@@ -227,7 +227,7 @@ class MidiTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             action = args.get("action", "")
-            track_index = int(args.get("track_index", 0))
+            int(args.get("track_index", 0))
             note = int(args.get("note", 60))
             velocity = int(args.get("velocity", 64))
 

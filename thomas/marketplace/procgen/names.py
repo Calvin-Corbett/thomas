@@ -262,7 +262,7 @@ class NameGenerator:
     def _generate_generic_name(self) -> str:
         """Generate a generic phonotactically valid name."""
         name = ""
-        length = random.randint(4, 10)
+        random.randint(4, 10)
 
         # Build syllables
         num_syllables = random.randint(2, 4)

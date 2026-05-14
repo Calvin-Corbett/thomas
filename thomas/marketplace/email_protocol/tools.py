@@ -37,7 +37,7 @@ class EmailOperationsTool(Tool):
             if action == "send":
                 recipient = args.get("recipient", "")
                 subject = args.get("subject", "")
-                body = args.get("body", "")
+                args.get("body", "")
 
                 if not recipient or not subject:
                     return ToolResult(ok=False, error="recipient and subject required")
@@ -91,7 +91,7 @@ class EmailFilteringTool(Tool):
 
             if action == "create_filter":
                 filter_name = args.get("filter_name", "")
-                criteria = args.get("criteria", {})
+                args.get("criteria", {})
 
                 if not filter_name:
                     return ToolResult(ok=False, error="filter_name required")

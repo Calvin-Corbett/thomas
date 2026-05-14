@@ -147,7 +147,7 @@ class InventoryManager:
         base_eoq = Decimal(str(math.sqrt(float(eoq_value))))
 
         # Calculate total cost for base EOQ
-        orders_per_year = annual_demand / base_eoq if base_eoq > 0 else Decimal("0")
+        annual_demand / base_eoq if base_eoq > 0 else Decimal("0")
         base_cost = (annual_demand / base_eoq) * order_cost + (base_eoq / Decimal("2")) * holding_cost_per_unit
 
         optimal_eoq = base_eoq
@@ -638,7 +638,7 @@ class InventoryManager:
 
         for warehouse in warehouses:
             # Demand is proportional to warehouse's share of total demand
-            current_level = next(
+            next(
                 (l.quantity_on_hand for l in inventory_levels if l.warehouse_id == warehouse.id), Decimal("0")
             )
 

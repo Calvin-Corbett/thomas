@@ -39,9 +39,9 @@ class GeometryTool(Tool):
                 dimension = args.get("dimension", "2d")
 
                 if dimension == "2d":
-                    point = cad.Point2D(x=float(coords[0]), y=float(coords[1]))
+                    cad.Point2D(x=float(coords[0]), y=float(coords[1]))
                 else:
-                    point = cad.Point3D(
+                    cad.Point3D(
                         x=float(coords[0]), y=float(coords[1]), z=float(coords[2]) if len(coords) > 2 else 0
                     )
 
@@ -52,7 +52,7 @@ class GeometryTool(Tool):
                 radius = float(args.get("radius", 1.0))
 
                 center = cad.Point2D(x=float(coords[0]), y=float(coords[1]))
-                circle = cad.Circle(center=center, radius=radius)
+                cad.Circle(center=center, radius=radius)
 
                 return ToolResult(ok=True, data={"type": "circle", "center": coords, "radius": radius})
 
@@ -63,7 +63,7 @@ class GeometryTool(Tool):
 
                 p1 = cad.Point2D(x=float(coords[0]), y=float(coords[1]))
                 p2 = cad.Point2D(x=float(coords[2]), y=float(coords[3]))
-                line = cad.Line(p1=p1, p2=p2)
+                cad.Line(p1=p1, p2=p2)
 
                 return ToolResult(
                     ok=True, data={"type": "line", "start": [coords[0], coords[1]], "end": [coords[2], coords[3]]}
@@ -78,7 +78,7 @@ class GeometryTool(Tool):
                 for i in range(0, len(coords), 2):
                     points.append(cad.Point2D(x=float(coords[i]), y=float(coords[i + 1])))
 
-                polygon = cad.Polygon(points=tuple(points))
+                cad.Polygon(points=tuple(points))
 
                 return ToolResult(ok=True, data={"type": "polygon", "num_vertices": len(points), "coords": coords})
 

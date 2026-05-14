@@ -312,7 +312,7 @@ class TaxManager:
         Raises:
             TaxError: If no tax data for jurisdiction
         """
-        liability = self.calculate_tax_liability(period_start, period_end)
+        self.calculate_tax_liability(period_start, period_end)
 
         transactions_in_period = [
             t for t in self.transactions if t.transaction_date >= period_start and t.transaction_date <= period_end
@@ -329,7 +329,7 @@ class TaxManager:
         input_tax = Decimal("0.00")
 
         for transaction in jurisdiction_transactions:
-            code = self.tax_codes[transaction.tax_code_id]
+            self.tax_codes[transaction.tax_code_id]
             tax_amount = self.calculate_tax(transaction.amount, transaction.tax_code_id)
 
             if transaction.transaction_type == "SALES":

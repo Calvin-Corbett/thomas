@@ -242,7 +242,7 @@ class UserManager:
             BlockedUserError: If blocked
         """
         self.get_user_by_id(follower_id)
-        target_user = self.get_user_by_id(following_id)
+        self.get_user_by_id(following_id)
 
         if follower_id == following_id:
             raise InvalidOperationError("Cannot follow yourself")
@@ -561,12 +561,12 @@ class UserManager:
         Returns:
             List of suggested users
         """
-        user = self.get_user_by_id(user_id)
+        self.get_user_by_id(user_id)
         suggestions = {}
 
         # Find friends of friends
         for friend_id in self.following_graph[user_id]:
-            friend = self.users[friend_id]
+            self.users[friend_id]
             for friend_of_friend in self.following_graph[friend_id]:
                 if friend_of_friend == user_id:
                     continue

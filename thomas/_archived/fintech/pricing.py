@@ -278,7 +278,7 @@ class BondCalculator:
             Bond price
         """
         fv = float(face_value)
-        c = float(coupon_rate) / payments_per_year
+        float(coupon_rate) / payments_per_year
         y = float(yield_to_maturity) / payments_per_year
         n = int(float(years_to_maturity) * payments_per_year)
         coupon_payment = fv * float(coupon_rate) / payments_per_year
@@ -369,7 +369,7 @@ class BondCalculator:
             Modified duration in years
         """
         fv = float(face_value)
-        c = float(coupon_rate) / payments_per_year
+        float(coupon_rate) / payments_per_year
         y = float(yield_to_maturity) / payments_per_year
         n = int(float(years_to_maturity) * payments_per_year)
         coupon_payment = fv * float(coupon_rate) / payments_per_year
@@ -421,7 +421,7 @@ class BondCalculator:
             Convexity
         """
         fv = float(face_value)
-        c = float(coupon_rate) / payments_per_year
+        float(coupon_rate) / payments_per_year
         y = float(yield_to_maturity) / payments_per_year
         n = int(float(years_to_maturity) * payments_per_year)
         coupon_payment = fv * float(coupon_rate) / payments_per_year

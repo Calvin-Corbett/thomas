@@ -106,7 +106,7 @@ class TestDFAMinimization:
         ast = parse("ab|ac")
         nfa = build_nfa(ast)
         dfa = construct_dfa(nfa)
-        original_accepting = sum(1 for s in dfa.all_states() if s.is_accepting)
+        sum(1 for s in dfa.all_states() if s.is_accepting)
 
         minimized = minimize_dfa(dfa)
         minimized_accepting = sum(1 for s in minimized.all_states() if s.is_accepting)

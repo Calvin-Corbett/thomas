@@ -7,8 +7,8 @@ from types import SimpleNamespace
 
 def _load_preflight_module():
     root = Path(__file__).resolve().parents[1]
-    path = root / "scripts" / "agent_preflight.py"
-    spec = importlib.util.spec_from_file_location("agent_preflight", path)
+    path = root / "scripts" / "crew" / "brief" / "preflight.py"
+    spec = importlib.util.spec_from_file_location("crew_brief_preflight", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

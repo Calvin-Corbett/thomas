@@ -168,7 +168,7 @@ class LLMPromptExecutor:
                 raise ValueError("prompt is required")
 
             model = step_config.config.get("model", "default")
-            temperature = step_config.config.get("temperature", 0.7)
+            step_config.config.get("temperature", 0.7)
 
             logger.info(f"Executing LLM prompt with model: {model}")
 
@@ -350,7 +350,7 @@ class WaitExecutor:
         """
         try:
             duration = step_config.config.get("duration_seconds", 0)
-            until_condition = step_config.config.get("until_condition")
+            step_config.config.get("until_condition")
 
             if duration > 0:
                 # Respect timeout from step_config
@@ -400,7 +400,7 @@ class ApprovalExecutor:
         """
         try:
             message = step_config.config.get("message", "Approval required")
-            timeout = step_config.config.get("timeout_seconds", 3600)
+            step_config.config.get("timeout_seconds", 3600)
 
             logger.info(f"Waiting for approval: {message}")
 
@@ -443,8 +443,8 @@ class WebhookExecutor:
                 raise ValueError("url is required")
 
             method = step_config.config.get("method", "POST")
-            body = step_config.config.get("body")
-            headers = step_config.config.get("headers", {})
+            step_config.config.get("body")
+            step_config.config.get("headers", {})
 
             logger.info(f"Calling webhook: {method} {url}")
 

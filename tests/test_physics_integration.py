@@ -178,7 +178,7 @@ class TestConstraints:
         )
         world.constraints.add_constraint(constraint)
 
-        initial_distance = body1.position.distance_to(body2.position)
+        body1.position.distance_to(body2.position)
 
         for _ in range(100):
             world.step(0.016)
@@ -358,7 +358,7 @@ class TestMultiBodySystem:
             )
             world.add_body(body)
 
-        initial_last_x = world.bodies[-1].position.x
+        world.bodies[-1].position.x
 
         # Simulate
         for _ in range(100):

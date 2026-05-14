@@ -196,7 +196,7 @@ def augment_motif(motif: list[Note], factor: float = 2.0) -> list[Note]:
     if not motif or len(motif) < 2:
         return motif
 
-    first_midi = motif[0].to_midi_number()
+    motif[0].to_midi_number()
     augmented: list[Note] = [motif[0]]
 
     for i in range(1, len(motif)):

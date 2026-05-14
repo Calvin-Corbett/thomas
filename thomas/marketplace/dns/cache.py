@@ -274,7 +274,7 @@ class DNSCache:
             JSON string representation of cache
         """
         entries = {}
-        now = time.time()
+        time.time()
 
         for (name, rtype), entry in self.cache.items():
             if not entry.is_expired():

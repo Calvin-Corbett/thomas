@@ -22,7 +22,7 @@ def _plant(app: AgentMemoryApp, thread: str, n: int) -> list[int]:
 def needle_test(app: AgentMemoryApp, thread: str) -> EvalResult:
     _plant(app, thread, 120)
     needle = "the password is Blueberry42 and the server is named NIMBUS"
-    nid = app.log_event(thread=thread, etype="note", text=f"IMPORTANT {needle}")
+    app.log_event(thread=thread, etype="note", text=f"IMPORTANT {needle}")
     _plant(app, thread, 120)
     out = app.query(thread=thread, mode="deep", text="what was the password and server name i mentioned earlier")
     packed = out["packed"]

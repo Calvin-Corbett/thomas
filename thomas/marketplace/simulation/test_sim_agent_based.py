@@ -190,7 +190,7 @@ class TestSimpleAgent:
 
         env = Environment()
         env.add_agent(agent)
-        actions = agent.decide(env)
+        agent.decide(env)
 
         assert len(executed) == 1
 
@@ -210,7 +210,7 @@ class TestSimpleAgent:
         agent.add_rule(lambda a: True, action2, priority=2)
 
         env = Environment()
-        actions = agent.decide(env)
+        agent.decide(env)
 
         # Higher priority first
         assert order == [2, 1]
@@ -254,7 +254,7 @@ class TestUtilityAgent:
 
         env = Environment()
         agent.perceive(env)
-        actions = agent.decide(env)
+        agent.decide(env)
 
         assert goal.satisfied
 

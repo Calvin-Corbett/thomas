@@ -92,7 +92,7 @@ class TestInpainting:
         img, mask = image_with_hole
 
         # Count pixels in hole
-        hole_pixels = np.sum(mask.data > 0)
+        np.sum(mask.data > 0)
 
         result = inpainter.inpaint_exemplar(img, mask)
 

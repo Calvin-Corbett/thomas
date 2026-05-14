@@ -196,7 +196,7 @@ class TestIMAPClient:
         msg.flags.add(Flag.SEEN)
         client.messages[1] = msg
 
-        results = client.store(1, {Flag.FLAGGED}, action="+FLAGS")
+        client.store(1, {Flag.FLAGGED}, action="+FLAGS")
         assert Flag.SEEN in client.messages[1].flags
         assert Flag.FLAGGED in client.messages[1].flags
 

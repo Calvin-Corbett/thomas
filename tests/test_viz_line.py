@@ -244,8 +244,8 @@ class TestLineChart:
         ]
         series = Series("test", points)
 
-        x_scale = LinearScale((0.0, 100.0), (0.0, 400.0))
-        y_scale = LinearScale((0.0, 100.0), (0.0, 300.0))
+        LinearScale((0.0, 100.0), (0.0, 400.0))
+        LinearScale((0.0, 100.0), (0.0, 300.0))
 
         valid = chart._filter_valid_points(series.points)
 

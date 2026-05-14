@@ -53,7 +53,6 @@ def dictsort(value: dict[str, Any], case_sensitive: bool = False, by: str = "key
             key=lambda x: x[1],
             reverse=False,
         )
-    reverse = case_sensitive
     return sorted(value.items(), key=lambda x: x[0] if case_sensitive else x[0].lower())
 
 

@@ -203,7 +203,6 @@ class Linter:
     def _check_links(self, doc: Document) -> None:
         """Check for broken link references."""
         # Collect all reference definitions
-        references: set[str] = set()
 
         # Simple check: ensure referenced links exist
         # This would require full AST traversal in real implementation
@@ -270,7 +269,6 @@ class LinkValidator:
             List of error messages
         """
         errors = []
-        seen_refs: set[str] = set()
 
         def visit(node: MarkdownNode | InlineNode) -> None:
             if isinstance(node, Link):

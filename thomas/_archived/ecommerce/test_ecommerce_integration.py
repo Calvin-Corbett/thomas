@@ -95,7 +95,7 @@ class TestEcommerceIntegration:
 
     def test_add_to_cart(self) -> None:
         """Test adding products to cart."""
-        cart = self.cart_manager.create_cart("cart1", "user1")
+        self.cart_manager.create_cart("cart1", "user1")
 
         self.cart_manager.add_item("cart1", self.laptop, 1)
         self.cart_manager.add_item("cart1", self.mouse, 2)
@@ -158,7 +158,7 @@ class TestEcommerceIntegration:
         shipping = ShippingCalculator()
 
         # Cart total
-        cart = self.cart_manager.create_cart("cart1", "user1")
+        self.cart_manager.create_cart("cart1", "user1")
         self.cart_manager.add_item("cart1", self.laptop, 1)
         cart_total = self.cart_manager.get_subtotal("cart1")
 
@@ -282,7 +282,7 @@ class TestEcommerceIntegration:
         initial_stock = self.inventory.get_stock_level("laptop")
 
         # Reserve stock for order
-        reservation = self.inventory.reserve_stock(
+        self.inventory.reserve_stock(
             product_id="laptop",
             variant_id=None,
             quantity=2,

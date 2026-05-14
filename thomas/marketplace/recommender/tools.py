@@ -36,10 +36,10 @@ class CollaborativeFilteringTool(Tool):
             action = args.get("action", "")
 
             if action == "user_based_cf":
-                cf = recommender.UserBasedCF()
+                recommender.UserBasedCF()
                 return ToolResult(ok=True, data={"type": "user_based_collaborative_filtering", "status": "initialized"})
             elif action == "item_based_cf":
-                cf = recommender.ItemBasedCF()
+                recommender.ItemBasedCF()
                 return ToolResult(ok=True, data={"type": "item_based_collaborative_filtering", "status": "initialized"})
             elif action == "recommend":
                 user_id = args.get("user_id", "")
@@ -93,7 +93,7 @@ class MatrixFactorizationTool(Tool):
                 num_factors = args.get("num_factors", 10)
                 iterations = args.get("iterations", 10)
 
-                mf = recommender.ALSFactorizer(num_factors=num_factors, iterations=iterations)
+                recommender.ALSFactorizer(num_factors=num_factors, iterations=iterations)
                 return ToolResult(
                     ok=True,
                     data={"type": "ALS", "factors": num_factors, "iterations": iterations, "status": "initialized"},
@@ -102,7 +102,7 @@ class MatrixFactorizationTool(Tool):
                 num_factors = args.get("num_factors", 10)
                 iterations = args.get("iterations", 10)
 
-                mf = recommender.SGDFactorizer(num_factors=num_factors, iterations=iterations)
+                recommender.SGDFactorizer(num_factors=num_factors, iterations=iterations)
                 return ToolResult(
                     ok=True,
                     data={"type": "SGD", "factors": num_factors, "iterations": iterations, "status": "initialized"},
@@ -156,7 +156,7 @@ class ContentBasedTool(Tool):
 
             if action == "train":
                 features = args.get("features", {})
-                cbr = recommender.ContentBasedRecommender()
+                recommender.ContentBasedRecommender()
                 return ToolResult(
                     ok=True, data={"type": "content_based", "features_count": len(features), "status": "trained"}
                 )

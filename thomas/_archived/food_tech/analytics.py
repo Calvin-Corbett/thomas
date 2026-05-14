@@ -115,7 +115,6 @@ class FoodAnalytics:
         meal_types = {}
 
         for timestamp, meal_type, _ in self.meal_log:
-            hour = timestamp.hour
             meal_types[meal_type] = meal_types.get(meal_type, 0) + 1
 
         return {

@@ -221,7 +221,6 @@ class TestRRCStateMachine:
         rrc = RRCStateMachine()
         rrc.transition_to_connected()
         rrc.transition_to_inactive()
-        initial_state = rrc.current_state
 
         rrc.handle_activity()
         assert rrc.current_state == RRCState.CONNECTED

@@ -243,7 +243,7 @@ class GraphTraversal:
         if end_node_id not in distances:
             return []
 
-        target_dist = distances[end_node_id]
+        distances[end_node_id]
         paths: list[Path] = []
 
         def dfs_all_paths(current: str, path: list[str], current_dist: float) -> None:

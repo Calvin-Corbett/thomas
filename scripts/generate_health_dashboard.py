@@ -149,12 +149,12 @@ def generate_dashboard() -> str:
     total_lines = sum(f["lines"] for f in files)
     critical_files = [f for f in files if f["status"] == "critical"]
     warning_files = [f for f in files if f["status"] == "warning"]
-    ok_files = [f for f in files if f["status"] == "ok"]
+    [f for f in files if f["status"] == "ok"]
     total_broad_exceptions = sum(f["broad_exceptions"] for f in files)
 
-    green_modules = [m for m in modules if m.get("health") == "green"]
-    yellow_modules = [m for m in modules if m.get("health") == "yellow"]
-    red_modules = [m for m in modules if m.get("health") == "red"]
+    [m for m in modules if m.get("health") == "green"]
+    [m for m in modules if m.get("health") == "yellow"]
+    [m for m in modules if m.get("health") == "red"]
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 

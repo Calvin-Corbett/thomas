@@ -96,7 +96,7 @@ class POSTagger:
     def _compute_probabilities(self) -> None:
         """Compute emission and transition probabilities with smoothing."""
         # Emission probabilities
-        total_tags = sum(self.tag_counts.values())
+        sum(self.tag_counts.values())
 
         for word, tag_counts in self.word_tag_counts.items():
             for tag, count in tag_counts.items():

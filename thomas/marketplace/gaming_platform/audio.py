@@ -313,7 +313,7 @@ class AudioEngine:
                 self.music_crossfade = False
             else:
                 # Fade old music out, new in
-                t = self.music_fade_elapsed / self.music_fade_duration
+                self.music_fade_elapsed / self.music_fade_duration
                 # Implementation would update volumes
 
         # Update fading channels

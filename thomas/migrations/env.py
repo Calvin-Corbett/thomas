@@ -71,8 +71,7 @@ def run_migrations_offline() -> None:
         log.warning("Alembic not installed; cannot run offline migrations")
         return
 
-    config = context.config
-    target_metadata = _get_metadata()
+    _get_metadata()
 
     with context.begin_transaction():
         context.execute(
@@ -91,7 +90,6 @@ def run_migrations_online() -> None:
         log.warning("Alembic not installed; cannot run online migrations")
         return
 
-    config = context.config
     target_metadata = _get_metadata()
 
     # Get database connection

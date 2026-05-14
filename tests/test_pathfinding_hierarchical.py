@@ -190,7 +190,7 @@ class TestObstacleHandling:
 
         hpf = HierarchicalPathfinder(graph, cluster_size=2)
 
-        cluster_size_before = sum(len(nodes) for nodes in hpf.clusters.values())
+        sum(len(nodes) for nodes in hpf.clusters.values())
 
         hpf.update_obstacle(2, blocked=True)
 

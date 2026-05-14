@@ -61,7 +61,7 @@ class IntentRecognitionTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             utterance = args.get("utterance", "")
-            threshold = float(args.get("confidence_threshold", 0.5))
+            float(args.get("confidence_threshold", 0.5))
 
             if not utterance:
                 return ToolResult(ok=False, error="utterance required")

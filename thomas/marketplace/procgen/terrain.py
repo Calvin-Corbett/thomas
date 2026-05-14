@@ -97,7 +97,7 @@ class TerrainGenerator:
                     break
 
                 # Get current height and neighbors
-                h_current = heightmap.get(ix, iy)
+                heightmap.get(ix, iy)
                 h_left = heightmap.get(ix - 1, iy)
                 h_right = heightmap.get(ix + 1, iy)
                 h_up = heightmap.get(ix, iy - 1)

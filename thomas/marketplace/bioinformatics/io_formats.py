@@ -453,7 +453,7 @@ def auto_detect_format(filepath: str) -> str:
 
             if first_line.startswith(">"):
                 # Could be FASTA or FASTQ, check further
-                second_line = f.readline().strip()
+                f.readline().strip()
                 third_line = f.readline().strip()
 
                 if third_line.startswith("+"):

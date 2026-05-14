@@ -95,10 +95,10 @@ class TestTraversalOnRealData:
 
     def test_find_mutual_friends(self, social_network: GraphStorage) -> None:
         """Test finding mutual friends."""
-        traversal = GraphTraversal(social_network)
+        GraphTraversal(social_network)
 
         # Find friends of Alice
-        alice_friends = social_network.get_adjacent_nodes("alice", direction="outbound")
+        social_network.get_adjacent_nodes("alice", direction="outbound")
         alice_knows = [e for e in social_network.get_outbound_edges("alice") if e.type == "KNOWS"]
         alice_friend_ids = [e.target for e in alice_knows]
 
@@ -287,7 +287,7 @@ class TestComplexScenarios:
     def test_recommendation_system(self, social_network: GraphStorage) -> None:
         """Test building recommendation system (friends of friends)."""
         # Find users Alice doesn't directly know but mutual friends do
-        traversal = GraphTraversal(social_network)
+        GraphTraversal(social_network)
 
         # Get Alice's direct friends
         alice_knows = [e.target for e in social_network.get_outbound_edges("alice") if e.type == "KNOWS"]

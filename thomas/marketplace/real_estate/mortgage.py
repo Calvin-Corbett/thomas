@@ -503,7 +503,7 @@ class PMICalculation:
             Estimated date PMI can be removed
         """
         home_value = principal + down_payment
-        current_equity = down_payment / home_value
+        down_payment / home_value
 
         schedule = MortgageCalculator.amortization_schedule(principal, annual_rate, term_months)
 

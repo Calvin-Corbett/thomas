@@ -161,7 +161,7 @@ class TestBacktestEngine:
 
     def test_run_backtest(self, engine: BacktestEngine) -> None:
         """Test running a simple backtest."""
-        asset = Asset(symbol="SPY", name="S&P 500", asset_type="EQUITY")
+        Asset(symbol="SPY", name="S&P 500", asset_type="EQUITY")
 
         # Generate sample data
         dates = [datetime(2023, 1, 1) + timedelta(days=i) for i in range(20)]
@@ -262,7 +262,7 @@ class TestBacktestMetrics:
     def engine_with_trades(self) -> BacktestEngine:
         """Create engine with executed trades."""
         engine = BacktestEngine()
-        asset = Asset(symbol="TEST", name="Test", asset_type="EQUITY")
+        Asset(symbol="TEST", name="Test", asset_type="EQUITY")
 
         # Simulate profitable trade sequence
         engine.portfolio_values = [100000, 102000, 101000, 103000, 105000]

@@ -54,7 +54,7 @@ class TestLineLengthChecking:
         linter = Linter(rules)
 
         source = "```\n" + "x" * 100 + "\n```"
-        errors = linter.lint(source)
+        linter.lint(source)
         # Code blocks should be skipped
         # This behavior may vary based on implementation
 
@@ -165,7 +165,7 @@ class TestLintRules:
 
         # These specific errors should not be present
         has_trailing = any("trailing" in e.message.lower() for e in errors)
-        has_skip = any("skip" in e.message.lower() for e in errors)
+        any("skip" in e.message.lower() for e in errors)
 
         assert not has_trailing
         # Skip errors may not be detected due to disabled rule

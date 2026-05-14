@@ -436,7 +436,7 @@ class TestCompilerIntegrationPipeline:
         source = "fn main() { return 42; }"
         compiler = Compiler(config)
         # Should not raise
-        result = compiler.compile(source)
+        compiler.compile(source)
 
 
 class TestCompilerIntegrationComplex:

@@ -399,7 +399,7 @@ def informed_rrt_star(
 
         angle = math.atan2(goal[1] - start[1], goal[0] - start[0])
 
-        r = random.random()
+        random.random()
         theta = 2 * math.pi * random.random()
 
         x_ellipse = a * math.cos(theta)

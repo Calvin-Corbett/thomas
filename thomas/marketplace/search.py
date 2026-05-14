@@ -257,7 +257,7 @@ class SearchIndex:
             quality = listing.quality_score
 
             # Combined score
-            final_score = relevance * Decimal("0.4") + vendor_score * Decimal("0.3") + quality * Decimal("0.3")
+            relevance * Decimal("0.4") + vendor_score * Decimal("0.3") + quality * Decimal("0.3")
 
             result = SearchResult(
                 listing_id=listing.id,

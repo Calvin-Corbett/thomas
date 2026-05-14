@@ -212,7 +212,7 @@ class TestVendorRegistry:
         """Test listing vendors."""
         registry = VendorRegistry()
 
-        v1 = registry.register_vendor(
+        registry.register_vendor(
             name="Vendor 1",
             email="v1@example.com",
             description="Test",
@@ -223,7 +223,7 @@ class TestVendorRegistry:
             tax_id="12-1111111",
         )
 
-        v2 = registry.register_vendor(
+        registry.register_vendor(
             name="Vendor 2",
             email="v2@example.com",
             description="Test",

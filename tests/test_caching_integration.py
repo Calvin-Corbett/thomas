@@ -89,7 +89,7 @@ class TestCacheWithInvalidation:
     def test_pattern_based_invalidation(self):
         """Test pattern-based invalidation."""
         config = CacheConfig(max_size_bytes=10000, max_entries=100)
-        cache = LRUCache(config)
+        LRUCache(config)
         invalidation = InvalidationManager()
 
         # Add pattern for session keys
@@ -102,7 +102,7 @@ class TestCacheWithInvalidation:
     def test_cascading_invalidation(self):
         """Test cascading invalidation."""
         config = CacheConfig(max_size_bytes=10000, max_entries=100)
-        cache = LRUCache(config)
+        LRUCache(config)
         invalidation = InvalidationManager()
 
         # Set up dependencies
@@ -206,10 +206,9 @@ class TestCacheWithSerialization:
     def test_json_serialization(self):
         """Test JSON serializer."""
         config = CacheConfig(max_size_bytes=10000, max_entries=100)
-        cache = LRUCache(config)
+        LRUCache(config)
 
         serializer = SerializerFactory.create("json")
-        context = serializer  # In production, would wrap cache put/get
 
         data = {"user": "Alice", "age": 30}
         serialized = serializer.serialize(data)

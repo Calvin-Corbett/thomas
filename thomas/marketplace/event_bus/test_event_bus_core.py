@@ -264,7 +264,6 @@ async def test_metrics_collection():
 @pytest.mark.asyncio
 async def test_dispatch_strategy_sync():
     """Test synchronous dispatch strategy."""
-    execution_times: list[float] = []
 
     async def handler(event: Event):
         pass

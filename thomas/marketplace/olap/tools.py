@@ -39,18 +39,18 @@ class CubeManagementTool(Tool):
             cube_name = args.get("cube_name")
 
             if action == "create":
-                cube = core.OLAPCube(cube_name, description=args.get("description", ""))
+                core.OLAPCube(cube_name, description=args.get("description", ""))
                 return ToolResult(ok=True, data={"status": "cube_created", "cube_name": cube_name})
 
             elif action == "add_dimension":
-                dimension = core.Dimension(
+                core.Dimension(
                     args.get("name"), args.get("description", ""), members=args.get("dimension_members", [])
                 )
                 return ToolResult(ok=True, data={"status": "dimension_added", "dimension": args.get("name")})
 
             elif action == "add_measure":
                 agg = args.get("aggregation", "sum").upper()
-                measure = core.Measure(
+                core.Measure(
                     args.get("name"), args.get("description", ""), aggregation=core.AggregationFunction[agg]
                 )
                 return ToolResult(
@@ -130,7 +130,7 @@ class MDXQueryTool(Tool):
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
-            query = args.get("query")
+            args.get("query")
             cube = args.get("cube", "default")
 
             return ToolResult(

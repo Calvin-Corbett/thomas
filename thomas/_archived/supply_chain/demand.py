@@ -469,8 +469,8 @@ class DemandForecaster:
         cumulative_adoptions = Decimal("0")
 
         for t in range(1, time_period + 1):
-            t_decimal = Decimal(t)
-            t_minus_1_decimal = Decimal(t - 1)
+            Decimal(t)
+            Decimal(t - 1)
 
             # Sales at time t = [p + q * (F(t-1) / m)] * (m - F(t-1))
             # where F(t) is cumulative adoptions

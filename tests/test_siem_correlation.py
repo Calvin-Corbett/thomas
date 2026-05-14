@@ -392,7 +392,7 @@ class TestCorrelationEngine:
         """Test engine cleans up expired states."""
         engine = CorrelationEngine()
 
-        state = engine.create_state("rule1", event_window=1)
+        engine.create_state("rule1", event_window=1)
         import time
 
         time.sleep(0.1)

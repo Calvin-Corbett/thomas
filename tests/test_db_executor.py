@@ -93,7 +93,7 @@ class TestFilterOperator:
         # Create fake scan that returns records
         table = Table(table_id=1, name="t", columns=[Column(name="a", data_type=DataType.INT)])
 
-        ctx = ExecutionContext(buffer_pool=BufferPool(), tables={"t": table}, heap_files={}, indexes={})
+        ExecutionContext(buffer_pool=BufferPool(), tables={"t": table}, heap_files={}, indexes={})
 
         # Create a mock scan operator
         scan = SeqScanOperator(1, "t")
@@ -113,7 +113,7 @@ class TestProjectionOperator:
             columns=[Column(name="a", data_type=DataType.INT), Column(name="b", data_type=DataType.VARCHAR)],
         )
 
-        ctx = ExecutionContext(buffer_pool=BufferPool(), tables={"t": table}, heap_files={}, indexes={})
+        ExecutionContext(buffer_pool=BufferPool(), tables={"t": table}, heap_files={}, indexes={})
 
         scan = SeqScanOperator(1, "t")
         proj = ProjectionOperator(2, scan, ["a"])
@@ -122,14 +122,13 @@ class TestProjectionOperator:
 
     def test_projection_star(self) -> None:
         """Test SELECT * projection."""
-        table = Table(table_id=1, name="t", columns=[Column(name="a", data_type=DataType.INT)])
+        Table(table_id=1, name="t", columns=[Column(name="a", data_type=DataType.INT)])
 
         scan = SeqScanOperator(1, "t")
-        proj = ProjectionOperator(2, scan, ["*"])
+        ProjectionOperator(2, scan, ["*"])
 
         # Should project all columns
-        record = Record(values={"a": 1})
-        projected = proj.next  # Not actually calling it without proper setup
+        Record(values={"a": 1})
 
 
 class TestSortOperator:
@@ -137,7 +136,7 @@ class TestSortOperator:
 
     def test_sort_basic(self) -> None:
         """Test basic sorting."""
-        table = Table(table_id=1, name="t", columns=[Column(name="a", data_type=DataType.INT)])
+        Table(table_id=1, name="t", columns=[Column(name="a", data_type=DataType.INT)])
 
         scan = SeqScanOperator(1, "t")
         sort = SortOperator(2, scan, [("a", "ASC")])
@@ -146,7 +145,7 @@ class TestSortOperator:
 
     def test_sort_multiple_keys(self) -> None:
         """Test sorting with multiple keys."""
-        table = Table(
+        Table(
             table_id=1,
             name="t",
             columns=[Column(name="a", data_type=DataType.INT), Column(name="b", data_type=DataType.INT)],
@@ -163,7 +162,7 @@ class TestLimitOperator:
 
     def test_limit_basic(self) -> None:
         """Test basic LIMIT."""
-        table = Table(table_id=1, name="t", columns=[Column(name="a", data_type=DataType.INT)])
+        Table(table_id=1, name="t", columns=[Column(name="a", data_type=DataType.INT)])
 
         scan = SeqScanOperator(1, "t")
         limit = LimitOperator(2, scan, limit=10)
@@ -173,7 +172,7 @@ class TestLimitOperator:
 
     def test_limit_with_offset(self) -> None:
         """Test LIMIT with OFFSET."""
-        table = Table(table_id=1, name="t", columns=[Column(name="a", data_type=DataType.INT)])
+        Table(table_id=1, name="t", columns=[Column(name="a", data_type=DataType.INT)])
 
         scan = SeqScanOperator(1, "t")
         limit = LimitOperator(2, scan, limit=10, offset=5)
@@ -187,7 +186,7 @@ class TestAggregationOperator:
 
     def test_aggregation_basic(self) -> None:
         """Test basic aggregation."""
-        table = Table(
+        Table(
             table_id=1,
             name="t",
             columns=[Column(name="a", data_type=DataType.INT), Column(name="b", data_type=DataType.INT)],
@@ -200,7 +199,7 @@ class TestAggregationOperator:
 
     def test_aggregation_multiple_functions(self) -> None:
         """Test aggregation with multiple functions."""
-        table = Table(table_id=1, name="t", columns=[Column(name="a", data_type=DataType.INT)])
+        Table(table_id=1, name="t", columns=[Column(name="a", data_type=DataType.INT)])
 
         scan = SeqScanOperator(1, "t")
         agg = AggregationOperator(
@@ -215,9 +214,9 @@ class TestNestedLoopJoinOperator:
 
     def test_nested_loop_join_basic(self) -> None:
         """Test basic nested loop join."""
-        table1 = Table(table_id=1, name="t1", columns=[Column(name="a", data_type=DataType.INT)])
+        Table(table_id=1, name="t1", columns=[Column(name="a", data_type=DataType.INT)])
 
-        table2 = Table(table_id=2, name="t2", columns=[Column(name="b", data_type=DataType.INT)])
+        Table(table_id=2, name="t2", columns=[Column(name="b", data_type=DataType.INT)])
 
         predicate = BinaryOpNode(operator="=", left=ColumnNode(column_name="a"), right=ColumnNode(column_name="b"))
 
@@ -233,9 +232,9 @@ class TestHashJoinOperator:
 
     def test_hash_join_basic(self) -> None:
         """Test basic hash join."""
-        table1 = Table(table_id=1, name="t1", columns=[Column(name="a", data_type=DataType.INT)])
+        Table(table_id=1, name="t1", columns=[Column(name="a", data_type=DataType.INT)])
 
-        table2 = Table(table_id=2, name="t2", columns=[Column(name="b", data_type=DataType.INT)])
+        Table(table_id=2, name="t2", columns=[Column(name="b", data_type=DataType.INT)])
 
         left = SeqScanOperator(1, "t1")
         right = SeqScanOperator(2, "t2")
@@ -250,7 +249,7 @@ class TestOperatorChaining:
 
     def test_operator_pipeline(self) -> None:
         """Test chaining operators together."""
-        table = Table(table_id=1, name="t", columns=[Column(name="a", data_type=DataType.INT)])
+        Table(table_id=1, name="t", columns=[Column(name="a", data_type=DataType.INT)])
 
         scan = SeqScanOperator(1, "t")
         limit = LimitOperator(2, scan, limit=10)

@@ -241,7 +241,7 @@ async def setup_chat_request(
         memory_auto_optimize_waste_threshold_pref = float(
             getattr(advanced_memory, "auto_optimize_waste_threshold", 0.22) or 0.22
         )
-        memory_auto_optimize_min_interval_hours_pref = float(
+        float(
             getattr(advanced_memory, "auto_optimize_min_interval_hours", 12.0) or 12.0
         )
 

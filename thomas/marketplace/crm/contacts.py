@@ -388,7 +388,7 @@ class ContactManager:
         Raises:
             ContactNotFoundError: If contact not found
         """
-        contact = self.get_contact(contact_id)
+        self.get_contact(contact_id)
         history = self.get_activity_history(contact_id)
 
         if not history:

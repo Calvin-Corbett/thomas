@@ -52,7 +52,7 @@ class Delay(Effect):
 
         output = np.zeros_like(samples)
         num_samples = len(samples)
-        delay_samples = int(self.delay_time * self.sample_rate)
+        int(self.delay_time * self.sample_rate)
 
         for i in range(num_samples):
             # Read delayed sample
@@ -223,7 +223,7 @@ class Chorus(Effect):
         for i in range(len(samples)):
             # LFO modulation
             lfo = np.sin(2.0 * np.pi * self.lfo_phase)
-            delay_mod = base_delay + lfo * self.depth * self.sample_rate / 1000.0
+            base_delay + lfo * self.depth * self.sample_rate / 1000.0
 
             # Delay line read with linear interpolation
             if self.buffer.available_read >= 1:
@@ -283,7 +283,7 @@ class Flanger(Effect):
         lfo_inc = self.rate / self.sample_rate
 
         for i in range(len(samples)):
-            lfo = np.sin(2.0 * np.pi * self.lfo_phase)
+            np.sin(2.0 * np.pi * self.lfo_phase)
             delayed = np.zeros(samples.shape[1])
 
             if self.buffer.available_read >= 1:

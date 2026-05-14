@@ -250,7 +250,7 @@ class WebhookRegistry:
         if not event_types:
             raise ValueError("At least one event type must be specified")
 
-        endpoint = self._get_endpoint(endpoint_id)
+        self._get_endpoint(endpoint_id)
 
         subscription = Subscription(
             endpoint_id=endpoint_id,

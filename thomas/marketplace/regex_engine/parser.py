@@ -347,8 +347,6 @@ class Parser:
         self._consume(TokenType.LPAREN)
 
         is_capturing = True
-        is_lookahead = False
-        negative_lookahead = False
 
         # Check for special group syntax
         if self._check(TokenType.QUESTION):
@@ -363,12 +361,9 @@ class Parser:
                 elif special_char == "=":
                     # Positive lookahead (?=...)
                     self._consume(TokenType.LITERAL)
-                    is_lookahead = True
                 elif special_char == "!":
                     # Negative lookahead (?!...)
                     self._consume(TokenType.LITERAL)
-                    is_lookahead = True
-                    negative_lookahead = True
                 else:
                     raise ParseError(
                         f"Unknown group type: (?{special_char}",

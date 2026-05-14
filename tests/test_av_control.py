@@ -36,7 +36,7 @@ class TestPIDController:
         pid = PIDController(kp=0.0, ki=1.0, kd=0.0)
 
         for _ in range(10):
-            output = pid.update(1.0, dt=0.1)
+            pid.update(1.0, dt=0.1)
 
         assert pid.integral_error > 0.0
 

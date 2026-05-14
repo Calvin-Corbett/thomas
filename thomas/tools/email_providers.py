@@ -264,7 +264,7 @@ class _GmailProvider(_Provider):
         from .email_calendar import _get_tz
 
         days = max(1, min(int(days), 90))
-        tz_info = _get_tz(tz)
+        _get_tz(tz)
 
         now_utc = datetime.now(timezone.utc)
         end_utc = now_utc + td(days=days)
@@ -307,7 +307,7 @@ class _GmailProvider(_Provider):
             json=payload,
         )
 
-        tz_info = _get_tz(tz)
+        _get_tz(tz)
         busy = []
         for cal_id in calendars:
             intervals = data.get("calendars", {}).get(cal_id, {}).get("busy") or []
@@ -471,7 +471,7 @@ class _MicrosoftProvider(_Provider):
             "toRecipients": [{"emailAddress": {"address": to}}],
         }
 
-        result = await self._request_json(
+        await self._request_json(
             "POST",
             "https://graph.microsoft.com/v1.0/me/sendMail",
             json={"message": msg_data},

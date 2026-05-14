@@ -238,8 +238,8 @@ class TestHDRProcessor:
 
         # Create images with different channel counts
         rgb_img = Image(data=np.random.rand(h, w, 3))
-        gray_img = Image(data=np.random.rand(h, w, 1))
-        rgba_img = Image(data=np.random.rand(h, w, 4))
+        Image(data=np.random.rand(h, w, 1))
+        Image(data=np.random.rand(h, w, 4))
 
         # HDR should handle by converting appropriately
         images = [rgb_img, rgb_img, rgb_img]

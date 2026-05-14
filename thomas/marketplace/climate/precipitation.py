@@ -252,7 +252,6 @@ def penman_monteith_evapotranspiration(
     delta = (4098 * e_s) / ((temperature_c + 237.3) ** 2)
 
     # Aerodynamic resistance
-    z_u = 2.0  # Measurement height (2m)
     u_2 = wind_speed_m_s
     ra = 208.0 / u_2 if u_2 > 0.1 else 208.0
 

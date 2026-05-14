@@ -168,7 +168,7 @@ class CompiledRegex:
                 if count > 0 and replacements_made >= count:
                     break
 
-                match_text = text[pos + match.start : pos + match.end]
+                text[pos + match.start : pos + match.end]
                 result = result[: pos + match.start] + replacement + result[pos + match.end :]
                 pos += match.end if match.end > 0 else 1
                 replacements_made += 1

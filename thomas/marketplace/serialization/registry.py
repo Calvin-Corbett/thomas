@@ -97,7 +97,7 @@ def format_negotiate(
     Returns:
         Negotiated format or None if no match.
     """
-    client_set = set(client_formats)
+    set(client_formats)
     server_set = set(server_formats)
 
     # Find first match in client preference order

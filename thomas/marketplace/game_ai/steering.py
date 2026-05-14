@@ -312,7 +312,7 @@ class ObstacleAvoidance(SteeringBehavior):
             return SteeringOutput(Vec2(0, 0), False)
 
         heading = entity.velocity.normalize()
-        detection_ray_end = entity.position + heading * self.detection_range
+        entity.position + heading * self.detection_range
 
         # Find closest obstacle in path
         closest_distance = float("inf")

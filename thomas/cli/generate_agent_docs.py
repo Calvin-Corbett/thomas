@@ -52,7 +52,6 @@ def generate_agent_docs_command(dry_run: bool) -> None:
 
     # Generate Mermaid dependency graph
     graph_lines = ["# Architecture Dependency Graph", "", "```mermaid", "graph TD"]
-    tier_styles = {"core": ":::core", "ext": ":::ext", "infra": ":::infra", "support": ":::support"}
 
     for name, mod in sorted(MODULES.items()):
         for dep in mod["depends_on"]:

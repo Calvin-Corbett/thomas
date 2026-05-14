@@ -408,7 +408,7 @@ class ThermostatScheduler:
         eta = self.estimate_time_to_target(zone_id)
 
         # Start heating/cooling 10% earlier for safety margin
-        start_offset_minutes = eta * 1.1
+        eta * 1.1
 
         # Initiate pre-heating/cooling
         comfort_temp = self._comfort_settings[zone_id].get("comfort_temp", 21.0)
@@ -430,7 +430,7 @@ class ThermostatScheduler:
         Raises:
             ClimateError: If zone not found.
         """
-        zone = self.get_zone(zone_id)
+        self.get_zone(zone_id)
         comfort_temp = self._comfort_settings[zone_id].get("comfort_temp", 21.0)
 
         # Adjust based on weather

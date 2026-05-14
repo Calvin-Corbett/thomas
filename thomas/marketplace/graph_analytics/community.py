@@ -249,8 +249,8 @@ def girvan_newman(graph: Graph, num_communities: int = 2) -> CommunityResult:
     """
     # Work with a copy
     g = graph.copy()
-    communities = list(range(g.num_nodes()))
-    node_map = {node: i for i, node in enumerate(g.nodes())}
+    list(range(g.num_nodes()))
+    {node: i for i, node in enumerate(g.nodes())}
 
     edge_count = g.num_edges()
 

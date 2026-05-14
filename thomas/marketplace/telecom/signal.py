@@ -457,7 +457,7 @@ class Beamformer:
         Returns:
             Beamwidth in degrees
         """
-        wavelength = 3e8 / (self.frequency_mhz * 1e6)
+        3e8 / (self.frequency_mhz * 1e6)
         d_wavelengths = self.element_spacing_wavelengths
         return math.degrees(0.886 / (self.num_elements * d_wavelengths))
 

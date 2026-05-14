@@ -45,7 +45,7 @@ def harris_corner_detector(img: Image, block_size: int = 5, k: float = 0.04, thr
             ixy.data[y][x][0] = gx_val * gy_val
 
     # Blur structure tensor
-    radius = block_size // 2
+    block_size // 2
     ixx = filters.gaussian_blur(ixx, block_size, sigma=1.0)
     iyy = filters.gaussian_blur(iyy, block_size, sigma=1.0)
     ixy = filters.gaussian_blur(ixy, block_size, sigma=1.0)

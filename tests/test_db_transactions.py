@@ -375,7 +375,7 @@ class TestConcurrentTransactions:
         tm = TransactionManager()
 
         txn1 = tm.begin_transaction()
-        txn2 = tm.begin_transaction()
+        tm.begin_transaction()
 
         tm.acquire_lock(txn1, 0, LockMode.EXCLUSIVE)
 

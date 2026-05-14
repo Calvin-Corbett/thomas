@@ -145,7 +145,7 @@ class RK4Integrator(Integrator):
 
             # k2
             temp_vel = body.velocity + k1_vel * (timestep * 0.5)
-            temp_pos = body.position + k1_pos * (timestep * 0.5)
+            body.position + k1_pos * (timestep * 0.5)
             k2_vel = body._compute_acceleration(gravity)
             k2_pos = temp_vel
 
@@ -156,7 +156,7 @@ class RK4Integrator(Integrator):
 
             # k4
             temp_vel = body.velocity + k3_vel * timestep
-            temp_pos = body.position + k3_pos * timestep
+            body.position + k3_pos * timestep
             k4_vel = body._compute_acceleration(gravity)
             k4_pos = temp_vel
 

@@ -38,7 +38,7 @@ class TestAudioProcessingPipeline:
         noisy = Signal(sig.samples + noise.samples, sig.sample_rate)
 
         # 3. Analyze (before filtering)
-        energy_before = rms_energy(noisy.samples)
+        rms_energy(noisy.samples)
         zcr_before = zero_crossing_rate(noisy.samples)
 
         # 4. Filter
@@ -47,7 +47,7 @@ class TestAudioProcessingPipeline:
         filtered = fir.filter(noisy.samples)
 
         # 5. Analyze (after filtering)
-        energy_after = rms_energy(filtered)
+        rms_energy(filtered)
         zcr_after = zero_crossing_rate(filtered)
 
         # Filtering should reduce noise (lower ZCR)
@@ -404,7 +404,6 @@ class TestRealWorldScenarios:
         X = dct(frame, kind=2)
 
         # 4. Quantize (simulate compression)
-        bits = 8  # 8 bits per coefficient
         max_val = np.max(np.abs(X))
         X_quantized = np.round(X / (max_val / 128)) * (max_val / 128)
 

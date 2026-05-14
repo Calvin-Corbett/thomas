@@ -436,7 +436,7 @@ class ColorScience:
             - 0.20 * np.cos(np.radians(4 * hbar_p - 63))
         )
 
-        f = 2 * np.sqrt(Cbar_p**4 / (Cbar_p**4 + 1900))
+        2 * np.sqrt(Cbar_p**4 / (Cbar_p**4 + 1900))
         Sl = 1 + (0.015 * (Lbar_p - 50) ** 2) / np.sqrt(20 + (Lbar_p - 50) ** 2)
         Sc = 1 + 0.045 * Cbar_p
         Sh = 1 + 0.015 * Cbar_p * T

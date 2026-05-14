@@ -324,7 +324,7 @@ def voice_chord_close_position(chord: Chord, lowest_note: Note) -> Chord:
     Returns:
         Voiced chord in close position.
     """
-    pitch_classes = {n.pitch.note for n in chord.notes}
+    {n.pitch.note for n in chord.notes}
 
     voiced_notes: list[Note] = []
     current_octave = lowest_note.octave
@@ -334,7 +334,7 @@ def voice_chord_close_position(chord: Chord, lowest_note: Note) -> Chord:
 
     for note in notes_to_voice:
         midi_note = note.to_midi_number() % 12
-        lowest_midi = lowest_note.to_midi_number() % 12
+        lowest_note.to_midi_number() % 12
 
         target_midi = (current_octave * 12) + 12 + midi_note
 
@@ -469,7 +469,7 @@ def chord_to_roman_numeral(chord: Chord, key_root: Note) -> str:
         >>> chord_to_roman_numeral(chord, c)
         'IV'
     """
-    scale = theory.build_scale(key_root, theory.ScaleType.MAJOR)
+    theory.build_scale(key_root, theory.ScaleType.MAJOR)
 
     root_midi = chord.root.to_midi_number() % 12
     key_midi = key_root.to_midi_number() % 12

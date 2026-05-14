@@ -127,4 +127,4 @@ class TestPredictionInterval:
         x = [[1, 2], [3, 4]]
         y = [1, 2]
         with pytest.raises(InsufficientDataError):
-            result = reg.multiple_linear_regression(x, y)
+            reg.multiple_linear_regression(x, y)

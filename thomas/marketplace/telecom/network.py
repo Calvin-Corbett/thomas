@@ -205,7 +205,6 @@ class FrequencyPlanner:
             Mapping of cell index to allocated frequencies
         """
         allocation = {}
-        freq_index = 0
 
         for cell_idx in range(num_cells):
             cell_frequencies = []

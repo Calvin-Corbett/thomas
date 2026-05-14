@@ -268,7 +268,7 @@ class TestSchedulerEvents:
             return "success"
 
         trigger = IntervalTrigger(1)
-        job = scheduler.add_job(test_func, trigger)
+        scheduler.add_job(test_func, trigger)
         scheduler.on(SchedulerEvent.JOB_COMPLETED, on_completed)
 
         scheduler.start()
@@ -372,7 +372,7 @@ class TestSchedulerErrorHandling:
 
     def test_job_with_timeout(self) -> None:
         """Test job timeout handling."""
-        scheduler = Scheduler()
+        Scheduler()
         executed = []
 
         def slow_job() -> None:

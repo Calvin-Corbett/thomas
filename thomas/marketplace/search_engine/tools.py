@@ -81,7 +81,7 @@ class SearchIndexDocumentTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             index_name = args["index_name"]
-            document = args["document"]
+            args["document"]
             doc_id = args.get("document_id")
 
             return ToolResult(

@@ -33,7 +33,7 @@ class DataFrameCreateTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             data = args["data"]
-            index = args.get("index")
+            args.get("index")
 
             return ToolResult(
                 ok=True,

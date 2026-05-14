@@ -404,7 +404,7 @@ def _detect_sequence_type(seq: str) -> SequenceType:
         return SequenceType.DNA
     else:
         # Check if it looks like protein
-        protein_chars = set("ACDEFGHIKLMNPQRSTVWY")
+        set("ACDEFGHIKLMNPQRSTVWY")
         non_dna = set("EFIPQZ")
 
         if any(c in seq for c in non_dna):

@@ -248,7 +248,7 @@ async def test_monitoring_integration(full_broker):
         assert metrics["total_messages"] > 0
 
         # Get alerts
-        alerts = await monitor.get_alerts()
+        await monitor.get_alerts()
 
         await consumer.stop()
 
@@ -331,7 +331,7 @@ async def test_rebalancing_on_consumer_failure(full_broker):
             {"test-topic"},
         )
 
-        initial_partitions = set(assignment1.get("test-topic", [])) | set(assignment2.get("test-topic", []))
+        set(assignment1.get("test-topic", [])) | set(assignment2.get("test-topic", []))
 
         # Stop one consumer
         await consumer1.stop()

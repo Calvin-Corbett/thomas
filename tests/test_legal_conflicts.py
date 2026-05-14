@@ -153,7 +153,7 @@ class TestConflictChecker:
     def test_waive_conflict(self, checker: ConflictChecker) -> None:
         """Test recording conflict waiver."""
         # Create a conflict
-        conflict = checker.conflicts["conflict_001"] = type(
+        checker.conflicts["conflict_001"] = type(
             "Conflict",
             (),
             {

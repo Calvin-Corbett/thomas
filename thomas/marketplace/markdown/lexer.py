@@ -85,7 +85,7 @@ class Lexer:
                 break
 
             line = self.lines[self.pos]
-            indent = self._get_indent(line)
+            self._get_indent(line)
 
             # Try to match block types
             if (

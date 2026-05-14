@@ -123,7 +123,7 @@ class IOCManager:
         Returns:
             Number of IOCs removed.
         """
-        now = datetime.utcnow()
+        datetime.utcnow()
         expired = [ioc_id for ioc_id, ioc in self.iocs.items() if ioc.is_expired()]
 
         for ioc_id in expired:

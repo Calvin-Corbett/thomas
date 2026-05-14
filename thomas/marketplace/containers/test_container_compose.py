@@ -306,7 +306,7 @@ services:
 """
         compose_parser.parse(compose_content)
 
-        app = compose_parser.services["app"]
+        compose_parser.services["app"]
         # Note: interpolation happens during parsing
 
 

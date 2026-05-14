@@ -268,7 +268,7 @@ class TestIntegration:
 
         # Generate keypair deterministically
         keypair = generate_deterministic_keypair(password)
-        address = derive_address(keypair.public_key_x, keypair.public_key_y)
+        derive_address(keypair.public_key_x, keypair.public_key_y)
 
         # Sign message
         message = b"Deterministic message"

@@ -88,7 +88,7 @@ class TestMM1Queue:
             if current_time % 0.5 == 0:
                 queue.arrive(current_time)
 
-            customer = queue.serve(current_time, service_duration=0.2)
+            queue.serve(current_time, service_duration=0.2)
 
             completed = [c for c in queue.customers_processed if c.service_end_time == current_time]
             for c in completed:
@@ -208,8 +208,8 @@ class TestPriorityQueue:
         queue = PriorityQueue(num_servers=1, preemptive=False)
 
         # Arrive in order: normal, low, high
-        c1 = queue.arrive(0.0, PriorityLevel.NORMAL)
-        c2 = queue.arrive(0.0, PriorityLevel.LOW)
+        queue.arrive(0.0, PriorityLevel.NORMAL)
+        queue.arrive(0.0, PriorityLevel.LOW)
         c3 = queue.arrive(0.0, PriorityLevel.HIGH)
 
         # High priority should be served first

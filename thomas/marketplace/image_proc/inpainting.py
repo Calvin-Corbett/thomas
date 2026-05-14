@@ -178,7 +178,7 @@ class Inpainter:
         half_patch = self.patch_size // 2
 
         # PatchMatch for acceleration
-        nnf = self._patchmatch(result, mask_work)
+        self._patchmatch(result, mask_work)
 
         # Grow from boundary
         boundary = self._find_boundary(mask_work)
@@ -355,7 +355,7 @@ class Inpainter:
 
         # Simplified version: random search
         patch_size = 5
-        half_patch = patch_size // 2
+        patch_size // 2
 
         for y in range(h):
             for x in range(w):

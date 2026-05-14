@@ -269,7 +269,7 @@ class TestCaseManager:
             assigned_attorney_id="attorney_001",
         )
 
-        case2 = manager.create_case(
+        manager.create_case(
             case_name="Case 2",
             case_type=CaseType.CIVIL,
             client_id="client_001",
@@ -308,21 +308,21 @@ class TestCaseManager:
 
     def test_get_cases_by_client(self, manager: CaseManager) -> None:
         """Test retrieving cases by client."""
-        case1 = manager.create_case(
+        manager.create_case(
             case_name="Case 1",
             case_type=CaseType.CIVIL,
             client_id="client_001",
             assigned_attorney_id="attorney_001",
         )
 
-        case2 = manager.create_case(
+        manager.create_case(
             case_name="Case 2",
             case_type=CaseType.CIVIL,
             client_id="client_001",
             assigned_attorney_id="attorney_001",
         )
 
-        case3 = manager.create_case(
+        manager.create_case(
             case_name="Case 3",
             case_type=CaseType.CIVIL,
             client_id="client_002",

@@ -249,7 +249,7 @@ class TelemetryEngine:
         if not end_time:
             end_time = points[-1].timestamp
 
-        bucket_delta = timedelta(minutes=interval_minutes)
+        timedelta(minutes=interval_minutes)
         buckets: dict[datetime, list[float]] = {}
 
         for point in points:

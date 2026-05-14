@@ -425,7 +425,7 @@ class RiskManager:
         Raises:
             RiskNotFoundError: If risk doesn't exist.
         """
-        risk = self.get_risk(risk_id)
+        self.get_risk(risk_id)
         del self.risks[risk_id]
         if risk_id in self.risk_responses:
             del self.risk_responses[risk_id]

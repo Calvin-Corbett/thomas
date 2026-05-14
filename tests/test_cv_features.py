@@ -131,7 +131,7 @@ class TestFeatureMatching:
             Descriptor([1, 1, 1, 1, 1], descriptor_type="BRIEF"),
         ]
 
-        matches = features.match_features(desc1, desc2, ratio_threshold=0.5)
+        features.match_features(desc1, desc2, ratio_threshold=0.5)
         # May or may not have matches depending on ratio test
 
 

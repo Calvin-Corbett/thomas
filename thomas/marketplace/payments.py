@@ -331,9 +331,8 @@ class PaymentProcessor:
             raise
 
         # Hold in escrow if specified
-        escrow_id = ""
         if use_escrow:
-            escrow_id = self._escrow.hold_payment(order_id, amount)
+            self._escrow.hold_payment(order_id, amount)
 
         payment = Payment(
             id=payment_id,

@@ -250,12 +250,11 @@ class AgileManager:
         burndown_data: list[tuple[datetime, float]] = []
         duration_days = (sprint.end_date - sprint.start_date).days
         current_date = sprint.start_date
-        completed_points = 0.0
 
         while current_date <= sprint.end_date:
             # Calculate % of sprint elapsed
             elapsed_days = (current_date - sprint.start_date).days
-            elapsed_progress_ratio = min(1.0, elapsed_days / max(1, duration_days))
+            min(1.0, elapsed_days / max(1, duration_days))
 
             # Calculate remaining based on task completion
             remaining = total_points
@@ -290,7 +289,7 @@ class AgileManager:
 
         cfd_data: dict[TaskStatus, list[tuple[datetime, float]]] = {status: [] for status in TaskStatus}
 
-        duration_days = (sprint.end_date - sprint.start_date).days
+        (sprint.end_date - sprint.start_date).days
         current_date = sprint.start_date
 
         while current_date <= sprint.end_date:

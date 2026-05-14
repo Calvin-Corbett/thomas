@@ -169,7 +169,7 @@ def pursue(
     """
     dx = target.x - character.x
     dy = target.y - character.y
-    dist = math.sqrt(dx * dx + dy * dy)
+    math.sqrt(dx * dx + dy * dy)
 
     predicted_x = target.x + target.vx * look_ahead_time
     predicted_y = target.y + target.vy * look_ahead_time
@@ -195,7 +195,7 @@ def evade(
     """
     dx = threat.x - character.x
     dy = threat.y - character.y
-    dist = math.sqrt(dx * dx + dy * dy)
+    math.sqrt(dx * dx + dy * dy)
 
     predicted_x = threat.x + threat.vx * look_ahead_time
     predicted_y = threat.y + threat.vy * look_ahead_time

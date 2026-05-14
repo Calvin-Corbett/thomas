@@ -144,8 +144,8 @@ class HeaderParser:
             try:
                 month = months[month_str]
                 tz_hours = int(tz_str[:3])
-                tz_minutes = int(tz_str[3:])
-                tz_offset = timezone(timezone.utc.utcoffset(None) if tz_hours == 0 else timezone(timezone.utc).tzinfo)
+                int(tz_str[3:])
+                timezone(timezone.utc.utcoffset(None) if tz_hours == 0 else timezone(timezone.utc).tzinfo)
 
                 return datetime(int(year), month, int(day), int(hour), int(minute), int(second))
             except (ValueError, TypeError):

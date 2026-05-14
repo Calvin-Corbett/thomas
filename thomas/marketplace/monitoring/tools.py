@@ -190,7 +190,7 @@ class MonitoringGetHealthChecksTool(Tool):
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
-            service_filter = args.get("service_filter")
+            args.get("service_filter")
 
             return ToolResult(
                 ok=True,

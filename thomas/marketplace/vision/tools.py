@@ -31,7 +31,7 @@ class ImageAnalysisTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             analysis_type = args.get("analysis_type", "")
-            image_url = args.get("image_url", "")
+            args.get("image_url", "")
             confidence = float(args.get("confidence", 0.5))
 
             supported = ["object_detection", "text_recognition", "face_detection", "scene_analysis"]
@@ -105,7 +105,7 @@ class HandlerTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             request_type = args.get("request_type", "")
-            payload = args.get("payload", {})
+            args.get("payload", {})
 
             supported = ["analyze", "classify", "segment", "recognize"]
             if request_type not in supported:

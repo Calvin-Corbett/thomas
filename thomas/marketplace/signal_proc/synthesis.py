@@ -320,7 +320,7 @@ def fm_modulation(
     t = np.arange(n_samples) / sample_rate
 
     # Modulating signal
-    modulator = np.sin(2 * np.pi * modulator_freq * t)
+    np.sin(2 * np.pi * modulator_freq * t)
 
     # FM phase
     phase = 2 * np.pi * carrier_freq * t + 2 * np.pi * (frequency_deviation / modulator_freq) * (

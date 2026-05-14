@@ -420,7 +420,7 @@ class TestSearchPipeline:
 
         # Filter
         filter_obj = RangeFilter("rating", min_value=4)
-        filtered_docs = [doc_id for doc_id in doc_ids if filter_obj.matches(index.document_store.get_document(doc_id))]
+        [doc_id for doc_id in doc_ids if filter_obj.matches(index.document_store.get_document(doc_id))]
 
         # All should execute without error
         assert len(results) > 0

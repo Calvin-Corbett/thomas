@@ -600,9 +600,9 @@ class SSHTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         """Execute SSH tool action."""
         action = args.get("action")
-        host = args.get("host", "")
-        port = args.get("port", 22)
-        username = args.get("username", "root")
+        args.get("host", "")
+        args.get("port", 22)
+        args.get("username", "root")
 
         try:
             if action == "connect":

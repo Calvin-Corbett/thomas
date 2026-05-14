@@ -48,7 +48,6 @@ async def api_health_ready(request: web.Request) -> web.Response:
     all_ok = True
 
     # Check 1: SQLite database writability
-    db_ok = False
     db_error = ""
     try:
         # Try a simple write to a temporary in-memory database
@@ -57,19 +56,17 @@ async def api_health_ready(request: web.Request) -> web.Response:
         conn.execute("INSERT INTO _health_check (id) VALUES (1)")
         conn.execute("DELETE FROM _health_check WHERE id = 1")
         conn.close()
-        db_ok = True
         checks["database"] = "ok"
     except sqlite3.Error as e:
         db_error = str(e)
         checks["database"] = f"failed: {db_error}"
         all_ok = False
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as e:
         db_error = str(e)
         checks["database"] = f"error: {db_error}"
         all_ok = False
 
     # Check 2: At least one LLM provider configured
-    llm_ok = False
     llm_error = ""
     try:
         if cfg is None:
@@ -81,7 +78,6 @@ async def api_health_ready(request: web.Request) -> web.Response:
             checks["llm"] = f"failed: {llm_error}"
             all_ok = False
         else:
-            llm_ok = True
             checks["llm"] = "ok"
     except Exception as e:
         llm_error = str(e)
@@ -89,13 +85,11 @@ async def api_health_ready(request: web.Request) -> web.Response:
         all_ok = False
 
     # Check 3: Static files directory exists
-    static_ok = False
     static_error = ""
     try:
         # The static directory should be in thomas/server/static
         static_dir = Path(__file__).parent.parent / "static"
         if static_dir.exists() and static_dir.is_dir():
-            static_ok = True
             checks["static_files"] = "ok"
         else:
             static_error = f"Directory not found or not a directory: {static_dir}"

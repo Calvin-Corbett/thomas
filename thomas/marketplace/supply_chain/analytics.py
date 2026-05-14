@@ -152,7 +152,7 @@ class SupplyChainAnalytics:
         """
         # OTIF: On-Time In-Full
         on_time = sum(1 for s in shipments if s.actual_delivery <= s.expected_delivery) if shipments else 0
-        in_full = sum(1 for s in shipments if s.status.value == "delivered") if shipments else 0
+        sum(1 for s in shipments if s.status.value == "delivered") if shipments else 0
         otif = Decimal(on_time) / Decimal(len(shipments)) * Decimal("100") if shipments else Decimal("0")
 
         # Fill rate
@@ -162,7 +162,7 @@ class SupplyChainAnalytics:
 
         # Inventory turns
         total_inventory_value = Decimal(sum(level.quantity_on_hand * level.unit_cost for level in inventory_levels))
-        cogs = Decimal("0")  # Would come from accounting system
+        Decimal("0")  # Would come from accounting system
         inventory_turns = supply_chain_costs / total_inventory_value if total_inventory_value > 0 else Decimal("0")
 
         # Cash-to-cash cycle (Days)
@@ -258,7 +258,7 @@ class SupplyChainAnalytics:
             if len(retailer_orders) > 1
             else Decimal("0")
         )
-        wholesaler_var = (
+        (
             Decimal(str(statistics.variance([float(o) for o in wholesaler_orders])))
             if len(wholesaler_orders) > 1
             else Decimal("0")

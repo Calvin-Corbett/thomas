@@ -231,7 +231,7 @@ class TestStreamManager:
     def test_get_closed_streams(self) -> None:
         """Test getting only closed streams."""
         s1 = self.manager.create_stream(1)
-        s2 = self.manager.create_stream(3)
+        self.manager.create_stream(3)
         s1.close()
 
         closed = self.manager.get_closed_streams()

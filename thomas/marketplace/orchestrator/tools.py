@@ -33,7 +33,7 @@ class SagaExecutionTool(Tool):
             saga_name = args.get("saga_name")
 
             if action == "create":
-                saga = core.Saga(saga_id="", name=saga_name)
+                core.Saga(saga_id="", name=saga_name)
                 return ToolResult(ok=True, data={"status": "saga_created", "saga_name": saga_name})
 
             elif action == "execute":

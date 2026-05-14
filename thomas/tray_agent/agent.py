@@ -169,7 +169,7 @@ def enable_auto_start() -> bool:
     try:
         exe = _get_exe_path()
         script = _get_script_path()
-        cwd = str(_get_repo_root())
+        str(_get_repo_root())
 
         # Create task that runs at logon
         cmd = [

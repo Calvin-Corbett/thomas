@@ -79,15 +79,14 @@ class DXFReader:
 
     def _parse_sections(self, lines: list[str]) -> None:
         """Parse DXF sections."""
-        current_section = None
 
         for line in lines:
             line = line.strip()
 
             if line == "SECTION":
-                current_section = None
+                pass
             elif line.startswith("$"):
-                current_section = line
+                pass
 
         self.sections = {}
 

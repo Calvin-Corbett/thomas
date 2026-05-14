@@ -143,7 +143,7 @@ class Scheduler:
             if job_id not in self._jobs:
                 raise JobNotFound(job_id)
 
-            job = self._jobs[job_id]
+            self._jobs[job_id]
             del self._jobs[job_id]
             self.job_store.delete_job(job_id)
 

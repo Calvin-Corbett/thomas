@@ -119,7 +119,6 @@ class PackageLoader(Loader):
                 # Fall back to older API
                 import pkg_resources
 
-                path = f"{self.package_name}/{self.package_path}/{name}"
                 source = pkg_resources.resource_string(self.package_name, f"{self.package_path}/{name}").decode(
                     self.encoding
                 )

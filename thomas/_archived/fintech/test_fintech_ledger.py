@@ -41,7 +41,7 @@ class TestGeneralLedger:
 
     def test_account_hierarchy(self):
         """Test account parent-child relationships."""
-        parent = self.ledger.create_account(
+        self.ledger.create_account(
             code="1000",
             name="Assets",
             account_type=AccountType.ASSET,

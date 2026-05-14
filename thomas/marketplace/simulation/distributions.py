@@ -407,7 +407,7 @@ class Beta(Distribution):
 
     def sample(self) -> float:
         """Draw sample via Gamma method."""
-        u = random.random()
+        random.random()
         x = self._gamma(self.alpha, 1.0)
         y = self._gamma(self.beta_val, 1.0)
         return x / (x + y)

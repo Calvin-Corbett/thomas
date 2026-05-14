@@ -309,7 +309,7 @@ class TestSensitivePatterns:
         sanitizer = InputSanitizer(config)
         sanitizer.add_sensitive_pattern("api_key", r"api_key=\w+", "[MASKED]")
 
-        result = sanitizer.sanitize("url?api_key=secret123")
+        sanitizer.sanitize("url?api_key=secret123")
         # Custom patterns would need to be checked
 
 

@@ -85,7 +85,7 @@ class TestAuditLogger(unittest.TestCase):
         audit = AuditLogger()
 
         hash1 = audit.log_event("event1", "First event")
-        hash2 = audit.log_event("event2", "Second event")
+        audit.log_event("event2", "Second event")
 
         trail = audit.get_audit_trail()
         self.assertEqual(len(trail), 2)

@@ -213,7 +213,7 @@ class TestHPACKDecoder:
         encoded = self.encoder.encode_headers(headers)
 
         # Decode with decoder
-        decoded = self.decoder.decode_headers(encoded)
+        self.decoder.decode_headers(encoded)
 
         # Tables should be synchronized
         assert len(self.encoder.dynamic_table) == len(self.decoder.dynamic_table)

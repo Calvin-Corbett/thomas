@@ -374,7 +374,7 @@ Content 2"""
         original = parser.parse(source)
         original_len = len(original.children)
 
-        extracted = SectionExtractor.extract_section(original, "Section 1")
+        SectionExtractor.extract_section(original, "Section 1")
 
         # Original should be unchanged
         assert len(original.children) == original_len

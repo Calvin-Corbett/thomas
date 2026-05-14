@@ -31,7 +31,7 @@ class DocumentExtractionTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             action = args.get("action", "")
-            filepath = args.get("filepath", "")
+            args.get("filepath", "")
 
             if action == "extract_text":
                 return ToolResult(ok=True, data={"status": "text_extracted", "text": "", "num_pages": 0})
@@ -104,7 +104,7 @@ class DocumentConversionTool(Tool):
         try:
             from_format = args.get("from_format", "")
             to_format = args.get("to_format", "")
-            filepath = args.get("filepath", "")
+            args.get("filepath", "")
 
             if not from_format or not to_format:
                 return ToolResult(ok=False, error="from_format and to_format required")

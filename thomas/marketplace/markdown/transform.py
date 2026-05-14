@@ -334,7 +334,7 @@ class TableOfContentsInjector:
         # Build TOC list
         toc_list = MarkdownList(list_type=None, tight=True)
         for entry in toc_entries:
-            indent = "  " * (entry.level - 1)
+            "  " * (entry.level - 1)
             item_text = f"[{entry.title}](#{entry.anchor})"
             item = ListItem()
             # Parse item text

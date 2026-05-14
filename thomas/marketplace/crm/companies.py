@@ -252,7 +252,7 @@ class CompanyManager:
         Raises:
             CompanyNotFoundError: If company not found
         """
-        company = self.get_company(company_id)
+        self.get_company(company_id)
 
         activities = self._company_activities.get(company_id, [])
 

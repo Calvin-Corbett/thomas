@@ -127,7 +127,7 @@ class TestManufacturingManager:
         lines = [BOMLine(sku="MAT001", quantity=Decimal("2.00"), unit_cost=Decimal("5.00"))]
         mfg.create_bom("BOM001", "PRODUCT001", lines)
 
-        routing = mfg.create_routing(
+        mfg.create_routing(
             "ROUTE001",
             "PRODUCT001",
             [
@@ -136,7 +136,7 @@ class TestManufacturingManager:
             ],
         )
 
-        pr = mfg.create_production_order(
+        mfg.create_production_order(
             "PR001", "BOM001", "PRODUCT001", Decimal("50.00"), date(2024, 1, 1), date(2024, 1, 31)
         )
 
@@ -162,7 +162,7 @@ class TestManufacturingManager:
         lines = [BOMLine(sku="MAT001", quantity=Decimal("2.00"), unit_cost=Decimal("5.00"))]
         mfg.create_bom("BOM001", "PRODUCT001", lines)
 
-        pr = mfg.create_production_order(
+        mfg.create_production_order(
             "PR001", "BOM001", "PRODUCT001", Decimal("50.00"), date(2024, 1, 1), date(2024, 1, 31)
         )
 
@@ -176,7 +176,7 @@ class TestManufacturingManager:
         lines = [BOMLine(sku="MAT001", quantity=Decimal("2.00"), unit_cost=Decimal("5.00"))]
         mfg.create_bom("BOM001", "PRODUCT001", lines)
 
-        pr = mfg.create_production_order(
+        mfg.create_production_order(
             "PR001", "BOM001", "PRODUCT001", Decimal("50.00"), date(2024, 1, 1), date(2024, 1, 31)
         )
 
@@ -209,7 +209,7 @@ class TestManufacturingManager:
         lines = [BOMLine(sku="MAT001", quantity=Decimal("2.00"), unit_cost=Decimal("5.00"))]
         mfg.create_bom("BOM001", "PRODUCT001", lines)
 
-        pr = mfg.create_production_order(
+        mfg.create_production_order(
             "PR001", "BOM001", "PRODUCT001", Decimal("50.00"), date(2024, 1, 1), date(2024, 1, 31)
         )
 
@@ -227,7 +227,7 @@ class TestManufacturingManager:
         lines = [BOMLine(sku="MAT001", quantity=Decimal("2.00"), unit_cost=Decimal("5.00"))]
         mfg.create_bom("BOM001", "PRODUCT001", lines)
 
-        pr = mfg.create_production_order(
+        mfg.create_production_order(
             "PR001", "BOM001", "PRODUCT001", Decimal("100.00"), date(2024, 1, 1), date(2024, 1, 31)
         )
 

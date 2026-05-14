@@ -266,8 +266,8 @@ class TestSagaManager:
         saga1 = SimpleSaga()
         saga2 = SimpleSaga()
 
-        saga_id1 = await manager.start_saga(saga1)
-        saga_id2 = await manager.start_saga(saga2)
+        await manager.start_saga(saga1)
+        await manager.start_saga(saga2)
 
         completed = await manager.list_completed()
         assert len(completed) == 2
@@ -279,7 +279,7 @@ class TestSagaManager:
         saga1 = SimpleSaga()
         saga2 = FailingSaga()
 
-        saga_id1 = await manager.start_saga(saga1)
+        await manager.start_saga(saga1)
 
         with pytest.raises(SagaException):
             await manager.start_saga(saga2)

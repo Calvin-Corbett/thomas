@@ -251,7 +251,7 @@ class TestIPHash:
         context2 = RequestContext(client_ip="192.168.1.2", path="/test")
 
         decision1 = algo.select(backends, context1)
-        decision2 = algo.select(backends, context2)
+        algo.select(backends, context2)
 
         # They might be same or different, but algorithm is deterministic
         d1_repeat = algo.select(backends, context1)
@@ -290,7 +290,7 @@ class TestConsistentHash:
         for i in range(100):
             ctx = RequestContext(client_ip=f"192.168.1.{i}", path="/test")
             decision = algo.select(backends_reduced, context=ctx)
-            bid_before = list(selections_before.keys())[0]  # Simplified
+            list(selections_before.keys())[0]  # Simplified
 
         # Most requests should stay with same backend
         assert redistributed < 50  # Less than 50% redistribution expected

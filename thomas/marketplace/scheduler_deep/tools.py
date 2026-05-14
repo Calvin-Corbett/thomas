@@ -29,7 +29,7 @@ class SchedulerCreateJobTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             job_id = args["job_id"]
-            command = args["command"]
+            args["command"]
             schedule = args["schedule"]
 
             return ToolResult(
@@ -65,7 +65,7 @@ class SchedulerListJobsTool(Tool):
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
-            status_filter = args.get("status_filter", "all")
+            args.get("status_filter", "all")
 
             return ToolResult(
                 ok=True,

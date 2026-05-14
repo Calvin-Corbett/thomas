@@ -82,7 +82,7 @@ def resample_rational(
     if sample_rate <= 0 or new_sample_rate <= 0:
         raise SignalError("Sample rates must be positive")
 
-    ratio = new_sample_rate / sample_rate
+    new_sample_rate / sample_rate
 
     # Find rational approximation
     from fractions import Fraction
@@ -195,7 +195,7 @@ def resample_sinc(
 
         # Integer and fractional parts
         idx_center = int(np.round(pos_padded))
-        frac = pos_padded - idx_center
+        pos_padded - idx_center
 
         # Sinc kernel
         sinc_kernel = np.zeros(num_taps)

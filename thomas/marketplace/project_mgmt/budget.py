@@ -446,5 +446,5 @@ class BudgetManager:
         Raises:
             ProjectNotFoundError: If budget doesn't exist.
         """
-        budget = self.get_budget(budget_id)
+        self.get_budget(budget_id)
         del self.budgets[budget_id]

@@ -144,7 +144,7 @@ class TaskQueue:
         """
         with self._lock:
             if task_id in self._tasks:
-                task = self._tasks.pop(task_id)
+                self._tasks.pop(task_id)
                 self._queue = [(p, c, t) for p, c, t in self._queue if t.task_id != task_id]
                 heapq.heapify(self._queue)
                 self._save_if_enabled()
@@ -245,7 +245,7 @@ class TaskQueue:
 
     def _promote_scheduled_tasks(self) -> None:
         """Move scheduled tasks to main queue if time has come."""
-        now = datetime.utcnow()
+        datetime.utcnow()
         to_promote = [task_id for task_id, task in list(self._scheduled_tasks.items()) if not task.is_scheduled()]
 
         for task_id in to_promote:
@@ -278,7 +278,7 @@ class TaskQueue:
             state_file = Path(self.config.persistence_path) / "queue_state.json"
             if state_file.exists():
                 with open(state_file) as f:
-                    state = json.load(f)
+                    json.load(f)
                 # Note: In a real implementation, deserialize tasks properly
                 # This is simplified for the prototype
         except Exception:

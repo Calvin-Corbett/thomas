@@ -325,7 +325,6 @@ class WindForecaster:
 
         # Forecast
         forecast = []
-        current = mean_speed
 
         for hour in range(forecast_hours):
             # Decay deviation from mean

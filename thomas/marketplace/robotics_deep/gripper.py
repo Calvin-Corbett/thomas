@@ -182,7 +182,7 @@ class GraspPlanner:
         angle_between = 2 * math.pi / num_fingers
 
         object_radius = 0.05  # Assume small object
-        min_contact_angle = math.atan(friction_coefficient)
+        math.atan(friction_coefficient)
 
         for i in range(num_fingers):
             angle = i * angle_between

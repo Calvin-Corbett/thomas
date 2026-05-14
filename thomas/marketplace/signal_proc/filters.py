@@ -44,7 +44,7 @@ def design_lowpass_fir(
     omega_c = 2 * np.pi * cutoff / sample_rate
 
     # Sinc kernel
-    n = np.arange(num_taps)
+    np.arange(num_taps)
     center = num_taps // 2
 
     h = np.zeros(num_taps)
@@ -380,7 +380,7 @@ def design_butterworth_lowpass(
 
     # Analog prototype cutoff = 1 rad/s
     # Normalized digital frequency
-    omega_c = 2 * cutoff / sample_rate
+    2 * cutoff / sample_rate
     tan_half = np.tan(np.pi * cutoff / sample_rate)
 
     sections = []

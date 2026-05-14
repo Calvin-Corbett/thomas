@@ -180,8 +180,7 @@ class RetrievalPipeline:
 
         # Build features
         feats: list[CandidateFeatures] = []
-        pins = self._pins()
-        pinned_ids = set()  # pins are text, not IDs; set later via search (v4)
+        self._pins()
         for eid in candidate_ids:
             ev = self.log.get_event(eid)
             if not ev:

@@ -224,7 +224,7 @@ class SemanticRoleLabeler:
         roles = []
 
         # Get frame if available
-        frame = self.frames.get(predicate)
+        self.frames.get(predicate)
 
         for i, (span, text, candidate_role) in enumerate(arguments):
             # Use candidate role or refine

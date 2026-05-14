@@ -188,7 +188,7 @@ class TestContainerListing:
     def test_list_running_containers(self, runtime, test_image):
         """Test listing only running containers."""
         c1 = runtime.create_container(test_image, name="c1")
-        c2 = runtime.create_container(test_image, name="c2")
+        runtime.create_container(test_image, name="c2")
 
         runtime.start_container(c1.id)
 
@@ -206,7 +206,7 @@ class TestContainerListing:
 
     def test_get_container_by_name(self, runtime, test_image):
         """Test retrieving container by name."""
-        container = runtime.create_container(test_image, name="mycontainer")
+        runtime.create_container(test_image, name="mycontainer")
         retrieved = runtime.get_container("mycontainer")
 
         assert retrieved.name == "mycontainer"

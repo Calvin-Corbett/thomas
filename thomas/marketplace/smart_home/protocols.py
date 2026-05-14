@@ -160,7 +160,7 @@ class ProtocolBridge:
             raise MessageRoutingError(f"No route to {message.dest_device}")
 
         # Serialize with Zigbee framing
-        frame = self._serialize_zigbee_frame(message)
+        self._serialize_zigbee_frame(message)
 
         # Call handlers
         self._call_handlers(Protocol.ZIGBEE, message)

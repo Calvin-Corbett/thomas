@@ -115,7 +115,6 @@ class SMTPClient:
         if self.state != SMTPState.CONNECTED:
             raise SMTPError(f"Invalid state for EHLO: {self.state}")
 
-        command = f"EHLO {client_hostname}\r\n"
         self.state = SMTPState.EHLO_SENT
 
         response_lines = [
@@ -172,8 +171,7 @@ class SMTPClient:
             raise SMTPError("Server does not support AUTH")
 
         auth_string = f"\0{username}\0{password}"
-        encoded = base64.b64encode(auth_string.encode()).decode()
-        command = f"AUTH PLAIN {encoded}\r\n"
+        base64.b64encode(auth_string.encode()).decode()
         self.state = SMTPState.AUTH_PLAIN
 
         if self._simulate_auth_success(username, password):
@@ -239,7 +237,6 @@ class SMTPClient:
 
         self.current_from = from_addr
         self.current_recipients = []
-        command = f"MAIL FROM:<{from_addr.address}>\r\n"
         self.state = SMTPState.MAIL_FROM_SENT
 
         if self._simulate_sender_validation(from_addr):
@@ -265,7 +262,6 @@ class SMTPClient:
         ):
             raise SMTPError(f"Invalid state for RCPT: {self.state}")
 
-        command = f"RCPT TO:<{to_addr.address}>\r\n"
         self.state = SMTPState.RCPT_TO_SENT
 
         if self._simulate_recipient_validation(to_addr):
@@ -292,12 +288,11 @@ class SMTPClient:
         if not self.current_recipients:
             raise SMTPError("No recipients specified")
 
-        command = "DATA\r\n"
         self.state = SMTPState.DATA_SENT
 
         response = SMTPResponse(354, "Start mail input; end with <CRLF>.<CRLF>", is_success=True, is_continuation=True)
 
-        message_body = self._build_message_body(message)
+        self._build_message_body(message)
         self.state = SMTPState.MESSAGE_BODY_SENT
 
         return response
@@ -342,7 +337,6 @@ class SMTPClient:
         Returns:
             SMTP response
         """
-        command = "QUIT\r\n"
         self.state = SMTPState.QUIT_SENT
         return SMTPResponse(221, "2.0.0 Goodbye", is_success=True)
 

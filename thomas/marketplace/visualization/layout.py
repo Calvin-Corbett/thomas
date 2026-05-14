@@ -321,7 +321,7 @@ class ChartLayout:
         """
         axes_layout = self._calculate_axes_layout()
         if "bottom" in [al.position for al in axes_layout.values()]:
-            bottom_axis = [al for al in axes_layout.values() if al.position == "bottom"][0]
+            [al for al in axes_layout.values() if al.position == "bottom"][0]
             plot_y = min(al.y for al in axes_layout.values() if al.position != "bottom")
         else:
             plot_y = min([al.y for al in axes_layout.values()]) if axes_layout else 0

@@ -364,7 +364,7 @@ class TestDenoising:
 
         # High sharpening should increase contrast
         result_var = np.var(result.data)
-        orig_var = np.var(noisy_image.data)
+        np.var(noisy_image.data)
 
         # Variance might increase with sharpening
         assert result_var >= 0

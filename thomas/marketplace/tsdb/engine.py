@@ -194,7 +194,6 @@ class TSDBEngine:
                     chunk_end = chunk_start + self.config.chunk_size_ms
 
                     # Get or create chunk
-                    chunk_key = (series_id, chunk_start)
 
                     chunk = Chunk(
                         chunk_id=self.next_chunk_id,

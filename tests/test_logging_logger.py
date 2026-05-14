@@ -338,7 +338,7 @@ class TestLoggerNaming(unittest.TestCase):
 
     def test_hierarchy_creation(self) -> None:
         """Test automatic hierarchy creation."""
-        logger = get_logger("app.db.connection")
+        get_logger("app.db.connection")
         # Should automatically create app and app.db loggers
         self.assertIn("app", Logger._loggers)
         self.assertIn("app.db", Logger._loggers)

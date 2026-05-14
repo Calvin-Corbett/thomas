@@ -57,7 +57,7 @@ class TestParserState(unittest.TestCase):
     def test_state_immutability(self) -> None:
         """Test that applying action doesn't modify original state."""
         state = ParserState(buffer=[0, 1, 2], stack=[], dependencies=[])
-        new_state = state.apply_action("SHIFT")
+        state.apply_action("SHIFT")
 
         # Original should be unchanged
         self.assertEqual(len(state.buffer), 3)
@@ -269,7 +269,7 @@ class TestParserIntegration(unittest.TestCase):
         sentence = Sentence(text=text, tokens=tokens)
 
         parser = DependencyParser()
-        tree = parser.parse(sentence)
+        parser.parse(sentence)
 
         self.assertEqual(sentence.text, text)
 

@@ -221,12 +221,12 @@ class TestBotDetector:
     def test_cleanup_expired_tokens(self, detector: BotDetector, browser_request: HTTPRequest) -> None:
         """Test cleanup of expired tokens."""
         # Generate token
-        token = detector.require_javascript_challenge(browser_request)
+        detector.require_javascript_challenge(browser_request)
 
         assert len(detector.challenge_tokens) == 1
 
         # Cleanup
-        count = detector.cleanup_expired_tokens()
+        detector.cleanup_expired_tokens()
         # Count may be 0 if token hasn't expired yet
 
     def test_get_stats(self, detector: BotDetector, browser_request: HTTPRequest) -> None:

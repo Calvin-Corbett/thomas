@@ -152,7 +152,7 @@ class TestWAFIntegration:
         assert len(rep.threat_types) == 2
 
         # Check suspicious
-        is_suspicious = waf_stack["ip_reputation"].is_suspicious(ip)
+        waf_stack["ip_reputation"].is_suspicious(ip)
 
     def test_bot_challenge_flow(self, waf_stack):
         """Test bot challenge flow."""
@@ -182,7 +182,7 @@ class TestWAFIntegration:
     def test_anomaly_score_accumulation(self, waf_stack):
         """Test anomaly score accumulation."""
         # Get SQL injection rules
-        sql_rules = BuiltInRules.get_rules_by_category("SQL Injection")
+        BuiltInRules.get_rules_by_category("SQL Injection")
 
         request = HTTPRequest(
             method="GET",

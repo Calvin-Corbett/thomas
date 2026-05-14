@@ -177,7 +177,7 @@ class TestPlaybookEngine:
     def test_handler_notification(self) -> None:
         """Test handler notification."""
         handler = Handler(name="restart_service", action="service")
-        task = Task(
+        Task(
             name="Update config",
             module="template",
             args={"src": "/tmp/conf.j2", "dest": "/etc/app.conf"},
@@ -197,7 +197,7 @@ class TestPlaybookEngine:
         task1 = Task(name="Task1", module="command", args={"cmd": "true"})
         task2 = Task(name="Task2", module="command", args={"cmd": "false"})
 
-        playbook = Playbook(
+        Playbook(
             name="test",
             hosts="all",
             tasks=[task1, task2],

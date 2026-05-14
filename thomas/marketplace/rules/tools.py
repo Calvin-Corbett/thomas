@@ -66,7 +66,7 @@ class RuleChainEvaluationTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             chain_name = args.get("chain_name")
-            context = args.get("context", {})
+            args.get("context", {})
 
             return ToolResult(
                 ok=True,

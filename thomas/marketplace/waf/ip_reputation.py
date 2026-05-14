@@ -341,7 +341,7 @@ class IPReputationManager:
             CIDR notation string or None
         """
         try:
-            ip_obj = ipaddress.ip_address(ip_address)
+            ipaddress.ip_address(ip_address)
             # Return /24 network (class C)
             network = ipaddress.ip_network(f"{ip_address}/24", strict=False)
             return str(network)
@@ -356,7 +356,6 @@ class IPReputationManager:
             Number of bans removed
         """
         count = 0
-        expired = []
 
         for ip_address, rep in self.reputation.items():
             if rep.ban_until and datetime.utcnow() >= rep.ban_until:

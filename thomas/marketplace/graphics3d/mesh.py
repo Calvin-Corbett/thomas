@@ -591,7 +591,7 @@ def simplify_mesh(mesh: Mesh, target_vertex_count: int) -> Mesh:
     vertices = list(mesh.vertices)
     indices = list(mesh.indices)
     valid = [True] * len(vertices)
-    vertex_map = list(range(len(vertices)))
+    list(range(len(vertices)))
 
     # Collapse edges
     while len([v for v in valid if v]) > target_vertex_count and edges:

@@ -113,7 +113,7 @@ class TestHTTP2ConnectionServer:
         self.conn.initiate()
 
         # Get next available ID for server
-        next_id = self.conn.stream_manager.next_available_stream_id()
+        self.conn.stream_manager.next_available_stream_id()
         # Manually set to 2 for testing
         self.conn.stream_manager.next_stream_id = 2
 

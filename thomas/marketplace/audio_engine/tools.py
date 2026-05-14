@@ -121,7 +121,7 @@ class FilterTool(Tool):
                 return ToolResult(ok=False, error=f"Unknown filter type: {action}")
 
             # Create biquad filter
-            filt = audio_engine.BiquadFilter(filter_type, frequency, q_factor, sample_rate)
+            audio_engine.BiquadFilter(filter_type, frequency, q_factor, sample_rate)
 
             return ToolResult(
                 ok=True,
@@ -213,13 +213,13 @@ class AnalysisTool(Tool):
             sample_rate = int(args.get("sample_rate", 44100))
 
             if action == "spectrum":
-                analyzer = audio_engine.SpectrumAnalyzer(sample_rate=sample_rate)
+                audio_engine.SpectrumAnalyzer(sample_rate=sample_rate)
                 return ToolResult(ok=True, data={"status": "spectrum_analyzer_created", "sample_rate": sample_rate})
             elif action == "pitch":
-                detector = audio_engine.PitchDetector(sample_rate=sample_rate)
+                audio_engine.PitchDetector(sample_rate=sample_rate)
                 return ToolResult(ok=True, data={"status": "pitch_detector_created", "sample_rate": sample_rate})
             elif action == "onset":
-                detector = audio_engine.OnsetDetector(sample_rate=sample_rate)
+                audio_engine.OnsetDetector(sample_rate=sample_rate)
                 return ToolResult(ok=True, data={"status": "onset_detector_created", "sample_rate": sample_rate})
             else:
                 return ToolResult(ok=False, error=f"Unknown action: {action}")

@@ -158,7 +158,7 @@ def bca_confidence_interval(
         bootstrap_sample = [random.choice(data) for _ in range(len(data))]
         bootstrap_stats.append(statistic(bootstrap_sample))
 
-    bootstrap_mean = desc.mean(bootstrap_stats)
+    desc.mean(bootstrap_stats)
 
     z0 = 0
     bootstrap_less = sum(1 for b in bootstrap_stats if b < theta_hat)
@@ -182,7 +182,7 @@ def bca_confidence_interval(
 
     sorted_stats = sorted(bootstrap_stats)
 
-    alpha = 1 - level
+    1 - level
     z_alpha_lower = -1.96
     z_alpha_upper = 1.96
 

@@ -75,7 +75,6 @@ class TestRRT:
 
     def test_path_collision_check(self) -> None:
         """Test path collision checking."""
-        obstacle_hit = False
 
         def collision_checker(q: list) -> bool:
             """Obstacle at (0.5, 0.5)."""
@@ -104,7 +103,7 @@ class TestRRTStar:
         """Test RRT* finds better paths than RRT."""
 
         def collision_checker(q: list) -> bool:
-            x, y = q[0], q[1]
+            _x, _y = q[0], q[1]
             return True
 
         rrt_star = RRTStar(

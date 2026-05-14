@@ -152,7 +152,7 @@ class TestUniqueConstraints:
 
     def test_unique_constraint_on_property(self) -> None:
         """Test unique constraint during property validation."""
-        storage = GraphStorage()
+        GraphStorage()
         schema_manager = SchemaManager()
 
         properties = {

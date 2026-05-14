@@ -260,7 +260,7 @@ class DesktopHostCapabilityService:
         return self.status()
 
     def launch_host_service_install(self) -> dict[str, Any]:
-        posture = self.install_host_capability(stage_only=True)
+        self.install_host_capability(stage_only=True)
         command = self._install_launch_command()
         result: dict[str, Any] = {
             "ok": False,

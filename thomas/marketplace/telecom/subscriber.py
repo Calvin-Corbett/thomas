@@ -285,7 +285,7 @@ class ChurnPredictor:
 
         tracker = self.usage_trackers.get(msisdn)
         if tracker:
-            monthly_usage = tracker.get_monthly_usage()
+            tracker.get_monthly_usage()
             data_usage_ratio = (
                 subscriber.used_data_gb / subscriber.monthly_quota_gb if subscriber.monthly_quota_gb > 0 else 0.0
             )

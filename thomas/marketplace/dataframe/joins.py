@@ -123,8 +123,8 @@ class JoinOperation:
         left_col = list(on_mapping.keys())[0]
         right_col = list(on_mapping.values())[0]
 
-        left_sorted = left.copy()
-        right_sorted = right.copy()
+        left.copy()
+        right.copy()
 
         # Simple sort
         left_indices = sorted(

@@ -200,7 +200,7 @@ class TestEncoderSimulator:
         circumference = 2 * math.pi * 0.1
         position = Vec3(circumference, 0, 0)
 
-        ticks = encoder.update(position)
+        encoder.update(position)
         distance = encoder.get_distance()
 
         assert abs(distance - circumference) < 0.01
@@ -286,13 +286,13 @@ class TestSensorIntegration:
         assert len(scan.ranges) == 10
 
         point = Vec3(1, 0, 5)
-        projection = camera.project(point, pose)
+        camera.project(point, pose)
         # May or may not project depending on camera orientation
 
     def test_imu_encoder_fusion(self) -> None:
         """Test IMU and encoder fusion."""
         imu = IMUSimulator()
-        encoder = EncoderSimulator()
+        EncoderSimulator()
         fusion = SensorFusion()
 
         vel = Vec3(1.0, 0, 0)
@@ -322,15 +322,15 @@ class TestSensorIntegration:
         assert len(scan.ranges) == 8
 
         point = Vec3(2, 1, 5)
-        proj = camera.project(point, pose)
+        camera.project(point, pose)
 
         accel, gyro = imu.measure(Vec3(1, 0, 0), Vec3(0, 0, 0.1))
 
         pos = Vec3(1, 0, 0)
-        ticks = encoder.update(pos)
+        encoder.update(pos)
 
         fusion.__post_init__()
-        attitude = fusion.complementary_filter(accel, gyro)
+        fusion.complementary_filter(accel, gyro)
 
         # System should work without errors
         assert scan is not None

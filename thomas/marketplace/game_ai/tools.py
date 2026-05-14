@@ -92,7 +92,7 @@ class GOAPPlannerTool(Tool):
                 precond = args.get("preconditions", {})
                 effects = args.get("effects", {})
                 cost = args.get("cost", 1.0)
-                goap_action = game_ai.GOAPAction(
+                game_ai.GOAPAction(
                     name="action",
                     preconditions=game_ai.WorldState(precond),
                     effects=game_ai.WorldState(effects),
@@ -100,8 +100,8 @@ class GOAPPlannerTool(Tool):
                 )
                 return ToolResult(ok=True, data={"action": "added", "cost": cost})
             elif action == "plan":
-                goal = game_ai.WorldState(args.get("goal", {}))
-                initial = game_ai.WorldState(args.get("initial_state", {}))
+                game_ai.WorldState(args.get("goal", {}))
+                game_ai.WorldState(args.get("initial_state", {}))
                 planner = game_ai.GOAPPlanner()
                 return ToolResult(ok=True, data={"plan": "generated", "goal_reachable": True})
             else:
@@ -247,7 +247,7 @@ class SteeringBehaviorTool(Tool):
         try:
             behavior = args.get("behavior", "seek")
             position = args.get("position", [0, 0])
-            velocity = args.get("velocity", [0, 0])
+            args.get("velocity", [0, 0])
             target = args.get("target", [1, 1])
             max_speed = args.get("max_speed", 5.0)
 

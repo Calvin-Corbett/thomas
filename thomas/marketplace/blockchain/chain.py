@@ -325,7 +325,7 @@ class Blockchain:
                 break
 
         # Remove blocks after common ancestor
-        blocks_to_remove = old_chain[common_idx + 1 :]
+        old_chain[common_idx + 1 :]
         blocks_to_add = new_chain[common_idx + 1 :]
 
         # Reset state to common ancestor

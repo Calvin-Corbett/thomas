@@ -183,7 +183,7 @@ def balanced_partitioning(
     partition = spectral_partitioning(adjacency_matrix, num_partitions)
 
     # Check balance
-    partition_sizes = [partition.count(p) for p in range(num_partitions)]
+    [partition.count(p) for p in range(num_partitions)]
     ideal_size = n / num_partitions
     tolerance = int(ideal_size * balance_factor)
 

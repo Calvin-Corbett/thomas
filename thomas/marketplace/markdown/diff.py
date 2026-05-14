@@ -197,17 +197,17 @@ class ThreeWayMerge:
         theirs_text = renderer.render(theirs).splitlines(keepends=True)
 
         # Three-way merge
-        merger = difflib.Differ()
+        difflib.Differ()
         merged_lines = []
         conflicts = []
 
         # Use diff3-like approach
-        base_diff_ours = list(difflib.SequenceMatcher(None, base_text, ours_text).get_opcodes())
-        base_diff_theirs = list(difflib.SequenceMatcher(None, base_text, theirs_text).get_opcodes())
+        list(difflib.SequenceMatcher(None, base_text, ours_text).get_opcodes())
+        list(difflib.SequenceMatcher(None, base_text, theirs_text).get_opcodes())
 
         # Detect conflicts
-        our_changes = ThreeWayMerge._extract_changes(base_text, ours_text)
-        their_changes = ThreeWayMerge._extract_changes(base_text, theirs_text)
+        ThreeWayMerge._extract_changes(base_text, ours_text)
+        ThreeWayMerge._extract_changes(base_text, theirs_text)
 
         for line_no in range(max(len(ours_text), len(theirs_text))):
             if line_no < len(ours_text) and line_no < len(theirs_text):

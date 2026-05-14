@@ -30,7 +30,7 @@ class DataToTextTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             data_type = args.get("data_type", "")
-            data = args.get("data", {})
+            args.get("data", {})
 
             if data_type not in ["sports", "weather", "financial", "health"]:
                 return ToolResult(ok=False, error=f"Unknown data type: {data_type}")
@@ -64,7 +64,7 @@ class DialogueGenerationTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             dialogue_type = args.get("dialogue_type", "")
-            context = args.get("context", {})
+            args.get("context", {})
 
             supported = ["customer_service", "chitchat", "negotiation", "task_oriented"]
             if dialogue_type not in supported:

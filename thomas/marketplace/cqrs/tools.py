@@ -109,9 +109,9 @@ class CQRSGetEventsTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             aggregate_id = args["aggregate_id"]
-            event_type = args.get("event_type")
+            args.get("event_type")
             from_version = args.get("from_version", 0)
-            limit = args.get("limit", 50)
+            args.get("limit", 50)
 
             return ToolResult(
                 ok=True,
@@ -146,7 +146,7 @@ class CQRSRebuildProjectionTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             projection_name = args["projection_name"]
-            from_timestamp = args.get("from_timestamp")
+            args.get("from_timestamp")
 
             return ToolResult(
                 ok=True,

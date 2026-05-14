@@ -194,7 +194,6 @@ class ProsodyAnalyzer:
         vad_flags, segments = self.vad_detector.detect_voice_activity(audio_sample)
 
         pauses = []
-        sample_rate = audio_sample.sample_rate
 
         # Gaps between speech segments
         for i in range(len(segments) - 1):
@@ -255,7 +254,6 @@ class ProsodyAnalyzer:
         Returns:
             List of prosodic features.
         """
-        sample_rate = audio_sample.sample_rate
 
         # Extract pitch
         pitch_contour = self.pitch_detector.detect_pitch(audio_sample)

@@ -48,8 +48,8 @@ class HTTP2ConnectionTool(Tool):
             elif action == "send_request":
                 method = args.get("method", "GET")
                 url = args.get("url", "")
-                headers = args.get("headers", {})
-                body = args.get("body", "")
+                args.get("headers", {})
+                args.get("body", "")
 
                 if not url:
                     return ToolResult(ok=False, error="url required")

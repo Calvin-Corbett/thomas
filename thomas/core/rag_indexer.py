@@ -211,7 +211,7 @@ def _chunk_python_ast(text: str) -> list[_Chunk] | None:
         return None
 
     lines = text.splitlines(True)
-    newlines = _newline_positions(text)
+    _newline_positions(text)
 
     def line_to_char(line_no: int) -> int:
         return sum(len(lines[i]) for i in range(max(0, line_no - 1)))

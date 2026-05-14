@@ -69,7 +69,7 @@ class SchemaValidationTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             schema_name = args.get("schema_name")
-            data = args.get("data", {})
+            args.get("data", {})
 
             return ToolResult(
                 ok=True, data={"status": "validation_complete", "schema": schema_name, "valid": True, "errors": []}

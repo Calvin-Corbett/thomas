@@ -483,7 +483,6 @@ class FlightSearchEngine:
         if not segments:
             raise InvalidSearchError("At least one segment required")
 
-        itineraries = []
         current_options = []
 
         # Search first segment

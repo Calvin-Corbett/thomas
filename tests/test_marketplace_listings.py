@@ -306,7 +306,7 @@ class TestListingRegistry:
         """Test listing vendor's listings."""
         registry = ListingRegistry()
 
-        listing1 = registry.create_listing(
+        registry.create_listing(
             vendor_id="vendor_1",
             product_id="prod_1",
             title="Product 1",
@@ -318,7 +318,7 @@ class TestListingRegistry:
             attributes={},
         )
 
-        listing2 = registry.create_listing(
+        registry.create_listing(
             vendor_id="vendor_1",
             product_id="prod_2",
             title="Product 2",
@@ -330,7 +330,7 @@ class TestListingRegistry:
             attributes={},
         )
 
-        listing3 = registry.create_listing(
+        registry.create_listing(
             vendor_id="vendor_2",
             product_id="prod_3",
             title="Product 3",

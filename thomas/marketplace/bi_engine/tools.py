@@ -164,7 +164,7 @@ class PivotAnalysisTool(Tool):
                 return ToolResult(ok=False, error=f"Cube not found: {cube_name}")
 
             if action == "create_pivot":
-                pivot = self.engine.create_pivot(cube_name)
+                self.engine.create_pivot(cube_name)
                 return ToolResult(ok=True, data={"pivot_created": True})
 
             elif action == "slice_cube":

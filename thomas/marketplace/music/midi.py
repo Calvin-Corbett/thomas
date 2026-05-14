@@ -288,7 +288,6 @@ class MidiFile:
         """
         track = MidiTrack()
         current_time = 0
-        running_status = 0
 
         while True:
             delta_time, _ = decode_varint(f)
@@ -310,10 +309,8 @@ class MidiFile:
                 if meta_type == META_EVENT_SEQUENCE_NAME:
                     track.name = meta_data.decode("utf-8", errors="replace")
 
-                running_status = 0
 
             elif status_byte & 0x80:
-                running_status = status_byte
                 channel = status_byte & 0x0F
                 event_type = status_byte & 0xF0
 

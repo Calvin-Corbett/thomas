@@ -166,7 +166,7 @@ class TestCommandManager:
             target_device_id=device_id,
             action="set_temperature",
         )
-        cmd2 = manager.send_command(
+        manager.send_command(
             target_device_id=device_id,
             action="query",
         )
@@ -217,7 +217,7 @@ class TestCommandManager:
         )
         manager.complete_command(cmd1.command_id, {"success": True})
 
-        cmd2 = manager.send_command(
+        manager.send_command(
             target_device_id=device_id,
             action="query",
         )
@@ -285,7 +285,7 @@ class TestCommandManager:
             target_device_id=device_id,
             action="action1",
         )
-        cmd2 = manager.send_command(
+        manager.send_command(
             target_device_id=device_id,
             action="action2",
         )

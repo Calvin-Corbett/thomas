@@ -187,7 +187,7 @@ class Matrix4x4:
 
         # Inverse: R^T and -R^T * p
         rot_inv = rot.transpose()
-        pos_inv = rot_inv.multiply(Matrix3x3.from_list([[p] for p in pos.to_list()]))
+        rot_inv.multiply(Matrix3x3.from_list([[p] for p in pos.to_list()]))
 
         for i in range(3):
             for j in range(3):

@@ -175,7 +175,7 @@ class TestCompleteWorkflow:
             when="env == 'production'",
         )
 
-        playbook = Playbook(
+        Playbook(
             name="conditional_install",
             hosts="all",
             tasks=[task],
@@ -192,7 +192,7 @@ class TestCompleteWorkflow:
             with_items=["alice", "bob", "charlie"],
         )
 
-        playbook = Playbook(
+        Playbook(
             name="create_users",
             hosts="all",
             tasks=[task],
@@ -250,7 +250,7 @@ class TestCompleteWorkflow:
         )
 
         # Create runner
-        runner = PlaybookRunner(self.inventory)
+        PlaybookRunner(self.inventory)
 
         # Validate playbook
         playbook.validate()
@@ -273,7 +273,7 @@ class TestCompleteWorkflow:
             tasks=[Task(name="Install", module="package", args={"name": "postgresql"})],
         )
 
-        runner = PlaybookRunner(self.inventory)
+        PlaybookRunner(self.inventory)
 
         playbook1.validate()
         playbook2.validate()

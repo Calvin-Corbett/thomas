@@ -68,7 +68,7 @@ class CompilerOptimizeCodeTool(Tool):
         try:
             from thomas.marketplace.compiler_infra.optimizer import IROptimizer
 
-            optimizer = IROptimizer()
+            IROptimizer()
             passes = args.get("passes", [])
 
             return ToolResult(
@@ -106,7 +106,7 @@ class CompilerGenerateCodeTool(Tool):
         try:
             from thomas.marketplace.compiler_infra.codegen import CodeGenerator
 
-            codegen = CodeGenerator()
+            CodeGenerator()
             target = args["target_language"]
 
             return ToolResult(

@@ -204,7 +204,7 @@ class SentencePlanner:
         for entity in entities:
             entity_id = entity.get("id", "unknown")
             name = entity.get("name", "entity")
-            category = entity.get("category", "object")
+            entity.get("category", "object")
             gender = entity.get("gender", "neuter")
 
             if entity_id in context:

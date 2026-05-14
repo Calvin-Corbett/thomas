@@ -344,7 +344,7 @@ class TestOrderMatcher:
             tif=TimeInForce.FOK,
         )
 
-        trades = self.matcher.submit_order(fok_order)
+        self.matcher.submit_order(fok_order)
 
         # Should cancel unfilled
         assert fok_order.status == OrderStatus.CANCELLED

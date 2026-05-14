@@ -131,7 +131,7 @@ class ReadingOrderDetector:
 
             return ReadingOrder(elements=ordered)
 
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as e:
             raise LayoutError(f"Reading order detection failed: {e}")
 
     def _xy_cut(self, blocks: list[TextBlock], indices: list[int], depth: int = 0) -> list[int]:
@@ -290,7 +290,6 @@ class ReadingOrderDetector:
 
         for idx in sorted_indices:
             block = blocks[idx]
-            coord = block.bbox.x0 if direction == "vertical" else block.bbox.y0
 
             # Check if block crosses any cut
             in_new_partition = False

@@ -137,9 +137,9 @@ class HealthChecker:
 
     def _check_http(self, check: Check) -> CheckResult:
         """Execute HTTP health check."""
-        url = check.config.get("url", "")
-        expected_status = check.config.get("expected_status", 200)
-        expected_body = check.config.get("expected_body", None)
+        check.config.get("url", "")
+        check.config.get("expected_status", 200)
+        check.config.get("expected_body", None)
 
         start_time = time.time()
 

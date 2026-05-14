@@ -354,7 +354,7 @@ class TestLoggerNameFilter(unittest.TestCase):
         """Test exact logger name matching."""
         filter = LoggerNameFilter("app.service")
 
-        app_logger = get_logger("app")
+        get_logger("app")
         service_logger = get_logger("app.service")
         db_logger = get_logger("app.database")
 
@@ -375,7 +375,7 @@ class TestLoggerNameFilter(unittest.TestCase):
         """Test logger name with wildcard."""
         filter = LoggerNameFilter("app.*")
 
-        app_logger = get_logger("app")
+        get_logger("app")
         service_logger = get_logger("app.service")
         db_logger = get_logger("app.database")
         other_logger = get_logger("other")

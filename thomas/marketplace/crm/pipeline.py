@@ -227,7 +227,7 @@ class PipelineManager:
         Raises:
             PipelineNotFoundError: If pipeline not found
         """
-        pipeline = self.get_pipeline(pipeline_id)
+        self.get_pipeline(pipeline_id)
 
         conversion_rates = {}
 
@@ -305,7 +305,7 @@ class PipelineManager:
         Raises:
             PipelineNotFoundError: If pipeline not found
         """
-        pipeline = self.get_pipeline(pipeline_id)
+        self.get_pipeline(pipeline_id)
 
         cycle_times = []
 

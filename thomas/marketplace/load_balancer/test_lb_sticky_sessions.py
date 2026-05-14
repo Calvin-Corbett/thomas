@@ -250,7 +250,7 @@ class TestSessionManager:
         time.sleep(1.2)
 
         # Expired session should be gone
-        all_sessions = manager.get_all_sessions()
+        manager.get_all_sessions()
         # Note: May still exist until cleanup runs
 
         manager.stop()
@@ -274,7 +274,7 @@ class TestSessionAffinity:
 
     def test_sticky_session_affinity(self, manager, backends):
         """Test that same session stays with same backend."""
-        context1 = RequestContext(
+        RequestContext(
             client_ip="192.168.1.1",
             path="/test",
             session_id="sess1",

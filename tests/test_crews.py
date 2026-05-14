@@ -360,7 +360,7 @@ class TestCrew(unittest.TestCase):
         task = Task("unknown", required_capabilities=["nonexistent"])
         self.crew.add_task(task)
 
-        results = self.crew.execute_sequential()
+        self.crew.execute_sequential()
 
         # Task should be in execution log but not executed
         self.assertEqual(len([e for e in self.crew.execution_log if e["task"] == "unknown"]), 1)
