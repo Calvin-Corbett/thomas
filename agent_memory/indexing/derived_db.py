@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import json
 import sqlite3
 import time
@@ -100,7 +101,7 @@ class DerivedDB:
         self.conn.commit()
 
     # ---- vectors ----
-    def vec_upsert(self, event_id: int, thread: str, ts_utc: int, etype: str, vec: Dict[str, float]) -> None:
+    def vec_upsert(self, event_id: int, thread: str, ts_utc: int, etype: str, vec: dict[str, float]) -> None:
         norm = sum(v*v for v in vec.values()) ** 0.5
         if norm > 0:
             vec = {k: v / norm for k, v in vec.items()}
@@ -111,25 +112,25 @@ class DerivedDB:
             (event_id, thread, ts_utc, etype, json.dumps(vec, ensure_ascii=False), float(norm))
         )
 
-    def vec_get(self, event_id: int) -> Optional[Dict[str, float]]:
+    def vec_get(self, event_id: int) -> dict[str, float] | None:
         cur = self.conn.execute("SELECT vec_json FROM vec WHERE event_id=?", (event_id,))
         r = cur.fetchone()
         if not r:
             return None
         return json.loads(r[0])
 
-    def vec_candidates_by_thread(self, thread: str, limit: int = 2000) -> List[int]:
+    def vec_candidates_by_thread(self, thread: str, limit: int = 2000) -> list[int]:
         cur = self.conn.execute("SELECT event_id FROM vec WHERE thread=? ORDER BY ts_utc DESC LIMIT ?", (thread, limit))
         return [int(r[0]) for r in cur.fetchall()]
 
-    def vec_candidates_recent_global(self, limit: int = 2000) -> List[int]:
+    def vec_candidates_recent_global(self, limit: int = 2000) -> list[int]:
         cur = self.conn.execute("SELECT event_id FROM vec ORDER BY ts_utc DESC LIMIT ?", (limit,))
         return [int(r[0]) for r in cur.fetchall()]
 
-    def vec_similarity(self, qvec: Dict[str, float], event_ids: List[int]) -> Dict[int, float]:
+    def vec_similarity(self, qvec: dict[str, float], event_ids: list[int]) -> dict[int, float]:
         # cosine for sparse dicts
         q = qvec
-        out: Dict[int, float] = {}
+        out: dict[int, float] = {}
         if not q:
             return out
         placeholders = ",".join("?" for _ in event_ids) if event_ids else "NULL"
@@ -158,8 +159,8 @@ class DerivedDB:
         cur = self.conn.execute("SELECT node_id FROM g_nodes WHERE type_name=? AND key=?", (type_name, key))
         return int(cur.fetchone()[0])
 
-    def edge_add(self, src_node: int, rel: str, dst_node: int, confidence: float = 0.5, user_asserted: bool = False, receipts: Optional[List[Dict[str, Any]]] = None,
-                 valid_from_ts_utc: Optional[int] = None, valid_to_ts_utc: Optional[int] = None) -> int:
+    def edge_add(self, src_node: int, rel: str, dst_node: int, confidence: float = 0.5, user_asserted: bool = False, receipts: list[dict[str, Any]] | None = None,
+                 valid_from_ts_utc: int | None = None, valid_to_ts_utc: int | None = None) -> int:
         now = int(time.time())
         self.conn.execute(
             "INSERT INTO g_edges(src_node, rel, dst_node, created_ts_utc, valid_from_ts_utc, valid_to_ts_utc, confidence, user_asserted, receipts_json) VALUES (?,?,?,?,?,?,?,?,?)",
@@ -168,7 +169,7 @@ class DerivedDB:
         cur = self.conn.execute("SELECT last_insert_rowid()")
         return int(cur.fetchone()[0])
 
-    def edges_from(self, src_node: int, rel: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+    def edges_from(self, src_node: int, rel: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
         if rel:
             cur = self.conn.execute(
                 "SELECT edge_id, src_node, rel, dst_node, created_ts_utc, valid_from_ts_utc, valid_to_ts_utc, confidence, user_asserted, tombstoned, receipts_json "
@@ -198,7 +199,7 @@ class DerivedDB:
             })
         return out
 
-    def node_get(self, node_id: int) -> Optional[Dict[str, Any]]:
+    def node_get(self, node_id: int) -> dict[str, Any] | None:
         cur = self.conn.execute("SELECT node_id, type_name, key, label, created_ts_utc, user_asserted, tombstoned FROM g_nodes WHERE node_id=?", (node_id,))
         r = cur.fetchone()
         if not r:
@@ -213,7 +214,7 @@ class DerivedDB:
             "tombstoned": bool(r[6]),
         }
 
-    def nodes_search_label(self, like: str, limit: int = 50) -> List[Dict[str, Any]]:
+    def nodes_search_label(self, like: str, limit: int = 50) -> list[dict[str, Any]]:
         cur = self.conn.execute(
             "SELECT node_id, type_name, key, label, created_ts_utc, user_asserted, tombstoned FROM g_nodes WHERE tombstoned=0 AND label LIKE ? LIMIT ?",
             (f"%{like}%", limit)
@@ -258,14 +259,14 @@ class DerivedDB:
         )
 
     # ---- rollups ----
-    def rollup_set(self, key: str, text: str, meta: Optional[Dict[str, Any]] = None):
+    def rollup_set(self, key: str, text: str, meta: dict[str, Any] | None = None):
         self.conn.execute(
             "INSERT INTO rollups(key, created_ts_utc, text, meta_json) VALUES (?,?,?,?) "
             "ON CONFLICT(key) DO UPDATE SET created_ts_utc=excluded.created_ts_utc, text=excluded.text, meta_json=excluded.meta_json",
             (key, int(time.time()), text, json.dumps(meta or {}, ensure_ascii=False))
         )
 
-    def rollup_get(self, key: str) -> Optional[str]:
+    def rollup_get(self, key: str) -> str | None:
         cur = self.conn.execute("SELECT text FROM rollups WHERE key=?", (key,))
         r = cur.fetchone()
         return r[0] if r else None

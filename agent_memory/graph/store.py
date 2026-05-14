@@ -1,9 +1,11 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from agent_memory.indexing.derived_db import DerivedDB
 from agent_memory.graph.extract import extract_edges
+from agent_memory.indexing.derived_db import DerivedDB
+
 
 @dataclass
 class GraphConfig:
@@ -24,17 +26,17 @@ class GraphStore:
             dst_id = self.db.node_upsert(dst_t, dst_k, dst_label, user_asserted=user_asserted)
             self.db.edge_add(src_id, e["rel"], dst_id, confidence=float(e.get("confidence", 0.5)), user_asserted=user_asserted, receipts=receipts)
 
-    def related_receipts(self, like_label: str, max_hops: int = 2, limit_edges: int = 80) -> List[int]:
+    def related_receipts(self, like_label: str, max_hops: int = 2, limit_edges: int = 80) -> list[int]:
         # naive: find nodes by label substring, hop outward, collect receipts event_ids
         nodes = self.db.nodes_search_label(like_label, limit=12)
-        receipts: List[int] = []
+        receipts: list[int] = []
         seen_edges = 0
         seen_nodes = set()
         frontier = [n["node_id"] for n in nodes]
         for nid in frontier:
             seen_nodes.add(nid)
         for hop in range(max_hops):
-            next_frontier: List[int] = []
+            next_frontier: list[int] = []
             for nid in frontier:
                 edges = self.db.edges_from(nid, rel=None, limit=limit_edges)
                 for ed in edges:

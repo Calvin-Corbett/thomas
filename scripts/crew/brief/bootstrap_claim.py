@@ -12,7 +12,6 @@ from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 
-import sys
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
@@ -20,7 +19,7 @@ if str(_REPO_ROOT) not in sys.path:
 try:
     from scripts import agent_identity
     from scripts.crew.workboard import claim as claim_tool
-except Exception:  # pragma: no cover
+except (ImportError, ModuleNotFoundError, AttributeError):  # pragma: no cover
     import agent_identity  # type: ignore
     from crew.workboard import claim as claim_tool  # type: ignore
 
@@ -43,7 +42,7 @@ def _presence_repo_root(workboard_path: Path) -> Path:
     candidate = workboard_path.resolve()
     try:
         candidate.relative_to(ROOT)
-    except Exception:
+    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
         return candidate.parent
     return ROOT
 
@@ -70,7 +69,7 @@ def _detect_branch_name() -> str:
             check=False,
         )
         branch = str(proc.stdout or "").strip()
-    except Exception:
+    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
         branch = ""
     if branch and branch.upper() != "HEAD":
         return branch
@@ -184,7 +183,7 @@ def _spawn_worker_loop(
             close_fds=close_fds,
             creationflags=creation_flags,
         )
-    except Exception as exc:
+    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as exc:
         return False, None, str(exc)
     return (
         True,
@@ -241,7 +240,7 @@ def _spawn_task_manager_loop(
             close_fds=close_fds,
             creationflags=creation_flags,
         )
-    except Exception as exc:
+    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as exc:
         return False, None, str(exc)
     return (
         True,
@@ -293,7 +292,7 @@ def _is_task_manager_claimed(workboard_path: Path, task_manager_agent: str) -> b
     manager_key = _agent_key(task_manager_agent)
     try:
         ok, active_claims = claim_tool.list_claims(workboard_path)  # type: ignore[misc]
-    except Exception:
+    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
         return False
     if not ok or not isinstance(active_claims, Sequence):
         return False
@@ -307,7 +306,7 @@ def _default_task_manager_scope(workboard_path: Path) -> str:
     try:
         scoped = workboard_path.parent.resolve().relative_to(ROOT.resolve())
         return str(scoped).replace("\\", "/")
-    except Exception:
+    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
         return str(workboard_path.parent).replace("\\", "/")
 
 

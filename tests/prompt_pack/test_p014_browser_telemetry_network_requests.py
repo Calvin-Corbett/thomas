@@ -105,8 +105,8 @@ def test_p014_capture_network_requests_collects_and_correlates(monkeypatch):
 
 
 def test_p014_cli_json_success(monkeypatch, capsys):
-    import thomas.cli.commands.browser.p014_browser_telemetry_network_requests as cli
     import thomas.browser.p014_browser_telemetry_network_requests as core
+    import thomas.cli.commands.browser.p014_browser_telemetry_network_requests as cli
 
     def fake_capture(_req, *, on_event=None):
         return core.BrowserNetworkRequestsOutput(
@@ -139,8 +139,8 @@ def test_p014_cli_json_success(monkeypatch, capsys):
 
 
 def test_p014_cli_json_failure(monkeypatch, capsys):
-    import thomas.cli.commands.browser.p014_browser_telemetry_network_requests as cli
     import thomas.browser.p014_browser_telemetry_network_requests as core
+    import thomas.cli.commands.browser.p014_browser_telemetry_network_requests as cli
 
     def fake_capture(_req, *, on_event=None):
         raise core.BrowserTelemetryConfigError(code="browser_endpoint_missing", message="no endpoint")

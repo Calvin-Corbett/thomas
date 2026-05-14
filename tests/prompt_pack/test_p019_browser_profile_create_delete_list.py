@@ -3,8 +3,8 @@ import os
 from pathlib import Path
 
 import pytest
-from click.testing import CliRunner
 import typer
+from click.testing import CliRunner
 
 from thomas.browser.p019_browser_profile_create_delete_list import (
     BrowserProfileConfigError,
@@ -18,7 +18,6 @@ from thomas.browser.p019_browser_profile_create_delete_list import (
     delete_browser_profile,
     list_browser_profiles,
 )
-
 from thomas.cli.commands.browser.p019_browser_profile_create_delete_list import profile_app
 
 

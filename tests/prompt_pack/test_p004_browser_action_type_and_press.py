@@ -2,7 +2,6 @@ import json
 
 import pytest
 
-
 from thomas.browser.p004_browser_action_type_and_press import (
     TypeAndPressError,
     TypeAndPressParams,

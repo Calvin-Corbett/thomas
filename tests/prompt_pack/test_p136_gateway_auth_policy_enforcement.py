@@ -5,8 +5,8 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 from yarl import URL
 
-from thomas.server.routes.gateway import p136_gateway_auth_policy_enforcement as gw
 from thomas.cli.commands.gateway import p136_gateway_auth_policy_enforcement as cli
+from thomas.server.routes.gateway import p136_gateway_auth_policy_enforcement as gw
 
 
 async def _make_client(app: web.Application) -> TestClient:

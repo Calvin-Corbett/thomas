@@ -75,7 +75,10 @@ def test_parse_build_request_rejects_unknown_key() -> None:
 
 
 def test_build_plugin_registry_core_model_collects_import_errors() -> None:
-    from thomas.plugins.p105_plugin_registry_core_model import BuildPluginRegistryRequest, build_plugin_registry_core_model
+    from thomas.plugins.p105_plugin_registry_core_model import (
+        BuildPluginRegistryRequest,
+        build_plugin_registry_core_model,
+    )
 
     model = build_plugin_registry_core_model(
         BuildPluginRegistryRequest(plugin_modules=["does.not.exist"], include_failed=True, on_error="collect")

@@ -1,4 +1,5 @@
 import json
+
 import pytest
 
 from thomas.browser.p018_browser_tab_management import (

@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import hashlib
 from pathlib import Path
+
 
 class BlobStore:
     def __init__(self, root: Path):

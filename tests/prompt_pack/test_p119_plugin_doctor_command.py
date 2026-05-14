@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
+from thomas.cli.commands.plugins.p119_plugin_doctor_command import run_cli
 from thomas.plugins.p119_plugin_doctor_command import (
     InvalidPluginDoctorInput,
     PluginConfigNotFound,
     PluginDoctorRequest,
     run_plugin_doctor,
 )
-from thomas.cli.commands.plugins.p119_plugin_doctor_command import run_cli
 
 
 def test_plugin_doctor_success_all_pass(monkeypatch):

@@ -1,9 +1,11 @@
 from __future__ import annotations
+
 import time
 from dataclasses import dataclass
 from typing import List
 
 from agent_memory.app import AgentMemoryApp
+
 
 @dataclass
 class EvalResult:
@@ -11,7 +13,7 @@ class EvalResult:
     passed: bool
     details: str
 
-def _plant(app: AgentMemoryApp, thread: str, n: int) -> List[int]:
+def _plant(app: AgentMemoryApp, thread: str, n: int) -> list[int]:
     ids = []
     for i in range(n):
         ids.append(app.log_event(thread=thread, etype="note", text=f"filler {i} lorem ipsum some unrelated content"))
@@ -71,7 +73,7 @@ def latency_smoke_test(app: AgentMemoryApp, thread: str) -> EvalResult:
     ok = dt < 2000  # loose in CI env
     return EvalResult("latency_smoke", ok, f"ttft_sim_ms={dt:.1f}")
 
-def run_all(app: AgentMemoryApp) -> List[EvalResult]:
+def run_all(app: AgentMemoryApp) -> list[EvalResult]:
     thread = "eval"
     results = [
         needle_test(app, thread),

@@ -9,6 +9,8 @@ from thomas.server.routes.gateway.p130_gateway_probe_command import (
     GatewayProbeException,
     probe_gateway,
     resolve_gateway_target,
+)
+from thomas.server.routes.gateway.p130_gateway_probe_command import (
     routes as gateway_routes,
 )
 

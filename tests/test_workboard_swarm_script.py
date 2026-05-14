@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import scripts.forge.gates.workboard_claims as gate
-import scripts.crew.workboard.message as msg_mod
 import scripts.crew.swarm.cli as mod
+import scripts.crew.workboard.message as msg_mod
+import scripts.forge.gates.workboard_claims as gate
 
 
 def _write_workboard(

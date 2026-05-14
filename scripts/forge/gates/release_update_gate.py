@@ -10,14 +10,13 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-import sys
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
     import tomllib
-except Exception:  # pragma: no cover
+except (ImportError, ModuleNotFoundError, AttributeError):  # pragma: no cover
     import tomli as tomllib  # type: ignore
 
 
@@ -236,7 +235,7 @@ def run(argv: Sequence[str] | None = None) -> int:
                 args.head,
                 include_untracked=bool(args.include_untracked),
             )
-        except Exception as exc:
+        except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as exc:
             print(f"Release update gate: FAIL (diff resolution error: {exc})")
             return 1
 
@@ -269,7 +268,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     if base_py is not None and base_init is not None:
         try:
             prior_py = _version_from_pyproject_text(base_py)
-        except Exception:
+        except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
             prior_py = ""
         prior_init = _version_from_init_text(base_init)
         if prior_py and prior_init and current_py == prior_py and current_init == prior_init:

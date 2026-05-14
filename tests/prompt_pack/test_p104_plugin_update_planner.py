@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+from thomas.cli.commands.plugins import p104_plugin_update_planner as cli_mod
 from thomas.plugins.p104_plugin_update_planner import (
     PluginUpdatePlannerConfigError,
     PluginUpdatePlannerExternalError,
@@ -11,7 +12,6 @@ from thomas.plugins.p104_plugin_update_planner import (
     SemVer,
     plan_plugin_updates,
 )
-from thomas.cli.commands.plugins import p104_plugin_update_planner as cli_mod
 
 
 def test_semver_prerelease_ordering():

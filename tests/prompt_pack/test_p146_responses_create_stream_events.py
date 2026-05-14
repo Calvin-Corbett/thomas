@@ -1,8 +1,9 @@
 import json
+
 import pytest
 
-from thomas.server.routes.gateway import p146_responses_create_stream_events as impl
 from thomas.cli.commands.gateway import p146_responses_create_stream_events as cli_impl
+from thomas.server.routes.gateway import p146_responses_create_stream_events as impl
 
 
 def test_stream_events_success_contract_and_order():

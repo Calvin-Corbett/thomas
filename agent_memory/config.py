@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
+
 
 @dataclass(frozen=True)
 class AppPaths:
@@ -12,7 +14,7 @@ class AppPaths:
     delta_dir: Path
 
     @staticmethod
-    def from_root(root: Path) -> "AppPaths":
+    def from_root(root: Path) -> AppPaths:
         root = root.resolve()
         data_dir = root / "data"
         blobs_dir = root / "blobs"

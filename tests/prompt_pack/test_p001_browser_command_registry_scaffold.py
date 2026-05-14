@@ -4,8 +4,8 @@ import argparse
 import importlib.util
 import json
 import sys
-from pathlib import Path
 import types
+from pathlib import Path
 
 import pytest
 
@@ -199,8 +199,8 @@ def test_discovery_from_tools_browser_mapping(registry_mod):
     sys.modules["thomas"] = thomas_pkg
     sys.modules["thomas.tools"] = tools_pkg
     sys.modules["thomas.tools.browser"] = browser_pkg
-    setattr(thomas_pkg, "tools", tools_pkg)
-    setattr(tools_pkg, "browser", browser_pkg)
+    thomas_pkg.tools = tools_pkg
+    tools_pkg.browser = browser_pkg
 
     try:
         registry = registry_mod.build_browser_command_registry_scaffold()

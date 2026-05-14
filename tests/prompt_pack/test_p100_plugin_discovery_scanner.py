@@ -5,12 +5,12 @@ from pathlib import Path
 
 import pytest
 
+from thomas.cli.commands.plugins import p100_plugin_discovery_scanner as cli_mod
 from thomas.plugins.p100_plugin_discovery_scanner import (
-    PluginDiscoveryScanRequest,
     PluginDiscoveryScannerError,
+    PluginDiscoveryScanRequest,
     scan_plugins,
 )
-from thomas.cli.commands.plugins import p100_plugin_discovery_scanner as cli_mod
 
 
 def test_scan_filesystem_success(tmp_path: Path) -> None:

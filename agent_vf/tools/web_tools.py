@@ -1,11 +1,13 @@
 from __future__ import annotations
+
 import urllib.request
 from typing import Any, Dict
 
 from agent_vf.tools.base import Tool, ToolRegistry
 
+
 def register(reg: ToolRegistry, deny_network: bool = False) -> None:
-    def open_url(args: Dict[str, Any]) -> Dict[str, Any]:
+    def open_url(args: dict[str, Any]) -> dict[str, Any]:
         if deny_network:
             return {"ok": False, "error": "network_denied"}
         url = args["url"]

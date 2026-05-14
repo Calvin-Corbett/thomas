@@ -3,6 +3,7 @@ import unittest
 
 from thomas.agent.approval import ApprovalBroker
 
+
 class TestApprovalBroker(unittest.TestCase):
     def test_resolve(self):
         async def main():

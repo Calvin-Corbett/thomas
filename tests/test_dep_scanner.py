@@ -3,8 +3,8 @@ import unittest
 from pathlib import Path
 
 import pytest
-from thomas.tools import dep_scanner
-from thomas.tools import dep_scanner_python
+
+from thomas.tools import dep_scanner, dep_scanner_python
 
 
 class TestPolicyFilters(unittest.TestCase):

@@ -3,13 +3,13 @@ import importlib
 
 import pytest
 
+from thomas.cli.commands.messages import p056_message_delete_command as cli_mod
 from thomas.messages.p056_message_delete_command import (
     MessageDeleteError,
     MessageDeleteRequest,
     build_default_deleter,
     delete_message,
 )
-from thomas.cli.commands.messages import p056_message_delete_command as cli_mod
 
 
 class _StubDeleter:

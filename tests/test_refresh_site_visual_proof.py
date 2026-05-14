@@ -4,9 +4,8 @@ import hashlib
 import json
 from pathlib import Path
 
-from PIL import Image
-
 import scripts.refresh_site_visual_proof as mod
+from PIL import Image
 
 
 def _sha256(path: Path) -> str:

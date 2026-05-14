@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 from pathlib import Path
 from typing import Any, Dict
 
 from agent_vf.tools.base import Tool, ToolRegistry
+
 
 def _safe_path(root: Path, rel: str) -> Path:
     p = (root / rel).resolve()
@@ -14,13 +16,13 @@ def register(reg: ToolRegistry, fs_root: str) -> None:
     root = Path(fs_root)
     root.mkdir(parents=True, exist_ok=True)
 
-    def read(args: Dict[str, Any]) -> Dict[str, Any]:
+    def read(args: dict[str, Any]) -> dict[str, Any]:
         path = _safe_path(root, args["path"])
         if not path.exists():
             return {"ok": False, "error": "not_found"}
         return {"ok": True, "text": path.read_text(encoding="utf-8", errors="replace")}
 
-    def write(args: Dict[str, Any]) -> Dict[str, Any]:
+    def write(args: dict[str, Any]) -> dict[str, Any]:
         path = _safe_path(root, args["path"])
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(args.get("text",""), encoding="utf-8")

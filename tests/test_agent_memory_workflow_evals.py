@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from agent_memory.app import AgentMemoryApp
 from agent_memory.eval.suite import (
     handoff_continuity_test,

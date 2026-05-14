@@ -9,18 +9,17 @@ Tests cover:
 """
 
 import unittest
-from typing import Any, Dict, List, Optional, Callable
 from datetime import datetime
-
+from typing import Any, Callable, Dict, List, Optional
 
 # Note: These imports assume the modules exist or will be created
 try:
-    from thomas.flows.types import StepStatus, FlowStatus
+    from thomas.flows.builder import FlowBuilder
+    from thomas.flows.condition import Condition
+    from thomas.flows.flow import Flow
     from thomas.flows.state import FlowState
     from thomas.flows.step import Step
-    from thomas.flows.flow import Flow
-    from thomas.flows.condition import Condition
-    from thomas.flows.builder import FlowBuilder
+    from thomas.flows.types import FlowStatus, StepStatus
 except ImportError:
     # Fallback: define minimal mock classes
     from enum import Enum
@@ -62,7 +61,7 @@ except ImportError:
             """Check if key exists in state."""
             return key in self.state
 
-        def update(self, updates: Dict[str, Any]) -> None:
+        def update(self, updates: dict[str, Any]) -> None:
             """Update multiple state values."""
             for key, value in updates.items():
                 self.set(key, value)
@@ -72,7 +71,7 @@ except ImportError:
             self.state.clear()
             self.history = []
 
-        def get_history(self) -> List[Dict]:
+        def get_history(self) -> list[dict]:
             """Get state change history."""
             return self.history
 
@@ -121,7 +120,7 @@ except ImportError:
 
     class Flow:
         """Orchestrated flow of steps."""
-        def __init__(self, name: str = "default", initial_state: Dict = None):
+        def __init__(self, name: str = "default", initial_state: dict = None):
             self.name = name
             self.state = FlowState(name)
             if initial_state:
@@ -134,7 +133,7 @@ except ImportError:
             """Add step to flow."""
             self.steps.append(step)
 
-        def run(self) -> List[Any]:
+        def run(self) -> list[Any]:
             """Execute all steps in flow."""
             self.status = FlowStatus.RUNNING
             try:
@@ -161,7 +160,7 @@ except ImportError:
         def __init__(self, name: str = "default"):
             self.flow = Flow(name)
 
-        def with_initial_state(self, state: Dict) -> "FlowBuilder":
+        def with_initial_state(self, state: dict) -> "FlowBuilder":
             """Set initial state."""
             self.flow.state.update(state)
             return self

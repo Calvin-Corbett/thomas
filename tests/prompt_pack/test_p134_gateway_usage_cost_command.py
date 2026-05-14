@@ -104,8 +104,8 @@ async def test_run_gateway_usage_cost_success_sums_breakdown(monkeypatch: pytest
 
 
 def test_cli_usage_cost_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
-    from thomas.server.routes.gateway import p134_gateway_usage_cost_command as srv_mod
     from thomas.cli.commands.gateway import p134_gateway_usage_cost_command as cli_mod
+    from thomas.server.routes.gateway import p134_gateway_usage_cost_command as srv_mod
 
     async def _ok(**kwargs):
         return {

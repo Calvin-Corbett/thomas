@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import json
 import sqlite3
 import time
@@ -63,7 +64,7 @@ class MetaDB:
         self.conn.execute("DELETE FROM pins WHERE key=?", (key,))
         self.conn.commit()
 
-    def pin_list(self) -> List[Tuple[str, str, int]]:
+    def pin_list(self) -> list[tuple[str, str, int]]:
         cur = self.conn.execute("SELECT key, text, created_ts_utc FROM pins ORDER BY created_ts_utc DESC")
         return [(r[0], r[1], int(r[2])) for r in cur.fetchall()]
 
@@ -76,7 +77,7 @@ class MetaDB:
         )
         self.conn.commit()
 
-    def lex_list(self) -> List[Tuple[str, str, int]]:
+    def lex_list(self) -> list[tuple[str, str, int]]:
         cur = self.conn.execute("SELECT phrase, meaning, updated_ts_utc FROM lexicon ORDER BY updated_ts_utc DESC")
         return [(r[0], r[1], int(r[2])) for r in cur.fetchall()]
 
@@ -90,7 +91,7 @@ class MetaDB:
         return out
 
     # Traces
-    def trace_add(self, thread: str, mode: str, query: str, trace: Dict[str, Any]):
+    def trace_add(self, thread: str, mode: str, query: str, trace: dict[str, Any]):
         ts = int(time.time())
         self.conn.execute(
             "INSERT INTO traces(ts_utc, thread, mode, query, trace_json) VALUES (?,?,?,?,?)",

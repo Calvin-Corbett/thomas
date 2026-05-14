@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
 from agent_memory.rerank.features import CandidateFeatures
+
 
 @dataclass
 class Tier1Config:
@@ -35,7 +37,7 @@ class Tier1Reranker:
         )
         return float(s)
 
-    def rank(self, feats: List[CandidateFeatures]) -> List[Tuple[int, float]]:
+    def rank(self, feats: list[CandidateFeatures]) -> list[tuple[int, float]]:
         scored = [(f.eid, self.score(f)) for f in feats]
         scored.sort(key=lambda x: x[1], reverse=True)
         return scored

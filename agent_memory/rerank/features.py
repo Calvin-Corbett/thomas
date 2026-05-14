@@ -1,8 +1,10 @@
 from __future__ import annotations
-from dataclasses import dataclass
-from typing import Dict, Optional
+
 import math
 import time
+from dataclasses import dataclass
+from typing import Dict, Optional
+
 
 @dataclass
 class CandidateFeatures:
@@ -16,7 +18,7 @@ class CandidateFeatures:
     pinned_bonus: float = 0.0
     prior_useful: float = 0.0
 
-    def to_dict(self) -> Dict[str, float]:
+    def to_dict(self) -> dict[str, float]:
         return {
             "fts": float(self.fts),
             "vec": float(self.vec),

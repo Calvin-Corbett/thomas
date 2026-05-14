@@ -1,5 +1,7 @@
 import json
+
 import pytest
+
 from thomas.agent.swarm import TaskGraph
 
 

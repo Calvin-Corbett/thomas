@@ -4,19 +4,19 @@ from thomas.core.self_upgrade_engine import SelfUpgradeEngine
 
 
 class _FakeIssueEngine:
-    def __init__(self, report: Dict[str, Any]) -> None:
+    def __init__(self, report: dict[str, Any]) -> None:
         self._report = dict(report)
-        self.calls: List[Dict[str, Any]] = []
+        self.calls: list[dict[str, Any]] = []
 
-    def run_cycle_once(self, *, reason: str = "manual", force: bool = False) -> Dict[str, Any]:
+    def run_cycle_once(self, *, reason: str = "manual", force: bool = False) -> dict[str, Any]:
         self.calls.append({"reason": reason, "force": force})
         return dict(self._report)
 
 
 class _FakePersistence:
     def __init__(self) -> None:
-        self.goals: Dict[str, Dict[str, Any]] = {}
-        self.facts: Dict[str, Any] = {}
+        self.goals: dict[str, dict[str, Any]] = {}
+        self.facts: dict[str, Any] = {}
 
     def upsert_goal(self, goal_id: str, text: str, status: str = "open") -> None:
         self.goals[goal_id] = {"id": goal_id, "text": text, "status": status}
@@ -25,7 +25,7 @@ class _FakePersistence:
         if goal_id in self.goals:
             self.goals[goal_id]["status"] = "done"
 
-    def open_goals(self) -> List[Dict[str, Any]]:
+    def open_goals(self) -> list[dict[str, Any]]:
         return [dict(item) for item in self.goals.values() if str(item.get("status")) == "open"]
 
     def set_fact(self, key: str, value: Any) -> None:
@@ -53,7 +53,7 @@ def test_self_upgrade_engine_creates_upgrade_goals(monkeypatch) -> None:
         cycle_interval_s=1.0,
     )
 
-    def fake_module_check(module: str) -> Dict[str, Any]:
+    def fake_module_check(module: str) -> dict[str, Any]:
         if module == "thomas.system.config_validator":
             return {"ok": False, "summary": {"error_count": 1, "warning_count": 0}}
         if module == "thomas.system.release_contracts":

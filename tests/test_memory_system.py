@@ -13,16 +13,15 @@ import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Any
-
+from typing import Any, Dict, List, Optional
 
 # Note: These imports assume the modules exist or will be created
 try:
-    from thomas.memory.short_term import ShortTermMemory
-    from thomas.memory.long_term import LongTermMemory
     from thomas.memory.entity import EntityMemory
-    from thomas.memory.search import MemorySearch
+    from thomas.memory.long_term import LongTermMemory
     from thomas.memory.manager import MemoryManager
+    from thomas.memory.search import MemorySearch
+    from thomas.memory.short_term import ShortTermMemory
 except ImportError:
     # Fallback: define minimal mock classes
     class ShortTermMemory:
@@ -42,7 +41,7 @@ except ImportError:
             if len(self.items) > self.max_items:
                 self.items.pop(0)
 
-        def get(self, key: str) -> Optional[Any]:
+        def get(self, key: str) -> Any | None:
             """Get item from memory."""
             for item in reversed(self.items):
                 if item["key"] == key:
@@ -53,7 +52,7 @@ except ImportError:
             """Clear all memory."""
             self.items = []
 
-        def list_keys(self) -> List[str]:
+        def list_keys(self) -> list[str]:
             """List all keys in memory."""
             return [item["key"] for item in self.items]
 
@@ -69,7 +68,7 @@ except ImportError:
         def _load(self) -> None:
             """Load from disk."""
             if self.db_file.exists():
-                with open(self.db_file, 'r') as f:
+                with open(self.db_file) as f:
                     self.data = json.load(f)
 
         def _save(self) -> None:
@@ -85,7 +84,7 @@ except ImportError:
             }
             self._save()
 
-        def retrieve(self, key: str) -> Optional[Any]:
+        def retrieve(self, key: str) -> Any | None:
             """Retrieve stored item."""
             if key in self.data:
                 return self.data[key]["value"]
@@ -97,7 +96,7 @@ except ImportError:
                 del self.data[key]
                 self._save()
 
-        def list_keys(self) -> List[str]:
+        def list_keys(self) -> list[str]:
             """List all stored keys."""
             return list(self.data.keys())
 
@@ -115,7 +114,7 @@ except ImportError:
                 "updated": datetime.now()
             }
 
-        def get_entity(self, entity_id: str) -> Optional[Dict]:
+        def get_entity(self, entity_id: str) -> dict | None:
             """Get entity details."""
             return self.entities.get(entity_id)
 
@@ -125,7 +124,7 @@ except ImportError:
                 self.entities[entity_id]["attributes"][attr_key] = attr_value
                 self.entities[entity_id]["updated"] = datetime.now()
 
-        def list_entities(self, entity_type: str = None) -> List[str]:
+        def list_entities(self, entity_type: str = None) -> list[str]:
             """List entity IDs, optionally filtered by type."""
             if entity_type:
                 return [eid for eid, e in self.entities.items() if e["type"] == entity_type]
@@ -133,10 +132,10 @@ except ImportError:
 
     class MemorySearch:
         """Search through memory."""
-        def __init__(self, memory: Dict):
+        def __init__(self, memory: dict):
             self.memory = memory
 
-        def search(self, query: str, limit: int = 10) -> List[Dict]:
+        def search(self, query: str, limit: int = 10) -> list[dict]:
             """Search memory for matching items."""
             results = []
             query_lower = query.lower()
@@ -149,7 +148,7 @@ except ImportError:
 
             return results
 
-        def search_by_type(self, item_type: str) -> List[Dict]:
+        def search_by_type(self, item_type: str) -> list[dict]:
             """Search by item type."""
             return [{"key": k, "value": v, "type": item_type}
                     for k, v in self.memory.items()]
@@ -169,7 +168,7 @@ except ImportError:
             """Add to long-term memory."""
             self.long_term.store(key, value)
 
-        def get(self, key: str) -> Optional[Any]:
+        def get(self, key: str) -> Any | None:
             """Get from either memory."""
             result = self.short_term.get(key)
             if result is None:
@@ -180,7 +179,7 @@ except ImportError:
             """Register an entity."""
             self.entities.add_entity(entity_id, entity_type)
 
-        def search_all(self, query: str) -> List[Dict]:
+        def search_all(self, query: str) -> list[dict]:
             """Search across all memory types."""
             results = []
             # Search short term

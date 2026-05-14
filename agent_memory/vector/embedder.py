@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import re
 from dataclasses import dataclass
 from typing import Dict, Iterable, List
@@ -17,9 +18,9 @@ class HashEmbedder:
     def __init__(self, cfg: EmbedderConfig = EmbedderConfig()):
         self.cfg = cfg
 
-    def embed(self, text: str) -> Dict[str, float]:
+    def embed(self, text: str) -> dict[str, float]:
         tokens = [t.lower() for t in _WORD.findall(text)]
-        feats: Dict[int, float] = {}
+        feats: dict[int, float] = {}
         dims = self.cfg.dims
         # unigrams
         for tok in tokens:
@@ -33,5 +34,5 @@ class HashEmbedder:
         # return as str keys to keep JSON compact + stable
         return {str(k): float(v) for k, v in feats.items()}
 
-    def embed_many(self, texts: List[str]) -> List[Dict[str, float]]:
+    def embed_many(self, texts: list[str]) -> list[dict[str, float]]:
         return [self.embed(t) for t in texts]

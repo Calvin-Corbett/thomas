@@ -7,13 +7,13 @@ import types
 import pytest
 from typer.testing import CliRunner
 
+from thomas.cli.commands.plugins.p107_plugin_hook_types_contract import app
 from thomas.plugins.p107_plugin_hook_types_contract import (
     HookTypesContractError,
     HookTypesContractErrorCode,
     HookTypesContractRequest,
     build_hook_types_contract,
 )
-from thomas.cli.commands.plugins.p107_plugin_hook_types_contract import app
 
 
 class DummyPluginBase:

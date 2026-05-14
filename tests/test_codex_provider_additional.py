@@ -20,7 +20,7 @@ async def _collect(provider: CodexProvider, messages: list[dict[str, Any]], tool
 
 @pytest.mark.asyncio
 async def test_get_bridge_bootstraps_login_and_replaces_stopped_owned_bridge(monkeypatch: pytest.MonkeyPatch) -> None:
-    created: list["_BridgeFactory"] = []
+    created: list[_BridgeFactory] = []
 
     class _BridgeFactory:
         def __init__(self, cwd: str | None = None) -> None:

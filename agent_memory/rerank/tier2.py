@@ -1,10 +1,12 @@
 from __future__ import annotations
+
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional, Tuple
 
 from agent_memory.rerank.features import CandidateFeatures
+
 
 @dataclass
 class Tier2Config:
@@ -20,7 +22,7 @@ class Tier2Reranker:
         self.cfg = cfg
         self.root_dir = root_dir
         self.model_file = root_dir / cfg.model_path
-        self.weights: Dict[str, float] = {}
+        self.weights: dict[str, float] = {}
         self.bias: float = 0.0
         self.enabled = cfg.enabled and self.model_file.exists()
         if self.model_file.exists():
@@ -44,7 +46,7 @@ class Tier2Reranker:
             s += self.weights.get(k, 0.0) * v
         return float(s)
 
-    def rank(self, feats: List[CandidateFeatures]) -> List[Tuple[int, float]]:
+    def rank(self, feats: list[CandidateFeatures]) -> list[tuple[int, float]]:
         scored = [(f.eid, self.score(f)) for f in feats]
         scored.sort(key=lambda x: x[1], reverse=True)
         return scored

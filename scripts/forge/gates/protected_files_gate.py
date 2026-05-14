@@ -29,6 +29,7 @@ PRECOMMIT_BREADCRUMB = ROOT / ".git" / "thomas_precommit_ran"
 # Load protected file lists from config (agent_safety.toml).
 # Falls back to empty lists if config doesn't exist.
 import sys
+
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))

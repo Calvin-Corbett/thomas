@@ -1,7 +1,7 @@
-import json
 import hashlib
-from pathlib import Path
+import json
 import sys
+from pathlib import Path
 
 import pytest
 

@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import json
 import sqlite3
 import time
@@ -49,8 +50,8 @@ class EventRow:
     thread: str
     etype: str
     text: str
-    metadata: Dict[str, Any]
-    blob_id: Optional[str]
+    metadata: dict[str, Any]
+    blob_id: str | None
 
 class ImmortalLog:
     def __init__(self, db_path: Path):
@@ -68,7 +69,7 @@ class ImmortalLog:
         except Exception:
             pass
 
-    def add_event(self, thread: str, etype: str, text: str, metadata: Optional[Dict[str, Any]] = None, blob_id: Optional[str] = None) -> int:
+    def add_event(self, thread: str, etype: str, text: str, metadata: dict[str, Any] | None = None, blob_id: str | None = None) -> int:
         ts = int(time.time())
         meta = json.dumps(metadata or {}, ensure_ascii=False)
         cur = self.conn.execute(
@@ -78,7 +79,7 @@ class ImmortalLog:
         self.conn.commit()
         return int(cur.lastrowid)
 
-    def get_event(self, eid: int) -> Optional[EventRow]:
+    def get_event(self, eid: int) -> EventRow | None:
         cur = self.conn.execute("SELECT id, ts_utc, thread, etype, text, metadata_json, blob_id FROM events WHERE id=?", (eid,))
         r = cur.fetchone()
         if not r:
@@ -86,18 +87,18 @@ class ImmortalLog:
         return EventRow(id=r[0], ts_utc=r[1], thread=r[2], etype=r[3], text=r[4],
                         metadata=json.loads(r[5] or "{}"), blob_id=r[6])
 
-    def recent_events(self, thread: str, limit: int = 20) -> List[EventRow]:
+    def recent_events(self, thread: str, limit: int = 20) -> list[EventRow]:
         cur = self.conn.execute(
             "SELECT id, ts_utc, thread, etype, text, metadata_json, blob_id FROM events WHERE thread=? ORDER BY id DESC LIMIT ?",
             (thread, limit)
         )
-        out: List[EventRow] = []
+        out: list[EventRow] = []
         for r in cur.fetchall():
             out.append(EventRow(id=r[0], ts_utc=r[1], thread=r[2], etype=r[3], text=r[4],
                                 metadata=json.loads(r[5] or "{}"), blob_id=r[6]))
         return out
 
-    def search_fts(self, query: str, thread: Optional[str] = None, limit: int = 80) -> List[Tuple[int, float]]:
+    def search_fts(self, query: str, thread: str | None = None, limit: int = 80) -> list[tuple[int, float]]:
         where = "events_fts MATCH ?"
         params = [query]
         if thread:
@@ -112,7 +113,7 @@ class ImmortalLog:
         """
         params.append(limit)
         cur = self.conn.execute(sql, tuple(params))
-        out: List[Tuple[int, float]] = []
+        out: list[tuple[int, float]] = []
         for rowid, rank in cur.fetchall():
             score = 1.0 / (1.0 + abs(float(rank)))
             out.append((int(rowid), score))

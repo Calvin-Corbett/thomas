@@ -11,7 +11,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import sys
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
@@ -343,7 +342,7 @@ def _check_worktree_clean(root: Path) -> dict[str, str]:
                 max_changed_lines=config.worktree_max_uncommitted_changed_lines(),
                 ignore_prefixes=config.worktree_change_budget_ignore_prefixes(),
             )
-        except Exception:
+        except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
             change_budget = {
                 "ok": True,
                 "threshold": config.worktree_max_uncommitted_changed_lines(),

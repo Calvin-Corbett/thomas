@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 from typing import Any, Dict
+
 from agent_vf.tools.base import Tool, ToolRegistry
 
+
 def register(reg: ToolRegistry) -> None:
-    def run(args: Dict[str, Any]) -> Dict[str, Any]:
+    def run(args: dict[str, Any]) -> dict[str, Any]:
         try:
             from playwright.sync_api import sync_playwright
         except Exception as e:

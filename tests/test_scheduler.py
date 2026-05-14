@@ -1,6 +1,6 @@
 import tempfile
 import unittest
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from thomas.core.scheduler import TaskScheduler, _normalize_cron

@@ -24,7 +24,6 @@ import sqlalchemy as sa
 from sqlalchemy import inspect
 from sqlalchemy.engine import Engine
 
-
 DEFAULT_WORKSPACE_ID = "00000000-0000-0000-0000-000000000001"
 DEFAULT_MEMBERSHIP_ID = "00000000-0000-0000-0000-000000000002"
 
@@ -149,7 +148,7 @@ def _create_tables(conn) -> None:
             pass
 
 
-def _best_effort_owner_user_id(conn) -> Optional[str]:
+def _best_effort_owner_user_id(conn) -> str | None:
     insp = inspect(conn)
     for t in insp.get_table_names():
         cols = {c["name"] for c in insp.get_columns(t)}

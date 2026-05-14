@@ -7,7 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from thomas.cli.commands.plugins.p108_plugin_hook_runner_core import app as cli_app
-from thomas.plugins.p108_plugin_hook_runner_core import HookRunRequest, HookRunnerError, run_hook
+from thomas.plugins.p108_plugin_hook_runner_core import HookRunnerError, HookRunRequest, run_hook
 
 
 class _OkPlugin:

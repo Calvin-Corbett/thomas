@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import math
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
@@ -9,9 +10,10 @@ try:
 except Exception as e:
     raise RuntimeError("Training requires optional dependencies. Install with: pip install .[train]") from e
 
-from agent_memory.storage.meta_db import MetaDB
-from agent_memory.rerank.tier2 import Tier2Reranker
 from agent_memory.rerank.features import CandidateFeatures
+from agent_memory.rerank.tier2 import Tier2Reranker
+from agent_memory.storage.meta_db import MetaDB
+
 
 @dataclass
 class TrainConfig:
@@ -20,15 +22,15 @@ class TrainConfig:
     lr: float = 0.01
     epochs: int = 4
 
-def _features_to_array(feats: CandidateFeatures, keys: List[str]) -> np.ndarray:
+def _features_to_array(feats: CandidateFeatures, keys: list[str]) -> np.ndarray:
     d = feats.to_dict()
     return np.array([d.get(k, 0.0) for k in keys], dtype=np.float32)
 
-def train_linear_from_traces(meta: MetaDB, tier2: Tier2Reranker, cfg: TrainConfig = TrainConfig()) -> Dict[str, float]:
+def train_linear_from_traces(meta: MetaDB, tier2: Tier2Reranker, cfg: TrainConfig = TrainConfig()) -> dict[str, float]:
     # Build dataset: positives are final_selected IDs; negatives are top candidates not selected.
     keys = ["fts", "vec", "graph", "recency", "etype_bonus", "thread_match", "pinned", "prior_useful"]
-    X: List[np.ndarray] = []
-    y: List[int] = []
+    X: list[np.ndarray] = []
+    y: list[int] = []
 
     n = 0
     for _, _, _, _, trace in meta.trace_iter(limit=cfg.max_traces):

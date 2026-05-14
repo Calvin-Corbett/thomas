@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
 
 @dataclass
 class PackConfig:
@@ -17,12 +19,12 @@ def _clip(s: str, n: int) -> str:
 
 def pack_context(
     mode: str,
-    pins: List[Tuple[str, str]],
-    l2_summary: Optional[str],
-    receipts: List[Dict[str, Any]],
-    recent_turns: List[Dict[str, Any]],
+    pins: list[tuple[str, str]],
+    l2_summary: str | None,
+    receipts: list[dict[str, Any]],
+    recent_turns: list[dict[str, Any]],
     cfg: PackConfig = PackConfig(),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     # L1: mode + pins
     l1_lines = [f"MODE: {mode}"]
     for k, txt in pins:
@@ -33,7 +35,7 @@ def pack_context(
     l2 = (l2_summary or "").strip()
 
     # L3: receipts, verbatim
-    l3_lines: List[str] = []
+    l3_lines: list[str] = []
     for r in receipts[: cfg.max_receipts]:
         header = f"RECEIPT event_id={r['event_id']} thread={r.get('thread','')} ts={r.get('ts_utc','')}"
         body = _clip(r.get("text", ""), cfg.receipt_chars_each)
@@ -43,7 +45,7 @@ def pack_context(
     l3 = "\n".join(l3_lines).strip()
 
     # Recent turns (optional)
-    rt_lines: List[str] = []
+    rt_lines: list[str] = []
     for t in recent_turns[: cfg.include_recent_turns]:
         rt_lines.append(f"{t.get('etype','')}: {_clip(t.get('text',''), 500)}")
     recent_block = "\n".join(rt_lines).strip()
@@ -59,7 +61,7 @@ def pack_context(
     if l3:
         parts.append(("L3", l3))
 
-    out_lines: List[str] = []
+    out_lines: list[str] = []
     used = 0
     # Always reserve L3
     l3_len = len(l3) + 20 if l3 else 0

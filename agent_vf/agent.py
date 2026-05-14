@@ -1,12 +1,13 @@
 from __future__ import annotations
+
 import json
 from dataclasses import dataclass
 from typing import Any, Dict, List
 
 from agent_vf.config import AppConfig
-from agent_vf.llm_client import OpenAICompatClient, LLMError
-from agent_vf.tools.base import ToolRegistry
+from agent_vf.llm_client import LLMError, OpenAICompatClient
 from agent_vf.memory_engine import AgentMemoryApp
+from agent_vf.tools.base import ToolRegistry
 
 SYSTEM_CORE = """You are a local-first autonomous assistant.
 Rules:
@@ -32,7 +33,7 @@ class Agent:
     def close(self):
         self.memory.close()
 
-    def _tool_dispatch(self, name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    def _tool_dispatch(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
         t = self.tools.get(name)
         if not t:
             return {"ok": False, "error": "unknown_tool"}
@@ -51,7 +52,7 @@ class Agent:
 
         system = SYSTEM_CORE + "\n\nMEMORY CONTEXT:\n" + (packed if packed else "(none)")
         tools_spec = self.tools.openai_tool_specs()
-        messages: List[Dict[str, Any]] = [
+        messages: list[dict[str, Any]] = [
             {"role":"system","content":system},
             {"role":"user","content":user_text},
         ]

@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
+
 from thomas.core.api_importer import ApiImporter
+
 
 def test_v4_freeze_snapshot_and_deepobject_query(tmp_path: Path):
     spec = {

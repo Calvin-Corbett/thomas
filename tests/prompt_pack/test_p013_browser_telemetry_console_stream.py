@@ -98,8 +98,8 @@ def test_p013_stream_console_collects_events(monkeypatch):
 
 
 def test_p013_cli_json_success(monkeypatch, capsys):
-    import thomas.cli.commands.browser.p013_browser_telemetry_console_stream as cli
     import thomas.browser.p013_browser_telemetry_console_stream as core
+    import thomas.cli.commands.browser.p013_browser_telemetry_console_stream as cli
 
     def fake_stream_console(_req, *, on_event=None):
         return core.BrowserConsoleStreamOutput(
@@ -124,8 +124,8 @@ def test_p013_cli_json_success(monkeypatch, capsys):
 
 
 def test_p013_cli_json_failure(monkeypatch, capsys):
-    import thomas.cli.commands.browser.p013_browser_telemetry_console_stream as cli
     import thomas.browser.p013_browser_telemetry_console_stream as core
+    import thomas.cli.commands.browser.p013_browser_telemetry_console_stream as cli
 
     def fake_stream_console(_req, *, on_event=None):
         raise core.BrowserTelemetryConfigError(code="browser_endpoint_missing", message="no endpoint")

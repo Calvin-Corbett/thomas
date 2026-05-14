@@ -14,12 +14,11 @@ from typing import List, Optional
 
 import typer
 
-
 _REGISTERED = False
 
 
 def registry_model(
-    plugin: Optional[List[str]] = typer.Option(
+    plugin: list[str] | None = typer.Option(
         None,
         "--plugin",
         "-p",
@@ -75,7 +74,7 @@ def registry_model(
     typer.echo(f"{len(plugins)} plugin(s)")
 
     for plugin_desc in plugins:
-        suffix_parts: List[str] = []
+        suffix_parts: list[str] = []
         if plugin_desc.version:
             suffix_parts.append(f"v{plugin_desc.version}")
         if plugin_desc.load_error is not None:
@@ -102,7 +101,7 @@ def register(target_app: typer.Typer) -> None:
     _REGISTERED = True
 
 
-def _resolve_plugins_group_app() -> Optional[typer.Typer]:
+def _resolve_plugins_group_app() -> typer.Typer | None:
     """Best-effort lookup of the canonical `thomas plugins` command group."""
     pkg = sys.modules.get("thomas.cli.commands.plugins")
     if pkg is None:

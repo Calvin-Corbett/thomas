@@ -18,7 +18,7 @@ from typing import Optional, Tuple
 from fastapi.routing import APIRoute
 from sqlalchemy import inspect
 
-from .deps import enforce_workspace, PUBLIC_PATH_PREFIXES
+from .deps import PUBLIC_PATH_PREFIXES, enforce_workspace
 from .migrate_schema import _import_engine  # noqa: WPS436
 
 
@@ -66,7 +66,7 @@ def _has_enforce_dependency(route: APIRoute) -> bool:
     return False
 
 
-def verify_routes(app) -> Tuple[int, int]:
+def verify_routes(app) -> tuple[int, int]:
     ok = 0
     bad = 0
     for r in app.routes:

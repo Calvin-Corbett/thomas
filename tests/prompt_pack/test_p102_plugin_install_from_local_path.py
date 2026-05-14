@@ -4,13 +4,13 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+from thomas.cli.commands.plugins.p102_plugin_install_from_local_path import command as install_cli
 from thomas.plugins.p102_plugin_install_from_local_path import (
     PluginInstallFromLocalPathError,
     PluginInstallFromLocalPathRequest,
     install_plugin_from_local_path,
     run,
 )
-from thomas.cli.commands.plugins.p102_plugin_install_from_local_path import command as install_cli
 
 
 def _make_minimal_pyproject_plugin(tmp_path: Path, *, name: str = "demo_plugin") -> Path:

@@ -7,11 +7,11 @@ import pytest
 from typer.testing import CliRunner
 
 from thomas.browser.p023_browser_trace_start_stop_export import (
+    DEFAULT_TRACE_REGISTRY,
     BrowserTraceError,
     BrowserTraceErrorCode,
     BrowserTraceExportInput,
     BrowserTraceStartInput,
-    DEFAULT_TRACE_REGISTRY,
 )
 from thomas.cli.commands.browser.p023_browser_trace_start_stop_export import app as trace_app
 

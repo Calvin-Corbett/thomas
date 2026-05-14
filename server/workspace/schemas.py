@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional, List
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 class WorkspaceOut(BaseModel):
     workspace_id: str
     name: str
-    owner_user_id: Optional[str] = None
+    owner_user_id: str | None = None
     created_at: datetime
 
     class Config:
@@ -34,7 +34,7 @@ class MembershipOut(BaseModel):
 class InviteCreateIn(BaseModel):
     email: str
     role: str = "member"
-    note: Optional[str] = None
+    note: str | None = None
 
 
 class InviteOut(BaseModel):
@@ -44,9 +44,9 @@ class InviteOut(BaseModel):
     role: str
     created_at: datetime
     expires_at: datetime
-    accepted_at: Optional[datetime] = None
-    revoked_at: Optional[datetime] = None
-    note: Optional[str] = None
+    accepted_at: datetime | None = None
+    revoked_at: datetime | None = None
+    note: str | None = None
 
     class Config:
         orm_mode = True
