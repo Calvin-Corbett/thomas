@@ -8,11 +8,14 @@ import json
 from collections.abc import Sequence
 from pathlib import Path
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 from thomas.core import agent_presence
 
-ROOT = Path(__file__).resolve().parent.parent
-
-
+ROOT = Path(__file__).resolve().parents[3]
 def _format_status(payload: dict[str, object]) -> str:
     agents = list(payload.get("agents") or [])
     groups = {

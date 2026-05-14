@@ -371,8 +371,8 @@ jobs:
             thomas/marketplace/codex/provider.py \
             thomas/marketplace/orchestrator/brain.py \
             scripts/active_folders.py \
-            scripts/agent_bootstrap_claim.py \
-            scripts/agent_startup_router.py \
+            scripts/crew/brief/bootstrap_claim.py \
+            scripts/crew/brief/startup_router.py \
             scripts/crew/workboard/claim.py \
             scripts/crew/workboard/claim_ops.py \
             scripts/crew/workboard/claim_utils.py \

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import scripts.forge.gates.workboard_claims as gate
 import scripts.crew.workboard.message as msg_mod
-import scripts.workboard_swarm as mod
+import scripts.crew.swarm.cli as mod
 
 
 def _write_workboard(

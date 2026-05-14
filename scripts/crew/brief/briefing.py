@@ -7,19 +7,19 @@ specific files and modules the agent will touch.
 
 Usage:
     # Briefing for working on memory module
-    python scripts/agent_briefing.py --modules memory
+    python scripts/crew/brief/briefing.py --modules memory
 
     # Briefing for working on server routes
-    python scripts/agent_briefing.py --modules server
+    python scripts/crew/brief/briefing.py --modules server
 
     # Briefing for a specific task (auto-detects modules)
-    python scripts/agent_briefing.py --task "fix the memory curator cleanup logic"
+    python scripts/crew/brief/briefing.py --task "fix the memory curator cleanup logic"
 
     # Briefing for multiple modules
-    python scripts/agent_briefing.py --modules memory,server,agent
+    python scripts/crew/brief/briefing.py --modules memory,server,agent
 
     # Full briefing (all modules)
-    python scripts/agent_briefing.py --full
+    python scripts/crew/brief/briefing.py --full
 """
 
 from __future__ import annotations
@@ -27,8 +27,12 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
+ROOT = Path(__file__).resolve().parents[3]
 # Module keywords for auto-detection from task descriptions
 MODULE_KEYWORDS: dict[str, list[str]] = {
     "agent": ["agent", "loop", "response", "tone", "swarm", "guidance", "tool execution"],

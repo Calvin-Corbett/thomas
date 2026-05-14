@@ -12,9 +12,14 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 from typing import Any
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -49,10 +54,10 @@ DATE_RE = re.compile(r"Last updated:\s*(?P<value>\d{4}-\d{2}-\d{2})")
 
 
 def _load_agent_preflight_module():
-    module_path = Path(__file__).with_name("agent_preflight.py")
-    spec = importlib.util.spec_from_file_location("agent_preflight", module_path)
+    module_path = Path(__file__).with_name("preflight.py")
+    spec = importlib.util.spec_from_file_location("crew_brief_preflight", module_path)
     if spec is None or spec.loader is None:
-        raise RuntimeError(f"Unable to load agent_preflight from {module_path}")
+        raise RuntimeError(f"Unable to load preflight from {module_path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -235,7 +240,7 @@ def _bootstrap_command(summary: str, paths: list[str]) -> str:
     scope = ",".join(_unique([_relpath(path) for path in paths if _relpath(path)])) or "<scope>"
     task = re.sub(r"[\r\n;]+", " ", str(summary or "").strip()) or "describe the task"
     return (
-        'python scripts/agent_bootstrap_claim.py --agent "<agent-id>" '
+        'python scripts/crew/brief/bootstrap_claim.py --agent "<agent-id>" '
         f'--scope "{scope}" --task "{task}" --no-auto-dispatch'
     )
 

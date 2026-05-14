@@ -6,16 +6,16 @@ the codebase without reading code or git diffs.
 
 Usage:
     # Report on the last commit
-    python scripts/agent_session_report.py
+    python scripts/crew/brief/session_report.py
 
     # Report on the last 3 commits
-    python scripts/agent_session_report.py --commits 3
+    python scripts/crew/brief/session_report.py --commits 3
 
     # Report on changes since a specific commit
-    python scripts/agent_session_report.py --since abc1234
+    python scripts/crew/brief/session_report.py --since abc1234
 
     # Save report to file
-    python scripts/agent_session_report.py --output report.md
+    python scripts/crew/brief/session_report.py --output report.md
 """
 
 from __future__ import annotations
@@ -25,8 +25,12 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
+ROOT = Path(__file__).resolve().parents[3]
 # Module descriptions for plain-English summaries
 MODULE_DESCRIPTIONS: dict[str, str] = {
     "thomas/agent": "the AI agent brain (how Thomas thinks and responds)",
