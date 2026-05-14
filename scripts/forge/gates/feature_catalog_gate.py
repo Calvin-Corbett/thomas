@@ -56,7 +56,7 @@ REQUIRED_FEATURE_IDS: set[str] = {
     "server.remote_access_control",
     "security.secret_storage",
     "observability.run_store_and_journal",
-    "upgrade.doppelganger",
+    "forge.anvil.doppelganger",
 }
 
 FEATURE_LINE_RE = re.compile(r"^- \[([a-z0-9_.-]+)\] .+", flags=re.MULTILINE)

@@ -240,7 +240,7 @@ def test_resolve_dispatches_tasks_and_broadcasts(tmp_path: Path, capsys) -> None
             "--summary",
             "approved split into command lane and test lane",
             "--dispatch-item",
-            "brainstorm-followup|scripts/workboard_task_manager.py|implement brainstorm orchestration updates",
+            "brainstorm-followup|scripts/crew/tasks/manager.py|implement brainstorm orchestration updates",
             "--json",
         ]
     )
@@ -252,6 +252,6 @@ def test_resolve_dispatches_tasks_and_broadcasts(tmp_path: Path, capsys) -> None
     assert payload["state"] == "resolved"
     assert payload["dispatch_count"] == 1
     assert payload["broadcast_count"] == 2
-    assert "task_id=brainstorm-followup; scope=scripts/workboard_task_manager.py;" in text
+    assert "task_id=brainstorm-followup; scope=scripts/crew/tasks/manager.py;" in text
     assert "kind=brainstorm_decision;" in text
     assert gate.evaluate(workboard) == []

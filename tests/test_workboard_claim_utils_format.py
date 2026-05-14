@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import scripts.workboard_claim_utils as mod
+import scripts.crew.workboard.claim_utils as mod
 
 
 def test_resolve_display_name_uses_virtual_office_default() -> None:
