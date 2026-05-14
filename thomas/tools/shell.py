@@ -52,7 +52,7 @@ class ShellTool(Tool):
         self._max_timeout = max_timeout
         self._allowed = allowed
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         if not self._allowed:
             return ToolResult(
                 ok=False,

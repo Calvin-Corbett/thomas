@@ -47,11 +47,11 @@ def _format_human(payload: dict[str, Any]) -> str:
 def _execute_usage_cost(
     *,
     start_date: str,
-    end_date: Optional[str],
-    project: Optional[str],
-    model: Optional[str],
-    gateway_url: Optional[str],
-    gateway_api_key: Optional[str],
+    end_date: str | None,
+    project: str | None,
+    model: str | None,
+    gateway_url: str | None,
+    gateway_api_key: str | None,
 ) -> dict[str, Any]:
     from thomas.server.routes.gateway.p134_gateway_usage_cost_command import (
         parse_usage_cost_query,
@@ -98,7 +98,7 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run(argv: Optional[Sequence[str]] = None, *, _out: Any = None) -> int:
+def run(argv: Sequence[str] | None = None, *, _out: Any = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
     out_stream = _out if _out is not None else None
@@ -159,15 +159,15 @@ def register(app: Any) -> None:
         start_date: str = typer.Option(
             ..., "--start-date", help="Start date (YYYY-MM-DD)", show_default=False
         ),
-        end_date: Optional[str] = typer.Option(
+        end_date: str | None = typer.Option(
             None, "--end-date", help="End date (YYYY-MM-DD). Defaults to start-date"
         ),
-        project: Optional[str] = typer.Option(None, "--project", help="Optional project filter"),
-        model: Optional[str] = typer.Option(None, "--model", help="Optional model filter"),
-        gateway_url: Optional[str] = typer.Option(
+        project: str | None = typer.Option(None, "--project", help="Optional project filter"),
+        model: str | None = typer.Option(None, "--model", help="Optional model filter"),
+        gateway_url: str | None = typer.Option(
             None, "--gateway-url", help="Gateway base URL (overrides env/config)"
         ),
-        gateway_api_key: Optional[str] = typer.Option(
+        gateway_api_key: str | None = typer.Option(
             None, "--gateway-api-key", help="Gateway API key (overrides env/config)"
         ),
         json_output: bool = typer.Option(
@@ -222,7 +222,7 @@ def add_commands(app: Any) -> None:
     register(app)
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     return run(argv)
 
 

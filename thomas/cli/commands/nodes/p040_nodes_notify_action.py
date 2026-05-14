@@ -99,10 +99,10 @@ def run(args: argparse.Namespace) -> int:
     try:
         payload = payload_from_json(getattr(args, "payload", None))
         inp = NodesNotifyActionInput(
-            node_ids=list(getattr(args, "node_ids") or []),
-            action=str(getattr(args, "action")),
+            node_ids=list(args.node_ids or []),
+            action=str(args.action),
             payload=payload,
-            timeout_s=float(getattr(args, "timeout_s")),
+            timeout_s=float(args.timeout_s),
         )
 
         out = notify_action(inp)

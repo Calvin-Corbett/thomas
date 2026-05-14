@@ -11,10 +11,10 @@ def estimate_tokens(text: str) -> int:
     return max(1, (len(text) + 3) // 4)
 
 
-def normalize_lines(text: str) -> List[str]:
+def normalize_lines(text: str) -> list[str]:
     lines = [ln.rstrip() for ln in (text or "").splitlines()]
     # Keep structure but drop repeated blank runs.
-    out: List[str] = []
+    out: list[str] = []
     blank = False
     for ln in lines:
         if ln.strip():
@@ -35,9 +35,9 @@ def redundancy_ratio(lines: Iterable[str]) -> float:
     return max(0.0, min(1.0, 1.0 - (uniq / float(len(items)))))
 
 
-def compact_lines(lines: List[str], max_lines: int = 2000) -> List[str]:
+def compact_lines(lines: list[str], max_lines: int = 2000) -> list[str]:
     seen = set()
-    out: List[str] = []
+    out: list[str] = []
     for ln in lines:
         key = ln.strip().lower()
         # Keep section headers and non-content lines even if repeated.
@@ -51,7 +51,7 @@ def compact_lines(lines: List[str], max_lines: int = 2000) -> List[str]:
     return out
 
 
-def truncate_to_token_budget(text: str, budget_tokens: int) -> Tuple[str, int]:
+def truncate_to_token_budget(text: str, budget_tokens: int) -> tuple[str, int]:
     budget = max(1, int(budget_tokens))
     if estimate_tokens(text) <= budget:
         return text, estimate_tokens(text)

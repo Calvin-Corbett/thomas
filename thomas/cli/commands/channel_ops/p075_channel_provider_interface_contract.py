@@ -47,7 +47,7 @@ def _load_config(args: argparse.Namespace) -> Mapping[str, Any] | None:
     if cfg_inline is not None:
         return _parse_json_object(str(cfg_inline))
 
-    with open(str(cfg_file), "r", encoding="utf-8") as f:
+    with open(str(cfg_file), encoding="utf-8") as f:
         return _parse_json_object(f.read())
 
 

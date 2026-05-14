@@ -46,7 +46,8 @@ else:
     from .app_core import *  # noqa: F401,F403
 
 if "serve" not in globals() or "serve_async" not in globals():
-    from .app_lifecycle import serve as _compat_serve, serve_async as _compat_serve_async
+    from .app_lifecycle import serve as _compat_serve
+    from .app_lifecycle import serve_async as _compat_serve_async
 
     globals().setdefault("serve", _compat_serve)
     globals().setdefault("serve_async", _compat_serve_async)

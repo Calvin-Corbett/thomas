@@ -12,14 +12,13 @@ The function returns deterministic, machine-readable results for automation.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Dict, Literal, Optional, Tuple
 import inspect
 import json
 import urllib.parse
 import webbrowser
-
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, Literal, Optional, Tuple
 
 ErrorKind = Literal["invalid_input", "missing_config", "external_failure", "internal_error"]
 BackendKind = Literal["thomas_tool", "webbrowser", "noop"]
@@ -29,9 +28,9 @@ BackendKind = Literal["thomas_tool", "webbrowser", "noop"]
 class BrowserOpenError:
     kind: ErrorKind
     message: str
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"kind": self.kind, "message": self.message, "details": dict(self.details)}
 
 
@@ -39,9 +38,9 @@ class BrowserOpenError:
 class BrowserOpenRequest:
     """Input contract for the browser route."""
 
-    url: Optional[str] = None
-    config_path: Optional[str] = None
-    timeout_s: Optional[float] = None
+    url: str | None = None
+    config_path: str | None = None
+    timeout_s: float | None = None
     dry_run: bool = False
 
 
@@ -50,14 +49,14 @@ class BrowserOpenResult:
     """Output contract for the browser route."""
 
     ok: bool
-    url: Optional[str]
+    url: str | None
     opened: bool
     backend: BackendKind
     message: str
-    error: Optional[BrowserOpenError] = None
-    meta: Dict[str, Any] = field(default_factory=dict)
+    error: BrowserOpenError | None = None
+    meta: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ok": self.ok,
             "url": self.url,
@@ -81,7 +80,7 @@ class BrowserOpenException(Exception):
 _ALLOWED_URL_SCHEMES = {"http", "https"}
 
 
-def _load_config(config_path: Optional[str]) -> Dict[str, Any]:
+def _load_config(config_path: str | None) -> dict[str, Any]:
     if config_path is None or str(config_path).strip() == "":
         return {}
 
@@ -128,7 +127,7 @@ def _load_config(config_path: Optional[str]) -> Dict[str, Any]:
     return {"config_path": str(path)}
 
 
-def _normalize_url(url: Optional[str]) -> Optional[str]:
+def _normalize_url(url: str | None) -> str | None:
     if url is None:
         return None
     if not isinstance(url, str):
@@ -189,9 +188,9 @@ def _interpret_open_return(value: Any) -> bool:
     return True
 
 
-def _call_open_callable(fn: Any, url: str, config: Dict[str, Any], timeout_s: Optional[float]) -> Any:
+def _call_open_callable(fn: Any, url: str, config: dict[str, Any], timeout_s: float | None) -> Any:
     sig = inspect.signature(fn)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
 
     # Best-effort keyword mapping (only if the callable supports it).
     if "config" in sig.parameters:
@@ -222,8 +221,8 @@ def _call_open_callable(fn: Any, url: str, config: Dict[str, Any], timeout_s: Op
 
 
 def _try_open_with_thomas_tool(
-    url: str, config: Dict[str, Any], timeout_s: Optional[float]
-) -> Tuple[Optional[bool], Dict[str, Any]]:
+    url: str, config: dict[str, Any], timeout_s: float | None
+) -> tuple[bool | None, dict[str, Any]]:
     try:
         import thomas.tools.browser as tb  # type: ignore
     except Exception as e:
@@ -273,9 +272,9 @@ def _open_with_webbrowser(url: str) -> bool:
 def open_url(request: BrowserOpenRequest) -> BrowserOpenResult:
     """Open a URL with deterministic output and error handling."""
 
-    backend_meta: Dict[str, Any] = {}
-    normalized_url: Optional[str] = None
-    config: Dict[str, Any] = {}
+    backend_meta: dict[str, Any] = {}
+    normalized_url: str | None = None
+    config: dict[str, Any] = {}
 
     try:
         config = _load_config(request.config_path)
@@ -361,7 +360,7 @@ def open_url(request: BrowserOpenRequest) -> BrowserOpenResult:
         )
 
 
-def result_json_schema() -> Dict[str, Any]:
+def result_json_schema() -> dict[str, Any]:
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "title": "ThomasBrowserOpenResult",

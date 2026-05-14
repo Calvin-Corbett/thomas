@@ -58,7 +58,7 @@ class DeltaIngester:
     def last_indexed_id(self, value: int) -> None:
         self._last_indexed_id = value
 
-    def ingest_events(self, events: List[EventRow]) -> Dict[str, Any]:
+    def ingest_events(self, events: list[EventRow]) -> dict[str, Any]:
         """Index a batch of events into delta derived DB.
 
         Returns stats dict with counts.
@@ -107,7 +107,7 @@ class DeltaIngester:
         log.info("Delta ingestion: %d events in %.0fms", len(events), duration)
         return stats
 
-    def ingest_new(self) -> Dict[str, Any]:
+    def ingest_new(self) -> dict[str, Any]:
         """Ingest all events newer than last_indexed_id."""
         new_events = list(self._log.iter_events(after_id=self._last_indexed_id))
 
@@ -116,7 +116,7 @@ class DeltaIngester:
 
         # Process in batches to avoid memory spikes
         batch_size = 64
-        total_stats: Dict[str, Any] = {"indexed": 0, "entities": 0, "relations": 0}
+        total_stats: dict[str, Any] = {"indexed": 0, "entities": 0, "relations": 0}
 
         for i in range(0, len(new_events), batch_size):
             batch = new_events[i:i + batch_size]
@@ -153,7 +153,7 @@ class BaseRebuilder:
         self._embedder = embedder
         self._paths = paths
 
-    def rebuild(self) -> Dict[str, Any]:
+    def rebuild(self) -> dict[str, Any]:
         """Full rebuild of the base index.
 
         Creates a new build, indexes all events, then swaps it active.
@@ -170,7 +170,7 @@ class BaseRebuilder:
         new_graph = GraphStore(new_derived)
 
         # Process all events in batches
-        batch: List[EventRow] = []
+        batch: list[EventRow] = []
         batch_size = 64
         total = 0
         e_count = 0
@@ -215,10 +215,10 @@ class BaseRebuilder:
 
     def _process_batch(
         self,
-        events: List[EventRow],
+        events: list[EventRow],
         derived: DerivedDB,
         graph: GraphStore,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process a batch of events for the rebuild."""
         texts = [ev.text for ev in events]
 

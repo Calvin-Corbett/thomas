@@ -131,7 +131,7 @@ def register_spend_routes(
                     await resp.write(b": keepalive\n\n")
                     continue
                 data = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
-                await resp.write(f"event: spend\ndata: {data}\n\n".encode("utf-8"))
+                await resp.write(f"event: spend\ndata: {data}\n\n".encode())
         except (ConnectionResetError, asyncio.CancelledError):
             pass
         finally:

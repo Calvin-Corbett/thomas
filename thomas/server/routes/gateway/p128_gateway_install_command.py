@@ -12,7 +12,6 @@ from typing import Any, Dict, List, Mapping, Optional, TypedDict, cast
 
 from aiohttp import web
 
-
 # -----------------------------
 # Contracts
 # -----------------------------
@@ -32,15 +31,15 @@ class GatewayInstallCommandResultDict(TypedDict):
     installed_path: str
     installed: bool
     dry_run: bool
-    actions: List[str]
+    actions: list[str]
     message: str
 
 
 @dataclass(frozen=True, slots=True)
 class GatewayInstallCommandRequest:
     source: str
-    name: Optional[str] = None
-    install_dir: Optional[str] = None
+    name: str | None = None
+    install_dir: str | None = None
     overwrite: bool = False
     dry_run: bool = False
 
@@ -51,7 +50,7 @@ class GatewayInstallCommandResult:
     installed_path: str
     installed: bool
     dry_run: bool
-    actions: List[str]
+    actions: list[str]
     message: str
 
 
@@ -66,10 +65,10 @@ class GatewayInstallCommandError(Exception):
     code: str
     message: str
     http_status: int = 400
-    details: Optional[Mapping[str, Any]] = None
+    details: Mapping[str, Any] | None = None
 
-    def to_error_payload(self) -> Dict[str, Any]:
-        err: Dict[str, Any] = {
+    def to_error_payload(self) -> dict[str, Any]:
+        err: dict[str, Any] = {
             "message": self.message,
             "type": "gateway_install_error",
             "code": self.code,
@@ -106,7 +105,7 @@ def _sanitize_name(raw: str) -> str:
     return candidate
 
 
-def _resolve_install_dir(request: GatewayInstallCommandRequest, app: Optional[web.Application]) -> Path:
+def _resolve_install_dir(request: GatewayInstallCommandRequest, app: web.Application | None) -> Path:
     if request.install_dir:
         return Path(request.install_dir).expanduser()
 
@@ -163,8 +162,8 @@ def _is_unsafe_zip_member(name: str) -> bool:
     return False
 
 
-def _safe_extract_zip(zip_path: Path, dest_dir: Path) -> List[str]:
-    actions: List[str] = []
+def _safe_extract_zip(zip_path: Path, dest_dir: Path) -> list[str]:
+    actions: list[str] = []
     dest_resolved = dest_dir.resolve()
     with zipfile.ZipFile(zip_path, "r") as zf:
         for zi in zf.infolist():
@@ -204,7 +203,7 @@ def _safe_extract_zip(zip_path: Path, dest_dir: Path) -> List[str]:
 def install_gateway_artifact(
     request: GatewayInstallCommandRequest,
     *,
-    app: Optional[web.Application] = None,
+    app: web.Application | None = None,
 ) -> GatewayInstallCommandResult:
     """Install a gateway artifact into install_dir/name.
 
@@ -232,7 +231,7 @@ def install_gateway_artifact(
     name = _sanitize_name(name_raw)
     dest_path = install_dir / name
 
-    actions: List[str] = []
+    actions: list[str] = []
     if dest_path.exists() and not request.overwrite:
         raise GatewayInstallCommandError(
             code="already_installed",
@@ -376,7 +375,7 @@ def parse_gateway_install_request(data: Mapping[str, Any]) -> GatewayInstallComm
     )
 
 
-def gateway_install_schema() -> Dict[str, Any]:
+def gateway_install_schema() -> dict[str, Any]:
     """Compact JSON schema for automation clients."""
 
     return {

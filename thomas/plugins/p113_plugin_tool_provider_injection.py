@@ -44,11 +44,11 @@ class ToolProviderInjectionResult:
 
     ok: bool
     provider_id: str
-    injected_tool_names: Tuple[str, ...] = ()
-    error_code: Optional[str] = None
-    error_message: Optional[str] = None
+    injected_tool_names: tuple[str, ...] = ()
+    error_code: str | None = None
+    error_message: str | None = None
 
-    def to_json(self) -> Dict[str, Any]:
+    def to_json(self) -> dict[str, Any]:
         payload = asdict(self)
         # Tuples are not JSON-serializable by default in some encoders; normalize.
         payload["injected_tool_names"] = list(self.injected_tool_names)
@@ -138,7 +138,7 @@ class EchoTool:
     provider_id: str
     description: str = "Echo back the provided text."
     # Optional JSON schema-ish hints (safe for registries that accept dicts)
-    input_schema: Dict[str, Any] = field(
+    input_schema: dict[str, Any] = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {"text": {"type": "string"}},
@@ -146,7 +146,7 @@ class EchoTool:
             "additionalProperties": False,
         }
     )
-    output_schema: Dict[str, Any] = field(
+    output_schema: dict[str, Any] = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -310,7 +310,7 @@ class PluginToolProviderInjection(_ThomasPluginBase):  # type: ignore[misc]
         return inject_tool_provider(registry, req)
 
 
-def _extract_registry(args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> Any:
+def _extract_registry(args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
     # Common keyword names.
     for key in ("tool_registry", "registry", "tools"):
         if key in kwargs and kwargs[key] is not None:

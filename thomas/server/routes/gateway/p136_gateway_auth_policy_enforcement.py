@@ -52,8 +52,6 @@ Deterministic error responses:
 """
 
 import asyncio
-from collections import deque
-from dataclasses import dataclass
 import hashlib
 import hmac
 import ipaddress
@@ -61,7 +59,9 @@ import json
 import os
 import time
 import weakref
-from typing import Any, Mapping, Sequence, TypedDict, Literal
+from collections import deque
+from dataclasses import dataclass
+from typing import Any, Literal, Mapping, Sequence, TypedDict
 
 from aiohttp import web
 
@@ -137,10 +137,10 @@ class GatewayAuthDecision:
 
 
 # Cache policies without mutating aiohttp Application (avoid aiohttp deprecation warnings).
-_POLICY_CACHE: "weakref.WeakKeyDictionary[web.Application, GatewayAuthPolicy]" = weakref.WeakKeyDictionary()
+_POLICY_CACHE: weakref.WeakKeyDictionary[web.Application, GatewayAuthPolicy] = weakref.WeakKeyDictionary()
 _APP_REGISTERED: web.AppKey[bool] = web.AppKey("__p136_gateway_auth_policy_registered", bool)
-_AUTH_FAILURES_CACHE: "weakref.WeakKeyDictionary[web.Application, dict[str, Any]]" = weakref.WeakKeyDictionary()
-_AUTH_FAILURE_LOCKS: "weakref.WeakKeyDictionary[web.Application, asyncio.Lock]" = weakref.WeakKeyDictionary()
+_AUTH_FAILURES_CACHE: weakref.WeakKeyDictionary[web.Application, dict[str, Any]] = weakref.WeakKeyDictionary()
+_AUTH_FAILURE_LOCKS: weakref.WeakKeyDictionary[web.Application, asyncio.Lock] = weakref.WeakKeyDictionary()
 
 # In auto/prefix modes, enforcement targets these gateway-ish paths.
 _DEFAULT_GATEWAY_PREFIXES: tuple[str, ...] = ("/gateway", "/ws")
@@ -256,7 +256,7 @@ def _load_policy_dict_from_env() -> dict[str, Any] | None:
     file_path = os.getenv("THOMAS_GATEWAY_AUTH_POLICY_FILE")
     if file_path:
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 data = json.load(f)
         except FileNotFoundError as e:
             raise GatewayAuthPolicyExternalError(f"gateway auth policy file not found: {file_path}") from e

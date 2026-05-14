@@ -67,7 +67,7 @@ def cli_assign(
     user_id: str = UserIdOpt,
     role_id: str = RoleIdOpt,
     json_output: bool = JsonFlag,
-    token: Optional[str] = typer.Option(None, "--token", help="Override Discord bot token (otherwise uses env/config)."),
+    token: str | None = typer.Option(None, "--token", help="Override Discord bot token (otherwise uses env/config)."),
     timeout_s: float = typer.Option(15.0, "--timeout-s", help="HTTP timeout seconds."),
 ) -> None:
     """Assign (grant) a role to a member in a guild."""
@@ -91,7 +91,7 @@ def cli_remove(
     user_id: str = UserIdOpt,
     role_id: str = RoleIdOpt,
     json_output: bool = JsonFlag,
-    token: Optional[str] = typer.Option(None, "--token", help="Override Discord bot token (otherwise uses env/config)."),
+    token: str | None = typer.Option(None, "--token", help="Override Discord bot token (otherwise uses env/config)."),
     timeout_s: float = typer.Option(15.0, "--timeout-s", help="HTTP timeout seconds."),
 ) -> None:
     """Remove (revoke) a role from a member in a guild."""

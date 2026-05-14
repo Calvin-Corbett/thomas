@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional
 
 from thomas.policy.redact import Redactor
 
+
 @dataclass
 class AuditLog:
     path: Path

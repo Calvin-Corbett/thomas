@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any, List, Optional
 
+from thomas.core.api_importer import ApiImporter, HttpOptions, _make_toolresult_err, _make_toolresult_ok, _make_toolspec
 from thomas.tools.base import Tool, ToolResult, ToolSpec
-from thomas.core.api_importer import ApiImporter, HttpOptions, _make_toolresult_ok, _make_toolresult_err, _make_toolspec
 
 
 class ApiImportTool(Tool):
@@ -15,7 +15,7 @@ class ApiImportTool(Tool):
       - persists tool list + base_url + non-secret security summary
       - supports HTTP tuning (timeout/retries/ssl verify)
     """
-    def __init__(self, registry: Any, importer: Optional[ApiImporter] = None):
+    def __init__(self, registry: Any, importer: ApiImporter | None = None):
         self._registry = registry
         self._importer = importer or ApiImporter()
         self._spec = _make_toolspec(
@@ -84,7 +84,7 @@ class ApiImportTool(Tool):
             self._importer.register_all(tools, self._registry)
             self._importer.save_imported_api(name=str(name), spec_url=str(url), tools=tools)
 
-            tool_names: List[str] = []
+            tool_names: list[str] = []
             for t in tools:
                 s = getattr(t, "spec", None)
                 if callable(s):
@@ -121,7 +121,7 @@ class ApiListImportedTool(Tool):
     Tool: api.list_imported
     Lists saved imported APIs + tool counts, and whether spec was frozen.
     """
-    def __init__(self, importer: Optional[ApiImporter] = None):
+    def __init__(self, importer: ApiImporter | None = None):
         self._importer = importer or ApiImporter()
         self._spec = _make_toolspec(
             name="api.list_imported",
@@ -162,7 +162,7 @@ class ApiRemoveTool(Tool):
     params: { name: str }
     Removes all tools for an API and deletes its persisted entry.
     """
-    def __init__(self, registry: Any, importer: Optional[ApiImporter] = None):
+    def __init__(self, registry: Any, importer: ApiImporter | None = None):
         self._registry = registry
         self._importer = importer or ApiImporter()
         self._spec = _make_toolspec(
@@ -188,7 +188,7 @@ class ApiRemoveTool(Tool):
         removed = self._importer.remove_saved(str(name)) or {}
         tool_names = removed.get("tool_names") or []
 
-        unregistered: List[str] = []
+        unregistered: list[str] = []
 
         # Best-effort unregister.
         try:
@@ -234,7 +234,7 @@ class ApiReloadImportedTool(Tool):
     Tool: api.reload_imported
     Reloads all saved imported APIs on demand.
     """
-    def __init__(self, registry: Any, importer: Optional[ApiImporter] = None):
+    def __init__(self, registry: Any, importer: ApiImporter | None = None):
         self._registry = registry
         self._importer = importer or ApiImporter()
         self._spec = _make_toolspec(
@@ -255,7 +255,7 @@ class ApiReloadImportedTool(Tool):
             return _make_toolresult_err(f"Reload failed: {e}")
 
 
-def build_api_import_tools(registry: Any) -> List[Tool]:
+def build_api_import_tools(registry: Any) -> list[Tool]:
     """
     Convenience: create management tools (import/list/remove/reload).
 

@@ -29,7 +29,6 @@ from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, Tuple,
 
 from aiohttp import ClientError, ClientResponse, ClientSession, ClientTimeout, web
 
-
 # -----------------------------
 # Contracts (minimal subset)
 # -----------------------------
@@ -64,7 +63,7 @@ class ResponsesCompatOutputMessage(TypedDict):
     id: str
     type: Literal["message"]
     role: Literal["assistant"]
-    content: List[ResponsesCompatOutputText]
+    content: list[ResponsesCompatOutputText]
 
 
 class ResponsesCompatUsage(TypedDict, total=False):
@@ -80,16 +79,16 @@ class ResponsesCompatCreateResponse:
     created_at: int
     model: str
     status: Literal["completed"]
-    output: List[ResponsesCompatOutputMessage]
+    output: list[ResponsesCompatOutputMessage]
     usage: ResponsesCompatUsage
-    metadata: Optional[Mapping[str, Any]] = None
+    metadata: Mapping[str, Any] | None = None
 
 
 class ErrorObject(TypedDict, total=False):
     message: str
     type: str
-    param: Optional[str]
-    code: Optional[str]
+    param: str | None
+    code: str | None
 
 
 class ErrorEnvelope(TypedDict):
@@ -105,8 +104,8 @@ class GatewayError(Exception):
         status: int,
         message: str,
         error_type: str = "invalid_request_error",
-        param: Optional[str] = None,
-        code: Optional[str] = None,
+        param: str | None = None,
+        code: str | None = None,
     ) -> None:
         super().__init__(message)
         self.status = status
@@ -126,21 +125,21 @@ _ENV_UPSTREAM = "THOMAS_RESPONSES_COMPAT_UPSTREAM_BASE_URL"
 _ENV_TIMEOUT_S = "THOMAS_RESPONSES_COMPAT_TIMEOUT_S"
 
 # Shared env-var fallbacks (common in gateways).
-_FALLBACK_UPSTREAM_ENV_VARS: Tuple[str, ...] = (
+_FALLBACK_UPSTREAM_ENV_VARS: tuple[str, ...] = (
     "THOMAS_GATEWAY_UPSTREAM_BASE_URL",
     "THOMAS_UPSTREAM_BASE_URL",
     "OPENAI_BASE_URL",
     "OPENAI_API_BASE",
 )
 
-_FALLBACK_API_KEY_ENV_VARS: Tuple[str, ...] = (
+_FALLBACK_API_KEY_ENV_VARS: tuple[str, ...] = (
     "THOMAS_GATEWAY_API_KEY",
     "OPENAI_API_KEY",
 )
 
 
 def _get_mode(app: web.Application) -> str:
-    mode = os.getenv(_ENV_MODE) or cast(Optional[str], app.get("responses_compat_mode"))
+    mode = os.getenv(_ENV_MODE) or cast(str | None, app.get("responses_compat_mode"))
     if mode:
         m = str(mode).strip().lower()
         if m in ("auto", "stub", "proxy"):
@@ -150,8 +149,8 @@ def _get_mode(app: web.Application) -> str:
     return "auto"
 
 
-def _resolve_upstream_base_url(app: web.Application) -> Optional[str]:
-    val = os.getenv(_ENV_UPSTREAM) or cast(Optional[str], app.get("responses_compat_upstream_base_url"))
+def _resolve_upstream_base_url(app: web.Application) -> str | None:
+    val = os.getenv(_ENV_UPSTREAM) or cast(str | None, app.get("responses_compat_upstream_base_url"))
     if val:
         return str(val).rstrip("/")
 
@@ -164,7 +163,7 @@ def _resolve_upstream_base_url(app: web.Application) -> Optional[str]:
     if config is None:
         return None
 
-    candidates: Sequence[Tuple[str, ...]] = (
+    candidates: Sequence[tuple[str, ...]] = (
         ("gateway", "upstream_base_url"),
         ("gateway", "base_url"),
         ("openai", "base_url"),
@@ -172,7 +171,7 @@ def _resolve_upstream_base_url(app: web.Application) -> Optional[str]:
         ("base_url",),
     )
 
-    def _dig(obj: Any, path: Tuple[str, ...]) -> Optional[Any]:
+    def _dig(obj: Any, path: tuple[str, ...]) -> Any | None:
         cur = obj
         for key in path:
             if cur is None:
@@ -193,14 +192,14 @@ def _resolve_upstream_base_url(app: web.Application) -> Optional[str]:
     return None
 
 
-def _resolve_api_key(app: web.Application, request: web.Request) -> Optional[str]:
+def _resolve_api_key(app: web.Application, request: web.Request) -> str | None:
     # Client-supplied auth takes priority.
     auth = request.headers.get("Authorization")
     if auth:
         return auth
 
     # App-level stored token.
-    key_val = cast(Optional[str], app.get("gateway_api_key") or app.get("api_key"))
+    key_val = cast(str | None, app.get("gateway_api_key") or app.get("api_key"))
     if key_val:
         v = str(key_val)
         return v if v.lower().startswith("bearer ") else f"Bearer {v}"
@@ -229,8 +228,8 @@ def _resolve_timeout_s() -> float:
 # -----------------------------
 
 
-def get_json_schema() -> Dict[str, Any]:
-    request_schema: Dict[str, Any] = {
+def get_json_schema() -> dict[str, Any]:
+    request_schema: dict[str, Any] = {
         "type": "object",
         "required": ["model", "input"],
         "properties": {
@@ -241,7 +240,7 @@ def get_json_schema() -> Dict[str, Any]:
         },
         "additionalProperties": True,
     }
-    response_schema: Dict[str, Any] = {
+    response_schema: dict[str, Any] = {
         "type": "object",
         "required": ["id", "object", "created_at", "model", "status", "output"],
         "properties": {
@@ -256,7 +255,7 @@ def get_json_schema() -> Dict[str, Any]:
         },
         "additionalProperties": True,
     }
-    error_schema: Dict[str, Any] = {
+    error_schema: dict[str, Any] = {
         "type": "object",
         "required": ["error"],
         "properties": {
@@ -302,7 +301,7 @@ def _json_response(payload: Any, *, status: int = 200) -> web.Response:
     return web.json_response(payload, status=status, dumps=lambda o: json.dumps(o, separators=(",", ":"), ensure_ascii=False))
 
 
-async def _read_json_object(request: web.Request) -> Dict[str, Any]:
+async def _read_json_object(request: web.Request) -> dict[str, Any]:
     try:
         data = await request.json()
     except json.JSONDecodeError:
@@ -311,7 +310,7 @@ async def _read_json_object(request: web.Request) -> Dict[str, Any]:
         raise GatewayError(status=400, message="Request body must be JSON.", code="invalid_json")
     if not isinstance(data, dict):
         raise GatewayError(status=400, message="Request JSON body must be an object.", code="invalid_body")
-    return cast(Dict[str, Any], data)
+    return cast(dict[str, Any], data)
 
 
 def _validate_input_items(inp: Any) -> None:
@@ -387,7 +386,7 @@ def _validate_input_items(inp: Any) -> None:
             )
 
 
-def _validate_create_request(data: Dict[str, Any]) -> ResponsesCompatCreateRequest:
+def _validate_create_request(data: dict[str, Any]) -> ResponsesCompatCreateRequest:
     if "model" not in data:
         raise GatewayError(status=400, message="Missing required field: model", param="model", code="missing_field")
     if not isinstance(data["model"], str) or not data["model"].strip():
@@ -473,11 +472,11 @@ async def _read_upstream_json(resp: ClientResponse) -> Mapping[str, Any]:
     return cast(Mapping[str, Any], data)
 
 
-async def _proxy_to_upstream(*, request: web.Request, upstream_base_url: str, payload: Dict[str, Any]) -> Tuple[int, Mapping[str, Any]]:
+async def _proxy_to_upstream(*, request: web.Request, upstream_base_url: str, payload: dict[str, Any]) -> tuple[int, Mapping[str, Any]]:
     url = f"{upstream_base_url}/v1/responses"
     timeout = ClientTimeout(total=_resolve_timeout_s())
 
-    headers: Dict[str, str] = {"Content-Type": "application/json", "Accept": "application/json"}
+    headers: dict[str, str] = {"Content-Type": "application/json", "Accept": "application/json"}
     auth = _resolve_api_key(request.app, request)
     if auth:
         headers["Authorization"] = auth
@@ -570,18 +569,18 @@ async def handle_create(request: web.Request) -> web.Response:
 # -----------------------------
 
 
-ROUTES: List[web.RouteDef] = [
+ROUTES: list[web.RouteDef] = [
     web.post("/v1/responses", handle_create),
     web.get("/v1/responses/schema", handle_schema),
 ]
 
-ROUTE_SPECS: List[Tuple[str, str, Any]] = [
+ROUTE_SPECS: list[tuple[str, str, Any]] = [
     ("POST", "/v1/responses", handle_create),
     ("GET", "/v1/responses/schema", handle_schema),
 ]
 
 
-def routes() -> List[web.RouteDef]:
+def routes() -> list[web.RouteDef]:
     return ROUTES
 
 

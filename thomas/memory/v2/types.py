@@ -10,14 +10,14 @@ class RetrievalItem:
     ref_id: str
     score: float
     snippet: str
-    meta: Dict[str, Any] = field(default_factory=dict)
+    meta: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class RetrievalResult:
     pack_text: str
     trace_id: str
-    items: List[RetrievalItem]
+    items: list[RetrievalItem]
     latency_ms: int
     pack_tokens_est: int
 

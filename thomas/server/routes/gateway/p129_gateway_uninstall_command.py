@@ -18,17 +18,16 @@ Uninstall behavior is intentionally conservative and idempotent:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
 import os
-from pathlib import Path
 import shlex
 import shutil
 import subprocess
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Mapping, Optional, TypedDict, cast
 
 from aiohttp import web
-
 
 # ---------------------------
 # Contracts
@@ -50,7 +49,7 @@ class GatewayUninstallResultPayload(TypedDict):
     dry_run: bool
     removed_paths: list[str]
     ran_external_uninstall: bool
-    external_uninstall_command: Optional[list[str]]
+    external_uninstall_command: list[str] | None
 
 
 class GatewayUninstallErrorPayload(TypedDict):
@@ -64,12 +63,12 @@ class GatewayUninstallErrorPayload(TypedDict):
 class GatewayUninstallRequest:
     """Parsed request for uninstalling the Gateway."""
 
-    state_dir: Optional[str] = None
+    state_dir: str | None = None
     dry_run: bool = False
     purge_state: bool = False
 
     @staticmethod
-    def from_payload(payload: Mapping[str, Any]) -> "GatewayUninstallRequest":
+    def from_payload(payload: Mapping[str, Any]) -> GatewayUninstallRequest:
         if not isinstance(payload, Mapping):
             raise GatewayUninstallError.invalid_request("Request body must be an object.")
 
@@ -93,7 +92,7 @@ class GatewayUninstallRequest:
             raise GatewayUninstallError.invalid_request("purge_state must be a boolean.")
 
         return GatewayUninstallRequest(
-            state_dir=cast(Optional[str], state_dir),
+            state_dir=cast(str | None, state_dir),
             dry_run=dry_run,
             purge_state=purge_state,
         )
@@ -108,7 +107,7 @@ class GatewayUninstallResult:
     dry_run: bool
     removed_paths: list[str] = field(default_factory=list)
     ran_external_uninstall: bool = False
-    external_uninstall_command: Optional[list[str]] = None
+    external_uninstall_command: list[str] | None = None
 
     def to_payload(self) -> GatewayUninstallResultPayload:
         return GatewayUninstallResultPayload(
@@ -139,19 +138,19 @@ class GatewayUninstallError(RuntimeError):
         return GatewayUninstallErrorPayload(code=self.code, message=str(self))
 
     @staticmethod
-    def invalid_request(message: str) -> "GatewayUninstallError":
+    def invalid_request(message: str) -> GatewayUninstallError:
         return GatewayUninstallError(code="invalid_request", message=message, http_status=400)
 
     @staticmethod
-    def missing_config(message: str) -> "GatewayUninstallError":
+    def missing_config(message: str) -> GatewayUninstallError:
         return GatewayUninstallError(code="missing_configuration", message=message, http_status=409)
 
     @staticmethod
-    def external_failure(message: str) -> "GatewayUninstallError":
+    def external_failure(message: str) -> GatewayUninstallError:
         return GatewayUninstallError(code="external_uninstall_failed", message=message, http_status=502)
 
     @staticmethod
-    def filesystem_failure(message: str) -> "GatewayUninstallError":
+    def filesystem_failure(message: str) -> GatewayUninstallError:
         return GatewayUninstallError(code="filesystem_error", message=message, http_status=500)
 
 
@@ -165,7 +164,7 @@ _STATE_DIR_ENV = "THOMAS_STATE_DIR"
 _GATEWAY_UNINSTALL_ENV = "THOMAS_GATEWAY_UNINSTALL_CMD"
 
 
-def _coerce_uninstall_command(raw: Any) -> Optional[list[str]]:
+def _coerce_uninstall_command(raw: Any) -> list[str] | None:
     """Normalize an uninstall command value into argv list.
 
     Supported forms:
@@ -187,7 +186,7 @@ def _coerce_uninstall_command(raw: Any) -> Optional[list[str]]:
     raise GatewayUninstallError.invalid_request("uninstall_command must be a string or string list.")
 
 
-def _resolve_state_dir(req: GatewayUninstallRequest, app_config: Optional[Mapping[str, Any]] = None) -> Path:
+def _resolve_state_dir(req: GatewayUninstallRequest, app_config: Mapping[str, Any] | None = None) -> Path:
     """Resolve the Thomas state directory.
 
     Priority:
@@ -200,7 +199,7 @@ def _resolve_state_dir(req: GatewayUninstallRequest, app_config: Optional[Mappin
     if req.state_dir:
         candidate = Path(req.state_dir)
     else:
-        state_dir_val: Optional[str] = None
+        state_dir_val: str | None = None
         if app_config:
             for key in ("state_dir", "thomas_state_dir", "data_dir", "home_dir"):
                 v = app_config.get(key)  # type: ignore[arg-type]
@@ -225,7 +224,7 @@ def _resolve_state_dir(req: GatewayUninstallRequest, app_config: Optional[Mappin
     return resolved
 
 
-def _load_gateway_config(path: Path) -> Optional[Mapping[str, Any]]:
+def _load_gateway_config(path: Path) -> Mapping[str, Any] | None:
     if not path.exists():
         return None
     try:
@@ -252,7 +251,7 @@ def _predict_removed_paths(state_dir: Path) -> list[str]:
 def uninstall_gateway(
     req: GatewayUninstallRequest,
     *,
-    app_config: Optional[Mapping[str, Any]] = None,
+    app_config: Mapping[str, Any] | None = None,
 ) -> GatewayUninstallResult:
     """Uninstall the local Gateway installation (idempotent)."""
 
@@ -385,7 +384,7 @@ async def gateway_uninstall(request: web.Request) -> web.Response:
         req_obj = GatewayUninstallRequest.from_payload(payload)
 
         # Best-effort app config lookup; keep this permissive to avoid coupling.
-        app_cfg: Optional[Mapping[str, Any]] = None
+        app_cfg: Mapping[str, Any] | None = None
         for key in ("config", "settings"):
             v = request.app.get(key)
             if isinstance(v, Mapping):

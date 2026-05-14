@@ -17,13 +17,13 @@ Interface stays exactly the same. Extra value is delivered via additional output
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import difflib
 import json
 import os
 import re
 import time
 import uuid
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 try:
@@ -61,7 +61,7 @@ def _ensure_shell() -> None:
 # Shell/Git helpers (tolerant to multiple exec shapes)
 # ---------------------------------------------------------------------------
 
-def _shell(cmd: List[str], cwd: Optional[str] = None) -> Dict[str, Any]:
+def _shell(cmd: list[str], cwd: str | None = None) -> dict[str, Any]:
     """
     Execute a command using thomas.tools.shell.exec.
 
@@ -96,7 +96,7 @@ def _shell(cmd: List[str], cwd: Optional[str] = None) -> Dict[str, Any]:
     return {"stdout": str(res) if res is not None else "", "stderr": "", "code": 0, "ok": True}
 
 
-def _run_git(args: List[str], cwd: Optional[str]) -> Dict[str, Any]:
+def _run_git(args: list[str], cwd: str | None) -> dict[str, Any]:
     res = _shell(["git", *args], cwd=cwd)
     code = res.get("code", res.get("returncode", 0))
     ok = res.get("ok", code == 0)
@@ -109,7 +109,7 @@ def _run_git(args: List[str], cwd: Optional[str]) -> Dict[str, Any]:
     return res
 
 
-def _try_git(args: List[str], cwd: Optional[str]) -> Dict[str, Any]:
+def _try_git(args: list[str], cwd: str | None) -> dict[str, Any]:
     """
     Like _run_git, but never raises. Consumers love "best effort" with warnings.
     """
@@ -221,7 +221,7 @@ _WS_RE = re.compile(r"\s+", re.MULTILINE)
 _BLOCK_OPEN = ("/*", "<!--")
 _BLOCK_CLOSE = ("*/", "-->")
 
-_EXT_LINE_COMMENTS: Dict[str, Tuple[str, ...]] = {
+_EXT_LINE_COMMENTS: dict[str, tuple[str, ...]] = {
     ".py": ("#",),
     ".sh": ("#",),
     ".bash": ("#",),
@@ -262,17 +262,17 @@ def _is_effectively_empty(s: str) -> bool:
     return (s or "").strip() == ""
 
 
-def _line_comment_prefixes_for_path(path: str) -> Tuple[str, ...]:
+def _line_comment_prefixes_for_path(path: str) -> tuple[str, ...]:
     ext = os.path.splitext(path)[1].lower()
     return _EXT_LINE_COMMENTS.get(ext, _FALLBACK_LINE_PREFIXES)
 
 
-def _is_line_comment(line: str, prefixes: Tuple[str, ...]) -> bool:
+def _is_line_comment(line: str, prefixes: tuple[str, ...]) -> bool:
     st = (line or "").lstrip()
     return any(st.startswith(p) for p in prefixes)
 
 
-def _is_comment_only_block(block: str, prefixes: Tuple[str, ...]) -> bool:
+def _is_comment_only_block(block: str, prefixes: tuple[str, ...]) -> bool:
     for ln in (block or "").splitlines():
         st = ln.strip()
         if not st:
@@ -295,12 +295,12 @@ class Conflict:
     tail_marker: str
 
 
-def _parse_conflicts_with_recovery(text: str) -> Tuple[List[Conflict], List[str]]:
+def _parse_conflicts_with_recovery(text: str) -> tuple[list[Conflict], list[str]]:
     """
     Parses all conflict blocks while attempting recovery on malformed ones.
     """
     lines = text.splitlines(keepends=True)
-    conflicts: List[Conflict] = []
+    conflicts: list[Conflict] = []
 
     i = 0
     n = len(lines)
@@ -350,7 +350,7 @@ def _fallback_conflict_count(text: str) -> int:
     return text.count(CONFLICT_START)
 
 
-def _nearest_nonempty_line(lines: List[str], start: int, direction: int) -> Optional[str]:
+def _nearest_nonempty_line(lines: list[str], start: int, direction: int) -> str | None:
     i = start
     while 0 <= i < len(lines):
         s = lines[i].strip("\r\n")
@@ -360,7 +360,7 @@ def _nearest_nonempty_line(lines: List[str], start: int, direction: int) -> Opti
     return None
 
 
-def _in_block_comment_before(lines: List[str], line_index: int, cap: int = 20000) -> bool:
+def _in_block_comment_before(lines: list[str], line_index: int, cap: int = 20000) -> bool:
     in_block = False
     limit = min(line_index, cap)
     for i in range(limit):
@@ -376,7 +376,7 @@ def _in_block_comment_before(lines: List[str], line_index: int, cap: int = 20000
     return in_block
 
 
-def _is_conflict_in_comment_context(lines: List[str], c: Conflict, prefixes: Tuple[str, ...]) -> bool:
+def _is_conflict_in_comment_context(lines: list[str], c: Conflict, prefixes: tuple[str, ...]) -> bool:
     if _in_block_comment_before(lines, c.start_line):
         return True
     prev_line = _nearest_nonempty_line(lines, c.start_line - 1, -1)
@@ -397,7 +397,7 @@ _MISSING = object()
 JSONType = Union[dict, list, str, int, float, bool, None]
 
 
-def _git_show_index_stage(repo_root: str, stage: int, rel_path: str) -> Optional[str]:
+def _git_show_index_stage(repo_root: str, stage: int, rel_path: str) -> str | None:
     """
     Returns file content for an unmerged index stage:
       1=base, 2=ours, 3=theirs
@@ -413,7 +413,7 @@ def _json_normalize(s: str) -> Any:
     return json.loads(s)
 
 
-def _json_merge3(base: Any, ours: Any, theirs: Any, path: Tuple[str, ...] = ()) -> Tuple[Any, List[Tuple[str, ...]]]:
+def _json_merge3(base: Any, ours: Any, theirs: Any, path: tuple[str, ...] = ()) -> tuple[Any, list[tuple[str, ...]]]:
     """
     Returns (merged_value, conflict_paths). Conflict paths are tuples of key segments.
     Rules (safe disjoint merge):
@@ -436,13 +436,13 @@ def _json_merge3(base: Any, ours: Any, theirs: Any, path: Tuple[str, ...] = ()) 
         b = base if isinstance(base, dict) else {}
         o = ours if isinstance(ours, dict) else {}
         t = theirs if isinstance(theirs, dict) else {}
-        merged: Dict[str, Any] = {}
+        merged: dict[str, Any] = {}
 
-        conflicts: List[Tuple[str, ...]] = []
+        conflicts: list[tuple[str, ...]] = []
 
         # preserve base key order first, then ours-only, then theirs-only
         seen = set()
-        key_order: List[str] = list(b.keys()) + [k for k in o.keys() if k not in b] + [k for k in t.keys() if k not in b and k not in o]
+        key_order: list[str] = list(b.keys()) + [k for k in o.keys() if k not in b] + [k for k in t.keys() if k not in b and k not in o]
 
         for k in key_order:
             if k in seen:
@@ -523,7 +523,7 @@ def _json_merge3(base: Any, ours: Any, theirs: Any, path: Tuple[str, ...] = ()) 
     return base, [path]
 
 
-def _json_structured_merge(repo_root: str, rel_path: str) -> Tuple[Optional[str], List[Tuple[str, ...]], str]:
+def _json_structured_merge(repo_root: str, rel_path: str) -> tuple[str | None, list[tuple[str, ...]], str]:
     """
     Attempts a structured JSON 3-way merge using the index stages.
     Returns (merged_text_or_None, conflicts, reason)
@@ -600,7 +600,7 @@ def _confidence_for_reason(reason: str) -> float:
     }.get(reason, 0.5)
 
 
-def _decide_auto_resolution(ours: str, theirs: str, in_comment_ctx: bool, rel_path: str) -> Tuple[Optional[str], str]:
+def _decide_auto_resolution(ours: str, theirs: str, in_comment_ctx: bool, rel_path: str) -> tuple[str | None, str]:
     if _is_effectively_empty(ours) and not _is_effectively_empty(theirs):
         return theirs, "ours_empty_take_theirs"
     if _is_effectively_empty(theirs) and not _is_effectively_empty(ours):
@@ -624,34 +624,34 @@ def _decide_auto_resolution(ours: str, theirs: str, in_comment_ctx: bool, rel_pa
 @dataclass
 class Decision:
     conflict_index: int
-    chosen_side: Optional[str]  # "ours" | "theirs" | None
+    chosen_side: str | None  # "ours" | "theirs" | None
     reason: str
     confidence: float
-    start_line: Optional[int]
-    end_line: Optional[int]
+    start_line: int | None
+    end_line: int | None
 
 
 def _apply_marker_based_resolution(
     text: str,
     strategy: str,
     rel_path: str,
-) -> Tuple[str, int, int, List[Dict[str, str]], List[Decision]]:
+) -> tuple[str, int, int, list[dict[str, str]], list[Decision]]:
     conflicts, lines = _parse_conflicts_with_recovery(text)
     if not conflicts:
         return text, 0, 0, [], []
 
     prefixes = _line_comment_prefixes_for_path(rel_path)
 
-    out: List[str] = []
+    out: list[str] = []
     cursor = 0
-    unresolved: List[Dict[str, str]] = []
-    decisions: List[Decision] = []
+    unresolved: list[dict[str, str]] = []
+    decisions: list[Decision] = []
     unresolved_count = 0
 
     for idx, c in enumerate(conflicts):
         out.extend(lines[cursor : c.start_line])
 
-        chosen: Optional[str] = None
+        chosen: str | None = None
         reason = ""
 
         if strategy == "ours":
@@ -700,7 +700,7 @@ def _apply_marker_based_resolution(
 # Diff preview + report builder (dry_run)
 # ---------------------------------------------------------------------------
 
-def _unified_diff(old: str, new: str, rel_path: str, max_lines: int = 2000) -> Tuple[str, bool]:
+def _unified_diff(old: str, new: str, rel_path: str, max_lines: int = 2000) -> tuple[str, bool]:
     if old == new:
         return "", False
     diff_lines = list(
@@ -730,8 +730,8 @@ def _truncate(s: str, limit: int = 600) -> str:
     return s[:limit] + "\n... (truncated) ...\n"
 
 
-def _build_markdown_report(file_previews: List[Dict[str, Any]]) -> str:
-    lines: List[str] = []
+def _build_markdown_report(file_previews: list[dict[str, Any]]) -> str:
+    lines: list[str] = []
     lines.append("# Git conflict resolver preview")
     lines.append("")
     for fp in file_previews:
@@ -770,7 +770,7 @@ def _normalize_relpath(p: str) -> str:
 # Public tools
 # ---------------------------------------------------------------------------
 
-def conflict_summary() -> Dict[str, Any]:
+def conflict_summary() -> dict[str, Any]:
     """
     Tool: git.conflict_summary
     No params.
@@ -779,7 +779,7 @@ def conflict_summary() -> Dict[str, Any]:
     res = _run_git(["diff", "--name-only", "--diff-filter=U"], cwd=root)
     files = [ln.strip() for ln in (res.get("stdout") or "").splitlines() if ln.strip()]
 
-    out_files: List[Dict[str, Any]] = []
+    out_files: list[dict[str, Any]] = []
     total_conflicts = 0
 
     for rel in files:
@@ -812,9 +812,9 @@ def conflict_summary() -> Dict[str, Any]:
 
 def resolve_conflicts(
     strategy: str = "auto",
-    file: Optional[str] = None,
+    file: str | None = None,
     dry_run: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Tool: git.resolve_conflicts
     Parameters:
@@ -828,7 +828,7 @@ def resolve_conflicts(
 
     root = _git_root()
     run_id = _new_run_id()
-    warnings: List[str] = []
+    warnings: list[str] = []
 
     res = _run_git(["diff", "--name-only", "--diff-filter=U"], cwd=root)
     conflicted = [ln.strip() for ln in (res.get("stdout") or "").splitlines() if ln.strip()]
@@ -847,7 +847,7 @@ def resolve_conflicts(
         conflicted = [p for p in conflicted if _normalize_relpath(p) == target_norm]
 
     # Backups map (only in non-dry-run) so we can rollback.
-    backups: Dict[str, str] = {}
+    backups: dict[str, str] = {}
 
     # Consumers love that we leverage git rerere if enabled
     rerere_applied = False
@@ -871,10 +871,10 @@ def resolve_conflicts(
             else:
                 rerere_applied = True
 
-    resolved_files: List[str] = []
-    needs_manual: List[Dict[str, Any]] = []
+    resolved_files: list[str] = []
+    needs_manual: list[dict[str, Any]] = []
     staged_any = False
-    file_previews: List[Dict[str, Any]] = []
+    file_previews: list[dict[str, Any]] = []
 
     # Re-read current conflicted files list (rerere may have cleaned content, but index still unmerged)
     res2 = _run_git(["diff", "--name-only", "--diff-filter=U"], cwd=root)
@@ -949,8 +949,8 @@ def resolve_conflicts(
 
         notes = ""
         # Outside-the-box, but safe: attempt structured JSON merge first (auto only)
-        merged_json_text: Optional[str] = None
-        structured_conflicts: List[Tuple[str, ...]] = []
+        merged_json_text: str | None = None
+        structured_conflicts: list[tuple[str, ...]] = []
         if strategy == "auto" and os.path.splitext(rel)[1].lower() == ".json":
             merged_json_text, structured_conflicts, sreason = _json_structured_merge(root, rel)
             if merged_json_text is not None:
@@ -965,7 +965,7 @@ def resolve_conflicts(
             new_text = merged_json_text.replace("\n", newline) + (newline if merged_json_text and not merged_json_text.endswith("\n") else "")
             total_conflicts = _fallback_conflict_count(original)  # best-effort count for reporting
             unresolved_count = 0
-            unresolved_conflicts: List[Dict[str, str]] = []
+            unresolved_conflicts: list[dict[str, str]] = []
             decisions = [Decision(conflict_index=0, chosen_side="ours", reason="structured_json_merged", confidence=_confidence_for_reason("structured_json_merged"), start_line=None, end_line=None)]
         else:
             new_text, total_conflicts, unresolved_count, unresolved_conflicts, decisions = _apply_marker_based_resolution(
@@ -1027,7 +1027,7 @@ def resolve_conflicts(
             _run_git(["add", rel], cwd=root)
             staged_any = True
 
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "resolved": resolved_files,
         "needs_manual": needs_manual,
         "staged": bool(staged_any and not dry_run),
@@ -1057,7 +1057,7 @@ def resolve_conflicts(
 # Tool specs / wiring
 # ---------------------------------------------------------------------------
 
-TOOL_SPECS: List[Dict[str, Any]] = [
+TOOL_SPECS: list[dict[str, Any]] = [
     {
         "name": "git.resolve_conflicts",
         "category": "git",
@@ -1085,7 +1085,7 @@ TOOL_SPECS: List[Dict[str, Any]] = [
 TOOLS = TOOL_SPECS
 
 
-def get_tools() -> List[Dict[str, Any]]:
+def get_tools() -> list[dict[str, Any]]:
     return TOOL_SPECS
 
 

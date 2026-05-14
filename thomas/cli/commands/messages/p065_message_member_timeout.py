@@ -51,19 +51,19 @@ def main(
         "--seconds",
         help="Timeout duration in seconds.",
     ),
-    reason: Optional[str] = typer.Option(None, "--reason", help="Optional audit log reason."),
-    message_id: Optional[str] = typer.Option(
+    reason: str | None = typer.Option(None, "--reason", help="Optional audit log reason."),
+    message_id: str | None = typer.Option(
         None,
         "--message-id",
         help="Optional message ID (traceability only).",
     ),
-    token: Optional[str] = typer.Option(
+    token: str | None = typer.Option(
         None,
         "--token",
         envvar="THOMAS_DISCORD_BOT_TOKEN",
         help="Bot token (or set THOMAS_DISCORD_BOT_TOKEN).",
     ),
-    api_base_url: Optional[str] = typer.Option(
+    api_base_url: str | None = typer.Option(
         None,
         "--api-base-url",
         help="Override Discord API base URL (advanced).",

@@ -39,7 +39,7 @@ class OpenAIChatMessage(TypedDict, total=False):
 
 class OpenAIChatCompletionsRequest(TypedDict, total=False):
     model: str
-    messages: List[OpenAIChatMessage]
+    messages: list[OpenAIChatMessage]
     stream: bool
 
     # Common optional parameters (we pass through unknown keys too).
@@ -47,7 +47,7 @@ class OpenAIChatCompletionsRequest(TypedDict, total=False):
     top_p: float
     max_tokens: int
     n: int
-    stop: Union[str, List[str]]
+    stop: Union[str, list[str]]
     presence_penalty: float
     frequency_penalty: float
     user: str
@@ -56,8 +56,8 @@ class OpenAIChatCompletionsRequest(TypedDict, total=False):
 class OpenAIErrorObject(TypedDict, total=False):
     message: str
     type: str
-    param: Optional[str]
-    code: Optional[str]
+    param: str | None
+    code: str | None
 
 
 class OpenAIErrorResponse(TypedDict):
@@ -65,7 +65,7 @@ class OpenAIErrorResponse(TypedDict):
 
 
 # JSON Schemas (machine-readable contracts) for automation.
-REQUEST_JSON_SCHEMA: Dict[str, Any] = {
+REQUEST_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["model", "messages"],
     "properties": {
@@ -90,7 +90,7 @@ REQUEST_JSON_SCHEMA: Dict[str, Any] = {
     "additionalProperties": True,
 }
 
-RESPONSE_JSON_SCHEMA: Dict[str, Any] = {
+RESPONSE_JSON_SCHEMA: dict[str, Any] = {
     "oneOf": [
         # Success response is OpenAI-defined; we don't over-constrain it.
         {"type": "object", "additionalProperties": True},
@@ -127,10 +127,10 @@ class OpenAIConfig:
     api_key: str
     base_url: str
     timeout_s: float = 30.0
-    organization: Optional[str] = None
+    organization: str | None = None
 
 
-def _get_env(name: str) -> Optional[str]:
+def _get_env(name: str) -> str | None:
     v = os.getenv(name)
     if v is None:
         return None
@@ -138,20 +138,20 @@ def _get_env(name: str) -> Optional[str]:
     return v or None
 
 
-def _coalesce(*values: Optional[str]) -> Optional[str]:
+def _coalesce(*values: str | None) -> str | None:
     for v in values:
         if v:
             return v
     return None
 
 
-def _extract_dict(d: Any) -> Dict[str, Any]:
+def _extract_dict(d: Any) -> dict[str, Any]:
     if isinstance(d, dict):
-        return cast(Dict[str, Any], d)
+        return cast(dict[str, Any], d)
     return {}
 
 
-def resolve_openai_config(app: Optional[web.Application] = None) -> Union[OpenAIConfig, OpenAIErrorResponse]:
+def resolve_openai_config(app: web.Application | None = None) -> Union[OpenAIConfig, OpenAIErrorResponse]:
     """
     Resolve OpenAI client config.
 
@@ -160,7 +160,7 @@ def resolve_openai_config(app: Optional[web.Application] = None) -> Union[OpenAI
     2) app["config"]/ ["settings"]/ ["cfg"] dict (optionally nested under "openai")
     """
 
-    cfg: Dict[str, Any] = {}
+    cfg: dict[str, Any] = {}
     if app is not None:
         for key in ("config", "settings", "cfg"):
             if key in app:
@@ -169,37 +169,37 @@ def resolve_openai_config(app: Optional[web.Application] = None) -> Union[OpenAI
                     break
         openai_cfg = cfg.get("openai")
         if isinstance(openai_cfg, dict):
-            cfg = cast(Dict[str, Any], openai_cfg)
+            cfg = cast(dict[str, Any], openai_cfg)
 
     api_key = _coalesce(
         _get_env("OPENAI_API_KEY"),
         _get_env("THOMAS_OPENAI_API_KEY"),
-        cast(Optional[str], cfg.get("api_key")),
-        cast(Optional[str], cfg.get("openai_api_key")),
-        cast(Optional[str], cfg.get("OPENAI_API_KEY")),
+        cast(str | None, cfg.get("api_key")),
+        cast(str | None, cfg.get("openai_api_key")),
+        cast(str | None, cfg.get("OPENAI_API_KEY")),
     )
 
     base_url = _coalesce(
         _get_env("OPENAI_BASE_URL"),
         _get_env("OPENAI_API_BASE"),
         _get_env("THOMAS_OPENAI_BASE_URL"),
-        cast(Optional[str], cfg.get("base_url")),
-        cast(Optional[str], cfg.get("openai_base_url")),
-        cast(Optional[str], cfg.get("OPENAI_BASE_URL")),
+        cast(str | None, cfg.get("base_url")),
+        cast(str | None, cfg.get("openai_base_url")),
+        cast(str | None, cfg.get("OPENAI_BASE_URL")),
     ) or "https://api.openai.com/v1"
 
     timeout_s_raw = _coalesce(
         _get_env("OPENAI_TIMEOUT_S"),
         _get_env("THOMAS_OPENAI_TIMEOUT_S"),
-        cast(Optional[str], cfg.get("timeout_s")),
-        cast(Optional[str], cfg.get("timeout_seconds")),
+        cast(str | None, cfg.get("timeout_s")),
+        cast(str | None, cfg.get("timeout_seconds")),
     )
 
     organization = _coalesce(
         _get_env("OPENAI_ORG_ID"),
         _get_env("OPENAI_ORGANIZATION"),
-        cast(Optional[str], cfg.get("organization")),
-        cast(Optional[str], cfg.get("org_id")),
+        cast(str | None, cfg.get("organization")),
+        cast(str | None, cfg.get("org_id")),
     )
 
     timeout_s: float = 30.0
@@ -250,8 +250,8 @@ def _error(
     *,
     message: str,
     error_type: str,
-    code: Optional[str] = None,
-    param: Optional[str] = None,
+    code: str | None = None,
+    param: str | None = None,
 ) -> OpenAIErrorResponse:
     return {
         "error": {
@@ -280,7 +280,7 @@ def validate_request(payload: Any) -> Union[OpenAIChatCompletionsRequest, OpenAI
             code="invalid_json",
         )
 
-    obj = cast(Dict[str, Any], payload)
+    obj = cast(dict[str, Any], payload)
 
     model = obj.get("model")
     if not isinstance(model, str) or not model.strip():

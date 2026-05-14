@@ -10,8 +10,8 @@ from typing import Any, Dict, List, Mapping, MutableMapping, Optional, Sequence,
 
 from thomas.cli.live_browser import (
     LiveBrowserSmokeError,
-    _CdpClient,
     _cdp_ready,
+    _CdpClient,
     _eval_js,
     _find_fallback_cdp_url,
     _launch_browser_with_cdp,
@@ -23,7 +23,6 @@ from thomas.demo.harness import (
     build_execution_plan,
     load_task_pack,
 )
-
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_RUNS_DIR = ROOT / "demo" / "browser-runs"
@@ -38,7 +37,7 @@ class BrowserAdapter:
     assistant_role_text: str
     assistant_text_selector: str
     status_selector: str
-    status_done_substrings: Tuple[str, ...]
+    status_done_substrings: tuple[str, ...]
 
 
 def default_adapter() -> BrowserAdapter:
@@ -54,8 +53,8 @@ def default_adapter() -> BrowserAdapter:
     )
 
 
-def parse_target_args(pairs: Sequence[str]) -> Dict[str, str]:
-    out: Dict[str, str] = {}
+def parse_target_args(pairs: Sequence[str]) -> dict[str, str]:
+    out: dict[str, str] = {}
     for raw in pairs:
         text = str(raw or "").strip()
         if not text:
@@ -73,9 +72,9 @@ def parse_target_args(pairs: Sequence[str]) -> Dict[str, str]:
     return out
 
 
-def load_adapters(path: Optional[Path], competitors: Sequence[str]) -> Dict[str, BrowserAdapter]:
+def load_adapters(path: Path | None, competitors: Sequence[str]) -> dict[str, BrowserAdapter]:
     adapter = default_adapter()
-    merged: Dict[str, BrowserAdapter] = {str(c): adapter for c in competitors}
+    merged: dict[str, BrowserAdapter] = {str(c): adapter for c in competitors}
     if path is None:
         return merged
     raw = json.loads(path.read_text(encoding="utf-8-sig"))
@@ -103,11 +102,11 @@ def load_adapters(path: Optional[Path], competitors: Sequence[str]) -> Dict[str,
     return merged
 
 
-def _open_client_for(cdp_url: str, target_url: str) -> Tuple[_CdpClient, Mapping[str, Any]]:
+def _open_client_for(cdp_url: str, target_url: str) -> tuple[_CdpClient, Mapping[str, Any]]:
     targets = _list_page_targets(cdp_url)
     if not targets:
         raise LiveBrowserSmokeError("No page targets found in browser.")
-    selected: Optional[Mapping[str, Any]] = None
+    selected: Mapping[str, Any] | None = None
     for row in targets:
         page_url = str(row.get("url") or "")
         if page_url.startswith(target_url):
@@ -254,7 +253,7 @@ def _wait_for_response(
     *,
     previous_count: int,
     timeout_s: float,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     container = json.dumps(adapter.assistant_container_selector)
     role_sel = json.dumps(adapter.assistant_role_selector)
     role_txt = json.dumps(adapter.assistant_role_text.lower())
@@ -317,8 +316,8 @@ def build_results_from_browser(
     *,
     browser_results: Sequence[Mapping[str, Any]],
     quality_min: int,
-) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
     for row in browser_results:
         transcript = str(row.get("transcript_relpath") or "").strip()
         out.append(
@@ -350,7 +349,7 @@ def run_dual_browser_demo(
     reply_timeout_s: float,
     runtime_root: Path,
     run_dir: Path,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     run_dir.mkdir(parents=True, exist_ok=True)
     transcript_root = run_dir / "browser_transcripts"
     transcript_root.mkdir(parents=True, exist_ok=True)
@@ -365,7 +364,7 @@ def run_dual_browser_demo(
     )
 
     task_map = {str(task.get("id") or ""): str(task.get("prompt") or "") for task in (task_pack.get("tasks") or [])}
-    results: List[Dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
 
     for row in execution_plan:
         step = int(row.get("step") or 0)
@@ -451,7 +450,7 @@ def _write_json(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run a dual-browser head-to-head demo with timestamps.")
     parser.add_argument("--task-pack", default=str(DEFAULT_TASK_PACK), help="Path to task pack JSON.")
     parser.add_argument("--run-id", default="", help="Run id. Default: UTC timestamp.")
@@ -478,7 +477,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     targets = parse_target_args(args.target)
     competitors = tuple(targets.keys())

@@ -26,9 +26,9 @@ def _clean(v: str) -> str:
     return re.sub(r"\s+", " ", (v or "").strip()).strip(" .,:;")
 
 
-def extract_profile_hints(text: str) -> List[ProfileHint]:
+def extract_profile_hints(text: str) -> list[ProfileHint]:
     src = text or ""
-    out: List[ProfileHint] = []
+    out: list[ProfileHint] = []
     seen = set()
     for rx, key, conf in _PATTERNS:
         for m in rx.finditer(src):

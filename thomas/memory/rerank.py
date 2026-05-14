@@ -26,7 +26,7 @@ class CandidateFeatures:
     """Feature vector for a retrieval candidate, used by Tier 1 reranker."""
 
     event_id: int
-    event: Optional[EventRow] = None
+    event: EventRow | None = None
 
     # Retrieval scores (from different sources)
     fts_score: float = 0.0        # BM25 full-text search score
@@ -47,7 +47,7 @@ class CandidateFeatures:
 
 
 # Event type weights — more important types score higher
-_ETYPE_WEIGHTS: Dict[str, float] = {
+_ETYPE_WEIGHTS: dict[str, float] = {
     "user_message": 1.2,
     "assistant_response": 1.0,
     "tool_result": 0.6,
@@ -59,7 +59,7 @@ _ETYPE_WEIGHTS: Dict[str, float] = {
 }
 
 # Tier 1 feature weights — tuned for coding assistant use
-_TIER1_WEIGHTS: Dict[str, float] = {
+_TIER1_WEIGHTS: dict[str, float] = {
     "fts_score": 0.30,
     "sparse_score": 0.15,
     "dense_score": 0.25,
@@ -75,8 +75,8 @@ _TIER1_WEIGHTS: Dict[str, float] = {
 
 
 def compute_features(
-    candidates: List[CandidateFeatures],
-    now_ts: Optional[int] = None,
+    candidates: list[CandidateFeatures],
+    now_ts: int | None = None,
 ) -> None:
     """Compute temporal and content features for all candidates in-place."""
     if not candidates:
@@ -114,10 +114,10 @@ class Tier1Reranker:
     defined above to combine retrieval scores, recency, and type weights.
     """
 
-    def __init__(self, weights: Optional[Dict[str, float]] = None):
+    def __init__(self, weights: dict[str, float] | None = None):
         self._weights = weights or _TIER1_WEIGHTS
 
-    def score(self, candidates: List[CandidateFeatures]) -> List[CandidateFeatures]:
+    def score(self, candidates: list[CandidateFeatures]) -> list[CandidateFeatures]:
         """Score and sort candidates by weighted feature combination.
 
         Modifies candidates in-place and returns sorted (highest first).
@@ -152,11 +152,11 @@ class Tier2Reranker:
 
     def score(
         self,
-        candidates: List[CandidateFeatures],
+        candidates: list[CandidateFeatures],
         query_vec: np.ndarray,
-        dense_vecs: Dict[int, np.ndarray],
+        dense_vecs: dict[int, np.ndarray],
         weight: float = 0.4,
-    ) -> List[CandidateFeatures]:
+    ) -> list[CandidateFeatures]:
         """Rescore candidates using dense similarity.
 
         Blends dense_score with existing final_score:
@@ -188,9 +188,9 @@ class Tier2Reranker:
 
 
 def reciprocal_rank_fusion(
-    *ranked_lists: List[Tuple[int, float]],
+    *ranked_lists: list[tuple[int, float]],
     k: int = 60,
-) -> Dict[int, float]:
+) -> dict[int, float]:
     """Merge multiple ranked lists using Reciprocal Rank Fusion.
 
     Each list is [(event_id, score)] sorted by score descending.
@@ -199,7 +199,7 @@ def reciprocal_rank_fusion(
     RRF score = sum over lists of 1 / (k + rank_in_list)
     where k=60 is standard.
     """
-    fused: Dict[int, float] = {}
+    fused: dict[int, float] = {}
 
     for ranked in ranked_lists:
         for rank, (eid, _score) in enumerate(ranked):

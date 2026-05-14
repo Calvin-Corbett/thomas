@@ -51,7 +51,7 @@ class WorkspaceSyncCoordinationClient:
     def enabled(self) -> bool:
         return bool(self._enabled and self._script_path.exists())
 
-    def acquire(self, files: List[str]) -> Dict[str, Any]:
+    def acquire(self, files: list[str]) -> dict[str, Any]:
         if not self._enabled:
             return {"ok": True, "enabled": False, "reason": "disabled", "paths": []}
         if not self._script_path.exists():
@@ -61,7 +61,7 @@ class WorkspaceSyncCoordinationClient:
         if not claim_paths:
             return {"ok": True, "enabled": True, "reason": "no_paths", "paths": []}
 
-        cmd_args: List[str] = [
+        cmd_args: list[str] = [
             "claim",
             "--ttl",
             str(self._claim_ttl_s),
@@ -117,8 +117,8 @@ class WorkspaceSyncCoordinationClient:
                 _truncate(str(result.get("stderr") or result.get("stdout") or "")),
             )
 
-    def _coordination_paths(self, files: List[str]) -> List[str]:
-        out: List[str] = []
+    def _coordination_paths(self, files: list[str]) -> list[str]:
+        out: list[str] = []
         seen: set[str] = set()
         for rel in files:
             normalized = _normalize_rel_path(rel)
@@ -135,7 +135,7 @@ class WorkspaceSyncCoordinationClient:
             out.append(claim_path)
         return sorted(out)
 
-    def _run(self, *args: str) -> Dict[str, Any]:
+    def _run(self, *args: str) -> dict[str, Any]:
         cmd = [os.environ.get("PYTHON", os.sys.executable), str(self._script_path), *[str(a) for a in args], "--json"]
         try:
             proc = subprocess.run(
@@ -153,7 +153,7 @@ class WorkspaceSyncCoordinationClient:
                 "payload": {},
             }
 
-        payload: Dict[str, Any] = {}
+        payload: dict[str, Any] = {}
         stdout = str(proc.stdout or "").strip()
         if stdout:
             try:

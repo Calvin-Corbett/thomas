@@ -32,8 +32,8 @@ def _format_human(resp: dict[str, Any]) -> str:
     node = resp.get("node_id") or "-"
     state = resp.get("state", "unknown")
     done = resp.get("done", False)
-    success = resp.get("success", None)
-    exit_code = resp.get("exit_code", None)
+    success = resp.get("success")
+    exit_code = resp.get("exit_code")
 
     parts = [f"Command: {cmd}", f"Node: {node}", f"State: {state}"]
     parts.append(f"Done: {done}")
@@ -54,7 +54,7 @@ def _format_human(resp: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
-def _run(command_id: str, node_id: Optional[str], include_output: bool, as_json: bool) -> None:
+def _run(command_id: str, node_id: str | None, include_output: bool, as_json: bool) -> None:
     try:
         req = NodeCommandStatusRequest(
             command_id=command_id,
@@ -91,7 +91,7 @@ def _run(command_id: str, node_id: Optional[str], include_output: bool, as_json:
     default=False,
     help="Emit machine-readable JSON (response on stdout; errors on stdout with non-zero exit).",  # noqa: E501
 )
-def command_status_cli(command_id: str, node_id: Optional[str], include_output: bool, as_json: bool) -> None:
+def command_status_cli(command_id: str, node_id: str | None, include_output: bool, as_json: bool) -> None:
     _run(command_id, node_id, include_output, as_json)
 
 
@@ -110,7 +110,7 @@ def command_status_cli(command_id: str, node_id: Optional[str], include_output: 
     default=False,
     help="Emit machine-readable JSON (response on stdout; errors on stdout with non-zero exit).",  # noqa: E501
 )
-def nested_status_cli(command_id: str, node_id: Optional[str], include_output: bool, as_json: bool) -> None:
+def nested_status_cli(command_id: str, node_id: str | None, include_output: bool, as_json: bool) -> None:
     _run(command_id, node_id, include_output, as_json)
 
 

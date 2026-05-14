@@ -21,10 +21,10 @@ Machine readable output:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
-from pathlib import Path
 import sys
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Mapping
 
 from thomas.channels.p093_channel_retry_and_backoff_strategy import (
@@ -36,7 +36,6 @@ from thomas.channels.p093_channel_retry_and_backoff_strategy import (
     policy_from_mapping,
     retry_plan_json_schema,
 )
-
 
 COMMAND_NAME = "retry-backoff"
 COMMAND_ALIASES = ("retry-strategy", "backoff-strategy")

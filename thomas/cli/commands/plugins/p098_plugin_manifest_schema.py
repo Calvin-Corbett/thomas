@@ -19,11 +19,10 @@ from thomas.plugins.p098_plugin_manifest_schema import (
     build_plugin_manifest_schema,
 )
 
-
 COMMAND_NAME = "plugin-manifest-schema"
 
 
-def _render_json(data: Dict[str, Any], *, compact: bool) -> str:
+def _render_json(data: dict[str, Any], *, compact: bool) -> str:
     if compact:
         return json.dumps(data, separators=(",", ":"), sort_keys=True)
     return json.dumps(data, indent=2, sort_keys=True)

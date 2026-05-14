@@ -22,12 +22,12 @@ Public API surface:
 
 from __future__ import annotations
 
+import builtins
 import json
 import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, TypedDict
-
 
 # -----------------------------
 # Error model (deterministic)
@@ -38,9 +38,9 @@ class PluginHttpRouteRegistryError(RuntimeError):
     """Base class for deterministic route-registry errors."""
 
     code: str
-    details: Dict[str, Any]
+    details: dict[str, Any]
 
-    def __init__(self, *, code: str, message: str, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, *, code: str, message: str, details: dict[str, Any] | None = None):
         super().__init__(message)
         self.code = code
         self.details = details or {}
@@ -83,18 +83,18 @@ class HttpRouteRegistration(TypedDict, total=False):
 class PluginHttpRouteDict(TypedDict):
     plugin_id: str
     path: str
-    source: Optional[str]
+    source: str | None
 
 
 class ErrorPayload(TypedDict, total=False):
     code: str
     message: str
-    details: Dict[str, Any]
+    details: dict[str, Any]
 
 
 class PluginHttpRoutesSuccess(TypedDict):
     count: int
-    routes: List[PluginHttpRouteDict]
+    routes: list[PluginHttpRouteDict]
 
 
 class PluginHttpRoutesFailure(TypedDict):
@@ -107,7 +107,7 @@ class PluginHttpRoute:
 
     plugin_id: str
     path: str
-    source: Optional[str] = None
+    source: str | None = None
 
     def to_dict(self) -> PluginHttpRouteDict:
         # Always include `source` for stable JSON output (null when unknown).
@@ -119,8 +119,8 @@ class PluginHttpRoute:
 # -----------------------------
 
 
-def _invalid(field: str, message: str, *, value: Any = None, extra: Optional[Dict[str, Any]] = None) -> None:
-    details: Dict[str, Any] = {"field": field}
+def _invalid(field: str, message: str, *, value: Any = None, extra: dict[str, Any] | None = None) -> None:
+    details: dict[str, Any] = {"field": field}
     if value is not None:
         details["value"] = value
     if extra:
@@ -176,7 +176,7 @@ class PluginHttpRouteRegistry:
 
     def __init__(self) -> None:
         self._lock = threading.RLock()
-        self._by_path: Dict[str, PluginHttpRoute] = {}
+        self._by_path: dict[str, PluginHttpRoute] = {}
 
     def clear(self) -> None:
         with self._lock:
@@ -187,7 +187,7 @@ class PluginHttpRouteRegistry:
         *,
         plugin_id: str,
         path: str,
-        source: Optional[str] = None,
+        source: str | None = None,
     ) -> PluginHttpRoute:
         """Register a single route.
 
@@ -218,16 +218,16 @@ class PluginHttpRouteRegistry:
         self,
         registrations: Iterable[HttpRouteRegistration],
         *,
-        default_plugin_id: Optional[str] = None,
-        default_source: Optional[str] = None,
-    ) -> List[PluginHttpRoute]:
+        default_plugin_id: str | None = None,
+        default_source: str | None = None,
+    ) -> builtins.list[PluginHttpRoute]:
         """Register many routes as a single operation.
 
         This method validates everything first, then mutates the registry.
         If any entry is invalid (or duplicates another), the registry is not modified.
         """
-        prepared: List[Tuple[str, PluginHttpRoute]] = []
-        seen_paths: Dict[str, str] = {}
+        prepared: list[tuple[str, PluginHttpRoute]] = []
+        seen_paths: dict[str, str] = {}
 
         for idx, reg in enumerate(registrations):
             if not isinstance(reg, dict):
@@ -287,7 +287,7 @@ class PluginHttpRouteRegistry:
         prepared.sort(key=lambda item: (item[0], item[1].plugin_id))
         return [route for _, route in prepared]
 
-    def list_routes(self, *, plugin_id: Optional[str] = None) -> List[PluginHttpRoute]:
+    def list_routes(self, *, plugin_id: str | None = None) -> builtins.list[PluginHttpRoute]:
         pid = normalize_plugin_id(plugin_id) if plugin_id is not None else None
 
         with self._lock:
@@ -300,11 +300,11 @@ class PluginHttpRouteRegistry:
         return routes
 
     # Backwards-friendly alias
-    def list(self, *, plugin_id: Optional[str] = None) -> List[PluginHttpRoute]:
+    def list(self, *, plugin_id: str | None = None) -> builtins.list[PluginHttpRoute]:
         return self.list_routes(plugin_id=plugin_id)
 
     @staticmethod
-    def json_schema() -> Dict[str, Any]:
+    def json_schema() -> dict[str, Any]:
         return plugin_http_routes_output_schema()
 
 
@@ -331,12 +331,12 @@ def _extract_routes_from_config(config: Mapping[str, Any]) -> Sequence[Mapping[s
     - {"plugins": {"http": {"routes": [ ... ]}}}
     """
 
-    def _as_route_list(val: Any) -> Optional[Sequence[Mapping[str, Any]]]:
+    def _as_route_list(val: Any) -> Sequence[Mapping[str, Any]] | None:
         if isinstance(val, list) and all(isinstance(item, dict) for item in val):
             return val  # type: ignore[return-value]
         return None
 
-    candidates: List[Optional[Sequence[Mapping[str, Any]]]] = [
+    candidates: list[Sequence[Mapping[str, Any]] | None] = [
         _as_route_list(config.get("plugin_http_routes")),
         _as_route_list(config.get("http_routes")),
     ]
@@ -358,10 +358,10 @@ def _extract_routes_from_config(config: Mapping[str, Any]) -> Sequence[Mapping[s
 def load_routes_from_json_config(
     config_path: Path,
     *,
-    registry: Optional[PluginHttpRouteRegistry] = None,
-    default_plugin_id: Optional[str] = None,
-    default_source: Optional[str] = None,
-) -> List[PluginHttpRoute]:
+    registry: PluginHttpRouteRegistry | None = None,
+    default_plugin_id: str | None = None,
+    default_source: str | None = None,
+) -> list[PluginHttpRoute]:
     """Load route registrations from a JSON config file."""
 
     if not isinstance(config_path, Path):
@@ -403,7 +403,7 @@ def load_routes_from_json_config(
     reg = registry or get_default_registry()
 
     # Validate required keys for a deterministic config-error category.
-    prepared: List[HttpRouteRegistration] = []
+    prepared: list[HttpRouteRegistration] = []
     for idx, entry in enumerate(entries):
         if not isinstance(entry, dict):
             raise InvalidConfigError(
@@ -449,10 +449,10 @@ def load_routes_from_json_config(
 def load_routes_from_config(
     config_path: Path,
     *,
-    registry: Optional[PluginHttpRouteRegistry] = None,
-    default_plugin_id: Optional[str] = None,
-    default_source: Optional[str] = None,
-) -> List[PluginHttpRoute]:
+    registry: PluginHttpRouteRegistry | None = None,
+    default_plugin_id: str | None = None,
+    default_source: str | None = None,
+) -> list[PluginHttpRoute]:
     """Compatibility alias for config-based route loading."""
 
     return load_routes_from_json_config(
@@ -468,7 +468,7 @@ def load_routes_from_config(
 # -----------------------------
 
 
-def plugin_http_routes_output_schema() -> Dict[str, Any]:
+def plugin_http_routes_output_schema() -> dict[str, Any]:
     """JSON Schema for the CLI `--json` output.
 
     The CLI emits either:

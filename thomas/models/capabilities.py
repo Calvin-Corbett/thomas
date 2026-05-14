@@ -11,7 +11,6 @@ from typing import Dict
 
 from thomas.core.config import ModelConfig
 
-
 _BASE_FEATURES = (
     "chat",
     "tools",
@@ -28,7 +27,7 @@ _BASE_FEATURES = (
 )
 
 
-def _cap(**kwargs: bool) -> Dict[str, bool]:
+def _cap(**kwargs: bool) -> dict[str, bool]:
     out = {k: False for k in _BASE_FEATURES}
     for k, v in kwargs.items():
         if k in out:
@@ -37,7 +36,7 @@ def _cap(**kwargs: bool) -> Dict[str, bool]:
 
 
 # Research-backed baseline (updated 2026-02-18).
-_PROVIDER_CAPABILITIES: Dict[str, Dict[str, bool]] = {
+_PROVIDER_CAPABILITIES: dict[str, dict[str, bool]] = {
     "openai_compat": _cap(
         chat=True,
         tools=True,
@@ -70,7 +69,7 @@ _PROVIDER_CAPABILITIES: Dict[str, Dict[str, bool]] = {
 }
 
 
-def provider_capability_map(provider: str) -> Dict[str, bool]:
+def provider_capability_map(provider: str) -> dict[str, bool]:
     p = str(provider or "").strip().lower()
     base = _PROVIDER_CAPABILITIES.get(p)
     if base is None:
@@ -79,7 +78,7 @@ def provider_capability_map(provider: str) -> Dict[str, bool]:
     return dict(base)
 
 
-def profile_capability_map(cfg: ModelConfig) -> Dict[str, bool]:
+def profile_capability_map(cfg: ModelConfig) -> dict[str, bool]:
     """Return a profile capability map, with model/profile heuristics layered in."""
     out = provider_capability_map(cfg.provider)
 

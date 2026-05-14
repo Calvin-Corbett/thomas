@@ -28,7 +28,6 @@ from typing import Any, Mapping, Optional
 
 from pydantic import BaseModel, Field, ValidationError
 
-
 PLUGIN_ID = "p123_sample_plugin_skeleton_extension"
 TOOL_NAME = "sample_plugin_skeleton_extension"
 DESCRIPTION = (
@@ -85,7 +84,7 @@ class SamplePluginError(RuntimeError):
         *,
         code: str,
         message: str,
-        details: Optional[Mapping[str, Any]] = None,
+        details: Mapping[str, Any] | None = None,
         retryable: bool = False,
     ):
         super().__init__(message)
@@ -107,7 +106,7 @@ class InvalidInputError(SamplePluginError):
         self,
         *,
         message: str = "Invalid input",
-        details: Optional[Mapping[str, Any]] = None,
+        details: Mapping[str, Any] | None = None,
     ):
         super().__init__(code="invalid_input", message=message, details=details, retryable=False)
 
@@ -117,7 +116,7 @@ class MissingConfigError(SamplePluginError):
         self,
         *,
         message: str = "Missing configuration",
-        details: Optional[Mapping[str, Any]] = None,
+        details: Mapping[str, Any] | None = None,
     ):
         super().__init__(code="missing_config", message=message, details=details, retryable=False)
 
@@ -127,7 +126,7 @@ class ExternalFailureError(SamplePluginError):
         self,
         *,
         message: str = "External failure",
-        details: Optional[Mapping[str, Any]] = None,
+        details: Mapping[str, Any] | None = None,
         retryable: bool = True,
     ):
         super().__init__(code="external_failure", message=message, details=details, retryable=retryable)
@@ -234,7 +233,7 @@ def _load_config_file(path: Path) -> _SamplePluginConfig:
 def _resolve_prefix(
     *,
     use_config: bool,
-    config_path: Optional[str],
+    config_path: str | None,
     env: Mapping[str, str],
 ) -> tuple[str, bool]:
     if not use_config:
@@ -259,8 +258,8 @@ def _resolve_prefix(
 def run(
     request: SamplePluginSkeletonExtensionInput,
     *,
-    config_path: Optional[str] = None,
-    env: Optional[Mapping[str, str]] = None,
+    config_path: str | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> SamplePluginSkeletonExtensionOutput:
     env_map = env or os.environ
 
@@ -278,8 +277,8 @@ def run(
 def invoke(
     payload: Mapping[str, Any],
     *,
-    config_path: Optional[str] = None,
-    env: Optional[Mapping[str, str]] = None,
+    config_path: str | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Invoke the plugin from an untyped payload.
 

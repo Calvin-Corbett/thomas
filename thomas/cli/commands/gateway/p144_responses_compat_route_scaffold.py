@@ -18,7 +18,7 @@ from thomas.server.routes.gateway.p144_responses_compat_route_scaffold import ge
 @dataclass(frozen=True)
 class ResponsesCompatCliReport:
     name: str
-    schema: Dict[str, Any]
+    schema: dict[str, Any]
 
 
 def build_report() -> ResponsesCompatCliReport:
@@ -34,7 +34,7 @@ def _print_report(report: ResponsesCompatCliReport, *, json_mode: bool) -> None:
     print(json.dumps(payload["schema"], indent=2, ensure_ascii=False))
 
 
-def _build_arg_parser(subparsers: Optional[argparse._SubParsersAction] = None) -> argparse.ArgumentParser:
+def _build_arg_parser(subparsers: argparse._SubParsersAction | None = None) -> argparse.ArgumentParser:
     name = "p144-responses-compat"
     help_text = "Emit schema/metadata for the Responses compatibility route."
     if subparsers is not None:
@@ -64,7 +64,7 @@ def register(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
     return add_parser(subparsers)
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = _build_arg_parser()
     ns = parser.parse_args(argv)
     return run(ns)

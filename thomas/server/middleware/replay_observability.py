@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import json
+
 from aiohttp import web
 
 from thomas.observability import auto_instrument
-from thomas.observability.event_recorder import start_run, attach_run, end_run, record_event, get_current_run_id
+from thomas.observability.event_recorder import attach_run, end_run, get_current_run_id, record_event, start_run
+
 
 @web.middleware
 async def replay_observability_middleware(request: web.Request, handler):

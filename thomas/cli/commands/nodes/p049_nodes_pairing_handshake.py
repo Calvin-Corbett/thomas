@@ -27,13 +27,12 @@ from thomas.nodes.p049_nodes_pairing_handshake import (
     nodes_pairing_handshake,
 )
 
-
 COMMAND_NAME = "pairing-handshake"
 COMMAND_GROUP = "nodes"
 PARITY_ID = "p049"
 
 
-def build_parser(parser: Optional[argparse.ArgumentParser] = None) -> argparse.ArgumentParser:
+def build_parser(parser: argparse.ArgumentParser | None = None) -> argparse.ArgumentParser:
     if parser is None:
         parser = argparse.ArgumentParser(
             prog=f"thomas {COMMAND_GROUP} {COMMAND_NAME}",
@@ -98,7 +97,7 @@ def run(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
     return run(args)
@@ -123,7 +122,7 @@ def add_parser(subparsers: Any) -> argparse.ArgumentParser:
     return parser
 
 
-class CommandSpec(Dict[str, Any]):
+class CommandSpec(dict[str, Any]):
     """
     Loose command spec for registries that consume module-level metadata.
     """

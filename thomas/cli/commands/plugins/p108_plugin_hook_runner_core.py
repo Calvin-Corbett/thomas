@@ -19,13 +19,12 @@ from typing import Any, Optional
 import typer
 
 from thomas.plugins.p108_plugin_hook_runner_core import (
-    HookRunRequest,
     HookRunnerError,
+    HookRunRequest,
     request_json_schema,
     response_json_schema,
     run_hook,
 )
-
 
 app = typer.Typer(add_completion=False, help="Run plugin hooks")
 
@@ -44,7 +43,7 @@ def _emit(obj: Any, *, as_json: bool) -> None:
         typer.echo(obj)
 
 
-def _parse_payload(payload: Optional[str], payload_file: Optional[Path]) -> dict[str, Any]:
+def _parse_payload(payload: str | None, payload_file: Path | None) -> dict[str, Any]:
     if payload and payload_file:
         raise HookRunnerError(
             "invalid_request",
@@ -94,10 +93,10 @@ def _parse_payload(payload: Optional[str], payload_file: Optional[Path]) -> dict
 @app.command("run-hook")
 def run_hook_cli(
     hook: str = typer.Argument(..., help="Hook name"),
-    payload: Optional[str] = typer.Option(None, "--payload", help="Hook payload JSON object"),
-    payload_file: Optional[Path] = typer.Option(None, "--payload-file", help="Read payload JSON from a file"),
-    plugin: Optional[list[str]] = typer.Option(None, "--plugin", help="Restrict run to specific plugin id(s)"),
-    config: Optional[Path] = typer.Option(
+    payload: str | None = typer.Option(None, "--payload", help="Hook payload JSON object"),
+    payload_file: Path | None = typer.Option(None, "--payload-file", help="Read payload JSON from a file"),
+    plugin: list[str] | None = typer.Option(None, "--plugin", help="Restrict run to specific plugin id(s)"),
+    config: Path | None = typer.Option(
         None,
         "--config",
         help="Path to a JSON config containing a 'plugins' list (used when plugins are not provided by runtime)",
@@ -152,7 +151,7 @@ def schema_cli(json_out: bool = typer.Option(True, "--json/--no-json", help="Emi
         typer.echo(payload)
 
 
-def main(argv: Optional[list[str]] = None) -> None:
+def main(argv: list[str] | None = None) -> None:
     """Entry point for module execution."""
 
     app(prog_name="thomas plugins", args=argv or sys.argv[1:])

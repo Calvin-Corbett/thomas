@@ -5,7 +5,6 @@ Tests backreferences, catastrophic backtracking protection, and greedy/lazy sema
 """
 
 import pytest
-
 from regex_engine.backtracking import BacktrackingMatcher
 from regex_engine.parser import parse
 

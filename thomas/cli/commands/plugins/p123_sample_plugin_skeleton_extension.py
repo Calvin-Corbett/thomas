@@ -16,7 +16,6 @@ from typing import Optional
 
 import typer
 
-
 COMMAND_NAME = "p123-sample-plugin-skeleton-extension"
 
 app = typer.Typer(
@@ -36,7 +35,7 @@ def _import_plugin():
 
 @app.callback(invoke_without_command=True)
 def main(
-    message: Optional[str] = typer.Argument(None, help="Message to render"),
+    message: str | None = typer.Argument(None, help="Message to render"),
     times: int = typer.Option(1, "--times", "-n", min=1, max=20, help="Repeat count"),
     uppercase: bool = typer.Option(False, "--uppercase/--no-uppercase", help="Uppercase the message"),
     use_config: bool = typer.Option(
@@ -44,7 +43,7 @@ def main(
         "--use-config",
         help="Load a JSON config file to get the prefix (see schema/docs).",
     ),
-    config_path: Optional[Path] = typer.Option(
+    config_path: Path | None = typer.Option(
         None,
         "--config-path",
         help="Path to JSON config file (overrides env var THOMAS_P123_SAMPLE_PLUGIN_CONFIG).",

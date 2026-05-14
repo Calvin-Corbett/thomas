@@ -6,7 +6,6 @@ groups, anchors, and escape sequences.
 """
 
 import pytest
-
 from regex_engine._exceptions import ParseError
 from regex_engine._types import (
     Alternation,

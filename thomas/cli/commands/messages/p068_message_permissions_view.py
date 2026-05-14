@@ -44,10 +44,10 @@ def _permissions_group() -> None:
 
 def _build_config(
     *,
-    static_permissions: Optional[str] = None,
-    endpoint: Optional[str] = None,
-    token: Optional[str] = None,
-    timeout_s: Optional[float] = None,
+    static_permissions: str | None = None,
+    endpoint: str | None = None,
+    token: str | None = None,
+    timeout_s: float | None = None,
 ) -> MessagePermissionsViewConfig:
     """Construct config from CLI overrides or environment."""
 
@@ -107,7 +107,7 @@ def _build_config(
 @typer_app.command(COMMAND_NAME)
 def cli_view(
     message_id: str = typer.Option(..., "--message-id", "-m", help="Message identifier."),
-    user_id: Optional[str] = typer.Option(
+    user_id: str | None = typer.Option(
         None, "--user-id", "-u", help="User identifier for which to view permissions."
     ),
     json_output: bool = typer.Option(
@@ -115,22 +115,22 @@ def cli_view(
         "--json",
         help="Emit machine-readable JSON output.",
     ),
-    static_permissions: Optional[str] = typer.Option(
+    static_permissions: str | None = typer.Option(
         None,
         "--static-permissions",
         help="Override permissions with a JSON mapping (e.g. '{\"view\": true}').",
     ),
-    endpoint: Optional[str] = typer.Option(
+    endpoint: str | None = typer.Option(
         None,
         "--endpoint",
         help="Remote permissions backend URL (overrides env).",
     ),
-    token: Optional[str] = typer.Option(
+    token: str | None = typer.Option(
         None,
         "--token",
         help="Bearer token for remote backend (overrides env).",
     ),
-    timeout_s: Optional[float] = typer.Option(
+    timeout_s: float | None = typer.Option(
         None,
         "--timeout-s",
         help="HTTP timeout in seconds (overrides env).",

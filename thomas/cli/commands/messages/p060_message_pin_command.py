@@ -44,10 +44,10 @@ HELP = "Pin a message in a channel."
 
 def _config_from_env_and_overrides(
     *,
-    backend: Optional[str],
-    api_url: Optional[str],
-    api_token: Optional[str],
-    timeout_seconds: Optional[float],
+    backend: str | None,
+    api_url: str | None,
+    api_token: str | None,
+    timeout_seconds: float | None,
 ):
     # Load from environment, with click option overrides applied as env values.
     env = dict(os.environ)
@@ -113,12 +113,12 @@ def pin_command(
     ctx: click.Context,
     channel_id: str,
     message_id: str,
-    reason: Optional[str],
-    requested_by: Optional[str],
-    backend: Optional[str],
-    api_url: Optional[str],
-    api_token: Optional[str],
-    timeout_seconds: Optional[float],
+    reason: str | None,
+    requested_by: str | None,
+    backend: str | None,
+    api_url: str | None,
+    api_token: str | None,
+    timeout_seconds: float | None,
     json_output: bool,
 ) -> None:
     """Pin a message."""

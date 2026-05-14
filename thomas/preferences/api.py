@@ -35,7 +35,7 @@ def get_store() -> PreferencesStore:
     return _store_for_path(get_db_path())
 
 
-def get_user_id(x_user_id: Optional[str] = Header(default=None, alias="X-User-Id")) -> str:
+def get_user_id(x_user_id: str | None = Header(default=None, alias="X-User-Id")) -> str:
     # Thomas is often single-user. Support header-based segmentation.
     return (x_user_id or "default").strip() or "default"
 
@@ -46,7 +46,7 @@ def _web_dir() -> Path:
 
 @router.get("/api/preferences", response_model=PreferencesResponse)
 def get_preferences(
-    thread_id: Optional[str] = Query(default=None, description="Optional thread identifier for per-thread memory toggle."),
+    thread_id: str | None = Query(default=None, description="Optional thread identifier for per-thread memory toggle."),
     store: PreferencesStore = Depends(get_store),
     user_id: str = Depends(get_user_id),
 ) -> PreferencesResponse:
@@ -56,7 +56,7 @@ def get_preferences(
 @router.patch("/api/preferences", response_model=PreferencesResponse)
 def patch_preferences(
     patch: PreferencesPatch,
-    thread_id: Optional[str] = Query(default=None, description="Optional thread identifier for per-thread memory toggle."),
+    thread_id: str | None = Query(default=None, description="Optional thread identifier for per-thread memory toggle."),
     store: PreferencesStore = Depends(get_store),
     user_id: str = Depends(get_user_id),
 ) -> PreferencesResponse:

@@ -24,11 +24,11 @@ try:
     )
 except ImportError:  # pragma: no cover
     from thomas.channels.p087_channel_auth_validation_helper import (
-    ChannelAuthValidationRequest,
-    ChannelAuthValidationResult,
-    ChannelAuthValidationError,
-    validate_channel_auth,
-)
+        ChannelAuthValidationError,
+        ChannelAuthValidationRequest,
+        ChannelAuthValidationResult,
+        validate_channel_auth,
+    )
 
 
 COMMAND_NAME = "validate-auth"
@@ -74,7 +74,7 @@ def _json_error(err: ChannelAuthValidationError) -> str:
     help="Network timeout (seconds).",
 )
 @click.option("--json", "json_output", is_flag=True, help="Emit machine-readable JSON.")
-def command(channel: str, token: Optional[str], timeout_s: float, json_output: bool) -> None:
+def command(channel: str, token: str | None, timeout_s: float, json_output: bool) -> None:
     """Validate that a channel integration is authenticated."""
 
     try:
@@ -119,7 +119,7 @@ def register(app: Any) -> None:
         app.add_command(command)  # type: ignore[attr-defined]
         return
 
-    if hasattr(app, "command") and callable(getattr(app, "command")):
+    if hasattr(app, "command") and callable(app.command):
         app.command(COMMAND_NAME)(command)  # type: ignore[misc]
         return
 

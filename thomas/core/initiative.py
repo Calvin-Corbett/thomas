@@ -44,7 +44,7 @@ DAILY_SUMMARY_HOUR: int = 8          # send daily summary at 8am local time
 # ROI scoring
 # ---------------------------------------------------------------------------
 
-_ROI_KEYWORDS: Dict[str, int] = {
+_ROI_KEYWORDS: dict[str, int] = {
     "crash": 12, "broken": 12, "fix": 10, "bug": 10, "error": 10,
     "deploy": 8, "ship": 8, "release": 8,
     "test": 6, "verify": 6, "check": 5,
@@ -53,7 +53,7 @@ _ROI_KEYWORDS: Dict[str, int] = {
 }
 
 
-def _score_goal(goal: Dict[str, Any]) -> int:
+def _score_goal(goal: dict[str, Any]) -> int:
     """Return an ROI priority score for a goal."""
     text = (goal.get("text", "") + " " + goal.get("id", "")).lower()
     score = sum(w for kw, w in _ROI_KEYWORDS.items() if kw in text)
@@ -71,7 +71,7 @@ def _score_goal(goal: Dict[str, Any]) -> int:
     return score
 
 
-def pick_highest_roi(goals: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+def pick_highest_roi(goals: list[dict[str, Any]]) -> dict[str, Any] | None:
     """Return the open goal with the highest ROI score, or None."""
     open_goals = [g for g in goals if g.get("status") == "open"]
     return max(open_goals, key=_score_goal) if open_goals else None
@@ -93,10 +93,10 @@ class InitiativeEngine:
     def __init__(self) -> None:
         self._last_user_ts: float = time.monotonic()
         self._running: bool = False
-        self._thread: Optional[threading.Thread] = None
-        self._executor_fn: Optional[Callable] = None
-        self._notify_fn: Optional[Callable] = None
-        self._last_summary_date: Optional[str] = None
+        self._thread: threading.Thread | None = None
+        self._executor_fn: Callable | None = None
+        self._notify_fn: Callable | None = None
+        self._last_summary_date: str | None = None
         self._active_goal_ids: set = set()
 
     # ------------------------------------------------------------------
@@ -106,7 +106,7 @@ class InitiativeEngine:
     def start(
         self,
         executor_fn: Callable,
-        notify_fn: Optional[Callable] = None,
+        notify_fn: Callable | None = None,
     ) -> None:
         """Start the background polling daemon thread."""
         self._executor_fn = executor_fn
@@ -172,7 +172,7 @@ class InitiativeEngine:
             name=f"thomas-goal-{goal.get('id', 'x')[:8]}",
         ).start()
 
-    def _run_goal(self, goal: Dict[str, Any]) -> None:
+    def _run_goal(self, goal: dict[str, Any]) -> None:
         goal_id = goal.get("id", "")
         goal_text = goal.get("text", "")
         try:
@@ -247,7 +247,7 @@ def _log_notify(message: str) -> None:
 # Singleton
 # ---------------------------------------------------------------------------
 
-_engine: Optional[InitiativeEngine] = None
+_engine: InitiativeEngine | None = None
 _engine_lock = threading.Lock()
 
 

@@ -17,7 +17,7 @@ class ServiceLifecycleError(Exception):
     code: str
     details: Mapping[str, Any]
 
-    def __init__(self, *, code: str, message: str, details: Optional[Mapping[str, Any]] = None) -> None:
+    def __init__(self, *, code: str, message: str, details: Mapping[str, Any] | None = None) -> None:
         super().__init__(message)
         self.code = code
         self.details = dict(details or {})
@@ -27,17 +27,17 @@ class ServiceLifecycleError(Exception):
 
 
 class InvalidInputError(ServiceLifecycleError):
-    def __init__(self, message: str, *, details: Optional[Mapping[str, Any]] = None) -> None:
+    def __init__(self, message: str, *, details: Mapping[str, Any] | None = None) -> None:
         super().__init__(code="invalid_input", message=message, details=details)
 
 
 class MissingConfigError(ServiceLifecycleError):
-    def __init__(self, message: str, *, details: Optional[Mapping[str, Any]] = None) -> None:
+    def __init__(self, message: str, *, details: Mapping[str, Any] | None = None) -> None:
         super().__init__(code="missing_config", message=message, details=details)
 
 
 class ExternalFailureError(ServiceLifecycleError):
-    def __init__(self, message: str, *, details: Optional[Mapping[str, Any]] = None) -> None:
+    def __init__(self, message: str, *, details: Mapping[str, Any] | None = None) -> None:
         super().__init__(code="external_failure", message=message, details=details)
 
 
@@ -442,7 +442,7 @@ class PluginServiceLifecycleManagerPlugin:
     def register(self, api: Any) -> None:  # pragma: no cover
         # Expose manager to the host runtime.
         try:
-            setattr(api, "plugin_service_manager", self.manager)
+            api.plugin_service_manager = self.manager
         except Exception:
             pass
 

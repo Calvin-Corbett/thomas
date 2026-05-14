@@ -13,7 +13,6 @@ except ImportError:
 
 from thomas.core.config import AppConfig
 
-
 BuildLibraryFn = Callable[[AppConfig], Any]
 BuildMemoryFn = Callable[[AppConfig], Any]
 
@@ -195,5 +194,5 @@ def register_library_commands(
         finally:
             try:
                 memory.close()
-            except Exception as exc:
+            except (OSError, RuntimeError, AttributeError) as exc:
                 logger.debug("Failed to close memory engine after library curate: %s", exc)

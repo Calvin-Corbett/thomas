@@ -35,7 +35,7 @@ class _FastAPIRequestShim:
 
 
 def _to_plain_json(value: Any) -> Any:
-    if hasattr(value, "model_dump") and callable(getattr(value, "model_dump")):
+    if hasattr(value, "model_dump") and callable(value.model_dump):
         return _to_plain_json(value.model_dump())
     if isinstance(value, dict):
         return {str(k): _to_plain_json(v) for k, v in value.items()}
@@ -108,7 +108,7 @@ def register_webhooks_routes(
     app: web.Application,
     *,
     require_api_access: Callable[[web.Request], None],
-    signature_enforcement_default: Optional[bool] = None,
+    signature_enforcement_default: bool | None = None,
 ) -> None:
     """Attach webhook management + receive routes to aiohttp app."""
     webhook_mod.configure_webhook_signature_enforcement_default(signature_enforcement_default)

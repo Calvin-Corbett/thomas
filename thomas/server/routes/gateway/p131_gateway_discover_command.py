@@ -22,7 +22,6 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from aiohttp import web
 
-
 # --- Public contracts -----------------------------------------------------------------
 
 
@@ -49,11 +48,11 @@ class GatewayBeacon:
     """A discovered gateway beacon."""
 
     instance_name: str
-    host: Optional[str] = None
-    port: Optional[int] = None
-    addresses: List[str] = field(default_factory=list)
-    ws_url: Optional[str] = None
-    txt: Dict[str, str] = field(default_factory=dict)
+    host: str | None = None
+    port: int | None = None
+    addresses: list[str] = field(default_factory=list)
+    ws_url: str | None = None
+    txt: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,14 +63,14 @@ class GatewayDiscoverResult:
     domain: str
     timeout_ms: int
     elapsed_ms: int
-    beacons: List[GatewayBeacon]
+    beacons: list[GatewayBeacon]
 
 
 @dataclass(frozen=True, slots=True)
 class GatewayDiscoverErrorBody:
     code: str
     message: str
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
 
 
 class GatewayDiscoverError(RuntimeError):
@@ -80,9 +79,9 @@ class GatewayDiscoverError(RuntimeError):
     code = "gateway_discover_error"
     http_status = 500
 
-    def __init__(self, message: str, *, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None):
         super().__init__(message)
-        self.details: Dict[str, Any] = details or {}
+        self.details: dict[str, Any] = details or {}
 
     def to_body(self) -> GatewayDiscoverErrorBody:
         return GatewayDiscoverErrorBody(code=self.code, message=str(self), details=self.details)
@@ -156,10 +155,10 @@ register_routes = add_routes
 register = add_routes
 
 # Declarative form some loaders prefer.
-ROUTES: List[Tuple[str, str, Any]] = [("GET", ROUTE_PATH, handle_gateway_discover)]
+ROUTES: list[tuple[str, str, Any]] = [("GET", ROUTE_PATH, handle_gateway_discover)]
 
 
-def get_discover_schema() -> Dict[str, Any]:
+def get_discover_schema() -> dict[str, Any]:
     """Return a small JSON-schema-like document for automation and introspection.
 
     This is intentionally lightweight (not a full OpenAPI generator).
@@ -276,7 +275,7 @@ def _parse_http_request(request: web.Request) -> GatewayDiscoverRequest:
     return GatewayDiscoverRequest(timeout_ms=timeout_ms, domain=domain, service_type=service_type)
 
 
-def _result_to_dict(result: GatewayDiscoverResult) -> Dict[str, Any]:
+def _result_to_dict(result: GatewayDiscoverResult) -> dict[str, Any]:
     return {
         "service_type": result.service_type,
         "domain": result.domain,
@@ -301,7 +300,7 @@ class _DecodedRecord:
     data: Any
 
 
-def _discover_via_mdns(service_type: str, domain: str, timeout_ms: int) -> List[GatewayBeacon]:
+def _discover_via_mdns(service_type: str, domain: str, timeout_ms: int) -> list[GatewayBeacon]:
     """Best-effort DNS-SD browse + resolve.
 
     Implementation notes:
@@ -330,13 +329,13 @@ def _discover_via_mdns(service_type: str, domain: str, timeout_ms: int) -> List[
     )
 
     # 2) Follow-up SRV/TXT for instances that didn't arrive with details.
-    missing: List[str] = []
+    missing: list[str] = []
     for inst in instances:
         if not any(r.rtype == 33 and r.name == inst for r in records):
             missing.append(inst)
 
     if missing and stage2_budget > 0:
-        q2_questions: List[Tuple[str, int]] = []
+        q2_questions: list[tuple[str, int]] = []
         for inst in missing:
             q2_questions.append((inst, 33))  # SRV
             q2_questions.append((inst, 16))  # TXT
@@ -345,12 +344,12 @@ def _discover_via_mdns(service_type: str, domain: str, timeout_ms: int) -> List[
         records.extend(_decode_records_from_messages(msgs2))
 
     # 3) Build beacons.
-    beacons: List[GatewayBeacon] = []
+    beacons: list[GatewayBeacon] = []
     for inst in instances:
         host, port = _find_srv(records, inst)
         txt = _merge_txt(records, inst)
 
-        addresses: List[str] = []
+        addresses: list[str] = []
         if host:
             # Prefer A/AAAA from the mDNS response; if missing, fall back to local resolver.
             addresses = [
@@ -377,19 +376,15 @@ def _discover_via_mdns(service_type: str, domain: str, timeout_ms: int) -> List[
     return beacons
 
 
-def _best_effort_resolve(host: str) -> List[str]:
+def _best_effort_resolve(host: str) -> list[str]:
     """Attempt to resolve hostnames into IPs without failing discovery."""
 
     host = _strip_dot(host)
-    out: List[str] = []
+    out: list[str] = []
     try:
         infos = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
         for fam, _socktype, _proto, _canon, sockaddr in infos:
-            if fam == socket.AF_INET and isinstance(sockaddr, tuple) and len(sockaddr) >= 1:
-                ip = sockaddr[0]
-                if ip and ip not in out:
-                    out.append(ip)
-            elif fam == socket.AF_INET6 and isinstance(sockaddr, tuple) and len(sockaddr) >= 1:
+            if fam == socket.AF_INET and isinstance(sockaddr, tuple) and len(sockaddr) >= 1 or fam == socket.AF_INET6 and isinstance(sockaddr, tuple) and len(sockaddr) >= 1:
                 ip = sockaddr[0]
                 if ip and ip not in out:
                     out.append(ip)
@@ -398,7 +393,7 @@ def _best_effort_resolve(host: str) -> List[str]:
     return out
 
 
-def _find_srv(records: Sequence[_DecodedRecord], instance_fqdn: str) -> Tuple[Optional[str], Optional[int]]:
+def _find_srv(records: Sequence[_DecodedRecord], instance_fqdn: str) -> tuple[str | None, int | None]:
     for r in records:
         if r.rtype != 33 or r.name != instance_fqdn:
             continue
@@ -409,8 +404,8 @@ def _find_srv(records: Sequence[_DecodedRecord], instance_fqdn: str) -> Tuple[Op
     return None, None
 
 
-def _merge_txt(records: Sequence[_DecodedRecord], name_fqdn: str) -> Dict[str, str]:
-    merged: Dict[str, str] = {}
+def _merge_txt(records: Sequence[_DecodedRecord], name_fqdn: str) -> dict[str, str]:
+    merged: dict[str, str] = {}
     for r in records:
         if r.rtype != 16 or r.name != name_fqdn:
             continue
@@ -419,7 +414,7 @@ def _merge_txt(records: Sequence[_DecodedRecord], name_fqdn: str) -> Dict[str, s
     return merged
 
 
-def _infer_ws_url(*, host: Optional[str], port: Optional[int], txt: Dict[str, str]) -> Optional[str]:
+def _infer_ws_url(*, host: str | None, port: int | None, txt: dict[str, str]) -> str | None:
     if not host or not port:
         return None
     tls_hint = (
@@ -433,7 +428,7 @@ def _infer_ws_url(*, host: Optional[str], port: Optional[int], txt: Dict[str, st
     return f"{scheme}://{_strip_dot(host)}:{port}"
 
 
-def _truthy(val: Optional[str]) -> bool:
+def _truthy(val: str | None) -> bool:
     if val is None:
         return False
     return str(val).strip().lower() in {"1", "true", "yes", "y", "on"}
@@ -450,7 +445,7 @@ def _strip_dot(name: str) -> str:
     return name[:-1] if name.endswith(".") else name
 
 
-def _mdns_exchange(query: bytes, timeout_ms: int) -> List[bytes]:
+def _mdns_exchange(query: bytes, timeout_ms: int) -> list[bytes]:
     """Send a single mDNS query and collect responses until timeout.
 
     We use an ephemeral UDP port to encourage QU (unicast) responses.
@@ -459,7 +454,7 @@ def _mdns_exchange(query: bytes, timeout_ms: int) -> List[bytes]:
         return []
     timeout_s = max(0.001, timeout_ms / 1000.0)
     end = time.monotonic() + timeout_s
-    responses: List[bytes] = []
+    responses: list[bytes] = []
 
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -475,14 +470,14 @@ def _mdns_exchange(query: bytes, timeout_ms: int) -> List[bytes]:
             sock.settimeout(remaining)
             try:
                 data, _ = sock.recvfrom(65535)
-            except socket.timeout:
+            except TimeoutError:
                 break
             responses.append(data)
 
     return responses
 
 
-def _build_dns_query(questions: Iterable[Tuple[str, int]]) -> bytes:
+def _build_dns_query(questions: Iterable[tuple[str, int]]) -> bytes:
     """Build a minimal mDNS query with the QU (unicast-response) bit set."""
 
     q_list = list(questions)
@@ -510,8 +505,8 @@ def _encode_dns_name(name: str) -> bytes:
     return bytes(out)
 
 
-def _decode_records_from_messages(messages: Iterable[bytes]) -> List[_DecodedRecord]:
-    out: List[_DecodedRecord] = []
+def _decode_records_from_messages(messages: Iterable[bytes]) -> list[_DecodedRecord]:
+    out: list[_DecodedRecord] = []
     for msg in messages:
         try:
             out.extend(_decode_dns_message_records(msg))
@@ -521,7 +516,7 @@ def _decode_records_from_messages(messages: Iterable[bytes]) -> List[_DecodedRec
     return out
 
 
-def _decode_dns_message_records(data: bytes) -> List[_DecodedRecord]:
+def _decode_dns_message_records(data: bytes) -> list[_DecodedRecord]:
     if len(data) < 12:
         return []
     _id, _flags, qdcount, ancount, nscount, arcount = struct.unpack_from("!HHHHHH", data, 0)
@@ -533,7 +528,7 @@ def _decode_dns_message_records(data: bytes) -> List[_DecodedRecord]:
         offset += 4
 
     total_rr = ancount + nscount + arcount
-    out: List[_DecodedRecord] = []
+    out: list[_DecodedRecord] = []
     for _ in range(total_rr):
         name, offset = _decode_dns_name(data, offset)
         if offset + 10 > len(data):
@@ -570,8 +565,8 @@ def _decode_dns_message_records(data: bytes) -> List[_DecodedRecord]:
     return out
 
 
-def _decode_txt(raw: bytes) -> Dict[str, str]:
-    out: Dict[str, str] = {}
+def _decode_txt(raw: bytes) -> dict[str, str]:
+    out: dict[str, str] = {}
     i = 0
     while i < len(raw):
         ln = raw[i]
@@ -590,10 +585,10 @@ def _decode_txt(raw: bytes) -> Dict[str, str]:
     return out
 
 
-def _decode_dns_name(data: bytes, offset: int) -> Tuple[str, int]:
+def _decode_dns_name(data: bytes, offset: int) -> tuple[str, int]:
     """Decode a possibly-compressed DNS name. Returns (fqdn, new_offset)."""
 
-    labels: List[str] = []
+    labels: list[str] = []
     jumped = False
     jump_offset = offset
     seen: set[int] = set()

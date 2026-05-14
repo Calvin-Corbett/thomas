@@ -14,7 +14,7 @@ from thomas.tools.base import Tool, ToolResult
 from thomas.tools.filesystem import _safe_path
 
 
-async def _git_run(args: List[str], cwd: Path) -> tuple[int, str, str]:
+async def _git_run(args: list[str], cwd: Path) -> tuple[int, str, str]:
     """Run a git subcommand. Returns (returncode, stdout, stderr)."""
     cmd = ["git"] + args
     try:
@@ -67,7 +67,7 @@ class GitStatusTool(Tool):
     def __init__(self, working_dir: Path):
         self._cwd = working_dir.resolve()
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         git_args = ["status"]
         if args.get("short"):
             git_args.append("--short")
@@ -103,7 +103,7 @@ class GitDiffTool(Tool):
     def __init__(self, working_dir: Path):
         self._cwd = working_dir.resolve()
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         git_args = ["diff"]
         if args.get("staged"):
             git_args.append("--staged")
@@ -140,7 +140,7 @@ class GitLogTool(Tool):
     def __init__(self, working_dir: Path):
         self._cwd = working_dir.resolve()
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         n = args.get("n", 10)
         git_args = ["log", f"-{n}"]
         if args.get("oneline", True):
@@ -186,7 +186,7 @@ class GitCommitTool(Tool):
     def __init__(self, working_dir: Path):
         self._cwd = working_dir.resolve()
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         message = args["message"]
         files = args.get("files", [])
         all_staged = args.get("all_staged", False)
@@ -236,7 +236,7 @@ class GitBlameTool(Tool):
     def __init__(self, working_dir: Path):
         self._cwd = working_dir.resolve()
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         file_path = args["file"]
         git_args = ["blame", "--date=short"]
         start = args.get("start_line")

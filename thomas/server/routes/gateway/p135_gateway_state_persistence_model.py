@@ -41,8 +41,8 @@ class PersistenceModelRequest(TypedDict, total=False):
 class PersistenceModelResponse(TypedDict):
     schema_version: int
     mode: PersistenceMode
-    state_dir: Optional[str]  # effective dir (includes /gateway when file mode)
-    state_file: Optional[str]
+    state_dir: str | None  # effective dir (includes /gateway when file mode)
+    state_file: str | None
     max_state_bytes: int
 
 
@@ -50,11 +50,11 @@ class GatewayStateEnvelope(TypedDict):
     schema_version: int
     version: int
     updated_at: float
-    state: Dict[str, Any]
+    state: dict[str, Any]
 
 
 class GatewayStatePutRequest(TypedDict, total=False):
-    state: Dict[str, Any]
+    state: dict[str, Any]
     expected_version: int  # optional optimistic concurrency
 
 
@@ -62,7 +62,7 @@ class GatewayStateResponse(TypedDict):
     schema_version: int
     version: int
     updated_at: float
-    state: Dict[str, Any]
+    state: dict[str, Any]
 
 
 # ----------------------------
@@ -76,7 +76,7 @@ class GatewayStatePersistenceError(Exception):
     message: str
     http_status: int = 400
 
-    def to_payload(self) -> Dict[str, Any]:
+    def to_payload(self) -> dict[str, Any]:
         return {"error": {"code": self.code, "message": self.message}}
 
 
@@ -99,10 +99,10 @@ DEFAULT_STATE_FILENAME = "gateway_state.json"
 class PersistenceConfig:
     schema_version: int = DEFAULT_SCHEMA_VERSION
     mode: PersistenceMode = "memory"
-    state_dir: Optional[Path] = None  # effective dir (includes /gateway when file mode)
+    state_dir: Path | None = None  # effective dir (includes /gateway when file mode)
     max_state_bytes: int = DEFAULT_MAX_STATE_BYTES
 
-    def state_file(self) -> Optional[Path]:
+    def state_file(self) -> Path | None:
         if self.mode != "file" or not self.state_dir:
             return None
         return self.state_dir / DEFAULT_STATE_FILENAME
@@ -126,10 +126,10 @@ class GatewayStatePersistence:
       - file: atomic JSON file at <state_dir>/gateway/gateway_state.json
     """
 
-    def __init__(self, config: Optional[PersistenceConfig] = None):
+    def __init__(self, config: PersistenceConfig | None = None):
         self._lock = asyncio.Lock()
         self._config = config or PersistenceConfig()
-        self._state: Dict[str, Any] = {}
+        self._state: dict[str, Any] = {}
         self._version: int = 0
         self._updated_at: float = 0.0
 
@@ -160,7 +160,7 @@ class GatewayStatePersistence:
                 http_status=400,
             )
 
-        effective_state_dir: Optional[Path] = None
+        effective_state_dir: Path | None = None
         if mode == "file":
             base_dir_str = req.get("state_dir") or os.environ.get(DEFAULT_STATE_DIR_ENV)
             if not base_dir_str:
@@ -192,7 +192,7 @@ class GatewayStatePersistence:
                 await self._load_from_disk_if_present()
             return self._snapshot()
 
-    async def set_state(self, state: Dict[str, Any], expected_version: Optional[int] = None) -> GatewayStateResponse:
+    async def set_state(self, state: dict[str, Any], expected_version: int | None = None) -> GatewayStateResponse:
         if not isinstance(state, dict):
             raise GatewayStatePersistenceError(
                 code="invalid_request",
@@ -390,7 +390,7 @@ def _get_persistence(app: web.Application) -> GatewayStatePersistence:
         return existing
 
     base_dir_str = os.environ.get(DEFAULT_STATE_DIR_ENV)
-    effective_dir: Optional[Path] = None
+    effective_dir: Path | None = None
     if base_dir_str:
         effective_dir = (Path(base_dir_str).expanduser().resolve() / DEFAULT_STATE_SUBDIR).resolve()
 
@@ -404,7 +404,7 @@ def _set_state_headers(resp: web.Response, version: int) -> None:
     resp.headers["X-Thomas-Gateway-State-Version"] = str(version)
 
 
-def _parse_if_match(request: web.Request) -> Optional[int]:
+def _parse_if_match(request: web.Request) -> int | None:
     raw = request.headers.get("If-Match")
     if not raw:
         return None
@@ -478,7 +478,7 @@ async def put_gateway_state(request: web.Request) -> web.Response:
         if not isinstance(state, dict):
             raise GatewayStatePersistenceError("invalid_request", "'state' must be a JSON object", 400)
 
-        snap = await persistence.set_state(state, expected_version=cast(Optional[int], expected_version))
+        snap = await persistence.set_state(state, expected_version=cast(int | None, expected_version))
         resp = web.json_response(snap)
         _set_state_headers(resp, snap["version"])
         return resp

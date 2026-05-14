@@ -47,7 +47,7 @@ class InvestigateStatusTool(Tool):
         },
     }
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             store = _get_store()
             case_id = args.get("case_id")
@@ -103,7 +103,7 @@ class InvestigateQueryTool(Tool):
         "required": ["query"],
     }
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             store = _get_store()
             case_id = args.get("case_id")
@@ -168,7 +168,7 @@ class InvestigatePatternsTool(Tool):
         },
     }
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             store = _get_store()
             case_id = args.get("case_id")
@@ -230,7 +230,7 @@ class InvestigateTimelineTool(Tool):
         },
     }
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             store = _get_store()
             case_id = args.get("case_id")

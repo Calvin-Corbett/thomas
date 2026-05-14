@@ -20,7 +20,6 @@ from thomas.plugins.p103_plugin_uninstall_cleanup import (
     run_plugin_uninstall_cleanup,
 )
 
-
 NAME = "uninstall-cleanup"
 COMMAND_NAME = NAME
 
@@ -37,7 +36,7 @@ app = typer.Typer(
 def main(
     plugin_id: str = typer.Argument(..., help="Plugin id to clean up (directory under extensions/)."),  # noqa: B008
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be removed without deleting."),  # noqa: B008
-    config_path: Optional[Path] = typer.Option(
+    config_path: Path | None = typer.Option(
         None,
         "--config-path",
         exists=False,
@@ -46,7 +45,7 @@ def main(
         readable=True,
         help="Path to the Thomas config file (defaults via THOMAS_CONFIG_PATH or ~/.thomas/thomas.json).",  # noqa: E501
     ),
-    state_dir: Optional[Path] = typer.Option(
+    state_dir: Path | None = typer.Option(
         None,
         "--state-dir",
         exists=False,
@@ -54,7 +53,7 @@ def main(
         dir_okay=True,
         help="Override the Thomas state directory (defaults via THOMAS_STATE_DIR or config parent).",  # noqa: E501
     ),
-    extensions_dir: Optional[Path] = typer.Option(
+    extensions_dir: Path | None = typer.Option(
         None,
         "--extensions-dir",
         exists=False,

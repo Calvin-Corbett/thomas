@@ -8,18 +8,38 @@ from typing import Any, Optional
 
 from thomas.cli.parity_gateway_support import (
     active_gateway_target as _active_gateway_target,
+)
+from thomas.cli.parity_gateway_support import (
     clear_gateway_state as _clear_gateway_state,
+)
+from thomas.cli.parity_gateway_support import (
     gateway_spawn as _gateway_spawn,
+)
+from thomas.cli.parity_gateway_support import (
     is_pid_running as _is_pid_running,
+)
+from thomas.cli.parity_gateway_support import (
     kill_pid as _kill_pid,
+)
+from thomas.cli.parity_gateway_support import (
     probe_gateway as _probe_gateway,
+)
+from thomas.cli.parity_gateway_support import (
     resolve_bind_port as _resolve_bind_port,
+)
+from thomas.cli.parity_gateway_support import (
     save_gateway_state as _save_gateway_state,
 )
 from thomas.cli.parity_support import (
     gateway_log_file as _gateway_log_file,
+)
+from thomas.cli.parity_support import (
     gateway_state_file as _gateway_state_file,
+)
+from thomas.cli.parity_support import (
     load_gateway_state as _load_gateway_state,
+)
+from thomas.cli.parity_support import (
     utc_iso as _utc_iso,
 )
 from thomas.core.config import AppConfig
@@ -41,8 +61,8 @@ def engine_snapshot() -> dict[str, Any]:
 def gateway_detached_status(
     config: AppConfig,
     *,
-    host: Optional[str] = None,
-    port: Optional[int] = None,
+    host: str | None = None,
+    port: int | None = None,
 ) -> dict[str, Any]:
     use_host, use_port, state = _active_gateway_target(config, host, port)
     pid = int(state.get("pid") or 0) if str(state.get("pid") or "").strip() else 0
@@ -74,8 +94,8 @@ def gateway_detached_status(
 def status_payload(
     config: AppConfig,
     *,
-    host: Optional[str] = None,
-    port: Optional[int] = None,
+    host: str | None = None,
+    port: int | None = None,
 ) -> dict[str, Any]:
     local_payload = engine_snapshot()
     detached_payload = gateway_detached_status(config, host=host, port=port)

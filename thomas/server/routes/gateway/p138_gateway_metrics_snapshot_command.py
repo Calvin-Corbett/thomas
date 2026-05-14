@@ -52,7 +52,7 @@ class GatewayMetricsSnapshotSuccess(TypedDict):
 @dataclass(frozen=True)
 class _ParsedRequest:
     reset: bool
-    window_seconds: Optional[int]
+    window_seconds: int | None
 
 
 class _SnapshotError(Exception):
@@ -62,7 +62,7 @@ class _SnapshotError(Exception):
         message: str,
         *,
         http_status: int,
-        details: Optional[Mapping[str, Any]] = None,
+        details: Mapping[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -73,7 +73,7 @@ class _SnapshotError(Exception):
 
 _TRUE_STRINGS = {"1", "true", "t", "yes", "y", "on"}
 _FALSE_STRINGS = {"0", "false", "f", "no", "n", "off"}
-_LAST_INPROCESS_SNAPSHOTTER: Optional[Callable[..., Any]] = None
+_LAST_INPROCESS_SNAPSHOTTER: Callable[..., Any] | None = None
 
 
 def _utcnow_iso() -> str:
@@ -105,7 +105,7 @@ def _parse_bool(value: Any, *, default: bool) -> bool:
     )
 
 
-def _parse_optional_int(value: Any, *, field: str, min_value: int, max_value: int) -> Optional[int]:
+def _parse_optional_int(value: Any, *, field: str, min_value: int, max_value: int) -> int | None:
     if value is None:
         return None
     if isinstance(value, bool):
@@ -190,11 +190,11 @@ def _extract_config(app: web.Application) -> Mapping[str, Any]:
     return {}
 
 
-def get_inprocess_snapshotter() -> Optional[Callable[..., Any]]:
+def get_inprocess_snapshotter() -> Callable[..., Any] | None:
     return _LAST_INPROCESS_SNAPSHOTTER
 
 
-def _resolve_metrics_url(app: web.Application) -> Optional[str]:
+def _resolve_metrics_url(app: web.Application) -> str | None:
     cfg = _extract_config(app)
 
     # 1) Explicit endpoint URL.
@@ -231,7 +231,7 @@ async def _maybe_await(value: Any) -> Any:
     return value
 
 
-async def _snapshot_from_app(request: web.Request, parsed: _ParsedRequest) -> Optional[tuple[Mapping[str, Any], str]]:
+async def _snapshot_from_app(request: web.Request, parsed: _ParsedRequest) -> tuple[Mapping[str, Any], str] | None:
     """
     Try to read metrics from in-process hooks.
     """

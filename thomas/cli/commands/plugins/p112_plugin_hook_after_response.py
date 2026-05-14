@@ -52,12 +52,12 @@ def main(
         "-r",
         help="Response text to run the hook against (ignored if --request is used)",
     ),
-    request: Optional[str] = typer.Option(
+    request: str | None = typer.Option(
         None,
         "--request",
         help="JSON request object (file path, '-' for stdin, or inline JSON)",
     ),
-    config: Optional[str] = typer.Option(
+    config: str | None = typer.Option(
         None,
         "--config",
         help="JSON config object (file path, '-' for stdin, or inline JSON)",
@@ -72,24 +72,24 @@ def main(
         "--disabled",
         help="Override config: force disabled",
     ),
-    sink: Optional[str] = typer.Option(
+    sink: str | None = typer.Option(
         None,
         "--sink",
         help="Override config: sink (none|file)",
     ),
-    file_path: Optional[str] = typer.Option(
+    file_path: str | None = typer.Option(
         None,
         "--file-path",
         help="Override config: file_path (used when sink=file)",
     ),
-    max_chars: Optional[int] = typer.Option(
+    max_chars: int | None = typer.Option(
         None,
         "--max-chars",
         help="Override config: max_chars",
         min=1,
     ),
     as_json: bool = typer.Option(False, "--json", help="Emit machine-readable JSON"),
-    schema: Optional[str] = typer.Option(
+    schema: str | None = typer.Option(
         None,
         "--schema",
         help="Print JSON schema: request|config|result|envelope",

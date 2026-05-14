@@ -9,14 +9,13 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 from thomas.plugins.extension_catalog_runtime import load_extension_catalog, validate_extension_catalog
 from thomas.plugins.p104_plugin_update_planner import plan_plugin_updates
 
-
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_REQUIRED_CAPABILITIES = ("healthcheck",)
 
 
-def _normalize_required_capabilities(raw: Optional[Iterable[str]]) -> List[str]:
+def _normalize_required_capabilities(raw: Iterable[str] | None) -> list[str]:
     items = list(raw or [])
-    out: List[str] = []
+    out: list[str] = []
     seen: set[str] = set()
     for item in items:
         cap = str(item or "").strip()
@@ -27,8 +26,8 @@ def _normalize_required_capabilities(raw: Optional[Iterable[str]]) -> List[str]:
     return out
 
 
-def _catalog_map_by_id(catalog: Mapping[str, Any]) -> Dict[str, Dict[str, Any]]:
-    out: Dict[str, Dict[str, Any]] = {}
+def _catalog_map_by_id(catalog: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
     rows = catalog.get("packs")
     if not isinstance(rows, list):
         return out
@@ -59,9 +58,9 @@ def _infer_version_from_plugin_path(plugin_path: str) -> str:
     return str(payload.get("version") or "").strip()
 
 
-def _build_available_versions(catalog: Mapping[str, Any]) -> Dict[str, Dict[str, List[str]]]:
+def _build_available_versions(catalog: Mapping[str, Any]) -> dict[str, dict[str, list[str]]]:
     rows = catalog.get("packs")
-    out: Dict[str, Dict[str, List[str]]] = {}
+    out: dict[str, dict[str, list[str]]] = {}
     if not isinstance(rows, list):
         return out
     for row in rows:
@@ -79,11 +78,11 @@ def _build_available_versions(catalog: Mapping[str, Any]) -> Dict[str, Dict[str,
 
 
 def certify_extension_catalog(
-    root: Optional[Path] = None,
+    root: Path | None = None,
     *,
-    required_capabilities: Optional[Iterable[str]] = None,
+    required_capabilities: Iterable[str] | None = None,
     min_pass_rate: float = 0.95,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     required = _normalize_required_capabilities(required_capabilities)
     if not required:
         required = list(DEFAULT_REQUIRED_CAPABILITIES)
@@ -126,7 +125,7 @@ def certify_extension_catalog(
         valid = bool(row.get("valid", False))
         errors = list(row.get("errors") or [])
         certified = bool(valid and not missing_capabilities)
-        reasons: List[str] = []
+        reasons: list[str] = []
         reasons.extend(str(item) for item in errors if str(item).strip())
         for cap in missing_capabilities:
             reasons.append(f"missing required capability: {cap}")
@@ -178,13 +177,13 @@ def certify_extension_catalog(
 def build_plugin_update_plan_from_state(
     installed_plugins: Iterable[Mapping[str, Any]],
     *,
-    catalog_root: Optional[Path] = None,
+    catalog_root: Path | None = None,
     include_prereleases: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     loaded = load_extension_catalog(root=catalog_root)
     available = _build_available_versions(loaded)
 
-    installed: List[Dict[str, Any]] = []
+    installed: list[dict[str, Any]] = []
     for row in installed_plugins:
         name = str(row.get("name") or row.get("id") or "").strip()
         if not name:

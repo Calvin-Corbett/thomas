@@ -22,10 +22,10 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence, TypedDict
 
 from thomas.server.routes.gateway.p132_gateway_configured_command import (
-    GatewayConfiguredStatus,
     REASON_INVALID_CONFIG,
     REASON_MISSING_CONFIG,
     REASON_MISSING_GATEWAY_MODE,
+    GatewayConfiguredStatus,
     evaluate_gateway_configured,
 )
 
@@ -38,18 +38,18 @@ CLI_REASON_INVALID_INPUT = "invalid_input"
 class GatewayConfiguredCliOutput(TypedDict, total=False):
     configured: bool
     source: str
-    reason: Optional[str]
+    reason: str | None
     message: str
-    details: Dict[str, Any]
+    details: dict[str, Any]
 
 
 @dataclass(frozen=True)
 class GatewayConfiguredCliResult:
     configured: bool
     source: str
-    reason: Optional[str]
+    reason: str | None
     message: str
-    details: Dict[str, Any]
+    details: dict[str, Any]
 
     def to_output(self) -> GatewayConfiguredCliOutput:
         return {
@@ -83,7 +83,7 @@ def _fetch_remote(url: str, *, timeout_s: float = 2.0) -> GatewayConfiguredCliRe
     base = url.rstrip("/")
     candidate_paths = ("/gateway/configured", "/configured")
 
-    last_error: Optional[str] = None
+    last_error: str | None = None
     for path in candidate_paths:
         endpoint = f"{base}{path}"
         try:
@@ -141,7 +141,7 @@ def _run_from_parsed_args(args: argparse.Namespace) -> int:
     return run(json_mode=bool(args.json), config_path=args.config_path, url=args.url, timeout_s=float(args.timeout))
 
 
-def run(*, json_mode: bool = False, config_path: Optional[str] = None, url: Optional[str] = None, timeout_s: float = 2.0) -> int:
+def run(*, json_mode: bool = False, config_path: str | None = None, url: str | None = None, timeout_s: float = 2.0) -> int:
     if url is not None:
         if not (url.startswith("http://") or url.startswith("https://")):
             result = GatewayConfiguredCliResult(
@@ -182,7 +182,7 @@ def _emit(result: GatewayConfiguredCliResult, *, json_mode: bool) -> None:
             sys.stdout.write(f"Config path: {cfg_path}\n")
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="thomas gateway configured")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--config-path", default=None)

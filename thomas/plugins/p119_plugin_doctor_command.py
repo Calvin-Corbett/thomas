@@ -12,14 +12,14 @@ The command is designed to be usable from both CLI and automation:
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
 import importlib
 import importlib.util
 import os
-from pathlib import Path
 import pkgutil
 import re
-from typing import Any, Dict, List, Literal, Optional, Tuple, Callable
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 
 TOOL_NAME = "plugins.doctor"
 TOOL_DESCRIPTION = "Run diagnostics over installed Thomas plugins and return a structured report."
@@ -36,8 +36,8 @@ DoctorStatus = Literal["pass", "fail", "warn"]
 class PluginDoctorRequest:
     """Inputs for plugin diagnostics."""
 
-    plugin: Optional[str] = None
-    config_path: Optional[str] = None
+    plugin: str | None = None
+    config_path: str | None = None
     include_hidden: bool = False
     strict: bool = False
 
@@ -49,7 +49,7 @@ class DoctorCheck:
     id: str
     status: DoctorStatus
     summary: str
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -57,10 +57,10 @@ class PluginDoctorReport:
     """Overall diagnostic report."""
 
     ok: bool
-    inspected: List[str] = field(default_factory=list)
-    checks: List[DoctorCheck] = field(default_factory=list)
+    inspected: list[str] = field(default_factory=list)
+    checks: list[DoctorCheck] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ok": self.ok,
             "inspected": list(self.inspected),
@@ -82,8 +82,8 @@ class PluginDoctorError(RuntimeError):
         self,
         message: str,
         *,
-        code: Optional[str] = None,
-        exit_code: Optional[int] = None,
+        code: str | None = None,
+        exit_code: int | None = None,
     ) -> None:
         super().__init__(message)
         if code is not None:
@@ -136,7 +136,7 @@ def _resolve_plugin_module_name(plugin: str) -> str:
     return f"thomas.plugins.{plugin}"
 
 
-def _try_import_module(module_name: str) -> Tuple[Optional[Any], Optional[str], Dict[str, Any]]:
+def _try_import_module(module_name: str) -> tuple[Any | None, str | None, dict[str, Any]]:
     """Try importing a module. Returns (module|None, error_summary|None, details)."""
     try:
         module = importlib.import_module(module_name)
@@ -152,7 +152,7 @@ def _try_import_module(module_name: str) -> Tuple[Optional[Any], Optional[str], 
         )
 
 
-def _discover_plugin_module_names(*, include_hidden: bool) -> Tuple[List[str], Optional[str]]:
+def _discover_plugin_module_names(*, include_hidden: bool) -> tuple[list[str], str | None]:
     """Discover plugin module names under `thomas.plugins`.
 
     Returns (names, error_summary). If discovery fails (e.g. thomas.plugins missing),
@@ -167,7 +167,7 @@ def _discover_plugin_module_names(*, include_hidden: bool) -> Tuple[List[str], O
         return [], "thomas.plugins has no __path__ (not a package?)"
 
     prefix = plugins_mod.__name__ + "."
-    names: List[str] = []
+    names: list[str] = []
     for mod in pkgutil.iter_modules(pkg_path, prefix=prefix):
         base = mod.name.split(".")[-1]
         if not include_hidden and base.startswith("_"):
@@ -181,10 +181,10 @@ class ToolRegistryProbe:
     """A minimal registry shim used to validate plugin registration wiring."""
 
     def __init__(self) -> None:
-        self.tools: List[Dict[str, Any]] = []
-        self._seen: Dict[str, int] = {}
-        self.duplicate_names: List[str] = []
-        self.invalid_registrations: List[Dict[str, Any]] = []
+        self.tools: list[dict[str, Any]] = []
+        self._seen: dict[str, int] = {}
+        self.duplicate_names: list[str] = []
+        self.invalid_registrations: list[dict[str, Any]] = []
 
     def register_tool(self, name: Any, fn: Any, description: Any = None, **kwargs: Any) -> None:
         self._record(name, fn, description=description, extra=kwargs)
@@ -195,8 +195,8 @@ class ToolRegistryProbe:
     def register(self, name: Any, fn: Any, description: Any = None, **kwargs: Any) -> None:
         self._record(name, fn, description=description, extra=kwargs)
 
-    def _record(self, name: Any, fn: Any, *, description: Any, extra: Dict[str, Any]) -> None:
-        problems: List[str] = []
+    def _record(self, name: Any, fn: Any, *, description: Any, extra: dict[str, Any]) -> None:
+        problems: list[str] = []
 
         if not isinstance(name, str) or name.strip() == "":
             problems.append("tool name must be a non-empty string")
@@ -227,7 +227,7 @@ class ToolRegistryProbe:
         )
 
 
-def _find_registration_entrypoint(module: Any) -> Tuple[Optional[str], Optional[Callable[[Any], Any]]]:
+def _find_registration_entrypoint(module: Any) -> tuple[str | None, Callable[[Any], Any] | None]:
     """Best-effort detection of a plugin registration hook."""
     reg = getattr(module, "register", None)
     if callable(reg):
@@ -249,8 +249,8 @@ def run_plugin_doctor(request: PluginDoctorRequest) -> PluginDoctorReport:
     """Run diagnostics and return a structured report."""
     _validate_request(request)
 
-    checks: List[DoctorCheck] = []
-    inspected: List[str] = []
+    checks: list[DoctorCheck] = []
+    inspected: list[str] = []
 
     # Config presence validation is deterministic only when a path is supplied.
     if request.config_path:
@@ -285,7 +285,7 @@ def run_plugin_doctor(request: PluginDoctorRequest) -> PluginDoctorReport:
         )
 
     # Determine which plugin modules to inspect.
-    plugin_modules: List[str] = []
+    plugin_modules: list[str] = []
     if request.plugin:
         resolved = _resolve_plugin_module_name(request.plugin)
         if importlib.util.find_spec(resolved) is None:
@@ -329,8 +329,8 @@ def run_plugin_doctor(request: PluginDoctorRequest) -> PluginDoctorReport:
             )
 
     # Inspect plugin importability + wiring.
-    global_tool_owner: Dict[str, str] = {}
-    collisions: List[Dict[str, str]] = []
+    global_tool_owner: dict[str, str] = {}
+    collisions: list[dict[str, str]] = []
 
     for mod_name in plugin_modules:
         inspected.append(mod_name)

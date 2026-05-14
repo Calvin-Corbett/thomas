@@ -29,7 +29,7 @@ class ErrorDetails(TypedDict, total=False):
     message: str
     type: str
     code: str
-    param: Optional[str]
+    param: str | None
 
 
 class ErrorEnvelope(TypedDict):
@@ -42,10 +42,10 @@ class ResponsesCreateNonStreamRequest:
 
     model: str
     input: Any
-    instructions: Optional[str] = None
-    metadata: Optional[Mapping[str, Any]] = None
-    temperature: Optional[float] = None
-    max_output_tokens: Optional[int] = None
+    instructions: str | None = None
+    metadata: Mapping[str, Any] | None = None
+    temperature: float | None = None
+    max_output_tokens: int | None = None
 
 
 @dataclass(frozen=True)
@@ -63,7 +63,7 @@ class GatewayError(Exception):
     code: str
     message: str
     error_type: str = "gateway_error"
-    param: Optional[str] = None
+    param: str | None = None
 
 
 ROUTE_PATH: str = "/v1/responses"
@@ -279,7 +279,7 @@ async def _invoke_backend(backend: Any, req: ResponsesCreateNonStreamRequest) ->
     )
 
 
-def _extract_text_from_backend_result(result: Any) -> Optional[str]:
+def _extract_text_from_backend_result(result: Any) -> str | None:
     """Extract assistant text from common backend response shapes."""
     if result is None:
         return None

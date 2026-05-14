@@ -308,7 +308,7 @@ async def _run_openclaw_task(
     parsed, blob = _parse_openclaw_json(text)
     reply = ""
     if parsed:
-        payloads = list((((parsed.get("result") or {}).get("payloads") or [])))
+        payloads = list((parsed.get("result") or {}).get("payloads") or [])
         if payloads:
             reply = str((payloads[0] or {}).get("text") or "")
     return reply, round(max(0.0, time.monotonic() - start), 3), blob

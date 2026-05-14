@@ -31,7 +31,7 @@ def estimate_tokens(text: str) -> int:
     return max(1, int(len(text) / _CHARS_PER_TOKEN))
 
 
-def estimate_message_tokens(message: Dict[str, Any]) -> int:
+def estimate_message_tokens(message: dict[str, Any]) -> int:
     """Estimate tokens in a single chat message.
 
     Accounts for message structure overhead (~4 tokens per message
@@ -64,7 +64,7 @@ def estimate_message_tokens(message: Dict[str, Any]) -> int:
     return tokens
 
 
-def estimate_messages_tokens(messages: List[Dict[str, Any]]) -> int:
+def estimate_messages_tokens(messages: list[dict[str, Any]]) -> int:
     """Estimate total tokens across a list of messages.
 
     Adds a base overhead of ~3 tokens for the messages wrapper.
@@ -74,7 +74,7 @@ def estimate_messages_tokens(messages: List[Dict[str, Any]]) -> int:
     return 3 + sum(estimate_message_tokens(m) for m in messages)
 
 
-def estimate_tools_tokens(tools: List[Dict[str, Any]]) -> int:
+def estimate_tools_tokens(tools: list[dict[str, Any]]) -> int:
     """Estimate tokens consumed by tool specifications.
 
     Tool specs are sent with every request and consume significant context.
@@ -94,13 +94,13 @@ def estimate_tools_tokens(tools: List[Dict[str, Any]]) -> int:
 
 
 def trim_messages_to_budget(
-    messages: List[Dict[str, Any]],
+    messages: list[dict[str, Any]],
     budget: int,
     system_tokens: int = 0,
     tools_tokens: int = 0,
     preserve_first: int = 1,
     preserve_last: int = 4,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Trim a message list to fit within a token budget.
 
     Strategy:
@@ -146,7 +146,7 @@ def trim_messages_to_budget(
         return tail
 
     # Keep middle messages from the end (most recent) that fit
-    kept_middle: List[Dict[str, Any]] = []
+    kept_middle: list[dict[str, Any]] = []
     used = 0
     # Iterate backwards (newest to oldest)
     for msg in reversed(middle):

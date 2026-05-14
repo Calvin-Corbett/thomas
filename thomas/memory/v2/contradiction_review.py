@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Tuple
 
 
-def severity_route(*, score: float, reason: str) -> Tuple[str, str]:
+def severity_route(*, score: float, reason: str) -> tuple[str, str]:
     s = float(max(0.0, min(1.0, score)))
     why = str(reason or "").lower()
     if s >= 0.85 or "polarity_conflict" in why or "numeric_mismatch" in why:
@@ -63,7 +63,7 @@ def list_contradictions(
     *,
     only_open: bool = True,
     limit: int = 50,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     lim = max(1, min(500, int(limit)))
     if only_open:
         cur = db.execute(
@@ -124,14 +124,14 @@ def list_contradictions(
 def list_contradictions_for_review(
     db: Any,
     *,
-    status: Optional[str] = None,
-    severity: Optional[str] = None,
-    route: Optional[str] = None,
+    status: str | None = None,
+    severity: str | None = None,
+    route: str | None = None,
     limit: int = 50,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     lim = max(1, min(500, int(limit)))
-    where: List[str] = []
-    args: List[Any] = []
+    where: list[str] = []
+    args: list[Any] = []
     st = str(status or "").strip().lower()
     sev = str(severity or "").strip().lower()
     rt = str(route or "").strip().lower()
@@ -163,7 +163,7 @@ def list_contradictions_for_review(
         """,
         (*args, lim),
     ).fetchall()
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for row in rows:
         rec = dict(row)
         rec["severity"] = str(rec.get("review_severity") or "medium").strip().lower()

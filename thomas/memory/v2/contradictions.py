@@ -4,7 +4,6 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-
 _NUM_RE = re.compile(r"-?\d+(?:\.\d+)?")
 
 
@@ -14,7 +13,7 @@ class ContradictionSignal:
     reason: str
 
 
-def _extract_num(s: str) -> Optional[float]:
+def _extract_num(s: str) -> float | None:
     m = _NUM_RE.search(s or "")
     if not m:
         return None
@@ -29,7 +28,7 @@ def contradiction_score_for_fact(
     new_obj: str,
     old_polarity: int,
     new_polarity: int,
-) -> Optional[ContradictionSignal]:
+) -> ContradictionSignal | None:
     old_txt = (old_obj or "").strip().lower()
     new_txt = (new_obj or "").strip().lower()
     if not old_txt or not new_txt:

@@ -44,7 +44,7 @@ class ErrorPayload(TypedDict):
 class GatewayProbeRequest:
     """Input contract for a gateway probe."""
 
-    target: Optional[str] = None
+    target: str | None = None
     timeout_s: float = 3.0
     path: str = "/"
 
@@ -55,9 +55,9 @@ class GatewayProbeResponse:
 
     ok: bool
     target: str
-    latency_ms: Optional[int] = None
-    status_code: Optional[int] = None
-    error: Optional[ErrorPayload] = None
+    latency_ms: int | None = None
+    status_code: int | None = None
+    error: ErrorPayload | None = None
 
 
 class GatewayProbeException(Exception):
@@ -155,8 +155,8 @@ def _try_load_config() -> Mapping[str, Any]:
 
 def resolve_gateway_target(
     *,
-    explicit_target: Optional[str] = None,
-    app_config: Optional[Mapping[str, Any]] = None,
+    explicit_target: str | None = None,
+    app_config: Mapping[str, Any] | None = None,
     environ: Mapping[str, str] | None = None,
 ) -> str:
     """Resolve the gateway target URL.
@@ -241,7 +241,7 @@ async def probe_gateway(*, target: str, timeout_s: float = 3.0, path: str = "/")
     url = str(base.with_path(probe_path))
 
     started = time.monotonic()
-    status_code: Optional[int] = None
+    status_code: int | None = None
     try:
         timeout = ClientTimeout(total=timeout_s)
         async with ClientSession(timeout=timeout) as session:

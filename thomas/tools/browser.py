@@ -61,16 +61,20 @@ except Exception:  # pragma: no cover
 
 # --- Playwright ---
 _PLAYWRIGHT_AVAILABLE = True
-_PLAYWRIGHT_IMPORT_ERROR: Optional[str] = None
+_PLAYWRIGHT_IMPORT_ERROR: str | None = None
 try:
     from playwright.async_api import (  # type: ignore
-        async_playwright,
         Browser,
         BrowserContext,
-        Page,
         Locator,
-        TimeoutError as PlaywrightTimeoutError,
+        Page,
+        async_playwright,
+    )
+    from playwright.async_api import (
         Error as PlaywrightError,
+    )
+    from playwright.async_api import (
+        TimeoutError as PlaywrightTimeoutError,
     )
 except Exception as e:  # pragma: no cover
     _PLAYWRIGHT_AVAILABLE = False
@@ -128,17 +132,17 @@ _STRIP_SELECTORS = [
 
 @dataclass
 class _SessionState:
-    context: Optional["BrowserContext"] = None
-    page: Optional["Page"] = None
-    last_url: Optional[str] = None
+    context: BrowserContext | None = None
+    page: Page | None = None
+    last_url: str | None = None
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 @dataclass
 class _BrowserState:
     pw: Any = None
-    browser: Optional["Browser"] = None
-    headless: Optional[bool] = None
-    sessions: Dict[str, _SessionState] = field(default_factory=dict)
+    browser: Browser | None = None
+    headless: bool | None = None
+    sessions: dict[str, _SessionState] = field(default_factory=dict)
     active_session: str = "default"
 
 _STATE = _BrowserState()
@@ -219,7 +223,7 @@ def _temp_screenshot_name() -> str:
     return f"thomas_screenshot_{ts}_{suffix}.png"
 
 
-def _resolve_screenshot_path(path_in: Optional[str]) -> str:
+def _resolve_screenshot_path(path_in: str | None) -> str:
     if not path_in:
         p = Path(tempfile.gettempdir()) / _temp_screenshot_name()
         return str(p)
@@ -240,7 +244,7 @@ def _resolve_screenshot_path(path_in: Optional[str]) -> str:
     return str(p)
 
 
-def _fmt_action_error(action: str, exc: Exception, selector: Optional[str] = None) -> str:
+def _fmt_action_error(action: str, exc: Exception, selector: str | None = None) -> str:
     msg = str(exc).strip() if exc else ""
     if isinstance(exc, PlaywrightTimeoutError):
         return f"{action} timed out{f' for selector {selector!r}' if selector else ''}."
@@ -273,7 +277,7 @@ def _fmt_nav_error(url: str, exc: Exception, timeout_ms: int) -> str:
     return f"Navigation error while navigating to {url}: {msg or exc.__class__.__name__}"
 
 
-async def _best_effort_stabilize(page: "Page", *, max_ms: int = 3000) -> None:
+async def _best_effort_stabilize(page: Page, *, max_ms: int = 3000) -> None:
     try:
         await page.wait_for_load_state("domcontentloaded", timeout=max_ms)
     except Exception:
@@ -326,7 +330,7 @@ async def _cleanup_locked() -> None:
     _STATE.headless = None
 
 
-async def get_browser(*, headless: bool = True) -> "Browser":
+async def get_browser(*, headless: bool = True) -> Browser:
     """Get or create the shared Chromium browser (singleton)."""
     _require_playwright()
 
@@ -353,14 +357,14 @@ async def get_browser(*, headless: bool = True) -> "Browser":
         return _STATE.browser  # type: ignore[return-value]
 
 
-def _get_session_name(args: Dict[str, Any]) -> str:
+def _get_session_name(args: dict[str, Any]) -> str:
     s = (args.get("session") or "").strip()
     if s:
         return s
     return _STATE.active_session or "default"
 
 
-async def _ensure_session_page(session_name: str, *, headless: Optional[bool] = None) -> Tuple[_SessionState, "Page"]:
+async def _ensure_session_page(session_name: str, *, headless: bool | None = None) -> tuple[_SessionState, Page]:
     """Ensure session exists with an alive context+page."""
     desired_headless = bool(headless) if headless is not None else (_STATE.headless if _STATE.headless is not None else True)
     browser = await get_browser(headless=desired_headless)
@@ -396,7 +400,7 @@ async def _ensure_session_page(session_name: str, *, headless: Optional[bool] = 
         return sess, sess.page
 
 
-async def _rehydrate_if_needed(sess: _SessionState, page: "Page") -> Optional[str]:
+async def _rehydrate_if_needed(sess: _SessionState, page: Page) -> str | None:
     """If page is blank and we have a last_url, navigate back so actions can continue."""
     try:
         cur = page.url or ""
@@ -421,7 +425,7 @@ async def _rehydrate_if_needed(sess: _SessionState, page: "Page") -> Optional[st
         return _fmt_nav_error(sess.last_url, e, _NAV_TIMEOUT_MS)
 
 
-def _ensure_navigated(page: "Page") -> Optional[str]:
+def _ensure_navigated(page: Page) -> str | None:
     try:
         u = page.url or ""
     except Exception:
@@ -435,7 +439,7 @@ def _ensure_navigated(page: "Page") -> Optional[str]:
 # "Consumer-friendly" locator resolution
 # ----------------------------
 
-async def _resolve_locator_for_click(page: "Page", selector: str) -> "Locator":
+async def _resolve_locator_for_click(page: Page, selector: str) -> Locator:
     """
     If selector looks like CSS/XPath/engine, use page.locator.
     Else treat as human label: button/link role -> get_by_text fallback.
@@ -458,7 +462,7 @@ async def _resolve_locator_for_click(page: "Page", selector: str) -> "Locator":
     return page.get_by_text(s, exact=False).first
 
 
-async def _resolve_locator_for_type(page: "Page", selector: str) -> "Locator":
+async def _resolve_locator_for_type(page: Page, selector: str) -> Locator:
     """
     If selector looks like CSS/XPath/engine, use page.locator.
     Else treat as human label/placeholder.
@@ -484,7 +488,7 @@ async def _resolve_locator_for_type(page: "Page", selector: str) -> "Locator":
 # Better text extraction
 # ----------------------------
 
-async def _extract_best_text(page: "Page") -> str:
+async def _extract_best_text(page: Page) -> str:
     """
     Picks best content container by scoring candidates:
     score = textLen - 0.6 * linkTextLen
@@ -567,7 +571,7 @@ class BrowserOpenTool(Tool):
     name = "browser.open"
     category = "browser"
     description = "Navigate to a URL and return page title + cleaned text (max 8000 chars)."
-    parameters: Dict[str, Any] = {
+    parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
             "url": {"type": "string", "description": "URL to navigate to."},
@@ -579,7 +583,7 @@ class BrowserOpenTool(Tool):
         "additionalProperties": False,
     }
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             raw_url = (args.get("url") or "").strip()
             if not raw_url:
@@ -641,7 +645,7 @@ class BrowserClickTool(Tool):
     name = "browser.click"
     category = "browser"
     description = "Click an element on the current page (CSS/XPath) or by human label (e.g., 'Sign in')."
-    parameters: Dict[str, Any] = {
+    parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
             "selector": {"type": "string", "description": "CSS or XPath selector (or human label as fallback)."},
@@ -652,7 +656,7 @@ class BrowserClickTool(Tool):
         "additionalProperties": False,
     }
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             selector_in = (args.get("selector") or "").strip()
             if not selector_in:
@@ -724,7 +728,7 @@ class BrowserTypeTool(Tool):
     name = "browser.type"
     category = "browser"
     description = "Type text into an input (CSS/XPath) or by human label (e.g., 'Email')."
-    parameters: Dict[str, Any] = {
+    parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
             "selector": {"type": "string", "description": "CSS/XPath selector (or human label as fallback)."},
@@ -736,7 +740,7 @@ class BrowserTypeTool(Tool):
         "additionalProperties": False,
     }
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             selector_in = (args.get("selector") or "").strip()
             if not selector_in:
@@ -793,7 +797,7 @@ class BrowserScreenshotTool(Tool):
     name = "browser.screenshot"
     category = "browser"
     description = "Take a screenshot of the current page."
-    parameters: Dict[str, Any] = {
+    parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
             "path": {"type": "string", "description": "Optional output path (defaults to temp file)."},
@@ -803,7 +807,7 @@ class BrowserScreenshotTool(Tool):
         "additionalProperties": False,
     }
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             session_name = _get_session_name(args)
             out_path = _resolve_screenshot_path((args.get("path") or "").strip() or None)
@@ -841,7 +845,7 @@ class BrowserExtractTool(Tool):
     name = "browser.extract"
     category = "browser"
     description = "Extract strings from page elements (CSS selector)."
-    parameters: Dict[str, Any] = {
+    parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
             "selector": {"type": "string", "description": "CSS selector for elements to extract."},
@@ -852,7 +856,7 @@ class BrowserExtractTool(Tool):
         "additionalProperties": False,
     }
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             selector = (args.get("selector") or "").strip()
             if not selector:
@@ -878,7 +882,7 @@ class BrowserExtractTool(Tool):
                 except Exception as e:
                     return ToolResult(ok=False, data=None, error=_fmt_action_error("Extract", e, selector))
 
-                items: List[str] = []
+                items: list[str] = []
                 try:
                     for i in range(n):
                         el = loc.nth(i)
@@ -910,14 +914,14 @@ class BrowserCloseTool(Tool):
     name = "browser.close"
     category = "browser"
     description = "Close the shared Chromium browser and cleanup the Playwright instance."
-    parameters: Dict[str, Any] = {
+    parameters: dict[str, Any] = {
         "type": "object",
         "properties": {},
         "required": [],
         "additionalProperties": False,
     }
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             async with _init_lock:
                 # Also ensure we don't deadlock by acquiring session locks one-by-one.
@@ -937,7 +941,7 @@ class BrowserCloseTool(Tool):
 
 
 # Export for registries that auto-discover tools in a module
-TOOLS: List[Tool] = [
+TOOLS: list[Tool] = [
     BrowserOpenTool(),
     BrowserClickTool(),
     BrowserTypeTool(),

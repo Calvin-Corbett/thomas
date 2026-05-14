@@ -41,8 +41,8 @@ class Triple:
 @dataclass
 class GraphContext:
     """Packed graph context for injection into LLM prompt."""
-    entities: List[Dict[str, Any]] = field(default_factory=list)
-    relations: List[Dict[str, Any]] = field(default_factory=list)
+    entities: list[dict[str, Any]] = field(default_factory=list)
+    relations: list[dict[str, Any]] = field(default_factory=list)
     summary: str = ""
 
 
@@ -51,7 +51,7 @@ class GraphContext:
 # ---------------------------------------------------------------------------
 
 # Patterns for extracting entities from conversation text
-_ENTITY_PATTERNS: Dict[str, List[re.Pattern]] = {
+_ENTITY_PATTERNS: dict[str, list[re.Pattern]] = {
     "Project": [
         re.compile(r"(?:project|repo|repository|codebase)\s+['\"]?(\w[\w\-/.]+)['\"]?", re.I),
         re.compile(r"(?:working on|building|developing)\s+['\"]?(\w[\w\-/.]+)['\"]?", re.I),
@@ -71,7 +71,7 @@ _ENTITY_PATTERNS: Dict[str, List[re.Pattern]] = {
 }
 
 # Relation patterns: (subject_type, relation, object_type, pattern)
-_RELATION_PATTERNS: List[Tuple[str, str, str, re.Pattern]] = [
+_RELATION_PATTERNS: list[tuple[str, str, str, re.Pattern]] = [
     ("Project", "uses", "Concept",
      re.compile(r"(?:project|repo)\s+(\w+)\s+(?:uses?|with)\s+(\w[\w\s]*\w)", re.I)),
     ("User", "prefers", "Concept",
@@ -81,14 +81,14 @@ _RELATION_PATTERNS: List[Tuple[str, str, str, re.Pattern]] = [
 ]
 
 
-def extract_entities(text: str) -> List[Entity]:
+def extract_entities(text: str) -> list[Entity]:
     """Extract entities from text using regex patterns.
 
     This is a fast, dependency-free extraction. For better quality,
     use LLM-based extraction via GraphStore.extract_with_llm().
     """
-    seen: Set[Tuple[str, str]] = set()
-    entities: List[Entity] = []
+    seen: set[tuple[str, str]] = set()
+    entities: list[Entity] = []
 
     for type_name, patterns in _ENTITY_PATTERNS.items():
         for pat in patterns:
@@ -105,9 +105,9 @@ def extract_entities(text: str) -> List[Entity]:
     return entities
 
 
-def extract_triples(text: str) -> List[Triple]:
+def extract_triples(text: str) -> list[Triple]:
     """Extract relationship triples from text using regex patterns."""
-    triples: List[Triple] = []
+    triples: list[Triple] = []
 
     for subj_type, rel, obj_type, pat in _RELATION_PATTERNS:
         for match in pat.finditer(text):
@@ -153,8 +153,8 @@ class GraphStore:
         self._db = derived
 
     def ingest_text(
-        self, text: str, event_ids: Optional[List[int]] = None
-    ) -> Tuple[int, int]:
+        self, text: str, event_ids: list[int] | None = None
+    ) -> tuple[int, int]:
         """Extract and store entities + relations from text.
 
         Returns (entities_added, relations_added).
@@ -167,7 +167,7 @@ class GraphStore:
         r_count = 0
 
         # Upsert entities
-        node_ids: Dict[Tuple[str, str], int] = {}
+        node_ids: dict[tuple[str, str], int] = {}
         for ent in entities:
             nid = self._db.node_upsert(ent.type_name, ent.key, ent.label)
             node_ids[(ent.type_name, ent.key)] = nid
@@ -216,8 +216,8 @@ class GraphStore:
 
         # Search for nodes matching query terms
         terms = query.lower().split()
-        seen_nodes: Set[int] = set()
-        seed_nodes: List[Dict[str, Any]] = []
+        seen_nodes: set[int] = set()
+        seed_nodes: list[dict[str, Any]] = []
 
         for term in terms:
             if len(term) < 3:
@@ -234,9 +234,9 @@ class GraphStore:
 
         # Traverse edges from seed nodes
         for hop in range(max_hops):
-            next_seeds: List[Dict[str, Any]] = []
+            next_seeds: list[dict[str, Any]] = []
             # Collect all edges from current seeds
-            all_edges: List[Dict[str, Any]] = []
+            all_edges: list[dict[str, Any]] = []
             for node in seed_nodes:
                 edges = self._db.edges_from(node["node_id"], limit=20)
                 all_edges.extend(edges)
@@ -265,7 +265,7 @@ class GraphStore:
 
         # Build summary
         if ctx.entities or ctx.relations:
-            parts: List[str] = []
+            parts: list[str] = []
             if ctx.entities:
                 ent_strs = [f"{e['type']}:{e['label']}" for e in ctx.entities[:8]]
                 parts.append(f"Entities: {', '.join(ent_strs)}")

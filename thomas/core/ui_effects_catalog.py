@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-EFFECTS_CATALOG: List[Dict[str, Any]] = [
+EFFECTS_CATALOG: list[dict[str, Any]] = [
     {
         "id": "view-transitions-native",
         "name": "Native View Transitions",

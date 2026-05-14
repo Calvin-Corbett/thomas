@@ -25,7 +25,6 @@ from thomas.server.routes.gateway.p131_gateway_discover_command import (
     get_discover_schema,
 )
 
-
 COMMAND_NAME = "discover"
 
 
@@ -96,7 +95,7 @@ def run_from_args(args: argparse.Namespace) -> int:
         _emit_error(e, json_mode=bool(getattr(args, "json", False)))
         return 2
 
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "ok": True,
         "result": {
             "service_type": result.service_type,
@@ -148,7 +147,7 @@ def _emit_error(err: GatewayDiscoverError, *, json_mode: bool) -> None:
         print(f"details: {json.dumps(err.details, sort_keys=True)}", file=sys.stderr)
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     """Standalone entrypoint for manual testing."""
 
     parser = argparse.ArgumentParser(prog="thomas gateway discover")

@@ -13,13 +13,12 @@ import sys
 from typing import Sequence
 
 from thomas.nodes.p046_nodes_pending_approvals import (
+    ERROR_CONFIG_MISSING,
+    ERROR_INVALID_INPUT,
     NodesPendingApprovalsError,
     NodesPendingApprovalsInput,
     nodes_pending_approvals,
-    ERROR_CONFIG_MISSING,
-    ERROR_INVALID_INPUT,
 )
-
 
 COMMAND_GROUP = "nodes"
 COMMAND_NAME = "pending-approvals"

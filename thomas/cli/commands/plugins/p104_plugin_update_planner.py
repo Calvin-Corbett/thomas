@@ -31,7 +31,7 @@ def _write_json(data: Any) -> str:
     return json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
-def _render_human(result: Dict[str, Any]) -> str:
+def _render_human(result: dict[str, Any]) -> str:
     summary = result.get("summary", {})
     lines = [
         "Plugin update plan",
@@ -62,13 +62,13 @@ def _render_human(result: Dict[str, Any]) -> str:
 
 def _run(
     installed: Path,
-    catalog_path: Optional[Path],
-    catalog_url: Optional[str],
+    catalog_path: Path | None,
+    catalog_url: str | None,
     json_out: bool,
     include_prereleases: bool,
     timeout_s: float,
 ) -> int:
-    req: Dict[str, Any] = {
+    req: dict[str, Any] = {
         "installed": _read_json_file(installed),
         "include_prereleases": include_prereleases,
         "timeout_s": timeout_s,
@@ -122,8 +122,8 @@ def _make_command(name: str) -> click.Command:
     @click.option("--json", "json_out", is_flag=True, help="Emit machine-readable JSON.")
     def cmd(
         installed_path: Path,
-        catalog_path: Optional[Path],
-        catalog_url: Optional[str],
+        catalog_path: Path | None,
+        catalog_url: str | None,
         include_prereleases: bool,
         timeout_s: float,
         json_out: bool,

@@ -39,13 +39,13 @@ class ChatMessage(TypedDict, total=False):
 class BeforeModelError(RuntimeError):
     """Deterministic error raised by the before-model hook."""
 
-    def __init__(self, *, code: str, message: str, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, *, code: str, message: str, details: Mapping[str, Any] | None = None):
         super().__init__(message)
         self.code = code
         self.message = message
         self.details = dict(details or {})
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ok": False,
             "error": {
@@ -70,12 +70,12 @@ class BeforeModelHookConfig:
             Guardrail to avoid accidental mega-prompts.
     """
 
-    inject_system: Optional[str] = None
+    inject_system: str | None = None
     simulate_external_failure: bool = False
     max_inject_chars: int = 4096
 
     @staticmethod
-    def from_mapping(raw: Optional[Mapping[str, Any]]) -> "BeforeModelHookConfig":
+    def from_mapping(raw: Mapping[str, Any] | None) -> BeforeModelHookConfig:
         if raw is None:
             return BeforeModelHookConfig()
 
@@ -104,7 +104,7 @@ class BeforeModelHookConfig:
             )
 
         return BeforeModelHookConfig(
-            inject_system=cast(Optional[str], inject_system),
+            inject_system=cast(str | None, inject_system),
             simulate_external_failure=simulate_external_failure,
             max_inject_chars=max_inject_chars,
         )
@@ -114,12 +114,12 @@ class BeforeModelHookConfig:
 class BeforeModelHookInput:
     """Input contract for the before-model hook."""
 
-    messages: List[ChatMessage]
-    model: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    messages: list[ChatMessage]
+    model: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @staticmethod
-    def from_mapping(raw: Mapping[str, Any]) -> "BeforeModelHookInput":
+    def from_mapping(raw: Mapping[str, Any]) -> BeforeModelHookInput:
         if not isinstance(raw, Mapping):
             raise BeforeModelError(
                 code="INVALID_INPUT",
@@ -135,7 +135,7 @@ class BeforeModelHookInput:
                 details={"field": "messages", "type": type(messages).__name__},
             )
 
-        validated: List[ChatMessage] = []
+        validated: list[ChatMessage] = []
         for idx, msg in enumerate(messages):
             if not isinstance(msg, Mapping):
                 raise BeforeModelError(
@@ -183,7 +183,7 @@ class BeforeModelHookInput:
 
         return BeforeModelHookInput(
             messages=validated,
-            model=cast(Optional[str], model),
+            model=cast(str | None, model),
             metadata=dict(metadata),
         )
 
@@ -192,12 +192,12 @@ class BeforeModelHookInput:
 class BeforeModelHookOutput:
     """Output contract for the before-model hook."""
 
-    messages: List[ChatMessage]
-    model: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    messages: list[ChatMessage]
+    model: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
     applied: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ok": True,
             "result": {
@@ -232,7 +232,7 @@ def apply_before_model_hook(
     parsed_config = (
         config
         if isinstance(config, BeforeModelHookConfig)
-        else BeforeModelHookConfig.from_mapping(cast(Optional[Mapping[str, Any]], config))
+        else BeforeModelHookConfig.from_mapping(cast(Mapping[str, Any] | None, config))
     )
 
     if parsed_config.simulate_external_failure:
@@ -253,7 +253,7 @@ def apply_before_model_hook(
             details={"max_inject_chars": parsed_config.max_inject_chars, "length": len(inject_text)},
         )
 
-    new_messages: List[ChatMessage] = [
+    new_messages: list[ChatMessage] = [
         ChatMessage(role="system", content=inject_text),
         *parsed_input.messages,
     ]
@@ -277,14 +277,14 @@ def apply_before_model_hook(
     )
 
 
-def hook_json_schema() -> Dict[str, Any]:
+def hook_json_schema() -> dict[str, Any]:
     """Return a JSON-schema-like contract for request/config/result.
 
     This is intentionally conservative: it documents the shape used by this
     plugin without implying any broader Thomas schemas.
     """
 
-    message_schema: Dict[str, Any] = {
+    message_schema: dict[str, Any] = {
         "type": "object",
         "required": ["role", "content"],
         "properties": {
@@ -294,7 +294,7 @@ def hook_json_schema() -> Dict[str, Any]:
         "additionalProperties": True,
     }
 
-    request_schema: Dict[str, Any] = {
+    request_schema: dict[str, Any] = {
         "type": "object",
         "required": ["messages"],
         "properties": {
@@ -305,7 +305,7 @@ def hook_json_schema() -> Dict[str, Any]:
         "additionalProperties": True,
     }
 
-    config_schema: Dict[str, Any] = {
+    config_schema: dict[str, Any] = {
         "type": "object",
         "properties": {
             "inject_system": {"type": "string"},
@@ -315,7 +315,7 @@ def hook_json_schema() -> Dict[str, Any]:
         "additionalProperties": True,
     }
 
-    result_schema: Dict[str, Any] = {
+    result_schema: dict[str, Any] = {
         "type": "object",
         "required": ["ok"],
         "properties": {
@@ -371,7 +371,7 @@ class BeforeModelHookPlugin:
 
     plugin_id: str = "p109-before-model"
 
-    def before_model(self, request: Mapping[str, Any], *, config: Optional[Mapping[str, Any]] = None, **_: Any) -> Any:
+    def before_model(self, request: Mapping[str, Any], *, config: Mapping[str, Any] | None = None, **_: Any) -> Any:
         out = apply_before_model_hook(request, config=config)
         out_request = dict(request)
         out_request["messages"] = out.messages
@@ -394,7 +394,7 @@ PLUGIN = get_plugin()
 plugin = PLUGIN
 
 
-def run_json(hook_input_json: str, *, config_json: Optional[str] = None) -> str:
+def run_json(hook_input_json: str, *, config_json: str | None = None) -> str:
     """Automation helper: JSON in, JSON out."""
 
     try:
@@ -405,7 +405,7 @@ def run_json(hook_input_json: str, *, config_json: Optional[str] = None) -> str:
             sort_keys=True,
         )
 
-    cfg: Optional[Mapping[str, Any]] = None
+    cfg: Mapping[str, Any] | None = None
     if config_json is not None:
         try:
             cfg = cast(Mapping[str, Any], json.loads(config_json))

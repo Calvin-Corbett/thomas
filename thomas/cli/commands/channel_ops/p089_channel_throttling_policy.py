@@ -48,43 +48,43 @@ def _emit(payload: dict[str, Any], json_out: bool) -> None:
 
 
 def throttling_policy(
-    channel: Optional[str] = typer.Option(
+    channel: str | None = typer.Option(
         None,
         "--channel",
         "-c",
         help="Channel/integration name (example: telegram).",
     ),
-    bucket_key: Optional[str] = typer.Option(
+    bucket_key: str | None = typer.Option(
         None,
         "--bucket-key",
         help="Throttle bucket key. Defaults to the channel name.",
     ),
     cost: float = typer.Option(1.0, "--cost", help="Token cost for this event (default: 1)."),
-    burst: Optional[int] = typer.Option(None, "--burst", help="Maximum burst capacity (tokens)."),
-    rate_per_second: Optional[float] = typer.Option(
+    burst: int | None = typer.Option(None, "--burst", help="Maximum burst capacity (tokens)."),
+    rate_per_second: float | None = typer.Option(
         None,
         "--rate-per-second",
         help="Refill rate in tokens per second.",
     ),
-    rate_per_minute: Optional[float] = typer.Option(
+    rate_per_minute: float | None = typer.Option(
         None,
         "--rate-per-minute",
         help="Refill rate in tokens per minute.",
     ),
-    config_file: Optional[Path] = typer.Option(
+    config_file: Path | None = typer.Option(
         None,
         "--config",
         dir_okay=False,
         help="Path to a JSON throttle policy config file.",
     ),
-    state_file: Optional[Path] = typer.Option(
+    state_file: Path | None = typer.Option(
         None,
         "--state-file",
         dir_okay=False,
         help="Path to a JSON file used to persist throttle state.",
     ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Do not persist state."),
-    now: Optional[float] = typer.Option(None, "--now", help="Epoch timestamp override (tests/automation)."),
+    now: float | None = typer.Option(None, "--now", help="Epoch timestamp override (tests/automation)."),
     json_out: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
 ) -> None:
     """Evaluate whether an event is allowed under a token-bucket policy."""

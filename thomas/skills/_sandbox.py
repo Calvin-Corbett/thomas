@@ -252,8 +252,8 @@ def promote_skill_draft(config: Any, *, draft_id: str, target: str, cwd: Path | 
     if not str(payload.get('reviewed_at') or '').strip():
         raise ValueError('Draft must be reviewed before promotion.')
 
-    generated_dir = Path(str(((payload.get('generated') or {}).get('path') or ''))).expanduser().resolve()
-    source_path = Path(str(((payload.get('source') or {}).get('path') or ''))).expanduser().resolve()
+    generated_dir = Path(str((payload.get('generated') or {}).get('path') or '')).expanduser().resolve()
+    source_path = Path(str((payload.get('source') or {}).get('path') or '')).expanduser().resolve()
     validation = validate_recreated_skill_bundle(generated_dir, [source_path])
     payload['similarity'] = validation
     if not validation['ok']:

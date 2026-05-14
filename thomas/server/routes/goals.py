@@ -20,8 +20,8 @@ ReadJsonFn = Callable[[web.Request], Awaitable[Any]]
 Priority = Literal["low", "medium", "high"]
 Status = Literal["open", "in_progress", "done"]
 
-PRIORITY_ORDER: Dict[str, int] = {"high": 0, "medium": 1, "low": 2}
-STATUS_ALIASES: Dict[str, Status] = {
+PRIORITY_ORDER: dict[str, int] = {"high": 0, "medium": 1, "low": 2}
+STATUS_ALIASES: dict[str, Status] = {
     "open": "open",
     "todo": "open",
     "new": "open",
@@ -85,7 +85,7 @@ def _parse_ts_seconds(v: Any) -> float:
         return 0.0
 
 
-def _parse_iso(v: Any) -> Optional[datetime]:
+def _parse_iso(v: Any) -> datetime | None:
     if v is None:
         return None
     if isinstance(v, (int, float)):
@@ -107,7 +107,7 @@ def _parse_iso(v: Any) -> Optional[datetime]:
         return None
 
 
-def _parse_rank(v: Any) -> Optional[float]:
+def _parse_rank(v: Any) -> float | None:
     if v is None:
         return None
     if isinstance(v, (int, float)):
@@ -127,7 +127,7 @@ def _parse_rank(v: Any) -> Optional[float]:
         return None
 
 
-def _coerce_tags(v: Any) -> List[str]:
+def _coerce_tags(v: Any) -> list[str]:
     if v is None:
         return []
     if isinstance(v, list):
@@ -137,7 +137,7 @@ def _coerce_tags(v: Any) -> List[str]:
             if s:
                 out.append(s[:64])
         seen: set[str] = set()
-        dedup: List[str] = []
+        dedup: list[str] = []
         for t in out:
             k = t.lower()
             if k in seen:
@@ -155,7 +155,7 @@ def _coerce_tags(v: Any) -> List[str]:
         if pp:
             out.append(pp[:64])
     seen2: set[str] = set()
-    dedup2: List[str] = []
+    dedup2: list[str] = []
     for t in out:
         k = t.lower()
         if k in seen2:
@@ -165,7 +165,7 @@ def _coerce_tags(v: Any) -> List[str]:
     return dedup2[:16]
 
 
-def _normalize_goal(g: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_goal(g: dict[str, Any]) -> dict[str, Any]:
     gg = dict(g)
 
     gid = gg.get("id")
@@ -221,7 +221,7 @@ def _normalize_goal(g: Dict[str, Any]) -> Dict[str, Any]:
     return gg
 
 
-def _find_goal(pe: Any, goal_id: str) -> Optional[Dict[str, Any]]:
+def _find_goal(pe: Any, goal_id: str) -> dict[str, Any] | None:
     goals = getattr(pe, "goals", []) or []
     for g in goals:
         if str(g.get("id")) == str(goal_id):
@@ -242,7 +242,7 @@ def _commit(pe: Any) -> None:
             return
 
 
-def _top_rank_for_status(goals: List[Dict[str, Any]], status: str) -> float:
+def _top_rank_for_status(goals: list[dict[str, Any]], status: str) -> float:
     ranks = []
     for g in goals:
         if str(g.get("status")) != status:
@@ -255,13 +255,13 @@ def _top_rank_for_status(goals: List[Dict[str, Any]], status: str) -> float:
     return min(ranks) - 1.0
 
 
-def _group_and_sort(goals: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
-    grouped: Dict[str, List[Dict[str, Any]]] = {"open": [], "in_progress": [], "done": []}
+def _group_and_sort(goals: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {"open": [], "in_progress": [], "done": []}
     for g in goals:
         ng = _normalize_goal(g)
         grouped[ng["status"]].append(ng)
 
-    def sort_key(g: Dict[str, Any]) -> Tuple[int, float, int, int, float]:
+    def sort_key(g: dict[str, Any]) -> tuple[int, float, int, int, float]:
         r = _parse_rank(g.get("rank"))
         has_rank = 0 if r is not None else 1
         rank_val = r if r is not None else 0.0
@@ -283,7 +283,7 @@ def _etag_for_payload(payload: Any) -> str:
     return sha256(blob).hexdigest()
 
 
-def _resolve_initiative_enqueue() -> Tuple[Any, str]:
+def _resolve_initiative_enqueue() -> tuple[Any, str]:
     module_candidates = (
         "thomas.core.initiative",
         "thomas.core.initiative_engine",
@@ -293,7 +293,7 @@ def _resolve_initiative_enqueue() -> Tuple[Any, str]:
     getter_candidates = ("get_initiative_engine", "get_engine", "get_initiative", "engine")
     enqueue_candidates = ("queue_goal", "enqueue_goal", "submit_goal", "run_goal", "queue")
 
-    errors: List[str] = []
+    errors: list[str] = []
 
     for mod_name in module_candidates:
         try:
@@ -333,7 +333,7 @@ def _resolve_initiative_enqueue() -> Tuple[Any, str]:
     )
 
 
-def _call_enqueue(enqueue_fn: Any, goal: Dict[str, Any]) -> None:
+def _call_enqueue(enqueue_fn: Any, goal: dict[str, Any]) -> None:
     try:
         try:
             enqueue_fn(goal)
@@ -346,7 +346,7 @@ def _call_enqueue(enqueue_fn: Any, goal: Dict[str, Any]) -> None:
 # ── validation helpers (replace Pydantic models) ──
 
 
-def _validate_goal_create(data: Dict[str, Any]) -> Dict[str, Any]:
+def _validate_goal_create(data: dict[str, Any]) -> dict[str, Any]:
     text = str(data.get("text") or "").strip()
     if not text:
         raise web.HTTPBadRequest(text="text is required")
@@ -369,8 +369,8 @@ def _validate_goal_create(data: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _validate_goal_patch(data: Dict[str, Any]) -> Dict[str, Any]:
-    patch: Dict[str, Any] = {}
+def _validate_goal_patch(data: dict[str, Any]) -> dict[str, Any]:
+    patch: dict[str, Any] = {}
 
     if "status" in data and data["status"] is not None:
         patch["status"] = str(data["status"])
@@ -457,7 +457,7 @@ def register_goals_routes(
         done_n = sum(1 for g in goals if g.get("status") == "done" and not g.get("archived"))
 
         done_today = 0
-        lead_hours: List[float] = []
+        lead_hours: list[float] = []
         for g in goals:
             if g.get("status") != "done":
                 continue

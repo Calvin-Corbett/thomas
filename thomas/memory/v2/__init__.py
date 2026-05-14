@@ -1,6 +1,6 @@
 """Memory Fabric v2 public exports."""
 
-from .fabric import MemoryFabricV2, MemoryFabricCompat
+from .fabric import MemoryFabricCompat, MemoryFabricV2
 
 __all__ = ["MemoryFabricV2", "MemoryFabricCompat"]
 

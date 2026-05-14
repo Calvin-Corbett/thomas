@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-PROFILE: Dict[str, Any] = {
+PROFILE: dict[str, Any] = {
   "profile_id": "wf_profile_034",
   "category": "release_validation",
   "title": "Release_Validation workflow profile 034",
@@ -18,5 +18,5 @@ PROFILE: Dict[str, Any] = {
   "timeout_ms": 19658
 }
 
-def get_profile() -> Dict[str, Any]:
+def get_profile() -> dict[str, Any]:
     return dict(PROFILE)

@@ -8,26 +8,25 @@ from typing import Any, Dict, List, Tuple
 
 from thomas.browser.workflows import get_workflow_profile, list_workflow_profiles
 
-
 WORKFLOW_CORPUS_ROOT = Path(__file__).resolve().parent / "workflow_corpus"
 
 
-def list_profiles() -> List[Dict[str, Any]]:
+def list_profiles() -> list[dict[str, Any]]:
     return list_workflow_profiles()
 
 
-def load_profile(profile_id: str) -> Dict[str, Any] | None:
+def load_profile(profile_id: str) -> dict[str, Any] | None:
     return get_workflow_profile(profile_id)
 
 
-def list_case_files(limit: int | None = None) -> List[Path]:
+def list_case_files(limit: int | None = None) -> list[Path]:
     files = sorted(WORKFLOW_CORPUS_ROOT.glob("case_*.json"))
     if limit is not None and limit >= 0:
         return files[: int(limit)]
     return files
 
 
-def load_case(case_id: str) -> Dict[str, Any]:
+def load_case(case_id: str) -> dict[str, Any]:
     needle = str(case_id or "").strip()
     if not needle:
         raise ValueError("case_id is required")
@@ -50,8 +49,8 @@ def load_case(case_id: str) -> Dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def validate_case_payload(payload: Dict[str, Any]) -> Tuple[bool, List[str]]:
-    errors: List[str] = []
+def validate_case_payload(payload: dict[str, Any]) -> tuple[bool, list[str]]:
+    errors: list[str] = []
     if not isinstance(payload, dict):
         return False, ["payload must be an object"]
 
@@ -85,16 +84,16 @@ def validate_case_payload(payload: Dict[str, Any]) -> Tuple[bool, List[str]]:
     return len(errors) == 0, errors
 
 
-def validate_case_file(path: Path) -> Tuple[bool, List[str]]:
+def validate_case_file(path: Path) -> tuple[bool, list[str]]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     return validate_case_payload(payload)
 
 
-def validate_corpus(limit: int | None = None) -> Dict[str, Any]:
+def validate_corpus(limit: int | None = None) -> dict[str, Any]:
     files = list_case_files(limit=limit)
     valid = 0
     invalid = 0
-    issues: List[Dict[str, Any]] = []
+    issues: list[dict[str, Any]] = []
     for path in files:
         ok, errors = validate_case_file(path)
         if ok:

@@ -25,7 +25,6 @@ import inspect
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Optional
 
-
 # ---------------------------------------------------------------------------
 # Deterministic errors
 # ---------------------------------------------------------------------------
@@ -43,8 +42,8 @@ class BrowserActionError(RuntimeError):
         code: str,
         message: str,
         *,
-        details: Optional[Mapping[str, Any]] = None,
-        cause: Optional[BaseException] = None,
+        details: Mapping[str, Any] | None = None,
+        cause: BaseException | None = None,
     ) -> None:
         super().__init__(message)
         self.code = str(code)
@@ -72,7 +71,7 @@ class ViewportScrollRequest:
     delta_y: int = 0
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "ViewportScrollRequest":
+    def from_dict(cls, data: Mapping[str, Any]) -> ViewportScrollRequest:
         if not isinstance(data, Mapping):
             raise BrowserActionError(
                 "INVALID_INPUT",
@@ -113,10 +112,10 @@ class ScrollIntoViewRequest:
     """Request to scroll an element matching `selector` into view."""
 
     selector: str
-    timeout_ms: Optional[int] = None
+    timeout_ms: int | None = None
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "ScrollIntoViewRequest":
+    def from_dict(cls, data: Mapping[str, Any]) -> ScrollIntoViewRequest:
         if not isinstance(data, Mapping):
             raise BrowserActionError(
                 "INVALID_INPUT",
@@ -184,7 +183,7 @@ def _looks_like_timeout(exc: BaseException) -> bool:
     return False
 
 
-def _normalize_for_queryselector(selector: str) -> Optional[str]:
+def _normalize_for_queryselector(selector: str) -> str | None:
     """Return a CSS selector usable by document.querySelector, or None.
 
     Playwright-style selectors like `text=...` are *not* CSS selectors.
@@ -219,7 +218,7 @@ def _normalize_for_queryselector(selector: str) -> Optional[str]:
     return s
 
 
-def _get_callable(obj: Any, *names: str) -> Optional[Callable[..., Any]]:
+def _get_callable(obj: Any, *names: str) -> Callable[..., Any] | None:
     for name in names:
         fn = getattr(obj, name, None)
         if callable(fn):

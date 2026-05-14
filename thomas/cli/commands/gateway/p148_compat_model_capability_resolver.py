@@ -11,7 +11,7 @@ class P148CompatModelCapabilityResolverArgs:
     json_output: bool = False
 
 
-def resolve_locally(model: str) -> Dict[str, Any]:
+def resolve_locally(model: str) -> dict[str, Any]:
     """Local resolver path used by tests and CLI offline mode."""
 
     from thomas.server.routes.gateway.p148_compat_model_capability_resolver import (

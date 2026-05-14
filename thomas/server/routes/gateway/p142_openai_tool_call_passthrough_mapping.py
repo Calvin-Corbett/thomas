@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, TypedD
 from aiohttp import web
 
 JSONPrimitive = Union[None, bool, int, float, str]
-JSONValue = Union[JSONPrimitive, List["JSONValue"], Dict[str, "JSONValue"]]
+JSONValue = Union[JSONPrimitive, list["JSONValue"], dict[str, "JSONValue"]]
 
 
 class OpenAIToolFunction(TypedDict, total=False):
@@ -27,7 +27,7 @@ class OpenAIToolCall(TypedDict, total=False):
 class OpenAIChatMessage(TypedDict, total=False):
     role: str
     content: Any
-    tool_calls: List[OpenAIToolCall]
+    tool_calls: list[OpenAIToolCall]
     tool_call_id: str
     name: str
 
@@ -40,8 +40,8 @@ class ToolCallIdPassthroughMapStats(TypedDict):
 
 
 class ToolCallIdPassthroughMapResponse(TypedDict):
-    messages: List[OpenAIChatMessage]
-    tool_call_id_map: Dict[str, str]
+    messages: list[OpenAIChatMessage]
+    tool_call_id_map: dict[str, str]
     changed: bool
     stats: ToolCallIdPassthroughMapStats
 
@@ -49,13 +49,13 @@ class ToolCallIdPassthroughMapResponse(TypedDict):
 class ErrorResponse(TypedDict):
     code: str
     message: str
-    details: Dict[str, JSONValue]
+    details: dict[str, JSONValue]
 
 
 @dataclass(frozen=True)
 class ToolCallIdMapResult:
-    messages: List[OpenAIChatMessage]
-    tool_call_id_map: Dict[str, str]
+    messages: list[OpenAIChatMessage]
+    tool_call_id_map: dict[str, str]
     changed: bool
     stats: ToolCallIdPassthroughMapStats
 
@@ -73,7 +73,7 @@ class ToolCallIdMapError(Exception):
 
     code: str
     http_status: int
-    details: Dict[str, JSONValue]
+    details: dict[str, JSONValue]
 
     def __init__(
         self,
@@ -81,7 +81,7 @@ class ToolCallIdMapError(Exception):
         code: str,
         message: str,
         http_status: int = 400,
-        details: Optional[Dict[str, JSONValue]] = None,
+        details: dict[str, JSONValue] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -143,10 +143,10 @@ def build_openai_tool_call_passthrough_mapping(
             details={"supported": ["strict"]},
         )
 
-    copied: List[OpenAIChatMessage] = cast(List[OpenAIChatMessage], copy.deepcopy(list(messages)))
+    copied: list[OpenAIChatMessage] = cast(list[OpenAIChatMessage], copy.deepcopy(list(messages)))
 
-    id_map: Dict[str, str] = {}
-    used_ids: Dict[str, str] = {}  # mapped_id -> canonical_source_id
+    id_map: dict[str, str] = {}
+    used_ids: dict[str, str] = {}  # mapped_id -> canonical_source_id
 
     total_tool_calls = 0
     remapped_tool_calls = 0
@@ -263,7 +263,7 @@ def build_openai_tool_call_passthrough_mapping(
     return ToolCallIdMapResult(messages=copied, tool_call_id_map=id_map, changed=changed, stats=stats)
 
 
-def get_json_schema() -> Dict[str, Any]:
+def get_json_schema() -> dict[str, Any]:
     """Minimal schema for automation tooling (validates only what this module cares about)."""
     return {
         "request": {

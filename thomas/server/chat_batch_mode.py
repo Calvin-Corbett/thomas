@@ -11,7 +11,6 @@ from typing import Any
 
 from aiohttp import web
 
-from thomas.models.capabilities import supports
 from thomas.models.batching import (
     OpenAICompatBatchClient,
     build_completion_request,
@@ -20,6 +19,7 @@ from thomas.models.batching import (
     extract_result_text,
     parse_batch_state,
 )
+from thomas.models.capabilities import supports
 
 
 async def maybe_execute_batch_chat(

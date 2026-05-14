@@ -31,7 +31,7 @@ class RagSearchTool:
         "extension": {"type": "string", "required": False, "description": "Optional extension filter like .py"},
     }
 
-    def execute(self, args: Dict[str, Any]) -> str:
+    def execute(self, args: dict[str, Any]) -> str:
         args = args or {}
         query = str(args.get("query", "")).strip()
         if not query:

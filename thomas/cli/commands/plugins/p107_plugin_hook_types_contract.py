@@ -55,12 +55,12 @@ def _echo_json(payload: dict) -> None:
 
 @app.callback(invoke_without_command=True)
 def main(
-    plugin_base: Optional[str] = typer.Option(
+    plugin_base: str | None = typer.Option(
         None,
         "--plugin-base",
         help="Dotted path to the plugin base class to introspect. Defaults to Thomas' built-in plugin base.",
     ),
-    config: Optional[Path] = typer.Option(
+    config: Path | None = typer.Option(
         None,
         "--config",
         exists=False,

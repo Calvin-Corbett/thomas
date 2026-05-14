@@ -34,7 +34,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
-
 PROMPT_ID = "p101"
 TOOL_ID = "plugins.enablement_store"
 
@@ -47,13 +46,13 @@ _PLUGIN_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@/+-]{0,255}$")
 class PluginEnablementStoreError(RuntimeError):
     """Deterministic, machine-friendly failures for the enablement store."""
 
-    def __init__(self, code: str, message: str, *, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, code: str, message: str, *, details: dict[str, Any] | None = None):
         super().__init__(message)
         self.code = code
         self.message = message
-        self.details: Dict[str, Any] = details or {}
+        self.details: dict[str, Any] = details or {}
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"code": self.code, "message": self.message, "details": dict(self.details)}
 
 
@@ -68,7 +67,7 @@ class PluginEnablementChange:
     store_path: str
     updated_at: float
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "plugin": self.plugin,
             "enabled": self.enabled,
@@ -79,7 +78,7 @@ class PluginEnablementChange:
         }
 
 
-def resolve_enablement_store_path(explicit_path: Optional[Path]) -> Path:
+def resolve_enablement_store_path(explicit_path: Path | None) -> Path:
     """Resolve enablement store path.
 
     Order:
@@ -136,7 +135,7 @@ def _validate_plugin_key(plugin: Any) -> str:
     return plugin
 
 
-def _default_state() -> Dict[str, Any]:
+def _default_state() -> dict[str, Any]:
     return {"schema_version": STATE_SCHEMA_VERSION, "updated_at": None, "plugins": {}}
 
 
@@ -199,13 +198,13 @@ class PluginEnablementStore:
             self._write_state(state)
         return existed
 
-    def list_enabled_states(self) -> Dict[str, bool]:
+    def list_enabled_states(self) -> dict[str, bool]:
         """Return stored states only (does not enumerate all installed plugins)."""
 
         state = self._load_state()
         return {k: bool(v["enabled"]) for k, v in state["plugins"].items()}
 
-    def _load_state(self) -> Dict[str, Any]:
+    def _load_state(self) -> dict[str, Any]:
         if self.path.exists() and self.path.is_dir():
             raise PluginEnablementStoreError(
                 code="STATE_STORE_PATH_INVALID",
@@ -240,7 +239,7 @@ class PluginEnablementStore:
 
         return self._validate_state(data)
 
-    def _validate_state(self, data: Any) -> Dict[str, Any]:
+    def _validate_state(self, data: Any) -> dict[str, Any]:
         if not isinstance(data, dict):
             raise PluginEnablementStoreError(
                 code="STATE_STORE_CORRUPT",
@@ -271,7 +270,7 @@ class PluginEnablementStore:
                 details={"path": str(self.path)},
             )
 
-        normalized: Dict[str, Dict[str, Any]] = {}
+        normalized: dict[str, dict[str, Any]] = {}
         for key, entry in plugins_raw.items():
             if not isinstance(key, str) or not isinstance(entry, dict) or "enabled" not in entry:
                 raise PluginEnablementStoreError(
@@ -309,7 +308,7 @@ class PluginEnablementStore:
             "plugins": normalized,
         }
 
-    def _write_state(self, state: Dict[str, Any]) -> None:
+    def _write_state(self, state: dict[str, Any]) -> None:
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
         except OSError as e:
@@ -341,21 +340,21 @@ class PluginEnablementStore:
 # ---- Convenience functions for callers that don't want to manage a store object ----
 
 
-def is_plugin_enabled(plugin: Any, *, store_path: Optional[Path] = None) -> bool:
+def is_plugin_enabled(plugin: Any, *, store_path: Path | None = None) -> bool:
     """Check whether a plugin is enabled (default True if absent)."""
 
     path = resolve_enablement_store_path(store_path)
     return PluginEnablementStore(path).is_enabled(plugin)
 
 
-def set_plugin_enabled(plugin: Any, enabled: Any, *, store_path: Optional[Path] = None) -> PluginEnablementChange:
+def set_plugin_enabled(plugin: Any, enabled: Any, *, store_path: Path | None = None) -> PluginEnablementChange:
     """Persist a plugin's enabled state."""
 
     path = resolve_enablement_store_path(store_path)
     return PluginEnablementStore(path).set_enabled(plugin, enabled)
 
 
-def clear_plugin_enabled(plugin: Any, *, store_path: Optional[Path] = None) -> bool:
+def clear_plugin_enabled(plugin: Any, *, store_path: Path | None = None) -> bool:
     """Remove a plugin from the enablement store (reverts to default-enabled)."""
 
     path = resolve_enablement_store_path(store_path)
@@ -365,7 +364,7 @@ def clear_plugin_enabled(plugin: Any, *, store_path: Optional[Path] = None) -> b
 # ---- Gateway-friendly IO contract (dict-in/dict-out) ----
 
 
-def handle_enablement_change(payload: Mapping[str, Any]) -> Dict[str, Any]:
+def handle_enablement_change(payload: Mapping[str, Any]) -> dict[str, Any]:
     """Dict-in/dict-out wrapper suitable for a gateway layer.
 
     Expected input:
@@ -383,7 +382,7 @@ def handle_enablement_change(payload: Mapping[str, Any]) -> Dict[str, Any]:
         enabled = payload.get("enabled")
         store_path_raw = payload.get("store_path")
 
-        path: Optional[Path] = None
+        path: Path | None = None
         if store_path_raw is not None:
             if not isinstance(store_path_raw, str) or not store_path_raw.strip():
                 raise PluginEnablementStoreError(

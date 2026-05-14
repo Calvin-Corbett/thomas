@@ -3,9 +3,9 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, List
+from typing import Any, Dict, List, Optional, Tuple
 
-Key = Tuple[str, str]  # (run_id, tool_call_id)
+Key = tuple[str, str]  # (run_id, tool_call_id)
 
 @dataclass
 class PendingApproval:
@@ -23,10 +23,10 @@ class ApprovalBroker:
     Stores pending approvals keyed by (run_id, tool_call_id).
     """
     def __init__(self) -> None:
-        self._futs: Dict[Key, asyncio.Future[bool]] = {}
-        self._pending: Dict[Key, PendingApproval] = {}
+        self._futs: dict[Key, asyncio.Future[bool]] = {}
+        self._pending: dict[Key, PendingApproval] = {}
         self._lock = asyncio.Lock()
-        self._session_allow: Dict[str, set[str]] = {}
+        self._session_allow: dict[str, set[str]] = {}
 
     def is_allowed_for_session(self, session_id: str, tool_name: str) -> bool:
         s = self._session_allow.get(session_id)
@@ -84,8 +84,8 @@ class ApprovalBroker:
         tool_call_id: str,
         approved: bool,
         allow_session_tool: bool = False,
-        tool_name: Optional[str] = None,
-        session_id: Optional[str] = None,
+        tool_name: str | None = None,
+        session_id: str | None = None,
     ) -> bool:
         key = (run_id, tool_call_id)
         async with self._lock:
@@ -104,7 +104,7 @@ class ApprovalBroker:
             fut.set_result(bool(approved))
         return True
 
-    async def pending(self) -> List[Dict[str, Any]]:
+    async def pending(self) -> list[dict[str, Any]]:
         async with self._lock:
             items = list(self._pending.values())
         return [
