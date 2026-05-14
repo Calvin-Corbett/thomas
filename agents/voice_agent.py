@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
-&quot;&quot;&quot;Voice Agent: Sets up STT/TTS loop using thomas/realtime/.&quot;&quot;&quot;
-import sys
+# Scaffold voice-agent demo — installs deps for STT/TTS loop. Not imported
+# by any production module.
+"""Voice Agent: Sets up STT/TTS loop using thomas/realtime/."""
 import subprocess
-import os
+import sys
+
 
 def setup_voice():
-    print(&quot;🔊 Voice Agent: Installing deps...&quot;)
+    print("🔊 Voice Agent: Installing deps...")
     # Install whisper for STT (local)
-    subprocess.check_call([sys.executable, &quot;-m&quot;, &quot;pip&quot;, &quot;install&quot;, &quot;-q&quot;, &quot;openai-whisper&quot;, &quot;pyaudio&quot;])
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "openai-whisper", "pyaudio"])
     # Edge TTS for Windows (no key needed)
-    subprocess.check_call([sys.executable, &quot;-m&quot;, &quot;pip&quot;, &quot;install&quot;, &quot;-q&quot;, &quot;edge-tts&quot;])
-    
-    print(&quot;✅ Deps ready. Run realtime server: thomas serve --realtime&quot;)
-    print(&quot;Voice loop: Mic → STT → Brain → TTS → Speakers&quot;)
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "edge-tts"])
+
+    print("✅ Deps ready. Run realtime server: thomas serve --realtime")
+    print("Voice loop: Mic → STT → Brain → TTS → Speakers")
     # Test STT
-    print(&quot;🧪 Test: Say something...&quot;)
+    print("🧪 Test: Say something...")
     # Placeholder for full loop - integrate with thomas/realtime/stt.py tts.py
 
-if __name__ == &quot;__main__&quot;:
+if __name__ == "__main__":
     setup_voice()
