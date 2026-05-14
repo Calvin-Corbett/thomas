@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 import fnmatch
 import glob
 import io
@@ -12,6 +10,7 @@ import tokenize
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from statistics import mean, pstdev
+from typing import Any
 
 from thomas.demo.agent_comparison_suite_shared import (
     CODE_EXTENSIONS,
