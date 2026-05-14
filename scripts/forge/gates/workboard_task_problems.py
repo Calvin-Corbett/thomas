@@ -162,7 +162,7 @@ def evaluate(workboard_path: Path = DEFAULT_WORKBOARD) -> list[str]:
         if task_key not in entries:
             violations.append(
                 f"missing task problem mapping for `{task_id}`; run "
-                "`python scripts/workboard_task_manager.py --sync-plans --apply`"
+                "`python scripts/crew/tasks/manager.py --sync-plans --apply`"
             )
 
     for task_key, fields in entries.items():

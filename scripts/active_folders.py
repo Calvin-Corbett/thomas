@@ -38,11 +38,11 @@ except ModuleNotFoundError:
 
 try:
     from scripts.forge.gates import workboard_claims as workboard_claims_gate
-    from scripts import workboard_claim as workboard_claim_tool
+    from scripts.crew.workboard import claim as workboard_claim_tool
 except Exception:  # pragma: no cover
     try:
         from forge.gates import workboard_claims as workboard_claims_gate  # type: ignore
-        import workboard_claim as workboard_claim_tool  # type: ignore
+        from crew.workboard import claim as workboard_claim_tool  # type: ignore
     except Exception:
         workboard_claims_gate = None  # type: ignore[assignment]
         workboard_claim_tool = None  # type: ignore[assignment]
