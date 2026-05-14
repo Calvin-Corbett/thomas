@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any
 
 from agent_vf.config import AppConfig
 from agent_vf.llm_client import LLMError, OpenAICompatClient

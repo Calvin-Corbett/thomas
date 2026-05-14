@@ -235,14 +235,12 @@ def test_marketplace_uses_native_runtime_shell() -> None:
 
 def test_run_command_wraps_windows_batch_shims() -> None:
     project_root = ROOT
-    with patch("thomas.server.routes.local_projects_aiohttp.os.name", "nt"):
-        with patch(
-            "thomas.server.routes.local_projects_aiohttp.shutil.which", return_value=r"C:\Program Files\nodejs\pnpm.cmd"
-        ):
-            with patch(
-                "thomas.server.routes.local_projects_aiohttp.subprocess.Popen", return_value=Mock(pid=9090)
-            ) as popen:
-                result = local_projects._run_command(["pnpm", "install"], project_root)
+    with patch("thomas.server.routes.local_projects_aiohttp.os.name", "nt"), patch(
+        "thomas.server.routes.local_projects_aiohttp.shutil.which", return_value=r"C:\Program Files\nodejs\pnpm.cmd"
+    ), patch(
+        "thomas.server.routes.local_projects_aiohttp.subprocess.Popen", return_value=Mock(pid=9090)
+    ) as popen:
+        result = local_projects._run_command(["pnpm", "install"], project_root)
     assert result["kind"] == "command_started"
     assert result["command"] == ["pnpm", "install"]
     assert result["launched_command"] == ["cmd.exe", "/c", "pnpm", "install"]

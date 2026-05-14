@@ -13,7 +13,6 @@ What it checks:
 from __future__ import annotations
 
 import os
-from typing import Optional, Tuple
 
 from fastapi.routing import APIRoute
 from sqlalchemy import inspect
@@ -43,7 +42,7 @@ def _import_app() -> object:
         try:
             m = __import__(mod, fromlist=[sym])
             return getattr(m, sym)
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as e:
             last = e
     raise RuntimeError("Could not import FastAPI app. Set THOMAS_APP_IMPORT=module:app") from last
 
@@ -61,7 +60,7 @@ def _has_enforce_dependency(route: APIRoute) -> bool:
         for dep in route.dependant.dependencies:
             if dep.call is enforce_workspace:
                 return True
-    except Exception:
+    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
         pass
     return False
 

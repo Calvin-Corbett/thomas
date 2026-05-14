@@ -73,13 +73,13 @@ def _is_nonempty_str(v: Any) -> bool:
     return isinstance(v, str) and bool(v.strip())
 
 
-def _as_dict(payload: Any) -> Union[dict[str, Any], CompatValidationError]:
+def _as_dict(payload: Any) -> dict[str, Any] | CompatValidationError:
     if not isinstance(payload, dict):
         return _err("invalid_type", "Payload must be a JSON object.", path="$")
     return cast(dict[str, Any], payload)
 
 
-def _optional_number(payload: Mapping[str, Any], key: str, *, path: str) -> Union[None, float, CompatValidationError]:
+def _optional_number(payload: Mapping[str, Any], key: str, *, path: str) -> None | float | CompatValidationError:
     v = payload.get(key)
     if v is None:
         return None
@@ -90,7 +90,7 @@ def _optional_number(payload: Mapping[str, Any], key: str, *, path: str) -> Unio
     return float(v)
 
 
-def _optional_bool(payload: Mapping[str, Any], key: str, *, path: str) -> Union[None, bool, CompatValidationError]:
+def _optional_bool(payload: Mapping[str, Any], key: str, *, path: str) -> None | bool | CompatValidationError:
     v = payload.get(key)
     if v is None:
         return None

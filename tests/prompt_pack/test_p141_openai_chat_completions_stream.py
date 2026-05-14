@@ -1,7 +1,7 @@
 import asyncio
 import inspect
 import json
-from typing import Any, Tuple
+from typing import Any
 from collections.abc import Callable, Iterable
 
 import pytest

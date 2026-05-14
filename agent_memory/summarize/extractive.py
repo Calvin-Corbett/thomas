@@ -4,7 +4,6 @@ import math
 import re
 from collections import Counter
 from dataclasses import dataclass
-from typing import List
 
 _SENT = re.compile(r"(?<=[.!?])\s+")
 

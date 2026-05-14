@@ -41,14 +41,13 @@ class BlockManager:
         normalized_id = block_id.replace("-", "")
         url = f"{self.base_url}/blocks/{normalized_id}"
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=self.headers) as resp:
-                if resp.status == 404:
-                    raise NotionNotFoundError(f"Block not found: {block_id}")
-                if resp.status >= 400:
-                    body = await resp.text()
-                    raise NotionAPIError(f"Failed to get block: {body}")
-                return await resp.json()
+        async with aiohttp.ClientSession() as session, session.get(url, headers=self.headers) as resp:
+            if resp.status == 404:
+                raise NotionNotFoundError(f"Block not found: {block_id}")
+            if resp.status >= 400:
+                body = await resp.text()
+                raise NotionAPIError(f"Failed to get block: {body}")
+            return await resp.json()
 
     async def get_block_children(
         self,
@@ -128,12 +127,11 @@ class BlockManager:
         normalized_id = block_id.replace("-", "")
         url = f"{self.base_url}/blocks/{normalized_id}"
 
-        async with aiohttp.ClientSession() as session:
-            async with session.delete(url, headers=self.headers) as resp:
-                if resp.status >= 400:
-                    body = await resp.text()
-                    raise NotionAPIError(f"Failed to delete block: {body}")
-                return await resp.json()
+        async with aiohttp.ClientSession() as session, session.delete(url, headers=self.headers) as resp:
+            if resp.status >= 400:
+                body = await resp.text()
+                raise NotionAPIError(f"Failed to delete block: {body}")
+            return await resp.json()
 
     async def append_children(
         self,

@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
 
 try:
     import numpy as np
     from sklearn.linear_model import SGDClassifier
-except Exception as e:
+except (ImportError, ModuleNotFoundError, AttributeError) as e:
     raise RuntimeError("Training requires optional dependencies. Install with: pip install .[train]") from e
 
 from agent_memory.rerank.features import CandidateFeatures

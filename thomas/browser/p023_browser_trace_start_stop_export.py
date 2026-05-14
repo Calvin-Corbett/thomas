@@ -114,7 +114,7 @@ class BrowserTraceError(RuntimeError):
 
     def __init__(
         self,
-        code: Union[BrowserTraceErrorCode, str],
+        code: BrowserTraceErrorCode | str,
         message: str,
         *,
         details: dict[str, Any] | None = None,

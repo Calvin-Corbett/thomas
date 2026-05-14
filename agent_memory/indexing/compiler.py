@@ -4,7 +4,6 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from agent_memory.graph.store import GraphStore
 from agent_memory.indexing.derived_db import DerivedDB
@@ -104,11 +103,11 @@ class Compiler:
             if delta_path.exists():
                 try:
                     os.remove(delta_path)
-                except Exception:
+                except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
                     # Windows locking: rename instead of delete
                     try:
                         os.replace(str(delta_path), str(delta_path.with_suffix(f".old.{ts}")))
-                    except Exception:
+                    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
                         pass
             # recreate empty delta db
             _ = DerivedDB(delta_path)

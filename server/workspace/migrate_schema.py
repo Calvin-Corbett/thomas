@@ -18,7 +18,6 @@ You can later wrap this logic inside an Alembic migration once you know your dow
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 from collections.abc import Iterable
 
 import sqlalchemy as sa
@@ -65,7 +64,7 @@ def _import_engine() -> Engine:
                 eng = obj
             if isinstance(eng, sa.engine.Engine):
                 return eng
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as e:
             last = e
     raise RuntimeError(
         "Could not locate SQLAlchemy Engine. "
@@ -121,7 +120,7 @@ def _create_tables(conn) -> None:
         # composite index best-effort
         try:
             conn.execute(sa.text("CREATE INDEX ix_workspace_memberships_workspace_role ON workspace_memberships (workspace_id, role)"))
-        except Exception:
+        except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
             pass
 
     if not _table_exists(insp, "workspace_invites"):
@@ -145,7 +144,7 @@ def _create_tables(conn) -> None:
         _add_index(conn, "workspace_invites", "token_hash")
         try:
             conn.execute(sa.text("CREATE INDEX ix_workspace_invites_workspace_status ON workspace_invites (workspace_id, revoked_at, accepted_at)"))
-        except Exception:
+        except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
             pass
 
 
@@ -158,7 +157,7 @@ def _best_effort_owner_user_id(conn) -> str | None:
                 row = conn.execute(sa.text(f"SELECT id FROM {t} ORDER BY id ASC LIMIT 1")).fetchone()
                 if row:
                     return str(row[0])
-            except Exception:
+            except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
                 continue
     return None
 
@@ -199,14 +198,14 @@ def _add_workspace_column(conn, table: str) -> bool:
         conn.execute(sa.text(f"ALTER TABLE {table} ADD COLUMN workspace_id VARCHAR(36)"))
         _add_index(conn, table, "workspace_id")
         return True
-    except Exception:
+    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
         return False
 
 
 def _backfill_workspace_column(conn, table: str) -> None:
     try:
         conn.execute(sa.text(f"UPDATE {table} SET workspace_id = :ws WHERE workspace_id IS NULL"), {"ws": DEFAULT_WORKSPACE_ID})
-    except Exception:
+    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
         pass
 
 

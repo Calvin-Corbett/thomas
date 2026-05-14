@@ -41,14 +41,13 @@ class PageManager:
         normalized_id = page_id.replace("-", "")
         url = f"{self.base_url}/pages/{normalized_id}"
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=self.headers) as resp:
-                if resp.status == 404:
-                    raise NotionNotFoundError(f"Page not found: {page_id}")
-                if resp.status >= 400:
-                    body = await resp.text()
-                    raise NotionAPIError(f"Failed to get page: {body}")
-                return await resp.json()
+        async with aiohttp.ClientSession() as session, session.get(url, headers=self.headers) as resp:
+            if resp.status == 404:
+                raise NotionNotFoundError(f"Page not found: {page_id}")
+            if resp.status >= 400:
+                body = await resp.text()
+                raise NotionAPIError(f"Failed to get page: {body}")
+            return await resp.json()
 
     async def create_page(
         self,

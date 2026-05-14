@@ -10,11 +10,10 @@ async def test_schema_endpoint_success_root_mount():
     app = web.Application()
     route_mod.register(app)
 
-    async with TestServer(app) as server:
-        async with TestClient(server) as client:
-            resp = await client.get(f"{route_mod.BASE_PATH}/schema")
-            assert resp.status == 200
-            data = await resp.json()
+    async with TestServer(app) as server, TestClient(server) as client:
+        resp = await client.get(f"{route_mod.BASE_PATH}/schema")
+        assert resp.status == 200
+        data = await resp.json()
 
     assert data["id"] == "gateway.openai_compat"
     assert any(r["path"].endswith("/v1/chat/completions") for r in data["routes"])
@@ -29,11 +28,10 @@ async def test_schema_endpoint_success_gateway_subapp_mount():
     route_mod.register(sub)
     parent.add_subapp("/gateway", sub)
 
-    async with TestServer(parent) as server:
-        async with TestClient(server) as client:
-            resp = await client.get(f"{route_mod.GATEWAY_BASE_PATH}/schema")
-            assert resp.status == 200
-            data = await resp.json()
+    async with TestServer(parent) as server, TestClient(server) as client:
+        resp = await client.get(f"{route_mod.GATEWAY_BASE_PATH}/schema")
+        assert resp.status == 200
+        data = await resp.json()
 
     assert data["id"] == "gateway.openai_compat"
 
@@ -46,11 +44,10 @@ async def test_health_missing_config_is_deterministic(monkeypatch: pytest.Monkey
     app = web.Application()
     route_mod.register(app)
 
-    async with TestServer(app) as server:
-        async with TestClient(server) as client:
-            resp = await client.get(f"{route_mod.BASE_PATH}/health")
-            assert resp.status == 503
-            data = await resp.json()
+    async with TestServer(app) as server, TestClient(server) as client:
+        resp = await client.get(f"{route_mod.BASE_PATH}/health")
+        assert resp.status == 503
+        data = await resp.json()
 
     assert data == {
         "error": {
@@ -95,16 +92,15 @@ async def test_proxy_success_and_invalid_json(monkeypatch: pytest.MonkeyPatch):
         gateway_app = web.Application()
         route_mod.register(gateway_app)
 
-        async with TestServer(gateway_app) as gateway_server:
-            async with TestClient(gateway_server) as client:
-                resp = await client.post(
-                    f"{route_mod.BASE_PATH}/v1/chat/completions",
-                    json={"model": "gpt-test", "messages": [{"role": "user", "content": "yo"}]},
-                )
-                assert resp.status == 200
-                data = await resp.json()
-                assert data["id"] == "chatcmpl-test"
-                assert data["model"] == "gpt-test"
+        async with TestServer(gateway_app) as gateway_server, TestClient(gateway_server) as client:
+            resp = await client.post(
+                f"{route_mod.BASE_PATH}/v1/chat/completions",
+                json={"model": "gpt-test", "messages": [{"role": "user", "content": "yo"}]},
+            )
+            assert resp.status == 200
+            data = await resp.json()
+            assert data["id"] == "chatcmpl-test"
+            assert data["model"] == "gpt-test"
 
     # Deterministic error for invalid JSON body.
     monkeypatch.setenv("THOMAS_GATEWAY_OPENAI_BASE_URL", "http://example.invalid")
@@ -113,15 +109,14 @@ async def test_proxy_success_and_invalid_json(monkeypatch: pytest.MonkeyPatch):
     app = web.Application()
     route_mod.register(app)
 
-    async with TestServer(app) as server:
-        async with TestClient(server) as client:
-            resp = await client.post(
-                f"{route_mod.BASE_PATH}/v1/chat/completions",
-                data="not json",
-                headers={"Content-Type": "application/json"},
-            )
-            assert resp.status == 400
-            data = await resp.json()
+    async with TestServer(app) as server, TestClient(server) as client:
+        resp = await client.post(
+            f"{route_mod.BASE_PATH}/v1/chat/completions",
+            data="not json",
+            headers={"Content-Type": "application/json"},
+        )
+        assert resp.status == 400
+        data = await resp.json()
 
     assert data["error"]["code"] == "thomas_invalid_json"
 
@@ -135,13 +130,12 @@ async def test_proxy_upstream_unreachable_is_deterministic(monkeypatch: pytest.M
     app = web.Application()
     route_mod.register(app)
 
-    async with TestServer(app) as server:
-        async with TestClient(server) as client:
-            resp = await client.post(
-                f"{route_mod.BASE_PATH}/v1/chat/completions",
-                json={"model": "gpt-test", "messages": [{"role": "user", "content": "yo"}]},
-            )
-            assert resp.status == 502
-            data = await resp.json()
+    async with TestServer(app) as server, TestClient(server) as client:
+        resp = await client.post(
+            f"{route_mod.BASE_PATH}/v1/chat/completions",
+            json={"model": "gpt-test", "messages": [{"role": "user", "content": "yo"}]},
+        )
+        assert resp.status == 502
+        data = await resp.json()
 
     assert data["error"]["code"] == "thomas_upstream_unreachable"

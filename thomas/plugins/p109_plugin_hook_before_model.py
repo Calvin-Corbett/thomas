@@ -211,9 +211,9 @@ class BeforeModelHookOutput:
 
 
 def apply_before_model_hook(
-    hook_input: Union[BeforeModelHookInput, Mapping[str, Any]],
+    hook_input: BeforeModelHookInput | Mapping[str, Any],
     *,
-    config: Union[BeforeModelHookConfig, Mapping[str, Any], None] = None,
+    config: BeforeModelHookConfig | Mapping[str, Any] | None = None,
 ) -> BeforeModelHookOutput:
     """Apply the before-model hook.
 
