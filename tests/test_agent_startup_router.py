@@ -6,8 +6,8 @@ from pathlib import Path
 
 def _load_router_module():
     root = Path(__file__).resolve().parents[1]
-    path = root / "scripts" / "agent_startup_router.py"
-    spec = importlib.util.spec_from_file_location("agent_startup_router", path)
+    path = root / "scripts" / "crew" / "brief" / "startup_router.py"
+    spec = importlib.util.spec_from_file_location("crew_brief_startup_router", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

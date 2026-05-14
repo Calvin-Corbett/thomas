@@ -1,8 +1,0 @@
-Timeout (0:00:05)!
-Thread 0x000083b0 (most recent call first):
-  File "C:\Users\corbe\Thomas\thomas\template_engine\parser.py", line 636 in _at_end
-  File "C:\Users\corbe\Thomas\thomas\template_engine\parser.py", line 613 in _check
-  File "C:\Users\corbe\Thomas\thomas\template_engine\parser.py", line 61 in _parse_node
-  File "C:\Users\corbe\Thomas\thomas\template_engine\parser.py", line 52 in parse
-  File "C:\Users\corbe\Thomas\thomas\template_engine\environment.py", line 233 in get_template
-  File "C:\Users\corbe\Thomas\tmp_template_debug.py", line 25 in <module>

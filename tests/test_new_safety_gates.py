@@ -353,7 +353,7 @@ class TestWorktreeCleanCheck:
 
     def test_preflight_includes_worktree_check(self):
         """evaluate_preflight should include a worktree-clean check."""
-        from agent_preflight import evaluate_preflight
+        from crew.brief.preflight import evaluate_preflight
 
         # We can't guarantee the state, but we CAN verify the check exists
         result = evaluate_preflight()
@@ -365,7 +365,7 @@ class TestWorktreeCleanCheck:
 
     def test_worktree_check_returns_valid_status(self):
         """Worktree check should return a valid status (ok or degraded)."""
-        from agent_preflight import evaluate_preflight
+        from crew.brief.preflight import evaluate_preflight
 
         result = evaluate_preflight()
         wt_check = next(c for c in result["checks"] if c["id"] == "worktree-clean")
