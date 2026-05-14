@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import scripts.forge.gates.workboard_claims as gate
-import scripts.workboard_claim as mod
+import scripts.crew.workboard.claim as mod
 
 
 def _write_workboard(

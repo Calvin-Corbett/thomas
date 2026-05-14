@@ -14,15 +14,12 @@ except Exception:  # pragma: no cover
 
 try:
     from scripts.forge.gates import workboard_claims as claims_gate
-    from scripts import (
-        workboard_claim,
-        workboard_issue,
-        workboard_task_manager_sweep,
-    )
+    from scripts import workboard_issue, workboard_task_manager_sweep
+    from scripts.crew.workboard import claim as workboard_claim
     from thomas.core import task_bot_runtime
 except Exception:  # pragma: no cover
     from forge.gates import workboard_claims as claims_gate  # type: ignore
-    import workboard_claim  # type: ignore
+    from crew.workboard import claim as workboard_claim  # type: ignore
     import workboard_issue  # type: ignore
     import workboard_task_manager_sweep  # type: ignore
 

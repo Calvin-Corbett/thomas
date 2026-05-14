@@ -5,9 +5,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 try:
-    from .workboard_claim_ops import claim, release
-    from .workboard_claim_utils import (
+    from scripts.crew.workboard.claim_ops import claim, release
+    from scripts.crew.workboard.claim_utils import (
         DEFAULT_DISPATCH_MAX_SUGGESTIONS,
         DEFAULT_DISPATCH_TARGET_WORKERS,
         DEFAULT_MIN_DISPATCH_TARGET_WORKERS,
@@ -32,8 +37,8 @@ try:
         workboard_message_mod,
     )
 except ImportError:  # pragma: no cover
-    from workboard_claim_ops import claim, release  # type: ignore
-    from workboard_claim_utils import (  # type: ignore
+    from crew.workboard.claim_ops import claim, release  # type: ignore
+    from crew.workboard.claim_utils import (  # type: ignore
         DEFAULT_DISPATCH_MAX_SUGGESTIONS,
         DEFAULT_DISPATCH_TARGET_WORKERS,
         DEFAULT_MIN_DISPATCH_TARGET_WORKERS,
@@ -114,7 +119,7 @@ def suggest_delegation(
         child_name = virtual_office_identity.default_display_name(child_agent)
         task_label = f"[WIP][AUTO-{idx:02d}] {item['task_id']}: {item['summary']}"
         command = (
-            "python scripts/workboard_claim.py --claim "
+            "python scripts/crew/workboard/claim.py --claim "
             f"--agent \"{child_agent}\" --name \"{child_name}\" --role worker "
             f"--parent \"{parent_agent}\" --scope \"{item['scope']}\" --task \"{task_label}\""
         )

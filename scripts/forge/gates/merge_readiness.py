@@ -24,7 +24,7 @@ MERGE_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "architecture",
         (sys.executable, "-m", "pytest", "-p", "no:cacheprovider", "tests/test_architecture.py", "-x", "--tb=short", "-q"),
     ),
-    ("workboard_audit_backstop", (sys.executable, "scripts/workboard_audit_backstop.py")),
+    ("workboard_audit_backstop", (sys.executable, "scripts/crew/workboard/audit_backstop.py")),
     ("auto_checks_quick", (sys.executable, "scripts/auto_checks.py", "--quick")),
 )
 

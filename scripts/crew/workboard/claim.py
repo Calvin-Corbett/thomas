@@ -8,10 +8,15 @@ import json
 from collections.abc import Sequence
 from pathlib import Path
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 try:
-    from .workboard_claim_dispatch import dispatch_workers, release_temp_task_creator, suggest_delegation
-    from .workboard_claim_ops import claim, list_claims, release
-    from .workboard_claim_utils import (
+    from scripts.crew.workboard.claim_dispatch import dispatch_workers, release_temp_task_creator, suggest_delegation
+    from scripts.crew.workboard.claim_ops import claim, list_claims, release
+    from scripts.crew.workboard.claim_utils import (
         DEFAULT_DISPATCH_MAX_SUGGESTIONS,
         DEFAULT_DISPATCH_TARGET_WORKERS,
         DEFAULT_TASK_MANAGER_AGENT,
@@ -22,9 +27,9 @@ try:
         claims_gate,
     )
 except ImportError:  # pragma: no cover
-    from workboard_claim_dispatch import dispatch_workers, release_temp_task_creator, suggest_delegation  # type: ignore
-    from workboard_claim_ops import claim, list_claims, release  # type: ignore
-    from workboard_claim_utils import (  # type: ignore
+    from crew.workboard.claim_dispatch import dispatch_workers, release_temp_task_creator, suggest_delegation  # type: ignore
+    from crew.workboard.claim_ops import claim, list_claims, release  # type: ignore
+    from crew.workboard.claim_utils import (  # type: ignore
         DEFAULT_DISPATCH_MAX_SUGGESTIONS,
         DEFAULT_DISPATCH_TARGET_WORKERS,
         DEFAULT_TASK_MANAGER_AGENT,

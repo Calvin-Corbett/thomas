@@ -19,7 +19,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 try:
-    import scripts.workboard_claim as workboard_claim
+    import scripts.crew.workboard.claim as workboard_claim
     import scripts.workboard_task_manager_sweep as workboard_task_manager_sweep
     from scripts.workboard_task_manager_base import (
         DEFAULT_MAX_AGENT_SILENCE_MINUTES,
@@ -57,7 +57,7 @@ try:
 
     _sweep_inactive = workboard_task_manager_sweep._sweep_inactive
 except Exception:  # pragma: no cover
-    import workboard_claim  # type: ignore
+    from crew.workboard import claim as workboard_claim  # type: ignore
     import workboard_task_manager_sweep  # type: ignore
     from workboard_task_manager_base import (
         DEFAULT_MAX_AGENT_SILENCE_MINUTES,

@@ -13,11 +13,12 @@ from pathlib import Path
 
 try:
     from scripts.forge.gates import workboard_claims as claims_gate
-    from scripts import workboard_issue, workboard_message
+    from scripts import workboard_issue
+    from scripts.crew.workboard import message as workboard_message
 except Exception:  # pragma: no cover
     from forge.gates import workboard_claims as claims_gate  # type: ignore
     import workboard_issue  # type: ignore
-    import workboard_message  # type: ignore
+    from crew.workboard import message as workboard_message  # type: ignore
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -316,14 +317,14 @@ def _make_manifest(
         prompt_path.write_text(prompt_text, encoding="utf-8")
 
         startup_status_cmd = (
-            "python scripts/workboard_message.py "
+            "python scripts/crew/workboard/message.py "
             f'--send --from-agent {_ps_single_quote(agent)} --to-agent {_ps_single_quote(coordinator)} '
             f'--task-id {_ps_single_quote(task_id)} --kind status --priority p0 '
             f'--summary {_ps_single_quote(f"swarm {swarm_id} terminal online")} '
             "--requested-action none --decision pending"
         )
         claim_cmd = (
-            "python scripts/workboard_claim.py "
+            "python scripts/crew/workboard/claim.py "
             f'--claim --agent {_ps_single_quote(agent)} --name {_ps_single_quote(agent)} --role solo --parent none '
             f'--scope {_ps_single_quote(lane_scope)} '
             f'--task {_ps_single_quote(f"[WIP][SWARM:{swarm_id}] {task_id} lane")}'

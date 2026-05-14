@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-import scripts.workboard_claim_ops as ops
-import scripts.workboard_claim_utils as utils
+import scripts.crew.workboard.claim_ops as ops
+import scripts.crew.workboard.claim_utils as utils
 
 
 def _write_workboard(tmp_path: Path) -> Path:
@@ -77,7 +77,7 @@ def test_claim_aborts_when_presence_gate_fails_closed(tmp_path: Path, monkeypatc
     ok, message = ops.claim(
         workboard,
         agent="Codex Script",
-        scope="scripts/workboard_claim_ops.py",
+        scope="scripts/crew/workboard/claim_ops.py",
         task="script import claim",
     )
 

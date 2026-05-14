@@ -129,7 +129,7 @@ def _resolve_agent(explicit: str | None) -> str | None:
 def _resolve_active_claim(repo_root: Path, agent: str) -> dict | None:
     """Return ``{'scope_paths': [...], 'task': '...'}`` for ``agent`` or None."""
     proc = subprocess.run(
-        [sys.executable, "scripts/workboard_claim.py", "--list"],
+        [sys.executable, "scripts/crew/workboard/claim.py", "--list"],
         cwd=str(repo_root),
         capture_output=True,
         text=True,

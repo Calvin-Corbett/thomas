@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import scripts.forge.gates.workboard_claims as gate
-import scripts.workboard_claim_cleanup as mod
+import scripts.crew.workboard.claim_cleanup as mod
 
 
 def _write_workboard(

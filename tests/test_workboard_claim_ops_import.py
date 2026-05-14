@@ -46,7 +46,7 @@ def _write_workboard(tmp_path: Path) -> Path:
 
 def test_workboard_claim_ops_top_level_import_supports_claim(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.syspath_prepend(str(ROOT / "scripts"))
-    mod = _load_module("workboard_claim_ops_fallback", ROOT / "scripts" / "workboard_claim_ops.py")
+    mod = _load_module("workboard_claim_ops_fallback", ROOT / "scripts" / "crew" / "workboard" / "claim_ops.py")
     monkeypatch.setattr(mod, "_presence_gate", lambda **_: (True, ""))
     monkeypatch.setattr(mod, "_scope_guard_supported", lambda _: False)
 
@@ -54,12 +54,12 @@ def test_workboard_claim_ops_top_level_import_supports_claim(tmp_path: Path, mon
     ok, message = mod.claim(
         workboard,
         agent="Codex Script",
-        scope="scripts/workboard_claim_ops.py",
+        scope="scripts/crew/workboard/claim_ops.py",
         task="script import claim",
     )
     text = workboard.read_text(encoding="utf-8")
 
     assert ok is True
-    assert "claimed scope `scripts/workboard_claim_ops.py`" in message
+    assert "claimed scope `scripts/crew/workboard/claim_ops.py`" in message
     assert "agent=Codex Script;" in text
     assert "summary=script import claim; status=active" in text
