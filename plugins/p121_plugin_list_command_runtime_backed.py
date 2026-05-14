@@ -414,7 +414,7 @@ def _safe_get_str(mapping: Mapping[str, Any], key: str) -> str | None:
 
 
 def _plugin_dir_name(plugin_id: str) -> str:
-    normalized = plugin_id.replace("/", "__").replace("\", "__")
+    normalized = plugin_id.replace("/", "__").replace("\\", "__")
     normalized = _DIR_SAFE_RE.sub("_", normalized).strip("._")
     return normalized or "plugin"
 

@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-&quot;&quot;&quot;Code Agent: Handles coding tasks via Thomas tools.&quot;&quot;&quot;
+# Scaffold demo — minimal placeholder showing the agent dispatch pattern.
+# Not imported by any production module (only mention is a docstring in
+# scripts/crew/workboard/brainstorm.py).
+"""Code Agent: Handles coding tasks via Thomas tools."""
 import sys
+
 # Wrap fs/code/git tools - extend as needed
-print(&quot;💻 Code Agent reporting: Task '&quot; + &quot; '.join(sys.argv[1:]) + &quot;' queued.&quot;)
-# TODO: Integrate thomas/tools/* 
-print(&quot;✅ Simulated code task complete. Extend me!&quot;)
+print("💻 Code Agent reporting: Task '" + " ".join(sys.argv[1:]) + "' queued.")
+# TODO: Integrate thomas/tools/*
+print("✅ Simulated code task complete. Extend me!")

@@ -148,7 +148,7 @@ def _patch_fastapi_entrypoint(p: Path, receipt: dict) -> None:
         return call[:-1] + ", dependencies=[Depends(enforce_workspace)])"
 
     txt = re.sub(
-        r"app\.include_router\([^\)]*prefix\s*=\s*["']\/api["'][^\)]*\)",
+        r"""app\.include_router\([^\)]*prefix\s*=\s*["']\/api["'][^\)]*\)""",
         _patch_include,
         txt,
         flags=re.M,
@@ -163,7 +163,7 @@ def _patch_fastapi_entrypoint(p: Path, receipt: dict) -> None:
         return call[:-1] + ", dependencies=[Depends(enforce_workspace)])"
 
     txt = re.sub(
-        r"APIRouter\([^\)]*prefix\s*=\s*["']\/api["'][^\)]*\)",
+        r"""APIRouter\([^\)]*prefix\s*=\s*["']\/api["'][^\)]*\)""",
         _patch_api_router,
         txt,
         flags=re.M,
