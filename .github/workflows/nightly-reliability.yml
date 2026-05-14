@@ -63,8 +63,8 @@ jobs:
           python scripts/forge/gates/onboarding_outcomes_gate.py --days 7 --json --strict --ignore-low-sample-warning > artifacts/nightly_reliability/onboarding_outcomes_gate.json
           python scripts/forge/gates/workboard_claims.py --require-identity-metadata --json > artifacts/nightly_reliability/workboard_claims_gate.json
           python scripts/forge/gates/workboard_changed_files.py --base HEAD~1 --head HEAD --require-identity-metadata --json > artifacts/nightly_reliability/workboard_changed_files_gate.json
-          python scripts/workboard_audit_backstop.py --json > artifacts/nightly_reliability/workboard_audit_backstop.json
-          python scripts/workboard_claim_cleanup.py --max-age-hours 72 --json > artifacts/nightly_reliability/workboard_claim_cleanup.json
+          python scripts/crew/workboard/audit_backstop.py --json > artifacts/nightly_reliability/workboard_audit_backstop.json
+          python scripts/crew/workboard/claim_cleanup.py --max-age-hours 72 --json > artifacts/nightly_reliability/workboard_claim_cleanup.json
           python scripts/forge/gates/competitor_freshness_guard.py --max-age-days 7 --json > artifacts/nightly_reliability/competitor_freshness_guard.json
           set +e
           python scripts/competitors/check_weekly_delta_alert.py --json --strict > artifacts/nightly_reliability/competitor_delta_alerting.json

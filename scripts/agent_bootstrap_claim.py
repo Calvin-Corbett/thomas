@@ -14,10 +14,10 @@ from pathlib import Path
 
 try:
     from scripts import agent_identity
-    from scripts import workboard_claim as claim_tool
+    from scripts.crew.workboard import claim as claim_tool
 except Exception:  # pragma: no cover
     import agent_identity  # type: ignore
-    import workboard_claim as claim_tool  # type: ignore
+    from crew.workboard import claim as claim_tool  # type: ignore
 
 from thomas.core import agent_presence
 
@@ -142,7 +142,7 @@ def _spawn_worker_loop(
     task_manager_agent: str,
     poll_seconds: float,
 ) -> tuple[bool, dict[str, object] | None, str | None]:
-    worker_script = (ROOT / "scripts" / "workboard_worker.py").resolve()
+    worker_script = (ROOT / "scripts" / "crew" / "workboard" / "worker.py").resolve()
     command = [
         sys.executable,
         str(worker_script),
@@ -366,7 +366,7 @@ def _start_worker_loop(
     agent: str,
     poll_seconds: float = 15.0,
 ) -> tuple[bool, str, int]:
-    worker_script = (ROOT / "scripts" / "workboard_worker.py").resolve()
+    worker_script = (ROOT / "scripts" / "crew" / "workboard" / "worker.py").resolve()
     command = [
         sys.executable,
         str(worker_script),
@@ -815,7 +815,7 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     if _is_worker_claim(role, args.parent) and _to_bool(args.run_worker_loop) and not _is_task_manager_agent(agent):
         print("- starting persistent worker loop:")
-        print('  - command: python scripts/workboard_worker.py --agent "..." --cycles 0 --poll-seconds 15')
+        print('  - command: python scripts/crew/workboard/worker.py --agent "..." --cycles 0 --poll-seconds 15')
         ok_loop, loop_error, loop_rc = _start_worker_loop(
             workboard_path=workboard_path,
             agent=agent,

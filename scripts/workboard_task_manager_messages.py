@@ -10,12 +10,13 @@ from pathlib import Path
 
 try:
     from scripts.forge.gates import workboard_claims as claims_gate
-    from scripts import task_specialists, workboard_issue, workboard_message
+    from scripts import task_specialists, workboard_issue
+    from scripts.crew.workboard import message as workboard_message
 except Exception:  # pragma: no cover
     from forge.gates import workboard_claims as claims_gate  # type: ignore
     import task_specialists  # type: ignore
     import workboard_issue  # type: ignore
-    import workboard_message  # type: ignore
+    from crew.workboard import message as workboard_message  # type: ignore
 
 try:
     from scripts.workboard_task_manager_base import (

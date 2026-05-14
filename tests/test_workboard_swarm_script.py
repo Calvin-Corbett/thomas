@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import scripts.forge.gates.workboard_claims as gate
-import scripts.workboard_message as msg_mod
+import scripts.crew.workboard.message as msg_mod
 import scripts.workboard_swarm as mod
 
 

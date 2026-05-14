@@ -72,7 +72,7 @@ def test_dirty_with_claim_commits(monkeypatch, tmp_path) -> None:
             return _Proc(0, blob)
         if "rev-parse" in args and "--abbrev-ref" in args:
             return _Proc(0, "claude/heartbeat-l1\n")
-        if "scripts/workboard_claim.py" in (args[1] if len(args) > 1 else ""):
+        if "scripts/crew/workboard/claim.py" in (args[1] if len(args) > 1 else ""):
             return _Proc(
                 0,
                 "Workboard claim tool: PASS\n"
@@ -131,7 +131,7 @@ def test_dirty_without_claim_records(monkeypatch, tmp_path) -> None:
             return _Proc(0, b" M scripts/something.py\x00")
         if "rev-parse" in args and "--abbrev-ref" in args:
             return _Proc(0, "feature\n")
-        if "scripts/workboard_claim.py" in (args[1] if len(args) > 1 else ""):
+        if "scripts/crew/workboard/claim.py" in (args[1] if len(args) > 1 else ""):
             # no entry for "claude"
             return _Proc(0, "Workboard claim tool: PASS\n- no active claims\n")
         return _Proc(0, "")
@@ -164,7 +164,7 @@ def test_dirty_outside_claim_scope_records(monkeypatch, tmp_path) -> None:
             return _Proc(0, b" M outside/path.py\x00")
         if "rev-parse" in args and "--abbrev-ref" in args:
             return _Proc(0, "feature\n")
-        if "scripts/workboard_claim.py" in (args[1] if len(args) > 1 else ""):
+        if "scripts/crew/workboard/claim.py" in (args[1] if len(args) > 1 else ""):
             return _Proc(
                 0,
                 "- agent=claude; scope=scripts/heartbeat.py; task=test\n",
@@ -195,7 +195,7 @@ def test_agent_commit_failure_records_and_returns(monkeypatch, tmp_path) -> None
             return _Proc(0, b" M scripts/heartbeat.py\x00")
         if "rev-parse" in args and "--abbrev-ref" in args:
             return _Proc(0, "feature\n")
-        if "scripts/workboard_claim.py" in (args[1] if len(args) > 1 else ""):
+        if "scripts/crew/workboard/claim.py" in (args[1] if len(args) > 1 else ""):
             return _Proc(
                 0,
                 "- agent=claude; scope=scripts/heartbeat.py; task=test\n",

@@ -5,8 +5,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 try:
-    from .workboard_claim_utils import (
+    from scripts.crew.workboard.claim_utils import (
         LOCK_FILE,
         NONE_ENTRY,
         ROOT,
@@ -35,7 +40,7 @@ try:
         workboard_issue_mod,
     )
 except ImportError:  # pragma: no cover
-    from workboard_claim_utils import (  # type: ignore
+    from crew.workboard.claim_utils import (  # type: ignore
         LOCK_FILE,
         NONE_ENTRY,
         _agent_key,
@@ -263,7 +268,7 @@ def release(
 
         dirty_paths = {"staged": [], "unstaged": [], "untracked": []}
         if _scope_guard_supported(workboard_path):
-            from workboard_claim_utils import _claimed_scope_dirty_paths
+            from crew.workboard.claim_utils import _claimed_scope_dirty_paths
 
             dirty_paths = _claimed_scope_dirty_paths([release_scope])
             offenders = sorted(

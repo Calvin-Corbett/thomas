@@ -189,7 +189,7 @@ jobs:
 
       - name: Workboard audit backstop gate
         run: |
-          python scripts/workboard_audit_backstop.py
+          python scripts/crew/workboard/audit_backstop.py
 
       - name: Release update gate
         run: |
@@ -298,7 +298,7 @@ jobs:
           python scripts/onboarding_outcomes_report.py --days 7 --json
           python scripts/forge/gates/onboarding_outcomes_gate.py --days 7 --json --strict --ignore-low-sample-warning
           python scripts/focus_scorecard.py --days 7 --json
-          python scripts/workboard_audit_backstop.py --json
+          python scripts/crew/workboard/audit_backstop.py --json
           python scripts/module_audit_status.py --max-age-hours 24 --json
           python scripts/release_contract_check.py --json --strict
           python scripts/extension_certify.py --json --strict
@@ -373,9 +373,9 @@ jobs:
             scripts/active_folders.py \
             scripts/agent_bootstrap_claim.py \
             scripts/agent_startup_router.py \
-            scripts/workboard_claim.py \
-            scripts/workboard_claim_ops.py \
-            scripts/workboard_claim_utils.py \
+            scripts/crew/workboard/claim.py \
+            scripts/crew/workboard/claim_ops.py \
+            scripts/crew/workboard/claim_utils.py \
             -lll -ii -f json -o output/ci/python-bandit-core.json
           python - <<'PY'
           import json

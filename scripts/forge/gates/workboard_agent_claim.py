@@ -26,11 +26,11 @@ if _REPO_ROOT not in sys.path:
 try:
     from scripts import agent_identity
     from scripts.forge.gates import workboard_claims as claims_gate
-    from scripts import workboard_claim as workboard_claim_tool
+    from scripts.crew.workboard import claim as workboard_claim_tool
 except ImportError:  # pragma: no cover
     import agent_identity  # type: ignore
     from scripts.forge.gates import workboard_claims as claims_gate  # type: ignore
-    import workboard_claim as workboard_claim_tool  # type: ignore
+    from crew.workboard import claim as workboard_claim_tool  # type: ignore
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -404,7 +404,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         if not fallback_scopes:
             message = (
                 f"no active workboard claim found for '{agent}'. "
-                "Run scripts/workboard_claim.py --claim before committing."
+                "Run scripts/crew/workboard/claim.py --claim before committing."
             )
             if args.json:
                 payload = {
