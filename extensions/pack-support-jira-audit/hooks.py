@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 PACK_ID = "pack-support-jira-audit"
 MODULE_NAME = "extension_support_jira_audit"

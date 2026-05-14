@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 PACK_ID = "pack-security-sms-audit"
 MODULE_NAME = "extension_security_sms_audit"

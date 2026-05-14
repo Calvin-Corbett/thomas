@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 PACK_ID = "pack-qa-webhook-escalate"
 MODULE_NAME = "extension_qa_webhook_escalate"

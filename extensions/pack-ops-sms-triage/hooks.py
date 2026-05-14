@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 PACK_ID = "pack-ops-sms-triage"
 MODULE_NAME = "extension_ops_sms_triage"

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 PACK_ID = "pack-ops-jira-prevent"
 MODULE_NAME = "extension_ops_jira_prevent"

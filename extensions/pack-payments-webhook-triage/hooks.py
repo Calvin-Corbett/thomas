@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 PACK_ID = "pack-payments-webhook-triage"
 MODULE_NAME = "extension_payments_webhook_triage"

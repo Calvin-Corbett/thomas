@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 PACK_ID = "pack-analytics-jira-escalate"
 MODULE_NAME = "extension_analytics_jira_escalate"
