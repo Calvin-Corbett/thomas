@@ -31,7 +31,7 @@ If a plan is moved, keep a pointer file at the old path.
 ## 3) Agent Startup Checklist
 
 For every new task:
-1. Run `python scripts/agent_startup_router.py --summary "<task summary>" [--path <repo/path>]...`
+1. Run `python scripts/crew/brief/startup_router.py --summary "<task summary>" [--path <repo/path>]...`
 2. Read the returned lane card in `docs/ai/CHECKLISTS/`
 3. Check `plans/thomas/WORKBOARD.md` for awareness of active claims and blockers
 4. Load only the plans and reference docs that the lane points to

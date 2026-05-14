@@ -273,7 +273,7 @@ python -m thomas serve --port 0
 
 12. **Workboard claim completion now enforces cleaner handoff discipline.**
    - `scripts/forge/gates/workboard_agent_claim.py` supports claimed-scope cleanliness checks (`--enforce-clean-claimed-scope`, optional `--enforce-untracked-claimed-scope`) so commit-time gate runs can block partial dirty claim-scope work.
-   - `scripts/workboard_claim.py --release` now blocks release when claimed scopes have dirty files unless `--allow-dirty-release` is provided with `--dirty-release-reason` (audited to `runtime/coordination/workboard_release_override_audit.jsonl`).
+   - `scripts/crew/workboard/claim.py --release` now blocks release when claimed scopes have dirty files unless `--allow-dirty-release` is provided with `--dirty-release-reason` (audited to `runtime/coordination/workboard_release_override_audit.jsonl`).
    - If release unexpectedly fails, run `git status --porcelain`, then either commit/stash claim-scope files or provide an auditable override reason.
 
 13. **`/api/chat` now uses conversation-first routing.** In `thomas/server/routes/chat_aiohttp.py`, normal chat turns run through direct `AgentLoop`; swarm orchestration is opt-in (`mode=swarm`, `orchestrator_only=true`) and auto-selected for L4 task-like requests. Explicit swarm requests still hard-fail with `HTTP 500` if swarm returns no response.

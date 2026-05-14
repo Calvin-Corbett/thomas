@@ -22,7 +22,7 @@ The deeper orchestration, workboards, swarms, and builder/operator surfaces are 
 
 Start with the router, not the long doc chain:
 
-1. **Run** `python scripts/agent_startup_router.py --summary "<task summary>" [--path <repo/path>]...`
+1. **Run** `python scripts/crew/brief/startup_router.py --summary "<task summary>" [--path <repo/path>]...`
 2. **Read** the returned lane card and only the docs it points to
 3. **Escalate** into the heavier lane only when the router says the task is risky, broad, shared, or multi-agent
 
@@ -87,19 +87,19 @@ For agent coordination and planning:
 - Local auto-enforcement available via `.pre-commit-config.yaml`.
 
 Required ecosystem commands:
-- `python scripts/workboard_task_manager.py --sync-plans --apply`
-- `python scripts/workboard_task_manager.py --sync-sessions --apply`
-- `python scripts/workboard_task_manager.py --sync-specialists --apply`
-- `python scripts/workboard_task_manager.py --specialist-for-task --task-id "<task_id>"`
-- `python scripts/workboard_task_manager.py --monitor --apply --cycles 0 --interval-seconds 30 --task-manager-agent "task-manager-agent"`
-- `python scripts/workboard_message.py --send --from-agent "<agent>" --to-agent "<agent|task-manager-agent>" --summary "<text>" --task-id "<task_id>"`
-- `python scripts/workboard_worker.py --agent "Codex 2" --cycles 0 --poll-seconds 15 --catalog "plans/thomas/worker_command_catalog.json" --max-completions 0`
-- `python scripts/workboard_brainstorm.py --start --task-id "<task_id>" --summary "<brief>" --objective "<outcome>" --facilitator "task-manager-agent" --all-hands`
-- `python scripts/workboard_brainstorm.py --contribute --session-id "<session_id>" --agent "<agent>" --kind proposal --summary "<idea>"`
-- `python scripts/workboard_brainstorm.py --resolve-session --session-id "<session_id>" --summary "<decision>" --dispatch-item "task_id|scope|summary"`
-- `python scripts/workboard_swarm.py --create --task-id "<task_id>" --size 8 --agent-prefix "Codex" --agent-start 1 --spawn-command "codex"`
-- `python scripts/workboard_swarm.py --launch --swarm-id "<swarm_id>"`
-- `python scripts/workboard_swarm.py --status --swarm-id "<swarm_id>"`
+- `python scripts/crew/tasks/manager.py --sync-plans --apply`
+- `python scripts/crew/tasks/manager.py --sync-sessions --apply`
+- `python scripts/crew/tasks/manager.py --sync-specialists --apply`
+- `python scripts/crew/tasks/manager.py --specialist-for-task --task-id "<task_id>"`
+- `python scripts/crew/tasks/manager.py --monitor --apply --cycles 0 --interval-seconds 30 --task-manager-agent "task-manager-agent"`
+- `python scripts/crew/workboard/message.py --send --from-agent "<agent>" --to-agent "<agent|task-manager-agent>" --summary "<text>" --task-id "<task_id>"`
+- `python scripts/crew/workboard/worker.py --agent "Codex 2" --cycles 0 --poll-seconds 15 --catalog "plans/thomas/worker_command_catalog.json" --max-completions 0`
+- `python scripts/crew/workboard/brainstorm.py --start --task-id "<task_id>" --summary "<brief>" --objective "<outcome>" --facilitator "task-manager-agent" --all-hands`
+- `python scripts/crew/workboard/brainstorm.py --contribute --session-id "<session_id>" --agent "<agent>" --kind proposal --summary "<idea>"`
+- `python scripts/crew/workboard/brainstorm.py --resolve-session --session-id "<session_id>" --summary "<decision>" --dispatch-item "task_id|scope|summary"`
+- `python scripts/crew/swarm/cli.py --create --task-id "<task_id>" --size 8 --agent-prefix "Codex" --agent-start 1 --spawn-command "codex"`
+- `python scripts/crew/swarm/cli.py --launch --swarm-id "<swarm_id>"`
+- `python scripts/crew/swarm/cli.py --status --swarm-id "<swarm_id>"`
 
 ## Companion App Scope (Read Before Building Companion)
 

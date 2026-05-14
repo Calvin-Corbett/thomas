@@ -39,9 +39,9 @@ User sends message
 | `thomas/server/routes/chat_modes.py` | Fast-reply handler for casual messages |
 | `thomas/agent/routing.py` | DEPRECATED — old 8-path intent router |
 | `plans/thomas/WORKBOARD.md` | Task state, agent claims, messages |
-| `scripts/workboard_task_manager.py` | Task lifecycle management |
-| `scripts/workboard_worker.py` | Worker execution loop |
-| `scripts/workboard_message.py` | Inter-agent messaging |
+| `scripts/crew/tasks/manager.py` | Task lifecycle management |
+| `scripts/crew/workboard/worker.py` | Worker execution loop |
+| `scripts/crew/workboard/message.py` | Inter-agent messaging |
 
 ## How Dispatch Works
 
@@ -111,7 +111,7 @@ There are TWO separate "swarm" systems. They are NOT the same:
    chat request needs parallel in-process execution (e.g. "research X and
    build Y simultaneously").
 
-2. **`scripts/workboard_swarm.py`** — Multi-terminal agent spawner.
+2. **`scripts/crew/swarm/cli.py`** — Multi-terminal agent spawner.
    Launches separate agent processes (Codex, Claude, etc.) that each run
    independently. This IS the production multi-agent system used by the
    workboard.
@@ -134,4 +134,4 @@ System #1 (in-process swarm) remains available for future integration.
 → Start with `thomas/server/routes/chat_aiohttp_part02.py` (the HTTP route)
 
 ### "I need to change how workers execute tasks"
-→ Edit `scripts/workboard_worker.py` and `plans/thomas/worker_command_catalog.json`
+→ Edit `scripts/crew/workboard/worker.py` and `plans/thomas/worker_command_catalog.json`

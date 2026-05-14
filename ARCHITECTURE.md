@@ -29,7 +29,7 @@ hard-coded global paths.
   - Agent loop (`loop.py` assembled from `loop_part01/02/03.py`) handles LLM streaming,
     tool execution, and context management for both casual replies and worker agents.
   - In-process swarm orchestrator (`swarm.py`) for future parallel task execution.
-    NOT the same as `scripts/workboard_swarm.py` (terminal process spawner).
+    NOT the same as `scripts/crew/swarm/cli.py` (terminal process spawner).
   - See `thomas/agent/README.md` for a complete file map.
 - `thomas/tools`
   - Tool definitions, registry, and `ToolResult` contract (`thomas/tools/base.py`).

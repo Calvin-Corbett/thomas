@@ -35,7 +35,7 @@ Thomas is intended to reach **Level 5: Autopoietic** — meaning it can improve 
 - **Actionable messages** (everything else): Thomas immediately acknowledges ("On it."), then dispatches to the workboard task manager pipeline. The task manager breaks work down and assigns workers.
 - **Fallback**: If dispatch fails, Thomas falls back to inline execution via the agent loop.
 - **In-process swarm** (`thomas/agent/swarm.py`): Available for future use. NOT the default.
-- **Workboard swarm** (`scripts/workboard_swarm.py`): Spawns multi-terminal agent processes. Used by the task manager for heavy parallel work.
+- **Workboard swarm** (`scripts/crew/swarm/cli.py`): Spawns multi-terminal agent processes. Used by the task manager for heavy parallel work.
 
 See `docs/CHAT_EXECUTION_MODEL.md` for the complete architecture.
 
