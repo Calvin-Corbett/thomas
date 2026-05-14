@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import urllib.request
-from typing import Any, Dict
+from typing import Any
 
 from agent_vf.tools.base import Tool, ToolRegistry
 

@@ -65,22 +65,21 @@ class TestFileSystemLoader:
 
     def test_load_from_multiple_paths(self) -> None:
         """Test loading from multiple search paths."""
-        with tempfile.TemporaryDirectory() as tmpdir1:
-            with tempfile.TemporaryDirectory() as tmpdir2:
-                path1 = Path(tmpdir1)
-                path2 = Path(tmpdir2)
+        with tempfile.TemporaryDirectory() as tmpdir1, tempfile.TemporaryDirectory() as tmpdir2:
+            path1 = Path(tmpdir1)
+            path2 = Path(tmpdir2)
 
-                # Create templates in both paths
-                (path1 / "base.html").write_text("Base")
-                (path2 / "child.html").write_text("Child")
+            # Create templates in both paths
+            (path1 / "base.html").write_text("Base")
+            (path2 / "child.html").write_text("Child")
 
-                loader = FileSystemLoader([str(path1), str(path2)])
+            loader = FileSystemLoader([str(path1), str(path2)])
 
-                source1, _ = loader.get_source("base.html")
-                source2, _ = loader.get_source("child.html")
+            source1, _ = loader.get_source("base.html")
+            source2, _ = loader.get_source("child.html")
 
-                assert source1 == "Base"
-                assert source2 == "Child"
+            assert source1 == "Base"
+            assert source2 == "Child"
 
     def test_missing_template_in_filesystem(self) -> None:
         """Test missing template raises error."""

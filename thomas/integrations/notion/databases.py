@@ -41,14 +41,13 @@ class DatabaseManager:
         normalized_id = database_id.replace("-", "")
         url = f"{self.base_url}/databases/{normalized_id}"
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=self.headers) as resp:
-                if resp.status == 404:
-                    raise NotionNotFoundError(f"Database not found: {database_id}")
-                if resp.status >= 400:
-                    body = await resp.text()
-                    raise NotionAPIError(f"Failed to get database: {body}")
-                return await resp.json()
+        async with aiohttp.ClientSession() as session, session.get(url, headers=self.headers) as resp:
+            if resp.status == 404:
+                raise NotionNotFoundError(f"Database not found: {database_id}")
+            if resp.status >= 400:
+                body = await resp.text()
+                raise NotionAPIError(f"Failed to get database: {body}")
+            return await resp.json()
 
     async def query_database(
         self,

@@ -323,10 +323,9 @@ class CostTracker:
 
         with self._lock:
             self._spend_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self._spend_path, "a", encoding="utf-8") as f:
-                with _FileLock(f, exclusive=True):
-                    f.write(line)
-                    f.flush()
+            with open(self._spend_path, "a", encoding="utf-8") as f, _FileLock(f, exclusive=True):
+                f.write(line)
+                f.flush()
 
             # update persisted aggregates (fast path)
             self._apply_row(day_str, model, usd_total, pt, ct)
@@ -605,10 +604,9 @@ class CostTracker:
                 self._file_mtime_ns = mtime_ns
                 return
 
-            with open(path, "rb") as f:
-                with _FileLock(f, exclusive=False):
-                    f.seek(self._processed_pos)
-                    blob = f.read()
+            with open(path, "rb") as f, _FileLock(f, exclusive=False):
+                f.seek(self._processed_pos)
+                blob = f.read()
 
             if not blob:
                 self._file_size = size

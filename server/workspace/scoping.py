@@ -7,7 +7,6 @@ This is a guardrail, not a magical force-field:
 - Core SQL / raw SQL that bypasses ORM won't be automatically scoped.
 """
 
-from typing import Set, Type
 
 from sqlalchemy import event
 from sqlalchemy.orm import Session, with_loader_criteria
@@ -31,7 +30,7 @@ def register_workspace_scoping() -> None:
             if hasattr(obj, "workspace_id") and obj.workspace_id in (None, ""):
                 try:
                     obj.workspace_id = ws_id
-                except Exception:
+                except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
                     pass
 
     @event.listens_for(Session, "do_orm_execute")
@@ -65,7 +64,7 @@ def register_workspace_scoping() -> None:
                 ent = desc.get("entity")
                 if ent is not None and hasattr(ent, "workspace_id"):
                     entities.add(ent)
-        except Exception:
+        except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
             return
 
         if not entities:

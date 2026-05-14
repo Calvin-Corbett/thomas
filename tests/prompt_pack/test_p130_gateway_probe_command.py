@@ -121,14 +121,13 @@ async def test_server_route_returns_json_success():
         api_app = web.Application()
         api_app.add_routes(gateway_routes)
 
-        async with run_test_server(api_app) as api_url:
-            async with ClientSession() as session:
-                resp = await session.post(
-                    f"{api_url}/probe",
-                    json={"target": target_url, "timeout_s": 1.0, "path": "/"},
-                )
-                assert resp.status == 200
-                data = await resp.json()
+        async with run_test_server(api_app) as api_url, ClientSession() as session:
+            resp = await session.post(
+                f"{api_url}/probe",
+                json={"target": target_url, "timeout_s": 1.0, "path": "/"},
+            )
+            assert resp.status == 200
+            data = await resp.json()
 
     assert data["ok"] is True
     assert data["target"] == target_url
@@ -139,15 +138,14 @@ async def test_server_route_returns_json_error_on_invalid_json():
     api_app = web.Application()
     api_app.add_routes(gateway_routes)
 
-    async with run_test_server(api_app) as api_url:
-        async with ClientSession() as session:
-            resp = await session.post(
-                f"{api_url}/probe",
-                data="not-json",
-                headers={"Content-Type": "application/json"},
-            )
-            assert resp.status == 400
-            data = await resp.json()
+    async with run_test_server(api_app) as api_url, ClientSession() as session:
+        resp = await session.post(
+            f"{api_url}/probe",
+            data="not-json",
+            headers={"Content-Type": "application/json"},
+        )
+        assert resp.status == 400
+        data = await resp.json()
 
     assert data["ok"] is False
     assert data["error"]["code"] == "invalid_input"

@@ -14,51 +14,45 @@ class TestKVStoreBasics:
 
     def test_put_and_get(self):
         """Test basic put and get."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
-                store.put(b"key", b"value")
-                assert store.get(b"key") == b"value"
+        with tempfile.TemporaryDirectory() as tmpdir, KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
+            store.put(b"key", b"value")
+            assert store.get(b"key") == b"value"
 
     def test_get_missing_key(self):
         """Test getting missing key raises error."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
-                with pytest.raises(KeyNotFoundError):
-                    store.get(b"missing")
+        with tempfile.TemporaryDirectory() as tmpdir, KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
+            with pytest.raises(KeyNotFoundError):
+                store.get(b"missing")
 
     def test_update_key(self):
         """Test updating an existing key."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
-                store.put(b"key", b"value1")
-                store.put(b"key", b"value2")
-                assert store.get(b"key") == b"value2"
+        with tempfile.TemporaryDirectory() as tmpdir, KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
+            store.put(b"key", b"value1")
+            store.put(b"key", b"value2")
+            assert store.get(b"key") == b"value2"
 
     def test_delete_key(self):
         """Test deleting a key."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
-                store.put(b"key", b"value")
-                store.delete(b"key")
-                with pytest.raises(KeyNotFoundError):
-                    store.get(b"key")
+        with tempfile.TemporaryDirectory() as tmpdir, KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
+            store.put(b"key", b"value")
+            store.delete(b"key")
+            with pytest.raises(KeyNotFoundError):
+                store.get(b"key")
 
     def test_contains(self):
         """Test contains method."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
-                store.put(b"key", b"value")
-                assert store.contains(b"key")
-                assert not store.contains(b"missing")
-                store.delete(b"key")
-                assert not store.contains(b"key")
+        with tempfile.TemporaryDirectory() as tmpdir, KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
+            store.put(b"key", b"value")
+            assert store.contains(b"key")
+            assert not store.contains(b"missing")
+            store.delete(b"key")
+            assert not store.contains(b"key")
 
     def test_invalid_keys(self):
         """Test that empty keys are rejected."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
-                with pytest.raises(ValueError):
-                    store.put(b"", b"value")
+        with tempfile.TemporaryDirectory() as tmpdir, KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
+            with pytest.raises(ValueError):
+                store.put(b"", b"value")
 
     def test_closed_store_raises_error(self):
         """Test that operations on closed store raise error."""
@@ -110,50 +104,46 @@ class TestKVStoreScan:
 
     def test_scan_all(self):
         """Test scanning all keys."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
-                for i in range(10):
-                    store.put(f"key{i:02d}".encode(), f"value{i}".encode())
+        with tempfile.TemporaryDirectory() as tmpdir, KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
+            for i in range(10):
+                store.put(f"key{i:02d}".encode(), f"value{i}".encode())
 
-                results = list(store.scan())
-                assert len(results) == 10
-                keys = [k for k, _ in results]
-                assert keys == sorted(keys)
+            results = list(store.scan())
+            assert len(results) == 10
+            keys = [k for k, _ in results]
+            assert keys == sorted(keys)
 
     def test_scan_with_start_key(self):
         """Test scan with start key."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
-                for i in range(10):
-                    store.put(f"key{i:02d}".encode(), f"value{i}".encode())
+        with tempfile.TemporaryDirectory() as tmpdir, KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
+            for i in range(10):
+                store.put(f"key{i:02d}".encode(), f"value{i}".encode())
 
-                results = list(store.scan(start_key=b"key05"))
-                keys = [k for k, _ in results]
-                assert b"key05" in keys
-                assert b"key04" not in keys
+            results = list(store.scan(start_key=b"key05"))
+            keys = [k for k, _ in results]
+            assert b"key05" in keys
+            assert b"key04" not in keys
 
     def test_scan_with_end_key(self):
         """Test scan with end key."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
-                for i in range(10):
-                    store.put(f"key{i:02d}".encode(), f"value{i}".encode())
+        with tempfile.TemporaryDirectory() as tmpdir, KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
+            for i in range(10):
+                store.put(f"key{i:02d}".encode(), f"value{i}".encode())
 
-                results = list(store.scan(end_key=b"key05"))
-                keys = [k for k, _ in results]
-                assert b"key05" not in keys
-                assert all(k < b"key05" for k in keys)
+            results = list(store.scan(end_key=b"key05"))
+            keys = [k for k, _ in results]
+            assert b"key05" not in keys
+            assert all(k < b"key05" for k in keys)
 
     def test_scan_range(self):
         """Test scan with both start and end keys."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
-                for i in range(20):
-                    store.put(f"key{i:02d}".encode(), f"value{i}".encode())
+        with tempfile.TemporaryDirectory() as tmpdir, KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
+            for i in range(20):
+                store.put(f"key{i:02d}".encode(), f"value{i}".encode())
 
-                results = list(store.scan(start_key=b"key05", end_key=b"key10"))
-                keys = [k for k, _ in results]
-                assert all(b"key05" <= k < b"key10" for k in keys)
+            results = list(store.scan(start_key=b"key05", end_key=b"key10"))
+            keys = [k for k, _ in results]
+            assert all(b"key05" <= k < b"key10" for k in keys)
 
 
 class TestKVStoreCompaction:
@@ -161,17 +151,16 @@ class TestKVStoreCompaction:
 
     def test_manual_compaction(self):
         """Test manual compaction."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
-                # Write enough to create SSTables
-                for i in range(100):
-                    store.put(f"key{i:03d}".encode(), f"value{i}".encode())
+        with tempfile.TemporaryDirectory() as tmpdir, KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
+            # Write enough to create SSTables
+            for i in range(100):
+                store.put(f"key{i:03d}".encode(), f"value{i}".encode())
 
-                store.compact()
+            store.compact()
 
-                # Verify data is still accessible
-                for i in range(100):
-                    assert store.get(f"key{i:03d}".encode()) == f"value{i}".encode()
+            # Verify data is still accessible
+            for i in range(100):
+                assert store.get(f"key{i:03d}".encode()) == f"value{i}".encode()
 
     def test_automatic_l0_compaction(self):
         """Test automatic L0 compaction when file count threshold exceeded."""
@@ -194,14 +183,13 @@ class TestKVStoreStats:
 
     def test_stats(self):
         """Test getting stats."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
-                store.put(b"key", b"value")
-                stats = store.stats()
-                assert "memtable_size_bytes" in stats
-                assert "memtable_entries" in stats
-                assert "levels" in stats
-                assert "sequence" in stats
+        with tempfile.TemporaryDirectory() as tmpdir, KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
+            store.put(b"key", b"value")
+            stats = store.stats()
+            assert "memtable_size_bytes" in stats
+            assert "memtable_entries" in stats
+            assert "levels" in stats
+            assert "sequence" in stats
 
 
 class TestKVStoreConcurrency:
@@ -271,10 +259,9 @@ class TestKVStoreContextManager:
 
     def test_context_manager(self):
         """Test KVStore works as context manager."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
-                store.put(b"key", b"value")
-                assert store.get(b"key") == b"value"
+        with tempfile.TemporaryDirectory() as tmpdir, KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
+            store.put(b"key", b"value")
+            assert store.get(b"key") == b"value"
 
 
 class TestKVStoreConfiguration:
@@ -302,11 +289,10 @@ class TestKVStoreEdgeCases:
 
     def test_large_values(self):
         """Test handling large values."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
-                large_value = b"x" * 1000000  # 1MB
-                store.put(b"key", large_value)
-                assert store.get(b"key") == large_value
+        with tempfile.TemporaryDirectory() as tmpdir, KVStore(KVStoreConfig(data_dir=tmpdir)) as store:
+            large_value = b"x" * 1000000  # 1MB
+            store.put(b"key", large_value)
+            assert store.get(b"key") == large_value
 
     def test_many_keys(self):
         """Test handling many keys."""

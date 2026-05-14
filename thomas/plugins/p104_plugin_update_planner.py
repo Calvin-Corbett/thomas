@@ -153,7 +153,7 @@ class PluginUpdatePlannerRequest(TypedDict, total=False):
       - timeout_s: HTTP timeout for catalog_url (seconds)
     """
 
-    installed: Union[list[Union[InstalledPluginDict, str]], dict[str, Any]]
+    installed: list[InstalledPluginDict | str] | dict[str, Any]
     available: dict[str, Any]
     catalog_path: str
     catalog_url: str
@@ -304,7 +304,7 @@ def _split_prerelease(pr: str) -> list[str]:
     return pr.split(".")
 
 
-def _prerelease_key(pr: str | None) -> tuple[int, list[tuple[int, Union[int, str]]]]:
+def _prerelease_key(pr: str | None) -> tuple[int, list[tuple[int, int | str]]]:
     """
     Create a sortable key with SemVer rules:
       - No prerelease has higher precedence than prerelease
@@ -317,7 +317,7 @@ def _prerelease_key(pr: str | None) -> tuple[int, list[tuple[int, Union[int, str
     if pr is None:
         return (1, [])  # stable is highest (after comparing major/minor/patch)
     parts = _split_prerelease(pr)
-    key_parts: list[tuple[int, Union[int, str]]] = []
+    key_parts: list[tuple[int, int | str]] = []
     for p in parts:
         if p.isdigit():
             key_parts.append((0, int(p)))
@@ -468,7 +468,7 @@ class PluginUpdatePlan:
         return {"ok": True, "actions": [a.to_dict() for a in self.actions], "summary": self.summary()}
 
 
-def _normalize_installed_entry(entry: Union[InstalledPluginDict, str]) -> InstalledPlugin:
+def _normalize_installed_entry(entry: InstalledPluginDict | str) -> InstalledPlugin:
     if isinstance(entry, str):
         # Support "id@version" shorthand; allow scoped packages by splitting at the last "@"
         s = entry.strip()
@@ -767,7 +767,7 @@ def plan_plugin_updates(request: PluginUpdatePlannerRequest) -> PluginUpdatePlan
             "'installed' must be a non-empty list (or an object containing one).",
             details={"installed": request.get("installed")},
         )
-    installed = [_normalize_installed_entry(cast(Union[InstalledPluginDict, str], e)) for e in installed_list]
+    installed = [_normalize_installed_entry(cast(InstalledPluginDict | str, e)) for e in installed_list]
 
     include_prereleases = bool(request.get("include_prereleases", False))
 

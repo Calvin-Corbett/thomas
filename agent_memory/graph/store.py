@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
 
 from agent_memory.graph.extract import extract_edges
 from agent_memory.indexing.derived_db import DerivedDB

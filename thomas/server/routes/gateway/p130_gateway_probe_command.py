@@ -245,10 +245,9 @@ async def probe_gateway(*, target: str, timeout_s: float = 3.0, path: str = "/")
     status_code: int | None = None
     try:
         timeout = ClientTimeout(total=timeout_s)
-        async with ClientSession(timeout=timeout) as session:
-            async with session.get(url) as resp:
-                status_code = resp.status
-                await resp.read()
+        async with ClientSession(timeout=timeout) as session, session.get(url) as resp:
+            status_code = resp.status
+            await resp.read()
 
         latency_ms = int(round((time.monotonic() - started) * 1000))
         if status_code >= 400:

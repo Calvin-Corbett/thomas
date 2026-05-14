@@ -25,7 +25,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 # Load config from agent_safety.toml if available
-import sys
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:

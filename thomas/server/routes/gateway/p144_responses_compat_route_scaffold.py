@@ -42,10 +42,10 @@ class ResponsesCompatTextInput(TypedDict, total=False):
 
 class ResponsesCompatMessageInput(TypedDict, total=False):
     role: Literal["user", "system", "assistant", "developer"]
-    content: Union[str, Sequence[ResponsesCompatTextInput]]
+    content: str | Sequence[ResponsesCompatTextInput]
 
 
-ResponsesCompatInput = Union[str, Sequence[Union[ResponsesCompatTextInput, ResponsesCompatMessageInput]]]
+ResponsesCompatInput = Union[str, Sequence[ResponsesCompatTextInput | ResponsesCompatMessageInput]]
 
 
 class ResponsesCompatCreateRequest(TypedDict, total=False):

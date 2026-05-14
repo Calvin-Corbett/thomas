@@ -179,9 +179,8 @@ class TestWALSyncModes:
 
     def test_invalid_sync_mode(self):
         """Test that invalid sync mode raises error."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with pytest.raises(ValueError):
-                WAL(tmpdir, sync_mode="invalid")
+        with tempfile.TemporaryDirectory() as tmpdir, pytest.raises(ValueError):
+            WAL(tmpdir, sync_mode="invalid")
 
 
 class TestWALCorruptionDetection:

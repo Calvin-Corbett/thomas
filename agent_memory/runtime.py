@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Tuple
 
 from agent_memory.config import AppPaths
 from agent_memory.indexing.compiler import Compiler

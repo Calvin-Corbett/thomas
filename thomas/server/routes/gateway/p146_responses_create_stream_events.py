@@ -42,7 +42,7 @@ from aiohttp import ClientSession, ClientTimeout, ContentTypeError, web
 
 class CreateResponseRequestDict(TypedDict, total=False):
     model: str
-    input: Union[str, list[Any]]
+    input: str | list[Any]
     stream: bool
     temperature: float
     max_output_tokens: int
@@ -62,7 +62,7 @@ StreamEvent = dict[str, Any]
 @dataclass(frozen=True)
 class ParsedCreateResponseRequest:
     model: str
-    raw_input: Union[str, list[Any]]
+    raw_input: str | list[Any]
     prompt_text: str
     stream: bool
     temperature: float
@@ -213,7 +213,7 @@ def parse_create_response_request(payload: Mapping[str, Any]) -> ParsedCreateRes
 
     return ParsedCreateResponseRequest(
         model=model.strip(),
-        raw_input=cast(Union[str, list[Any]], raw_input),
+        raw_input=cast(str | list[Any], raw_input),
         prompt_text=prompt_text,
         stream=stream,
         temperature=float(temperature),

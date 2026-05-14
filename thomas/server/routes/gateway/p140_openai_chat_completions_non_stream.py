@@ -47,7 +47,7 @@ class OpenAIChatCompletionsRequest(TypedDict, total=False):
     top_p: float
     max_tokens: int
     n: int
-    stop: Union[str, list[str]]
+    stop: str | list[str]
     presence_penalty: float
     frequency_penalty: float
     user: str
@@ -151,7 +151,7 @@ def _extract_dict(d: Any) -> dict[str, Any]:
     return {}
 
 
-def resolve_openai_config(app: web.Application | None = None) -> Union[OpenAIConfig, OpenAIErrorResponse]:
+def resolve_openai_config(app: web.Application | None = None) -> OpenAIConfig | OpenAIErrorResponse:
     """
     Resolve OpenAI client config.
 
@@ -272,7 +272,7 @@ def _json_error_response(err: OpenAIErrorResponse, *, status: int) -> web.Respon
 # ----------------------------
 
 
-def validate_request(payload: Any) -> Union[OpenAIChatCompletionsRequest, OpenAIErrorResponse]:
+def validate_request(payload: Any) -> OpenAIChatCompletionsRequest | OpenAIErrorResponse:
     if not isinstance(payload, dict):
         return _error(
             message="Request body must be a JSON object.",

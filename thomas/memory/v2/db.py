@@ -69,9 +69,8 @@ class SqliteDB:
     @contextlib.contextmanager
     def transact(self) -> Iterator[sqlite3.Connection]:
         """Transaction context that also serializes access."""
-        with self._lock:
-            with self._conn:
-                yield self._conn
+        with self._lock, self._conn:
+            yield self._conn
 
     def execute(self, sql: str, args: tuple[Any, ...] = ()) -> _LockedCursor:
         with self._lock:

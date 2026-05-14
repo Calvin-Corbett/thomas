@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional
 
 from agent_memory.indexing.derived_db import DerivedDB
 from agent_memory.vector.embedder import EmbedderConfig, HashEmbedder

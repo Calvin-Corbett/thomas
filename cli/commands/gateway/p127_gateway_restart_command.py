@@ -131,20 +131,19 @@ async def _default_requester(server_url: str, payload: dict[str, Any]) -> dict[s
 
     target = f"{server_url.rstrip('/')}{DEFAULT_ROUTE_PATH}"
     timeout = aiohttp.ClientTimeout(total=30)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.post(target, json=payload) as resp:
-            try:
-                return await resp.json()
-            except Exception:  # noqa: BLE001
-                text = await resp.text()
-                return {
-                    "ok": False,
-                    "error": {
-                        "code": "external_failure",
-                        "message": "Non-JSON response from server.",
-                        "details": {"status": resp.status, "body": text[:200]},
-                    },
-                }
+    async with aiohttp.ClientSession(timeout=timeout) as session, session.post(target, json=payload) as resp:
+        try:
+            return await resp.json()
+        except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):  # noqa: BLE001
+            text = await resp.text()
+            return {
+                "ok": False,
+                "error": {
+                    "code": "external_failure",
+                    "message": "Non-JSON response from server.",
+                    "details": {"status": resp.status, "body": text[:200]},
+                },
+            }
 
 
 def build_arg_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
