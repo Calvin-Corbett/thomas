@@ -106,7 +106,7 @@ thomas/core/events.py              <- Direct file
 ```
 thomas/agent/loop.py               <- STUB — loads from loop_part01/02/03.py
 thomas/server/routes/chat_aiohttp.py <- STUB — loads from chat_aiohttp_part01/02/03.py
-scripts/workboard_task_manager.py  <- STUB — loads from workboard_task_manager_part01/02/03/04.py
+scripts/crew/tasks/manager.py  <- STUB — loads from workboard_task_manager_part01/02/03/04.py
 ```
 
 For monolith-loaded files, the stub file (e.g. `loop.py`) does NOT contain code. It loads from part files (e.g. `loop_part01.py`, `loop_part02.py`). Edit the PARTS.

@@ -22,10 +22,10 @@ Report results or make changes
 
 | Script | Purpose |
 |---|---|
-| `workboard_task_manager.py` | Poll WORKBOARD.md, claim tasks, assign sub-tasks |
-| `workboard_worker.py` | Execute commands assigned on workboard |
-| `workboard_message.py` | Send messages between workboard agents |
-| `workboard_swarm.py` | Launch multi-agent swarm from workboard |
+| `crew/tasks/manager.py` | Poll WORKBOARD.md, claim tasks, assign sub-tasks |
+| `crew/workboard/worker.py` | Execute commands assigned on workboard |
+| `crew/workboard/message.py` | Send messages between workboard agents |
+| `crew/swarm/cli.py` | Launch multi-agent swarm from workboard |
 | `forge/gates/workboard_claims.py` | Verify agent claims on workboard |
 | `forge/gates/workboard_agent_claim.py` | Validate a specific agent's claim |
 | `forge/gates/workboard_changed_files.py` | What files did workboard change |
@@ -65,7 +65,7 @@ Report results or make changes
 | `apply_release_lanes.ps1` | PowerShell: Apply release lanes |
 | `apply_branch_protection.ps1` | PowerShell: Branch protection setup |
 | `forge/gates/release_lane_policy.py` | Release lane enforcement |
-| `agent_bootstrap_claim.py` | Agent initialization claim |
+| `crew/brief/bootstrap_claim.py` | Agent initialization claim |
 | `forge/gates/claim_integrity.py` | Validate agent claims |
 
 ### Visualization and Verification
@@ -279,7 +279,7 @@ def run_check(name, validator):
 ### From command line:
 
 ```bash
-python scripts/workboard_task_manager.py
+python scripts/crew/tasks/manager.py
 python scripts/auto_checks.py --verbose
 python scripts/forge/gates/monolith_guard.py --fix
 ```
@@ -288,7 +288,7 @@ python scripts/forge/gates/monolith_guard.py --fix
 
 ```bash
 # Dry run (don't make changes)
-python scripts/workboard_task_manager.py --dry-run
+python scripts/crew/tasks/manager.py --dry-run
 
 # Verbose output
 python scripts/auto_checks.py -v
@@ -307,7 +307,7 @@ Scripts are typically run in CI/CD pipelines:
 1. Pre-commit hooks: `check_*.py` validators
 2. Pull request checks: `auto_checks.py`
 3. Release process: `check_release_*.py` and `apply_release_*.ps1`
-4. Scheduled tasks: `workboard_task_manager.py` runs periodically
+4. Scheduled tasks: `crew/tasks/manager.py` runs periodically
 
 ## For AI Agents
 

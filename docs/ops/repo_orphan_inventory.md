@@ -100,9 +100,9 @@
 | `scripts/a.py` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
 | `scripts/competitors/tests/` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
 | `scripts/repo_orphan_inventory.py` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
-| `scripts/workboard_brainstorm.py` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
-| `scripts/workboard_swarm.py` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
-| `scripts/workboard_worker.py` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
+| `scripts/crew/workboard/brainstorm.py` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
+| `scripts/crew/swarm/cli.py` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
+| `scripts/crew/workboard/worker.py` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
 | `tests/test_ag_crops.py` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
 | `tests/test_ag_economics.py` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
 | `tests/test_ag_irrigation.py` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |

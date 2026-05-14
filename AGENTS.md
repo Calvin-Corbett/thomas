@@ -2,7 +2,7 @@
 
 ## STOP — Read This Before Anything Else
 
-1. Run the startup router: `python scripts/agent_startup_router.py --summary "<task summary>"`
+1. Run the startup router: `python scripts/crew/brief/startup_router.py --summary "<task summary>"`
 2. Read [GUARDRAILS.md](GUARDRAILS.md) and the module-level `GUARDRAILS.md` for whatever directory you are modifying
 3. Read [docs/AGENT_FILE_EDITING_RULES.md](docs/AGENT_FILE_EDITING_RULES.md) — this project has a monolith source loader; editing the wrong file means your changes DO NOTHING
 4. Check `agent_safety.toml` for protected files, forbidden patterns, and circular import rules
@@ -94,7 +94,7 @@ Before writing ANY code, read:
 
 ## Start Here
 
-1. Run `python scripts/agent_startup_router.py --summary "<task summary>"`.
+1. Run `python scripts/crew/brief/startup_router.py --summary "<task summary>"`.
 2. Read the returned lane card plus `docs/AGENT_FILE_EDITING_RULES.md`, `GUARDRAILS.md`, and any module `GUARDRAILS.md` the router points to.
 3. Use these deeper docs only when the lane requires them:
    - `PROJECT_INDEX.md` for runtime boot paths and system wiring
@@ -166,7 +166,7 @@ When multiple agents are active, use a double-handshake before bundling commits.
 
 **Standard first-pass behavior (non-negotiable unless user overrides):**
 
-- Use `agent_bootstrap_claim.py` for orchestration parents.
+- Use `crew/brief/bootstrap_claim.py` for orchestration parents.
 - Default to `parent` role (callsign `dispatcher`) with auto dispatch.
 - Dispatch minimum floor: 2 workers.
 - READY workers released before refill.
@@ -174,13 +174,13 @@ When multiple agents are active, use a double-handshake before bundling commits.
 
 **Steps:**
 
-1. **Claim scope:** `python scripts/agent_bootstrap_claim.py --agent "<name>" --scope "<path[,path...]>" --task "<short task>" --name "<name>"`
-2. **Mark ready:** `python scripts/workboard_claim.py --claim --agent "<name>" --name "<callsign>" --role <role> --parent <parent-id> --scope "<paths>" --task "[READY][HSK-<id>] <summary>"`
-3. **Fan out (parents):** `python scripts/workboard_claim.py --dispatch-workers --agent "<parent-name>" --dispatch-release-ready --dispatch-target-workers 2 --task-manager-agent "thomas"`
+1. **Claim scope:** `python scripts/crew/brief/bootstrap_claim.py --agent "<name>" --scope "<path[,path...]>" --task "<short task>" --name "<name>"`
+2. **Mark ready:** `python scripts/crew/workboard/claim.py --claim --agent "<name>" --name "<callsign>" --role <role> --parent <parent-id> --scope "<paths>" --task "[READY][HSK-<id>] <summary>"`
+3. **Fan out (parents):** `python scripts/crew/workboard/claim.py --dispatch-workers --agent "<parent-name>" --dispatch-release-ready --dispatch-target-workers 2 --task-manager-agent "thomas"`
 4. **Report issues:** `python scripts/workboard_issue.py --block --task-id "<id>" --reporter "<agent>" --summary "<blocker>"`
 5. **Acknowledge handoff:** `python scripts/append_handoff.py --title "ACK HSK-<id>" --note "<agent> marked READY"`
 6. **Integrator bundles** only after READY+ACK.
-7. **Release claims:** `python scripts/workboard_claim.py --release --agent "<name>"`
+7. **Release claims:** `python scripts/crew/workboard/claim.py --release --agent "<name>"`
 
 **Guard rails:** Never commit another agent's scope unless `[READY]` + ACK. Never use `--no-verify` except explicit emergency. SKIP requires `THOMAS_SKIP_BREAKGLASS=1` and is audited.
 

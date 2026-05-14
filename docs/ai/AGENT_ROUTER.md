@@ -5,7 +5,7 @@ Use this before loading long repo docs.
 Canonical startup entrypoint:
 
 ```bash
-python scripts/agent_startup_router.py --summary "<task summary>" [--path <repo/path>]...
+python scripts/crew/brief/startup_router.py --summary "<task summary>" [--path <repo/path>]...
 ```
 
 What the router does:

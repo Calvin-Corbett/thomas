@@ -6,7 +6,7 @@ Read AGENTS.md immediately. Every rule in that file applies to you.
 
 - You MUST tag every commit with `Thomas-Agent: claude` in the commit message trailer.
 - You MUST run the agent startup router before doing any work:
-  `python scripts/agent_startup_router.py --summary "<task summary>"`
+  `python scripts/crew/brief/startup_router.py --summary "<task summary>"`
 - You MUST NOT create files matching `*_part*.py` or `*.part*.py`. This is a monolith split pattern that is banned. If a file is too large, refactor it into separate modules with normal Python imports.
 - You MUST NOT use `exec()` to load code from other files. Use normal imports.
 - You MUST NOT modify any file listed in `agent_safety.toml` under `[protected_files]` without explicit user approval.
@@ -43,7 +43,7 @@ If you find matching branches or commits:
 2. Ask the user before building anything new — the work may just need a merge.
 3. If the branch has real, working code, merge or cherry-pick it instead of rewriting.
 
-The startup router (`agent_startup_router.py`) now scans branches automatically and will warn you. **Do not ignore branch scan warnings.**
+The startup router (`crew/brief/startup_router.py`) now scans branches automatically and will warn you. **Do not ignore branch scan warnings.**
 
 ## Before you write code
 

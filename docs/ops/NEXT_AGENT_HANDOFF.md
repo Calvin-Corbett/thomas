@@ -16,7 +16,7 @@ Latest stability checkpoint commits: `3475aa2`, `36af455`, `7fb8de5`, `d865441`,
 - Active-folder coordination has strict overlap blocking + pre-commit staged guard.
 - Pre-commit guard now requires explicit agent identity by default.
 - iOS in this repo means Companion policy/runtime/API coverage (not native Xcode app output).
-- All non-task-manager implementation agents are required to bootstrap with `agent_bootstrap_claim.py` for first claim in a terminal/session so parent role and dispatch are standardized.
+- All non-task-manager implementation agents are required to bootstrap with `crew/brief/bootstrap_claim.py` for first claim in a terminal/session so parent role and dispatch are standardized.
 
 ## Resume Commands
 
@@ -29,7 +29,7 @@ Latest stability checkpoint commits: `3475aa2`, `36af455`, `7fb8de5`, `d865441`,
 ## Task Board Standard
 
 - Non-task-manager implementation agents must use bootstrap claim + implicit orchestration:
-  - `python scripts/agent_bootstrap_claim.py --agent "<agent>" --scope "<scope>" --task "<summary>" --name "<name>"`
+  - `python scripts/crew/brief/bootstrap_claim.py --agent "<agent>" --scope "<scope>" --task "<summary>" --name "<name>"`
 - Bootstrap defaults are parent + auto-dispatch; leave dispatch on unless this is an explicit one-shot (`--no-auto-dispatch`).
 - Bootstrap dispatch is clamped to at least two workers by default and should keep moving when READY lanes exist.
 - Workers should release or mark `READY` on completion so the next assignment starts automatically, unless user explicitly asks to stay on a lane.
@@ -59,7 +59,7 @@ Standard completion cadence:
 - Claim folder ownership while working:
   - `python scripts/active_folders.py claim --path <target-folder> --note "<task>"`
 - Before implementation edits, pair folder claim with workboard bootstrap when not task-manager:
-  - `python scripts/agent_bootstrap_claim.py --agent "$env:AGENT_ID" --scope "<paths>" --task "<short task>" --name "<alias>"`
+  - `python scripts/crew/brief/bootstrap_claim.py --agent "$env:AGENT_ID" --scope "<paths>" --task "<short task>" --name "<alias>"`
 - Commits auto-check staged files via pre-commit hook:
   - `python scripts/active_folders.py guard-staged --require-explicit-agent`
 - Release after completion:
