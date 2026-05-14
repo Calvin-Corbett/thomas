@@ -210,7 +210,7 @@ class TestTDigest:
     def test_tdigest_compression(self) -> None:
         """Test T-Digest compression."""
         digest = TDigest(max_size=50)
-        initial_size = len(digest.centroids)
+        len(digest.centroids)
 
         for i in range(1000):
             digest.add(float(i))

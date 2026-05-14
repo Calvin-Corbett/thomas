@@ -123,7 +123,7 @@ class TestSquareWave:
         freqs = frequency_bins(len(sig.samples), sig.sample_rate)
 
         # Find peaks at odd harmonics
-        fundamental_idx = np.argmin(np.abs(freqs - 50))
+        np.argmin(np.abs(freqs - 50))
         third_harmonic_idx = np.argmin(np.abs(freqs - 150))
         second_harmonic_idx = np.argmin(np.abs(freqs - 100))
 

@@ -247,7 +247,7 @@ class LFUCache(Generic[T]):
             return False
 
         key_to_evict = next(iter(min_bucket))
-        entry = self._entries[key_to_evict]
+        self._entries[key_to_evict]
 
         self._remove_entry(key_to_evict)
         self._stats.evictions += 1

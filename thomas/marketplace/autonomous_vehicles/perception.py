@@ -118,7 +118,7 @@ class PointCloudProcessor:
         points_array = np.array([[p.x, p.y, p.z] for p in points])
 
         best_inliers = []
-        best_plane_normal = np.array([0, 0, 1], dtype=np.float32)
+        np.array([0, 0, 1], dtype=np.float32)
 
         # RANSAC iterations
         num_iterations = min(100, len(points) // 3)
@@ -142,7 +142,6 @@ class PointCloudProcessor:
 
             if len(inliers) > len(best_inliers):
                 best_inliers = inliers
-                best_plane_normal = normal
 
         # Filter out ground points
         if len(best_inliers) > 0:
@@ -284,12 +283,11 @@ class LaneDetector:
         try:
             from scipy import ndimage
 
-            edges = ndimage.sobel(normalized)
+            ndimage.sobel(normalized)
         except ImportError:
-            edges = normalized
+            pass
 
         # Simple line detection (replace with proper HoughLinesP if available)
-        lines = []
         return [(Vector2D(0, 0), Vector2D(1, 1)) for _ in range(2)]  # Placeholder
 
 
@@ -334,7 +332,7 @@ class SensorFusion:
         fused = []
         for pos, confidence in all_detections:
             # Simple averaging
-            state = KalmanFilterState(
+            KalmanFilterState(
                 position=np.array([pos.x, pos.y]),
                 velocity=np.array([0.0, 0.0]),
                 covariance=np.eye(4),

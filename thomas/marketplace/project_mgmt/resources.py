@@ -423,7 +423,7 @@ class ResourceManager:
         Raises:
             ResourceNotFoundError: If resource doesn't exist.
         """
-        resource = self.get_resource(resource_id)
+        self.get_resource(resource_id)
         if resource_id in self.allocations and self.allocations[resource_id]:
             raise ResourceOverallocationError("Cannot delete resource with active allocations")
         del self.resources[resource_id]

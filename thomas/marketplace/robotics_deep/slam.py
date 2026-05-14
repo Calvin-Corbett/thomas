@@ -195,7 +195,6 @@ class OccupancyGridMapper:
             cx = x1 + t * (x2 - x1)
             cy = y1 + t * (y2 - y1)
 
-            value = 0.2 if occupied else 0.2
             self.grid.set_cell(cx, cy, 0.3)  # Mark as free
 
 

@@ -242,7 +242,7 @@ class SubscriptionMigrator:
             migrated = 0
 
             for sub in old_subs:
-                new_sub = self.registry.register_subscription(
+                self.registry.register_subscription(
                     endpoint_id=new_endpoint_id,
                     event_types=sub.event_types,
                     filters=sub.filters,

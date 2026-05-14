@@ -161,15 +161,12 @@ class DictionaryEncoder:
         # Use compact integer width for indices.
         dict_size = len(dictionary)
         if dict_size <= 0xFF:
-            index_size = 1
             null_sentinel = 0xFF
             pack_fmt = "B"
         elif dict_size <= 0xFFFF:
-            index_size = 2
             null_sentinel = 0xFFFF
             pack_fmt = "<H"
         else:
-            index_size = 4
             null_sentinel = -1
             pack_fmt = "<i"
 

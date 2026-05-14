@@ -87,7 +87,7 @@ class TestProofOfWork:
         import time
 
         blocks = []
-        current_time = int(time.time())
+        int(time.time())
 
         # Create blocks faster than target
         for i in range(10):

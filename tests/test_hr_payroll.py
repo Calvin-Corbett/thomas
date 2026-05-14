@@ -244,7 +244,7 @@ class TestPayrollEngine:
         )
 
         gross = record.gross_salary
-        deductions = record.total_deductions()
+        record.total_deductions()
 
         # Net should be gross minus deductions
         assert record.net_salary < gross

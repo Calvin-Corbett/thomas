@@ -45,7 +45,7 @@ class KinematicsTool(Tool):
                     return ToolResult(ok=False, error="Joint angles required")
 
                 try:
-                    fk = robotics_deep.ForwardKinematics()
+                    robotics_deep.ForwardKinematics()
                     return ToolResult(
                         ok=True, data={"end_effector": {"x": 0.5, "y": 0.3, "z": 0.2}, "joint_count": len(joint_angles)}
                     )
@@ -57,7 +57,7 @@ class KinematicsTool(Tool):
                     return ToolResult(ok=False, error="Target pose required")
 
                 try:
-                    ik = robotics_deep.InverseKinematics()
+                    robotics_deep.InverseKinematics()
                     return ToolResult(
                         ok=True, data={"joint_angles": [0.5, 0.3, 0.2], "solution_found": True, "target_pose": pose}
                     )
@@ -66,7 +66,7 @@ class KinematicsTool(Tool):
             elif action == "jacobian":
                 joint_angles = args.get("joint_angles", [0, 0, 0])
                 try:
-                    jacobian = robotics_deep.Jacobian()
+                    robotics_deep.Jacobian()
                     return ToolResult(
                         ok=True, data={"jacobian_rank": 3, "joint_count": len(joint_angles), "singularities": []}
                     )
@@ -103,13 +103,13 @@ class MotionPlanningTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             action = args.get("action", "")
-            start = args.get("start", [0, 0, 0])
-            goal = args.get("goal", [1, 1, 1])
+            args.get("start", [0, 0, 0])
+            args.get("goal", [1, 1, 1])
             iterations = args.get("iterations", 1000)
 
             if action == "rrt":
                 try:
-                    planner = robotics_deep.RRT(iterations=iterations)
+                    robotics_deep.RRT(iterations=iterations)
                     return ToolResult(
                         ok=True, data={"algorithm": "RRT", "path_found": True, "waypoints": 5, "iterations": iterations}
                     )
@@ -117,7 +117,7 @@ class MotionPlanningTool(Tool):
                     return ToolResult(ok=False, error=str(e))
             elif action == "rrt_star":
                 try:
-                    planner = robotics_deep.RRTStar(iterations=iterations)
+                    robotics_deep.RRTStar(iterations=iterations)
                     return ToolResult(
                         ok=True,
                         data={"algorithm": "RRT*", "path_found": True, "path_cost": 2.3, "iterations": iterations},
@@ -126,7 +126,7 @@ class MotionPlanningTool(Tool):
                     return ToolResult(ok=False, error=str(e))
             elif action == "prm":
                 try:
-                    planner = robotics_deep.PRM(num_samples=500)
+                    robotics_deep.PRM(num_samples=500)
                     return ToolResult(
                         ok=True, data={"algorithm": "PRM", "path_found": True, "waypoints": 4, "samples": 500}
                     )
@@ -171,7 +171,7 @@ class ControlTool(Tool):
 
                 try:
                     controller = robotics_deep.PIDController(kp=1.0, ki=0.1, kd=0.5)
-                    control_signal = controller.compute(setpoint, feedback)
+                    controller.compute(setpoint, feedback)
                     return ToolResult(
                         ok=True, data={"control_signal": 0.5, "error": abs(setpoint - feedback), "method": "PID"}
                     )
@@ -179,7 +179,7 @@ class ControlTool(Tool):
                     return ToolResult(ok=False, error=str(e))
             elif action == "trajectory_tracking":
                 try:
-                    tracker = robotics_deep.TrajectoryTracker()
+                    robotics_deep.TrajectoryTracker()
                     return ToolResult(
                         ok=True,
                         data={
@@ -234,7 +234,7 @@ class SLAMTool(Tool):
 
             if action == "ekf_slam":
                 try:
-                    slam = robotics_deep.EKFSLAMFilter()
+                    robotics_deep.EKFSLAMFilter()
                     return ToolResult(
                         ok=True,
                         data={
@@ -247,7 +247,7 @@ class SLAMTool(Tool):
                     return ToolResult(ok=False, error=str(e))
             elif action == "mapping":
                 try:
-                    mapper = robotics_deep.OccupancyGridMapper()
+                    robotics_deep.OccupancyGridMapper()
                     return ToolResult(
                         ok=True, data={"mapper_type": "occupancy_grid", "grid_cells": 100, "resolution": 0.05}
                     )
@@ -255,7 +255,7 @@ class SLAMTool(Tool):
                     return ToolResult(ok=False, error=str(e))
             elif action == "localization":
                 try:
-                    localizer = robotics_deep.ParticleFilterLocalizer()
+                    robotics_deep.ParticleFilterLocalizer()
                     return ToolResult(
                         ok=True,
                         data={"localizer_type": "particle_filter", "particles": 1000, "position": {"x": 0.0, "y": 0.0}},
@@ -298,19 +298,19 @@ class SensorTool(Tool):
 
             if action == "lidar":
                 try:
-                    lidar = robotics_deep.LidarSimulator()
+                    robotics_deep.LidarSimulator()
                     return ToolResult(ok=True, data={"sensor": "lidar", "beams": 360, "range_max": 30.0, "points": 360})
                 except Exception as e:
                     return ToolResult(ok=False, error=str(e))
             elif action == "camera":
                 try:
-                    camera = robotics_deep.CameraModel()
+                    robotics_deep.CameraModel()
                     return ToolResult(ok=True, data={"sensor": "camera", "resolution": [640, 480], "fov": 60})
                 except Exception as e:
                     return ToolResult(ok=False, error=str(e))
             elif action == "imu":
                 try:
-                    imu = robotics_deep.IMUSimulator()
+                    robotics_deep.IMUSimulator()
                     return ToolResult(
                         ok=True,
                         data={"sensor": "imu", "acceleration": [0.0, 0.0, 9.81], "angular_velocity": [0.0, 0.0, 0.0]},
@@ -319,7 +319,7 @@ class SensorTool(Tool):
                     return ToolResult(ok=False, error=str(e))
             elif action == "encoder":
                 try:
-                    encoder = robotics_deep.EncoderSimulator()
+                    robotics_deep.EncoderSimulator()
                     return ToolResult(
                         ok=True,
                         data={"sensor": "encoder", "joint_angles": [0.0, 0.0, 0.0], "velocities": [0.0, 0.0, 0.0]},
@@ -328,7 +328,7 @@ class SensorTool(Tool):
                     return ToolResult(ok=False, error=str(e))
             elif action == "fusion":
                 try:
-                    fusion = robotics_deep.SensorFusion()
+                    robotics_deep.SensorFusion()
                     return ToolResult(
                         ok=True, data={"fusion_type": "sensor_fusion", "sensors_fused": 4, "confidence": 0.95}
                     )

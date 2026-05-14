@@ -94,7 +94,7 @@ class TestPerformanceManager:
 
     def test_get_employee_goals(self, manager: PerformanceManager, employee: Employee) -> None:
         """Test retrieving employee goals."""
-        goal1 = manager.create_goal(
+        manager.create_goal(
             employee.id,
             "Goal 1",
             "Description 1",
@@ -103,7 +103,7 @@ class TestPerformanceManager:
             "Target 1",
         )
 
-        goal2 = manager.create_goal(
+        manager.create_goal(
             employee.id,
             "Goal 2",
             "Description 2",
@@ -267,9 +267,9 @@ class TestPerformanceManager:
             salary=Decimal("100000"),
         )
 
-        rev1 = manager.create_performance_review(emp1.id, "mgr1", Decimal("5.0"), "Excellent", ReviewCycle.ANNUAL)
+        manager.create_performance_review(emp1.id, "mgr1", Decimal("5.0"), "Excellent", ReviewCycle.ANNUAL)
 
-        rev2 = manager.create_performance_review(emp2.id, "mgr1", Decimal("3.0"), "Good", ReviewCycle.ANNUAL)
+        manager.create_performance_review(emp2.id, "mgr1", Decimal("3.0"), "Good", ReviewCycle.ANNUAL)
 
         calibrated = manager.calibrate_ratings([emp1.id, emp2.id])
 

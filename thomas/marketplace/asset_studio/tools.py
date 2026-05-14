@@ -117,7 +117,7 @@ class RuntimeTool(Tool):
             action = args.get("action", "")
 
             if action == "create_runtime":
-                runtime = asset_studio.AssetStudioRuntime()
+                asset_studio.AssetStudioRuntime()
                 return ToolResult(ok=True, data={"status": "runtime_created", "runtime_type": "AssetStudioRuntime"})
 
             elif action == "get_status":

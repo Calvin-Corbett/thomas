@@ -124,7 +124,7 @@ class TestCalendarTrigger:
             business_end_hour=17,
             business_days={0, 1, 2, 3, 4},
         )
-        trigger = CalendarTrigger(calendar)
+        CalendarTrigger(calendar)
 
         # Monday 6 PM (after hours)
         after_hours = datetime(2024, 1, 1, 18, 0, 0, tzinfo=timezone.utc)

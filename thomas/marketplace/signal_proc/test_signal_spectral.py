@@ -242,7 +242,7 @@ class TestSpectralFeatures:
 
     def test_spectral_flatness_basic(self):
         """Spectral flatness should be between 0 and 1."""
-        freqs = np.linspace(0, 1000, 256)
+        np.linspace(0, 1000, 256)
         mag = np.ones(256)
 
         flatness = spectral_flatness(mag)

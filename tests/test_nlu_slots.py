@@ -100,7 +100,7 @@ class TestSlotFiller(unittest.TestCase):
         ]
 
         sentence = Sentence(text="Change location to Boston")
-        current_slots = self.filler.fill_slots(sentence)
+        self.filler.fill_slots(sentence)
 
         carried = self.filler.carry_slots(previous_slots, sentence)
 
@@ -346,7 +346,7 @@ class TestSlotIntegration(unittest.TestCase):
 
         # Turn 2: User specifies date
         turn2 = Sentence(text="On 2024-01-15")
-        slots2 = filler.fill_slots(turn2)
+        filler.fill_slots(turn2)
 
         # Carry slots from turn 1
         combined = filler.carry_slots(slots1, turn2)

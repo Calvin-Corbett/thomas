@@ -27,7 +27,7 @@ class CompatibilityBridgeTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             action = args.get("action")
-            request = args.get("request", {})
+            args.get("request", {})
 
             if action == "detect_version":
                 return ToolResult(ok=True, data={"status": "version_detected", "version": "2.0", "format": "openclaw"})

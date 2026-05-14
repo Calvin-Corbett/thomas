@@ -207,7 +207,7 @@ class QueryParser:
                     innermost = query[start + 1 : i]
                     break
             if innermost:
-                result = QueryParser.parse(df, innermost)
+                QueryParser.parse(df, innermost)
                 # Replace with placeholder
                 query = query[:start] + "__RESULT__" + query[i + 1 :]
             else:

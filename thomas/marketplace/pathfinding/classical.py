@@ -431,7 +431,6 @@ def iterative_deepening_astar(
         PathResult containing the path and statistics.
     """
     start_time = time.time()
-    nodes_expanded = 0
 
     if start_id not in graph.nodes or goal_id not in graph.nodes:
         return PathResult(found=False)
@@ -584,7 +583,7 @@ def beam_search(
                 if neighbor_id not in visited:
                     new_cost = cost + weight
                     h = heuristic(neighbor_id)
-                    f = new_cost + h
+                    new_cost + h
                     next_level[neighbor_id] = (new_cost, node_id)
                     visited.add(neighbor_id)
                     nodes_generated += 1

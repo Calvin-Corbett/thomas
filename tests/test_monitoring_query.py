@@ -262,7 +262,7 @@ class TestQueryParsing:
 
         # This should handle gracefully (not crash)
         try:
-            result = engine.instant_query("@invalid")
+            engine.instant_query("@invalid")
         except Exception:
             pass
 

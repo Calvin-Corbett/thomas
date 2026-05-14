@@ -63,7 +63,7 @@ class TestDESWithDistributions:
         for i in range(5):
             des.schedule_event(EventType.ARRIVAL, float(i * 5))
 
-        result = des.run()
+        des.run()
 
         assert len(service_times) == 5
         assert all(st > 0 for st in service_times)
@@ -206,7 +206,7 @@ class TestAgentBasedWithDES:
         for t in range(10):
             des.schedule_event(EventType.AGENT_STEP, float(t * 5), {"agent": 0})
 
-        result = des.run()
+        des.run()
 
         assert len(actions_taken) > 0
 

@@ -266,10 +266,10 @@ class TestCompleteRobotSystem:
         ik = InverseKinematics(fk)
 
         # Dynamics
-        dynamics = TwoDOFArmDynamics(m1=0.5, m2=0.5, L1=0.5, L2=0.5)
+        TwoDOFArmDynamics(m1=0.5, m2=0.5, L1=0.5, L2=0.5)
 
         # Control
-        tracker = TrajectoryTracker(num_joints=2, kp=5.0, kd=1.0)
+        TrajectoryTracker(num_joints=2, kp=5.0, kd=1.0)
 
         # Target object
         target_pose = Pose(

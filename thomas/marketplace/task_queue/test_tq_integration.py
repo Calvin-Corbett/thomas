@@ -194,7 +194,7 @@ class TestIntegration:
 
     def test_middleware_pipeline(self) -> None:
         """Test middleware with task execution."""
-        queue = TaskQueue()
+        TaskQueue()
         middleware = MiddlewareManager()
         middleware.add(LoggingMiddleware())
 
@@ -213,7 +213,7 @@ class TestIntegration:
         scheduler = TaskScheduler(queue, poll_interval=0.1)
         pool = WorkerPool(queue, num_workers=2)
         monitor = QueueMonitor(queue)
-        results = ResultStore()
+        ResultStore()
 
         # Create and schedule tasks
         for i in range(5):

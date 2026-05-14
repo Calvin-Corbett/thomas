@@ -268,7 +268,7 @@ class PhylogeneticsTool(Tool):
                     return ToolResult(ok=False, error="At least 2 sequences required")
 
                 try:
-                    matrix = bioinformatics.distance_matrix(sequences)
+                    bioinformatics.distance_matrix(sequences)
                     return ToolResult(
                         ok=True,
                         data={"sequences": len(sequences), "distances_calculated": True, "matrix_size": len(sequences)},
@@ -281,7 +281,7 @@ class PhylogeneticsTool(Tool):
                     return ToolResult(ok=False, error="At least 2 sequences required")
 
                 try:
-                    tree = bioinformatics.upgma_tree(sequences)
+                    bioinformatics.upgma_tree(sequences)
                     return ToolResult(
                         ok=True, data={"tree_constructed": True, "method": "UPGMA", "sequences": len(sequences)}
                     )
@@ -293,7 +293,7 @@ class PhylogeneticsTool(Tool):
                     return ToolResult(ok=False, error="At least 3 sequences required")
 
                 try:
-                    tree = bioinformatics.neighbor_joining(sequences)
+                    bioinformatics.neighbor_joining(sequences)
                     return ToolResult(
                         ok=True,
                         data={"tree_constructed": True, "method": "Neighbor-Joining", "sequences": len(sequences)},
@@ -308,7 +308,7 @@ class PhylogeneticsTool(Tool):
                     return ToolResult(ok=False, error="At least 2 sequences required")
 
                 try:
-                    support = bioinformatics.bootstrap_support(sequences, replicates)
+                    bioinformatics.bootstrap_support(sequences, replicates)
                     return ToolResult(
                         ok=True, data={"bootstrap_replicates": replicates, "support_values_calculated": True}
                     )
@@ -367,7 +367,7 @@ class ProteinAnalysisTool(Tool):
                     return ToolResult(ok=False, error=str(e))
             elif action == "hydrophobicity":
                 try:
-                    hydro = bioinformatics.hydrophobicity_plot(sequence)
+                    bioinformatics.hydrophobicity_plot(sequence)
                     return ToolResult(
                         ok=True, data={"hydrophobicity_calculated": True, "sequence_length": len(sequence)}
                     )

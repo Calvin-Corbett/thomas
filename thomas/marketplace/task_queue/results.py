@@ -204,7 +204,7 @@ class ResultStore:
         Returns:
             Number of results removed.
         """
-        now = datetime.utcnow()
+        datetime.utcnow()
         expired = [task_id for task_id, timestamp in self._result_timestamps.items() if self._is_expired(timestamp)]
 
         for task_id in expired:

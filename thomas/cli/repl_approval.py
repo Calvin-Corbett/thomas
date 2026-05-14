@@ -191,7 +191,7 @@ def render_post_edit_summary(
     if not path_str:
         return
 
-    file_path = sandbox_path / path_str if not Path(path_str).is_absolute() else Path(path_str)
+    sandbox_path / path_str if not Path(path_str).is_absolute() else Path(path_str)
 
     if tool_name == "fs.edit_file":
         old_str = args.get("old_string", "")

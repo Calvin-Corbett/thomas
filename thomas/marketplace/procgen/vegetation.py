@@ -291,7 +291,6 @@ class LSystemGenerator:
             List of turtle commands
         """
         commands = []
-        stack = []
 
         for char in command_string:
             if char == "F":

@@ -38,7 +38,7 @@ class DiscreteEventSimulationTool(Tool):
             if action == "create_sim":
                 duration = args.get("duration", 100.0)
                 try:
-                    sim = simulation.DiscreteEventSimulation(duration)
+                    simulation.DiscreteEventSimulation(duration)
                     return ToolResult(
                         ok=True, data={"type": "discrete_event", "duration": duration, "status": "created"}
                     )
@@ -94,7 +94,7 @@ class MonteCarloTool(Tool):
 
             if action == "integration":
                 try:
-                    mc = simulation.MonteCarloIntegration()
+                    simulation.MonteCarloIntegration()
                     return ToolResult(
                         ok=True,
                         data={
@@ -108,7 +108,7 @@ class MonteCarloTool(Tool):
                     return ToolResult(ok=False, error=str(e))
             elif action == "risk_analysis":
                 try:
-                    risk_sim = simulation.RiskSimulation()
+                    simulation.RiskSimulation()
                     return ToolResult(
                         ok=True, data={"method": "risk_simulation", "samples": samples, "var_95": 0.75, "cvar_95": 0.85}
                     )
@@ -116,7 +116,7 @@ class MonteCarloTool(Tool):
                     return ToolResult(ok=False, error=str(e))
             elif action == "variance_reduction":
                 try:
-                    vr = simulation.VarianceReduction()
+                    simulation.VarianceReduction()
                     return ToolResult(
                         ok=True, data={"method": "variance_reduction", "reduction_ratio": 0.5, "efficiency_gain": "50%"}
                     )
@@ -193,7 +193,7 @@ class DistributionTool(Tool):
                     return ToolResult(ok=False, error="Data required for fitting")
 
                 try:
-                    fitted = simulation.fit_distribution(data)
+                    simulation.fit_distribution(data)
                     return ToolResult(
                         ok=True, data={"fitted_distribution": dist_type, "parameters": {}, "goodness_of_fit": 0.95}
                     )
@@ -235,7 +235,7 @@ class AgentBasedModelingTool(Tool):
 
             if action == "create_model":
                 try:
-                    env = simulation.Environment()
+                    simulation.Environment()
                     return ToolResult(ok=True, data={"model_created": True, "agents": 0, "status": "ready"})
                 except Exception as e:
                     return ToolResult(ok=False, error=str(e))
@@ -244,7 +244,6 @@ class AgentBasedModelingTool(Tool):
                 agent_type = args.get("agent_type", "simple")
 
                 try:
-                    agent_class = simulation.SimpleAgent if agent_type == "simple" else simulation.UtilityAgent
                     return ToolResult(
                         ok=True, data={"agents_added": num_agents, "agent_type": agent_type, "total_agents": num_agents}
                     )
@@ -291,7 +290,7 @@ class ScenarioTool(Tool):
 
             if action == "epidemic":
                 try:
-                    scenario = simulation.EpidemicScenario()
+                    simulation.EpidemicScenario()
                     return ToolResult(
                         ok=True, data={"scenario": "epidemic", "duration": duration, "infected": 100, "recovered": 200}
                     )
@@ -299,7 +298,7 @@ class ScenarioTool(Tool):
                     return ToolResult(ok=False, error=str(e))
             elif action == "supply_chain":
                 try:
-                    scenario = simulation.SupplyChainScenario()
+                    simulation.SupplyChainScenario()
                     return ToolResult(
                         ok=True,
                         data={
@@ -313,7 +312,7 @@ class ScenarioTool(Tool):
                     return ToolResult(ok=False, error=str(e))
             elif action == "traffic":
                 try:
-                    scenario = simulation.TrafficScenario()
+                    simulation.TrafficScenario()
                     return ToolResult(
                         ok=True, data={"scenario": "traffic", "duration": duration, "vehicles": 50, "congestion": 0.3}
                     )
@@ -321,7 +320,7 @@ class ScenarioTool(Tool):
                     return ToolResult(ok=False, error=str(e))
             elif action == "predator_prey":
                 try:
-                    scenario = simulation.PredatorPreyScenario()
+                    simulation.PredatorPreyScenario()
                     return ToolResult(
                         ok=True, data={"scenario": "predator_prey", "duration": duration, "predators": 10, "prey": 100}
                     )
@@ -329,7 +328,7 @@ class ScenarioTool(Tool):
                     return ToolResult(ok=False, error=str(e))
             elif action == "bank_queue":
                 try:
-                    scenario = simulation.BankQueueScenario()
+                    simulation.BankQueueScenario()
                     return ToolResult(
                         ok=True,
                         data={

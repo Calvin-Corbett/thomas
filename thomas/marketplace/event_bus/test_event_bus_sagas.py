@@ -229,7 +229,7 @@ async def test_saga_get_state(executor):
     saga = Saga("test-saga")
     saga.add_step("step", step)
 
-    state = await executor.execute(saga)
+    await executor.execute(saga)
     retrieved = executor.get_saga_state("test-saga")
 
     assert retrieved is not None

@@ -341,7 +341,7 @@ class TestFilterSignalProcessing:
         X_in = fft(x)
         X_out = fft(y)
 
-        mag_in = magnitude_spectrum(X_in)
+        magnitude_spectrum(X_in)
         mag_out = magnitude_spectrum(X_out)
         freqs = frequency_bins(len(x), fs)
 

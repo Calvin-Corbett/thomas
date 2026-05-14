@@ -165,19 +165,19 @@ class TestTaskManager:
 
     def test_calculate_workload(self, manager: TaskManager) -> None:
         """Test workload calculation."""
-        task1 = manager.create_task(
+        manager.create_task(
             project_id="proj-1",
             title="Task 1",
             estimated_hours=(4.0, 8.0, 12.0),
             assigned_to_id="res-1",
         )
-        task2 = manager.create_task(
+        manager.create_task(
             project_id="proj-1",
             title="Task 2",
             estimated_hours=(2.0, 4.0, 6.0),
             assigned_to_id="res-1",
         )
-        task3 = manager.create_task(
+        manager.create_task(
             project_id="proj-1",
             title="Task 3",
             estimated_hours=(1.0, 2.0, 3.0),
@@ -220,7 +220,7 @@ class TestTaskManager:
             priority=Priority.HIGH,
             assigned_to_id="res-1",
         )
-        proj2_low = manager.create_task(
+        manager.create_task(
             project_id="proj-2",
             title="Low Priority Task",
             priority=Priority.LOW,

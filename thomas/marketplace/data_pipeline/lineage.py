@@ -141,7 +141,6 @@ class LineageGraph:
     def get_column_targets(self, table: str, column: str) -> list[tuple[str, str]]:
         """Get all target columns that use an input column."""
         targets = []
-        key = f"{table}.{column}"
 
         for lineage in self._column_lineage.values():
             if (column, table) in lineage.input_columns:

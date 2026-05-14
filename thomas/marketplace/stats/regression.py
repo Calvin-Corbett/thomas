@@ -463,7 +463,7 @@ def prediction_interval(x: float, result: RegressionResult, confidence: float = 
 
     residual_std = desc.std(result.residuals, sample=True)
     alpha = 1 - confidence
-    df = result.observations - 2
+    result.observations - 2
 
     t_crit = dist.normal_icdf(1 - alpha / 2)
 

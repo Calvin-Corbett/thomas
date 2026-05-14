@@ -61,7 +61,7 @@ class TestRRT:
         obstacles = []
         bounds = (0.0, 0.0, 20.0, 20.0)
 
-        result_no_bias = rrt(
+        rrt(
             start,
             goal,
             obstacles,
@@ -70,7 +70,7 @@ class TestRRT:
             goal_bias=0.0,
         )
 
-        result_with_bias = rrt(
+        rrt(
             start,
             goal,
             obstacles,
@@ -86,7 +86,7 @@ class TestRRT:
         obstacles = []
         bounds = (0.0, 0.0, 20.0, 20.0)
 
-        result_small_step = rrt(
+        rrt(
             start,
             goal,
             obstacles,
@@ -95,7 +95,7 @@ class TestRRT:
             step_size=0.5,
         )
 
-        result_large_step = rrt(
+        rrt(
             start,
             goal,
             obstacles,
@@ -347,7 +347,7 @@ class TestPRM:
         obstacles = []
         bounds = (0.0, 0.0, 20.0, 20.0)
 
-        result_few = probabilistic_roadmap(
+        probabilistic_roadmap(
             start,
             goal,
             obstacles,
@@ -355,7 +355,7 @@ class TestPRM:
             num_samples=10,
         )
 
-        result_many = probabilistic_roadmap(
+        probabilistic_roadmap(
             start,
             goal,
             obstacles,

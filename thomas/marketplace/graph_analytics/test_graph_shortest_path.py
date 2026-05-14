@@ -268,7 +268,7 @@ class TestIntegration:
         g.add_edge(1, 3, 1)
         g.add_edge(2, 3, 1)
 
-        bfs_result = bfs_shortest_path(g, 0, 3)
+        bfs_shortest_path(g, 0, 3)
         dij_result = dijkstra_shortest_path(g, 0, 3)
         bf_result = bellman_ford_shortest_path(g, 0, 3)
 

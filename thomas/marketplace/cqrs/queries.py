@@ -304,7 +304,7 @@ class LoggingMiddleware(QueryMiddleware):
         """Log query and pass to next handler."""
         start_time = time.time()
         result = await next_handler(query)
-        duration = time.time() - start_time
+        time.time() - start_time
         return result
 
 

@@ -89,9 +89,9 @@ class TestModerationEngine:
 
     def test_get_next_report(self) -> None:
         """Test getting next report from queue."""
-        report1 = self.engine.create_report(reporter_id=self.user_id, reason="minor", reported_user_id=uuid4())
+        self.engine.create_report(reporter_id=self.user_id, reason="minor", reported_user_id=uuid4())
 
-        report2 = self.engine.create_report(reporter_id=self.user_id, reason="hate", reported_user_id=uuid4())
+        self.engine.create_report(reporter_id=self.user_id, reason="hate", reported_user_id=uuid4())
 
         # Get highest priority report
         next_report = self.engine.get_next_report()
@@ -223,11 +223,11 @@ class TestModerationEngine:
 
     def test_report_priority_calculation(self) -> None:
         """Test report priority calculation."""
-        high_priority_report = self.engine.create_report(
+        self.engine.create_report(
             reporter_id=self.user_id, reason="hate", reported_user_id=uuid4()
         )
 
-        low_priority_report = self.engine.create_report(
+        self.engine.create_report(
             reporter_id=self.user_id, reason="spam", reported_user_id=uuid4()
         )
 

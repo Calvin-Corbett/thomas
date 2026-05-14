@@ -30,26 +30,26 @@ class PatternImplementationTool(Tool):
             pattern = args.get("pattern")
 
             if pattern == "factory":
-                factory = core.ConcreteFactory()
+                core.ConcreteFactory()
                 return ToolResult(ok=True, data={"status": "factory_created", "pattern": "factory"})
 
             elif pattern == "observer":
-                subject = core.Subject()
+                core.Subject()
                 return ToolResult(ok=True, data={"status": "observer_created", "pattern": "observer", "observers": 0})
 
             elif pattern == "strategy":
-                context = core.Context(None)
+                core.Context(None)
                 return ToolResult(ok=True, data={"status": "strategy_created", "pattern": "strategy"})
 
             elif pattern == "command":
-                invoker = core.CommandInvoker()
+                core.CommandInvoker()
                 return ToolResult(ok=True, data={"status": "command_created", "pattern": "command", "history": 0})
 
             elif pattern == "state":
                 return ToolResult(ok=True, data={"status": "state_machine_created", "pattern": "state"})
 
             elif pattern == "singleton":
-                instance = core.Singleton()
+                core.Singleton()
                 return ToolResult(ok=True, data={"status": "singleton_created", "pattern": "singleton"})
 
             else:

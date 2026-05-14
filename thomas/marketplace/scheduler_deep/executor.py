@@ -110,7 +110,6 @@ class JobExecutor:
             )
 
             # Create wrapper function
-            timeout = job.timeout_seconds or self.timeout_seconds
 
             def job_wrapper() -> Any:
                 try:
@@ -217,7 +216,7 @@ class JobExecutor:
         for future in as_completed(futures, timeout=timeout):
             try:
                 future.result()
-            except Exception:
+            except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
                 pass
 
     def get_running_count(self) -> int:
@@ -238,7 +237,7 @@ class JobExecutor:
         """
         try:
             self.executor.shutdown(wait=wait)
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as e:
             logger.error(f"Error shutting down executor: {e}")
 
     def _accepts_context(self, func: Callable) -> bool:
@@ -260,7 +259,7 @@ class JobExecutor:
                 # Check if annotation matches ExecutionContext
                 return first_param.annotation is ExecutionContext
             return False
-        except Exception:
+        except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
             return False
 
     def __repr__(self) -> str:

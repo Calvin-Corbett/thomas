@@ -92,7 +92,7 @@ class TestSmithWaterman:
         seq1 = "AAACGTAA"
         seq2 = "CGTACGTAA"
         local = smith_waterman(seq1, seq2)
-        global_align = needleman_wunsch(seq1, seq2)
+        needleman_wunsch(seq1, seq2)
         # Scores may differ due to different algorithms
         assert local.alignment_length <= len(seq1)
 

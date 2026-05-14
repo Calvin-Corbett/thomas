@@ -274,7 +274,7 @@ class TestLexerEdgeCases:
         """Test unterminated string."""
         lexer = Lexer('"unterminated')
         # Should raise error during regex match or later
-        tokens = lexer.tokenize()
+        lexer.tokenize()
         # This depends on implementation
 
     def test_very_long_string(self) -> None:

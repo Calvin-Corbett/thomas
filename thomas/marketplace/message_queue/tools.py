@@ -139,7 +139,7 @@ class MessageQueueGetDeadLetterQueueTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             topic = args["topic"]
-            max_messages = args.get("max_messages", 10)
+            args.get("max_messages", 10)
 
             return ToolResult(
                 ok=True,

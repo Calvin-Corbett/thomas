@@ -208,7 +208,7 @@ def min_cost_flow(
         for (src, dst), cap in capacity.items():
             if cap > flow[(src, dst)]:
                 residual_capacity = cap - flow[(src, dst)]
-                edge_cost = cost.get((src, dst), 0)
+                cost.get((src, dst), 0)
                 residual_graph.add_edge(src, dst, residual_capacity)
 
         # Find shortest path
@@ -221,7 +221,7 @@ def min_cost_flow(
                 break
 
             path = path_result.path
-            path_cost = sum(cost.get((path[i], path[i + 1]), 0) for i in range(len(path) - 1))
+            sum(cost.get((path[i], path[i + 1]), 0) for i in range(len(path) - 1))
 
             # Find bottleneck
             bottleneck = required_flow - sent_flow

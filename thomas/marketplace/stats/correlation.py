@@ -145,7 +145,7 @@ def kendall_tau(x: list[float], y: list[float]) -> CorrelationResult:
     else:
         tau = (concordant - discordant) / (concordant + discordant)
 
-    n_pairs = n * (n - 1) / 2
+    n * (n - 1) / 2
     var_tau = 2 * (2 * n + 5) / (9 * n * (n - 1))
 
     if var_tau > 0:

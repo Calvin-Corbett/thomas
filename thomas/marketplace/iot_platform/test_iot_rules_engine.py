@@ -321,7 +321,7 @@ class TestRulesEngine:
         }
 
         # Create two rules with different priorities
-        rule1 = engine.create_rule(
+        engine.create_rule(
             name="Rule 1",
             condition=condition,
             actions=[{"type": "alert", "severity": "warning"}],

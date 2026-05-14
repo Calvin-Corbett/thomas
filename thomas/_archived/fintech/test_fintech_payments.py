@@ -191,7 +191,7 @@ class TestPaymentProcessor:
 
     def test_get_account_payments(self):
         """Test retrieving account payments."""
-        payment1 = self.processor.create_payment(
+        self.processor.create_payment(
             from_account="ACC001",
             to_account="ACC002",
             amount=Decimal("100.00"),
@@ -199,7 +199,7 @@ class TestPaymentProcessor:
             method=PaymentMethod.ACH,
         )
 
-        payment2 = self.processor.create_payment(
+        self.processor.create_payment(
             from_account="ACC003",
             to_account="ACC001",
             amount=Decimal("50.00"),

@@ -100,7 +100,7 @@ class BatteryUnit(StorageUnit):
         energy_to_charge = min(space_mwh, max_energy)
 
         # Apply charging losses
-        energy_from_grid = energy_to_charge / (1.0 - self.charge_loss_factor)
+        energy_to_charge / (1.0 - self.charge_loss_factor)
 
         # Temperature effects (charging slower in cold)
         if ambient_temp < 10:
@@ -319,7 +319,7 @@ class FlywheelStorage(StorageUnit):
             Actual energy stored in MWh
         """
         max_capacity = self.get_stored_energy_mwh(self.max_speed_rpm)
-        current_capacity = self.soc * max_capacity
+        self.soc * max_capacity
         space_available = max_capacity * (self.max_soc - self.soc)
 
         energy_input = power_mw * duration_hours

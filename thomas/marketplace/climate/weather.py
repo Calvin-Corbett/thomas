@@ -231,7 +231,6 @@ def uv_index_calculation(
     # Reference: ~12 at solar noon with 300 DU ozone
     reference_uvi = 12.0
     reference_ozone = 300.0
-    reference_zenith = 0.0
 
     # Adjust for solar zenith angle (air mass)
     zenith_rad = math.radians(solar_zenith_angle_deg)
@@ -392,7 +391,7 @@ def lifted_index_stability(
     dry_lapse = 0.0098  # K/m
 
     # Pressure ratio
-    pressure_ratio = surface_pressure_hpa / environmental_pressure_500mb_hpa
+    surface_pressure_hpa / environmental_pressure_500mb_hpa
 
     # Temperature change (simplified)
     temp_change = -dry_lapse * (environmental_pressure_500mb_hpa - surface_pressure_hpa) / 10

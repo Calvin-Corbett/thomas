@@ -187,7 +187,7 @@ FROM ubuntu:20.04
 RUN apt-get update
 RUN apt-get install -y python3
 """
-        image = image_store.build_from_dockerfile(dockerfile, "myapp")
+        image_store.build_from_dockerfile(dockerfile, "myapp")
         layers = image_store.get_image_history("myapp")
 
         assert len(layers) > 0

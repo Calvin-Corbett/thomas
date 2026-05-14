@@ -210,11 +210,11 @@ class Button(UIWidget):
 
         # Choose color based on state
         if self.is_pressed:
-            color = self.pressed_color
+            pass
         elif self.is_hovered:
-            color = self.hover_color
+            pass
         else:
-            color = self.normal_color
+            pass
 
         # render_rect(..., color=color)
         # render_text(self.label, ...)

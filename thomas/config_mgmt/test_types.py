@@ -188,7 +188,7 @@ class TestHostGroup:
     def test_group_hierarchy(self) -> None:
         """Test group hierarchy."""
         parent = HostGroup(name="all")
-        child = HostGroup(name="webservers")
+        HostGroup(name="webservers")
         parent.add_child_group("webservers")
         assert "webservers" in parent.children
 

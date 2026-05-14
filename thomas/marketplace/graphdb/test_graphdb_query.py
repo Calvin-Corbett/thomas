@@ -211,7 +211,7 @@ class TestQueryExecution:
 
     def test_execute_delete_node(self, storage_with_data: GraphStorage) -> None:
         """Test executing DELETE query."""
-        initial_count = len(storage_with_data.node_store)
+        len(storage_with_data.node_store)
 
         # Note: This would require matching and deleting specific nodes
         # Full DELETE requires full match support

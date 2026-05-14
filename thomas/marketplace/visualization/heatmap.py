@@ -116,7 +116,6 @@ class Heatmap:
         value_range = (min(v[1] for v in valid_points), max(v[1] for v in valid_points))
         self.color_map.value_range = value_range
 
-        date_dict = {}
         for date_val, value in valid_points:
             days_since = (date_val - start_date).days
             week = days_since // 7

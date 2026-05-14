@@ -233,7 +233,7 @@ class TestMempoolToBlock:
 
     def test_create_block_from_mempool(self, setup_blockchain):
         """Test creating block with mempool transactions."""
-        chain = setup_blockchain["chain"]
+        setup_blockchain["chain"]
         mempool = setup_blockchain["mempool"]
 
         genesis = setup_blockchain["genesis"]
@@ -278,7 +278,7 @@ class TestBlockchainMining:
 
     def test_mine_block(self, setup_blockchain):
         """Test mining a block."""
-        consensus = setup_blockchain["consensus"]
+        setup_blockchain["consensus"]
         chain = setup_blockchain["chain"]
 
         genesis = chain.get_block_by_index(0)

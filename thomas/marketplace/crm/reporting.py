@@ -359,7 +359,7 @@ class ReportingEngine:
 
         funnel = []
         cumulative_count = len(deals)
-        cumulative_value = sum(d.value for d in deals)
+        sum(d.value for d in deals)
 
         for stage_id, stage_name in stages:
             count = stage_counts.get(stage_id, 0)

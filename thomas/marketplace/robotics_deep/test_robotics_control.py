@@ -230,7 +230,7 @@ class TestControllerPerformance:
 
         error = 1.0
         for _ in range(100):
-            output = pid.compute(error)
+            pid.compute(error)
 
         final_integral = pid.integral
 

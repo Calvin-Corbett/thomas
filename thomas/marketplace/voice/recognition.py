@@ -147,7 +147,7 @@ class TemplateMatchingRecognizer:
         sorted_results = sorted(distances.items(), key=lambda x: x[1])
 
         # Convert distance to confidence score
-        best_distance = sorted_results[0][1]
+        sorted_results[0][1]
         n_best = []
 
         for word, distance in sorted_results[:top_n]:

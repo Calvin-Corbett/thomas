@@ -90,7 +90,7 @@ class DependencyParser:
                     continue
 
                 # Get oracle actions
-                oracle_actions = self._oracle(sentence)
+                self._oracle(sentence)
 
                 # Parse with current model
                 predicted_tree = self.parse(sentence)

@@ -92,7 +92,7 @@ class PhysicsTool(Tool):
 
             if action == "create_world":
                 gravity = float(args.get("gravity", 9.8))
-                physics = Physics2D(gravity_magnitude=gravity)
+                Physics2D(gravity_magnitude=gravity)
                 return ToolResult(
                     ok=True, data={"status": "physics_world_created", "gravity": gravity, "bodies_count": 0}
                 )

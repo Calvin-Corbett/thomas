@@ -246,7 +246,7 @@ def linkage_disequilibrium(haplotypes: dict[str, int]) -> tuple[float, float, fl
     freq_ab = haplotypes.get("AB", 0) / total
     freq_Ab = haplotypes.get("Ab", 0) / total
     freq_aB = haplotypes.get("aB", 0) / total
-    freq_ab_complement = haplotypes.get("ab", 0) / total
+    haplotypes.get("ab", 0) / total
 
     # Allele frequencies
     p_a = freq_ab + freq_Ab

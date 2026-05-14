@@ -205,7 +205,7 @@ class DigitalTwinManager:
 
             # Get last few states
             recent_states = history[-10:]
-            timestamps = [t for t, _ in recent_states]
+            [t for t, _ in recent_states]
             states = [s for _, s in recent_states]
 
             predicted = {}

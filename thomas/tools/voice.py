@@ -634,7 +634,7 @@ class VoiceBridge:
 
                 if response:
                     # Synthesize and play response
-                    audio = await self.synthesize(response)
+                    await self.synthesize(response)
                     log.info(f"Playing response: {response[:100]}")
 
                 if not self.settings.auto_listen:

@@ -508,7 +508,7 @@ class EntityComponentSystem:
         Returns:
             Dict with entity count, component counts, etc.
         """
-        entity_count = sum(len(store.iter_entities()) for store in self.component_stores.values()) // max(
+        sum(len(store.iter_entities()) for store in self.component_stores.values()) // max(
             len(self.component_stores), 1
         )
 

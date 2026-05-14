@@ -431,11 +431,6 @@ class ABTestManager:
         )
 
         # Critical values for chi-squared (df=1)
-        critical_values = {
-            0.90: 2.706,
-            0.95: 3.841,
-            0.99: 6.635,
-        }
 
         # Approximation of p-value
         p_value = 0.05 if chi_squared > 3.841 else 0.95

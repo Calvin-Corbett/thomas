@@ -126,7 +126,7 @@ class TestWorkflow:
         assert len(kmers) > 0
 
         # Find ORFs
-        orfs = find_orfs(dna, min_length=15)
+        find_orfs(dna, min_length=15)
 
         # Reverse complement
         rev_comp = complement(dna)

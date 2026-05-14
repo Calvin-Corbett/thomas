@@ -255,7 +255,6 @@ def _call_editor(editor: Any, request: MessageEditCommandInput) -> Any:
     text_keys = ["text", "new_text", "content", "body"]
     channel_keys = ["channel_id", "channel", "room_id", "conversation_id"]
 
-    last_type_error: TypeError | None = None
 
     for fn, _label in candidates:
         # Try keyword conventions.
@@ -272,14 +271,13 @@ def _call_editor(editor: Any, request: MessageEditCommandInput) -> Any:
                     # First, try with None values (helps when param is required).
                     try:
                         return _call_with_filtered_kwargs(fn, kwargs)
-                    except TypeError as te:
-                        last_type_error = te
+                    except TypeError:
+                        pass
                     # Second, try again dropping explicit None values (helps strict clients).
                     kwargs_no_none = {k: v for k, v in kwargs.items() if v is not None}
                     try:
                         return _call_with_filtered_kwargs(fn, kwargs_no_none)
-                    except TypeError as te:
-                        last_type_error = te
+                    except TypeError:
                         continue
 
         # Try positional conventions.
@@ -291,8 +289,7 @@ def _call_editor(editor: Any, request: MessageEditCommandInput) -> Any:
         for args in pos_attempts:
             try:
                 return fn(*args)
-            except TypeError as te:
-                last_type_error = te
+            except TypeError:
                 continue
 
     # Editor had methods, but none matched expected signatures.

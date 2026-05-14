@@ -169,7 +169,7 @@ class AlertManager:
             try:
                 self._evaluate_rules()
                 self._update_alert_states()
-            except Exception as e:
+            except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as e:
                 log.warning("Alert evaluation failed: %s", e)
 
             time.sleep(15.0)
@@ -215,7 +215,7 @@ class AlertManager:
                                 alert.state = AlertState.FIRING
                                 alert.firing_at = now
 
-            except Exception as e:
+            except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as e:
                 log.warning("Rule evaluation failed for rule %s: %s", rule.name, e)
 
     def _update_alert_states(self) -> None:
@@ -322,7 +322,6 @@ class AlertManager:
     def get_alert_groups(self) -> list[AlertGroup]:
         """Get grouped alerts."""
         with self._lock:
-            groups = []
 
             # Group alerts by labels
             grouping: dict[AlertGroupKey, AlertGroup] = defaultdict(lambda: AlertGroup(key=AlertGroupKey({})))

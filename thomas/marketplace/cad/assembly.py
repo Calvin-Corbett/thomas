@@ -255,7 +255,7 @@ class Assembly:
 
         for i, (name, part) in enumerate(self.parts.items()):
             centroid_part = part.get_centroid()
-            direction = centroid_part - centroid_assembly
+            centroid_part - centroid_assembly
 
             explode_offset = axis_norm * (distance * (i + 1))
 

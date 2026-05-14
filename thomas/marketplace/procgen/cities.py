@@ -92,7 +92,7 @@ class CityGenerator:
             List of road segments (paths)
         """
         # Create L-system for road generation
-        lsystem = LSystem(
+        LSystem(
             axiom="X",
             rules={
                 "X": "F[+X][-X]FX",  # Recursive branching
@@ -106,8 +106,7 @@ class CityGenerator:
 
         roads = []
         x, y = float(self.center_x), float(self.center_y)
-        angle = 0.0
-        path = [(int(x), int(y))]
+        [(int(x), int(y))]
 
         # Simplified road generation: create grid-like pattern with variation
         road_spacing = 20

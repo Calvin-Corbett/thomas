@@ -768,14 +768,14 @@ class TestAgentLoopConversation(unittest.TestCase):
         self.assertEqual(content[1].get("image_url", {}).get("url"), "data:image/png;base64,AAAA")
 
     def test_live_test_default_hint_added_for_visible_testing_requests(self) -> None:
-        cfg = AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
-        tools = ToolRegistry()
+        AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
+        ToolRegistry()
         hint = live_test_default_hint("Please test this UI behavior in browser and verify it works.")
         self.assertIn("live visible execution in Chrome", hint)
 
     def test_live_test_default_hint_skips_when_shadow_requested(self) -> None:
-        cfg = AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
-        tools = ToolRegistry()
+        AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
+        ToolRegistry()
         hint = live_test_default_hint("Run a shadow headless browser test for this UI.")
         self.assertEqual(hint, "")
 

@@ -361,7 +361,7 @@ class TestThreatDetectionEngine:
 
         engine.detect_threats(event)
 
-        detections_before = len(engine.get_detections())
+        len(engine.get_detections())
 
         engine.clear_detections()
 

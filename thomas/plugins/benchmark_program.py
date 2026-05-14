@@ -490,7 +490,7 @@ def evaluate_benchmark_program(
     runtime_rows = [row for row in list(result.get("metric_board") or []) if isinstance(row, dict)]
     catalog_checks = [row for row in list(contract.get("catalog_checks") or []) if isinstance(row, dict)]
     agents = [row for row in list(result.get("agents") or []) if isinstance(row, dict)]
-    agent_ids = [str(row.get("id") or "").strip() for row in agents if str(row.get("id") or "").strip()]
+    [str(row.get("id") or "").strip() for row in agents if str(row.get("id") or "").strip()]
 
     token_score_map = {
         str(row.get("agent") or "").strip(): _safe_float(row.get("token_efficiency_score"))

@@ -563,7 +563,7 @@ def create_app(config: AppConfig | None = None):
         repo_root = _bootdoctor_repo_root()
         status_payload = read_boot_doctor_status(repo_root, consume=False) or {}
         notice_payload = read_boot_recovery_notice(repo_root, consume=False) or {}
-        severity = (
+        (
             str(status_payload.get("severity") or notice_payload.get("severity") or "degraded").strip().lower()
             or "degraded"
         )

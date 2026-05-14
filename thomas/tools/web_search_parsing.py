@@ -126,7 +126,7 @@ class _HTMLMainExtractor(HTMLParser):
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         t = tag.lower()
-        attrs_dict = {k.lower(): (v or "").lower() for k, v in attrs}
+        {k.lower(): (v or "").lower() for k, v in attrs}
 
         if t == "script" or t == "style":
             self._in_script = t == "script"

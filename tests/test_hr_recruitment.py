@@ -261,8 +261,8 @@ class TestRecruitmentManager:
 
     def test_get_candidates_by_position(self, manager: RecruitmentManager, position: Position) -> None:
         """Test getting candidates by position."""
-        cand1 = manager.add_candidate(position.id, "Jane", "Smith", "jane@example.com", "555-1")
-        cand2 = manager.add_candidate(position.id, "John", "Doe", "john@example.com", "555-2")
+        manager.add_candidate(position.id, "Jane", "Smith", "jane@example.com", "555-1")
+        manager.add_candidate(position.id, "John", "Doe", "john@example.com", "555-2")
 
         candidates = manager.get_candidates_by_position(position.id)
 
@@ -271,7 +271,7 @@ class TestRecruitmentManager:
     def test_get_candidates_by_status(self, manager: RecruitmentManager, position: Position) -> None:
         """Test filtering candidates by status."""
         cand1 = manager.add_candidate(position.id, "Jane", "Smith", "jane@example.com", "555-1")
-        cand2 = manager.add_candidate(position.id, "John", "Doe", "john@example.com", "555-2")
+        manager.add_candidate(position.id, "John", "Doe", "john@example.com", "555-2")
 
         manager.move_candidate(cand1.id, "interviewed")
 

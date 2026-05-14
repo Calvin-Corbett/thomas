@@ -31,7 +31,7 @@ class TemplateRenderingTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             template = args.get("template", "")
-            context = args.get("context", {})
+            args.get("context", {})
             format_type = args.get("format", "jinja2")
 
             if not template:

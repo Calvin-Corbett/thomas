@@ -199,7 +199,7 @@ class ManufacturingManager:
         if pr_id in self.production_orders:
             raise ManufacturingError(f"Production order {pr_id} already exists")
 
-        bom = self.boms[bom_id]
+        self.boms[bom_id]
 
         planned_materials = self.explode_bom(finished_sku, quantity_ordered, bom_id)
 
@@ -350,7 +350,7 @@ class ManufacturingManager:
         if pr_id not in self.production_orders:
             raise ManufacturingError(f"Production order {pr_id} not found")
 
-        pr = self.production_orders[pr_id]
+        self.production_orders[pr_id]
         operation_id = f"OP_{uuid4().hex[:8]}"
 
         operation = WorkCenterOperation(

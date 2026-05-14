@@ -431,7 +431,7 @@ class TestEndToEndFlow:
         portfolio.add_position("AAPL", Decimal("100"), Decimal("150.00"))
 
         # Create settlement
-        instruction = settlement.create_instruction(
+        settlement.create_instruction(
             trades[0],
             "BUYER",
             "SELLER",

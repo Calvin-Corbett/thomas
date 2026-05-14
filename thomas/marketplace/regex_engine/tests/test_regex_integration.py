@@ -319,7 +319,7 @@ class TestPerformance:
         """Test compile cache efficiency."""
         # Compile same pattern multiple times
         for _ in range(10):
-            regex = compile(r"test")
+            compile(r"test")
         # Should use cache, not create new compilers
 
     def test_large_character_class(self) -> None:

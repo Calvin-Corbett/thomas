@@ -116,7 +116,7 @@ class TestIoTPlatformIntegration:
 
         # Create rule
         rules = platform["rules"]
-        rule = rules.create_rule(
+        rules.create_rule(
             name="High Temperature Alert",
             condition={
                 "type": "threshold",
@@ -422,7 +422,7 @@ class TestIoTPlatformIntegration:
         registry.provision_device(device.device_id, device.provisioning_token)
 
         # Create monitoring rule
-        rule = rules.create_rule(
+        rules.create_rule(
             name="High Temperature Alert",
             condition={
                 "type": "threshold",

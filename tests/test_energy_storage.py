@@ -212,7 +212,6 @@ class TestFlywheelStorage:
             soc=0.5,
         )
 
-        initial_soc = flywheel.soc
 
         # Charge
         charged = flywheel.charge(power_mw=0.5, duration_hours=0.1)

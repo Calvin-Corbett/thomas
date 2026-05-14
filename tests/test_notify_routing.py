@@ -87,7 +87,7 @@ class TestRoutingEngine:
         engine.register_preference(preference)
 
         recipient = Recipient(user_id="user1", email="user@example.com")
-        notification = Notification(
+        Notification(
             recipient=recipient,
             template_id="t1",
             channel_type=ChannelType.EMAIL,
@@ -254,7 +254,7 @@ class TestDeduplicationEngine:
 
         dedup.mark_sent(notification)
 
-        initial_count = len(dedup.sent_hashes)
+        len(dedup.sent_hashes)
 
         removed = dedup.cleanup()
 

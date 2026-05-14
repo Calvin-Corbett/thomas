@@ -265,7 +265,7 @@ async def test_complete_order_workflow():
 @pytest.mark.asyncio
 async def test_event_bus_integration():
     """Test event bus integration with subscribers."""
-    store = EventStore()
+    EventStore()
     received_events = []
 
     async def order_handler(event: Event):

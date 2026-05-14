@@ -81,17 +81,17 @@ class TestRiskManager:
 
     def test_categorize_risks(self, manager: RiskManager) -> None:
         """Test risk categorization."""
-        tech_risk = manager.create_risk(
+        manager.create_risk(
             project_id="proj-1",
             description="Technical risk",
             category=RiskCategory.TECHNICAL,
         )
-        schedule_risk = manager.create_risk(
+        manager.create_risk(
             project_id="proj-1",
             description="Schedule risk",
             category=RiskCategory.SCHEDULE,
         )
-        cost_risk = manager.create_risk(
+        manager.create_risk(
             project_id="proj-2",
             description="Cost risk",
             category=RiskCategory.COST,
@@ -106,25 +106,25 @@ class TestRiskManager:
     def test_get_risk_matrix(self, manager: RiskManager) -> None:
         """Test probability-impact matrix."""
         # Create risks in each quadrant
-        high_high = manager.create_risk(
+        manager.create_risk(
             project_id="proj-1",
             description="High-High",
             probability=0.8,
             impact=0.8,
         )
-        high_low = manager.create_risk(
+        manager.create_risk(
             project_id="proj-1",
             description="High-Low",
             probability=0.8,
             impact=0.2,
         )
-        low_high = manager.create_risk(
+        manager.create_risk(
             project_id="proj-1",
             description="Low-High",
             probability=0.2,
             impact=0.8,
         )
-        low_low = manager.create_risk(
+        manager.create_risk(
             project_id="proj-1",
             description="Low-Low",
             probability=0.2,
@@ -184,13 +184,13 @@ class TestRiskManager:
 
     def test_get_risk_register(self, manager: RiskManager) -> None:
         """Test risk register generation."""
-        risk1 = manager.create_risk(
+        manager.create_risk(
             project_id="proj-1",
             description="Risk 1",
             probability=0.8,
             impact=0.9,
         )
-        risk2 = manager.create_risk(
+        manager.create_risk(
             project_id="proj-1",
             description="Risk 2",
             probability=0.2,
@@ -205,19 +205,19 @@ class TestRiskManager:
 
     def test_get_risk_summary(self, manager: RiskManager) -> None:
         """Test risk summary statistics."""
-        high_risk = manager.create_risk(
+        manager.create_risk(
             project_id="proj-1",
             description="High risk",
             probability=0.9,
             impact=0.9,
         )
-        medium_risk = manager.create_risk(
+        manager.create_risk(
             project_id="proj-1",
             description="Medium risk",
             probability=0.5,
             impact=0.4,
         )
-        low_risk = manager.create_risk(
+        manager.create_risk(
             project_id="proj-1",
             description="Low risk",
             probability=0.1,
@@ -232,13 +232,13 @@ class TestRiskManager:
 
     def test_list_risks(self, manager: RiskManager) -> None:
         """Test listing risks with filtering."""
-        tech_risk = manager.create_risk(
+        manager.create_risk(
             project_id="proj-1",
             description="Technical",
             category=RiskCategory.TECHNICAL,
             status=RiskStatus.MONITORING,
         )
-        schedule_risk = manager.create_risk(
+        manager.create_risk(
             project_id="proj-1",
             description="Schedule",
             category=RiskCategory.SCHEDULE,

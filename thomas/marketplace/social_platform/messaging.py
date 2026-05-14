@@ -196,7 +196,7 @@ class MessagingManager:
         """
         # Create key pairs for first two participants
         if len(conversation.participant_ids) >= 2:
-            participants = list(conversation.participant_ids)
+            list(conversation.participant_ids)
 
             # DH key exchange
             dh1 = DiffieHellmanKeyExchange()

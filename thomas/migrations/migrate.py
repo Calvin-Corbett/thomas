@@ -178,7 +178,7 @@ def run_migrations(
         _run_migrations_fallback(target_version, direction)
         return
 
-    db_path = _ensure_db_exists()
+    _ensure_db_exists()
     conn = _get_connection()
 
     try:

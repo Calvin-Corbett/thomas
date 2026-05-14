@@ -434,7 +434,7 @@ def homogeneity_test_pettitt(observations: list[float]) -> tuple[float, float, i
 
     # Calculate p-value approximation
     var_u = n * (n - 1) * (2 * n + 5) / 18
-    z = (U - 0.5) / math.sqrt(var_u)
+    (U - 0.5) / math.sqrt(var_u)
 
     p_value = 2 * math.exp(-(6 * U**2) / (n**3 + n**2))
 

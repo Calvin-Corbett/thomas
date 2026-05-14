@@ -213,7 +213,7 @@ async def upload_image(file: list[UploadFile] = File(...)) -> JSONResponse:
                 w, h = im.size
                 ext = _guess_ext(fmt)
                 # Encode to bytes (normalized output), then content-address with sha256
-                buf = Path(tmp_path).read_bytes()
+                Path(tmp_path).read_bytes()
                 # Re-encode normalized output to ensure EXIF transpose/downscale applied
                 import io
 

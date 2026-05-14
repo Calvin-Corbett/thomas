@@ -276,7 +276,7 @@ class EventStore:
             SnapshotData or None
         """
         async with self._lock:
-            agg_key = self._aggregate_key(aggregate_id)
+            self._aggregate_key(aggregate_id)
             # Find latest snapshot
             candidates = [snap for key, snap in self._snapshots.items() if snap.aggregate_id == aggregate_id]
             if candidates:

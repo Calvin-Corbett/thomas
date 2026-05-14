@@ -162,7 +162,7 @@ class DidYouMeanSuggester:
     def _damerau_levenshtein(self, s1: str, s2: str) -> int:
         """Calculate Damerau-Levenshtein distance (allows transposition)."""
         len1, len2 = len(s1), len(s2)
-        big_int = len1 + len2 + 1
+        len1 + len2 + 1
 
         # Create dictionary for character occurrences
         da: dict[str, int] = {}

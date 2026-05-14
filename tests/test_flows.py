@@ -142,7 +142,7 @@ except ImportError:
                     result = step.execute(self.state)
                     self.results.append(result)
                 self.status = FlowStatus.COMPLETED
-            except Exception as e:
+            except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
                 self.status = FlowStatus.FAILED
                 raise
             return self.results
@@ -555,7 +555,7 @@ class TestFlowBuilder(unittest.TestCase):
                 .add_step("finalize", lambda s: s.set("done", True))
                 .build())
 
-        results = flow.run()
+        flow.run()
 
         self.assertEqual(flow.state.get("total"), 10)
         self.assertTrue(flow.state.get("done"))

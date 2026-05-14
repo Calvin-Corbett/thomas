@@ -356,7 +356,7 @@ def adf_test_simplified(data: list[float]) -> float:
     if len(data) < 3:
         raise InsufficientDataError("Need at least 3 observations")
 
-    diffs = differencing(data, order=1)
+    differencing(data, order=1)
 
     acf_val = correlation.autocorrelation(data, lag=1)
 

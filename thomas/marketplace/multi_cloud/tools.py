@@ -32,7 +32,7 @@ class CloudConnectorTool(Tool):
             credentials = args.get("credentials", {})
 
             if action == "register_aws":
-                connector = core.AWSConnector(credentials)
+                core.AWSConnector(credentials)
                 return ToolResult(ok=True, data={"status": "connector_registered", "provider": "AWS"})
 
             else:
@@ -68,7 +68,7 @@ class ResourceProvisioningTool(Tool):
             provider = args.get("provider")
             resource_type = args.get("resource_type")
             region = args.get("region")
-            config = args.get("config", {})
+            args.get("config", {})
 
             return ToolResult(
                 ok=True,
@@ -107,7 +107,7 @@ class CostOptimizationTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             action = args.get("action")
-            filters = args.get("filters", {})
+            args.get("filters", {})
 
             if action == "analyze":
                 return ToolResult(

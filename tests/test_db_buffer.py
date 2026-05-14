@@ -116,8 +116,8 @@ class TestBufferPoolPin:
     def test_cannot_evict_pinned_page(self) -> None:
         """Test that pinned pages cannot be evicted."""
         pool = BufferPool(pool_size=2)
-        page1 = pool.pin_page(0)
-        page2 = pool.pin_page(1)
+        pool.pin_page(0)
+        pool.pin_page(1)
 
         # Try to allocate third page - should evict something
         # But first two are pinned, so should fail
@@ -170,7 +170,7 @@ class TestBufferPoolEviction:
     def test_cannot_evict_pinned(self) -> None:
         """Test that pinned pages cannot be evicted."""
         pool = BufferPool(pool_size=100)
-        page = pool.pin_page(0)
+        pool.pin_page(0)
 
         with pytest.raises(PageException):
             pool.evict_page(0)
@@ -250,7 +250,7 @@ class TestBufferPoolInfo:
     def test_get_page_info(self) -> None:
         """Test getting info about a page."""
         pool = BufferPool(pool_size=100)
-        page = pool.pin_page(0)
+        pool.pin_page(0)
 
         info = pool.get_page_info(0)
         assert info is not None
@@ -285,14 +285,14 @@ class TestBufferPoolClock:
 
         # Allocate 3 pages
         p0 = pool.allocate_page()
-        p1 = pool.allocate_page()
-        p2 = pool.allocate_page()
+        pool.allocate_page()
+        pool.allocate_page()
 
         # Access p0 to set reference bit
         pool.get_page(p0.page_id)
 
         # Allocate new page - should evict p1 (has reference bit cleared)
-        p3 = pool.allocate_page()
+        pool.allocate_page()
 
         assert len(pool.frames) == 3
 

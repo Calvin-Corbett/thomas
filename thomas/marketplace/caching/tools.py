@@ -35,23 +35,23 @@ class CacheManagementTool(Tool):
             max_size = int(args.get("max_size", 1000))
 
             if action == "create_lru":
-                cache = caching.LRUCache(max_size=max_size)
+                caching.LRUCache(max_size=max_size)
                 return ToolResult(ok=True, data={"status": "cache_created", "type": "LRU", "max_size": max_size})
 
             elif action == "create_lfu":
-                cache = caching.LFUCache(max_size=max_size)
+                caching.LFUCache(max_size=max_size)
                 return ToolResult(ok=True, data={"status": "cache_created", "type": "LFU", "max_size": max_size})
 
             elif action == "create_ttl":
                 ttl_seconds = float(args.get("ttl_seconds", 3600))
-                cache = caching.TTLCache(max_size=max_size, ttl_seconds=ttl_seconds)
+                caching.TTLCache(max_size=max_size, ttl_seconds=ttl_seconds)
                 return ToolResult(
                     ok=True,
                     data={"status": "cache_created", "type": "TTL", "max_size": max_size, "ttl_seconds": ttl_seconds},
                 )
 
             elif action == "create_multi_tier":
-                cache = caching.MultiTierCache()
+                caching.MultiTierCache()
                 return ToolResult(ok=True, data={"status": "cache_created", "type": "MultiTier"})
 
             else:
@@ -84,15 +84,15 @@ class InvalidationTool(Tool):
             strategy = args.get("strategy", "")
 
             if strategy == "tag_based":
-                invalidator = caching.TagBasedInvalidation()
+                caching.TagBasedInvalidation()
                 return ToolResult(ok=True, data={"status": "invalidator_created", "strategy": "tag_based"})
 
             elif strategy == "pattern_based":
-                invalidator = caching.PatternBasedInvalidation()
+                caching.PatternBasedInvalidation()
                 return ToolResult(ok=True, data={"status": "invalidator_created", "strategy": "pattern_based"})
 
             elif strategy == "cascading":
-                invalidator = caching.CascadingInvalidation()
+                caching.CascadingInvalidation()
                 return ToolResult(ok=True, data={"status": "invalidator_created", "strategy": "cascading"})
 
             else:
@@ -125,15 +125,15 @@ class WarmingTool(Tool):
             strategy = args.get("strategy", "")
 
             if strategy == "batch":
-                warmer = caching.BatchWarmer()
+                caching.BatchWarmer()
                 return ToolResult(ok=True, data={"status": "warmer_created", "strategy": "batch"})
 
             elif strategy == "scheduled":
-                warmer = caching.ScheduledWarmer()
+                caching.ScheduledWarmer()
                 return ToolResult(ok=True, data={"status": "warmer_created", "strategy": "scheduled"})
 
             elif strategy == "pattern_based":
-                warmer = caching.PatternBasedWarmer()
+                caching.PatternBasedWarmer()
                 return ToolResult(ok=True, data={"status": "warmer_created", "strategy": "pattern_based"})
 
             else:

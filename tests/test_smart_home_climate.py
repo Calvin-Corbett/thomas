@@ -251,7 +251,7 @@ class TestThermostatScheduler:
         # High solar irradiance
         self.scheduler.update_weather(outdoor_temp=15.0, solar_irradiance=800)
 
-        predicted = self.scheduler.predict_temperature("zone1", 30)
+        self.scheduler.predict_temperature("zone1", 30)
 
         # Solar gain should help reach target faster
         model = self.scheduler._thermal_models["zone1"]

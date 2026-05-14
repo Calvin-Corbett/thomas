@@ -195,7 +195,7 @@ class DeviceRegistry:
             if device_id not in self._devices:
                 raise DeviceNotFoundError(f"Device {device_id} not found")
 
-            device = self._devices[device_id]
+            self._devices[device_id]
             del self._devices[device_id]
 
             # Remove from groups

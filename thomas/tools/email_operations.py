@@ -52,7 +52,7 @@ class _EmailCalendarService:
         """List calendar events for the next N days."""
         from .email_calendar import _get_tz
 
-        tz = _get_tz(self.config.timezone)
+        _get_tz(self.config.timezone)
         return await self.provider.calendar_list_events(days=days, tz=self.config.timezone)
 
     async def calendar_freebusy(self, calendars: list[str], start: str, end: str) -> list[tuple[str, str]]:

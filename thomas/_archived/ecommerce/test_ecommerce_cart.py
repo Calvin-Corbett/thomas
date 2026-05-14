@@ -44,7 +44,7 @@ class TestShoppingCart:
 
     def test_add_item(self) -> None:
         """Test adding item to cart."""
-        cart = self.cart_manager.create_cart("cart1", "user1")
+        self.cart_manager.create_cart("cart1", "user1")
         item = self.cart_manager.add_item("cart1", self.product, 2)
 
         assert item.product_id == "p1"
@@ -209,8 +209,8 @@ class TestShoppingCart:
 
     def test_merge_carts(self) -> None:
         """Test merging guest and user carts."""
-        guest_cart = self.cart_manager.create_cart("guest_cart")
-        user_cart = self.cart_manager.create_cart("user_cart", "user1")
+        self.cart_manager.create_cart("guest_cart")
+        self.cart_manager.create_cart("user_cart", "user1")
 
         p1 = Product(
             id="p1",
@@ -244,7 +244,7 @@ class TestShoppingCart:
         cart1 = self.cart_manager.create_cart("cart1")
         cart1.expires_at = datetime.utcnow() - timedelta(minutes=1)
 
-        cart2 = self.cart_manager.create_cart("cart2")
+        self.cart_manager.create_cart("cart2")
 
         cleaned = self.cart_manager.cleanup_expired_carts()
 

@@ -394,7 +394,7 @@ class TestOrderProcessor:
             ),
         ]
 
-        orders = processor.create_orders_from_cart(
+        processor.create_orders_from_cart(
             buyer_id="buyer_1",
             vendor_carts=vendor_carts,
             shipping_address="123 Main St",

@@ -171,7 +171,7 @@ def eigenvector_centrality(graph: Graph, max_iterations: int = 100, tolerance: f
     """
     nodes = graph.nodes()
     n = len(nodes)
-    node_to_idx = {node: i for i, node in enumerate(nodes)}
+    {node: i for i, node in enumerate(nodes)}
 
     # Build adjacency matrix
     adj_matrix = graph.adjacency_matrix()
@@ -287,7 +287,7 @@ def katz_centrality(
         CentralityResult with Katz centrality scores.
     """
     nodes = graph.nodes()
-    n = len(nodes)
+    len(nodes)
 
     # Initialize scores
     katz_scores: dict[Any, float] = {node: 0.0 for node in nodes}

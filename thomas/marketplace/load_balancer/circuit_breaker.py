@@ -142,7 +142,6 @@ class CircuitBreaker:
 
     def _transition_to_open(self) -> None:
         """Transition circuit to OPEN state."""
-        old_state = self._state
         self._state = CircuitState.OPEN
         self._open_time = time.time()
         self._metrics.state_changes += 1
@@ -150,14 +149,12 @@ class CircuitBreaker:
 
     def _transition_to_half_open(self) -> None:
         """Transition circuit to HALF_OPEN state."""
-        old_state = self._state
         self._state = CircuitState.HALF_OPEN
         self._metrics.state_changes += 1
         self._half_open_successes = 0
 
     def _transition_to_closed(self) -> None:
         """Transition circuit to CLOSED state."""
-        old_state = self._state
         self._state = CircuitState.CLOSED
         self._metrics.state_changes += 1
         self._failure_window.clear()

@@ -56,7 +56,6 @@ class CashFlowProjection:
 
         for year in range(1, years + 1):
             current_income = initial_annual_income * ((1 + annual_income_increase) ** year)
-            current_expenses = 0
             projections.append(current_income - annual_debt_service)
 
         return projections

@@ -44,7 +44,7 @@ class CodeGeneratorTool(Tool):
 
             elif action == "generate_crud":
                 language = args.get("language", "python")
-                options = args.get("options", {})
+                args.get("options", {})
 
                 return ToolResult(
                     ok=True, data={"status": "code_generated", "type": "crud", "language": language, "files_created": 0}
@@ -52,7 +52,7 @@ class CodeGeneratorTool(Tool):
 
             elif action == "generate_api":
                 language = args.get("language", "python")
-                options = args.get("options", {})
+                args.get("options", {})
 
                 return ToolResult(
                     ok=True, data={"status": "code_generated", "type": "api", "language": language, "files_created": 0}

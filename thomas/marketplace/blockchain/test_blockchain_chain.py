@@ -155,7 +155,7 @@ class TestChainState:
         miner_addr = genesis_block.miner
 
         # Initial state
-        initial_miner_balance = chain.get_balance(miner_addr)
+        chain.get_balance(miner_addr)
 
         # Create transaction from miner to alice
         amount = 1000000

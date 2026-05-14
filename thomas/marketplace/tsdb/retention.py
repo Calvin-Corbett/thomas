@@ -126,7 +126,7 @@ class RetentionManager:
             now_ms = int(time.time() * 1000)
 
         for chunk_info in chunks:
-            chunk_start = chunk_info.get("start_time", 0)
+            chunk_info.get("start_time", 0)
             chunk_end = chunk_info.get("end_time", now_ms)
 
             # Check if entire chunk is expired

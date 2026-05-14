@@ -134,8 +134,8 @@ class Pipeline:
             self.camera.far,
         )
 
-        model_view_matrix = view_matrix * model_transform
-        normal_matrix = view_matrix * model_transform  # Simplified
+        view_matrix * model_transform
+        view_matrix * model_transform  # Simplified
 
         # Transform vertices
         transformed_vertices: list[Vec4] = []
@@ -150,7 +150,7 @@ class Pipeline:
             transformed_vertices.append(pos_clip)
 
             # Simple lighting per vertex (Gouraud shading)
-            normal_world = math3d.vector_transform_direction(vertex.normal, model_transform)
+            math3d.vector_transform_direction(vertex.normal, model_transform)
 
             # Ambient
             color = material.ambient

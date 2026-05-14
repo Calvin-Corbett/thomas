@@ -100,7 +100,7 @@ CMD ["python", "app.py"]
         )
 
         # Connect to network
-        ip = networking.connect_container(container, "bridge")
+        networking.connect_container(container, "bridge")
 
         # Start container
         started = runtime.start_container(container.id)
@@ -352,7 +352,7 @@ class TestVolumeManagement:
         container = runtime.create_container(image=image, name="myapp-1")
 
         # Mount volume
-        mount = volumes.mount_volume(
+        volumes.mount_volume(
             volume.name,
             container.id,
             "/app/data",
@@ -400,8 +400,8 @@ class TestNetworkingAdvanced:
         container = runtime.create_container(image=image, name="myapp-1")
 
         # Connect to multiple networks
-        ip1 = networking.connect_container(container, "frontend")
-        ip2 = networking.connect_container(container, "backend")
+        networking.connect_container(container, "frontend")
+        networking.connect_container(container, "backend")
 
         # Verify connections
         networks = networking.get_container_networks(container.id)

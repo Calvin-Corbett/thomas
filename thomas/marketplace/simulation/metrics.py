@@ -175,7 +175,7 @@ class BatchMeansAnalysis:
     @staticmethod
     def _t_value(df: int, confidence_level: float) -> float:
         """Approximate t-critical value."""
-        alpha = 1 - confidence_level
+        1 - confidence_level
 
         if df >= 30:
             return 1.96

@@ -137,7 +137,7 @@ def _extract_first_json_object(s: str) -> dict[str, Any]:
                     chunk = s[start : i + 1]
                     try:
                         obj = json.loads(chunk)
-                    except Exception as e:
+                    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as e:
                         raise ValueError(f"failed to parse planner JSON: {e}") from e
                     if not isinstance(obj, dict):
                         raise ValueError("planner JSON must be an object")
@@ -542,7 +542,7 @@ class SwarmOrchestrator:
             driver.cancel()
             try:
                 await driver
-            except Exception:
+            except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
                 pass
             await SwarmRunRegistry.unregister(self.run_id)
 
@@ -568,7 +568,6 @@ class SwarmOrchestrator:
         planner_prompt: str | None,
         reviewer_prompt: str | None,
     ) -> None:
-        ok = True
         error = ""
         started_ms = _monotonic_ms()
 
@@ -669,7 +668,6 @@ class SwarmOrchestrator:
                 },
             )
         except asyncio.CancelledError:
-            ok = False
             error = "cancelled"
             await self._emit(
                 "swarm_done",
@@ -682,8 +680,7 @@ class SwarmOrchestrator:
                     "duration_ms": _monotonic_ms() - started_ms,
                 },
             )
-        except Exception as e:
-            ok = False
+        except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as e:
             error = f"{type(e).__name__}: {e}"
             await self._emit(
                 "swarm_done",
@@ -949,7 +946,7 @@ class SwarmOrchestrator:
                     self.task_status[task_id] = TaskStatus.CANCELLED
                     await self._emit("task_update", "orchestrator", task_id, {"status": TaskStatus.CANCELLED.value})
                     break  # Don't retry on cancellation
-                except Exception as e:
+                except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as e:
                     # Execution error; retry on Exception (not CancelledError)
                     if retry_count < max_retries:
                         retry_count += 1
@@ -1003,7 +1000,7 @@ class SwarmOrchestrator:
             if self._tool_mutates_fs is not None:
                 try:
                     mutates_fs = bool(self._tool_mutates_fs(name, args))
-                except Exception:
+                except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
                     mutates_fs = True
             else:
                 mutates_fs = _guess_mutates_fs(name, args)
@@ -1049,7 +1046,7 @@ class SwarmOrchestrator:
                 {"tool_call_id": tool_call_id, "tool": name, "ok": False, "error": "cancelled", "took_ms": took},
             )
             raise
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as e:
             took = _monotonic_ms() - start
             await self._emit(
                 "agent_tool_result",

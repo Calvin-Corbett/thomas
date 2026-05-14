@@ -83,11 +83,9 @@ class TestTerrainGenerator:
         gen.apply_erosion(heightmap, iterations=5)
 
         # Erosion should modify some values
-        changed = False
         for y in range(len(heightmap.data)):
             for x in range(len(heightmap.data[0])):
                 if abs(heightmap.data[y][x] - original_values[y][x]) > 0.0001:
-                    changed = True
                     break
 
         # Note: erosion may not always change values, so we just check it doesn't crash

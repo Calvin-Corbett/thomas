@@ -38,7 +38,7 @@ class TestBezierPatch:
 
         p00 = patch.evaluate(0.0, 0.0)
         p11 = patch.evaluate(1.0, 1.0)
-        p_mid = patch.evaluate(0.5, 0.5)
+        patch.evaluate(0.5, 0.5)
 
         assert p00.x == pytest.approx(0.0)
         assert p00.y == pytest.approx(0.0)

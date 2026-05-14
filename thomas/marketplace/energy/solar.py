@@ -397,13 +397,13 @@ def mppt_simulation(
     temp_coeff_current = 0.0003  # A per Celsius
 
     voc_actual = voltage_oc + temp_coeff_voltage * (cell_temperature - 25)
-    isc_actual = current_sc + temp_coeff_current * (cell_temperature - 25)
+    current_sc + temp_coeff_current * (cell_temperature - 25)
 
     # Maximum power point voltage
     vmp = 0.80 * voc_actual
 
     # 1 m^2 module-equivalent power with MPPT efficiency.
-    irradiance_fraction = max(0.0, poa_irradiance / 1000.0)  # 1000 W/m^2 = STC
+    max(0.0, poa_irradiance / 1000.0)  # 1000 W/m^2 = STC
     mppt_efficiency = max(0.0, min(1.0, fill_factor / 0.75))
     power_w = poa_irradiance * panel_efficiency * mppt_efficiency
     power_w *= max(0.0, 1.0 - 0.0035 * max(0.0, cell_temperature - 25.0))

@@ -141,10 +141,8 @@ class LimitOrderBook:
 
         if order.side == OrderSide.BUY:
             opposite_side = self.asks
-            opposite_order_side = OrderSide.SELL
         else:
             opposite_side = self.bids
-            opposite_order_side = OrderSide.BUY
 
         # Match against all available prices until order filled or book empty
         for price in sorted(opposite_side.keys()):

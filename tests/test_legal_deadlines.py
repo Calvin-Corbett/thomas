@@ -123,7 +123,7 @@ class TestDeadlineManager:
 
         # Create future deadline
         future_date = date.today() + timedelta(days=5)
-        future_deadline = manager.create_deadline(
+        manager.create_deadline(
             case_id="case_001",
             description="Future deadline",
             due_date=future_date,
@@ -146,7 +146,7 @@ class TestDeadlineManager:
             importance=3,
         )
 
-        case2_deadline = manager.create_deadline(
+        manager.create_deadline(
             case_id="case_002",
             description="Case 2 deadline",
             due_date=date.today() + timedelta(days=20),
@@ -171,7 +171,7 @@ class TestDeadlineManager:
         )
 
         # Create deadline 60 days away
-        deadline_60 = manager.create_deadline(
+        manager.create_deadline(
             case_id="case_001",
             description="60 days away",
             due_date=date.today() + timedelta(days=60),
@@ -205,7 +205,7 @@ class TestDeadlineManager:
         """Test retrieving reminders due today."""
         today = date.today()
 
-        deadline = manager.create_deadline(
+        manager.create_deadline(
             case_id="case_001",
             description="Test deadline",
             due_date=today + timedelta(days=1),

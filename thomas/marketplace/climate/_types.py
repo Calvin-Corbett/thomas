@@ -271,7 +271,7 @@ class WeatherObservation:
         """
         t = self.temperature.celsius
         rh = self.humidity.percent
-        a, b, c = 17.27, 237.7, 110.6
+        a, b, _c = 17.27, 237.7, 110.6
         alpha = ((a * t) / (b + t)) + (lambda x: (a * x) / (b + x))((rh / 100) * ((a * t) / (b + t) - 1))
         return (b * alpha) / (a - alpha)
 

@@ -345,7 +345,7 @@ class SessionBasedRecommender:
             return []
 
         current = self.current_session[user_id]
-        all_sessions = list(self.sessions.values())
+        list(self.sessions.values())
 
         similarities: list[tuple[str, list[Rating], float]] = []
 

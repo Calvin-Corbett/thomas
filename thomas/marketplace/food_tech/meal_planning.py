@@ -65,7 +65,6 @@ class MealPlanner:
             raise PlanGenerationError("No recipes available for meal planning")
 
         meals: dict[str, list[Recipe]] = {day: [] for day in self.DAYS_OF_WEEK}
-        selected_recipes: set[str] = set()
         recipe_count: dict[str, int] = {r.id: 0 for r in recipes}
         total_cost = Decimal(0)
         total_calories = Decimal(0)

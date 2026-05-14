@@ -273,8 +273,6 @@ class TestEntityComponentSystem:
         ecs = EntityComponentSystem()
 
         entity1 = ecs.create_entity()
-        index = entity1.index
-        gen = entity1.generation
 
         ecs.destroy_entity(entity1)
 

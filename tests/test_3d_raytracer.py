@@ -118,7 +118,7 @@ class TestBVHIntersection:
         bvh = raytracer.BVH(m)
 
         ray = Ray(Vec3(-5, -5, -5), Vec3(0, 0, 1))
-        result = bvh.intersect(ray)
+        bvh.intersect(ray)
 
         # Likely to miss
         # assert not result.hit  # Not guaranteed depending on mesh size
@@ -156,7 +156,7 @@ class TestRefraction:
         normal = Vec3(0, 1, 0)
         ior = 0.5  # n2/n1 < 1 (going from denser to less dense)
 
-        refracted = raytracer.refract_direction(incident, normal, ior)
+        raytracer.refract_direction(incident, normal, ior)
         # Might result in total internal reflection depending on angle
         # assert refracted is None  # Not guaranteed
 

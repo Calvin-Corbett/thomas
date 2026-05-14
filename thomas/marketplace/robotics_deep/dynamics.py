@@ -177,9 +177,9 @@ class TwoDOFArmDynamics:
         Returns:
             2x2 mass matrix
         """
-        q1, q2 = q[0], q[1]
+        _q1, q2 = q[0], q[1]
         c2 = math.cos(q2)
-        s2 = math.sin(q2)
+        math.sin(q2)
 
         m1 = self.m1
         m2 = self.m2
@@ -208,7 +208,7 @@ class TwoDOFArmDynamics:
         Returns:
             Coriolis vector
         """
-        q1, q2 = q[0], q[1]
+        _q1, q2 = q[0], q[1]
         q1dot, q2dot = qdot[0], qdot[1]
 
         s2 = math.sin(q2)

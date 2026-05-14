@@ -216,7 +216,7 @@ class TestSecretRotator:
         """Test verification against any valid secret."""
         rotator = SecretRotator()
         secret1 = Secret(value="secret1")
-        secret2 = Secret(value="secret2")
+        Secret(value="secret2")
 
         rotator.set_secret(secret1)
 

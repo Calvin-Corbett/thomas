@@ -148,8 +148,8 @@ def upgma_tree(ids: list[str], distances: list[list[float]]) -> PhyloTree:
         new_seqs = seqs_i + seqs_j
 
         # Create internal node
-        left_node = PhyloTree(name=None, branch_length=new_height - height_i)
-        right_node = PhyloTree(name=None, branch_length=new_height - height_j)
+        PhyloTree(name=None, branch_length=new_height - height_i)
+        PhyloTree(name=None, branch_length=new_height - height_j)
 
         # Store cluster info
         clusters[cluster_id] = (new_height, new_seqs)
@@ -157,7 +157,7 @@ def upgma_tree(ids: list[str], distances: list[list[float]]) -> PhyloTree:
         # Update distance matrix
         for k in list(clusters.keys()):
             if k != min_i and k != min_j and k != cluster_id:
-                nk = len(clusters[k][1])
+                len(clusters[k][1])
                 ni = len(seqs_i)
                 nj = len(seqs_j)
 

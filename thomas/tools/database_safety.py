@@ -240,11 +240,10 @@ def _find_main_select_in_with_sql(original_sql: str) -> tuple[int, int] | None:
     if not with_match:
         return None
 
-    select_start = with_match.start(1)
+    with_match.start(1)
 
     # Find the position of the SELECT keyword in the original SQL
     # by counting characters and adjusting for removed strings/comments
-    select_pos = select_start
     # This is approximate; a proper implementation would track character offsets
 
     return None  # Conservative: don't auto-inject for CTEs

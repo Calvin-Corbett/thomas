@@ -128,14 +128,11 @@ def register(app: Any) -> None:
     raise RuntimeError("Unsupported CLI app type for registration")
 
     # Compatibility hooks for different parity loaders.
-    APP = None
     try:  # pragma: no cover
         import typer  # type: ignore
 
         _a = typer.Typer(add_completion=False)
         register(_a)
-        APP = _a
     except ImportError:  # pragma: no cover
-        APP = None
+        pass
 
-    REGISTER = register

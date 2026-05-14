@@ -379,8 +379,8 @@ def portfolio_var_decomposition(
     portfolio_return = np.dot(returns, weights)
     portfolio_var = historical_var(portfolio_return, confidence_level)
 
-    cov_matrix = np.cov(returns.T)
-    std_devs = np.std(returns, axis=0)
+    np.cov(returns.T)
+    np.std(returns, axis=0)
 
     # Marginal VaR approximation
     marginal_var = np.zeros(len(weights))

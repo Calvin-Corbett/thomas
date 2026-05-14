@@ -47,7 +47,7 @@ class WAVCodec:
                 if riff_header != b"RIFF":
                     raise CodecError("Invalid WAV file: missing RIFF header")
 
-                file_size = struct.unpack("<I", f.read(4))[0]
+                struct.unpack("<I", f.read(4))[0]
                 wave_header = f.read(4)
                 if wave_header != b"WAVE":
                     raise CodecError("Invalid WAV file: missing WAVE header")
@@ -66,8 +66,8 @@ class WAVCodec:
                         audio_format = struct.unpack("<H", f.read(2))[0]
                         num_channels = struct.unpack("<H", f.read(2))[0]
                         sample_rate = struct.unpack("<I", f.read(4))[0]
-                        byte_rate = struct.unpack("<I", f.read(4))[0]
-                        block_align = struct.unpack("<H", f.read(2))[0]
+                        struct.unpack("<I", f.read(4))[0]
+                        struct.unpack("<H", f.read(2))[0]
                         bits_per_sample = struct.unpack("<H", f.read(2))[0]
 
                         self.sample_rate = sample_rate

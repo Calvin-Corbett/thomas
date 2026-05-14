@@ -353,7 +353,7 @@ class QueryOptimizer:
         # Extract components
         tables = self._extract_tables(query_plan.get("from", {}))
         where_clause = query_plan.get("where")
-        columns = query_plan.get("columns", [])
+        query_plan.get("columns", [])
 
         # Cost estimation
         io_cost = 0.0
@@ -374,7 +374,7 @@ class QueryOptimizer:
             join_order = self.join_orderer.order_joins_dynamic_programming(tables, join_conditions)
 
             # Accumulate costs
-            current_rows = (
+            (
                 self.cost_estimator.table_stats.get(tables[0]).num_rows
                 if tables[0] in self.cost_estimator.table_stats
                 else 1000
@@ -395,7 +395,7 @@ class QueryOptimizer:
 
                 io_cost += join_io
                 cpu_cost += join_cpu
-                current_rows = int(left_rows * right_rows / max(1, left_rows + right_rows))
+                int(left_rows * right_rows / max(1, left_rows + right_rows))
 
         # Create physical plan
         self.plan_counter += 1

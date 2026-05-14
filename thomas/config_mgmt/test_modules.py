@@ -177,7 +177,7 @@ class TestTemplateModule:
                 args={"src": src, "dest": dest, "backup": True},
             )
 
-            result = self.module.execute(task, self.host, self.context)
+            self.module.execute(task, self.host, self.context)
             assert Path(dest + ".bak").exists()
 
 

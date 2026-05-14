@@ -281,7 +281,7 @@ class TestIntegration:
         assert cap_rate == pytest.approx(Decimal("0.072"), abs=Decimal("0.001"))
 
         down_payment = Decimal("125000")
-        loan_amount = purchase_price - down_payment
+        purchase_price - down_payment
         dscr = LeverageAnalysis.debt_service_coverage_ratio(noi, Decimal("30000"))
         assert dscr > Decimal("1.5")
 

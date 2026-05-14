@@ -162,13 +162,12 @@ class ComposeParser:
                 resource_limits.cpu_shares = int(float(limits["cpus"]) * 1024)
 
         # Parse health check
-        health_check = None
         healthcheck_config = config.get("healthcheck")
         if healthcheck_config:
             test = healthcheck_config.get("test", [])
             if isinstance(test, str):
                 test = [test]
-            health_check = HealthCheck(
+            HealthCheck(
                 test=test,
                 interval_seconds=self._parse_duration(healthcheck_config.get("interval", "30s")),
                 timeout_seconds=self._parse_duration(healthcheck_config.get("timeout", "10s")),

@@ -350,6 +350,6 @@ class TestEdgeTypeFilter:
         storage.add_edge(e1)
         storage.add_edge(e2)
 
-        traversal = GraphTraversal(storage)
+        GraphTraversal(storage)
         # Note: The current implementation doesn't support edge_type_filter in adjacent nodes
         # This test documents the feature for future enhancement

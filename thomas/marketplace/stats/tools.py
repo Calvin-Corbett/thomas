@@ -30,7 +30,7 @@ class DescriptiveStatisticsTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             data = args.get("data", [])
-            statistics = args.get("statistics", ["mean", "median", "std"])
+            args.get("statistics", ["mean", "median", "std"])
 
             if not data:
                 return ToolResult(ok=False, error="data required")
@@ -94,9 +94,9 @@ class BayesianAnalysisTool(Tool):
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
-            prior = args.get("prior", {})
-            likelihood = args.get("likelihood", {})
-            data = args.get("data", [])
+            args.get("prior", {})
+            args.get("likelihood", {})
+            args.get("data", [])
 
             return ToolResult(
                 ok=True,

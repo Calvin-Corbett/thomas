@@ -269,7 +269,7 @@ class TestFrequencyBins:
         n = 256
 
         freqs_pos = frequency_bins(n, fs, positive_only=True)
-        freqs_full = frequency_bins(n, fs, positive_only=False)
+        frequency_bins(n, fs, positive_only=False)
 
         assert np.all(freqs_pos >= 0)
         assert len(freqs_pos) == n // 2 + 1

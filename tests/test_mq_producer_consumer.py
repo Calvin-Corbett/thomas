@@ -202,7 +202,7 @@ async def test_consumer_commit_sync(topic_setup):
 
     try:
         # Poll messages
-        results = await consumer.poll()
+        await consumer.poll()
 
         # Commit offsets
         await consumer.commit_sync()

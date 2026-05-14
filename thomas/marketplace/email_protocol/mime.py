@@ -208,8 +208,7 @@ class MIMEParser:
             raise MIMEParseError("Multipart message missing boundary")
 
         parts = []
-        content_type = self.get_content_type()
-        is_multipart_alternative = content_type == ContentType.MULTIPART_ALTERNATIVE
+        self.get_content_type()
 
         boundary_marker = f"--{boundary}".encode()
         closing_marker = f"--{boundary}--".encode()

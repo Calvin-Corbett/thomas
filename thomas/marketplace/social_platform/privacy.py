@@ -442,7 +442,6 @@ class PrivacyManager:
 
         # Simplified geofencing (real implementation would use GIS)
         # For demo, allow US by default
-        allowed = allowed_countries or ["US"]
 
         # In real implementation, would lookup location from lat/long
         # For now, return True

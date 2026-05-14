@@ -30,7 +30,7 @@ class DungeonGenerationTool(Tool):
             width = int(args.get("width", 100))
             height = int(args.get("height", 100))
             num_rooms = int(args.get("num_rooms", 10))
-            seed = args.get("seed")
+            args.get("seed")
 
             return ToolResult(
                 ok=True,
@@ -67,7 +67,7 @@ class CityGenerationTool(Tool):
         try:
             size = args.get("size", "medium")
             style = args.get("style", "grid")
-            seed = args.get("seed")
+            args.get("seed")
 
             if size not in ["small", "medium", "large"]:
                 return ToolResult(ok=False, error=f"Unknown size: {size}")

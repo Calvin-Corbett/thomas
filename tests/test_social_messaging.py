@@ -242,9 +242,9 @@ class TestMessagingManager:
         """Test unread count with mixed read/unread."""
         conv = self.manager.create_conversation({self.user1, self.user2})
 
-        msg1 = self.manager.send_message(conv.id, self.user1, "Msg 1")
+        self.manager.send_message(conv.id, self.user1, "Msg 1")
         msg2 = self.manager.send_message(conv.id, self.user1, "Msg 2")
-        msg3 = self.manager.send_message(conv.id, self.user1, "Msg 3")
+        self.manager.send_message(conv.id, self.user1, "Msg 3")
 
         # Mark msg2 as read
         self.manager.mark_as_read(conv.id, self.user2, msg2.id)

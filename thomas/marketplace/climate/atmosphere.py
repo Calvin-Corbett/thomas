@@ -158,7 +158,7 @@ def dew_point_magnus(temperature_c: float, relative_humidity: float) -> float:
     if relative_humidity < 0 or relative_humidity > 100:
         raise InvalidParameterError("Humidity must be 0-100%", "relative_humidity", relative_humidity)
 
-    a, b, c = 17.27, 237.7, 110.6
+    a, b, _c = 17.27, 237.7, 110.6
 
     alpha = ((a * temperature_c) / (b + temperature_c)) + math.log(relative_humidity / 100.0)
     dew_point = (b * alpha) / (a - alpha)

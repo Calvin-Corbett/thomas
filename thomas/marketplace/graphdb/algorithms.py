@@ -38,7 +38,6 @@ class GraphAlgorithms:
         # Initialize ranks
         rank = {node_id: 1.0 / len(nodes) for node_id in nodes}
         n = len(nodes)
-        converged = False
 
         for iteration in range(iterations):
             new_rank = {}
@@ -62,7 +61,6 @@ class GraphAlgorithms:
             # Check convergence
             diff = sum(abs(rank[node] - old_rank[node]) for node in nodes)
             if diff < tolerance:
-                converged = True
                 break
 
         return rank
@@ -109,7 +107,6 @@ class GraphAlgorithms:
         Returns:
             List of sets, each containing node IDs in an SCC
         """
-        visited: set[str] = set()
         stack: list[str] = []
         sccs: list[set[str]] = []
         ids: dict[str, int] = {}
@@ -346,7 +343,7 @@ class GraphAlgorithms:
             return 0.0
 
         m = len(self.storage.edge_store)
-        max_edges = n * (n - 1) / 2  # For undirected graph
+        n * (n - 1) / 2  # For undirected graph
         return 2.0 * m / (n * (n - 1))
 
     def diameter(self) -> float | None:

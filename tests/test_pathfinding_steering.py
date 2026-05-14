@@ -121,8 +121,8 @@ class TestArrive:
         """Test that slow radius affects deceleration."""
         boid = Boid(x=0.0, y=0.0, vx=0.0, vy=0.0)
 
-        output_small_radius = arrive(boid, 10.0, 0.0, slow_radius=2.0)
-        output_large_radius = arrive(boid, 10.0, 0.0, slow_radius=20.0)
+        arrive(boid, 10.0, 0.0, slow_radius=2.0)
+        arrive(boid, 10.0, 0.0, slow_radius=20.0)
 
 
 class TestPursue:
@@ -198,7 +198,7 @@ class TestObstacleAvoidance:
         boid = Boid(x=0.0, y=0.0, vx=1.0, vy=0.0)
         obstacles = [(100.0, 100.0, 1.0)]
 
-        output = obstacle_avoidance(boid, obstacles, lookahead_dist=5.0)
+        obstacle_avoidance(boid, obstacles, lookahead_dist=5.0)
 
     def test_multiple_obstacles(self) -> None:
         """Test avoiding multiple obstacles."""
@@ -234,7 +234,7 @@ class TestFlocking:
         boid = Boid(x=0.0, y=0.0, vx=0.0, vy=0.0)
         neighbors = [Boid(x=1.0, y=0.0, vx=0.0, vy=0.0)]
 
-        output = flocking(boid, neighbors, separation_radius=5.0)
+        flocking(boid, neighbors, separation_radius=5.0)
 
     def test_flock_no_neighbors(self) -> None:
         """Test flocking with no neighbors."""
@@ -249,7 +249,7 @@ class TestFlocking:
         boid = Boid(x=0.0, y=0.0, vx=0.0, vy=0.0)
         neighbors = [Boid(x=1.0, y=0.0, vx=1.0, vy=0.0)]
 
-        output1 = flocking(
+        flocking(
             boid,
             neighbors,
             separation_weight=1.0,
@@ -257,7 +257,7 @@ class TestFlocking:
             cohesion_weight=0.0,
         )
 
-        output2 = flocking(
+        flocking(
             boid,
             neighbors,
             separation_weight=0.0,

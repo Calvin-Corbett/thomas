@@ -62,7 +62,7 @@ def read_bmp(file_path: str) -> Image:
         offset = struct.unpack("<I", header[10:14])[0]
 
         # DIB header
-        dib_header_size = struct.unpack("<I", f.read(4))[0]
+        struct.unpack("<I", f.read(4))[0]
         f.seek(18)
 
         width = struct.unpack("<I", f.read(4))[0]
@@ -170,7 +170,7 @@ def read_ppm_pgm(file_path: str) -> Image:
         height = int(parts[1])
 
         # Parse max value
-        max_val = int(f.readline().strip())
+        int(f.readline().strip())
 
         # Read pixel data
         channels = 3 if is_color else 1
@@ -239,8 +239,8 @@ def read_tga(file_path: str) -> Image:
     """
     with open(file_path, "rb") as f:
         # TGA header
-        id_length = f.read(1)[0]
-        color_map_type = f.read(1)[0]
+        f.read(1)[0]
+        f.read(1)[0]
         image_type = f.read(1)[0]
 
         # Skip color map
@@ -249,7 +249,7 @@ def read_tga(file_path: str) -> Image:
         width = struct.unpack("<H", f.read(2))[0]
         height = struct.unpack("<H", f.read(2))[0]
         bits_per_pixel = f.read(1)[0]
-        descriptor = f.read(1)[0]
+        f.read(1)[0]
 
         if image_type not in (2, 3):
             raise UnsupportedFormatError("Only uncompressed TGA images supported")

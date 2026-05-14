@@ -171,7 +171,7 @@ class TestLeveledCompactor:
             manifest.add_sstable(1, "dummy.db")
 
             # Check trigger logic
-            should_trigger = compactor.should_trigger_compaction(1)
+            compactor.should_trigger_compaction(1)
             # Depends on file size, likely false for dummy file
 
 
@@ -184,8 +184,8 @@ class TestSizeTieredCompactor:
             compactor = SizeTieredCompactor(tmpdir, level_multiplier=10)
 
             # Check trigger logic
-            manifest = Manifest(tmpdir)
-            should_trigger = compactor.should_trigger_compaction(0)
+            Manifest(tmpdir)
+            compactor.should_trigger_compaction(0)
 
 
 class TestCompactionMerge:

@@ -186,7 +186,7 @@ class TestRecipeManager:
 
     def test_search_recipes(self, recipe_manager: RecipeManager, sample_ingredients, sample_steps) -> None:
         """Test recipe search functionality."""
-        recipe1 = recipe_manager.create_recipe(
+        recipe_manager.create_recipe(
             name="Chicken Stir Fry",
             description="Asian style chicken",
             ingredients=sample_ingredients,
@@ -200,7 +200,7 @@ class TestRecipeManager:
             tags={"quick", "spicy"},
         )
 
-        recipe2 = recipe_manager.create_recipe(
+        recipe_manager.create_recipe(
             name="Chicken Salad",
             description="Fresh salad with chicken",
             ingredients=sample_ingredients[:2],

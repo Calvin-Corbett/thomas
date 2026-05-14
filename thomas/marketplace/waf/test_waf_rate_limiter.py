@@ -144,7 +144,7 @@ class TestRateLimiter:
         limiter.check_rate_limit(ip, "/api")
 
         # Cleanup should remove old entries
-        count = limiter.cleanup_old_entries()
+        limiter.cleanup_old_entries()
         # May or may not clean depending on timing
 
     def test_retry_after_header(self, limiter: RateLimiter) -> None:

@@ -70,7 +70,7 @@ class BenchmarkTool(Tool):
         try:
             benchmark_type = args.get("benchmark_type", "")
             competitors = args.get("competitors", ["thomas"])
-            task_pack = args.get("task_pack", "default")
+            args.get("task_pack", "default")
 
             if benchmark_type == "agentic":
                 return ToolResult(

@@ -146,7 +146,7 @@ class WireFormatter:
         flags = flags_byte[0]
 
         has_checksum = bool(flags & self.FLAG_CHECKSUM)
-        is_compressed = bool(flags & self.FLAG_COMPRESSED)
+        bool(flags & self.FLAG_COMPRESSED)
 
         # Read compression type
         compressed_byte = stream.read(1)

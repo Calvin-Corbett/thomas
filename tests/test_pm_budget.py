@@ -255,12 +255,12 @@ class TestBudgetManager:
             work_package_id="wp-1",
             planned_value=1000.0,
         )
-        b2 = manager.create_budget(
+        manager.create_budget(
             project_id="proj-1",
             work_package_id="wp-2",
             planned_value=2000.0,
         )
-        b3 = manager.create_budget(
+        manager.create_budget(
             project_id="proj-2",
             work_package_id="wp-3",
             planned_value=3000.0,

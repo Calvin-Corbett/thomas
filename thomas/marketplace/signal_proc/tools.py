@@ -212,7 +212,7 @@ class SynthesisTool(Tool):
             if duration <= 0:
                 return ToolResult(ok=False, error="Duration must be positive")
 
-            num_samples = int(sample_rate * duration)
+            int(sample_rate * duration)
 
             if waveform == "sine":
                 samples = signal_proc.sine_wave(frequency, duration, sample_rate)

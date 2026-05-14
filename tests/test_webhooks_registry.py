@@ -268,7 +268,7 @@ class TestSubscriptionManagement:
             endpoint_id=ep1.id,
             event_types=["order.created"],
         )
-        sub2 = registry.register_subscription(
+        registry.register_subscription(
             endpoint_id=ep2.id,
             event_types=["order.created"],
         )
@@ -284,7 +284,7 @@ class TestSubscriptionManagement:
         registry.register_event_type("order.created")
         registry.register_event_type("order.updated")
 
-        sub1 = registry.register_subscription(
+        registry.register_subscription(
             endpoint_id=endpoint.id,
             event_types=["order.created"],
         )

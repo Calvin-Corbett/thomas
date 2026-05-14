@@ -201,7 +201,7 @@ class TestMiddleware:
     async def test_idempotency_middleware_detects_duplicate(self):
         """Test idempotency middleware detects duplicates."""
         bus = CommandBus()
-        dedup = CommandDeduplicator(window_seconds=60)
+        CommandDeduplicator(window_seconds=60)
         bus.add_middleware(ValidatingMiddleware([]))
 
         async def handler(cmd: TestCommand) -> CommandResult:

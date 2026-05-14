@@ -169,7 +169,7 @@ class LoggingMiddleware(CommandMiddleware):
         """Log command and pass to next handler."""
         start_time = time.time()
         result = await next_handler(command)
-        duration = time.time() - start_time
+        time.time() - start_time
         return result
 
 

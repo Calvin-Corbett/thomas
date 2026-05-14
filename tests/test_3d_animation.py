@@ -150,7 +150,7 @@ class TestBone:
 
     def test_bone_hierarchy(self) -> None:
         """Test bone parent-child relationships."""
-        parent = animation.Bone("parent")
+        animation.Bone("parent")
         child = animation.Bone("child", parent_idx=0)
 
         assert child.parent_idx == 0

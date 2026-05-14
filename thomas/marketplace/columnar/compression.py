@@ -306,7 +306,7 @@ class ZSTDCompressor:
             raise CompressionError("Invalid compressed data")
 
         uncompressed_size = struct.unpack("<I", data[:4])[0]
-        level = data[4]
+        data[4]
         result = bytearray()
         pos = 5
 

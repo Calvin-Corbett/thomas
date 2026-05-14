@@ -99,7 +99,7 @@ def _agent_metrics(result: Mapping[str, Any], agent_id: str) -> dict[str, Any]:
 def _check_signals(result: Mapping[str, Any], agent_id: str) -> dict[str, bool]:
     metrics = _agent_metrics(result, agent_id)
     suite = dict(result.get("suite") or {})
-    focus = dict(result.get("focus") or {})
+    dict(result.get("focus") or {})
     prediction = dict(result.get("prediction_evo_scope") or {})
 
     tests_files = _safe_float(metrics.get("tests.files")) or 0.0

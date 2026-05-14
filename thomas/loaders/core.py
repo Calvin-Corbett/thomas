@@ -182,7 +182,7 @@ class ParquetLoader(DataLoader):
         try:
             data = json.loads(source)
             rows = data.get("data", [])
-            metadata = data.get("metadata", {})
+            data.get("metadata", {})
 
             return LoadResult(rows_loaded=len(rows), rows_failed=0, errors=[], sample_data=rows[:5])
 

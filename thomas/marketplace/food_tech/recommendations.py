@@ -300,7 +300,7 @@ class RecipeRecommendationEngine:
     def _update_trending_scores(self) -> None:
         """Update trending recipe scores based on view velocity."""
         current_time = datetime.now()
-        recent_cutoff = current_time.timestamp() - (7 * 24 * 60 * 60)  # 7 days
+        current_time.timestamp() - (7 * 24 * 60 * 60)  # 7 days
 
         for recipe_id, view_count in self.recipe_views.items():
             # Simple velocity: views in last week / 7

@@ -236,7 +236,7 @@ class TestVarianceReduction:
 
         # Regular sampling
         samples_raw = [func(random.random()) for _ in range(100)]
-        raw_variance = sum((x - sum(samples_raw) / len(samples_raw)) ** 2 for x in samples_raw) / len(samples_raw)
+        sum((x - sum(samples_raw) / len(samples_raw)) ** 2 for x in samples_raw) / len(samples_raw)
 
         # With control variates
         _, cv_variance = vr.control_variates(func, control_func, 0.5, num_samples=100)

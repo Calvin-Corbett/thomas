@@ -171,7 +171,7 @@ class TestLeaveManager:
 
     def test_blackout_dates(self, manager: LeaveManager) -> None:
         """Test blackout date functionality."""
-        blackout = manager.add_blackout_date(
+        manager.add_blackout_date(
             "Year End",
             date(2024, 12, 20),
             date(2024, 12, 31),
@@ -261,14 +261,14 @@ class TestLeaveManager:
         """Test leave history retrieval."""
         manager.initialize_employee_leave(employee, LeaveType.VACATION, Decimal("40"), Decimal("6.67"))
 
-        req1 = manager.request_leave(
+        manager.request_leave(
             employee.id,
             LeaveType.VACATION,
             date(2024, 6, 1),
             date(2024, 6, 7),
         )
 
-        req2 = manager.request_leave(
+        manager.request_leave(
             employee.id,
             LeaveType.VACATION,
             date(2024, 7, 1),

@@ -82,12 +82,12 @@ class TestERPIntegration:
 
         lines = [LineItem(account_id="4000", credit=Decimal("500.00"), description="Service")]
 
-        quote = sales.create_quote("Q001", "C001", date(2024, 2, 28), lines)
+        sales.create_quote("Q001", "C001", date(2024, 2, 28), lines)
 
         so = sales.convert_quote_to_order("Q001", "SO001", date(2024, 2, 1))
         assert so.id == "SO001"
 
-        shipment = sales.fulfill_order("SO001", {0: Decimal("1.00")}, date(2024, 1, 20), shipment_reference="TRACK123")
+        sales.fulfill_order("SO001", {0: Decimal("1.00")}, date(2024, 1, 20), shipment_reference="TRACK123")
 
         invoice = ar.create_sales_invoice("INV001", "C001", date(2024, 1, 1), date(2024, 1, 31), lines)
 
@@ -103,7 +103,7 @@ class TestERPIntegration:
             BOMLine(sku="MAT002", quantity=Decimal("1.00"), unit_cost=Decimal("10.00")),
         ]
 
-        bom = mfg.create_bom("BOM001", "PRODUCT001", bom_lines)
+        mfg.create_bom("BOM001", "PRODUCT001", bom_lines)
 
         pr = mfg.create_production_order(
             "PR001", "BOM001", "PRODUCT001", Decimal("50.00"), date(2024, 1, 1), date(2024, 1, 15)
@@ -204,7 +204,7 @@ class TestERPIntegration:
         """Test procurement workflow affecting inventory."""
         purch = setup_erp["purch"]
         inv = setup_erp["inv"]
-        ap = setup_erp["ap"]
+        setup_erp["ap"]
 
         purch.vendors["V001"] = __import__("thomas.marketplace.erp._types", fromlist=["Vendor"]).Vendor(
             id="V001", name="Supplier A"
@@ -251,7 +251,7 @@ class TestERPIntegration:
         inv.receive_stock("MAT002", Decimal("500.00"), Decimal("10.00"))
 
         lines = [LineItem(account_id="4000", credit=Decimal("1000.00"))]
-        so = sales.create_sales_order("SO001", "C001", date(2024, 2, 15), lines)
+        sales.create_sales_order("SO001", "C001", date(2024, 2, 15), lines)
 
         bom_lines = [
             BOMLine(sku="MAT001", quantity=Decimal("2.00"), unit_cost=Decimal("5.00")),

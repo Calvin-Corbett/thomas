@@ -182,7 +182,7 @@ async def test_persistence_segment_caching(temp_dir):
     await manager.flush_segment("test-topic", 0)
 
     # Load and cache
-    segment_id = int((await manager.get_stats())["total_segments"])
+    int((await manager.get_stats())["total_segments"])
 
     # Stats should reflect caching
     stats = await manager.get_stats()

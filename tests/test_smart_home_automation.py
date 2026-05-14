@@ -55,7 +55,7 @@ class TestAutomationEngine:
 
         auto = Automation(automation_id="", name="Light Chain", triggers=[trigger], actions=[action])
 
-        registered = self.engine.register_automation(auto)
+        self.engine.register_automation(auto)
 
         # Simulate state change
         self.engine.trigger_state_change("light1", "on_off", False, True)

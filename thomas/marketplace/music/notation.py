@@ -89,7 +89,7 @@ class AbcNotation:
             >>> abc.note_to_abc(note)
             'C'
         """
-        midi = note.to_midi_number()
+        note.to_midi_number()
         octave_num = note.octave
 
         note_names = {
@@ -238,7 +238,6 @@ def note_to_musicxml(note: Note, duration: Duration, divisions: int = 4) -> str:
     midi = note.to_midi_number()
     octave = note.octave
 
-    note_names = ["C", "D", "E", "F", "G", "A", "B"]
     pitch_class = midi % 12
 
     pitch_to_note = {

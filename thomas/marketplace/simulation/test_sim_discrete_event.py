@@ -246,7 +246,7 @@ class TestConditionalEvents:
         for i in range(10):
             des.schedule_event(EventType.ARRIVAL, float(i * 15))
 
-        result = des.run()
+        des.run()
 
         assert len(fired) > 0
 
@@ -269,7 +269,7 @@ class TestConditionalEvents:
         for i in range(10):
             des.schedule_event(EventType.ARRIVAL, float(i * 15))
 
-        result = des.run()
+        des.run()
 
         # Should check less frequently due to check_frequency
         assert check_count[0] > 0
@@ -300,7 +300,7 @@ class TestEventProcessing:
         des.schedule_event(EventType.DEPARTURE, 20.0)
         des.schedule_event(EventType.ARRIVAL, 30.0)
 
-        result = des.run()
+        des.run()
 
         arrivals = des.get_events_of_type(EventType.ARRIVAL)
         departures = des.get_events_of_type(EventType.DEPARTURE)

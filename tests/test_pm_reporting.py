@@ -286,7 +286,7 @@ class TestReportingManager:
 
     def test_list_reports(self, manager: ReportingManager) -> None:
         """Test listing reports."""
-        r1 = manager.create_status_report(
+        manager.create_status_report(
             project_id="proj-1",
             summary="Report 1",
         )
@@ -294,7 +294,7 @@ class TestReportingManager:
             project_id="proj-1",
             summary="Report 2",
         )
-        r3 = manager.create_status_report(
+        manager.create_status_report(
             project_id="proj-2",
             summary="Report 3",
         )

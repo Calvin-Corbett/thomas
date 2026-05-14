@@ -308,7 +308,7 @@ class TestIncidentManager:
         """Test retrieving incidents by status."""
         manager = IncidentManager()
 
-        incident = manager.create_incident(
+        manager.create_incident(
             title="Test",
             description="Test",
             severity=EventSeverity.MEDIUM,

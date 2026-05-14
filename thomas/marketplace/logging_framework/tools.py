@@ -32,7 +32,7 @@ class LoggingQueryLogsTool(Tool):
         try:
             query = args["query"]
             log_level = args.get("log_level", "debug")
-            limit = args.get("limit", 100)
+            args.get("limit", 100)
 
             return ToolResult(
                 ok=True,
@@ -106,7 +106,7 @@ class LoggingGetLogLevelsTool(Tool):
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
-            service_name = args.get("service_name")
+            args.get("service_name")
             time_window = args.get("time_window_hours", 24)
 
             return ToolResult(
@@ -142,7 +142,7 @@ class LoggingExportLogsTool(Tool):
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
-            query = args["query"]
+            args["query"]
             format_type = args["format"]
             destination = args["destination"]
 

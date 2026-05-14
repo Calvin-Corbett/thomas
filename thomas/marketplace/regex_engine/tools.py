@@ -65,8 +65,8 @@ class RegexMatchingTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             action = args.get("action", "")
-            pattern = args.get("pattern", "")
-            text = args.get("text", "")
+            args.get("pattern", "")
+            args.get("text", "")
 
             if action == "match":
                 return ToolResult(ok=True, data={"action": "match", "matched": False, "groups": []})
@@ -75,7 +75,7 @@ class RegexMatchingTool(Tool):
                 return ToolResult(ok=True, data={"action": "find_all", "matches": [], "count": 0})
 
             elif action == "replace":
-                replacement = args.get("replacement", "")
+                args.get("replacement", "")
                 return ToolResult(ok=True, data={"action": "replace", "result": "", "replacements_made": 0})
 
             elif action == "split":

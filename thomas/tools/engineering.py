@@ -715,7 +715,7 @@ class GitAnalysisTool(Tool):
         analysis = args.get("analysis", "recent")
         days = args.get("days", 30)
         try:
-            repo = gitmodule.Repo(repo_path)
+            gitmodule.Repo(repo_path)
         except (gitmodule.InvalidGitRepositoryError, gitmodule.NoSuchPathError) as e:
             return ToolResult(ok=False, error=str(e))
         since = f"--since={days} days ago"

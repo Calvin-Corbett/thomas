@@ -94,7 +94,7 @@ class TestInventoryManager:
 
         inv.receive_stock("SKU001", Decimal("100.00"), Decimal("10.00"))
 
-        transaction = inv.adjust_inventory("SKU001", Decimal("-5.00"), reason="Damage")
+        inv.adjust_inventory("SKU001", Decimal("-5.00"), reason="Damage")
 
         assert inv.items["SKU001"].quantity_on_hand == Decimal("95.00")
 

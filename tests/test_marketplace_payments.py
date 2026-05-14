@@ -265,9 +265,9 @@ class TestPaymentProcessor:
         """Test listing payments for order."""
         processor = PaymentProcessor()
 
-        payment1 = processor.process_payment("order_1", Decimal("99.99"))
-        payment2 = processor.process_payment("order_1", Decimal("50.00"))
-        payment3 = processor.process_payment("order_2", Decimal("75.00"))
+        processor.process_payment("order_1", Decimal("99.99"))
+        processor.process_payment("order_1", Decimal("50.00"))
+        processor.process_payment("order_2", Decimal("75.00"))
 
         order1_payments = processor.list_order_payments("order_1")
         assert len(order1_payments) == 2

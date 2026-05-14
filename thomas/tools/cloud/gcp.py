@@ -359,7 +359,7 @@ class GCPProvider(CloudProvider):
                 zone=zone,
                 resource=instance_id,
             )
-            operation = client.start(request=request)
+            client.start(request=request)
             return True
         except Exception as e:
             raise CloudOperationError(f"Failed to start instance: {e}")
@@ -384,7 +384,7 @@ class GCPProvider(CloudProvider):
                 zone=zone,
                 resource=instance_id,
             )
-            operation = client.stop(request=request)
+            client.stop(request=request)
             return True
         except Exception as e:
             raise CloudOperationError(f"Failed to stop instance: {e}")

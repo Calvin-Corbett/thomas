@@ -183,7 +183,7 @@ class OLAPCube:
         if dimension not in self.dimensions:
             return {}
 
-        dim = self.dimensions[dimension]
+        self.dimensions[dimension]
         # Simplified drill-down
         result = self.slice(dimension, parent_member)
         return result

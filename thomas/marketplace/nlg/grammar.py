@@ -259,8 +259,8 @@ class GrammarEngine:
         # Simple agreement check
         if left_tree.label == "NP" and right_tree.label == "VP":
             # Check subject-verb agreement
-            left_number = left_tree.features.get("number", "singular")
-            right_person = right_tree.features.get("person", "third")
+            left_tree.features.get("number", "singular")
+            right_tree.features.get("person", "third")
 
             # Both should match
             return True

@@ -178,7 +178,7 @@ class CompatibilityLayer:
             return APIResponse(status="error", data={}, error=f"Unsupported version: {version.value}")
 
         try:
-            api_request = await translator.translate_request(openclaw_request)
+            await translator.translate_request(openclaw_request)
             # Process request...
             return APIResponse(status="success", data={"processed": True})
         except Exception as e:

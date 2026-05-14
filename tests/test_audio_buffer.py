@@ -151,7 +151,7 @@ class TestAudioBufferPool:
         assert buf1.shape == (1024, 2)
         assert pool.available_count == 3
 
-        buf2 = pool.acquire()
+        pool.acquire()
         assert pool.available_count == 2
 
         pool.release(buf1)

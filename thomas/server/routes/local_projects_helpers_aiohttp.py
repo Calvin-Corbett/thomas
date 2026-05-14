@@ -168,7 +168,7 @@ def _read_registry(app: web.Application) -> list[dict[str, Any]]:
             data = json.load(f)
         if not isinstance(data, dict):
             return []
-        version = data.get("version", 1)
+        data.get("version", 1)
         projects = data.get("projects", [])
         if not isinstance(projects, list):
             return []

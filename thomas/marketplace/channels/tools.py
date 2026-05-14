@@ -96,7 +96,7 @@ class ChannelAuthenticationTool(Tool):
             channel_name = args.get("channel_name", "")
 
             if action == "login":
-                credentials = args.get("credentials", {})
+                args.get("credentials", {})
                 return ToolResult(ok=True, data={"status": "authenticated", "channel": channel_name})
 
             elif action == "logout":

@@ -204,7 +204,6 @@ def check_voice_spacing(voices: list[list[Note]], max_spacing_semitones: int = 8
     Returns:
         True if spacing is valid.
     """
-    voice_types = [VoiceType.SOPRANO, VoiceType.ALTO, VoiceType.TENOR, VoiceType.BASS]
 
     for i in range(len(voices) - 1):
         if not voices[i] or not voices[i + 1]:
@@ -475,7 +474,7 @@ def detect_modulation(chords: list[Chord], key_root: Note) -> tuple[int, Note] |
 
                             if remaining_notes.issubset(scale_notes):
                                 return (i, candidate_key)
-                except Exception:
+                except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
                     pass
 
     return None
