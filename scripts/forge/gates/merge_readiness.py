@@ -12,7 +12,7 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
-from typing import Sequence
+from collections.abc import Sequence
 
 ROOT = Path(__file__).resolve().parents[3]
 MERGE_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (

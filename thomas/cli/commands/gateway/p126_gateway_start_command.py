@@ -5,7 +5,8 @@ import json
 import os
 import sys
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, Optional
+from collections.abc import Sequence
 
 from thomas.server.routes.gateway.p126_gateway_start_command import (
     GatewayStartException,

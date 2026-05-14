@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Dict, Iterable, List
+from typing import Dict, List
+from collections.abc import Iterable
 
 _WORD = re.compile(r"[a-zA-Z0-9_]+")
 

@@ -18,7 +18,8 @@ import inspect
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Mapping, MutableMapping, Optional, Sequence, TypedDict
+from typing import Any, Optional, TypedDict
+from collections.abc import Mapping, MutableMapping, Sequence
 
 from aiohttp import web
 

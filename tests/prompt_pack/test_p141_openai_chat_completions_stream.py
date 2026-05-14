@@ -1,7 +1,8 @@
 import asyncio
 import inspect
 import json
-from typing import Any, Callable, Iterable, Tuple
+from typing import Any, Tuple
+from collections.abc import Callable, Iterable
 
 import pytest
 from aiohttp import ClientSession, web

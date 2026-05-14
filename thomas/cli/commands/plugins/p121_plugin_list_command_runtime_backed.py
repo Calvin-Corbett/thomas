@@ -16,7 +16,8 @@ import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Sequence, TextIO
+from typing import TextIO
+from collections.abc import Iterable, Sequence
 
 from thomas.plugins.p121_plugin_list_command_runtime_backed import (
     PLUGIN_LIST_JSON_SCHEMA,

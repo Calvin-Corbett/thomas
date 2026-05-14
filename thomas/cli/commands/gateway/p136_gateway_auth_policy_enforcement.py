@@ -17,7 +17,8 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any
+from collections.abc import Sequence
 
 from thomas.server.routes.gateway.p136_gateway_auth_policy_enforcement import (
     GatewayAuthPolicy,

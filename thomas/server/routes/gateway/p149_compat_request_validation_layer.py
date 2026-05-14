@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Literal, Mapping, Tuple, TypedDict, Union, cast
+from typing import Any, Dict, List, Literal, Tuple, TypedDict, Union, cast
+from collections.abc import Mapping
 
 from aiohttp import web
 

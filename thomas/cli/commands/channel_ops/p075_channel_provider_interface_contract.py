@@ -8,7 +8,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any, Mapping
+from typing import Any
+from collections.abc import Mapping
 
 from thomas.channels.p075_channel_provider_interface_contract import (
     ERROR_INVALID_INPUT,

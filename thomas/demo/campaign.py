@@ -5,7 +5,8 @@ import csv
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Dict, List, Optional
+from collections.abc import Mapping, Sequence
 
 from thomas.demo.browser_duel import (
     DEFAULT_RUNS_DIR as DEFAULT_BROWSER_RUNS_DIR,

@@ -6,7 +6,8 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, MutableMapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+from collections.abc import Mapping, MutableMapping, Sequence
 
 from thomas.cli.live_browser import (
     LiveBrowserSmokeError,

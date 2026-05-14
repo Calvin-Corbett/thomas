@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Iterable, List, Tuple
+from typing import List, Tuple
+from collections.abc import Iterable
 
 
 def estimate_tokens(text: str) -> int:

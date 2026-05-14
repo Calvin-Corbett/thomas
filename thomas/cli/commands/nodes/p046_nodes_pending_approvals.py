@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Sequence
+from collections.abc import Sequence
 
 from thomas.nodes.p046_nodes_pending_approvals import (
     ERROR_CONFIG_MISSING,

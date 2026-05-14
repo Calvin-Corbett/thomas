@@ -25,7 +25,8 @@ import asyncio
 import inspect
 import json
 from dataclasses import dataclass
-from typing import Any, Literal, Mapping, Optional
+from typing import Any, Literal, Optional
+from collections.abc import Mapping
 from urllib.parse import urlparse
 
 NavigateOpenAction = Literal["navigate", "open"]

@@ -5,7 +5,8 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+from collections.abc import Iterator
 
 SCHEMA_SQL = """
 PRAGMA journal_mode=WAL;

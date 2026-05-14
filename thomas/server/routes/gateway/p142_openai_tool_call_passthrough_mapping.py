@@ -5,7 +5,8 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, TypedDict, Union, cast
+from typing import Any, Dict, List, Literal, Optional, TypedDict, Union, cast
+from collections.abc import Mapping, Sequence
 
 from aiohttp import web
 

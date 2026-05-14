@@ -14,7 +14,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any, Mapping
+from typing import Any
+from collections.abc import Mapping
 
 from thomas.nodes.p038_nodes_list_and_status import (
     NodesConfigError,

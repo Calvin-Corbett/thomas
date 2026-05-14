@@ -5,7 +5,8 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, TypedDict, cast
+from typing import Any, TypedDict, cast
+from collections.abc import Mapping
 
 ERROR_INVALID_INPUT = "invalid_input"
 ERROR_MISSING_CONFIG = "missing_config"

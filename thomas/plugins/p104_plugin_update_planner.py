@@ -18,7 +18,8 @@ import json
 import os
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, Tuple, TypedDict, Union, cast
+from typing import Any, Dict, List, Literal, Optional, Tuple, TypedDict, Union, cast
+from collections.abc import Iterable, Mapping, Sequence
 
 try:
     import requests  # type: ignore

@@ -8,7 +8,8 @@ import json
 import re
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
-from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
+from collections.abc import Awaitable, Callable
 
 from aiohttp import web
 

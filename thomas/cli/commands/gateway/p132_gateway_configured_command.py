@@ -19,7 +19,8 @@ import sys
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence, TypedDict
+from typing import Any, Dict, Optional, TypedDict
+from collections.abc import Sequence
 
 from thomas.server.routes.gateway.p132_gateway_configured_command import (
     REASON_INVALID_CONFIG,

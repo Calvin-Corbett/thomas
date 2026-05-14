@@ -25,7 +25,8 @@ import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Optional, TypedDict, cast
+from typing import Any, Optional, TypedDict, cast
+from collections.abc import Mapping
 
 from aiohttp import web
 

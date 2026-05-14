@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Mapping, Optional
+from typing import Any, Optional
+from collections.abc import Mapping
 
 try:
     from thomas.marketplace.channels.p090_channel_webhook_bridge_adapter import (
