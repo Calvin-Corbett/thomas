@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import fnmatch
 import glob
 import io
@@ -7,7 +9,7 @@ import json
 import math
 import re
 import tokenize
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from statistics import mean, pstdev
 

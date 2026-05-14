@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from collections.abc import Mapping, Sequence
 
 from thomas.demo.agent_comparison_suite_shared import MetricSpec, _is_number, _safe_float

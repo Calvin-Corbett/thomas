@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from typing import Any
+
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from thomas.demo.agent_comparison_suite_shared import (
+    DEFAULT_CATEGORY_WEIGHTS,
     DEFAULT_GATEWAY_PATTERNS,
     MetricSpec,
     _collect_git_version_info,

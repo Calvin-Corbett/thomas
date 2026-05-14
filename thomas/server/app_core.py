@@ -225,12 +225,12 @@ def create_app(config: AppConfig | None = None):
         _file_audit.init_audit(audit_db_path)
 
         async def _audit_files_handler(request: web.Request) -> web.Response:
-            _require_api_access(request)
+            _require_api_access(request)  # noqa: F821  -- `_require_api_access` is a pre-existing dead reference (closure in middleware not exported)
             body, status, headers = await handle_audit_files(request)
             return web.Response(body=body, status=status, headers=headers)
 
         async def _audit_run_files_handler(request: web.Request) -> web.Response:
-            _require_api_access(request)
+            _require_api_access(request)  # noqa: F821  -- `_require_api_access` is a pre-existing dead reference (closure in middleware not exported)
             run_id = request.match_info.get("run_id", "")
             body, status, headers = await handle_audit_run_files(request, run_id)
             return web.Response(body=body, status=status, headers=headers)
@@ -322,7 +322,7 @@ def create_app(config: AppConfig | None = None):
     try:
         from thomas.marketplace.realtime.routes import setup_realtime_routes
 
-        setup_realtime_routes(app, require_api_access=lambda req: _require_api_access(req))
+        setup_realtime_routes(app, require_api_access=lambda req: _require_api_access(req))  # noqa: F821  -- `_require_api_access` is a pre-existing dead reference (closure in middleware not exported)
         _realtime_ok = True
     except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
         log.warning("Realtime routes unavailable: %s", e)

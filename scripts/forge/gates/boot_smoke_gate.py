@@ -112,7 +112,7 @@ def run(argv: list[str] | None = None) -> int:
                     "ok": all_ok,
                     "modules_tested": len(SMOKE_IMPORTS),
                     "failures": failures,
-                    "thomas_files_staged": len(thomas_files),
+                    "thomas_files_staged": len(triggered_files),
                 },
                 sort_keys=True,
             )
@@ -132,10 +132,10 @@ def run(argv: list[str] | None = None) -> int:
             print()
             print("HOW TO FIX IT:")
             print("1. Check for syntax errors in the files you changed:")
-            for tf in thomas_files[:8]:
+            for tf in triggered_files[:8]:
                 print(f"   python -m py_compile {tf}")
-            if len(thomas_files) > 8:
-                print(f"   ... and {len(thomas_files) - 8} more")
+            if len(triggered_files) > 8:
+                print(f"   ... and {len(triggered_files) - 8} more")
             print()
             print("2. Check for circular imports:")
             print(f"   python -c \"import {failures[0]['module']}\"")
