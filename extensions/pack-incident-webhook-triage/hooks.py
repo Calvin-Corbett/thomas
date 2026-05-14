@@ -6,14 +6,14 @@ PACK_ID = "pack-incident-webhook-triage"
 MODULE_NAME = "extension_incident_webhook_triage"
 MODE = "triage"
 
-def before_tool(payload: Dict[str, Any]) -> Dict[str, Any]:
+def before_tool(payload: dict[str, Any]) -> dict[str, Any]:
     data = dict(payload or {})
     data.setdefault('extension_pack', PACK_ID)
     data.setdefault('mode', MODE)
     data.setdefault('validated', True)
     return data
 
-def after_tool(payload: Dict[str, Any]) -> Dict[str, Any]:
+def after_tool(payload: dict[str, Any]) -> dict[str, Any]:
     data = dict(payload or {})
     data.setdefault('extension_pack', PACK_ID)
     data.setdefault('mode', MODE)
