@@ -227,12 +227,22 @@ def _parse_status_paths(repo_root: Path) -> list[str]:
         token = entry[3:] if len(entry) > 3 else entry
         if "R" in status or "C" in status:
             # Porcelain-v1 -z rename format: "<XY> <new-path>\0<old-path>\0".
-            # ``token`` already holds the NEW path; the next entry is the
-            # OLD path. Consume that iterator entry but keep ``token`` as
-            # the new path so working-tree changes are correctly attributed
-            # to the destination.
+            # ``token`` holds the NEW path; the next iterator entry holds
+            # the OLD path. Record BOTH so a claim scope matching either
+            # side of the rename allows the commit. (Previously only the
+            # new path was recorded, which forced agents to use Move-Item
+            # rather than ``git mv`` across every Praxis rename session —
+            # see 69e8c8d0 partial fix that handled the new-path side.)
+            new_normalized = _normalize_path(token)
+            if new_normalized and new_normalized not in changed:
+                changed.append(new_normalized)
             if index + 1 < len(entries) and str(entries[index + 1] or ""):
+                old_normalized = _normalize_path(entries[index + 1])
+                if old_normalized and old_normalized not in changed:
+                    changed.append(old_normalized)
                 index += 1
+            index += 1
+            continue
         normalized = _normalize_path(token)
         if normalized and normalized not in changed:
             changed.append(normalized)
