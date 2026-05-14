@@ -13,11 +13,11 @@ Use the queue model:
 - `logs`: optional operator logs
 
 Primary CLI:
-- `python scripts/code_intake.py init`
-- `python scripts/code_intake.py new --drop-id D20260220_001 --prompt-id P001 --batch-id B01 --title "Browser command registry scaffold"`
-- `python scripts/code_intake.py validate --drop-id D20260220_001`
-- `python scripts/code_intake.py stage --drop-id D20260220_001`
-- `python scripts/code_intake.py apply --drop-id D20260220_001 --execute`
+- `python scripts/forge/intake/cli.py init`
+- `python scripts/forge/intake/cli.py new --drop-id D20260220_001 --prompt-id P001 --batch-id B01 --title "Browser command registry scaffold"`
+- `python scripts/forge/intake/cli.py validate --drop-id D20260220_001`
+- `python scripts/forge/intake/cli.py stage --drop-id D20260220_001`
+- `python scripts/forge/intake/cli.py apply --drop-id D20260220_001 --execute`
 
 Security and quality controls:
 - Path ownership enforcement (`allowed_paths` / `forbidden_paths`)
