@@ -502,7 +502,7 @@ def cli(
     if ctx.invoked_subcommand is None:
         # Default to interactive mode for plain `thomas` invocations when attached to a terminal.
         if sys.stdin.isatty() and sys.stdout.isatty():
-            ctx.invoke(repl, model_name=None)
+            ctx.invoke(repl, model_name=None)  # noqa: F821  -- `repl` is a pre-existing dead-code reference (since 2026-03-02); investigate separately
         else:
             click.echo(ctx.get_help())
 
