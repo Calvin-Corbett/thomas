@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence
-
 
 _SWITCH_PREFIX_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"^\s*(switch|change|set|use)\b", re.IGNORECASE),
@@ -56,12 +55,12 @@ def infer_profile_candidates(
     *,
     current_profile: str,
     available_profiles: Iterable[str],
-) -> List[str]:
+) -> list[str]:
     low = _norm(text)
-    out: List[str] = []
+    out: list[str] = []
     seen: set[str] = set()
 
-    def add(name: Optional[str]) -> None:
+    def add(name: str | None) -> None:
         if not name:
             return
         n = str(name).strip()
@@ -95,7 +94,7 @@ def infer_profile_candidates(
     return out
 
 
-def _extract_requested_version(text: str) -> Optional[str]:
+def _extract_requested_version(text: str) -> str | None:
     low = _norm(text)
     m = re.search(r"\b([0-9])(?:[.\-]([0-9]))\b", low)
     if not m:
@@ -103,7 +102,7 @@ def _extract_requested_version(text: str) -> Optional[str]:
     return f"{m.group(1)}.{m.group(2)}"
 
 
-def _extract_requested_family(text: str) -> Optional[str]:
+def _extract_requested_family(text: str) -> str | None:
     low = _norm(text)
     for fam in ("opus", "sonnet", "haiku", "gpt", "grok"):
         if re.search(rf"\b{fam}\b", low):
@@ -111,7 +110,7 @@ def _extract_requested_family(text: str) -> Optional[str]:
     return None
 
 
-def _find_explicit_model_id(text: str, candidates: Sequence[str]) -> Optional[str]:
+def _find_explicit_model_id(text: str, candidates: Sequence[str]) -> str | None:
     low = _norm(text)
     for model_id in candidates:
         mid = _norm(model_id)
@@ -131,8 +130,8 @@ def _find_explicit_model_id(text: str, candidates: Sequence[str]) -> Optional[st
 def _score_model_id(
     model_id: str,
     *,
-    requested_family: Optional[str],
-    requested_version: Optional[str],
+    requested_family: str | None,
+    requested_version: str | None,
     request_tokens: set[str],
 ) -> float:
     mid = _norm(model_id)
@@ -170,7 +169,7 @@ def resolve_model_switch_request(
     current_profile: str,
     default_models: Mapping[str, str],
     discovered_models: Mapping[str, Sequence[str]],
-) -> Optional[ModelSwitchResolution]:
+) -> ModelSwitchResolution | None:
     if not is_model_switch_request(text):
         return None
 
@@ -187,11 +186,11 @@ def resolve_model_switch_request(
     requested_version = _extract_requested_version(text)
     requested_family = _extract_requested_family(text)
 
-    best: Optional[tuple[float, str, str]] = None  # score, profile, model
+    best: tuple[float, str, str] | None = None  # score, profile, model
 
     for profile in profiles:
         default_id = str(default_models.get(profile) or "").strip()
-        candidates: List[str] = []
+        candidates: list[str] = []
         if default_id:
             candidates.append(default_id)
         for mid in discovered_models.get(profile, []):
@@ -241,7 +240,7 @@ def resolve_model_switch_request(
     if score < 1.0 and (requested_family or requested_version):
         return None
 
-    explanation_bits: List[str] = []
+    explanation_bits: list[str] = []
     if requested_family:
         explanation_bits.append(f"family={requested_family}")
     if requested_version:

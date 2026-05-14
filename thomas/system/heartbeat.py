@@ -32,9 +32,9 @@ from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from thomas.core.py_compile_safe import compile_no_repo_pyc
-from typing import Any
 
 # ---------------------------------------------------------------------------
 # Paths

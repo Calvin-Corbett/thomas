@@ -93,16 +93,14 @@ def run(args: argparse.Namespace) -> int:
         if json_output:
             print(json.dumps(error_to_payload(exc, node=node, action=action), ensure_ascii=False))
         else:
-            print("ERROR[{code}]: {msg}".format(code=exc.code, msg=str(exc)), file=sys.stderr)
+            print(f"ERROR[{exc.code}]: {str(exc)}", file=sys.stderr)
         return 1
 
     if json_output:
         print(json.dumps(response_to_payload(resp), ensure_ascii=False))
     else:
         print(
-            "Invoked '{action}' on '{node}' (status {status})".format(
-                action=resp.action, node=resp.node, status=resp.status_code
-            )
+            f"Invoked '{resp.action}' on '{resp.node}' (status {resp.status_code})"
         )
         if resp.result is not None:
             print(json.dumps(resp.result, indent=2, ensure_ascii=False))
@@ -127,7 +125,7 @@ build_parser = register
 add_parser = register
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     """Standalone entrypoint (primarily for tests)."""
 
     argv = list(argv or sys.argv[1:])

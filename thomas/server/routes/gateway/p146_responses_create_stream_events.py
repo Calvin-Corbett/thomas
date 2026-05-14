@@ -35,7 +35,6 @@ from typing import Any, Dict, Iterable, Iterator, List, Literal, Mapping, Option
 
 from aiohttp import ClientSession, ClientTimeout, ContentTypeError, web
 
-
 # -----------------------------
 # Contracts
 # -----------------------------
@@ -46,17 +45,17 @@ class CreateResponseRequestDict(TypedDict, total=False):
     stream: bool
     temperature: float
     max_output_tokens: int
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
 
 
 class OpenAIStyleError(TypedDict, total=False):
     message: str
     type: str
-    param: Optional[str]
-    code: Optional[str]
+    param: str | None
+    code: str | None
 
 
-StreamEvent = Dict[str, Any]
+StreamEvent = dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -66,15 +65,15 @@ class ParsedCreateResponseRequest:
     prompt_text: str
     stream: bool
     temperature: float
-    max_output_tokens: Optional[int]
-    metadata: Dict[str, Any]
+    max_output_tokens: int | None
+    metadata: dict[str, Any]
 
 
 @dataclass(frozen=True)
 class RuntimeConfig:
     mode: Literal["stub", "proxy"]
-    upstream_url: Optional[str]
-    api_key: Optional[str]
+    upstream_url: str | None
+    api_key: str | None
 
 
 # -----------------------------
@@ -91,8 +90,8 @@ class GatewayError(Exception):
         self.http_status = http_status
         self.param = param
 
-    def to_openai_error(self) -> Dict[str, Any]:
-        err: Dict[str, Any] = {
+    def to_openai_error(self) -> dict[str, Any]:
+        err: dict[str, Any] = {
             "message": self.message,
             "type": "invalid_request_error" if 400 <= self.http_status < 500 else "server_error",
             "param": self.param,
@@ -153,7 +152,7 @@ def _extract_prompt_text(value: Any) -> str:
         return value
 
     if isinstance(value, list):
-        parts: List[str] = []
+        parts: list[str] = []
         for item in value:
             if isinstance(item, str):
                 parts.append(item)
@@ -218,18 +217,18 @@ def parse_create_response_request(payload: Mapping[str, Any]) -> ParsedCreateRes
         stream=stream,
         temperature=float(temperature),
         max_output_tokens=max_output_tokens,
-        metadata=cast(Dict[str, Any], metadata),
+        metadata=cast(dict[str, Any], metadata),
     )
 
 
-def _chunk_text(text: str, *, chunk_size: int = 8) -> List[str]:
+def _chunk_text(text: str, *, chunk_size: int = 8) -> list[str]:
     if not text:
         return [""]
     return [text[i : i + chunk_size] for i in range(0, len(text), chunk_size)]
 
 
-def _build_message_item(*, message_id: str, status: str, text: str | None = None) -> Dict[str, Any]:
-    item: Dict[str, Any] = {
+def _build_message_item(*, message_id: str, status: str, text: str | None = None) -> dict[str, Any]:
+    item: dict[str, Any] = {
         "id": message_id,
         "type": "message",
         "role": "assistant",
@@ -247,13 +246,13 @@ def _build_response_object(
     created_at: int,
     status: str,
     model: str,
-    output: List[Dict[str, Any]],
+    output: list[dict[str, Any]],
     completed_at: int | None,
-    metadata: Dict[str, Any],
+    metadata: dict[str, Any],
     temperature: float,
-    error: Dict[str, Any] | None = None,
-    usage: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
+    error: dict[str, Any] | None = None,
+    usage: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     return {
         "id": response_id,
         "object": "response",
@@ -282,7 +281,7 @@ def _build_response_object(
     }
 
 
-def _usage_from_text(input_text: str, output_text: str) -> Dict[str, int]:
+def _usage_from_text(input_text: str, output_text: str) -> dict[str, int]:
     input_tokens = max(1, len((input_text or "").split()))
     output_tokens = max(1, len((output_text or "").split()))
     return {"input_tokens": input_tokens, "output_tokens": output_tokens, "total_tokens": input_tokens + output_tokens}
@@ -320,7 +319,7 @@ def iter_stream_events(
 
     seq = 1
 
-    def emit(ev: Dict[str, Any]) -> StreamEvent:
+    def emit(ev: dict[str, Any]) -> StreamEvent:
         nonlocal seq
         ev["sequence_number"] = seq
         seq += 1
@@ -393,18 +392,18 @@ def build_stream_events(
     message_id: str,
     created_at: int,
     completed_at: int,
-) -> List[StreamEvent]:
+) -> list[StreamEvent]:
     """Convenience wrapper for tests/automation."""
     return list(iter_stream_events(req, response_id=response_id, message_id=message_id, created_at=created_at, completed_at=completed_at))
 
 
-def encode_sse_event(event_type: str, data_obj: Dict[str, Any]) -> bytes:
+def encode_sse_event(event_type: str, data_obj: dict[str, Any]) -> bytes:
     data = json.dumps(data_obj, ensure_ascii=False, separators=(",", ":"))
-    return f"event: {event_type}\n" f"data: {data}\n\n".encode("utf-8")
+    return f"event: {event_type}\n" f"data: {data}\n\n".encode()
 
 
 def events_to_sse(events: Iterable[StreamEvent]) -> str:
-    chunks: List[str] = []
+    chunks: list[str] = []
     for ev in events:
         event_type = ev.get("type", "message")
         data = json.dumps(ev, ensure_ascii=False, separators=(",", ":"))
@@ -413,7 +412,7 @@ def events_to_sse(events: Iterable[StreamEvent]) -> str:
     return "".join(chunks)
 
 
-async def _proxy_upstream(request: web.Request, payload: Dict[str, Any]) -> web.StreamResponse:
+async def _proxy_upstream(request: web.Request, payload: dict[str, Any]) -> web.StreamResponse:
     """
     Proxy the request to an upstream Responses endpoint.
 
@@ -425,7 +424,7 @@ async def _proxy_upstream(request: web.Request, payload: Dict[str, Any]) -> web.
     assert cfg.upstream_url
 
     upstream_url = cfg.upstream_url.rstrip("/") + "/v1/responses"
-    headers: Dict[str, str] = {}
+    headers: dict[str, str] = {}
     if cfg.api_key:
         headers["Authorization"] = f"Bearer {cfg.api_key}"
 
@@ -468,7 +467,7 @@ async def _proxy_upstream(request: web.Request, payload: Dict[str, Any]) -> web.
 # Route schemas
 # -----------------------------
 
-REQUEST_SCHEMA: Dict[str, Any] = {
+REQUEST_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "model": {"type": "string"},
@@ -482,7 +481,7 @@ REQUEST_SCHEMA: Dict[str, Any] = {
     "additionalProperties": True,
 }
 
-EVENT_SCHEMA: Dict[str, Any] = {
+EVENT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "type": {"type": "string"},
@@ -570,7 +569,7 @@ async def create_response(request: web.Request) -> web.StreamResponse:
         for ev in iter_stream_events(parsed, response_id=response_id, message_id=message_id, created_at=created_at, completed_at=completed_at):
             await resp.write(encode_sse_event(str(ev.get("type", "message")), ev))
     except GatewayError as e:
-        err_event: Dict[str, Any] = {"type": "error", "sequence_number": 1, "error": e.to_openai_error()["error"]}
+        err_event: dict[str, Any] = {"type": "error", "sequence_number": 1, "error": e.to_openai_error()["error"]}
         await resp.write(encode_sse_event("error", err_event))
     finally:
         await resp.write_eof()

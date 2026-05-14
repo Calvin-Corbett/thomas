@@ -5,10 +5,9 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List
 
-
 _CONTENT_ACTIVE_STATUSES = {"queued", "running", "awaiting_approval"}
 _CONTENT_TERMINAL_STATUSES = {"succeeded", "failed", "cancelled", "dead"}
-_CONTENT_PLATFORM_ALIASES: Dict[str, str] = {
+_CONTENT_PLATFORM_ALIASES: dict[str, str] = {
     "x": "X / Twitter",
     "twitter": "X / Twitter",
     "tweet": "X / Twitter",
@@ -27,7 +26,7 @@ _CONTENT_PLATFORM_ALIASES: Dict[str, str] = {
     "fb": "Facebook",
     "threads": "Threads",
 }
-_CONTENT_TEXT_PLATFORM_HINTS: List[tuple[re.Pattern[str], str]] = [
+_CONTENT_TEXT_PLATFORM_HINTS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\b(?:twitter|tweet|x\.com)\b", re.IGNORECASE), "X / Twitter"),
     (re.compile(r"\b(?:linkedin|linked\s*in)\b", re.IGNORECASE), "LinkedIn"),
     (re.compile(r"\b(?:instagram|insta)\b", re.IGNORECASE), "Instagram"),
@@ -53,7 +52,7 @@ _CONTENT_KEYWORD_RE = re.compile(
     r"\b(?:content|post|social|channel|publish|tweet|thread|shorts?|campaign|creator|audience)\b",
     re.IGNORECASE,
 )
-_CONTENT_PLATFORM_ORDER: List[str] = [
+_CONTENT_PLATFORM_ORDER: list[str] = [
     "X / Twitter",
     "LinkedIn",
     "Instagram",
@@ -70,7 +69,7 @@ _CONTENT_RELEVANT_JOB_KINDS = {
     "reminder",
     "video_generation",
 }
-_CONTENT_HUB_NAV_ITEMS: List[Dict[str, str]] = [
+_CONTENT_HUB_NAV_ITEMS: list[dict[str, str]] = [
     {"id": "home", "label": "Home", "description": "Today view with live control status, approvals, and health."},
     {"id": "planner", "label": "Planner", "description": "Ideas, briefs, campaigns, and assignment tracking."},
     {"id": "create", "label": "Create", "description": "Composer for multi-platform variants and reusable templates."},
@@ -82,12 +81,12 @@ _CONTENT_HUB_NAV_ITEMS: List[Dict[str, str]] = [
     {"id": "integrations", "label": "Integrations", "description": "Platform connections, API keys, and capability checks."},
     {"id": "settings", "label": "Settings", "description": "Security, roles, permissions, and workspace controls."},
 ]
-_CONTENT_HUB_ORGANIZATION_AXES: List[Dict[str, str]] = [
+_CONTENT_HUB_ORGANIZATION_AXES: list[dict[str, str]] = [
     {"id": "time", "label": "By time", "description": "Calendar schedule, queues, recurrence, and launch shifts."},
     {"id": "campaign", "label": "By campaign/project", "description": "Launches, pillars, goals, dependencies, and owners."},
     {"id": "asset", "label": "By asset", "description": "Library-first flow for media, variants, metadata, and reuse."},
 ]
-_CONTENT_HUB_CHECKLIST_TEMPLATE: List[Dict[str, Any]] = [
+_CONTENT_HUB_CHECKLIST_TEMPLATE: list[dict[str, Any]] = [
     {
         "id": "accounts_identity",
         "title": "1) Accounts, Platforms, and Identity",

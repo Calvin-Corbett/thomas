@@ -17,11 +17,6 @@ from thomas.demo.agent_comparison_suite_scoring import (
     _focus_gaps,
 )
 from thomas.demo.agent_comparison_suite_shared import (
-    MetricSpec,
-    _assertion_ok,
-    _collect_git_version_info,
-    _collect_model_snapshot,
-    _resolve_path_value,
     DEFAULT_CATEGORY_WEIGHTS,
     DEFAULT_EXECUTION_POLICY,
     DEFAULT_GATEWAY_PATTERNS,
@@ -32,10 +27,15 @@ from thomas.demo.agent_comparison_suite_shared import (
     DEFAULT_WRITE_MD_PATH,
     DEFAULT_WRITE_PATH,
     ROOT,
+    MetricSpec,
+    _assertion_ok,
+    _collect_git_version_info,
+    _collect_model_snapshot,
     _is_number,
     _materialize_competitor_catalog_agents,
     _now_iso,
     _read_json,
+    _resolve_path_value,
     _update_competitor_registry,
     _write_json,
 )

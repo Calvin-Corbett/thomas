@@ -23,7 +23,6 @@ import inspect
 from dataclasses import dataclass
 from typing import Any, Dict, Literal, Mapping, Optional
 
-
 SchemaDraft = Literal["2020-12", "7"]
 
 
@@ -44,14 +43,14 @@ class PluginManifestSchemaError(Exception):
         *,
         code: str,
         message: str,
-        details: Optional[Mapping[str, Any]] = None,
+        details: Mapping[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
-        self.details: Dict[str, Any] = dict(details or {})
+        self.details: dict[str, Any] = dict(details or {})
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "error": {
                 "code": self.code,
@@ -76,9 +75,9 @@ class PluginManifestSchemaResult:
 
     schema_version: str
     draft: SchemaDraft
-    schema: Dict[str, Any]
+    schema: dict[str, Any]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "schema_version": self.schema_version,
             "draft": self.draft,
@@ -125,12 +124,12 @@ def build_plugin_manifest_schema(
     defs_key = _defs_key(req.draft)
 
     # Reusable fragments.
-    json_schema_fragment: Dict[str, Any] = {
+    json_schema_fragment: dict[str, Any] = {
         "type": "object",
         "description": "A JSON Schema fragment (object form).",
     }
 
-    plugin_block: Dict[str, Any] = {
+    plugin_block: dict[str, Any] = {
         "type": "object",
         "additionalProperties": False,
         "required": ["name", "version", "description"],
@@ -173,7 +172,7 @@ def build_plugin_manifest_schema(
         },
     }
 
-    runtime_block: Dict[str, Any] = {
+    runtime_block: dict[str, Any] = {
         "type": "object",
         "additionalProperties": False,
         "required": ["kind", "entrypoint"],
@@ -191,7 +190,7 @@ def build_plugin_manifest_schema(
         },
     }
 
-    tool_block: Dict[str, Any] = {
+    tool_block: dict[str, Any] = {
         "type": "object",
         "additionalProperties": False,
         "required": ["name", "description", "input_schema", "output_schema"],
@@ -221,7 +220,7 @@ def build_plugin_manifest_schema(
         },
     }
 
-    schema: Dict[str, Any] = {
+    schema: dict[str, Any] = {
         "$schema": meta_schema,
         "$id": f"https://thomas.local/schemas/plugin-manifest/{req.schema_version}.json",
         "title": "Thomas Plugin Manifest",
@@ -297,7 +296,7 @@ def tool_plugin_manifest_schema(
     schema_version: str = "v1",
     draft: SchemaDraft = "2020-12",
     include_examples: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Tool wrapper: return the schema document as JSON-serializable data."""
 
     result = build_plugin_manifest_schema(
@@ -313,7 +312,7 @@ def tool_plugin_manifest_schema(
 
 # --- Tool descriptor(s) ----------------------------------------------------
 
-TOOL_INPUT_SCHEMA: Dict[str, Any] = {
+TOOL_INPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
@@ -336,12 +335,12 @@ TOOL_INPUT_SCHEMA: Dict[str, Any] = {
     },
 }
 
-TOOL_OUTPUT_SCHEMA: Dict[str, Any] = {
+TOOL_OUTPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "description": "A JSON Schema document.",
 }
 
-TOOL_SPEC: Dict[str, Any] = {
+TOOL_SPEC: dict[str, Any] = {
     "name": TOOL_NAME,
     "description": "Return the JSON Schema for the Thomas plugin manifest.",
     "input_schema": TOOL_INPUT_SCHEMA,
@@ -349,7 +348,7 @@ TOOL_SPEC: Dict[str, Any] = {
 }
 
 # Include common callable keys to maximize compatibility with registry loaders.
-TOOL_RUNTIME_SPEC: Dict[str, Any] = {
+TOOL_RUNTIME_SPEC: dict[str, Any] = {
     **TOOL_SPEC,
     "func": tool_plugin_manifest_schema,
     "callable": tool_plugin_manifest_schema,
@@ -385,7 +384,7 @@ def register(registry: Any) -> None:
 
     # 1) register_tool(...) is the most explicit.
     if hasattr(registry, "register_tool"):
-        register_tool = getattr(registry, "register_tool")
+        register_tool = registry.register_tool
 
         # Common patterns:
         #   register_tool(spec)
@@ -411,7 +410,7 @@ def register(registry: Any) -> None:
 
     # 2) register(...) is a common fallback.
     if hasattr(registry, "register"):
-        reg = getattr(registry, "register")
+        reg = registry.register
 
         try:
             reg(payload)

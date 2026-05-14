@@ -17,8 +17,7 @@ import json
 import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, MutableMapping, Optional, Literal
-
+from typing import Any, Literal, Mapping, MutableMapping, Optional
 
 # -------------------------------
 # Contracts
@@ -29,12 +28,12 @@ class AfterResponseHookRequest:
     """Input contract for the after-response hook."""
 
     response_text: str
-    conversation_id: Optional[str] = None
-    response_id: Optional[str] = None
+    conversation_id: str | None = None
+    response_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_mapping(cls, raw: Mapping[str, Any]) -> "AfterResponseHookRequest":
+    def from_mapping(cls, raw: Mapping[str, Any]) -> AfterResponseHookRequest:
         if not isinstance(raw, Mapping):
             raise AfterResponseHookInputError(
                 "request must be an object", field="request", got=type(raw).__name__
@@ -85,7 +84,7 @@ class AfterResponseHookRequest:
         )
 
     @classmethod
-    def from_any(cls, raw: Any) -> "AfterResponseHookRequest":
+    def from_any(cls, raw: Any) -> AfterResponseHookRequest:
         """A small convenience adapter.
 
         Accepts:
@@ -118,11 +117,11 @@ class AfterResponseHookConfig:
 
     enabled: bool
     sink: SinkType = "none"
-    file_path: Optional[str] = None
+    file_path: str | None = None
     max_chars: int = 50_000
 
     @classmethod
-    def from_mapping(cls, raw: Mapping[str, Any] | None) -> "AfterResponseHookConfig":
+    def from_mapping(cls, raw: Mapping[str, Any] | None) -> AfterResponseHookConfig:
         if raw is None:
             raise AfterResponseHookConfigError("missing config", code="missing_config")
 
@@ -206,7 +205,7 @@ class AfterResponseHookResult:
     char_count: int
     word_count: int
     sha256: str
-    written_to: Optional[str] = None
+    written_to: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -224,7 +223,7 @@ class AfterResponseHookError(RuntimeError):
         message: str,
         *,
         code: str,
-        details: Optional[Mapping[str, Any]] = None,
+        details: Mapping[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -235,7 +234,7 @@ class AfterResponseHookError(RuntimeError):
 
 
 class AfterResponseHookInputError(AfterResponseHookError):
-    def __init__(self, message: str, *, field: str, got: Optional[str] = None) -> None:
+    def __init__(self, message: str, *, field: str, got: str | None = None) -> None:
         details: dict[str, Any] = {"field": field}
         if got is not None:
             details["got"] = got
@@ -248,13 +247,13 @@ class AfterResponseHookConfigError(AfterResponseHookError):
         message: str,
         *,
         code: str = "invalid_config",
-        details: Optional[Mapping[str, Any]] = None,
+        details: Mapping[str, Any] | None = None,
     ) -> None:
         super().__init__(message, code=code, details=details)
 
 
 class AfterResponseHookExternalError(AfterResponseHookError):
-    def __init__(self, message: str, *, details: Optional[Mapping[str, Any]] = None) -> None:
+    def __init__(self, message: str, *, details: Mapping[str, Any] | None = None) -> None:
         super().__init__(message, code="external_failure", details=details)
 
 
@@ -295,14 +294,14 @@ def run_after_response_hook(
             ),
         )
 
-    written_to: Optional[str] = None
+    written_to: str | None = None
     if cfg_obj.sink == "file":
         written_to = _append_to_file(cfg_obj.file_path, req_obj.response_text)
 
     return _build_result(req_obj.response_text, written_to=written_to)
 
 
-def _build_result(response_text: str, *, written_to: Optional[str]) -> AfterResponseHookResult:
+def _build_result(response_text: str, *, written_to: str | None) -> AfterResponseHookResult:
     sha = hashlib.sha256(response_text.encode("utf-8")).hexdigest()
     return AfterResponseHookResult(
         response_text=response_text,
@@ -313,7 +312,7 @@ def _build_result(response_text: str, *, written_to: Optional[str]) -> AfterResp
     )
 
 
-def _append_to_file(file_path: Optional[str], content: str) -> str:
+def _append_to_file(file_path: str | None, content: str) -> str:
     if not file_path:
         raise AfterResponseHookConfigError(
             "file sink requires file_path",

@@ -8,6 +8,8 @@ from typing import Any, Optional
 import typer
 
 from thomas.plugins.p114_plugin_service_lifecycle_manager import (
+    SERVICE_LIFECYCLE_REQUEST_SCHEMA,
+    SERVICE_LIFECYCLE_RESPONSE_SCHEMA,
     InvalidInputError,
     LifecycleAction,
     MissingConfigError,
@@ -16,8 +18,6 @@ from thomas.plugins.p114_plugin_service_lifecycle_manager import (
     ServiceLifecycleRequest,
     apply_lifecycle_request,
     parse_lifecycle_request,
-    SERVICE_LIFECYCLE_REQUEST_SCHEMA,
-    SERVICE_LIFECYCLE_RESPONSE_SCHEMA,
 )
 
 app = typer.Typer(help="Manage lifecycle of plugin-defined background services.")
@@ -105,7 +105,7 @@ def schema(
 @app.command("apply")
 def apply(
     ctx: typer.Context,
-    request_json: Optional[str] = typer.Option(
+    request_json: str | None = typer.Option(
         None,
         "--request",
         "-r",
@@ -164,7 +164,7 @@ def list_services(
 @app.command("status")
 def status(
     ctx: typer.Context,
-    service_id: Optional[str] = typer.Argument(None, help="Service id to query (omit for all)."),
+    service_id: str | None = typer.Argument(None, help="Service id to query (omit for all)."),
     json_mode: bool = typer.Option(False, "--json", help="Emit machine-readable JSON output."),
 ) -> None:
     """Get status for a service, or all services if service_id is omitted."""
@@ -188,7 +188,7 @@ def status(
 def start(
     ctx: typer.Context,
     service_id: str = typer.Argument(..., help="Service id to start."),
-    timeout_s: Optional[float] = typer.Option(None, "--timeout", min=0, help="Optional start timeout (seconds)."),
+    timeout_s: float | None = typer.Option(None, "--timeout", min=0, help="Optional start timeout (seconds)."),
     json_mode: bool = typer.Option(False, "--json", help="Emit machine-readable JSON output."),
 ) -> None:
     """Start a single service."""
@@ -208,7 +208,7 @@ def start(
 def stop(
     ctx: typer.Context,
     service_id: str = typer.Argument(..., help="Service id to stop."),
-    timeout_s: Optional[float] = typer.Option(None, "--timeout", min=0, help="Optional stop timeout (seconds)."),
+    timeout_s: float | None = typer.Option(None, "--timeout", min=0, help="Optional stop timeout (seconds)."),
     json_mode: bool = typer.Option(False, "--json", help="Emit machine-readable JSON output."),
 ) -> None:
     """Stop a single service."""
@@ -228,7 +228,7 @@ def stop(
 def restart(
     ctx: typer.Context,
     service_id: str = typer.Argument(..., help="Service id to restart."),
-    timeout_s: Optional[float] = typer.Option(None, "--timeout", min=0, help="Optional stop/start timeout (seconds)."),
+    timeout_s: float | None = typer.Option(None, "--timeout", min=0, help="Optional stop/start timeout (seconds)."),
     json_mode: bool = typer.Option(False, "--json", help="Emit machine-readable JSON output."),
 ) -> None:
     """Restart a single service."""

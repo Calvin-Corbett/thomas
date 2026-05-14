@@ -11,7 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Sequence, Tuple
 
-_DEFAULT_GUIDANCE_FILES: Sequence[Tuple[str, int, bool]] = (
+_DEFAULT_GUIDANCE_FILES: Sequence[tuple[str, int, bool]] = (
     ("AGENTS.md", 10, False),
     ("IDENTITY.md", 8, False),
     ("USER.md", 8, False),
@@ -32,7 +32,7 @@ class GuidanceSourceStatus:
     selected: bool
     bullet_count: int
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "path": self.path,
             "exists": bool(self.exists),
@@ -45,8 +45,8 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _collect_md_bullets(text: str, *, limit: int) -> List[str]:
-    lines: List[str] = []
+def _collect_md_bullets(text: str, *, limit: int) -> list[str]:
+    lines: list[str] = []
     for raw in text.splitlines():
         s = raw.strip()
         if not s:
@@ -60,7 +60,7 @@ def _collect_md_bullets(text: str, *, limit: int) -> List[str]:
     return lines
 
 
-def _build_compact_section(rel_path: str, bullets: List[str]) -> str:
+def _build_compact_section(rel_path: str, bullets: list[str]) -> str:
     title = rel_path.replace("\\", "/")
     body = "\n".join(f"- {b}" for b in bullets)
     return f"[{title}]\n{body}"
@@ -70,16 +70,16 @@ def load_purpose_brief(
     *,
     root: Path | None = None,
     max_chars: int = 2_500,
-) -> tuple[str, List[GuidanceSourceStatus]]:
+) -> tuple[str, list[GuidanceSourceStatus]]:
     """Build a compact purpose brief from ordered local guidance files."""
     repo_root = Path(root) if root is not None else _repo_root()
-    sections: List[str] = []
-    statuses: List[GuidanceSourceStatus] = []
+    sections: list[str] = []
+    statuses: list[GuidanceSourceStatus] = []
 
     for rel_path, bullet_limit, fallback_only in _DEFAULT_GUIDANCE_FILES:
         path = repo_root / rel_path
         exists = path.exists() and path.is_file()
-        bullets: List[str] = []
+        bullets: list[str] = []
         should_read = (not fallback_only) or (len(sections) == 0)
         if exists and should_read:
             try:
@@ -115,7 +115,7 @@ def load_cached_purpose_brief() -> str:
 
 
 @lru_cache(maxsize=1)
-def guidance_bootstrap_report() -> Dict[str, Any]:
+def guidance_bootstrap_report() -> dict[str, Any]:
     text, statuses = load_purpose_brief()
     return {
         "root": str(_repo_root()),

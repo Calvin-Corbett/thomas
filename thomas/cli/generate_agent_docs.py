@@ -31,7 +31,7 @@ def generate_agent_docs_command(dry_run: bool) -> None:
 
         lines = [
             f"# thomas/{name}",
-            f"",
+            "",
             f"**{desc}** | tier: {tier} | health: {health}",
             f"Allowed imports: {deps}",
         ]

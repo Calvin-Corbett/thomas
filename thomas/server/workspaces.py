@@ -85,13 +85,13 @@ class WorkspaceStore:
         self._lock = threading.RLock()
         self._state = self._load()
 
-    def _blank(self) -> Dict[str, Any]:
+    def _blank(self) -> dict[str, Any]:
         return {"workspaces": {}, "memberships": [], "invites": []}
 
     def _backup_path(self) -> Path:
         return self.path.with_suffix(self.path.suffix + ".bak")
 
-    def _quarantine_corrupt_file(self) -> Optional[Path]:
+    def _quarantine_corrupt_file(self) -> Path | None:
         if not self.path.exists():
             return None
         stamp = _utc_now().strftime("%Y%m%dT%H%M%S")
@@ -102,7 +102,7 @@ class WorkspaceStore:
         except Exception:
             return None
 
-    def _load_from_file(self, src: Path) -> Optional[Dict[str, Any]]:
+    def _load_from_file(self, src: Path) -> dict[str, Any] | None:
         try:
             data = json.loads(src.read_text(encoding="utf-8"))
         except Exception:
@@ -121,7 +121,7 @@ class WorkspaceStore:
             out["invites"] = invites
         return out
 
-    def _load(self) -> Dict[str, Any]:
+    def _load(self) -> dict[str, Any]:
         if not self.path.exists():
             return self._blank()
         loaded = self._load_from_file(self.path)
@@ -149,7 +149,7 @@ class WorkspaceStore:
                 pass
         tmp.replace(self.path)
 
-    def _memberships_for_user(self, user_id: str) -> List[Dict[str, Any]]:
+    def _memberships_for_user(self, user_id: str) -> list[dict[str, Any]]:
         uid = str(user_id or "").strip()
         rows = [
             m
@@ -159,7 +159,7 @@ class WorkspaceStore:
         rows.sort(key=lambda r: str(r.get("created_at") or ""))
         return rows
 
-    def _membership(self, workspace_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+    def _membership(self, workspace_id: str, user_id: str) -> dict[str, Any] | None:
         wid = str(workspace_id or "").strip()
         uid = str(user_id or "").strip()
         for m in self._state["memberships"]:
@@ -170,7 +170,7 @@ class WorkspaceStore:
             return m
         return None
 
-    def list_workspaces(self, user_id: str) -> List[Dict[str, Any]]:
+    def list_workspaces(self, user_id: str) -> list[dict[str, Any]]:
         with self._lock:
             rows = []
             for m in self._memberships_for_user(user_id):
@@ -181,7 +181,7 @@ class WorkspaceStore:
             rows.sort(key=lambda r: str(r.get("created_at") or ""))
             return rows
 
-    def create_workspace(self, name: str, owner_user_id: str) -> Dict[str, Any]:
+    def create_workspace(self, name: str, owner_user_id: str) -> dict[str, Any]:
         clean_name = str(name or "").strip()
         if not clean_name:
             raise ValueError("workspace name is required")
@@ -211,7 +211,7 @@ class WorkspaceStore:
             self._save()
             return dict(ws)
 
-    def current_workspace(self, user_id: str, workspace_hint: str = "") -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    def current_workspace(self, user_id: str, workspace_hint: str = "") -> tuple[dict[str, Any], dict[str, Any]]:
         uid = str(user_id or "").strip()
         hint = str(workspace_hint or "").strip()
         if not uid:
@@ -237,21 +237,21 @@ class WorkspaceStore:
                 raise KeyError("workspace not found")
             return dict(ws), dict(selected)
 
-    def membership(self, workspace_id: str, user_id: str) -> Dict[str, Any]:
+    def membership(self, workspace_id: str, user_id: str) -> dict[str, Any]:
         with self._lock:
             m = self._membership(workspace_id, user_id)
             if m is None or not bool(m.get("is_active", False)):
                 raise KeyError("membership not found")
             return dict(m)
 
-    def _ensure_manage_role(self, workspace_id: str, user_id: str) -> Dict[str, Any]:
+    def _ensure_manage_role(self, workspace_id: str, user_id: str) -> dict[str, Any]:
         m = self.membership(workspace_id, user_id)
         role = normalize_role(m.get("role"))
         if not can_manage_members(role):
             raise PermissionError("requires admin or owner role")
         return m
 
-    def list_members(self, workspace_id: str, actor_user_id: str) -> List[Dict[str, Any]]:
+    def list_members(self, workspace_id: str, actor_user_id: str) -> list[dict[str, Any]]:
         with self._lock:
             self._ensure_manage_role(workspace_id, actor_user_id)
             out = [dict(m) for m in self._state["memberships"] if str(m.get("workspace_id") or "") == str(workspace_id or "")]
@@ -267,7 +267,7 @@ class WorkspaceStore:
         role: str,
         note: str = "",
         expires_days: int = 7,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         clean_email = str(email or "").strip().lower()
         if not clean_email:
             raise ValueError("email is required")
@@ -300,7 +300,7 @@ class WorkspaceStore:
             public_invite.pop("token_hash", None)
             return {"invite": public_invite, "invite_token": raw}
 
-    def list_invites(self, workspace_id: str, actor_user_id: str) -> List[Dict[str, Any]]:
+    def list_invites(self, workspace_id: str, actor_user_id: str) -> list[dict[str, Any]]:
         with self._lock:
             self._ensure_manage_role(workspace_id, actor_user_id)
             out = []
@@ -313,7 +313,7 @@ class WorkspaceStore:
             out.sort(key=lambda r: str(r.get("created_at") or ""), reverse=True)
             return out
 
-    def accept_invite(self, invite_token: str, user_id: str, email: str = "") -> Dict[str, Any]:
+    def accept_invite(self, invite_token: str, user_id: str, email: str = "") -> dict[str, Any]:
         token = str(invite_token or "").strip()
         uid = str(user_id or "").strip()
         user_email = str(email or "").strip().lower()
@@ -370,7 +370,7 @@ class WorkspaceStore:
             self._save()
             return dict(membership)
 
-    def change_role(self, workspace_id: str, actor_user_id: str, target_user_id: str, role: str) -> Dict[str, Any]:
+    def change_role(self, workspace_id: str, actor_user_id: str, target_user_id: str, role: str) -> dict[str, Any]:
         role_val = normalize_role(role)
         target_uid = str(target_user_id or "").strip()
         if not target_uid:

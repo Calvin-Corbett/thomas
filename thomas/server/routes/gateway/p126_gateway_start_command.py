@@ -9,7 +9,7 @@ import time
 import weakref
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, MutableMapping, Optional, TypedDict, Literal
+from typing import Any, Dict, List, Literal, Mapping, MutableMapping, Optional, TypedDict
 
 try:
     import tomllib  # py3.11+
@@ -29,7 +29,7 @@ GATEWAY_PROCESS_KEY = "process"
 
 # For environments where mutating an already-started aiohttp Application dict is discouraged,
 # we keep an out-of-band WeakKeyDictionary as a fallback.
-_APP_STATE: "weakref.WeakKeyDictionary[web.Application, MutableMapping[str, Any]]" = weakref.WeakKeyDictionary()
+_APP_STATE: weakref.WeakKeyDictionary[web.Application, MutableMapping[str, Any]] = weakref.WeakKeyDictionary()
 
 # Serialize start/restart to avoid racy double-starts.
 _START_LOCK = asyncio.Lock()
@@ -45,30 +45,30 @@ class GatewayStartRequest(TypedDict, total=False):
 class GatewayStartError(TypedDict):
     type: Literal["invalid_input", "missing_config", "external_failure"]
     message: str
-    details: Dict[str, Any]
+    details: dict[str, Any]
 
 
 class GatewayStartResponse(TypedDict):
     ok: bool
     status: Literal["started", "already_running"]
-    pid: Optional[int]
+    pid: int | None
     config_path: str
-    command: List[str]
+    command: list[str]
 
 
 @dataclass(frozen=True)
 class GatewayConfig:
-    command: List[str]
-    cwd: Optional[str] = None
-    env: Optional[Dict[str, str]] = None
+    command: list[str]
+    cwd: str | None = None
+    env: dict[str, str] | None = None
 
 
 @dataclass(frozen=True)
 class GatewayStartOutcome:
     status: Literal["started", "already_running"]
-    pid: Optional[int]
+    pid: int | None
     config_path: str
-    command: List[str]
+    command: list[str]
 
     def to_response(self) -> GatewayStartResponse:
         return {
@@ -88,16 +88,16 @@ class GatewayStartException(Exception):
         error_type: Literal["invalid_input", "missing_config", "external_failure"],
         message: str,
         *,
-        details: Optional[Mapping[str, Any]] = None,
+        details: Mapping[str, Any] | None = None,
         http_status: int = 400,
     ) -> None:
         super().__init__(message)
         self.error_type = error_type
         self.message = message
-        self.details: Dict[str, Any] = dict(details or {})
+        self.details: dict[str, Any] = dict(details or {})
         self.http_status = http_status
 
-    def to_error_payload(self) -> Dict[str, Any]:
+    def to_error_payload(self) -> dict[str, Any]:
         return {
             "ok": False,
             "error": {
@@ -119,7 +119,7 @@ def _get_app_state(app: web.Application) -> MutableMapping[str, Any]:
     return state
 
 
-def get_gateway_process(app: web.Application) -> Optional[subprocess.Popen]:
+def get_gateway_process(app: web.Application) -> subprocess.Popen | None:
     state = _get_app_state(app)
     proc = state.get(GATEWAY_PROCESS_KEY)
     return proc if isinstance(proc, subprocess.Popen) else None
@@ -135,7 +135,7 @@ def _resolve_config_path(config_path: str) -> str:
     return str(p)
 
 
-def _parse_command(value: Any) -> List[str]:
+def _parse_command(value: Any) -> list[str]:
     if isinstance(value, list):
         if not value:
             raise GatewayStartException(
@@ -180,11 +180,11 @@ def _parse_command(value: Any) -> List[str]:
     )
 
 
-def _safe_str(value: Any) -> Optional[str]:
+def _safe_str(value: Any) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def _load_config_file(config_path: str) -> Dict[str, Any]:
+def _load_config_file(config_path: str) -> dict[str, Any]:
     path = Path(config_path)
     if not path.exists() or not path.is_file():
         raise GatewayStartException(
@@ -264,7 +264,7 @@ def load_gateway_config(config_path: str) -> GatewayConfig:
     cwd = _safe_str(node.get("cwd"))
 
     env_node = node.get("env")
-    env: Optional[Dict[str, str]] = None
+    env: dict[str, str] | None = None
     if env_node is not None:
         if (
             not isinstance(env_node, dict)

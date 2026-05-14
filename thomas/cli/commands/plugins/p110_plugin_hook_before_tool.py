@@ -13,12 +13,12 @@ from typing import Any, Dict
 import typer
 
 from thomas.plugins.p110_plugin_hook_before_tool import (
+    BeforeToolDemoOutput,
     BeforeToolHookConfig,
+    ErrorInfo,
     HookConfigError,
     P110BeforeToolHookPlugin,
     ToolCall,
-    BeforeToolDemoOutput,
-    ErrorInfo,
     run_demo,
 )
 
@@ -27,7 +27,7 @@ def _echo_tool(*, text: str) -> str:
     return text
 
 
-def output_schema() -> Dict[str, Any]:
+def output_schema() -> dict[str, Any]:
     """A small JSON-schema-like description for automation tooling."""
     return {
         "type": "object",

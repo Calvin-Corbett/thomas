@@ -52,7 +52,6 @@ All failures are returned with deterministic error codes/messages suitable for a
 from __future__ import annotations
 
 import asyncio
-from collections import deque
 import hashlib
 import hmac
 import inspect
@@ -63,6 +62,7 @@ import os
 import shlex
 import subprocess
 import time
+from collections import deque
 from dataclasses import dataclass
 from typing import Any, Awaitable, Dict, Literal, Mapping, Optional, Sequence, TypedDict, cast
 
@@ -90,7 +90,7 @@ class GatewayRestartRequestBody(TypedDict, total=False):
 class GatewayRestartErrorBody(TypedDict):
     code: str
     message: str
-    details: Dict[str, Any]
+    details: dict[str, Any]
 
 
 class GatewayRestartFailureResponse(TypedDict):
@@ -104,13 +104,13 @@ class GatewayRestartSuccessResponse(TypedDict, total=False):
     status: Literal["restart_requested"]
     method: Literal["controller", "command"]
     message: str
-    deferral: Dict[str, Any]
+    deferral: dict[str, Any]
 
 
 GatewayRestartResponse = GatewayRestartSuccessResponse | GatewayRestartFailureResponse
 
 
-ROUTE_SCHEMA: Dict[str, Any] = {
+ROUTE_SCHEMA: dict[str, Any] = {
     "path": "/gateway/restart",
     "method": "POST",
     "request": {
@@ -178,7 +178,7 @@ class GatewayRestartRequest:
     force: bool = False
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, Any]) -> "GatewayRestartRequest":
+    def from_mapping(cls, data: Mapping[str, Any]) -> GatewayRestartRequest:
         allowed = {"gateway", "force"}
         unknown = sorted(k for k in data.keys() if k not in allowed)
         if unknown:
@@ -211,11 +211,11 @@ class GatewayRestartError(Exception):
     def __init__(
         self,
         *,
-        details: Optional[Dict[str, Any]] = None,
-        http_status: Optional[int] = None,
-        code: Optional[str] = None,
-        message: Optional[str] = None,
-        headers: Optional[Mapping[str, str]] = None,
+        details: dict[str, Any] | None = None,
+        http_status: int | None = None,
+        code: str | None = None,
+        message: str | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> None:
         if http_status is not None:
             self.http_status = int(http_status)
@@ -224,8 +224,8 @@ class GatewayRestartError(Exception):
         if message is not None:
             self.message = str(message)
         super().__init__(self.message)
-        self.details: Dict[str, Any] = details or {}
-        self.headers: Dict[str, str] = dict(headers or {})
+        self.details: dict[str, Any] = details or {}
+        self.headers: dict[str, str] = dict(headers or {})
 
 
 class InvalidGatewayRestartInput(GatewayRestartError):
@@ -276,7 +276,7 @@ def _error_response(err: GatewayRestartError) -> web.Response:
     return web.json_response(payload, status=err.http_status, headers=err.headers)
 
 
-def _coerce_int(raw: Any, *, default: int, minimum: int = 1, maximum: Optional[int] = None) -> int:
+def _coerce_int(raw: Any, *, default: int, minimum: int = 1, maximum: int | None = None) -> int:
     try:
         value = int(raw)
     except Exception:
@@ -525,7 +525,7 @@ def _restart_deferral_settings(app: web.Application) -> tuple[int, int]:
     return poll_ms, max_wait_ms
 
 
-async def _defer_restart_until_idle(app: web.Application) -> Dict[str, Any]:
+async def _defer_restart_until_idle(app: web.Application) -> dict[str, Any]:
     check_pending = app.get("gateway_restart_pending_count")
     if not callable(check_pending):
         return {"enabled": False, "waited_ms": 0, "timed_out": False, "pending": 0}
@@ -566,7 +566,7 @@ async def _defer_restart_until_idle(app: web.Application) -> Dict[str, Any]:
         await asyncio.sleep(float(poll_ms) / 1000.0)
 
 
-def _get_restart_command(app: web.Application) -> Optional[str | Sequence[str]]:
+def _get_restart_command(app: web.Application) -> str | Sequence[str] | None:
     if "gateway_restart_command" in app:
         return cast(str | Sequence[str], app["gateway_restart_command"])
 
@@ -582,7 +582,7 @@ def _get_restart_command(app: web.Application) -> Optional[str | Sequence[str]]:
     return None
 
 
-def _find_restart_callable(app: web.Application) -> Optional[Any]:
+def _find_restart_callable(app: web.Application) -> Any | None:
     candidate_keys = (
         "gateway_controller",
         "gateway",
@@ -615,7 +615,7 @@ async def _maybe_await(value: Any) -> Any:
 
 
 async def _invoke_restart_callable(fn: Any, *, gateway: str, force: bool) -> None:
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     sig = None
     try:
         sig = inspect.signature(fn)

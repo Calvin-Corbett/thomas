@@ -13,7 +13,6 @@ from typing import Any, Sequence
 
 from thomas.server.routes.gateway import p139_openai_compat_route_scaffold as route_mod
 
-
 COMMAND_NAME = "p139-openai-compat-route-scaffold"
 HELP = "Show schema + config hints for the OpenAI-compatible gateway route."
 

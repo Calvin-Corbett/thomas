@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from thomas.demo.browser_duel import (
     DEFAULT_RUNS_DIR as DEFAULT_BROWSER_RUNS_DIR,
+)
+from thomas.demo.browser_duel import (
     build_results_from_browser,
     load_adapters,
     parse_target_args,
@@ -24,7 +26,6 @@ from thomas.demo.harness import (
     write_run_artifacts,
 )
 
-
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_TASK_PACK = ROOT / "demo" / "task_pack.default.json"
 DEFAULT_CAMPAIGNS_DIR = ROOT / "demo" / "campaigns"
@@ -38,8 +39,8 @@ def _read_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8-sig"))
 
 
-def build_run_index_rows(scorecards: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
-    rows: List[Dict[str, Any]] = []
+def build_run_index_rows(scorecards: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
     for card in scorecards:
         run_id = str(card.get("run_id") or "")
         summary = dict(card.get("summary") or {})
@@ -69,7 +70,7 @@ def render_campaign_report(
     runs_attempted: int,
     runs_completed: int,
 ) -> str:
-    lines: List[str] = []
+    lines: list[str] = []
     lines.append(f"# Demo Campaign Report: {campaign_id}")
     lines.append("")
     lines.append(f"- Runs attempted: {runs_attempted}")
@@ -132,7 +133,7 @@ def run_campaign(
     runs_count: int,
     task_pack_path: Path,
     target_pairs: Sequence[str],
-    selectors_json: Optional[Path],
+    selectors_json: Path | None,
     cdp_url: str,
     browser: str,
     launch_browser: bool,
@@ -140,7 +141,7 @@ def run_campaign(
     reply_timeout: float,
     randomize_order: bool,
     base_seed: int,
-    runtime_root: Optional[Path],
+    runtime_root: Path | None,
     campaigns_dir: Path,
     require_evidence: bool,
     generate_blind_packs: bool,
@@ -184,8 +185,8 @@ def run_campaign(
         },
     )
 
-    run_status: List[Dict[str, Any]] = []
-    scorecards: List[Dict[str, Any]] = []
+    run_status: list[dict[str, Any]] = []
+    scorecards: list[dict[str, Any]] = []
 
     for i in range(runs_count):
         run_index = i + 1
@@ -361,7 +362,7 @@ def run_campaign(
     return campaign_dir
 
 
-def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run a multi-run head-to-head demo campaign.")
     parser.add_argument("--campaign-id", default="", help="Campaign id (default: UTC timestamp).")
     parser.add_argument("--runs-count", type=int, default=10, help="Number of runs to execute.")
@@ -407,7 +408,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     campaign_id = str(args.campaign_id).strip() or datetime.now(timezone.utc).strftime("campaign-%Y%m%d-%H%M%S")
     selectors_path = Path(args.selectors_json).resolve() if str(args.selectors_json or "").strip() else None

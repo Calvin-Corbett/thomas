@@ -22,7 +22,7 @@ class ToolRegistry:
     """
 
     def __init__(self) -> None:
-        self._tools: Dict[str, Tool] = {}
+        self._tools: dict[str, Tool] = {}
 
     def register(self, tool: Tool) -> None:
         if not tool.name:
@@ -35,7 +35,7 @@ class ToolRegistry:
     def unregister(self, name: str) -> None:
         self._tools.pop(name, None)
 
-    def get(self, name: str) -> Optional[Tool]:
+    def get(self, name: str) -> Tool | None:
         tool = self._tools.get(name)
         if tool is not None:
             return tool
@@ -48,7 +48,7 @@ class ToolRegistry:
     def _canonical_name(name: str) -> str:
         return re.sub(r"[^a-z0-9]+", ".", str(name or "").strip().lower()).strip(".")
 
-    def _resolve_tool_name(self, name: str) -> Optional[str]:
+    def _resolve_tool_name(self, name: str) -> str | None:
         raw = str(name or "").strip()
         if not raw or not self._tools:
             return None
@@ -107,23 +107,23 @@ class ToolRegistry:
 
         return None
 
-    def list_tools(self, category: Optional[str] = None) -> List[Tool]:
+    def list_tools(self, category: str | None = None) -> list[Tool]:
         tools = list(self._tools.values())
         if category:
             tools = [t for t in tools if t.category == category]
         return sorted(tools, key=lambda t: t.name)
 
-    def list_categories(self) -> List[str]:
+    def list_categories(self) -> list[str]:
         cats = sorted(set(t.category for t in self._tools.values()))
         return cats
 
-    def search(self, query: str, limit: int = 10) -> List[Tool]:
+    def search(self, query: str, limit: int = 10) -> list[Tool]:
         """Search tools by semantic keyword overlap."""
         if not query:
             return []
             
         q_tokens = set(re.findall(r"\w+", query.lower()))
-        scores: List[tuple[float, Tool]] = []
+        scores: list[tuple[float, Tool]] = []
         
         for tool in self._tools.values():
             score = 0.0
@@ -147,13 +147,13 @@ class ToolRegistry:
         return [s[1] for s in scores[:limit]]
 
     def get_openai_specs(
-        self, category: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+        self, category: str | None = None
+    ) -> list[dict[str, Any]]:
         """Generate OpenAI function-calling tool specs."""
         tools = self.list_tools(category)
         return [t.get_spec().to_openai() for t in tools]
 
-    async def execute(self, name: str, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, name: str, args: dict[str, Any]) -> ToolResult:
         """Execute a tool by name with error handling."""
         tool = self.get(name)
         if tool is None:

@@ -30,7 +30,7 @@ def run(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     scope, auth, ratelimit = load_compat_security_from_env()
-    payload: Dict[str, Any] = compat_security_status_json(scope, auth, ratelimit)
+    payload: dict[str, Any] = compat_security_status_json(scope, auth, ratelimit)
 
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))

@@ -4,7 +4,6 @@ from typing import Any, Dict, List, Optional
 
 from thomas.core.scheduler import get_scheduler
 
-
 # ============================================================
 # Table formatting (monospace-friendly)
 # ============================================================
@@ -15,7 +14,7 @@ def _truncate(s: str, max_len: int) -> str:
         return s
     return s[: max(0, max_len - 1)] + "…"
 
-def _format_table(rows: List[Dict[str, str]], columns: List[str]) -> str:
+def _format_table(rows: list[dict[str, str]], columns: list[str]) -> str:
     if not rows:
         header = " | ".join(columns)
         sep = "-+-".join("-" * len(c) for c in columns)
@@ -26,7 +25,7 @@ def _format_table(rows: List[Dict[str, str]], columns: List[str]) -> str:
         for c in columns:
             widths[c] = max(widths[c], len(str(r.get(c, ""))))
 
-    def fmt_row(r: Dict[str, str]) -> str:
+    def fmt_row(r: dict[str, str]) -> str:
         return " | ".join(str(r.get(c, "")).ljust(widths[c]) for c in columns)
 
     header = " | ".join(c.ljust(widths[c]) for c in columns)
@@ -39,7 +38,7 @@ def _tasks_table() -> str:
     sched = get_scheduler()
     tasks = sched.list_tasks()
 
-    rows: List[Dict[str, str]] = []
+    rows: list[dict[str, str]] = []
     for t in tasks:
         rows.append(
             {
@@ -58,7 +57,7 @@ def _tasks_table() -> str:
 # REQUIRED tools
 # ============================================================
 
-def schedule_add(params: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[str, Any]:
+def schedule_add(params: dict[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     params = params or {}
     task_id = str(params.get("id", "")).strip()
     cron = str(params.get("cron", "")).strip()
@@ -71,12 +70,12 @@ def schedule_add(params: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[str,
     return {"ok": True, "message": f"Scheduled task '{task_id}' added/updated.", "table": _tasks_table()}
 
 
-def schedule_list(params: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[str, Any]:
+def schedule_list(params: dict[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     sched = get_scheduler()
     return {"ok": True, "health": sched.health(), "table": _tasks_table()}
 
 
-def schedule_remove(params: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[str, Any]:
+def schedule_remove(params: dict[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     params = params or {}
     task_id = str(params.get("id", "")).strip()
 
@@ -85,7 +84,7 @@ def schedule_remove(params: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[s
     return {"ok": True, "message": f"Scheduled task '{task_id}' removed (if it existed).", "table": _tasks_table()}
 
 
-def schedule_run_now(params: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[str, Any]:
+def schedule_run_now(params: dict[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     params = params or {}
     task_id = str(params.get("id", "")).strip()
 
@@ -98,28 +97,28 @@ def schedule_run_now(params: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[
 # OPTIONAL "consumer delight" tools (won't break required set)
 # ============================================================
 
-def schedule_pause(params: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[str, Any]:
+def schedule_pause(params: dict[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     params = params or {}
     task_id = str(params.get("id", "")).strip()
     sched = get_scheduler()
     sched.pause_task(task_id)
     return {"ok": True, "message": f"Paused '{task_id}'.", "table": _tasks_table()}
 
-def schedule_resume(params: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[str, Any]:
+def schedule_resume(params: dict[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     params = params or {}
     task_id = str(params.get("id", "")).strip()
     sched = get_scheduler()
     sched.resume_task(task_id)
     return {"ok": True, "message": f"Resumed '{task_id}'.", "table": _tasks_table()}
 
-def schedule_preview(params: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[str, Any]:
+def schedule_preview(params: dict[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     params = params or {}
     task_id = str(params.get("id", "")).strip()
     count = int(params.get("count", 5) or 5)
     sched = get_scheduler()
     return {"ok": True, "id": task_id, "next": sched.preview_next(task_id, count=count)}
 
-def schedule_update(params: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[str, Any]:
+def schedule_update(params: dict[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     params = params or {}
     task_id = str(params.get("id", "")).strip()
     sched = get_scheduler()
@@ -139,7 +138,7 @@ def schedule_update(params: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[s
 # Tool registry patterns
 # ============================================================
 
-TOOLS: Dict[str, Dict[str, Any]] = {
+TOOLS: dict[str, dict[str, Any]] = {
     # required
     "schedule.add": {"handler": schedule_add, "schema": {"id": "str", "cron": "str", "task": "str"}},
     "schedule.list": {"handler": schedule_list, "schema": {}},
@@ -164,7 +163,7 @@ TOOLS: Dict[str, Dict[str, Any]] = {
 }
 
 
-def get_tools() -> Dict[str, Dict[str, Any]]:
+def get_tools() -> dict[str, dict[str, Any]]:
     return TOOLS
 
 

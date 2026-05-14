@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping
 
 
-def load_registry(path: Path) -> Dict[str, Any]:
+def load_registry(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {"version": 1, "updated_at_utc": "", "runs": [], "competitors": {}}
     try:
@@ -24,7 +24,7 @@ def load_registry(path: Path) -> Dict[str, Any]:
 def render_registry_markdown(registry: Mapping[str, Any]) -> str:
     competitors = dict(registry.get("competitors") or {})
     runs = list(registry.get("runs") or [])
-    lines: List[str] = []
+    lines: list[str] = []
     lines.append("# Competitor Registry")
     lines.append("")
     lines.append(f"- Updated at: `{registry.get('updated_at_utc')}`")

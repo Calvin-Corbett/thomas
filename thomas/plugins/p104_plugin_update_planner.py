@@ -14,10 +14,10 @@ The planner never installs or mutates plugins. It only compares:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import os
 import re
+from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, Tuple, TypedDict, Union, cast
 
 try:
@@ -67,9 +67,9 @@ class PluginUpdatePlannerError(_ThomasBaseError):
 
     code: str
     message: str
-    details: Dict[str, Any]
+    details: dict[str, Any]
 
-    def __init__(self, *, code: str, message: str, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, *, code: str, message: str, details: Mapping[str, Any] | None = None):
         # Some Thomas base errors may not accept message; keep it robust.
         try:
             super().__init__(message)
@@ -83,22 +83,22 @@ class PluginUpdatePlannerError(_ThomasBaseError):
         self.message = message
         self.details = dict(details or {})
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"ok": False, "error": {"code": self.code, "message": self.message, "details": self.details}}
 
 
 class PluginUpdatePlannerInputError(PluginUpdatePlannerError):
-    def __init__(self, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__(code="invalid_input", message=message, details=details)
 
 
 class PluginUpdatePlannerConfigError(PluginUpdatePlannerError):
-    def __init__(self, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__(code="missing_config", message=message, details=details)
 
 
 class PluginUpdatePlannerExternalError(PluginUpdatePlannerError):
-    def __init__(self, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__(code="external_failure", message=message, details=details)
 
 
@@ -152,8 +152,8 @@ class PluginUpdatePlannerRequest(TypedDict, total=False):
       - timeout_s: HTTP timeout for catalog_url (seconds)
     """
 
-    installed: Union[List[Union[InstalledPluginDict, str]], Dict[str, Any]]
-    available: Dict[str, Any]
+    installed: Union[list[Union[InstalledPluginDict, str]], dict[str, Any]]
+    available: dict[str, Any]
     catalog_path: str
     catalog_url: str
     include_prereleases: bool
@@ -163,23 +163,23 @@ class PluginUpdatePlannerRequest(TypedDict, total=False):
 class PluginUpdateActionDict(TypedDict):
     id: str
     current_version: str
-    latest_version: Optional[str]
+    latest_version: str | None
     status: Literal["update", "up_to_date", "unknown"]
     bump: Literal["major", "minor", "patch", "none", "unknown"]
     risk: Literal["high", "medium", "low", "unknown"]
     recommended: bool
     reason: str
     pinned: bool
-    source: Optional[str]
+    source: str | None
 
 
 class PluginUpdatePlannerResponse(TypedDict):
     ok: bool
-    actions: List[PluginUpdateActionDict]
-    summary: Dict[str, int]
+    actions: list[PluginUpdateActionDict]
+    summary: dict[str, int]
 
 
-REQUEST_JSON_SCHEMA: Dict[str, Any] = {
+REQUEST_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "required": ["installed"],
@@ -217,7 +217,7 @@ REQUEST_JSON_SCHEMA: Dict[str, Any] = {
     },
 }
 
-RESPONSE_JSON_SCHEMA: Dict[str, Any] = {
+RESPONSE_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "required": ["ok", "actions", "summary"],
@@ -294,7 +294,7 @@ def _normalize_version_string(s: str) -> str:
     return s
 
 
-def _split_prerelease(pr: str) -> List[str]:
+def _split_prerelease(pr: str) -> list[str]:
     # pr includes leading '-' by our parsing; strip it for comparison.
     if pr.startswith("-"):
         pr = pr[1:]
@@ -303,7 +303,7 @@ def _split_prerelease(pr: str) -> List[str]:
     return pr.split(".")
 
 
-def _prerelease_key(pr: Optional[str]) -> Tuple[int, List[Tuple[int, Union[int, str]]]]:
+def _prerelease_key(pr: str | None) -> tuple[int, list[tuple[int, Union[int, str]]]]:
     """
     Create a sortable key with SemVer rules:
       - No prerelease has higher precedence than prerelease
@@ -316,7 +316,7 @@ def _prerelease_key(pr: Optional[str]) -> Tuple[int, List[Tuple[int, Union[int, 
     if pr is None:
         return (1, [])  # stable is highest (after comparing major/minor/patch)
     parts = _split_prerelease(pr)
-    key_parts: List[Tuple[int, Union[int, str]]] = []
+    key_parts: list[tuple[int, Union[int, str]]] = []
     for p in parts:
         if p.isdigit():
             key_parts.append((0, int(p)))
@@ -330,10 +330,10 @@ class SemVer:
     major: int
     minor: int
     patch: int
-    prerelease: Optional[str] = None  # includes leading '-' if present
+    prerelease: str | None = None  # includes leading '-' if present
 
     @classmethod
-    def parse(cls, s: str) -> "SemVer":
+    def parse(cls, s: str) -> SemVer:
         raw = _normalize_version_string(s)
         m = _SEMVER_RE.match(raw or "")
         if not m:
@@ -346,7 +346,7 @@ class SemVer:
         prerelease = m.group("prerelease")
         return cls(major=major, minor=minor, patch=patch, prerelease=prerelease)
 
-    def __lt__(self, other: "SemVer") -> bool:
+    def __lt__(self, other: SemVer) -> bool:
         a = (self.major, self.minor, self.patch)
         b = (other.major, other.minor, other.patch)
         if a != b:
@@ -387,7 +387,7 @@ class SemVer:
             self.prerelease,
         ) == (other.major, other.minor, other.patch, other.prerelease)
 
-    def bump_kind(self, newer: "SemVer") -> Literal["major", "minor", "patch", "none"]:
+    def bump_kind(self, newer: SemVer) -> Literal["major", "minor", "patch", "none"]:
         """
         Classify bump by core version changes.
         If core versions equal but prerelease differs (e.g. 1.0.0-alpha -> 1.0.0),
@@ -418,7 +418,7 @@ class InstalledPlugin:
     plugin_id: str
     version: str
     pinned: bool = False
-    source: Optional[str] = None
+    source: str | None = None
 
     def semver(self) -> SemVer:
         return SemVer.parse(self.version)
@@ -428,14 +428,14 @@ class InstalledPlugin:
 class PluginUpdateAction:
     plugin_id: str
     current_version: str
-    latest_version: Optional[str]
+    latest_version: str | None
     status: Literal["update", "up_to_date", "unknown"]
     bump: Literal["major", "minor", "patch", "none", "unknown"]
     risk: Literal["high", "medium", "low", "unknown"]
     recommended: bool
     reason: str
     pinned: bool
-    source: Optional[str]
+    source: str | None
 
     def to_dict(self) -> PluginUpdateActionDict:
         return {
@@ -454,9 +454,9 @@ class PluginUpdateAction:
 
 @dataclass(frozen=True, slots=True)
 class PluginUpdatePlan:
-    actions: List[PluginUpdateAction]
+    actions: list[PluginUpdateAction]
 
-    def summary(self) -> Dict[str, int]:
+    def summary(self) -> dict[str, int]:
         total = len(self.actions)
         update = sum(1 for a in self.actions if a.status == "update")
         up_to_date = sum(1 for a in self.actions if a.status == "up_to_date")
@@ -493,21 +493,21 @@ def _normalize_installed_entry(entry: Union[InstalledPluginDict, str]) -> Instal
         plugin_id=pid,
         version=ver,
         pinned=bool(entry.get("pinned", False)),
-        source=cast(Optional[str], entry.get("source")),
+        source=cast(str | None, entry.get("source")),
     )
 
 
-def _extract_installed_list(raw: Any) -> List[Any]:
+def _extract_installed_list(raw: Any) -> list[Any]:
     if isinstance(raw, list):
         return raw
     if isinstance(raw, dict):
         for key in ("installed", "entries", "plugins"):
             if key in raw and isinstance(raw[key], list):
-                return cast(List[Any], raw[key])
+                return cast(list[Any], raw[key])
     return []
 
 
-def _parse_catalog_json(data: Any) -> Dict[str, Any]:
+def _parse_catalog_json(data: Any) -> dict[str, Any]:
     """
     Accept multiple catalog shapes and normalize into a dict:
       {id: version | [versions] | {"versions":[...]} }
@@ -515,14 +515,14 @@ def _parse_catalog_json(data: Any) -> Dict[str, Any]:
     if isinstance(data, dict):
         # Direct mapping
         if all(isinstance(k, str) for k in data.keys()):
-            return cast(Dict[str, Any], data)
+            return cast(dict[str, Any], data)
 
         for key in ("entries", "plugins"):
             if key in data and isinstance(data[key], list):
                 return _parse_catalog_json(data[key])
 
     if isinstance(data, list):
-        out: Dict[str, Any] = {}
+        out: dict[str, Any] = {}
         for item in data:
             if not isinstance(item, dict):
                 continue
@@ -545,13 +545,13 @@ def _parse_catalog_json(data: Any) -> Dict[str, Any]:
     )
 
 
-def _load_catalog_from_path(path: str) -> Dict[str, Any]:
+def _load_catalog_from_path(path: str) -> dict[str, Any]:
     if not path:
         raise PluginUpdatePlannerConfigError("catalog_path is empty.")
     if not os.path.exists(path):
         raise PluginUpdatePlannerConfigError("Catalog file not found.", details={"catalog_path": path})
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             raw = json.load(f)
     except json.JSONDecodeError as e:
         raise PluginUpdatePlannerInputError("Catalog file is not valid JSON.", details={"catalog_path": path, "error": str(e)})
@@ -560,7 +560,7 @@ def _load_catalog_from_path(path: str) -> Dict[str, Any]:
     return _parse_catalog_json(raw)
 
 
-def _load_catalog_from_url(url: str, *, timeout_s: float) -> Dict[str, Any]:
+def _load_catalog_from_url(url: str, *, timeout_s: float) -> dict[str, Any]:
     if requests is None:
         raise PluginUpdatePlannerExternalError("HTTP catalog fetch is unavailable (requests import failed).")
     if not url:
@@ -574,7 +574,7 @@ def _load_catalog_from_url(url: str, *, timeout_s: float) -> Dict[str, Any]:
     return _parse_catalog_json(raw)
 
 
-def _coerce_versions(value: Any) -> List[str]:
+def _coerce_versions(value: Any) -> list[str]:
     """
     Normalize any "available versions" value into a list of strings.
     """
@@ -594,12 +594,12 @@ def _coerce_versions(value: Any) -> List[str]:
     return []
 
 
-def _select_latest_version(versions: Sequence[str], *, include_prereleases: bool) -> Optional[str]:
+def _select_latest_version(versions: Sequence[str], *, include_prereleases: bool) -> str | None:
     """
     Choose the latest version according to SemVer ordering.
     If prereleases are excluded, ignore prerelease versions when selecting.
     """
-    parsed: List[Tuple[SemVer, str]] = []
+    parsed: list[tuple[SemVer, str]] = []
     for v in versions:
         try:
             sv = SemVer.parse(v)
@@ -618,7 +618,7 @@ def _select_latest_version(versions: Sequence[str], *, include_prereleases: bool
     return parsed[-1][1]
 
 
-def _recommendation_for(bump: str, pinned: bool) -> Tuple[bool, str]:
+def _recommendation_for(bump: str, pinned: bool) -> tuple[bool, str]:
     if pinned:
         return False, "Update available but plugin is pinned."
     if bump == "major":
@@ -632,7 +632,7 @@ def build_update_plan(
     *,
     include_prereleases: bool = False,
 ) -> PluginUpdatePlan:
-    actions: List[PluginUpdateAction] = []
+    actions: list[PluginUpdateAction] = []
 
     for p in installed:
         current_sv = p.semver()
@@ -774,7 +774,7 @@ def plan_plugin_updates(request: PluginUpdatePlannerRequest) -> PluginUpdatePlan
         raw_av = request.get("available")
         if not isinstance(raw_av, dict):
             raise PluginUpdatePlannerInputError("'available' must be a mapping.", details={"available": raw_av})
-        available: Dict[str, Any] = cast(Dict[str, Any], raw_av)
+        available: dict[str, Any] = cast(dict[str, Any], raw_av)
     elif "catalog_path" in request:
         available = _load_catalog_from_path(str(request.get("catalog_path") or ""))
     elif "catalog_url" in request:
@@ -851,7 +851,7 @@ class PluginUpdatePlannerPlugin:
     def register(self, registry: Any) -> None:
         register_tools(registry)
 
-    def tools(self) -> List[Any]:
+    def tools(self) -> list[Any]:
         return [plan_plugin_updates]
 
 

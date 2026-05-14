@@ -10,7 +10,7 @@ from typing import Any, Dict, Mapping, Optional, Sequence, Tuple, TypedDict
 class CompatModelCapabilityResolverError(Exception):
     """Internal exception used to convert failures into deterministic, machine-readable errors."""
 
-    def __init__(self, code: str, message: str, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, code: str, message: str, details: dict[str, Any] | None = None):
         super().__init__(message)
         self.code = code
         self.message = message
@@ -45,17 +45,17 @@ class CompatModelCapabilities:
     # Hints (optional metadata for callers; safe to ignore)
     notes: Sequence[str]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
 @dataclass(frozen=True)
 class CompatModelCapabilityResolverResult:
     ok: bool
-    capabilities: Optional[CompatModelCapabilities] = None
-    error: Optional[Dict[str, Any]] = None
+    capabilities: CompatModelCapabilities | None = None
+    error: dict[str, Any] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         if self.ok and self.capabilities is not None:
             return {"ok": True, "capabilities": self.capabilities.to_dict()}
         return {
@@ -64,7 +64,7 @@ class CompatModelCapabilityResolverResult:
         }
 
 
-def _load_caps_override_map() -> Dict[str, Dict[str, Any]]:
+def _load_caps_override_map() -> dict[str, dict[str, Any]]:
     """Optional override map for deployments that want explicit control.
 
     Env var: THOMAS_COMPAT_MODEL_CAPS_JSON
@@ -86,7 +86,7 @@ def _load_caps_override_map() -> Dict[str, Dict[str, Any]]:
         if raw.startswith("{"):
             data = json.loads(raw)
         else:
-            with open(raw, "r", encoding="utf-8") as f:
+            with open(raw, encoding="utf-8") as f:
                 data = json.load(f)
     except Exception as e:
         raise CompatModelCapabilityResolverError(
@@ -107,14 +107,14 @@ def _load_caps_override_map() -> Dict[str, Dict[str, Any]]:
             ),
         )
 
-    out: Dict[str, Dict[str, Any]] = {}
+    out: dict[str, dict[str, Any]] = {}
     for k, v in data.items():
         if isinstance(k, str) and isinstance(v, dict):
             out[k] = v
     return out
 
 
-def _match_override(model: str, override_map: Mapping[str, Mapping[str, Any]]) -> Optional[Mapping[str, Any]]:
+def _match_override(model: str, override_map: Mapping[str, Mapping[str, Any]]) -> Mapping[str, Any] | None:
     if model in override_map:
         return override_map[model]
     for k, v in override_map.items():
@@ -202,9 +202,7 @@ def resolve_compat_model_capabilities(req: CompatModelCapabilityRequest) -> Comp
         for k, v in ov.items():
             if k not in merged:
                 continue
-            if isinstance(merged[k], bool) and isinstance(v, bool):
-                merged[k] = v
-            elif isinstance(merged[k], str) and isinstance(v, str):
+            if isinstance(merged[k], bool) and isinstance(v, bool) or isinstance(merged[k], str) and isinstance(v, str):
                 merged[k] = v
             elif k == "notes" and isinstance(v, (list, tuple)) and all(isinstance(x, str) for x in v):
                 merged[k] = tuple(v)
@@ -232,7 +230,7 @@ async def handle_p148_compat_model_capability_resolver(request):  # pragma: no c
     try:
         if request.method.upper() == "GET":
             model = (request.query.get("model") or "").strip()
-            payload: Dict[str, Any] = {"model": model}
+            payload: dict[str, Any] = {"model": model}
         else:
             payload = await request.json()
             if not isinstance(payload, dict):
@@ -248,7 +246,7 @@ async def handle_p148_compat_model_capability_resolver(request):  # pragma: no c
         return _aiohttp_json({"ok": False, "error": err}, status=500)
 
 
-def get_routes() -> Sequence[Tuple[str, str, Any]]:  # pragma: no cover
+def get_routes() -> Sequence[tuple[str, str, Any]]:  # pragma: no cover
     return (
         ("GET", "/gateway/compat/model-capabilities", handle_p148_compat_model_capability_resolver),
         ("POST", "/gateway/compat/model-capabilities", handle_p148_compat_model_capability_resolver),
@@ -260,7 +258,7 @@ def register_routes(router) -> None:  # pragma: no cover
         router.add_route(method, path, handler)
 
 
-def _aiohttp_json(data: Dict[str, Any], status: int = 200):  # pragma: no cover
+def _aiohttp_json(data: dict[str, Any], status: int = 200):  # pragma: no cover
     from aiohttp import web
 
     return web.json_response(data, status=status)

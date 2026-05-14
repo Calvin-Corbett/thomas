@@ -29,7 +29,7 @@ from thomas.plugins.p106_plugin_command_registry_bridge import (
 )
 
 
-def _load_args(args_json: Optional[str], args_file: Optional[Path]) -> Dict[str, Any]:
+def _load_args(args_json: str | None, args_file: Path | None) -> dict[str, Any]:
     if args_json and args_file:
         raise PluginCommandBridgeError(
             code="INVALID_INPUT",
@@ -85,9 +85,9 @@ def _load_args(args_json: Optional[str], args_file: Optional[Path]) -> Dict[str,
 def cli(
     schema_mode: bool,
     list_mode: bool,
-    command_name: Optional[str],
-    args_json: Optional[str],
-    args_file: Optional[Path],
+    command_name: str | None,
+    args_json: str | None,
+    args_file: Path | None,
     json_mode: bool,
 ) -> None:
     """Bridge plugin commands into a tool-friendly invocation surface."""

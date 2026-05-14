@@ -43,9 +43,9 @@ ENV_GATEWAY_PASSWORD = "THOMAS_GATEWAY_PASSWORD"
 
 @dataclass(frozen=True, slots=True)
 class GatewayHealthDetailedRequest:
-    url: Optional[str] = None
-    token: Optional[str] = None
-    password: Optional[str] = None
+    url: str | None = None
+    token: str | None = None
+    password: str | None = None
     timeout_ms: int = DEFAULT_TIMEOUT_MS
 
     def validate(self) -> None:
@@ -73,7 +73,7 @@ class GatewayHealthDetailedRequest:
 class GatewayHealthDetailedResult:
     gateway_url: str
     duration_ms: int
-    protocol_version: Optional[int]
+    protocol_version: int | None
     snapshot: Any
 
     def to_dict(self) -> dict[str, Any]:
@@ -101,7 +101,7 @@ class GatewayHealthError(RuntimeError):
         message: str,
         http_status: int,
         error_type: str,
-        details: Optional[Mapping[str, Any]] = None,
+        details: Mapping[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -124,12 +124,12 @@ class GatewayHealthError(RuntimeError):
 
 
 class GatewayHealthInputError(GatewayHealthError):
-    def __init__(self, *, code: str, message: str, details: Optional[Mapping[str, Any]] = None) -> None:
+    def __init__(self, *, code: str, message: str, details: Mapping[str, Any] | None = None) -> None:
         super().__init__(code=code, message=message, http_status=400, error_type="invalid_request", details=details)
 
 
 class GatewayHealthConfigError(GatewayHealthError):
-    def __init__(self, *, code: str, message: str, details: Optional[Mapping[str, Any]] = None) -> None:
+    def __init__(self, *, code: str, message: str, details: Mapping[str, Any] | None = None) -> None:
         super().__init__(code=code, message=message, http_status=500, error_type="configuration_error", details=details)
 
 
@@ -139,7 +139,7 @@ class GatewayHealthExternalError(GatewayHealthError):
         *,
         code: str,
         message: str,
-        details: Optional[Mapping[str, Any]] = None,
+        details: Mapping[str, Any] | None = None,
         http_status: int = 502,
     ) -> None:
         super().__init__(code=code, message=message, http_status=http_status, error_type="gateway_error", details=details)
@@ -148,8 +148,8 @@ class GatewayHealthExternalError(GatewayHealthError):
 @dataclass(frozen=True, slots=True)
 class _GatewayConn:
     url: str
-    token: Optional[str] = None
-    password: Optional[str] = None
+    token: str | None = None
+    password: str | None = None
 
 
 def _app_cfg(app: Mapping[str, Any] | None) -> Mapping[str, Any]:
@@ -173,7 +173,7 @@ def _cfg_get(cfg: Mapping[str, Any], dotted_key: str) -> Any:
     return cur
 
 
-def _first_str(*values: Any) -> Optional[str]:
+def _first_str(*values: Any) -> str | None:
     for v in values:
         if isinstance(v, str) and v.strip():
             return v.strip()
@@ -254,7 +254,7 @@ async def fetch_gateway_health_detailed(
                         http_status=401,
                     )
 
-                protocol: Optional[int] = None
+                protocol: int | None = None
                 payload = connect_res.get("payload")
                 if isinstance(payload, dict) and isinstance(payload.get("protocol"), int):
                     protocol = payload["protocol"]
@@ -291,9 +291,9 @@ async def fetch_gateway_health_detailed(
     return GatewayHealthDetailedResult(conn.url, duration_ms, protocol, snapshot)
 
 
-async def _collect_challenge_events(ws: Any, *, budget_s: float) -> tuple[Optional[str], Optional[int]]:
-    nonce: Optional[str] = None
-    ts: Optional[int] = None
+async def _collect_challenge_events(ws: Any, *, budget_s: float) -> tuple[str | None, int | None]:
+    nonce: str | None = None
+    ts: int | None = None
     deadline = time.perf_counter() + max(0.0, budget_s)
 
     # Attempt to read a few messages quickly without blocking too long.
@@ -329,7 +329,7 @@ async def _collect_challenge_events(ws: Any, *, budget_s: float) -> tuple[Option
     return nonce, ts
 
 
-def _connect_params(*, nonce: Optional[str], ts: Optional[int], token: Optional[str], password: Optional[str]) -> dict[str, Any]:
+def _connect_params(*, nonce: str | None, ts: int | None, token: str | None, password: str | None) -> dict[str, Any]:
     params: dict[str, Any] = {
         "minProtocol": DEFAULT_PROTOCOL_VERSION,
         "maxProtocol": DEFAULT_PROTOCOL_VERSION,

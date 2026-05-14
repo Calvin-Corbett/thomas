@@ -65,7 +65,7 @@ class DownloadTrackingInput:
             File suffixes ignored while watching (common partial-download extensions).
     """
 
-    download_dir: Optional[Path]
+    download_dir: Path | None
     timeout_s: float = 30.0
     poll_interval_s: float = 0.1
     stable_checks: int = 2
@@ -104,7 +104,7 @@ class _FileSnapshot:
     mtime_ns: int
 
 
-def _resolve_download_dir(download_dir: Optional[Path]) -> Path:
+def _resolve_download_dir(download_dir: Path | None) -> Path:
     if download_dir is not None:
         return Path(download_dir)
 
@@ -205,7 +205,7 @@ def _wait_for_stable_file(
     """
 
     stable_count = 0
-    prev: Optional[tuple[int, int]] = None
+    prev: tuple[int, int] | None = None
 
     while stable_count < stable_checks:
         if time.monotonic() >= deadline_monotonic:

@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, TypedDict, cast
 
-
 ERROR_INVALID_INPUT = "invalid_input"
 ERROR_MISSING_CONFIG = "missing_config"
 ERROR_EXTERNAL_FAILURE = "external_failure"
@@ -360,11 +359,11 @@ if web is not None:  # pragma: no cover
     routes = web.RouteTableDef()
 
     @routes.get("/gateway/ops/route-package-scaffold/schema")
-    async def schema_handler(request: "web.Request") -> "web.Response":
+    async def schema_handler(request: web.Request) -> web.Response:
         return web.json_response(get_gateway_ops_route_package_scaffold_json_schema())
 
     @routes.post("/gateway/ops/route-package-scaffold")
-    async def scaffold_handler(request: "web.Request") -> "web.Response":
+    async def scaffold_handler(request: web.Request) -> web.Response:
         try:
             body = await request.json()
         except Exception:
@@ -381,6 +380,6 @@ if web is not None:  # pragma: no cover
             status = 400 if e.code in {ERROR_INVALID_INPUT, ERROR_MISSING_CONFIG} else 500
             return web.json_response({"ok": False, "error": e.to_dict()}, status=status)
 
-    def register(app: "web.Application") -> None:
+    def register(app: web.Application) -> None:
         """Compatibility hook for apps that expect an explicit registration function."""
         app.add_routes(routes)

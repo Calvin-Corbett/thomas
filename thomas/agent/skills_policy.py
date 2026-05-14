@@ -37,8 +37,8 @@ _RISK_KEYWORDS = {
 }
 
 
-def _ordered_unique(items: Iterable[str]) -> List[str]:
-    out: List[str] = []
+def _ordered_unique(items: Iterable[str]) -> list[str]:
+    out: list[str] = []
     seen: set[str] = set()
     for item in items:
         key = str(item or "").strip()
@@ -93,7 +93,7 @@ def _memory_root_path(config: Any) -> Path:
 
 
 
-def _default_trusted_skill_roots(config: Any, *, cwd: Path | None = None) -> List[Path]:
+def _default_trusted_skill_roots(config: Any, *, cwd: Path | None = None) -> list[Path]:
     _ = config
     return [path for path, _origin in discover_native_skill_roots(cwd=cwd)]
 
@@ -102,14 +102,14 @@ def _default_trusted_skill_roots(config: Any, *, cwd: Path | None = None) -> Lis
 class RuntimeSkillTrustPolicy:
     mode: str = "enforce"  # enforce | permissive | off
     require_hash: bool = False
-    trusted_roots: List[Path] = field(default_factory=list)
-    allow_skill_names: List[str] = field(default_factory=list)
-    deny_skill_names: List[str] = field(default_factory=list)
-    sha256_by_name: Dict[str, str] = field(default_factory=dict)
-    sha256_by_file: Dict[str, str] = field(default_factory=dict)
+    trusted_roots: list[Path] = field(default_factory=list)
+    allow_skill_names: list[str] = field(default_factory=list)
+    deny_skill_names: list[str] = field(default_factory=list)
+    sha256_by_name: dict[str, str] = field(default_factory=dict)
+    sha256_by_file: dict[str, str] = field(default_factory=dict)
     source_file: str = ""
 
-    def summary(self) -> Dict[str, Any]:
+    def summary(self) -> dict[str, Any]:
         return {
             "mode": str(self.mode),
             "require_hash": bool(self.require_hash),
@@ -133,10 +133,10 @@ def load_runtime_skill_trust_policy(config: Any, *, cwd: Path | None = None) -> 
         mode = "enforce"
     require_hash = _is_enabled_env("THOMAS_RUNTIME_SKILLS_REQUIRE_HASH", default=False)
     trusted_roots = list(_default_trusted_skill_roots(config, cwd=cwd))
-    allow_skill_names: List[str] = []
-    deny_skill_names: List[str] = []
-    sha256_by_name: Dict[str, str] = {}
-    sha256_by_file: Dict[str, str] = {}
+    allow_skill_names: list[str] = []
+    deny_skill_names: list[str] = []
+    sha256_by_name: dict[str, str] = {}
+    sha256_by_file: dict[str, str] = {}
     source_file = ""
 
     policy_path = _trust_policy_file(config)
@@ -194,7 +194,7 @@ def load_runtime_skill_trust_policy(config: Any, *, cwd: Path | None = None) -> 
                     else:
                         sha256_by_name[_normalize_skill_name(key_text)] = digest
 
-    trusted_unique: List[Path] = []
+    trusted_unique: list[Path] = []
     seen_roots: set[str] = set()
     for root in trusted_roots:
         try:
@@ -219,9 +219,9 @@ def load_runtime_skill_trust_policy(config: Any, *, cwd: Path | None = None) -> 
     )
 
 
-def classify_skill_risk(name: str, description: str, excerpt: str) -> tuple[str, List[str]]:
+def classify_skill_risk(name: str, description: str, excerpt: str) -> tuple[str, list[str]]:
     blob = "\n".join([str(name or ""), str(description or ""), str(excerpt or "")]).lower()
-    tags: List[str] = []
+    tags: list[str] = []
     for token in sorted(_RISK_KEYWORDS):
         if token in blob:
             tags.append(token)

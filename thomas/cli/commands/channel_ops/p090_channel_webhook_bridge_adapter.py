@@ -48,7 +48,7 @@ def _parse_header_kv(raw: str) -> tuple[str, str]:
     return k, v
 
 
-def _load_payload(text: Optional[str], payload_json: Optional[str]) -> Mapping[str, Any]:
+def _load_payload(text: str | None, payload_json: str | None) -> Mapping[str, Any]:
     payload: dict[str, Any] = {}
     if payload_json:
         try:
@@ -77,9 +77,9 @@ def _emit(obj: Any, *, json_mode: bool) -> None:
 
 def _run_send(
     *,
-    url: Optional[str],
-    text: Optional[str],
-    payload_json: Optional[str],
+    url: str | None,
+    text: str | None,
+    payload_json: str | None,
     headers: list[str],
     method: str,
     timeout_s: float,
@@ -146,9 +146,9 @@ def _register_typer_like(app: Any) -> None:
     import typer
 
     def cmd(
-        text: Optional[str] = typer.Argument(None, help="Message text to deliver (sets payload.text)."),
-        url: Optional[str] = typer.Option(None, "--url", help=f"Webhook URL. Can also come from ${_DEFAULT_ENV_URL}."),
-        payload_json: Optional[str] = typer.Option(None, "--payload-json", help="Raw JSON object to send. If provided with TEXT, it overwrites payload.text."),
+        text: str | None = typer.Argument(None, help="Message text to deliver (sets payload.text)."),
+        url: str | None = typer.Option(None, "--url", help=f"Webhook URL. Can also come from ${_DEFAULT_ENV_URL}."),
+        payload_json: str | None = typer.Option(None, "--payload-json", help="Raw JSON object to send. If provided with TEXT, it overwrites payload.text."),
         header: list[str] = typer.Option([], "--header", help="Extra header (KEY:VALUE). Repeatable."),
         method: str = typer.Option("POST", "--method", help="HTTP method (default POST)."),
         timeout_s: float = typer.Option(10.0, "--timeout", help="Timeout seconds."),

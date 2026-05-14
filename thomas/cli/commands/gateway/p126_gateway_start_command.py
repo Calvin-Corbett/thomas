@@ -13,7 +13,7 @@ from thomas.server.routes.gateway.p126_gateway_start_command import (
 )
 
 # CLI-level state for idempotency during a single CLI process run.
-_CLI_STATE: Dict[str, Any] = {}
+_CLI_STATE: dict[str, Any] = {}
 
 
 @dataclass(frozen=True)
@@ -22,7 +22,7 @@ class GatewayStartCliOptions:
     force_restart: bool = False
 
 
-def run_gateway_start(options: GatewayStartCliOptions) -> Dict[str, Any]:
+def run_gateway_start(options: GatewayStartCliOptions) -> dict[str, Any]:
     """Start the gateway process; returns a machine-readable payload."""
     try:
         outcome = start_gateway_process(
@@ -35,7 +35,7 @@ def run_gateway_start(options: GatewayStartCliOptions) -> Dict[str, Any]:
         return e.to_error_payload()
 
 
-def _format_human(payload: Dict[str, Any]) -> str:
+def _format_human(payload: dict[str, Any]) -> str:
     if payload.get("ok") is True:
         return (
             f"Gateway {payload.get('status')} "
@@ -64,7 +64,7 @@ def build_arg_parser(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     argv = list(argv) if argv is not None else sys.argv[1:]
     parser = argparse.ArgumentParser(prog="thomas gateway start", add_help=True)
     build_arg_parser(parser)
@@ -95,15 +95,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     return 0 if payload.get("ok") is True else 1
 
 
-def run(argv: Optional[Sequence[str]] = None) -> int:
+def run(argv: Sequence[str] | None = None) -> int:
     return main(argv)
 
 
-def invoke(*, config_path: str, force_restart: bool = False) -> Dict[str, Any]:
+def invoke(*, config_path: str, force_restart: bool = False) -> dict[str, Any]:
     return run_gateway_start(GatewayStartCliOptions(config_path=config_path, force_restart=force_restart))
 
 
-def get_command_spec() -> Dict[str, Any]:
+def get_command_spec() -> dict[str, Any]:
     # Duck-typed command metadata for Thomas CLI auto-discovery.
     return {
         "group": "gateway",

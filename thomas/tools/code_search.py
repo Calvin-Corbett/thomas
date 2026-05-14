@@ -78,12 +78,12 @@ class CodeSearchTool(Tool):
         self._root = sandbox_root.resolve()
         self._has_rg = shutil.which("rg") is not None
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         if self._has_rg:
             return await self._search_rg(args)
         return await self._search_python(args)
 
-    async def _search_rg(self, args: Dict[str, Any]) -> ToolResult:
+    async def _search_rg(self, args: dict[str, Any]) -> ToolResult:
         pattern = args["pattern"]
         rel = args.get("path", ".")
         try:
@@ -93,7 +93,7 @@ class CodeSearchTool(Tool):
         except Exception as e:
             return ToolResult(ok=False, error=str(e))
 
-        cmd: List[str] = ["rg", "--line-number", "--with-filename"]
+        cmd: list[str] = ["rg", "--line-number", "--with-filename"]
         if not args.get("case_sensitive", False):
             cmd.append("--ignore-case")
         ctx = args.get("context", 0)
@@ -145,7 +145,7 @@ class CodeSearchTool(Tool):
                 return py_result
             return ToolResult(ok=False, error=stderr_clean or py_result.error or "rg error")
 
-    async def _search_python(self, args: Dict[str, Any]) -> ToolResult:
+    async def _search_python(self, args: dict[str, Any]) -> ToolResult:
         pattern_str = args["pattern"]
         rel = args.get("path", ".")
         file_glob = args.get("glob", "*")
@@ -165,7 +165,7 @@ class CodeSearchTool(Tool):
         except re.error as e:
             return ToolResult(ok=False, error=f"Invalid regex: {e}")
 
-        matches: List[str] = []
+        matches: list[str] = []
         files_searched = 0
 
         for dirpath, dirnames, filenames in os.walk(base):
@@ -231,7 +231,7 @@ class FindDefinitionTool(Tool):
         "required": ["symbol"],
     }
 
-    _PATTERNS: Dict[str, List[str]] = {
+    _PATTERNS: dict[str, list[str]] = {
         "python": [
             r"^(class|def|async\s+def)\s+{symbol}\s*[:(]",
             r"^{symbol}\s*=\s*",
@@ -251,7 +251,7 @@ class FindDefinitionTool(Tool):
         ],
     }
 
-    _LANG_EXTS: Dict[str, set[str]] = {
+    _LANG_EXTS: dict[str, set[str]] = {
         "python": {".py"},
         "javascript": {".js", ".jsx", ".mjs"},
         "typescript": {".ts", ".tsx"},
@@ -262,7 +262,7 @@ class FindDefinitionTool(Tool):
     def __init__(self, sandbox_root: Path):
         self._root = sandbox_root.resolve()
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         symbol = re.escape(args["symbol"])
         lang = args.get("language", "").lower()
         rel = args.get("path", ".")
@@ -275,7 +275,7 @@ class FindDefinitionTool(Tool):
             return ToolResult(ok=False, error=str(e))
 
         # Build regex patterns
-        patterns: List[re.Pattern[str]] = []
+        patterns: list[re.Pattern[str]] = []
         if lang in self._PATTERNS:
             for p in self._PATTERNS[lang]:
                 patterns.append(re.compile(p.format(symbol=symbol), re.MULTILINE))
@@ -288,7 +288,7 @@ class FindDefinitionTool(Tool):
         # Filter by language extensions if specified
         exts = self._LANG_EXTS.get(lang, _CODE_EXTS)
 
-        results: List[str] = []
+        results: list[str] = []
         for dirpath, dirnames, filenames in os.walk(base):
             dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
             for fname in filenames:
@@ -346,7 +346,7 @@ class FindReferencesTool(Tool):
         self._root = sandbox_root.resolve()
         self._has_rg = shutil.which("rg") is not None
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         symbol = args["symbol"]
         rel = args.get("path", ".")
         max_results = args.get("max_results", 30)
@@ -381,7 +381,7 @@ class FindReferencesTool(Tool):
 
         # Python fallback
         compiled = re.compile(pattern)
-        results: List[str] = []
+        results: list[str] = []
         for dirpath, dirnames, filenames in os.walk(base):
             dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
             for fname in filenames:
@@ -434,7 +434,7 @@ class ProjectStructureTool(Tool):
     def __init__(self, sandbox_root: Path):
         self._root = sandbox_root.resolve()
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         rel = args.get("path", ".")
         max_depth = args.get("max_depth", 4)
         show_files = args.get("show_files", True)
@@ -449,7 +449,7 @@ class ProjectStructureTool(Tool):
         if not base.is_dir():
             return ToolResult(ok=False, error=f"Not a directory: {rel}")
 
-        lines: List[str] = [base.name or "."]
+        lines: list[str] = [base.name or "."]
         self._walk_tree(base, "", 0, max_depth, show_files, lines)
         return ToolResult(ok=True, data="\n".join(lines))
 
@@ -460,7 +460,7 @@ class ProjectStructureTool(Tool):
         depth: int,
         max_depth: int,
         show_files: bool,
-        lines: List[str],
+        lines: list[str],
     ) -> None:
         if depth >= max_depth:
             return

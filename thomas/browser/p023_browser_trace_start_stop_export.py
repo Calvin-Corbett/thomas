@@ -26,15 +26,15 @@ Export behavior:
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-from enum import Enum
 import json
 import os
-from pathlib import Path
 import shutil
 import tempfile
 import threading
 import time
+from dataclasses import asdict, dataclass
+from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Union
 from uuid import uuid4
 
@@ -62,7 +62,7 @@ class BrowserTraceStartInput:
     screenshots: bool = True
     snapshots: bool = True
     sources: bool = True
-    title: Optional[str] = None
+    title: str | None = None
 
 
 @dataclass(frozen=True)
@@ -104,8 +104,8 @@ class _TraceState:
     status: str  # started | stopped | exported
     started_at: float
     options: BrowserTraceStartInput
-    temp_path: Optional[Path] = None
-    exported_path: Optional[Path] = None
+    temp_path: Path | None = None
+    exported_path: Path | None = None
 
 
 class BrowserTraceError(RuntimeError):
@@ -116,17 +116,17 @@ class BrowserTraceError(RuntimeError):
         code: Union[BrowserTraceErrorCode, str],
         message: str,
         *,
-        details: Optional[Dict[str, Any]] = None,
-        cause: Optional[BaseException] = None,
+        details: dict[str, Any] | None = None,
+        cause: BaseException | None = None,
     ) -> None:
         self.code: str = code.value if isinstance(code, BrowserTraceErrorCode) else str(code)
         self.message: str = message
-        self.details: Dict[str, Any] = details or {}
+        self.details: dict[str, Any] = details or {}
         self.__cause__ = cause
         super().__init__(f"{self.code}: {self.message}")
 
-    def as_dict(self) -> Dict[str, Any]:
-        payload: Dict[str, Any] = {"code": self.code, "message": self.message}
+    def as_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {"code": self.code, "message": self.message}
         if self.details:
             payload["details"] = self.details
         return payload
@@ -265,7 +265,7 @@ def _validate_and_resolve_export_path(path_str: str, *, trace_id: str, overwrite
 
 def _safe_tracing_start(ctx: Any, params: BrowserTraceStartInput) -> None:
     """Call Playwright tracing.start with graceful fallback for version differences."""
-    kwargs: Dict[str, Any] = {
+    kwargs: dict[str, Any] = {
         "screenshots": params.screenshots,
         "snapshots": params.snapshots,
         "sources": params.sources,
@@ -305,7 +305,7 @@ def _safe_tracing_start(ctx: Any, params: BrowserTraceStartInput) -> None:
 
 
 async def _safe_tracing_start_async(ctx: Any, params: BrowserTraceStartInput) -> None:
-    kwargs: Dict[str, Any] = {
+    kwargs: dict[str, Any] = {
         "screenshots": params.screenshots,
         "snapshots": params.snapshots,
         "sources": params.sources,
@@ -404,12 +404,12 @@ class BrowserTraceRegistry:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._states: Dict[int, _TraceState] = {}
+        self._states: dict[int, _TraceState] = {}
 
     def _key_for(self, context: Any) -> int:
         return id(context)
 
-    def get_state(self, target: Any) -> Optional[_TraceState]:
+    def get_state(self, target: Any) -> _TraceState | None:
         ctx = _resolve_browser_context(target)
         if ctx is None:
             return None
@@ -656,7 +656,7 @@ def export_trace(target: Any, params: BrowserTraceExportInput) -> BrowserTraceEx
 
 # --- JSON Schema helpers (no third-party deps) -----------------------------------
 
-def input_schemas() -> Dict[str, Any]:
+def input_schemas() -> dict[str, Any]:
     """JSON Schemas for automation/routing layers."""
     return {
         "start": {
@@ -679,7 +679,7 @@ def input_schemas() -> Dict[str, Any]:
     }
 
 
-def output_schemas() -> Dict[str, Any]:
+def output_schemas() -> dict[str, Any]:
     """JSON Schemas for automation/routing layers."""
     return {
         "start": {
@@ -743,22 +743,22 @@ def _coerce_dataclass(cls: Any, payload: Any) -> Any:
     )
 
 
-def route_start(target: Any, payload: Any = None) -> Dict[str, Any]:
+def route_start(target: Any, payload: Any = None) -> dict[str, Any]:
     params = _coerce_dataclass(BrowserTraceStartInput, payload)
     return asdict(start_trace(target, params))
 
 
-def route_stop(target: Any, payload: Any = None) -> Dict[str, Any]:
+def route_stop(target: Any, payload: Any = None) -> dict[str, Any]:
     _ = payload
     return asdict(stop_trace(target))
 
 
-def route_export(target: Any, payload: Any) -> Dict[str, Any]:
+def route_export(target: Any, payload: Any) -> dict[str, Any]:
     params = _coerce_dataclass(BrowserTraceExportInput, payload)
     return asdict(export_trace(target, params))
 
 
-ROUTES: Dict[str, Dict[str, Any]] = {
+ROUTES: dict[str, dict[str, Any]] = {
     "browser.trace.start": {
         "handler": route_start,
         "input": BrowserTraceStartInput,

@@ -89,11 +89,11 @@ def register_telegram_commands(
         token: str,
         allow_chat_ids: tuple[int, ...],
         allow_chats_csv: str,
-        model_name: Optional[str],
+        model_name: str | None,
         shared_memory: bool,
         all_memories: bool,
         profile_memory: bool,
-        sessions_file: Optional[Path],
+        sessions_file: Path | None,
         no_session_persist: bool,
     ) -> None:
         """Run a Telegram bot that routes messages through Thomas."""
@@ -148,7 +148,7 @@ def register_telegram_commands(
             click.echo("Allowlisted chat ids: none (all chats accepted).")
         click.echo(
             "Shared memory mode: "
-            + (f"enabled (thread telegram:global)" if shared_memory else "disabled (per-chat thread ids, recommended)")
+            + ("enabled (thread telegram:global)" if shared_memory else "disabled (per-chat thread ids, recommended)")
         )
         click.echo(
             "Memory retrieval policy: " + ("thread episodic + global facts" if all_memories else "thread episodic only")

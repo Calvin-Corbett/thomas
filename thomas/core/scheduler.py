@@ -7,7 +7,7 @@ import random
 import re
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, Future
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -27,11 +27,11 @@ def _now_local() -> datetime:
     return datetime.now().astimezone()
 
 
-def _iso(dt: Optional[datetime]) -> Optional[str]:
+def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt else None
 
 
-def _from_iso(s: Optional[str]) -> Optional[datetime]:
+def _from_iso(s: str | None) -> datetime | None:
     if not s:
         return None
     try:
@@ -149,7 +149,7 @@ def _best_effort_emit(event_name: str, payload: dict) -> None:
 
         et = None
         if hasattr(ev, "EventType"):
-            EventType = getattr(ev, "EventType")
+            EventType = ev.EventType
             for candidate in (
                 event_name,
                 event_name.upper(),
@@ -183,7 +183,7 @@ def _best_effort_pe_set(key: str, value: Any) -> None:
 # Cron parsing (STRICT 5-field, plus user-friendly shorthands)
 # ============================================================
 
-_SHORTHANDS: Dict[str, str] = {
+_SHORTHANDS: dict[str, str] = {
     "@hourly": "0 * * * *",
     "@daily": "0 0 * * *",
     "@midnight": "0 0 * * *",
@@ -287,19 +287,19 @@ class ScheduledTask:
     updated_at: str = field(default_factory=lambda: _iso(_now_local()) or "")
 
     # Execution bookkeeping
-    last_fire_at: Optional[str] = None
-    last_scheduled_for: Optional[str] = None
-    next_run_at: Optional[str] = None
+    last_fire_at: str | None = None
+    last_scheduled_for: str | None = None
+    next_run_at: str | None = None
 
-    last_error: Optional[str] = None
+    last_error: str | None = None
 
     # Bounded run history (kept small, great for UX)
-    run_history: List[dict] = field(default_factory=list)
+    run_history: list[dict] = field(default_factory=list)
 
     def status(self) -> str:
         return "paused" if self.paused else "active"
 
-    def next_run_dt(self) -> Optional[datetime]:
+    def next_run_dt(self) -> datetime | None:
         return _from_iso(self.next_run_at)
 
 
@@ -343,7 +343,7 @@ class TaskScheduler:
 
         self._lock = threading.RLock()
         self._stop_evt = threading.Event()
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
 
         self._instance_lock = _InstanceLock(self._lock_path)
         self._instance_lock_acquired = False
@@ -353,7 +353,7 @@ class TaskScheduler:
             thread_name_prefix="TaskExec",
         )
 
-        self._tasks: Dict[str, ScheduledTask] = {}
+        self._tasks: dict[str, ScheduledTask] = {}
 
         self._load()
         self._repair_next_runs()
@@ -475,7 +475,7 @@ class TaskScheduler:
             _best_effort_emit("task_removed", {"id": task_id})
             _best_effort_pe_set(f"scheduler.task.{task_id}", None)
 
-    def list_tasks(self) -> List[dict]:
+    def list_tasks(self) -> list[dict]:
         with self._lock:
             tasks = list(self._tasks.values())
         tasks.sort(key=lambda x: x.id.lower())
@@ -546,7 +546,7 @@ class TaskScheduler:
         _best_effort_emit("task_run_now", {"id": task_id, "at": _iso(now)})
         self._submit_execution(t, scheduled_for=now)
 
-    def preview_next(self, id: str, count: int = 5) -> List[str]:
+    def preview_next(self, id: str, count: int = 5) -> list[str]:
         task_id = (id or "").strip()
         with self._lock:
             t = self._require(task_id)
@@ -561,9 +561,9 @@ class TaskScheduler:
             out.append(nxt.isoformat())
         return out
 
-    def update_task(self, id: str, cron: Optional[str] = None, task: Optional[str] = None,
-                    channel: Optional[str] = None, misfire_policy: Optional[str] = None,
-                    misfire_grace_s: Optional[int] = None, jitter_s: Optional[int] = None) -> None:
+    def update_task(self, id: str, cron: str | None = None, task: str | None = None,
+                    channel: str | None = None, misfire_policy: str | None = None,
+                    misfire_grace_s: int | None = None, jitter_s: int | None = None) -> None:
         """
         Consumer-friendly update without removing/re-adding.
         """
@@ -621,11 +621,11 @@ class TaskScheduler:
             return
 
         try:
-            with open(self._path, "r", encoding="utf-8") as f:
+            with open(self._path, encoding="utf-8") as f:
                 raw = json.load(f)
 
             items = raw.get("tasks", [])
-            tasks: Dict[str, ScheduledTask] = {}
+            tasks: dict[str, ScheduledTask] = {}
 
             for item in items:
                 try:
@@ -725,7 +725,7 @@ class TaskScheduler:
         - "skip": if occurrence is older than misfire_grace_s, skip it (advance schedule)
         """
         now = self._now()
-        fires: List[Tuple[str, datetime]] = []
+        fires: list[tuple[str, datetime]] = []
 
         with self._lock:
             for t in self._tasks.values():
@@ -869,11 +869,11 @@ class TaskScheduler:
 # Singleton
 # ============================================================
 
-_SCHED: Optional[TaskScheduler] = None
+_SCHED: TaskScheduler | None = None
 _SCHED_LOCK = threading.Lock()
 
 
-def get_scheduler(execute_fn: Optional[Callable[[str, str], None]] = None) -> TaskScheduler:
+def get_scheduler(execute_fn: Callable[[str, str], None] | None = None) -> TaskScheduler:
     """
     Singleton accessor.
 

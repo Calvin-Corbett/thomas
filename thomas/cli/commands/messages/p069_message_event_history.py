@@ -20,7 +20,6 @@ from thomas.messages.p069_message_event_history import (
     response_to_json,
 )
 
-
 COMMAND_NAME = "message-event-history"
 COMMAND_ALIASES = ["message_event_history", "event-history", "event_history", "events-history", "events_history"]
 COMMAND_HELP = "Show recorded event history for a message id."
@@ -120,7 +119,7 @@ def run(args: argparse.Namespace) -> int:
         if isinstance(e, MessageEventHistoryConfigError):
             return 3
         return 4
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError, ImportError, TypeError, json.JSONDecodeError) as e:
         if as_json:
             print(
                 json.dumps(

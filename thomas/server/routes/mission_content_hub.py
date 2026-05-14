@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from thomas.preferences.store import PreferencesStore, get_db_path
+
 from .mission_content_hub_constants import (
     _CONTENT_ACTIVE_STATUSES,
     _CONTENT_FALLBACK_PLATFORM,
@@ -41,7 +42,7 @@ def _iso_to_epoch(value: Any) -> float:
         return 0.0
 
 def _content_count_installed_skills() -> int:
-    roots: List[Path] = []
+    roots: list[Path] = []
     codex_home = str(os.environ.get("CODEX_HOME") or "").strip()
     if codex_home:
         roots.append(Path(codex_home) / "skills")
@@ -160,7 +161,7 @@ def _content_collect_platform_labels(value: Any, out: set[str], *, depth: int = 
             _content_collect_platform_labels(item, out, depth=depth + 1)
 
 
-def _content_collect_text_fragments(value: Any, out: List[str], *, depth: int = 0) -> None:
+def _content_collect_text_fragments(value: Any, out: list[str], *, depth: int = 0) -> None:
     if depth > 4 or len(out) >= 160:
         return
     if isinstance(value, str):
@@ -184,8 +185,8 @@ def _content_collect_text_fragments(value: Any, out: List[str], *, depth: int = 
             _content_collect_text_fragments(item, out, depth=depth + 1)
 
 
-def _content_job_text_blob(job_row: Dict[str, Any]) -> str:
-    parts: List[str] = []
+def _content_job_text_blob(job_row: dict[str, Any]) -> str:
+    parts: list[str] = []
     for value in (
         job_row.get("name"),
         job_row.get("kind"),
@@ -196,7 +197,7 @@ def _content_job_text_blob(job_row: Dict[str, Any]) -> str:
     return " ".join(parts)
 
 
-def _content_job_platforms(job_row: Dict[str, Any]) -> List[str]:
+def _content_job_platforms(job_row: dict[str, Any]) -> list[str]:
     labels: set[str] = set()
     payload = job_row.get("payload") if isinstance(job_row.get("payload"), dict) else {}
     result = job_row.get("result") if isinstance(job_row.get("result"), dict) else {}
@@ -220,7 +221,7 @@ def _content_job_platforms(job_row: Dict[str, Any]) -> List[str]:
     return sorted(labels, key=_content_platform_sort_key)
 
 
-def _content_job_is_related(kind: str, text_blob: str, platforms: List[str]) -> bool:
+def _content_job_is_related(kind: str, text_blob: str, platforms: list[str]) -> bool:
     low_kind = str(kind or "").strip().lower()
     if platforms:
         return True
@@ -239,7 +240,7 @@ def _trim_summary(value: Any, max_len: int = 180) -> str:
     return text[: max_len - 1].rstrip() + "…"
 
 
-def _content_job_summary(job_row: Dict[str, Any]) -> str:
+def _content_job_summary(job_row: dict[str, Any]) -> str:
     payload = job_row.get("payload") if isinstance(job_row.get("payload"), dict) else {}
     for key in ("goal", "prompt", "task", "message", "text", "summary", "topic", "title"):
         txt = str(payload.get(key) or "").strip()
@@ -249,7 +250,7 @@ def _content_job_summary(job_row: Dict[str, Any]) -> str:
     return _trim_summary(fallback.replace("_", " "), 76)
 
 
-def _content_workflow_name(job_row: Dict[str, Any]) -> str:
+def _content_workflow_name(job_row: dict[str, Any]) -> str:
     payload = job_row.get("payload") if isinstance(job_row.get("payload"), dict) else {}
     for key in ("workflow", "pipeline", "template"):
         value = str(payload.get(key) or "").strip()
@@ -298,7 +299,7 @@ def _content_workflow_trigger(schedule_types: set[str]) -> str:
 
 
 def _build_content_hub_payload(
-    jobs: List[Dict[str, Any]],
+    jobs: list[dict[str, Any]],
     *,
     approvals_pending: int = 0,
     sessions_active: int = 0,
@@ -306,12 +307,12 @@ def _build_content_hub_payload(
     skills_installed: int = 0,
     api_keys_configured: int = 0,
     audit_events_last_24h: int = 0,
-) -> Dict[str, Any]:
-    platform_map: Dict[str, Dict[str, Any]] = {}
-    workflow_groups: Dict[str, Dict[str, Any]] = {}
-    scheduler_rows: List[Dict[str, Any]] = []
+) -> dict[str, Any]:
+    platform_map: dict[str, dict[str, Any]] = {}
+    workflow_groups: dict[str, dict[str, Any]] = {}
+    scheduler_rows: list[dict[str, Any]] = []
 
-    def ensure_platform(label: str) -> Dict[str, Any]:
+    def ensure_platform(label: str) -> dict[str, Any]:
         name = str(label or "").strip() or _CONTENT_FALLBACK_PLATFORM
         row = platform_map.get(name)
         if row is None:
@@ -451,7 +452,7 @@ def _build_content_hub_payload(
         )
     )
 
-    workflow_rows: List[Dict[str, Any]] = []
+    workflow_rows: list[dict[str, Any]] = []
     for wf in workflow_groups.values():
         platforms = sorted(wf.get("platforms") or set(), key=_content_platform_sort_key)
         platform_count = len([p for p in platforms if p != _CONTENT_FALLBACK_PLATFORM]) or len(platforms)
@@ -664,7 +665,7 @@ def _build_content_hub_payload(
         },
     ]
 
-    checklist_rows: List[Dict[str, Any]] = []
+    checklist_rows: list[dict[str, Any]] = []
     for template in _CONTENT_HUB_CHECKLIST_TEMPLATE:
         cid = str(template.get("id") or "").strip()
         status = "planned"

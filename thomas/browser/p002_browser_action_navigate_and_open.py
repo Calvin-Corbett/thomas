@@ -37,11 +37,11 @@ class NavigateAndOpenRequest:
 
     url: str
     action: NavigateOpenAction = "navigate"
-    timeout_ms: Optional[int] = None
-    profile: Optional[str] = None
+    timeout_ms: int | None = None
+    profile: str | None = None
 
     @staticmethod
-    def from_mapping(data: Mapping[str, Any]) -> "NavigateAndOpenRequest":
+    def from_mapping(data: Mapping[str, Any]) -> NavigateAndOpenRequest:
         """Parse a request from a mapping.
 
         Supported aliases (to keep callers flexible):
@@ -94,7 +94,7 @@ class NavigateAndOpenResult:
     ok: bool
     action: NavigateOpenAction
     url: str
-    tab_id: Optional[str] = None
+    tab_id: str | None = None
     raw: Any = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -112,7 +112,7 @@ class NavigateAndOpenError(RuntimeError):
 
     code: str = "browser.navigate_open.error"
 
-    def __init__(self, message: str, *, details: Optional[dict[str, Any]] = None):
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None):
         super().__init__(message)
         self.details = details or {}
 
@@ -251,7 +251,7 @@ def _coerce_action(value: Any) -> NavigateOpenAction:
     return lowered  # type: ignore[return-value]
 
 
-def _coerce_timeout_ms(value: Any) -> Optional[int]:
+def _coerce_timeout_ms(value: Any) -> int | None:
     if value is None:
         return None
     if isinstance(value, bool):
@@ -272,7 +272,7 @@ def _coerce_timeout_ms(value: Any) -> Optional[int]:
     return value
 
 
-def _coerce_optional_str(value: Any, *, field_name: str) -> Optional[str]:
+def _coerce_optional_str(value: Any, *, field_name: str) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
@@ -528,7 +528,7 @@ async def _maybe_await(value: Any) -> Any:
     return value
 
 
-def _extract_tab_id(raw: Any) -> Optional[str]:
+def _extract_tab_id(raw: Any) -> str | None:
     """Best-effort extraction of a tab/page identifier from tool responses."""
 
     if raw is None:

@@ -83,7 +83,7 @@ def _get(obj: Any, dotted: str) -> Any:
     return cur
 
 
-def extract_token_usage(any_obj: Any) -> Tuple[int, int]:
+def extract_token_usage(any_obj: Any) -> tuple[int, int]:
     """Return (prompt_tokens, completion_tokens) from common provider response shapes.
 
     - OpenAI: response.usage.prompt_tokens / completion_tokens
@@ -214,7 +214,7 @@ class SpendSubscriber:
             self._cv.notify()
             return True
 
-    def get(self, timeout_s: float = 15.0) -> Optional[dict]:
+    def get(self, timeout_s: float = 15.0) -> dict | None:
         with self._cv:
             if not self._alive:
                 return None
@@ -244,7 +244,7 @@ class CostTracker:
       4) FALLBACK_UNKNOWN
     """
 
-    def __init__(self, spend_path: Optional[Path] = None, toml_path: Optional[Path] = None) -> None:
+    def __init__(self, spend_path: Path | None = None, toml_path: Path | None = None) -> None:
         self._lock = threading.Lock()
 
         repo_root = Path(__file__).resolve().parents[2]
@@ -647,7 +647,7 @@ class CostTracker:
             self._file_mtime_ns = mtime_ns
 
 
-_cost_tracker_singleton: Optional[CostTracker] = None
+_cost_tracker_singleton: CostTracker | None = None
 _cost_tracker_lock = threading.Lock()
 
 

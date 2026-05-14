@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import time
-import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
@@ -17,14 +17,14 @@ class StoredIntake:
     created_at: float
     source: str
     content_type: str
-    text: Optional[str]
-    blob_path: Optional[str]
+    text: str | None
+    blob_path: str | None
     blob_bytes: int
-    ocr_text: Optional[str]
+    ocr_text: str | None
     meta_json: str
     content_hash: str
-    idempotency_key: Optional[str]
-    chat_id: Optional[str]
+    idempotency_key: str | None
+    chat_id: str | None
 
 
 class IntakeStore:
@@ -35,7 +35,7 @@ class IntakeStore:
       - blobs/<item_id>.bin
     """
 
-    def __init__(self, cfg: Optional[IntakeStorageConfig] = None):
+    def __init__(self, cfg: IntakeStorageConfig | None = None):
         self.cfg = cfg or IntakeStorageConfig.from_env()
         self.base_dir = self.cfg.base_dir
         self.db_path = self.base_dir / "intake.db"
@@ -82,7 +82,7 @@ class IntakeStore:
             con.close()
 
     @staticmethod
-    def compute_hash(content_type: str, text: Optional[str], blob: Optional[bytes], ocr_text: Optional[str]) -> str:
+    def compute_hash(content_type: str, text: str | None, blob: bytes | None, ocr_text: str | None) -> str:
         h = hashlib.sha256()
         h.update(content_type.encode("utf-8"))
         if text:
@@ -96,7 +96,7 @@ class IntakeStore:
             h.update(ocr_text.encode("utf-8", errors="ignore"))
         return h.hexdigest()
 
-    def find_by_idempotency_or_hash(self, idempotency_key: Optional[str], content_hash: str, window_s: float) -> Optional[StoredIntake]:
+    def find_by_idempotency_or_hash(self, idempotency_key: str | None, content_hash: str, window_s: float) -> StoredIntake | None:
         con = self._connect()
         try:
             if idempotency_key:
@@ -119,16 +119,16 @@ class IntakeStore:
         item_id: str,
         source: str,
         content_type: str,
-        text: Optional[str],
-        blob: Optional[bytes],
-        ocr_text: Optional[str],
-        meta: Dict[str, Any],
+        text: str | None,
+        blob: bytes | None,
+        ocr_text: str | None,
+        meta: dict[str, Any],
         content_hash: str,
-        idempotency_key: Optional[str],
-        chat_id: Optional[str],
+        idempotency_key: str | None,
+        chat_id: str | None,
     ) -> StoredIntake:
         created_at = time.time()
-        blob_path: Optional[str] = None
+        blob_path: str | None = None
         blob_bytes = 0
         if blob is not None:
             blob_path = str(self.blob_dir / f"{item_id}.bin")
@@ -165,7 +165,7 @@ class IntakeStore:
             chat_id=chat_id,
         )
 
-    def get(self, item_id: str) -> Optional[StoredIntake]:
+    def get(self, item_id: str) -> StoredIntake | None:
         con = self._connect()
         try:
             row = con.execute("SELECT * FROM intake WHERE item_id = ? LIMIT 1", (item_id,)).fetchone()
@@ -173,7 +173,7 @@ class IntakeStore:
         finally:
             con.close()
 
-    def list_recent(self, limit: int = 50, chat_id: Optional[str] = None) -> List[StoredIntake]:
+    def list_recent(self, limit: int = 50, chat_id: str | None = None) -> list[StoredIntake]:
         con = self._connect()
         try:
             if chat_id:
@@ -187,7 +187,7 @@ class IntakeStore:
         finally:
             con.close()
 
-    def read_blob(self, item_id: str) -> Optional[bytes]:
+    def read_blob(self, item_id: str) -> bytes | None:
         it = self.get(item_id)
         if not it or not it.blob_path:
             return None

@@ -147,7 +147,7 @@ def doctor_command() -> None:
             ok_count += 1
         else:
             # Extract failure count from pytest output
-            click.echo(f"  Fitness tests: FAIL")
+            click.echo("  Fitness tests: FAIL")
             for line in result.stdout.splitlines():
                 if "failed" in line or "error" in line:
                     click.echo(f"                 {line.strip()}")

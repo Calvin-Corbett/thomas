@@ -15,13 +15,13 @@ from typing import Any
 
 from aiohttp import web
 
+from thomas.agent.loop import AgentLoop
 from thomas.agent.task_definition import (
     augment_prompt_with_task_definition,
     derive_task_definition,
     evaluate_task_result,
     should_activate_task_definition,
 )
-from thomas.agent.loop import AgentLoop
 from thomas.server.app_keys import (
     APP_ACTION_AUDIT,
     APP_GUARDED_TOOL_RUNNER,

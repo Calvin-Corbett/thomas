@@ -114,7 +114,7 @@ class CycleResult:
             self.cost_efficiency * 0.15
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "cycle": self.cycle,
             "timestamp": self.timestamp,
@@ -133,7 +133,7 @@ class CycleResult:
 # Individual test functions
 # ---------------------------------------------------------------------------
 
-def _test_prompt_injection(_executor_fn: Optional[Callable]) -> Tuple[float, str]:
+def _test_prompt_injection(_executor_fn: Callable | None) -> tuple[float, str]:
     """
     Verify known jailbreak probes are caught by check_prompt_suspicious.
     Score: (caught / total) * 100.
@@ -169,7 +169,7 @@ def _test_prompt_injection(_executor_fn: Optional[Callable]) -> Tuple[float, str
     return score, notes
 
 
-def _test_persistence_survival() -> Tuple[float, str]:
+def _test_persistence_survival() -> tuple[float, str]:
     """Round-trip a fact through persistence. Score 100=pass, 0=fail.
 
     STATUS: real but trivial (2026-03-18).
@@ -193,7 +193,7 @@ def _test_persistence_survival() -> Tuple[float, str]:
         return 0.0, f"Error: {e}"
 
 
-def _test_autonomy_accuracy(executor_fn: Optional[Callable]) -> Tuple[float, str]:
+def _test_autonomy_accuracy(executor_fn: Callable | None) -> tuple[float, str]:
     """Submit a simple goal and check for non-empty result. 100=pass, 50=skip, 0=fail.
 
     STATUS: NOT RUNNING (2026-03-18).
@@ -224,7 +224,7 @@ def _test_autonomy_accuracy(executor_fn: Optional[Callable]) -> Tuple[float, str
         return 0.0, f"Raised: {e}"
 
 
-def _test_cost_efficiency(history: List[CycleResult]) -> Tuple[float, str]:
+def _test_cost_efficiency(history: list[CycleResult]) -> tuple[float, str]:
     """Proxy: success rate of recent cycles. Real token tracking = future work.
 
     STATUS: PLACEHOLDER / CIRCULAR (2026-03-18).
@@ -253,14 +253,14 @@ class TestingSuite:
 
     def __init__(self) -> None:
         self._running = False
-        self._thread: Optional[threading.Thread] = None
-        self._executor_fn: Optional[Callable] = None
-        self._notify_fn: Optional[Callable] = None
+        self._thread: threading.Thread | None = None
+        self._executor_fn: Callable | None = None
+        self._notify_fn: Callable | None = None
         self._last_user_ts: float = time.monotonic()
         self._last_cycle_ts: float = 0.0
         self._cycle_count: int = 0
         self._session_cycles: int = 0
-        self._results: List[CycleResult] = []
+        self._results: list[CycleResult] = []
         self._daily_spend: float = 0.0
         self._today: str = ""
         self._lock = threading.Lock()
@@ -271,8 +271,8 @@ class TestingSuite:
 
     def start(
         self,
-        executor_fn: Optional[Callable] = None,
-        notify_fn: Optional[Callable] = None,
+        executor_fn: Callable | None = None,
+        notify_fn: Callable | None = None,
     ) -> None:
         self._executor_fn = executor_fn
         self._notify_fn = notify_fn or _log_notify
@@ -389,7 +389,7 @@ class TestingSuite:
         rp = Path(f"thomas_test_report_{today}.md")
         lines = [
             f"# Thomas Test Report — {today}",
-            f"",
+            "",
             f"**Cycles:** {len(results)} | **Composite avg:** {composite_avg:.1f}",
             "",
             "## Scores",
@@ -472,7 +472,7 @@ def _log_notify(msg: str) -> None:
 # Singleton
 # ---------------------------------------------------------------------------
 
-_suite: Optional[TestingSuite] = None
+_suite: TestingSuite | None = None
 _suite_lock = threading.Lock()
 
 

@@ -14,7 +14,7 @@ import json
 import logging
 from typing import Any, Dict
 
-from thomas.observability.file_audit import list_file_changes, get_run_summary
+from thomas.observability.file_audit import get_run_summary, list_file_changes
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ async def handle_audit_files(request: Any) -> tuple[bytes, int, dict]:
         if isinstance(qs, bytes):
             qs = qs.decode("utf-8", errors="replace")
 
-        params: Dict[str, str] = {}
+        params: dict[str, str] = {}
         if qs:
             for part in qs.split("&"):
                 if "=" in part:

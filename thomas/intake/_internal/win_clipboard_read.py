@@ -10,7 +10,7 @@ user32 = ctypes.windll.user32  # type: ignore[attr-defined]
 kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
 
 
-def read_clipboard_text() -> Optional[str]:
+def read_clipboard_text() -> str | None:
     """Read Unicode text directly from Windows clipboard (no extra deps)."""
     if not user32.OpenClipboard(None):
         return None

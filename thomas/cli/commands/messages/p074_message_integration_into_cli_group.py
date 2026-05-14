@@ -41,13 +41,13 @@ def _exit_code_for_error(err: MessageIntegrationError) -> int:
     return 1
 
 
-def _render_json(payload: Dict[str, Any]) -> str:
+def _render_json(payload: dict[str, Any]) -> str:
     # Stable key ordering helps with diffs and scripting.
     return json.dumps(payload, sort_keys=True)
 
 
-def _parse_metadata(pairs: List[str]) -> Dict[str, str]:
-    metadata: Dict[str, str] = {}
+def _parse_metadata(pairs: list[str]) -> dict[str, str]:
+    metadata: dict[str, str] = {}
     for item in pairs:
         if "=" not in item:
             raise InvalidMessageInputError("Metadata must be key=value.", details={"value": item})
@@ -63,18 +63,18 @@ def _parse_metadata(pairs: List[str]) -> Dict[str, str]:
 def send_command(
     text: str = typer.Argument(..., help="Message text."),
     channel: str = typer.Option(..., "--channel", "-c", help="Destination channel."),
-    meta: List[str] = typer.Option([], "--meta", help="Optional metadata as key=value (repeatable)."),
-    message_id: Optional[str] = typer.Option(
+    meta: list[str] = typer.Option([], "--meta", help="Optional metadata as key=value (repeatable)."),
+    message_id: str | None = typer.Option(
         None,
         "--id",
         help="Optional explicit message id (useful for idempotency in scripts).",
     ),
-    webhook_url: Optional[str] = typer.Option(
+    webhook_url: str | None = typer.Option(
         None,
         "--webhook-url",
         help="Override the configured webhook URL.",
     ),
-    timeout_seconds: Optional[float] = typer.Option(
+    timeout_seconds: float | None = typer.Option(
         None,
         "--timeout",
         help="HTTP timeout in seconds.",

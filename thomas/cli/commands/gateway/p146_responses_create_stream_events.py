@@ -22,7 +22,6 @@ from urllib.request import Request, urlopen
 
 from thomas.server.routes.gateway import p146_responses_create_stream_events as impl
 
-
 COMMAND_NAME = "p146-responses-create-stream-events"
 HELP = "Responses create stream events (P146)"
 
@@ -41,7 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _run_local(model: str, input_text: str) -> List[Dict[str, Any]]:
+def _run_local(model: str, input_text: str) -> list[dict[str, Any]]:
     payload = {"model": model, "input": input_text, "stream": True}
     parsed = impl.parse_create_response_request(payload)
     events = impl.build_stream_events(
@@ -54,7 +53,7 @@ def _run_local(model: str, input_text: str) -> List[Dict[str, Any]]:
     return events
 
 
-def _run_remote(base_url: str, model: str, input_text: str, timeout_s: float) -> List[Dict[str, Any]]:
+def _run_remote(base_url: str, model: str, input_text: str, timeout_s: float) -> list[dict[str, Any]]:
     url = base_url.rstrip("/") + "/v1/responses?format=json"
     payload = json.dumps({"model": model, "input": input_text, "stream": True}).encode("utf-8")
 
@@ -71,7 +70,7 @@ def _run_remote(base_url: str, model: str, input_text: str, timeout_s: float) ->
         return events
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 

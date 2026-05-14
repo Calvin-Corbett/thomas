@@ -21,8 +21,8 @@ from typing import Any, Sequence
 
 from thomas.server.routes.gateway.p136_gateway_auth_policy_enforcement import (
     GatewayAuthPolicy,
-    GatewayAuthPolicyError,
     GatewayAuthPolicyConfigError,
+    GatewayAuthPolicyError,
     GatewayAuthPolicyExternalError,
     constant_time_any_match,
     load_gateway_auth_policy,

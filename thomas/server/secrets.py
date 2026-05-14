@@ -15,8 +15,8 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -36,9 +36,9 @@ class SecretStore:
     def __init__(self, root_dir: Path, *, filename: str = "secrets.json") -> None:
         self._root_dir = Path(root_dir)
         self._path = self._root_dir / filename
-        self._keys: Dict[str, str] = {}
+        self._keys: dict[str, str] = {}
         self._persisted: set[str] = set()
-        self._meta: Dict[str, dict[str, object]] = {}
+        self._meta: dict[str, dict[str, object]] = {}
         self._storage = self._detect_storage()
         self._load()
 
@@ -56,7 +56,7 @@ class SecretStore:
     def is_persisted(self, profile: str) -> bool:
         return profile in self._persisted
 
-    def get(self, profile: str) -> Optional[str]:
+    def get(self, profile: str) -> str | None:
         v = self._keys.get(profile)
         return v if v else None
 

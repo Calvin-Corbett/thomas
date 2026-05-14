@@ -18,10 +18,10 @@ from thomas.server.routes.gateway.p128_gateway_install_command import (
 @dataclass(frozen=True, slots=True)
 class GatewayInstallCliResult:
     ok: bool
-    result: Optional[GatewayInstallCommandResult] = None
-    error: Optional[Dict[str, Any]] = None
+    result: GatewayInstallCommandResult | None = None
+    error: dict[str, Any] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         if self.ok and self.result is not None:
             return {"ok": True, "result": dataclasses.asdict(self.result)}
         return {"ok": False, "error": self.error or {"message": "unknown error"}}
@@ -30,8 +30,8 @@ class GatewayInstallCliResult:
 def run_gateway_install(
     *,
     source: str,
-    name: Optional[str] = None,
-    install_dir: Optional[str] = None,
+    name: str | None = None,
+    install_dir: str | None = None,
     overwrite: bool = False,
     dry_run: bool = False,
 ) -> GatewayInstallCliResult:
@@ -72,7 +72,7 @@ def render_cli_output(cli_result: GatewayInstallCliResult, *, as_json: bool) -> 
     return f"[ERROR:{code}] {msg}"
 
 
-def build_arg_parser(subparsers: Optional[argparse._SubParsersAction] = None) -> argparse.ArgumentParser:
+def build_arg_parser(subparsers: argparse._SubParsersAction | None = None) -> argparse.ArgumentParser:
     """Build an argparse parser for integration with Thomas' CLI."""
 
     if subparsers is None:
@@ -94,7 +94,7 @@ def build_arg_parser(subparsers: Optional[argparse._SubParsersAction] = None) ->
     return parser
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
 

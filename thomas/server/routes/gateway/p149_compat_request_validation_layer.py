@@ -40,16 +40,16 @@ class CompatValidationError(Exception):
 class CompatValidationResultDict(TypedDict):
     ok: bool
     kind: str
-    normalized: Dict[str, Any]
-    errors: List[CompatValidationErrorDict]
+    normalized: dict[str, Any]
+    errors: list[CompatValidationErrorDict]
 
 
 @dataclass(frozen=True)
 class CompatValidationResult:
     ok: bool
     kind: str
-    normalized: Dict[str, Any]
-    errors: Tuple[CompatValidationError, ...]
+    normalized: dict[str, Any]
+    errors: tuple[CompatValidationError, ...]
 
     def to_dict(self) -> CompatValidationResultDict:
         return {
@@ -72,10 +72,10 @@ def _is_nonempty_str(v: Any) -> bool:
     return isinstance(v, str) and bool(v.strip())
 
 
-def _as_dict(payload: Any) -> Union[Dict[str, Any], CompatValidationError]:
+def _as_dict(payload: Any) -> Union[dict[str, Any], CompatValidationError]:
     if not isinstance(payload, dict):
         return _err("invalid_type", "Payload must be a JSON object.", path="$")
-    return cast(Dict[str, Any], payload)
+    return cast(dict[str, Any], payload)
 
 
 def _optional_number(payload: Mapping[str, Any], key: str, *, path: str) -> Union[None, float, CompatValidationError]:
@@ -102,9 +102,9 @@ def _optional_bool(payload: Mapping[str, Any], key: str, *, path: str) -> Union[
 # Validators (conservative, deterministic)
 # ----------------------------------------------------------------------------
 
-def _validate_openai_chat_completions(payload: Dict[str, Any]) -> CompatValidationResult:
-    errors: List[CompatValidationError] = []
-    normalized: Dict[str, Any] = {}
+def _validate_openai_chat_completions(payload: dict[str, Any]) -> CompatValidationResult:
+    errors: list[CompatValidationError] = []
+    normalized: dict[str, Any] = {}
 
     model = payload.get("model")
     if not _is_nonempty_str(model):
@@ -130,7 +130,7 @@ def _validate_openai_chat_completions(payload: Dict[str, Any]) -> CompatValidati
             )
         )
     else:
-        norm_msgs: List[Dict[str, Any]] = []
+        norm_msgs: list[dict[str, Any]] = []
         for i, m in enumerate(messages):
             if not isinstance(m, dict):
                 errors.append(_err("invalid_type", "Each message must be an object.", path=f"$.messages[{i}]"))
@@ -185,9 +185,9 @@ def _validate_openai_chat_completions(payload: Dict[str, Any]) -> CompatValidati
     return CompatValidationResult(ok=ok, kind="openai_chat_completions", normalized=normalized, errors=tuple(errors))
 
 
-def _validate_responses_create(payload: Dict[str, Any]) -> CompatValidationResult:
-    errors: List[CompatValidationError] = []
-    normalized: Dict[str, Any] = {}
+def _validate_responses_create(payload: dict[str, Any]) -> CompatValidationResult:
+    errors: list[CompatValidationError] = []
+    normalized: dict[str, Any] = {}
 
     model = payload.get("model")
     if not _is_nonempty_str(model):
@@ -315,7 +315,7 @@ def bind_routes(app: web.Application) -> None:
     app.router.add_post(ROUTE_PATH, handle_compat_validate)
 
 
-def json_schema() -> Dict[str, Any]:
+def json_schema() -> dict[str, Any]:
     """Stable JSON schema for the validation envelope expected by /gateway/compat/validate."""
 
     return {

@@ -37,7 +37,7 @@ class ToolResultMapRequest(TypedDict, total=False):
 class ToolResultMapResponse(TypedDict):
     """Output contract for the mapped tool output object."""
 
-    tool_output: Dict[str, Any]
+    tool_output: dict[str, Any]
 
 
 class DeterministicMappingError(ValueError):
@@ -49,10 +49,10 @@ class DeterministicMappingError(ValueError):
         self.message = message
 
 
-def _require_object(v: Any) -> Dict[str, Any]:
+def _require_object(v: Any) -> dict[str, Any]:
     if not isinstance(v, dict):
         raise DeterministicMappingError("invalid_input", "request must be a JSON object")
-    return cast(Dict[str, Any], v)
+    return cast(dict[str, Any], v)
 
 
 def _require_nonempty_str(field: str, v: Any) -> str:
@@ -61,7 +61,7 @@ def _require_nonempty_str(field: str, v: Any) -> str:
     return v.strip()
 
 
-def _ensure_optional_nonempty_str(field: str, v: Any) -> Optional[str]:
+def _ensure_optional_nonempty_str(field: str, v: Any) -> str | None:
     if v is None:
         return None
     if not isinstance(v, str) or not v.strip():
@@ -117,7 +117,7 @@ def map_tool_result_to_responses_tool_output(req: ToolResultMapRequest) -> ToolR
         error_code = _require_nonempty_str("error_code", obj.get("error_code"))
         error_message = _require_nonempty_str("error_message", obj.get("error_message"))
 
-        tool_output: Dict[str, Any] = {
+        tool_output: dict[str, Any] = {
             "type": "tool_output",
             "tool_call_id": tool_call_id,
             "status": "failed",
@@ -153,7 +153,7 @@ def map_tool_result_to_responses_tool_output(req: ToolResultMapRequest) -> ToolR
     return {"tool_output": tool_output}
 
 
-def _error_payload(code: str, message: str) -> Dict[str, Any]:
+def _error_payload(code: str, message: str) -> dict[str, Any]:
     return {"ok": False, "error": {"code": code, "message": message}}
 
 
@@ -171,7 +171,7 @@ async def handle_tool_result_map(request):
     except Exception:
         return _aiohttp_json(500, _error_payload("internal_error", "unexpected error while mapping tool result"))
 
-    payload: Dict[str, Any] = {"ok": True}
+    payload: dict[str, Any] = {"ok": True}
     payload.update(mapped)
     return _aiohttp_json(200, payload)
 
@@ -185,7 +185,7 @@ def get_aiohttp_routes():
     return [web.post("/gateway/responses/tool-result-map", handle_tool_result_map)]
 
 
-def _aiohttp_json(status: int, payload: Dict[str, Any]):
+def _aiohttp_json(status: int, payload: dict[str, Any]):
     from aiohttp import web  # type: ignore
 
     return web.json_response(payload, status=status)

@@ -28,8 +28,8 @@ _UI_REVIEW_PREFIXES = (
 )
 
 
-def collect_changed_paths(root: Path) -> List[str]:
-    rows: List[str] = []
+def collect_changed_paths(root: Path) -> list[str]:
+    rows: list[str] = []
     commands = [
         ["git", "-C", str(root), "diff", "--name-only"],
         ["git", "-C", str(root), "diff", "--name-only", "--cached"],
@@ -58,9 +58,9 @@ def is_ui_review_path(rel_path: str) -> bool:
     return suffix in _UI_REVIEW_EXTS
 
 
-def intent_keywords(text: str) -> List[str]:
+def intent_keywords(text: str) -> list[str]:
     words = [word.lower() for word in _WORD_RE.findall(str(text or ""))]
-    out: List[str] = []
+    out: list[str] = []
     seen: set[str] = set()
     for word in words:
         if len(word) < 4 or word in _INTENT_STOPWORDS or word in seen:
@@ -75,10 +75,10 @@ def review_ui_edits(
     root: Path,
     read_text: Callable[[Path], str],
     intent: str = "",
-    changed_paths: Optional[Iterable[str]] = None,
+    changed_paths: Iterable[str] | None = None,
     strict: bool = True,
     inferred_intent: str = "",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     raw_paths = list(changed_paths or collect_changed_paths(root))
     changed = sorted({str(path or "").replace("\\", "/").strip() for path in raw_paths if str(path or "").strip()})
     ui_paths = [path for path in changed if is_ui_review_path(path)]
@@ -95,8 +95,8 @@ def review_ui_edits(
     intent_text = str(intent or "").strip() or str(inferred_intent or "").strip()
     keys = intent_keywords(intent_text)
 
-    combined_text_chunks: List[str] = []
-    issues: List[Dict[str, Any]] = []
+    combined_text_chunks: list[str] = []
+    issues: list[dict[str, Any]] = []
     css_changed_count = 0
     animation_without_reduced_motion = 0
     interactive_without_focus = 0
@@ -145,8 +145,8 @@ def review_ui_edits(
         )
 
     corpus = " ".join(combined_text_chunks).lower()
-    matched_keywords: List[str] = []
-    missing_keywords: List[str] = []
+    matched_keywords: list[str] = []
+    missing_keywords: list[str] = []
     if keys:
         for key in keys:
             if key in corpus:

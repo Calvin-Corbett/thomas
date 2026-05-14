@@ -32,7 +32,6 @@ from thomas.messages.p072_message_channel_specific_route_resolver import (
     route_resolution_json_schema,
 )
 
-
 COMMAND_NAME = "messages.resolve-route"
 
 

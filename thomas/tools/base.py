@@ -8,12 +8,11 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-
 _INT_RE = re.compile(r"^[+-]?\d+$")
 _FLOAT_RE = re.compile(r"^[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$")
 
 
-def _schema_type(schema: Dict[str, Any]) -> Optional[str]:
+def _schema_type(schema: dict[str, Any]) -> str | None:
     raw = schema.get("type")
     if isinstance(raw, str):
         return raw
@@ -27,7 +26,7 @@ def _schema_type(schema: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def _allows_null(schema: Dict[str, Any]) -> bool:
+def _allows_null(schema: dict[str, Any]) -> bool:
     raw = schema.get("type")
     if raw == "null":
         return True
@@ -36,7 +35,7 @@ def _allows_null(schema: Dict[str, Any]) -> bool:
     return False
 
 
-def _coerce_integer(value: Any) -> Tuple[Any, Optional[str]]:
+def _coerce_integer(value: Any) -> tuple[Any, str | None]:
     if isinstance(value, bool):
         return value, "expected integer, got boolean"
     if isinstance(value, int):
@@ -56,7 +55,7 @@ def _coerce_integer(value: Any) -> Tuple[Any, Optional[str]]:
     return value, f"expected integer, got {type(value).__name__}"
 
 
-def _coerce_number(value: Any) -> Tuple[Any, Optional[str]]:
+def _coerce_number(value: Any) -> tuple[Any, str | None]:
     if isinstance(value, bool):
         return value, "expected number, got boolean"
     if isinstance(value, (int, float)):
@@ -72,7 +71,7 @@ def _coerce_number(value: Any) -> Tuple[Any, Optional[str]]:
     return value, f"expected number, got {type(value).__name__}"
 
 
-def _coerce_boolean(value: Any) -> Tuple[Any, Optional[str]]:
+def _coerce_boolean(value: Any) -> tuple[Any, str | None]:
     if isinstance(value, bool):
         return value, None
     if isinstance(value, (int, float)) and not isinstance(value, bool):
@@ -89,7 +88,7 @@ def _coerce_boolean(value: Any) -> Tuple[Any, Optional[str]]:
     return value, f"expected boolean, got {type(value).__name__}"
 
 
-def _coerce_string(value: Any) -> Tuple[Any, Optional[str]]:
+def _coerce_string(value: Any) -> tuple[Any, str | None]:
     if isinstance(value, str):
         return value, None
     if isinstance(value, (int, float, bool)):
@@ -97,8 +96,8 @@ def _coerce_string(value: Any) -> Tuple[Any, Optional[str]]:
     return value, f"expected string, got {type(value).__name__}"
 
 
-def _coerce_with_schema(value: Any, schema: Dict[str, Any], path: str) -> Tuple[Any, List[str]]:
-    errors: List[str] = []
+def _coerce_with_schema(value: Any, schema: dict[str, Any], path: str) -> tuple[Any, list[str]]:
+    errors: list[str] = []
     if value is None:
         if _allows_null(schema):
             return None, []
@@ -135,7 +134,7 @@ def _coerce_with_schema(value: Any, schema: Dict[str, Any], path: str) -> Tuple[
         item_schema = schema.get("items")
         if not isinstance(item_schema, dict):
             return value, []
-        out: List[Any] = []
+        out: list[Any] = []
         for idx, item in enumerate(value):
             coerced_item, item_errs = _coerce_with_schema(item, item_schema, f"{path}[{idx}]")
             out.append(coerced_item)
@@ -171,7 +170,7 @@ def _coerce_with_schema(value: Any, schema: Dict[str, Any], path: str) -> Tuple[
     return value, []
 
 
-def _normalize_args(args: Any, schema: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], List[str]]:
+def _normalize_args(args: Any, schema: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
     if args is None:
         raw_args: Any = {}
     else:
@@ -192,7 +191,7 @@ class ToolResult:
 
     ok: bool
     data: Any = None
-    error: Optional[str] = None
+    error: str | None = None
     duration_ms: float = 0.0
 
     def to_content(self, max_len: int = 50_000) -> str:
@@ -214,9 +213,9 @@ class ToolSpec:
 
     name: str
     description: str
-    parameters: Dict[str, Any]
+    parameters: dict[str, Any]
 
-    def to_openai(self) -> Dict[str, Any]:
+    def to_openai(self) -> dict[str, Any]:
         return {
             "type": "function",
             "function": {
@@ -236,9 +235,9 @@ class Tool:
     name: str = ""
     category: str = "general"
     description: str = ""
-    parameters: Dict[str, Any] = {}
+    parameters: dict[str, Any] = {}
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         raise NotImplementedError
 
     def get_spec(self) -> ToolSpec:
@@ -248,7 +247,7 @@ class Tool:
             parameters=self.parameters,
         )
 
-    async def safe_execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def safe_execute(self, args: dict[str, Any]) -> ToolResult:
         """Execute with error handling and timing."""
         start = time.monotonic()
         try:

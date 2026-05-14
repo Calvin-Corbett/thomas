@@ -42,8 +42,8 @@ class GatewayUsageCostQuery:
 
     start_date: date
     end_date: date
-    project: Optional[str] = None
-    model: Optional[str] = None
+    project: str | None = None
+    model: str | None = None
 
 
 @dataclass(frozen=True)
@@ -71,7 +71,7 @@ class GatewayUsageCostError(Exception):
     code: str
     message: str
     http_status: int = 400
-    details: Optional[Mapping[str, Any]] = None
+    details: Mapping[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -147,16 +147,16 @@ def parse_usage_cost_query(payload: Mapping[str, Any]) -> GatewayUsageCostQuery:
     return GatewayUsageCostQuery(
         start_date=start_d,
         end_date=end_d,
-        project=cast(Optional[str], project),
-        model=cast(Optional[str], model),
+        project=cast(str | None, project),
+        model=cast(str | None, model),
     )
 
 
 def _resolve_gateway_config(
     *,
-    app: Optional[Mapping[str, Any]] = None,
-    gateway_url: Optional[str] = None,
-    gateway_api_key: Optional[str] = None,
+    app: Mapping[str, Any] | None = None,
+    gateway_url: str | None = None,
+    gateway_api_key: str | None = None,
 ) -> tuple[str, str]:
     """Resolve gateway URL + API key.
 
@@ -233,7 +233,7 @@ def _resolve_gateway_config(
     return url, key
 
 
-def _coerce_int(value: Any) -> Optional[int]:
+def _coerce_int(value: Any) -> int | None:
     if value is None:
         return None
     if isinstance(value, bool):
@@ -250,7 +250,7 @@ def _coerce_int(value: Any) -> Optional[int]:
     return None
 
 
-def _coerce_float(value: Any) -> Optional[float]:
+def _coerce_float(value: Any) -> float | None:
     if value is None:
         return None
     if isinstance(value, bool):
@@ -459,10 +459,10 @@ async def _fetch_gateway_usage_cost(
 async def run_gateway_usage_cost(
     *,
     query: GatewayUsageCostQuery,
-    app: Optional[Mapping[str, Any]] = None,
-    gateway_url: Optional[str] = None,
-    gateway_api_key: Optional[str] = None,
-    timeout_s: Optional[float] = None,
+    app: Mapping[str, Any] | None = None,
+    gateway_url: str | None = None,
+    gateway_api_key: str | None = None,
+    timeout_s: float | None = None,
 ) -> GatewayUsageCostReport:
     """Execute the command (shared by server + CLI)."""
 

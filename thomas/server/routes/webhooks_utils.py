@@ -41,7 +41,7 @@ def file_lock(lock_path: Path) -> Iterator[None]:
             pass
 
 
-def emit_webhook_event(name: str, payload: Dict[str, Any]) -> None:
+def emit_webhook_event(name: str, payload: dict[str, Any]) -> None:
     """Best-effort hook into `thomas.core.events` without strict API coupling."""
     try:
         from thomas.core import events as events_mod  # type: ignore

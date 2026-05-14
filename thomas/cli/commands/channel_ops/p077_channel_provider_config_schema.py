@@ -13,7 +13,6 @@ It exposes a `register(target)` helper that can attach the command to:
 
 from typing import Any
 
-
 COMMAND_NAME = "provider-config-schema"
 
 

@@ -46,15 +46,15 @@ def register(app: typer.Typer) -> None:
         action: str = typer.Option(..., "--action", help="kick or ban"),
         channel_id: str = typer.Option(..., "--channel-id", help="Channel / room identifier"),
         member_id: str = typer.Option(..., "--member-id", help="Member / user identifier"),
-        reason: Optional[str] = typer.Option(None, "--reason", help="Optional moderation reason"),
-        webhook_url: Optional[str] = typer.Option(
+        reason: str | None = typer.Option(None, "--reason", help="Optional moderation reason"),
+        webhook_url: str | None = typer.Option(
             None,
             "--webhook-url",
             help="Member moderation webhook URL (or set THOMAS_MESSAGES_MODERATION_WEBHOOK_URL)",
         ),
         timeout_s: float = typer.Option(10.0, "--timeout-s", help="HTTP timeout in seconds"),
         json_out: bool = typer.Option(False, "--json", help="Emit machine-readable JSON"),
-        request_id: Optional[str] = typer.Option(None, "--request-id", help="Optional trace / request id"),
+        request_id: str | None = typer.Option(None, "--request-id", help="Optional trace / request id"),
     ) -> None:
         """Kick or ban a member from a channel."""
 
@@ -76,11 +76,11 @@ def register(app: typer.Typer) -> None:
     def kick_member(
         channel_id: str = typer.Option(..., "--channel-id", help="Channel / room identifier"),
         member_id: str = typer.Option(..., "--member-id", help="Member / user identifier"),
-        reason: Optional[str] = typer.Option(None, "--reason", help="Optional moderation reason"),
-        webhook_url: Optional[str] = typer.Option(None, "--webhook-url", help="Outbound webhook URL"),
+        reason: str | None = typer.Option(None, "--reason", help="Optional moderation reason"),
+        webhook_url: str | None = typer.Option(None, "--webhook-url", help="Outbound webhook URL"),
         timeout_s: float = typer.Option(10.0, "--timeout-s", help="HTTP timeout in seconds"),
         json_out: bool = typer.Option(False, "--json", help="Emit machine-readable JSON"),
-        request_id: Optional[str] = typer.Option(None, "--request-id", help="Optional trace / request id"),
+        request_id: str | None = typer.Option(None, "--request-id", help="Optional trace / request id"),
     ) -> None:
         """Kick a member from a channel."""
 
@@ -102,11 +102,11 @@ def register(app: typer.Typer) -> None:
     def ban_member(
         channel_id: str = typer.Option(..., "--channel-id", help="Channel / room identifier"),
         member_id: str = typer.Option(..., "--member-id", help="Member / user identifier"),
-        reason: Optional[str] = typer.Option(None, "--reason", help="Optional moderation reason"),
-        webhook_url: Optional[str] = typer.Option(None, "--webhook-url", help="Outbound webhook URL"),
+        reason: str | None = typer.Option(None, "--reason", help="Optional moderation reason"),
+        webhook_url: str | None = typer.Option(None, "--webhook-url", help="Outbound webhook URL"),
         timeout_s: float = typer.Option(10.0, "--timeout-s", help="HTTP timeout in seconds"),
         json_out: bool = typer.Option(False, "--json", help="Emit machine-readable JSON"),
-        request_id: Optional[str] = typer.Option(None, "--request-id", help="Optional trace / request id"),
+        request_id: str | None = typer.Option(None, "--request-id", help="Optional trace / request id"),
     ) -> None:
         """Ban a member from a channel."""
 

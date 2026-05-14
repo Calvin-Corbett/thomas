@@ -27,7 +27,6 @@ from thomas.plugins.p101_plugin_enable_and_disable_state_store import (
     resolve_enablement_store_path,
 )
 
-
 app = typer.Typer(
     add_completion=False,
     help="Persist plugin enable/disable state in a local state store.",
@@ -38,7 +37,7 @@ typer_app = app
 cli_app = app
 
 
-def _emit(payload: Dict[str, Any], *, as_json: bool) -> None:
+def _emit(payload: dict[str, Any], *, as_json: bool) -> None:
     if as_json:
         typer.echo(json.dumps(payload, sort_keys=True))
         return
@@ -63,7 +62,7 @@ def _fail(err: PluginEnablementStoreError, *, as_json: bool) -> None:
     raise typer.Exit(code=1)
 
 
-def _store(store_path: Optional[Path]) -> PluginEnablementStore:
+def _store(store_path: Path | None) -> PluginEnablementStore:
     resolved = resolve_enablement_store_path(store_path)
     return PluginEnablementStore(resolved)
 
@@ -71,7 +70,7 @@ def _store(store_path: Optional[Path]) -> PluginEnablementStore:
 @app.command("enable")
 def enable(
     plugin: str = typer.Argument(..., help="Plugin key to enable."),
-    store_path: Optional[Path] = typer.Option(
+    store_path: Path | None = typer.Option(
         None,
         "--store-path",
         help="Override the enablement store file path.",
@@ -90,7 +89,7 @@ def enable(
 @app.command("disable")
 def disable(
     plugin: str = typer.Argument(..., help="Plugin key to disable."),
-    store_path: Optional[Path] = typer.Option(
+    store_path: Path | None = typer.Option(
         None,
         "--store-path",
         help="Override the enablement store file path.",
@@ -108,8 +107,8 @@ def disable(
 
 @app.command("status")
 def status(
-    plugin: Optional[str] = typer.Argument(None, help="Plugin key to query."),
-    store_path: Optional[Path] = typer.Option(
+    plugin: str | None = typer.Argument(None, help="Plugin key to query."),
+    store_path: Path | None = typer.Option(
         None,
         "--store-path",
         help="Override the enablement store file path.",
@@ -144,7 +143,7 @@ def status(
 @app.command("clear")
 def clear(
     plugin: str = typer.Argument(..., help="Plugin key to remove from the store."),
-    store_path: Optional[Path] = typer.Option(
+    store_path: Path | None = typer.Option(
         None,
         "--store-path",
         help="Override the enablement store file path.",

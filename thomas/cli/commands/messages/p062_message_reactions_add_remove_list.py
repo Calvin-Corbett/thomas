@@ -49,7 +49,7 @@ def _emit(result: dict, *, json_mode: bool) -> None:
         typer.echo(f"Error[{err.get('code')}]: {err.get('message')}")
 
 
-def _run_payload(payload: dict, *, backend: Optional[str], api_base_url: Optional[str], api_token: Optional[str], timeout_seconds: float) -> dict:
+def _run_payload(payload: dict, *, backend: str | None, api_base_url: str | None, api_token: str | None, timeout_seconds: float) -> dict:
     from thomas.messages.p062_message_reactions_add_remove_list import MessageReactionsConfig, run
 
     cfg = None
@@ -85,11 +85,11 @@ def _handle_error(exc: Exception, *, json_mode: bool) -> None:
 def add(
     message_id: str = typer.Option(..., "--message-id", help="Message identifier."),
     emoji: str = typer.Option(..., "--emoji", help="Emoji to add (unicode or :shortcode:)."),
-    channel_id: Optional[str] = typer.Option(None, "--channel-id", help="Optional channel identifier."),
-    user_id: Optional[str] = typer.Option(None, "--user-id", help="Optional user identifier."),
-    backend: Optional[str] = typer.Option(None, "--backend", help="Backend to use (memory/http)."),
-    api_base_url: Optional[str] = typer.Option(None, "--api-base-url", help="API base URL for http backend (optional)."),
-    api_token: Optional[str] = typer.Option(None, "--api-token", help="Bearer token for http backend (optional)."),
+    channel_id: str | None = typer.Option(None, "--channel-id", help="Optional channel identifier."),
+    user_id: str | None = typer.Option(None, "--user-id", help="Optional user identifier."),
+    backend: str | None = typer.Option(None, "--backend", help="Backend to use (memory/http)."),
+    api_base_url: str | None = typer.Option(None, "--api-base-url", help="API base URL for http backend (optional)."),
+    api_token: str | None = typer.Option(None, "--api-token", help="Bearer token for http backend (optional)."),
     timeout_seconds: float = typer.Option(10.0, "--timeout-seconds", help="HTTP timeout seconds (optional)."),
     json_mode: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
 ) -> None:
@@ -119,11 +119,11 @@ def add(
 def remove(
     message_id: str = typer.Option(..., "--message-id", help="Message identifier."),
     emoji: str = typer.Option(..., "--emoji", help="Emoji to remove (unicode or :shortcode:)."),
-    channel_id: Optional[str] = typer.Option(None, "--channel-id", help="Optional channel identifier."),
-    user_id: Optional[str] = typer.Option(None, "--user-id", help="Optional user identifier."),
-    backend: Optional[str] = typer.Option(None, "--backend", help="Backend to use (memory/http)."),
-    api_base_url: Optional[str] = typer.Option(None, "--api-base-url", help="API base URL for http backend (optional)."),
-    api_token: Optional[str] = typer.Option(None, "--api-token", help="Bearer token for http backend (optional)."),
+    channel_id: str | None = typer.Option(None, "--channel-id", help="Optional channel identifier."),
+    user_id: str | None = typer.Option(None, "--user-id", help="Optional user identifier."),
+    backend: str | None = typer.Option(None, "--backend", help="Backend to use (memory/http)."),
+    api_base_url: str | None = typer.Option(None, "--api-base-url", help="API base URL for http backend (optional)."),
+    api_token: str | None = typer.Option(None, "--api-token", help="Bearer token for http backend (optional)."),
     timeout_seconds: float = typer.Option(10.0, "--timeout-seconds", help="HTTP timeout seconds (optional)."),
     json_mode: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
 ) -> None:
@@ -152,10 +152,10 @@ def remove(
 @app.command("list")
 def list_cmd(
     message_id: str = typer.Option(..., "--message-id", help="Message identifier."),
-    channel_id: Optional[str] = typer.Option(None, "--channel-id", help="Optional channel identifier."),
-    backend: Optional[str] = typer.Option(None, "--backend", help="Backend to use (memory/http)."),
-    api_base_url: Optional[str] = typer.Option(None, "--api-base-url", help="API base URL for http backend (optional)."),
-    api_token: Optional[str] = typer.Option(None, "--api-token", help="Bearer token for http backend (optional)."),
+    channel_id: str | None = typer.Option(None, "--channel-id", help="Optional channel identifier."),
+    backend: str | None = typer.Option(None, "--backend", help="Backend to use (memory/http)."),
+    api_base_url: str | None = typer.Option(None, "--api-base-url", help="API base URL for http backend (optional)."),
+    api_token: str | None = typer.Option(None, "--api-token", help="Bearer token for http backend (optional)."),
     timeout_seconds: float = typer.Option(10.0, "--timeout-seconds", help="HTTP timeout seconds (optional)."),
     json_mode: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
 ) -> None:

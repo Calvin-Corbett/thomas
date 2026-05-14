@@ -21,11 +21,11 @@ def _load_core() -> Any:
     """Import the core implementation lazily."""
 
     from thomas.nodes.p036_node_command_uninstall import (  # type: ignore
+        NODE_COMMAND_UNINSTALL_REQUEST_SCHEMA,
+        NODE_COMMAND_UNINSTALL_RESULT_SCHEMA,
         NodeCommandUninstallError,
         NodeCommandUninstallRequest,
         uninstall_node_command,
-        NODE_COMMAND_UNINSTALL_REQUEST_SCHEMA,
-        NODE_COMMAND_UNINSTALL_RESULT_SCHEMA,
     )
 
     return (

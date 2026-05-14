@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence
 
 
-def _run_git(args: Sequence[str], *, cwd: Path, timeout_seconds: float = 90.0) -> Dict[str, Any]:
+def _run_git(args: Sequence[str], *, cwd: Path, timeout_seconds: float = 90.0) -> dict[str, Any]:
     cmd = ["git", *[str(a) for a in args]]
     try:
         proc = subprocess.run(
@@ -34,7 +34,7 @@ def _run_git(args: Sequence[str], *, cwd: Path, timeout_seconds: float = 90.0) -
         }
 
 
-def collect_changed_paths(repo_root: Path, *, old_ref: str, new_ref: str) -> Dict[str, Any]:
+def collect_changed_paths(repo_root: Path, *, old_ref: str, new_ref: str) -> dict[str, Any]:
     if not old_ref or not new_ref or old_ref == new_ref:
         return {"ok": False, "paths": [], "error": "refs_missing_or_equal"}
     run = _run_git(["diff", "--name-only", f"{old_ref}..{new_ref}"], cwd=repo_root, timeout_seconds=180.0)
@@ -44,7 +44,7 @@ def collect_changed_paths(repo_root: Path, *, old_ref: str, new_ref: str) -> Dic
     return {"ok": True, "paths": paths, "error": ""}
 
 
-def summarize_hotspots(paths: Sequence[str], *, top_n: int = 8) -> List[Dict[str, Any]]:
+def summarize_hotspots(paths: Sequence[str], *, top_n: int = 8) -> list[dict[str, Any]]:
     counts: Counter[str] = Counter()
     for raw in paths:
         path = str(raw or "").strip().replace("\\", "/")
@@ -58,8 +58,8 @@ def summarize_hotspots(paths: Sequence[str], *, top_n: int = 8) -> List[Dict[str
     return [{"path": p, "changed_files": int(n)} for p, n in counts.most_common(max(1, int(top_n)))]
 
 
-def infer_focus_areas(hotspots: Sequence[Mapping[str, Any]]) -> List[str]:
-    areas: List[str] = []
+def infer_focus_areas(hotspots: Sequence[Mapping[str, Any]]) -> list[str]:
+    areas: list[str] = []
     keys = " ".join(str(item.get("path") or "").lower() for item in hotspots)
     if any(k in keys for k in ("plugins", "extension", "skill", "mcp")):
         areas.append("plugin_ecosystem_expansion")
@@ -78,8 +78,8 @@ def infer_focus_areas(hotspots: Sequence[Mapping[str, Any]]) -> List[str]:
     return areas
 
 
-def recommend_counter_moves(focus_areas: Sequence[str]) -> List[str]:
-    recs: List[str] = []
+def recommend_counter_moves(focus_areas: Sequence[str]) -> list[str]:
+    recs: list[str] = []
     if "plugin_ecosystem_expansion" in focus_areas:
         recs.append("Expand Thomas plugin runtime contract tests and keep plugin command coverage at or above competitor levels.")
     if "gateway_and_protocol_surface" in focus_areas:
@@ -102,11 +102,11 @@ def build_prediction_evo_scope(
     agents: Sequence[Mapping[str, Any]],
     previous_registry_competitors: Mapping[str, Any],
     focus_agent: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     focus = str(focus_agent or "").strip()
-    by_competitor: Dict[str, Any] = {}
-    all_focus_areas: List[str] = []
-    all_recs: List[str] = []
+    by_competitor: dict[str, Any] = {}
+    all_focus_areas: list[str] = []
+    all_recs: list[str] = []
     for agent in agents:
         aid = str(agent.get("id") or "").strip()
         if not aid or aid == focus:
@@ -117,7 +117,7 @@ def build_prediction_evo_scope(
         prev_version = dict(prev_entry.get("version") or {})
         previous_head = str(prev_version.get("local_head") or "").strip()
         current_head = str(version.get("local_head") or "").strip()
-        row: Dict[str, Any] = {
+        row: dict[str, Any] = {
             "competitor": aid,
             "root": str(root),
             "previous_head": previous_head,

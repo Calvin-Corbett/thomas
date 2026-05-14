@@ -20,30 +20,30 @@ class WebhookDeliveryDeps:
     store_raw_payload: bool
     max_commits_included: int
     now_iso: Callable[[], str]
-    require_admin: Callable[[Optional[str]], None]
-    require_json_object: Callable[[bytes], Dict[str, Any]]
-    interpolate_template: Callable[[str, Dict[str, Any]], str]
-    payload_string: Callable[[Dict[str, Any]], str]
-    queue_goal: Callable[[str, str, Dict[str, Any]], str]
-    emit_event: Callable[[str, Dict[str, Any]], None]
+    require_admin: Callable[[str | None], None]
+    require_json_object: Callable[[bytes], dict[str, Any]]
+    interpolate_template: Callable[[str, dict[str, Any]], str]
+    payload_string: Callable[[dict[str, Any]], str]
+    queue_goal: Callable[[str, str, dict[str, Any]], str]
+    emit_event: Callable[[str, dict[str, Any]], None]
     format_stripe_amount: Callable[[Any, str], str]
     read_body_limited: Callable[[Request], Awaitable[bytes]]
     client_ip: Callable[[Request], str]
-    split_secrets: Callable[[Optional[str]], List[str]]
+    split_secrets: Callable[[str | None], list[str]]
     require_provider_secrets_for_signature_enforcement: Callable[..., None]
     require_generic_secret_for_signature_enforcement: Callable[[Any], None]
-    validate_simple_hmac_any: Callable[[List[str], bytes, Optional[str], str], None]
-    validate_stripe_signature_any: Callable[[List[str], bytes, Optional[str]], None]
-    inbox_record_base: Callable[..., Dict[str, Any]]
-    stats_key: Callable[[str, Optional[str]], str]
+    validate_simple_hmac_any: Callable[[list[str], bytes, str | None, str], None]
+    validate_stripe_signature_any: Callable[[list[str], bytes, str | None], None]
+    inbox_record_base: Callable[..., dict[str, Any]]
+    stats_key: Callable[[str, str | None], str]
 
 
-def _response(*, status: str, goal_id: str) -> Dict[str, str]:
+def _response(*, status: str, goal_id: str) -> dict[str, str]:
     return {"status": status, "goal_id": goal_id}
 
 
 def _github_goal_text(
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     *,
     event: str,
     max_commits_included: int,
@@ -57,7 +57,7 @@ def _github_goal_text(
         ref = payload.get("ref") or ""
         branch = ref.split("/")[-1] if isinstance(ref, str) and ref else "unknown"
         commits = payload.get("commits") or []
-        messages: List[str] = []
+        messages: list[str] = []
         if isinstance(commits, list):
             for c in commits[:max_commits_included]:
                 if isinstance(c, dict):
@@ -76,7 +76,7 @@ def _github_goal_text(
     raise HTTPException(status_code=400, detail=f"Unsupported GitHub event: {event or 'unknown'}")
 
 
-def _stripe_payment_goal(payload: Dict[str, Any], *, format_stripe_amount: Callable[[Any, str], str]) -> tuple[str, str]:
+def _stripe_payment_goal(payload: dict[str, Any], *, format_stripe_amount: Callable[[Any, str], str]) -> tuple[str, str]:
     obj = (((payload.get("data") or {}).get("object")) or {})
     if not isinstance(obj, dict):
         obj = {}
@@ -90,9 +90,9 @@ def _stripe_payment_goal(payload: Dict[str, Any], *, format_stripe_amount: Calla
 async def inbox_retry_impl(
     *,
     event_id: str,
-    x_admin_token: Optional[str],
+    x_admin_token: str | None,
     deps: WebhookDeliveryDeps,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     deps.require_admin(x_admin_token)
     rec = deps.inbox.find_event(event_id)
     if not rec:
@@ -100,7 +100,7 @@ async def inbox_retry_impl(
 
     provider = rec.get("provider")
     webhook_id = rec.get("webhook_id")
-    body_bytes: Optional[bytes] = None
+    body_bytes: bytes | None = None
     if rec.get("body_encoding") == "utf-8" and isinstance(rec.get("body"), str):
         body_bytes = rec["body"].encode("utf-8")
     elif rec.get("body_encoding") == "base64" and isinstance(rec.get("body_b64"), str):
@@ -122,7 +122,7 @@ async def inbox_retry_impl(
             if stored
             else deps.payload_string(payload)
         )
-        meta: Dict[str, Any] = {
+        meta: dict[str, Any] = {
             "webhook_id": webhook_id,
             "retry_of_event_id": event_id,
             "body_sha256": rec.get("body_sha256"),
@@ -212,10 +212,10 @@ async def inbox_retry_impl(
 async def test_webhook_impl(
     *,
     webhook_id: str,
-    payload: Dict[str, Any],
-    x_admin_token: Optional[str],
+    payload: dict[str, Any],
+    x_admin_token: str | None,
     deps: WebhookDeliveryDeps,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     deps.require_admin(x_admin_token)
     wid = webhook_id.strip()
     rec = deps.store.get(wid)
@@ -233,7 +233,7 @@ async def test_webhook_impl(
         signature = "sha256=" + sig
 
     goal_text = deps.interpolate_template(rec.goal_template, payload)
-    meta: Dict[str, Any] = {"webhook_id": wid, "test": True}
+    meta: dict[str, Any] = {"webhook_id": wid, "test": True}
     if deps.store_raw_payload:
         meta["raw"] = payload
     goal_id = deps.queue_goal(goal_text, "webhook.generic.test", meta)
@@ -251,11 +251,11 @@ async def test_webhook_impl(
 async def receive_github_webhook_impl(
     *,
     request: Request,
-    x_hub_signature_256: Optional[str],
-    x_github_event: Optional[str],
-    x_github_delivery: Optional[str],
+    x_hub_signature_256: str | None,
+    x_github_event: str | None,
+    x_github_delivery: str | None,
     deps: WebhookDeliveryDeps,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     secrets = deps.split_secrets(os.getenv("THOMAS_GITHUB_WEBHOOK_SECRET")) or deps.split_secrets(
         os.getenv("THOMAS_GITHUB_WEBHOOK_SECRETS")
     )
@@ -316,7 +316,7 @@ async def receive_github_webhook_impl(
             event=event,
             max_commits_included=deps.max_commits_included,
         )
-        meta: Dict[str, Any] = {"provider": "github", "event": event, "repo": repo}
+        meta: dict[str, Any] = {"provider": "github", "event": event, "repo": repo}
         if x_github_delivery:
             meta["delivery"] = x_github_delivery
         if deps.store_raw_payload:
@@ -374,9 +374,9 @@ async def receive_github_webhook_impl(
 async def receive_stripe_webhook_impl(
     *,
     request: Request,
-    stripe_signature: Optional[str],
+    stripe_signature: str | None,
     deps: WebhookDeliveryDeps,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     body = await deps.read_body_limited(request)
     stripe_secrets = deps.split_secrets(os.getenv("THOMAS_STRIPE_WEBHOOK_SECRET")) or deps.split_secrets(
         os.getenv("THOMAS_STRIPE_WEBHOOK_SECRETS")
@@ -423,7 +423,7 @@ async def receive_stripe_webhook_impl(
             raise HTTPException(status_code=400, detail=f"Unsupported Stripe event: {event_type}")
 
         goal_text, currency = _stripe_payment_goal(payload, format_stripe_amount=deps.format_stripe_amount)
-        meta: Dict[str, Any] = {"provider": "stripe", "event": event_type, "currency": currency}
+        meta: dict[str, Any] = {"provider": "stripe", "event": event_type, "currency": currency}
         if event_id:
             meta["event_id"] = event_id
         if deps.store_raw_payload:
@@ -479,10 +479,10 @@ async def receive_webhook_impl(
     *,
     webhook_id: str,
     request: Request,
-    x_webhook_signature: Optional[str],
-    x_webhook_delivery: Optional[str],
+    x_webhook_signature: str | None,
+    x_webhook_delivery: str | None,
     deps: WebhookDeliveryDeps,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     wid = webhook_id.strip()
     rec = deps.store.get(wid)
     if not rec:
@@ -541,7 +541,7 @@ async def receive_webhook_impl(
         payload = deps.require_json_object(body)
         goal_text = deps.interpolate_template(rec.goal_template, payload)
 
-        meta: Dict[str, Any] = {"webhook_id": wid}
+        meta: dict[str, Any] = {"webhook_id": wid}
         if x_webhook_delivery:
             meta["delivery"] = x_webhook_delivery
         if deps.store_raw_payload:

@@ -7,7 +7,6 @@ from typing import Any, Callable
 
 import typer
 
-
 app = typer.Typer(add_completion=False, help="Plugin management commands.")
 
 

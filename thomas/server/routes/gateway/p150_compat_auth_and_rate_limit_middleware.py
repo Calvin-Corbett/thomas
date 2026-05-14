@@ -25,7 +25,6 @@ from typing import Awaitable, Callable, Dict, Optional, Tuple, TypedDict
 
 from aiohttp import web
 
-
 # ----------------------------
 # Contracts
 # ----------------------------
@@ -42,9 +41,9 @@ class CompatErrorResponse(TypedDict):
 
 class CompatSecurityStatus(TypedDict):
     ok: bool
-    auth: Dict[str, object]
-    ratelimit: Dict[str, object]
-    scope: Dict[str, object]
+    auth: dict[str, object]
+    ratelimit: dict[str, object]
+    scope: dict[str, object]
 
 
 @dataclass(frozen=True)
@@ -57,7 +56,7 @@ class CompatScopeConfig:
     `path_prefixes` is evaluated in-order; any matching prefix enables enforcement.
     """
 
-    path_prefixes: Tuple[str, ...] = ("/v1",)
+    path_prefixes: tuple[str, ...] = ("/v1",)
 
 
 @dataclass(frozen=True)
@@ -65,7 +64,7 @@ class CompatAuthConfig:
     """Bearer token auth for compat routes."""
 
     enabled: bool
-    tokens: Tuple[str, ...]
+    tokens: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -81,12 +80,12 @@ class RateLimitConfig:
 # Helpers
 # ----------------------------
 
-def _json_error(status: int, code: str, message: str, *, headers: Optional[Dict[str, str]] = None) -> web.Response:
+def _json_error(status: int, code: str, message: str, *, headers: dict[str, str] | None = None) -> web.Response:
     body: CompatErrorResponse = {"ok": False, "error": {"code": code, "message": message}}
     return web.json_response(body, status=status, headers=headers)
 
 
-def _parse_bearer_token(value: Optional[str]) -> Optional[str]:
+def _parse_bearer_token(value: str | None) -> str | None:
     if not value:
         return None
     parts = value.strip().split()
@@ -118,7 +117,7 @@ def _in_scope(request: web.Request, scope: CompatScopeConfig) -> bool:
     return False
 
 
-def _truthy(v: Optional[str], default: bool) -> bool:
+def _truthy(v: str | None, default: bool) -> bool:
     if v is None:
         return default
     return v.strip().lower() in ("1", "true", "yes", "y", "on")
@@ -150,9 +149,9 @@ class TokenBucketLimiter:
         self._now = now
         self._lock = asyncio.Lock()
         # key -> (tokens, last_ts)
-        self._state: Dict[str, Tuple[float, float]] = {}
+        self._state: dict[str, tuple[float, float]] = {}
 
-    async def check(self, key: str, *, cost: float = 1.0) -> Tuple[bool, float, float]:
+    async def check(self, key: str, *, cost: float = 1.0) -> tuple[bool, float, float]:
         """Return (allowed, remaining_tokens, retry_after_seconds).
 
         retry_after_seconds is 0 when allowed.
@@ -184,7 +183,7 @@ class TokenBucketLimiter:
 # Configuration loading
 # ----------------------------
 
-def load_compat_security_from_env() -> Tuple[CompatScopeConfig, CompatAuthConfig, RateLimitConfig]:
+def load_compat_security_from_env() -> tuple[CompatScopeConfig, CompatAuthConfig, RateLimitConfig]:
     """Env-driven configuration (local dev + CI friendly).
 
     Scope:
@@ -240,19 +239,19 @@ def build_compat_middlewares(
     scope: CompatScopeConfig,
     auth: CompatAuthConfig,
     ratelimit: RateLimitConfig,
-    limiter: Optional[TokenBucketLimiter] = None,
-) -> Tuple[web.middleware, web.middleware]:
+    limiter: TokenBucketLimiter | None = None,
+) -> tuple[web.middleware, web.middleware]:
     """Factory returning (auth_middleware, ratelimit_middleware)."""
 
     # Validate and/or construct limiter up-front when possible.
-    constructed_limiter: Optional[TokenBucketLimiter] = limiter
+    constructed_limiter: TokenBucketLimiter | None = limiter
     if ratelimit.enabled and constructed_limiter is None and ratelimit.rps > 0 and ratelimit.burst > 0:
         constructed_limiter = TokenBucketLimiter(rps=ratelimit.rps, burst=ratelimit.burst)
 
-    def _ratelimit_headers(remaining: float, retry_after: float) -> Dict[str, str]:
+    def _ratelimit_headers(remaining: float, retry_after: float) -> dict[str, str]:
         # Remaining is float; serialize as an int floor for simplicity.
         rem_i = max(0, int(remaining))
-        headers: Dict[str, str] = {
+        headers: dict[str, str] = {
             "X-RateLimit-Limit": str(int(ratelimit.burst) if ratelimit.burst > 0 else 0),
             "X-RateLimit-Remaining": str(rem_i),
         }
