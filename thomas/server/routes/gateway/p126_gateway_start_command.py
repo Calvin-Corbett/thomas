@@ -9,7 +9,8 @@ import time
 import weakref
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Mapping, MutableMapping, Optional, TypedDict
+from typing import Any, Dict, List, Literal, Optional, TypedDict
+from collections.abc import Mapping, MutableMapping
 
 try:
     import tomllib  # py3.11+

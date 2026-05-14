@@ -11,7 +11,8 @@ import argparse
 import asyncio
 import json
 import os
-from typing import Any, Optional, Sequence
+from typing import Any, Optional
+from collections.abc import Sequence
 
 
 def _run(coro: Any) -> Any:

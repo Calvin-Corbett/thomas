@@ -19,7 +19,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any, Sequence
+from typing import Any
+from collections.abc import Sequence
 
 try:
     from thomas.marketplace.nodes.p040_nodes_notify_action import (

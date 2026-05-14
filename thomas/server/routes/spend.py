@@ -6,7 +6,8 @@ import asyncio
 import csv
 import json
 from io import StringIO
-from typing import Any, Callable, Dict
+from typing import Any, Dict
+from collections.abc import Callable
 
 from aiohttp import web
 

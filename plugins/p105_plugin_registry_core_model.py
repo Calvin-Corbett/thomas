@@ -19,7 +19,8 @@ import importlib
 import json
 import pkgutil
 from dataclasses import dataclass, field
-from typing import Any, Literal, Mapping, Optional, Sequence, TypedDict, cast
+from typing import Any, Literal, Optional, TypedDict, cast
+from collections.abc import Mapping, Sequence
 
 try:  # Python 3.11+
     from typing import NotRequired

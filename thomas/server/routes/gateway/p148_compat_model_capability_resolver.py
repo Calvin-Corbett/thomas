@@ -4,7 +4,8 @@ import json
 import os
 import re
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, Mapping, Optional, Sequence, Tuple, TypedDict
+from typing import Any, Dict, Optional, Tuple, TypedDict
+from collections.abc import Mapping, Sequence
 
 
 class CompatModelCapabilityResolverError(Exception):

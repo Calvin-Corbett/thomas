@@ -4,7 +4,8 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass
-from typing import Any, Callable, Sequence
+from typing import Any
+from collections.abc import Callable, Sequence
 
 _COMMAND_NAME = "p013-browser-telemetry-console-stream"
 

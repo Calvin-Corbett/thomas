@@ -61,7 +61,8 @@ import time
 import weakref
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Literal, Mapping, Sequence, TypedDict
+from typing import Any, Literal, TypedDict
+from collections.abc import Mapping, Sequence
 
 from aiohttp import web
 

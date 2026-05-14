@@ -10,7 +10,8 @@ Tests cover:
 
 import unittest
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
+from collections.abc import Callable
 
 # Note: These imports assume the modules exist or will be created
 try:

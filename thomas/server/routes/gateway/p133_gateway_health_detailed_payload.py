@@ -27,7 +27,8 @@ import sys
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Mapping, MutableMapping, Optional
+from typing import Any, Optional
+from collections.abc import Mapping, MutableMapping
 
 from aiohttp import ClientSession, ClientTimeout, WSMsgType, web
 

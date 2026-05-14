@@ -5,7 +5,8 @@ import inspect
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Awaitable, Callable, Iterable, Mapping, Optional
+from typing import Any, Optional
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 
 
 class ServiceLifecycleError(Exception):

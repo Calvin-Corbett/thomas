@@ -21,7 +21,8 @@ import asyncio
 import os
 import time
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Dict, Optional, Tuple, TypedDict
+from typing import Dict, Optional, Tuple, TypedDict
+from collections.abc import Awaitable, Callable
 
 from aiohttp import web
 

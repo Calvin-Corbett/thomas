@@ -25,7 +25,8 @@ import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
+from collections.abc import Mapping
 
 from thomas.channels.p093_channel_retry_and_backoff_strategy import (
     ChannelRetryConfigError,

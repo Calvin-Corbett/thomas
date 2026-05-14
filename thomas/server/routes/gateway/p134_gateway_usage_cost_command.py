@@ -16,7 +16,8 @@ import json
 import os
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
-from typing import Any, Mapping, Optional, Sequence, TypedDict, cast
+from typing import Any, Optional, TypedDict, cast
+from collections.abc import Mapping, Sequence
 
 import aiohttp
 from aiohttp import web

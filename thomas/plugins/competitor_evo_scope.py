@@ -3,7 +3,8 @@ from __future__ import annotations
 import subprocess
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any, Dict, List
+from collections.abc import Mapping, Sequence
 
 
 def _run_git(args: Sequence[str], *, cwd: Path, timeout_seconds: float = 90.0) -> dict[str, Any]:

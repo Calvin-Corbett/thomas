@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Sequence
+from collections.abc import Sequence
 
 from thomas.server.routes.gateway.p125_gateway_ops_route_package_scaffold import (
     GatewayOpsRoutePackageScaffoldError,

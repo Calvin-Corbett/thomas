@@ -63,7 +63,8 @@ import threading
 import time
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+from collections.abc import Callable
 
 log = logging.getLogger(__name__)
 

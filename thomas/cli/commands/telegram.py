@@ -3,7 +3,8 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Optional
+from collections.abc import Callable
 
 import click
 

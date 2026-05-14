@@ -5,7 +5,8 @@ import sys
 import types
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
+from collections.abc import Mapping
 
 import pytest
 

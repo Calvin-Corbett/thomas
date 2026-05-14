@@ -14,7 +14,8 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass
-from typing import Any, Callable, Sequence
+from typing import Any
+from collections.abc import Callable, Sequence
 
 
 def _load_core() -> Any:

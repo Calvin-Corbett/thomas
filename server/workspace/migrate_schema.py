@@ -18,7 +18,8 @@ You can later wrap this logic inside an Alembic migration once you know your dow
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Iterable, Optional
+from typing import Optional
+from collections.abc import Iterable
 
 import sqlalchemy as sa
 from sqlalchemy import inspect

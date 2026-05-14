@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Optional
+from collections.abc import Callable
 
 from aiohttp import web
 from fastapi import HTTPException as FastAPIHTTPException

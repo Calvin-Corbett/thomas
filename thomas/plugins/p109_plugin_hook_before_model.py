@@ -22,7 +22,8 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, TypedDict, Union, cast
+from typing import Any, Dict, List, Optional, TypedDict, Union, cast
+from collections.abc import Mapping
 
 
 class ChatMessage(TypedDict, total=False):

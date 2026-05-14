@@ -15,7 +15,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Optional
+from collections.abc import Mapping, Sequence
 
 from thomas.nodes.p039_nodes_invoke_action import (
     InvalidInvokeActionInput,
