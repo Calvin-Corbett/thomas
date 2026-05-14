@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 
 import scripts.forge.gates.workboard_claims as gate
-import scripts.workboard_task_manager as mod
-import scripts.workboard_task_manager_plans as plan_sync
+import scripts.crew.tasks.manager as mod
+import scripts.crew.tasks.plans as plan_sync
 
 from thomas.preferences.store import PreferencesStore
 

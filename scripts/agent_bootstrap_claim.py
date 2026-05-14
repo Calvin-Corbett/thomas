@@ -615,7 +615,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             if _to_bool(args.run_task_manager_loop):
                 print("- starting persistent task-manager loop:")
                 print(
-                    f"  - command: python scripts/workboard_task_manager.py --monitor --apply --cycles 0 "
+                    f"  - command: python scripts/crew/tasks/manager.py --monitor --apply --cycles 0 "
                     f'--interval-seconds 30 --task-manager-agent "{task_manager_agent}"'
                 )
                 ok_loop, loop_payload, loop_error = _spawn_task_manager_loop(
@@ -830,7 +830,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     if _is_task_manager_agent(agent) and _to_bool(args.run_task_manager_loop) and not args.json:
         print("- starting persistent task-manager loop:")
         print(
-            f"  - command: python scripts/workboard_task_manager.py --monitor --apply --cycles 0 "
+            f"  - command: python scripts/crew/tasks/manager.py --monitor --apply --cycles 0 "
             f'--interval-seconds 30 --task-manager-agent "{task_manager_agent}"'
         )
         ok_loop, loop_payload, loop_error = _spawn_task_manager_loop(
