@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-import scripts.agent_bootstrap_claim as mod
+import scripts.crew.brief.bootstrap_claim as mod
 import scripts.forge.gates.workboard_claims as gate
 
 

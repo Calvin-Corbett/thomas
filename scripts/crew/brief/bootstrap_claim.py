@@ -12,6 +12,11 @@ from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 try:
     from scripts import agent_identity
     from scripts.crew.workboard import claim as claim_tool
@@ -21,7 +26,7 @@ except Exception:  # pragma: no cover
 
 from thomas.core import agent_presence
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 DEFAULT_TASK_MANAGER_AGENT = getattr(claim_tool, "DEFAULT_TASK_MANAGER_AGENT", "task-manager-agent")
 DEFAULT_DISPATCH_TARGET_WORKERS = getattr(claim_tool, "DEFAULT_DISPATCH_TARGET_WORKERS", 2)

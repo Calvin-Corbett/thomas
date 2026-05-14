@@ -64,7 +64,7 @@ def _import_workboard_message():
 
         return workboard_message
     except ImportError:
-        import workboard_message  # type: ignore
+        from crew.workboard import message as workboard_message  # type: ignore
 
         return workboard_message
 

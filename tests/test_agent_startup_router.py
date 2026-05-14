@@ -190,7 +190,7 @@ def test_router_text_output_surfaces_preflight(tmp_path: Path) -> None:
             "stale": False,
             "updated_at": "2026-03-18",
         },
-        "bootstrap_command": 'python scripts/agent_bootstrap_claim.py --agent "<agent-id>" --scope "thomas/core/config.py" --task "Patch a small bug" --no-auto-dispatch',
+        "bootstrap_command": 'python scripts/crew/brief/bootstrap_claim.py --agent "<agent-id>" --scope "thomas/core/config.py" --task "Patch a small bug" --no-auto-dispatch',
         "gate_handling": {
             "summary": "Structural/quality gates should trigger remediation and retry; integrity/ownership/security gates remain hard stops.",
             "auto_remediate": ["monolith_guard"],
