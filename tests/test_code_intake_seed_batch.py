@@ -6,8 +6,8 @@ from pathlib import Path
 
 def _load_module():
     repo_root = Path(__file__).resolve().parents[1]
-    mod_path = repo_root / "scripts" / "code_intake_seed_batch.py"
-    spec = importlib.util.spec_from_file_location("code_intake_seed_batch", mod_path)
+    mod_path = repo_root / "scripts" / "forge" / "intake" / "seed_batch.py"
+    spec = importlib.util.spec_from_file_location("intake_seed_batch", mod_path)
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)

@@ -18,8 +18,8 @@ with queue state, validation reports, and controlled apply flow.
 ## CLI
 
 Primary tool:
-- `python scripts/code_intake.py`
-- `python scripts/code_intake_seed_batch.py`
+- `python scripts/forge/intake/cli.py`
+- `python scripts/forge/intake/seed_batch.py`
 
 Commands:
 - `init`: create queue structure and template
@@ -31,7 +31,7 @@ Commands:
 - `status`: queue and report summary
 
 Batch seeding helper:
-- `python scripts/code_intake_seed_batch.py --batch-id B01`
+- `python scripts/forge/intake/seed_batch.py --batch-id B01`
 - Seeds incoming drops from `docs/OPENCLAW_CATCHUP_PROMPT_BATCH_INDEX_216_2026-02-20.csv`
 - Creates manifest + diff placeholder per prompt in that batch
 
@@ -44,17 +44,17 @@ Batch seeding helper:
 ## Fast Start (Per Drop)
 
 1. Create intake skeleton:
-   - `python scripts/code_intake.py init`
+   - `python scripts/forge/intake/cli.py init`
 2. Create drop:
-   - `python scripts/code_intake.py new --drop-id D20260220_001 --prompt-id P001 --batch-id B01 --title "Browser command registry scaffold" --artifact-type unified_diff`
+   - `python scripts/forge/intake/cli.py new --drop-id D20260220_001 --prompt-id P001 --batch-id B01 --title "Browser command registry scaffold" --artifact-type unified_diff`
 3. Paste diff into:
    - `code_intake/queue/incoming/D20260220_001/change.diff`
 4. Validate:
-   - `python scripts/code_intake.py validate --drop-id D20260220_001`
+   - `python scripts/forge/intake/cli.py validate --drop-id D20260220_001`
 5. Stage:
-   - `python scripts/code_intake.py stage --drop-id D20260220_001`
+   - `python scripts/forge/intake/cli.py stage --drop-id D20260220_001`
 6. Apply (explicit):
-   - `python scripts/code_intake.py apply --drop-id D20260220_001 --execute`
+   - `python scripts/forge/intake/cli.py apply --drop-id D20260220_001 --execute`
 
 ## Policy Guardrails
 
@@ -76,7 +76,7 @@ Use prompt batches from:
 
 Recommended batch cycle:
 1. Seed one batch into `incoming`
-   - `python scripts/code_intake_seed_batch.py --batch-id B01`
+   - `python scripts/forge/intake/seed_batch.py --batch-id B01`
 2. Validate all 8
 3. Stage only passing drops
 4. Apply one-by-one with tests after each
