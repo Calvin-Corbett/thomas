@@ -8,7 +8,7 @@ import shutil
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TypedDict, cast
+from typing import Any, TypedDict, cast
 from collections.abc import Mapping
 
 from aiohttp import web

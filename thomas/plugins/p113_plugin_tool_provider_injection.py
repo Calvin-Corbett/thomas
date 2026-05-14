@@ -15,7 +15,7 @@ This file intentionally avoids any OpenClaw naming reuse.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, Optional, Protocol, Tuple, TypedDict, runtime_checkable
+from typing import Any, Protocol, TypedDict, runtime_checkable
 from collections.abc import Mapping, Sequence
 
 # -----------------------------

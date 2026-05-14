@@ -64,7 +64,7 @@ import subprocess
 import time
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Dict, Literal, Optional, TypedDict, cast
+from typing import Any, Literal, TypedDict, cast
 from collections.abc import Awaitable, Mapping, Sequence
 
 from aiohttp import web

@@ -21,7 +21,7 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional, TypedDict, cast
+from typing import Any, Literal, TypedDict, cast
 
 from aiohttp import web
 

@@ -10,7 +10,7 @@ Machine-readable output is supported via --json.
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import typer
 

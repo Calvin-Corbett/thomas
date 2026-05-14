@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from thomas.tools.base import Tool, ToolResult
 from thomas.tools.filesystem import _safe_path

@@ -7,7 +7,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 from collections.abc import Iterable
 
 from thomas.skills import discover_native_skill_roots

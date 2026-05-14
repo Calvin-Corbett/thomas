@@ -7,7 +7,6 @@ and easy to audit; update when provider docs change.
 
 from __future__ import annotations
 
-from typing import Dict
 
 from thomas.core.config import ModelConfig
 

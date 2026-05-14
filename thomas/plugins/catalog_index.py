@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import List
 
 _PLUGIN_FILE_RE = re.compile(r"^p\d{3}_[a-z0-9_]+\.py$")
 

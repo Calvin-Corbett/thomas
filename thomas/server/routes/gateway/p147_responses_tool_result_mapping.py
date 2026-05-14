@@ -20,7 +20,7 @@ Notes
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, Optional, TypedDict, cast
+from typing import Any, TypedDict, cast
 
 
 class ToolResultMapRequest(TypedDict, total=False):

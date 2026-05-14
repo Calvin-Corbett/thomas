@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 from collections.abc import Callable, Mapping
 
 # ---------------------------------------------------------------------------

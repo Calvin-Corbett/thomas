@@ -6,7 +6,6 @@ import asyncio
 import csv
 import json
 from io import StringIO
-from typing import Any, Dict
 from collections.abc import Callable
 
 from aiohttp import web
@@ -140,7 +139,7 @@ def register_spend_routes(
             ct.unsubscribe(sub)
             try:
                 await resp.write_eof()
-            except Exception:
+            except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
                 pass
 
         return resp

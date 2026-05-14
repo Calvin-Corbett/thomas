@@ -6,7 +6,6 @@ Runs all fitness checks from _architecture.py and reports results.
 from __future__ import annotations
 
 import pathlib
-import re
 import sys
 
 import click
@@ -151,7 +150,7 @@ def doctor_command() -> None:
             for line in result.stdout.splitlines():
                 if "failed" in line or "error" in line:
                     click.echo(f"                 {line.strip()}")
-    except Exception as exc:
+    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as exc:
         click.echo(f"  Fitness tests: ERROR ({exc})")
 
     # Overall

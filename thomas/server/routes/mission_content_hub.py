@@ -6,7 +6,7 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from thomas.preferences.store import PreferencesStore, get_db_path
 

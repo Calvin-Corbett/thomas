@@ -18,7 +18,7 @@ import json
 import sys
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 from collections.abc import Sequence
 
 from thomas.nodes.p049_nodes_pairing_handshake import (

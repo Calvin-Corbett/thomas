@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any, Dict, Optional
+from typing import Any
 
 from thomas.server.routes.gateway.p131_gateway_discover_command import (
     DEFAULT_DISCOVERY_DOMAIN,

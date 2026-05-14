@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 from collections.abc import Callable, Iterable
 
 _HEX_COLOR_RE = re.compile(r"#[0-9a-fA-F]{3,8}\b")

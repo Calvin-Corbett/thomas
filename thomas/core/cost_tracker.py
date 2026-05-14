@@ -6,7 +6,7 @@ import threading
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import Any
 
 try:
     import tomllib  # Python 3.11+

@@ -5,7 +5,7 @@ import datetime as _dt
 import json
 import os
 from dataclasses import dataclass
-from typing import Any, Optional, TypedDict, cast
+from typing import Any, TypedDict, cast
 from collections.abc import Awaitable, Callable, Mapping, MutableMapping
 
 from aiohttp import ClientError, ClientSession, ClientTimeout, web

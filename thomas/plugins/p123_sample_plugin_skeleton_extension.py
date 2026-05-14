@@ -24,7 +24,7 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from collections.abc import Mapping
 
 from pydantic import BaseModel, Field, ValidationError

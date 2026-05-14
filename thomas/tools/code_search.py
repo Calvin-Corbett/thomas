@@ -12,7 +12,7 @@ import os
 import re
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from thomas.tools.base import Tool, ToolResult
 

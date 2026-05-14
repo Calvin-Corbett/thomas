@@ -27,24 +27,12 @@ from thomas.demo.agent_comparison_suite_shared import (
     DEFAULT_WRITE_MD_PATH,
     DEFAULT_WRITE_PATH,
     ROOT,
-    MetricSpec,
-    _assertion_ok,
-    _collect_git_version_info,
-    _collect_model_snapshot,
     _is_number,
     _materialize_competitor_catalog_agents,
     _now_iso,
     _read_json,
-    _resolve_path_value,
     _update_competitor_registry,
     _write_json,
-)
-from thomas.demo.agent_comparison_suite_strict_checks import (
-    _collect_benchmark_evidence,
-    _collect_benchmark_summary,
-    _compute_token_efficiency,
-    _count_regex_hits,
-    _run_probe_suite,
 )
 from thomas.plugins.benchmark_program import evaluate_benchmark_program
 from thomas.plugins.competitor_evo_scope import build_prediction_evo_scope

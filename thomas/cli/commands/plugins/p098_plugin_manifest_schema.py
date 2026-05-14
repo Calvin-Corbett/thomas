@@ -9,7 +9,7 @@ It supports a machine-readable output mode via ``--json``.
 from __future__ import annotations
 
 import json
-from typing import Any, Dict
+from typing import Any
 
 import typer
 

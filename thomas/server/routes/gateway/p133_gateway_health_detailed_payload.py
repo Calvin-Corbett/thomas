@@ -23,11 +23,10 @@ import asyncio
 import json
 import os
 import platform
-import sys
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 from collections.abc import Mapping, MutableMapping
 
 from aiohttp import ClientSession, ClientTimeout, WSMsgType, web

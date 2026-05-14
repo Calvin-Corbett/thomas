@@ -27,7 +27,7 @@ import json
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, TypedDict
+from typing import Any, TypedDict
 from collections.abc import Iterable, Mapping, Sequence
 
 # -----------------------------

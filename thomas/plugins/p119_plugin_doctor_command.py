@@ -19,7 +19,7 @@ import pkgutil
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Literal
 from collections.abc import Callable
 
 TOOL_NAME = "plugins.doctor"

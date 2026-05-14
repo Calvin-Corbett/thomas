@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 from collections.abc import Iterable, Mapping
 
 from thomas.plugins.extension_catalog_runtime import load_extension_catalog, validate_extension_catalog

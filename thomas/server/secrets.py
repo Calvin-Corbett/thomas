@@ -18,7 +18,6 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, Optional
 
 log = logging.getLogger(__name__)
 
@@ -180,7 +179,7 @@ class SecretStore:
         try:
             raw = self._path.read_text(encoding="utf-8")
             data = json.loads(raw)
-        except Exception:
+        except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
             return
 
         enc = str(data.get("encryption") or "")
@@ -200,7 +199,7 @@ class SecretStore:
                     # Plaintext fallback (non-Windows).
                     self._keys[profile] = stored
                     self._persisted.add(profile)
-            except Exception as e:
+            except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as e:
                 # Corrupt entry; skip.
                 log.debug("Skipping unreadable secret for profile %s: %s", profile, e)
 
@@ -215,7 +214,7 @@ class SecretStore:
             if rotation_days is not None:
                 try:
                     normalized["rotation_days"] = _normalize_rotation_days(rotation_days)
-                except Exception:
+                except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
                     pass
             if normalized:
                 self._meta[profile] = normalized
@@ -245,7 +244,7 @@ class SecretStore:
             if row.get("rotation_days") is not None:
                 try:
                     item["rotation_days"] = _normalize_rotation_days(row.get("rotation_days"))
-                except Exception:
+                except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
                     pass
             meta[profile] = item
         data["meta"] = meta
@@ -279,7 +278,7 @@ def _parse_iso_utc(value: str) -> datetime | None:
         raw = raw[:-1] + "+00:00"
     try:
         dt = datetime.fromisoformat(raw)
-    except Exception:
+    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
         return None
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
@@ -289,7 +288,7 @@ def _parse_iso_utc(value: str) -> datetime | None:
 def _normalize_rotation_days(value: object) -> int:
     try:
         days = int(value)
-    except Exception as exc:
+    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as exc:
         raise ValueError("rotation_days must be an integer") from exc
     if days < 1:
         raise ValueError("rotation_days must be >= 1")
@@ -303,7 +302,7 @@ def _set_private_permissions(path: Path) -> None:
         return
     try:
         os.chmod(path, 0o600)
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as e:
         # Don't fail secret writes if chmod is unavailable.
         log.debug("Could not apply restrictive permissions to %s: %s", path, e)
 

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import ctypes
-import ctypes.wintypes as wt
-from typing import Optional
 
 CF_UNICODETEXT = 13
 

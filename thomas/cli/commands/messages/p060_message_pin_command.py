@@ -21,7 +21,6 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import asdict
-from typing import Optional
 
 import click
 
@@ -145,7 +144,7 @@ def pin_command(
         else:
             click.echo(f"ERROR ({e.code}): {e}")
         ctx.exit(1)
-    except Exception as e:  # pragma: no cover
+    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as e:  # pragma: no cover
         # Avoid leaking unpredictable details in automation output.
         if json_output:
             click.echo(

@@ -6,7 +6,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from thomas.tools.base import Tool, ToolResult
 from thomas.tools.filesystem import _safe_path
