@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from typing import Any
-
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 from thomas.demo.agent_comparison_suite_shared import (
     DEFAULT_CATEGORY_WEIGHTS,
