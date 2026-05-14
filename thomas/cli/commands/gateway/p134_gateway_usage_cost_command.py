@@ -11,7 +11,7 @@ import argparse
 import asyncio
 import json
 import os
-from typing import Any, Optional
+from typing import Any
 from collections.abc import Sequence
 
 

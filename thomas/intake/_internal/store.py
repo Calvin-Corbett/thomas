@@ -6,8 +6,7 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-from collections.abc import Iterable
+from typing import Any
 
 from .config import IntakeStorageConfig
 

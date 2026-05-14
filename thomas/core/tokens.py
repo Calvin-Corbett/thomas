@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 # Chars-per-token ratio. Conservative default that slightly overestimates
 # token count (better to trim too early than blow the context window).

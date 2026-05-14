@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Dict
 
 OPENAI_CHAT_COMPLETIONS_PATH = "/v1/chat/completions"
 OPENAI_RESPONSES_PATH = "/v1/responses"

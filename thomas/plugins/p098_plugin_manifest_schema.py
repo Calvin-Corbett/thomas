@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import dataclass
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Literal
 from collections.abc import Mapping
 
 SchemaDraft = Literal["2020-12", "7"]

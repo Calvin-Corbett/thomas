@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 import pkgutil
-from typing import Any, Dict, List
+from typing import Any
 
 PKG = __name__.rsplit('.', 1)[0]
 

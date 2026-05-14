@@ -7,7 +7,7 @@ Supports machine-readable output via `--json`.
 from __future__ import annotations
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 import typer
 from typer.main import get_command as _get_typer_command

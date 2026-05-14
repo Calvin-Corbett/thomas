@@ -11,7 +11,6 @@ Design goals
 from __future__ import annotations
 
 import json
-from typing import Optional
 
 import typer
 
@@ -109,7 +108,7 @@ def add(
             api_token=api_token,
             timeout_seconds=timeout_seconds,
         )
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as e:
         _handle_error(e, json_mode=json_mode)
         return
     _emit(result, json_mode=json_mode)
@@ -143,7 +142,7 @@ def remove(
             api_token=api_token,
             timeout_seconds=timeout_seconds,
         )
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as e:
         _handle_error(e, json_mode=json_mode)
         return
     _emit(result, json_mode=json_mode)
@@ -169,7 +168,7 @@ def list_cmd(
             api_token=api_token,
             timeout_seconds=timeout_seconds,
         )
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as e:
         _handle_error(e, json_mode=json_mode)
         return
     _emit(result, json_mode=json_mode)

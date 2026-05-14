@@ -17,7 +17,7 @@ Output:
 import argparse
 import json
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.request import Request, urlopen
 
 from thomas.server.routes.gateway import p146_responses_create_stream_events as impl

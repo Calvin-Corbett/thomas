@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import logging
-import os
 from logging.handlers import RotatingFileHandler
-from pathlib import Path
 
 from .config import default_state_dir
 

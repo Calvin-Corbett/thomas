@@ -28,7 +28,7 @@ import logging
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 from collections.abc import Callable
 
 log = logging.getLogger(__name__)

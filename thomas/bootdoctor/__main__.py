@@ -17,9 +17,6 @@ from typing import Any
 
 from thomas.bootdoctor.runtime_helpers import (
     BootDoctorPathPolicy,
-    RestrictedTool,
-    _extract_patch_targets,
-    _extract_repo_paths_from_text,
     build_rescue_prompt,
     build_restricted_tools,
     load_startup_context,

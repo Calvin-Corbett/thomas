@@ -25,7 +25,7 @@ import asyncio
 import inspect
 import json
 from dataclasses import dataclass
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 from collections.abc import Mapping
 from urllib.parse import urlparse
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional
 from collections.abc import Iterable, Mapping, Sequence
 
 _SWITCH_PREFIX_PATTERNS: tuple[re.Pattern[str], ...] = (

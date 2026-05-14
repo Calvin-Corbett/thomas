@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any
 
 from thomas.core.api_importer import ApiImporter, HttpOptions, _make_toolresult_err, _make_toolresult_ok, _make_toolspec
 from thomas.tools.base import Tool, ToolResult, ToolSpec

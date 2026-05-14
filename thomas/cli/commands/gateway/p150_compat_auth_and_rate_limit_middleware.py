@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from typing import Any, Dict
+from typing import Any
 
 from thomas.server.routes.gateway.p150_compat_auth_and_rate_limit_middleware import (
     compat_security_status_json,

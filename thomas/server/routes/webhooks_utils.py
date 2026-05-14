@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import os
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 from collections.abc import Iterator
 
 

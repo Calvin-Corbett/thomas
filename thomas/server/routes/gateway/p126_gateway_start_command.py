@@ -9,7 +9,7 @@ import time
 import weakref
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, TypedDict
+from typing import Any, Literal, TypedDict
 from collections.abc import Mapping, MutableMapping
 
 try:

@@ -18,7 +18,7 @@ import socket
 import struct
 import time
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 from collections.abc import Iterable, Sequence
 
 from aiohttp import web

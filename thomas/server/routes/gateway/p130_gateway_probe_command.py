@@ -29,7 +29,7 @@ import json
 import os
 import time
 from dataclasses import asdict, dataclass
-from typing import Any, Optional, TypedDict
+from typing import Any, TypedDict
 from collections.abc import Mapping
 
 from aiohttp import ClientError, ClientSession, ClientTimeout, web

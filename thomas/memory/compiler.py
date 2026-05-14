@@ -9,8 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from thomas.memory.embedder import Embedder
 from thomas.memory.graph import GraphStore

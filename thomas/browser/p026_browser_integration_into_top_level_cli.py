@@ -18,7 +18,7 @@ import urllib.parse
 import webbrowser
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional, Tuple
+from typing import Any, Literal
 
 ErrorKind = Literal["invalid_input", "missing_config", "external_failure", "internal_error"]
 BackendKind = Literal["thomas_tool", "webbrowser", "noop"]

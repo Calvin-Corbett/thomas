@@ -12,7 +12,7 @@ with short line-numbered previews.
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, Dict
+from typing import Any
 
 from thomas.core.rag_index import get_rag_index
 

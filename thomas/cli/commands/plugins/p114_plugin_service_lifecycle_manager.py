@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
-from typing import Any, Optional
+from typing import Any
 
 import typer
 

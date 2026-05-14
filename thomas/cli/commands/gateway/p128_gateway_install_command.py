@@ -5,7 +5,7 @@ import dataclasses
 import json
 import sys
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 from collections.abc import Sequence
 
 from thomas.server.routes.gateway.p128_gateway_install_command import (
