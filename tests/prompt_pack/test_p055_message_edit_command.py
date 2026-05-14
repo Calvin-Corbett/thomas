@@ -3,6 +3,7 @@ import json
 
 import pytest
 
+from thomas.cli.commands.messages import p055_message_edit_command as cli_mod
 from thomas.messages.p055_message_edit_command import (
     ERR_EXTERNAL_FAILURE,
     ERR_INVALID_INPUT,
@@ -11,8 +12,6 @@ from thomas.messages.p055_message_edit_command import (
     MessageEditCommandInput,
     execute_message_edit,
 )
-
-from thomas.cli.commands.messages import p055_message_edit_command as cli_mod
 
 
 class _FakeEditorKw:

@@ -9,13 +9,13 @@ from typer.testing import CliRunner
 
 from thomas.cli.commands.plugins.p114_plugin_service_lifecycle_manager import app as cli_app
 from thomas.plugins.p114_plugin_service_lifecycle_manager import (
+    SERVICE_LIFECYCLE_TOOL_NAME,
     ExternalFailureError,
     InvalidInputError,
     LifecycleAction,
     MissingConfigError,
     PluginServiceLifecycleManager,
     PluginServiceLifecycleManagerPlugin,
-    SERVICE_LIFECYCLE_TOOL_NAME,
     ServiceDefinition,
     ServiceLifecycleRequest,
     ServiceState,

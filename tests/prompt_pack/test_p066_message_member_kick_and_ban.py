@@ -91,8 +91,8 @@ def test_run_success_json_dict():
 
 
 def test_cli_json_success(monkeypatch):
-    from thomas.cli.commands.messages import p066_message_member_kick_and_ban as cli
     import thomas.messages.p066_message_member_kick_and_ban as mod
+    from thomas.cli.commands.messages import p066_message_member_kick_and_ban as cli
 
     def fake_post(url, json=None, timeout=None, headers=None):
         return _FakeResp(status_code=200, json_body={"message": "ok"})

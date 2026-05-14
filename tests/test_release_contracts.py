@@ -5,7 +5,6 @@ from pathlib import Path
 
 from thomas.system.release_contracts import build_release_contract_report, evaluate_release_contract_registry
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 

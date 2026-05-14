@@ -147,6 +147,7 @@ def test_cli_json_output_success(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with _run_gateway({"alpha": "running"}) as url:
         from typer.testing import CliRunner
+
         from thomas.cli.commands.plugins import p122_plugin_lifecycle_commands_runtime_backed as cli
 
         runner = CliRunner()
@@ -164,6 +165,7 @@ def test_cli_missing_config_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("THOMAS_GATEWAY_URL", raising=False)
 
     from typer.testing import CliRunner
+
     from thomas.cli.commands.plugins import p122_plugin_lifecycle_commands_runtime_backed as cli
 
     runner = CliRunner()

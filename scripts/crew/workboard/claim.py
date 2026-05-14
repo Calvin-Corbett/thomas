@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-import sys
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
@@ -27,7 +27,11 @@ try:
         claims_gate,
     )
 except ImportError:  # pragma: no cover
-    from crew.workboard.claim_dispatch import dispatch_workers, release_temp_task_creator, suggest_delegation  # type: ignore
+    from crew.workboard.claim_dispatch import (  # type: ignore
+        dispatch_workers,
+        release_temp_task_creator,
+        suggest_delegation,
+    )
     from crew.workboard.claim_ops import claim, list_claims, release  # type: ignore
     from crew.workboard.claim_utils import (  # type: ignore
         DEFAULT_DISPATCH_MAX_SUGGESTIONS,

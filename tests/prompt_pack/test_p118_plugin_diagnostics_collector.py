@@ -74,6 +74,7 @@ def test_collect_plugin_diagnostics_import_failure_is_reported(monkeypatch: pyte
 
 def test_cli_json_output_success() -> None:
     from typer.testing import CliRunner
+
     from thomas.cli.commands.plugins.p118_plugin_diagnostics_collector import app
 
     runner = CliRunner()
@@ -95,6 +96,7 @@ def test_cli_json_output_success() -> None:
 
 def test_cli_json_output_unknown_plugin_failure() -> None:
     from typer.testing import CliRunner
+
     from thomas.cli.commands.plugins.p118_plugin_diagnostics_collector import app
 
     runner = CliRunner()

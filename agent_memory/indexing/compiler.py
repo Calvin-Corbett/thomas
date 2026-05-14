@@ -1,18 +1,20 @@
 from __future__ import annotations
+
 import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from agent_memory.storage.filelock import file_lock
-from agent_memory.storage.sqlite_log import ImmortalLog
-from agent_memory.storage.meta_db import MetaDB
-from agent_memory.indexing.index_manager import IndexManager
-from agent_memory.indexing.derived_db import DerivedDB
-from agent_memory.vector.index import VectorIndex
 from agent_memory.graph.store import GraphStore
-from agent_memory.summarize.extractive import summarize, SummarizeConfig
+from agent_memory.indexing.derived_db import DerivedDB
+from agent_memory.indexing.index_manager import IndexManager
+from agent_memory.storage.filelock import file_lock
+from agent_memory.storage.meta_db import MetaDB
+from agent_memory.storage.sqlite_log import ImmortalLog
+from agent_memory.summarize.extractive import SummarizeConfig, summarize
+from agent_memory.vector.index import VectorIndex
+
 
 @dataclass
 class CompilerConfig:
@@ -27,7 +29,7 @@ class Compiler:
         self.meta = meta
         self.idx = idx
         self.cfg = cfg
-        self.swap_lock = str((root / "indices" / "SWAP.lock"))
+        self.swap_lock = str(root / "indices" / "SWAP.lock")
 
     def _active_base_path(self) -> Path:
         active = self.idx.get_active().active_build

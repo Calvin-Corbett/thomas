@@ -120,7 +120,7 @@ def patch_create_app_dependencies(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
         "thomas.server.routes.audit",
         SimpleNamespace(
             handle_audit_files=lambda request: (b"{}", 200, {}),
-            handle_audit_run_files=lambda request, run_id: (f'{{"run":"{run_id}"}}'.encode("utf-8"), 200, {}),
+            handle_audit_run_files=lambda request, run_id: (f'{{"run":"{run_id}"}}'.encode(), 200, {}),
         ),
     )
     monkeypatch.setattr(app_core._file_audit, "init_audit", lambda path: None)
@@ -424,7 +424,7 @@ async def test_audit_routes_and_guardrail_pref_denies_are_wired(
 
     async def _handle_audit_run_files(request, run_id):
         _ = request
-        return (f'{{"run":"{run_id}"}}'.encode("utf-8"), 200, {"Content-Type": "application/json"})
+        return (f'{{"run":"{run_id}"}}'.encode(), 200, {"Content-Type": "application/json"})
 
     policy_cfg = SimpleNamespace(
         deny_groups=[],

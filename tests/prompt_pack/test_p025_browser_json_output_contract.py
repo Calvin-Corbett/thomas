@@ -83,11 +83,11 @@ def test_cli_patch_adds_flags_without_touching_callback_signature():
 
 def test_cli_register_wraps_leaf_commands_for_json_output_and_captures_logging():
     click = pytest.importorskip("click")
+    import logging
+
     from click.testing import CliRunner
 
     from thomas.cli.commands.browser.p025_browser_json_output_contract import register
-
-    import logging
 
     logging.basicConfig(level=logging.WARNING)
 

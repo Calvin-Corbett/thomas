@@ -8,13 +8,13 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 from collections.abc import Sequence
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-import sys
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
@@ -24,8 +24,8 @@ try:
     from scripts.forge.gates import workboard_claims as claims_gate
 except Exception:  # pragma: no cover
     import agent_identity  # type: ignore
-    from forge.gates import workboard_claims as claims_gate  # type: ignore
     import virtual_office_identity  # type: ignore
+    from forge.gates import workboard_claims as claims_gate  # type: ignore
 
 try:
     from scripts.crew.workboard import message as workboard_message_mod

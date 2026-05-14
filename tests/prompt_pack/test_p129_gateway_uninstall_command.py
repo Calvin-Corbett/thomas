@@ -3,15 +3,14 @@ from pathlib import Path
 
 import pytest
 
+from thomas.cli.commands.gateway.p129_gateway_uninstall_command import (
+    format_error,
+    format_success,
+)
 from thomas.server.routes.gateway.p129_gateway_uninstall_command import (
     GatewayUninstallError,
     GatewayUninstallRequest,
     uninstall_gateway,
-)
-
-from thomas.cli.commands.gateway.p129_gateway_uninstall_command import (
-    format_error,
-    format_success,
 )
 
 

@@ -2,7 +2,6 @@ import json
 
 import pytest
 
-
 from thomas.plugins.p106_plugin_command_registry_bridge import (
     CommandRegistryAdapter,
     dispatch_plugin_command,

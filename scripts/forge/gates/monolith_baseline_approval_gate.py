@@ -6,14 +6,13 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import sys
 from pathlib import Path
 
-import sys
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 from typing import Any, Dict, List, Optional, Sequence, Set
-
 
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_BASELINE = "docs/monolith_guard_baseline.json"
@@ -34,7 +33,7 @@ def _to_int(value: Any, default: int = 0) -> int:
         return default
 
 
-def _git_changed_files(repo_root: Path, *, base_ref: str, head_ref: str) -> Set[str]:
+def _git_changed_files(repo_root: Path, *, base_ref: str, head_ref: str) -> set[str]:
     proc = subprocess.run(
         ["git", "diff", "--name-only", f"{base_ref}...{head_ref}"],
         cwd=repo_root,
@@ -44,7 +43,7 @@ def _git_changed_files(repo_root: Path, *, base_ref: str, head_ref: str) -> Set[
     if proc.returncode != 0:
         msg = (proc.stderr or proc.stdout or "").strip() or "git diff failed"
         raise RuntimeError(msg)
-    out: Set[str] = set()
+    out: set[str] = set()
     for line in proc.stdout.splitlines():
         rel = _normalize(line)
         if rel:
@@ -52,7 +51,7 @@ def _git_changed_files(repo_root: Path, *, base_ref: str, head_ref: str) -> Set[
     return out
 
 
-def _git_show_text(repo_root: Path, *, ref: str, rel_path: str) -> Optional[str]:
+def _git_show_text(repo_root: Path, *, ref: str, rel_path: str) -> str | None:
     proc = subprocess.run(
         ["git", "show", f"{ref}:{_normalize(rel_path)}"],
         cwd=repo_root,
@@ -64,7 +63,7 @@ def _git_show_text(repo_root: Path, *, ref: str, rel_path: str) -> Optional[str]
     return proc.stdout
 
 
-def _load_json_obj(text: Optional[str], *, default: Dict[str, Any]) -> Dict[str, Any]:
+def _load_json_obj(text: str | None, *, default: dict[str, Any]) -> dict[str, Any]:
     raw = str(text or "").strip()
     if not raw:
         return dict(default)
@@ -74,11 +73,11 @@ def _load_json_obj(text: Optional[str], *, default: Dict[str, Any]) -> Dict[str,
     return parsed
 
 
-def _extract_allowed(doc: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+def _extract_allowed(doc: dict[str, Any]) -> dict[str, dict[str, Any]]:
     raw = doc.get("allowed_large_files")
     if not isinstance(raw, dict):
         return {}
-    out: Dict[str, Dict[str, Any]] = {}
+    out: dict[str, dict[str, Any]] = {}
     for key, value in raw.items():
         rel = _normalize(str(key or ""))
         if not rel or not isinstance(value, dict):
@@ -87,22 +86,22 @@ def _extract_allowed(doc: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     return out
 
 
-def _extract_approvals(doc: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _extract_approvals(doc: dict[str, Any]) -> list[dict[str, Any]]:
     rows = doc.get("approvals")
     if not isinstance(rows, list):
         return []
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for row in rows:
         if isinstance(row, dict):
             out.append(dict(row))
     return out
 
 
-def _find_relaxations(base_doc: Dict[str, Any], head_doc: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _find_relaxations(base_doc: dict[str, Any], head_doc: dict[str, Any]) -> list[dict[str, Any]]:
     base_allowed = _extract_allowed(base_doc)
     head_allowed = _extract_allowed(head_doc)
 
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for path, head_entry in sorted(head_allowed.items()):
         base_entry = base_allowed.get(path)
         head_max = _to_int(head_entry.get("max_lines"), 0)
@@ -158,7 +157,7 @@ def _find_relaxations(base_doc: Dict[str, Any], head_doc: Dict[str, Any]) -> Lis
     return out
 
 
-def _approval_matches(relaxation: Dict[str, Any], approval: Dict[str, Any]) -> bool:
+def _approval_matches(relaxation: dict[str, Any], approval: dict[str, Any]) -> bool:
     if _normalize(str(approval.get("path") or "")) != _normalize(str(relaxation.get("path") or "")):
         return False
     if str(approval.get("change") or "").strip() != str(relaxation.get("change") or "").strip():
@@ -180,15 +179,15 @@ def _approval_matches(relaxation: Dict[str, Any], approval: Dict[str, Any]) -> b
 
 
 def evaluate_relaxation_gate(
-    base_doc: Dict[str, Any],
-    head_doc: Dict[str, Any],
-    approvals_doc: Dict[str, Any],
-) -> Dict[str, Any]:
+    base_doc: dict[str, Any],
+    head_doc: dict[str, Any],
+    approvals_doc: dict[str, Any],
+) -> dict[str, Any]:
     relaxations = _find_relaxations(base_doc, head_doc)
     approvals = _extract_approvals(approvals_doc)
 
-    violations: List[Dict[str, Any]] = []
-    matched: List[Dict[str, Any]] = []
+    violations: list[dict[str, Any]] = []
+    matched: list[dict[str, Any]] = []
     for row in relaxations:
         matched_row = next((a for a in approvals if _approval_matches(row, a)), None)
         if matched_row is None:
@@ -214,11 +213,11 @@ def evaluate_relaxation_gate(
 
 
 def apply_approval_file_change_requirement(
-    result: Dict[str, Any],
+    result: dict[str, Any],
     *,
     approvals_changed: bool,
     allow_existing_approvals: bool,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Require the approvals registry file to change whenever relaxations occur."""
     payload = dict(result or {})
     violations = list(payload.get("violations") or [])

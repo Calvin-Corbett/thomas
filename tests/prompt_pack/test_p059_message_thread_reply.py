@@ -25,7 +25,7 @@ def _import_module(module_name: str, rel_path: str):
 
 
 class DummyResponse:
-    def __init__(self, *, status_code: int = 200, text: str = "ok", json_data: Optional[Dict[str, Any]] = None):
+    def __init__(self, *, status_code: int = 200, text: str = "ok", json_data: dict[str, Any] | None = None):
         self.status_code = status_code
         self.text = text
         self._json_data = json_data
@@ -39,7 +39,7 @@ class DummyResponse:
 def test_thread_reply_success_via_webhook(monkeypatch):
     impl = _import_module("thomas.messages.p059_message_thread_reply", "thomas/messages/p059_message_thread_reply.py")
 
-    calls: Dict[str, Any] = {}
+    calls: dict[str, Any] = {}
 
     def fake_post(url, json=None, headers=None, timeout=None):
         calls["url"] = url

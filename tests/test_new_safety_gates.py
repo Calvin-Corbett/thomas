@@ -14,12 +14,12 @@ import pytest
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
+from forge.gates import protected_files_gate as protected_gate
 from forge.gates.circular_imports_gate import FORBIDDEN_PAIRS, _extract_thomas_imports
 from forge.gates.duplicate_filename_gate import FORBIDDEN_PREFIXES, FORBIDDEN_SUFFIXES, _is_scoped_code_file
 from forge.gates.exception_handler_gate import (
     _find_broad_handlers,
 )
-from forge.gates import protected_files_gate as protected_gate
 from forge.gates.protected_files_gate import PROTECTED_ENFORCEMENT_SCRIPTS, PROTECTED_FILES
 
 # ──────────────────────────────────────────────

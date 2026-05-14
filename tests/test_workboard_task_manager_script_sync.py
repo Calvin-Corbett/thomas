@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import scripts.forge.gates.workboard_claims as gate
 import scripts.crew.tasks.manager as mod
 import scripts.crew.tasks.plans as plan_sync
+import scripts.forge.gates.workboard_claims as gate
 
 from thomas.preferences.store import PreferencesStore
 

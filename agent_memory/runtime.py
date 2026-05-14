@@ -1,15 +1,17 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Tuple
 
 from agent_memory.config import AppPaths
-from agent_memory.storage.sqlite_log import ImmortalLog
-from agent_memory.storage.meta_db import MetaDB
-from agent_memory.storage.blob_store import BlobStore
-from agent_memory.indexing.index_manager import IndexManager
-from agent_memory.indexing.derived_db import DerivedDB
 from agent_memory.indexing.compiler import Compiler
+from agent_memory.indexing.derived_db import DerivedDB
+from agent_memory.indexing.index_manager import IndexManager
+from agent_memory.storage.blob_store import BlobStore
+from agent_memory.storage.meta_db import MetaDB
+from agent_memory.storage.sqlite_log import ImmortalLog
+
 
 @dataclass
 class Runtime:
@@ -53,7 +55,7 @@ def init_runtime(root: Path) -> Runtime:
     compiler = Compiler(root=paths.root, log=log, meta=meta, idx=idx)
     return Runtime(paths=paths, log=log, meta=meta, blobs=blobs, idx=idx, compiler=compiler)
 
-def open_active_indices(rt: Runtime) -> Tuple[DerivedDB, DerivedDB]:
+def open_active_indices(rt: Runtime) -> tuple[DerivedDB, DerivedDB]:
     active = rt.idx.get_active().active_build
     base_path = rt.paths.builds_dir / active / "derived_base.db"
     delta_path = rt.paths.delta_dir / "derived_delta.db"

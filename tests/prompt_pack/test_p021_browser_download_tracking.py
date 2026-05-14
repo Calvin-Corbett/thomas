@@ -48,7 +48,7 @@ def _keep_writing(path: Path, delay_s: float, interval_s: float, total_writes: i
         for i in range(total_writes):
             # ensure size+mtime keeps changing
             with open(path, "ab") as f:
-                f.write(f"{i}".encode("utf-8"))
+                f.write(f"{i}".encode())
             time.sleep(interval_s)
 
     t = threading.Thread(target=_worker, daemon=True)

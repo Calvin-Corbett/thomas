@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Any, Dict, List
+
 
 @dataclass
 class LLMConfig:
@@ -19,8 +21,8 @@ class AppConfig:
     thread: str = "default"
     mode: str = "auto"  # fast, deep, learning, auto, no_memory
     llm: LLMConfig = field(default_factory=LLMConfig)
-    tool_allowlist: List[str] = field(default_factory=lambda: ["fs.read", "fs.write", "web.open", "browser.playwright"])
-    safety: Dict[str, Any] = field(default_factory=lambda: {
+    tool_allowlist: list[str] = field(default_factory=lambda: ["fs.read", "fs.write", "web.open", "browser.playwright"])
+    safety: dict[str, Any] = field(default_factory=lambda: {
         "fs_root": "./sandbox_files",
         "deny_network": False,
     })

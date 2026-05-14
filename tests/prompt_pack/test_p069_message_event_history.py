@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from thomas.cli.commands.messages import p069_message_event_history as cli_mod
 from thomas.messages.p069_message_event_history import (
     MessageEventHistoryConfigError,
     MessageEventHistoryInvalidInputError,
@@ -12,8 +13,6 @@ from thomas.messages.p069_message_event_history import (
     get_message_event_history,
     response_to_json,
 )
-
-from thomas.cli.commands.messages import p069_message_event_history as cli_mod
 
 
 def _write_jsonl(path: Path, rows: list[dict]) -> None:

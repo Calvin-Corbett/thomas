@@ -116,7 +116,7 @@ def test_no_copy_policy_blocks_promotion_and_check_reports_it(tmp_path: Path, mo
 
     manifest = create_skill_draft(cfg, source=str(source_dir), name='copied-skill-native')
     draft_id = str(manifest['draft_id'])
-    generated_dir = Path(str(((manifest.get('generated') or {}).get('path') or '')))
+    generated_dir = Path(str((manifest.get('generated') or {}).get('path') or ''))
     (generated_dir / 'SKILL.md').write_text(source_text, encoding='utf-8')
     (generated_dir / 'THOMAS_SKILL.json').write_text(
         json.dumps({'name': 'copied-skill-native', 'recreated_from_scratch': True}, ensure_ascii=False),

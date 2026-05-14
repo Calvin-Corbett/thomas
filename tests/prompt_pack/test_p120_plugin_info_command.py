@@ -4,6 +4,7 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
+from thomas.cli.commands.plugins import p120_plugin_info_command as cli_mod
 from thomas.plugins.p120_plugin_info_command import (
     ERR_EXTERNAL_FAILURE,
     ERR_INVALID_INPUT,
@@ -13,7 +14,6 @@ from thomas.plugins.p120_plugin_info_command import (
     PluginInfoCommandInput,
     run_plugin_info_command,
 )
-from thomas.cli.commands.plugins import p120_plugin_info_command as cli_mod
 
 
 def test_plugin_info_success_from_stubbed_report():

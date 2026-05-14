@@ -4,8 +4,8 @@ import json
 from contextlib import contextmanager
 from pathlib import Path
 
-import scripts.forge.gates.workboard_claims as gate
 import scripts.crew.workboard.claim as mod
+import scripts.forge.gates.workboard_claims as gate
 
 
 def _write_workboard(

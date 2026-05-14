@@ -5,11 +5,11 @@ from click.testing import CliRunner
 
 from thomas.cli.commands.messages.p060_message_pin_command import pin_command
 from thomas.messages.p060_message_pin_command import (
+    InvalidMessagePinInput,
     MessagePinConfig,
     MessagePinConfigError,
     MessagePinExternalError,
     MessagePinInput,
-    InvalidMessagePinInput,
     load_message_pin_config,
     pin_message,
     reset_memory_pins,

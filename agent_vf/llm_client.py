@@ -1,15 +1,17 @@
 from __future__ import annotations
+
 import json
-import urllib.request
 import urllib.error
+import urllib.request
 from typing import Any, Dict, List, Optional
 
 from agent_vf.config import LLMConfig
 
+
 class LLMError(RuntimeError):
     pass
 
-def _post_json(url: str, payload: Dict[str, Any], headers: Dict[str, str], timeout: float) -> Dict[str, Any]:
+def _post_json(url: str, payload: dict[str, Any], headers: dict[str, str], timeout: float) -> dict[str, Any]:
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     try:
@@ -27,13 +29,13 @@ class OpenAICompatClient:
     def __init__(self, cfg: LLMConfig):
         self.cfg = cfg
 
-    def chat(self, messages: List[Dict[str, str]], tools: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    def chat(self, messages: list[dict[str, str]], tools: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         url = self.cfg.base_url.rstrip("/") + "/chat/completions"
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.cfg.api_key}",
         }
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "model": self.cfg.model,
             "messages": messages,
             "temperature": self.cfg.temperature,

@@ -1,11 +1,12 @@
+from typing import Tuple
+
 import pytest
 from aiohttp import ClientSession, web
-from typing import Tuple
 
 from thomas.server.routes.gateway import p140_openai_chat_completions_non_stream as p140
 
 
-async def _start_server(app: web.Application) -> Tuple[web.AppRunner, str]:
+async def _start_server(app: web.Application) -> tuple[web.AppRunner, str]:
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "127.0.0.1", 0)

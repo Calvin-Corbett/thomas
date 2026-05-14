@@ -5,8 +5,8 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from thomas.server.routes.gateway import p144_responses_compat_route_scaffold as route_mod
 from thomas.cli.commands.gateway import p144_responses_compat_route_scaffold as cli_mod
+from thomas.server.routes.gateway import p144_responses_compat_route_scaffold as route_mod
 
 
 @pytest.mark.asyncio

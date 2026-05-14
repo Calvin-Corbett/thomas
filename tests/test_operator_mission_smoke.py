@@ -4,7 +4,6 @@ from pathlib import Path
 
 from tests.web_ui_source import read_app_js_source
 
-
 ROOT = Path(__file__).resolve().parents[1]
 MISSION_ROUTE_PATH = ROOT / "thomas" / "server" / "routes" / "mission.py"
 MISSION_HTML_PATH = ROOT / "thomas" / "server" / "web" / "mission.html"

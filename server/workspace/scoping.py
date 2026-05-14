@@ -11,8 +11,7 @@ from typing import Set, Type
 
 from sqlalchemy import event
 from sqlalchemy.orm import Session, with_loader_criteria
-from sqlalchemy.sql.dml import Update, Delete
-
+from sqlalchemy.sql.dml import Delete, Update
 
 _REGISTERED = False
 
@@ -29,9 +28,9 @@ def register_workspace_scoping() -> None:
         if not ws_id:
             return
         for obj in session.new:
-            if hasattr(obj, "workspace_id") and getattr(obj, "workspace_id") in (None, ""):
+            if hasattr(obj, "workspace_id") and obj.workspace_id in (None, ""):
                 try:
-                    setattr(obj, "workspace_id", ws_id)
+                    obj.workspace_id = ws_id
                 except Exception:
                     pass
 
@@ -60,7 +59,7 @@ def register_workspace_scoping() -> None:
         if not orm_execute_state.is_select:
             return
 
-        entities: Set[Type] = set()
+        entities: set[type] = set()
         try:
             for desc in getattr(stmt, "column_descriptions", []) or []:
                 ent = desc.get("entity")

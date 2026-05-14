@@ -12,7 +12,6 @@ from thomas.messages.p068_message_permissions_view import (
     view_message_permissions,
 )
 
-
 runner = CliRunner()
 
 

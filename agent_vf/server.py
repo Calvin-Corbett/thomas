@@ -1,9 +1,11 @@
 from __future__ import annotations
+
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 
 from agent_vf.cli_runtime import build_agent
+
 
 class Handler(BaseHTTPRequestHandler):
     agent = None

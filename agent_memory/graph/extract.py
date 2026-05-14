@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -11,8 +12,8 @@ HATES = re.compile(r"\b(i hate|i don\x27t like|i do not like)\s+(?P<thing>[^.?!]
 
 PROJECT = re.compile(r"\b(project|repo)\s+(?P<name>[A-Za-z0-9_\-]{2,})", re.IGNORECASE)
 
-def extract_edges(text: str) -> List[Dict[str, Any]]:
-    edges: List[Dict[str, Any]] = []
+def extract_edges(text: str) -> list[dict[str, Any]]:
+    edges: list[dict[str, Any]] = []
     m = PROJECT.search(text)
     if m:
         pname = m.group("name").strip()

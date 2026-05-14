@@ -1,8 +1,8 @@
 import unittest
 
 from thomas.demo.browser_duel import (
-    build_results_from_browser,
     build_execution_plan,
+    build_results_from_browser,
     default_adapter,
     load_adapters,
     parse_target_args,

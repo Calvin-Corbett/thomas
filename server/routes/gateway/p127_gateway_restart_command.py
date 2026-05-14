@@ -62,7 +62,6 @@ from typing import Any, Awaitable, Dict, Literal, Mapping, Optional, Sequence, T
 
 from aiohttp import web
 
-
 # -----------------------------
 # Contracts
 # -----------------------------
@@ -75,7 +74,7 @@ class GatewayRestartRequestBody(TypedDict, total=False):
 class GatewayRestartErrorBody(TypedDict):
     code: str
     message: str
-    details: Dict[str, Any]
+    details: dict[str, Any]
 
 
 class GatewayRestartFailureResponse(TypedDict):
@@ -94,7 +93,7 @@ class GatewayRestartSuccessResponse(TypedDict):
 GatewayRestartResponse = GatewayRestartSuccessResponse | GatewayRestartFailureResponse
 
 
-ROUTE_SCHEMA: Dict[str, Any] = {
+ROUTE_SCHEMA: dict[str, Any] = {
     "path": "/gateway/restart",
     "method": "POST",
     "request": {
@@ -150,7 +149,7 @@ class GatewayRestartRequest:
     force: bool = False
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, Any]) -> "GatewayRestartRequest":
+    def from_mapping(cls, data: Mapping[str, Any]) -> GatewayRestartRequest:
         allowed = {"gateway", "force"}
         unknown = sorted(k for k in data.keys() if k not in allowed)
         if unknown:
@@ -180,9 +179,9 @@ class GatewayRestartError(Exception):
     http_status: int = 502
     message: str = "Gateway restart failed."
 
-    def __init__(self, *, details: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, *, details: dict[str, Any] | None = None) -> None:
         super().__init__(self.message)
-        self.details: Dict[str, Any] = details or {}
+        self.details: dict[str, Any] = details or {}
 
 
 class InvalidGatewayRestartInput(GatewayRestartError):
@@ -215,7 +214,7 @@ def _error_response(err: GatewayRestartError) -> web.Response:
     return web.json_response(payload, status=err.http_status)
 
 
-def _get_restart_command(app: web.Application) -> Optional[str | Sequence[str]]:
+def _get_restart_command(app: web.Application) -> str | Sequence[str] | None:
     if "gateway_restart_command" in app:
         return cast(str | Sequence[str], app["gateway_restart_command"])
 
@@ -231,7 +230,7 @@ def _get_restart_command(app: web.Application) -> Optional[str | Sequence[str]]:
     return None
 
 
-def _find_restart_callable(app: web.Application) -> Optional[Any]:
+def _find_restart_callable(app: web.Application) -> Any | None:
     candidate_keys = (
         "gateway_controller",
         "gateway",
@@ -264,7 +263,7 @@ async def _maybe_await(value: Any) -> Any:
 
 
 async def _invoke_restart_callable(fn: Any, *, gateway: str, force: bool) -> None:
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     sig = None
     try:
         sig = inspect.signature(fn)

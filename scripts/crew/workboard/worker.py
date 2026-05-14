@@ -14,28 +14,28 @@ import json
 import os
 import shlex
 import subprocess
+import sys
 import time
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-import sys
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from scripts.forge.gates import workboard_claims as claims_gate
     from scripts import workboard_task_manager
     from scripts.crew.workboard import claim as workboard_claim
     from scripts.crew.workboard import message as workboard_message
+    from scripts.forge.gates import workboard_claims as claims_gate
     from thomas.core import task_bot_runtime
 except Exception:  # pragma: no cover
-    from forge.gates import workboard_claims as claims_gate  # type: ignore
+    from crew.tasks import manager as workboard_task_manager  # type: ignore
     from crew.workboard import claim as workboard_claim  # type: ignore
     from crew.workboard import message as workboard_message  # type: ignore
-    from crew.tasks import manager as workboard_task_manager  # type: ignore
+    from forge.gates import workboard_claims as claims_gate  # type: ignore
 
     from thomas.core import task_bot_runtime  # type: ignore
 ROOT = Path(__file__).resolve().parents[3]

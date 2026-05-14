@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import create_engine, Column, String
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy import Column, String, create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
 
+from server.workspace.rbac import WorkspaceRole, can_manage_members, can_write, role_allows
 from server.workspace.scoping import register_workspace_scoping
-from server.workspace.rbac import WorkspaceRole, role_allows, can_manage_members, can_write
-
 
 Base = declarative_base()
 

@@ -135,8 +135,8 @@ def test_run_returns_error_dict_on_bad_payload():
 
 def test_cli_runner_json_success(monkeypatch, capsys):
     # Import CLI module and monkeypatch browser resolver used by click().
-    from thomas.cli.commands.browser import p003_browser_action_click as cli
     from thomas.browser import p003_browser_action_click as action
+    from thomas.cli.commands.browser import p003_browser_action_click as cli
 
     browser = DummyBrowser()
     monkeypatch.setattr(action, "_resolve_browser_client", lambda: browser)

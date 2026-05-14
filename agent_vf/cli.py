@@ -1,9 +1,11 @@
 from __future__ import annotations
+
 import argparse
 
 from agent_vf.cli_runtime import build_agent
-from agent_vf.server import serve
 from agent_vf.llm_client import LLMError
+from agent_vf.server import serve
+
 
 def cmd_chat(args):
     agent = build_agent(root=args.root)

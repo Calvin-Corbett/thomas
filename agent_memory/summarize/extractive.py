@@ -1,9 +1,10 @@
 from __future__ import annotations
+
+import math
+import re
+from collections import Counter
 from dataclasses import dataclass
 from typing import List
-import re
-import math
-from collections import Counter
 
 _SENT = re.compile(r"(?<=[.!?])\s+")
 
@@ -12,7 +13,7 @@ class SummarizeConfig:
     max_sentences: int = 6
     max_chars: int = 900
 
-def summarize(texts: List[str], cfg: SummarizeConfig = SummarizeConfig()) -> str:
+def summarize(texts: list[str], cfg: SummarizeConfig = SummarizeConfig()) -> str:
     joined = " ".join(t.strip() for t in texts if t.strip())
     if not joined:
         return ""

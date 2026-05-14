@@ -9,7 +9,6 @@ from collections.abc import Iterable, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 
-import sys
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
@@ -76,7 +75,7 @@ def _parse_iso_utc(raw: str) -> datetime | None:
         return None
     try:
         dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
-    except Exception:
+    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
         return None
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)

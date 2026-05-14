@@ -4,18 +4,17 @@ import pytest
 from prompt_toolkit.document import Document
 
 from thomas.cli.repl import _should_open_slash_popup
+from thomas.cli.repl_runtime import ThomasREPLRuntimeMixin
 from thomas.cli.repl_slash import (
     SlashArgOption,
     SlashCommandCompleter,
-    slash_arg_options,
     is_known_slash_command,
     list_slash_specs,
     normalize_slash_command,
     resolve_slash_selection,
+    slash_arg_options,
     suggest_slash_commands,
 )
-
-from thomas.cli.repl_runtime import ThomasREPLRuntimeMixin
 from thomas.cli.repl_state import ReplUiState
 
 

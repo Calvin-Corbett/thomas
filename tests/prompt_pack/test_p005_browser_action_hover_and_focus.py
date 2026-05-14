@@ -7,7 +7,6 @@ from thomas.browser.p005_browser_action_hover_and_focus import (
     HoverFocusRequest,
     hover_or_focus_sync,
 )
-
 from thomas.cli.commands.browser.p005_browser_action_hover_and_focus import (
     run_hover_or_focus,
 )

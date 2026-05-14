@@ -17,8 +17,8 @@ from thomas.core.config import (
     ToolsConfig,
     _auto_discover_bool_fields,
     _build_model_config,
-    _collect_unknown_core_keys,
     _coerce_types,
+    _collect_unknown_core_keys,
     _default_data_dir,
     _env_override,
     _is_subpath,
@@ -68,7 +68,7 @@ def test_apply_runtime_data_env_defaults_sets_stateful_paths(tmp_path: Path, mon
         profile="demo",
     )
     assert mapping["THOMAS_PROFILE"] == "demo"
-    assert os.environ["THOMAS_HOME"] == str((tmp_path / "base" / "demo"))
+    assert os.environ["THOMAS_HOME"] == str(tmp_path / "base" / "demo")
     assert os.environ["THOMAS_RUNS_DB_PATH"].endswith(".thomas\\runs.sqlite3") or os.environ["THOMAS_RUNS_DB_PATH"].endswith(".thomas/runs.sqlite3")
 
 

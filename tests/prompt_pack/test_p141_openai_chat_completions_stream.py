@@ -67,7 +67,7 @@ async def _make_thomas_app() -> web.Application:
     raise RuntimeError("Thomas app factory did not return an aiohttp.web.Application")
 
 
-async def _start_app(app: web.Application) -> Tuple[web.AppRunner, int]:
+async def _start_app(app: web.Application) -> tuple[web.AppRunner, int]:
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "127.0.0.1", 0)
@@ -149,7 +149,7 @@ def _make_upstream_app() -> web.Application:
         ]
 
         for c in chunks:
-            await resp.write(f"data: {json.dumps(c)}\n\n".encode("utf-8"))
+            await resp.write(f"data: {json.dumps(c)}\n\n".encode())
             await asyncio.sleep(0)
 
         await resp.write(b"data: [DONE]\n\n")

@@ -4,15 +4,15 @@ from typing import Any
 import pytest
 from typer.testing import CliRunner
 
+from thomas.cli.commands.messages.p067_message_role_assign_and_remove import app as cli_app
 from thomas.messages.p067_message_role_assign_and_remove import (
     ExternalMessageRoleFailure,
+    HttpResult,
     InvalidMessageRoleInput,
     MessageRoleChangeRequest,
     MissingMessageRoleConfig,
     change_member_role,
-    HttpResult,
 )
-from thomas.cli.commands.messages.p067_message_role_assign_and_remove import app as cli_app
 
 
 def test_change_member_role_assign_success(monkeypatch):
