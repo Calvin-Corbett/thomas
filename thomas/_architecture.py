@@ -158,7 +158,7 @@ MODULES = {
         "tier": "ext",
         "depends_on": ["core", "agent", "tools", "server"],
         "health": "yellow",
-        "debt": "moltbook.py exceeds 800 lines; TODO[batch-8]: discord-bridge-runtime imports server --add a server-side interface that integrations consume, instead of having integrations reach up into server",
+        "debt": "TODO[batch-8]: discord-bridge-runtime imports server --add a server-side interface that integrations consume, instead of having integrations reach up into server",
         "description": "Third-party service connectors",
     },
     "realtime": {
