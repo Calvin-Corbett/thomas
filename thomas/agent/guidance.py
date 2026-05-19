@@ -6,11 +6,11 @@ files and compacts them into a prompt-safe purpose brief.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
-from collections.abc import Sequence
 
 _DEFAULT_GUIDANCE_FILES: Sequence[tuple[str, int, bool]] = (
     ("AGENTS.md", 10, False),

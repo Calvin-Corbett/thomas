@@ -11,8 +11,8 @@ import argparse
 import asyncio
 import json
 import os
-from typing import Any
 from collections.abc import Sequence
+from typing import Any
 
 
 def _run(coro: Any) -> Any:
@@ -68,9 +68,7 @@ def _execute_usage_cost(
         payload["model"] = model
 
     resolved_url = gateway_url or os.environ.get("THOMAS_GATEWAY_URL") or os.environ.get("GATEWAY_URL")
-    resolved_key = (
-        gateway_api_key or os.environ.get("THOMAS_GATEWAY_API_KEY") or os.environ.get("GATEWAY_API_KEY")
-    )
+    resolved_key = gateway_api_key or os.environ.get("THOMAS_GATEWAY_API_KEY") or os.environ.get("GATEWAY_API_KEY")
 
     query = parse_usage_cost_query(payload)
     report = _run(
@@ -151,29 +149,22 @@ def register(app: Any) -> None:
     typer = _get_typer()
 
     if getattr(app, "registered_callback", None) is None:
+
         @app.callback(invoke_without_command=True)
         def _root() -> None:
             return
 
     @app.command("usage-cost")
     def usage_cost(
-        start_date: str = typer.Option(
-            ..., "--start-date", help="Start date (YYYY-MM-DD)", show_default=False
-        ),
-        end_date: str | None = typer.Option(
-            None, "--end-date", help="End date (YYYY-MM-DD). Defaults to start-date"
-        ),
+        start_date: str = typer.Option(..., "--start-date", help="Start date (YYYY-MM-DD)", show_default=False),
+        end_date: str | None = typer.Option(None, "--end-date", help="End date (YYYY-MM-DD). Defaults to start-date"),
         project: str | None = typer.Option(None, "--project", help="Optional project filter"),
         model: str | None = typer.Option(None, "--model", help="Optional model filter"),
-        gateway_url: str | None = typer.Option(
-            None, "--gateway-url", help="Gateway base URL (overrides env/config)"
-        ),
+        gateway_url: str | None = typer.Option(None, "--gateway-url", help="Gateway base URL (overrides env/config)"),
         gateway_api_key: str | None = typer.Option(
             None, "--gateway-api-key", help="Gateway API key (overrides env/config)"
         ),
-        json_output: bool = typer.Option(
-            False, "--json", help="Emit machine-readable JSON to stdout"
-        ),
+        json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON to stdout"),
     ) -> None:
         """Print usage + cost from Gateway."""
         from thomas.server.routes.gateway.p134_gateway_usage_cost_command import GatewayUsageCostError

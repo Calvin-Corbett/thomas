@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from collections.abc import Sequence
+from pathlib import Path
 
 import scripts.run_agent_comparison_suite as mod
 

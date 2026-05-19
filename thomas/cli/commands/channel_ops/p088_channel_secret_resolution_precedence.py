@@ -3,8 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any
 from collections.abc import Sequence
+from typing import Any
 
 from thomas.channels.p088_channel_secret_resolution_precedence import (
     ChannelSecretRequest,

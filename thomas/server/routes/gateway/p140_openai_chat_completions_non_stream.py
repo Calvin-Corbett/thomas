@@ -4,7 +4,7 @@ import asyncio
 import json
 import os
 from dataclasses import dataclass
-from typing import Any, Literal, TypedDict, Union, cast
+from typing import Any, Literal, TypedDict, cast
 from urllib.parse import urlparse
 
 from aiohttp import ClientError, ClientSession, ClientTimeout, web
@@ -179,14 +179,17 @@ def resolve_openai_config(app: web.Application | None = None) -> OpenAIConfig | 
         cast(str | None, cfg.get("OPENAI_API_KEY")),
     )
 
-    base_url = _coalesce(
-        _get_env("OPENAI_BASE_URL"),
-        _get_env("OPENAI_API_BASE"),
-        _get_env("THOMAS_OPENAI_BASE_URL"),
-        cast(str | None, cfg.get("base_url")),
-        cast(str | None, cfg.get("openai_base_url")),
-        cast(str | None, cfg.get("OPENAI_BASE_URL")),
-    ) or "https://api.openai.com/v1"
+    base_url = (
+        _coalesce(
+            _get_env("OPENAI_BASE_URL"),
+            _get_env("OPENAI_API_BASE"),
+            _get_env("THOMAS_OPENAI_BASE_URL"),
+            cast(str | None, cfg.get("base_url")),
+            cast(str | None, cfg.get("openai_base_url")),
+            cast(str | None, cfg.get("OPENAI_BASE_URL")),
+        )
+        or "https://api.openai.com/v1"
+    )
 
     timeout_s_raw = _coalesce(
         _get_env("OPENAI_TIMEOUT_S"),
@@ -359,9 +362,7 @@ async def _call_openai_chat_completions(
                 content_type = (resp.headers.get("Content-Type") or "").lower()
 
                 looks_like_json = (
-                    "application/json" in content_type
-                    or raw.lstrip().startswith(b"{")
-                    or raw.lstrip().startswith(b"[")
+                    "application/json" in content_type or raw.lstrip().startswith(b"{") or raw.lstrip().startswith(b"[")
                 )
 
                 if looks_like_json:

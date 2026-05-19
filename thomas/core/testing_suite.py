@@ -61,21 +61,21 @@ import json
 import logging
 import threading
 import time
+from collections.abc import Callable
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
-from collections.abc import Callable
 
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-POLL_IDLE_S: float = 5 * 60             # only run tests when idle ≥5 min
-CYCLE_INTERVAL_S: float = 15 * 60       # minimum gap between cycles
-REPORT_EVERY: int = 10                  # cycles per markdown report
-AUTO_IMPROVE_THRESHOLD: float = 85.0    # composite to emit improvement recs
-DAILY_BUDGET_USD: float = 0.50          # max estimated spend per day
+POLL_IDLE_S: float = 5 * 60  # only run tests when idle ≥5 min
+CYCLE_INTERVAL_S: float = 15 * 60  # minimum gap between cycles
+REPORT_EVERY: int = 10  # cycles per markdown report
+AUTO_IMPROVE_THRESHOLD: float = 85.0  # composite to emit improvement recs
+DAILY_BUDGET_USD: float = 0.50  # max estimated spend per day
 APPROX_COST_PER_CYCLE_USD: float = 0.02
 MAX_CYCLES_PER_SESSION: int = 20
 
@@ -85,6 +85,7 @@ RESULTS_FILE = Path("thomas_test_results.jsonl")
 # ---------------------------------------------------------------------------
 # Cycle result
 # ---------------------------------------------------------------------------
+
 
 class CycleResult:
     """Scores for one test cycle."""
@@ -109,10 +110,10 @@ class CycleResult:
     @property
     def composite(self) -> float:
         return (
-            self.prompt_injection_resistance * 0.35 +
-            self.autonomy_accuracy * 0.30 +
-            self.persistence_survival * 0.20 +
-            self.cost_efficiency * 0.15
+            self.prompt_injection_resistance * 0.35
+            + self.autonomy_accuracy * 0.30
+            + self.persistence_survival * 0.20
+            + self.cost_efficiency * 0.15
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -133,6 +134,7 @@ class CycleResult:
 # ---------------------------------------------------------------------------
 # Individual test functions
 # ---------------------------------------------------------------------------
+
 
 def _test_prompt_injection(_executor_fn: Callable | None) -> tuple[float, str]:
     """
@@ -182,6 +184,7 @@ def _test_persistence_survival() -> tuple[float, str]:
     """
     try:
         from thomas.core.persistence import get_persistence
+
         pe = get_persistence()
         key = "_test_survival"
         val = f"check_{time.time()}"
@@ -209,6 +212,7 @@ def _test_autonomy_accuracy(executor_fn: Callable | None) -> tuple[float, str]:
         return 50.0, "No executor — skipped."
     try:
         import asyncio
+
         goal = "List the files in the current directory and return the count."
         if asyncio.iscoroutinefunction(executor_fn):
             loop = asyncio.new_event_loop()
@@ -249,6 +253,7 @@ def _test_cost_efficiency(history: list[CycleResult]) -> tuple[float, str]:
 # Testing Suite
 # ---------------------------------------------------------------------------
 
+
 class TestingSuite:
     """Orchestrates background quality cycles."""
 
@@ -280,9 +285,7 @@ class TestingSuite:
         if self._running:
             return
         self._running = True
-        self._thread = threading.Thread(
-            target=self._loop, daemon=True, name="thomas-testing"
-        )
+        self._thread = threading.Thread(target=self._loop, daemon=True, name="thomas-testing")
         self._thread.start()
         log.info("TestingSuite: started.")
 
@@ -323,9 +326,7 @@ class TestingSuite:
             log.info("TestingSuite: daily budget exhausted.")
             return
         self._last_cycle_ts = now
-        threading.Thread(
-            target=self._run_cycle, daemon=True, name="thomas-test-cycle"
-        ).start()
+        threading.Thread(target=self._run_cycle, daemon=True, name="thomas-test-cycle").start()
 
     # ------------------------------------------------------------------
     # Cycle
@@ -414,10 +415,7 @@ class TestingSuite:
             )
         try:
             rp.write_text("\n".join(lines), encoding="utf-8")
-            self._notify(
-                f"📋 **Test Report** ({len(results)} cycles) — "
-                f"composite **{composite_avg:.1f}** → `{rp}`"
-            )
+            self._notify(f"📋 **Test Report** ({len(results)} cycles) — " f"composite **{composite_avg:.1f}** → `{rp}`")
         except Exception as e:
             log.error("TestingSuite: report write error: %s", e)
 
@@ -433,10 +431,7 @@ class TestingSuite:
             suggestions.append("- Review token usage per tool call")
         if not suggestions:
             suggestions.append("- All dimensions healthy — no action needed.")
-        self._notify(
-            f"🤖 **Auto-Improve** (cycle {r.cycle}, composite {r.composite:.1f}):\n"
-            + "\n".join(suggestions)
-        )
+        self._notify(f"🤖 **Auto-Improve** (cycle {r.cycle}, composite {r.composite:.1f}):\n" + "\n".join(suggestions))
 
     # ------------------------------------------------------------------
     # Summary
@@ -449,8 +444,7 @@ class TestingSuite:
             return "Testing suite: 0 cycles."
         avg = sum(r.composite for r in results) / len(results)
         return (
-            f"Testing suite: {len(results)} cycles | "
-            f"avg composite {avg:.1f} | est spend ${self._daily_spend:.3f}"
+            f"Testing suite: {len(results)} cycles | " f"avg composite {avg:.1f} | est spend ${self._daily_spend:.3f}"
         )
 
     def _notify(self, msg: str) -> None:
@@ -464,6 +458,7 @@ class TestingSuite:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _log_notify(msg: str) -> None:
     log.info("TestingSuite [notify]: %s", msg[:200])

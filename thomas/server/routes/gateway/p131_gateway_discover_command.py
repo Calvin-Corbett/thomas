@@ -17,9 +17,9 @@ import asyncio
 import socket
 import struct
 import time
+from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import Any
-from collections.abc import Iterable, Sequence
 
 from aiohttp import web
 
@@ -322,11 +322,7 @@ def _discover_via_mdns(service_type: str, domain: str, timeout_ms: int) -> list[
     records = _decode_records_from_messages(msgs)
 
     instances = sorted(
-        {
-            r.data
-            for r in records
-            if r.rtype == 12 and r.name == service_fqdn and isinstance(r.data, str) and r.data
-        }
+        {r.data for r in records if r.rtype == 12 and r.name == service_fqdn and isinstance(r.data, str) and r.data}
     )
 
     # 2) Follow-up SRV/TXT for instances that didn't arrive with details.
@@ -354,9 +350,7 @@ def _discover_via_mdns(service_type: str, domain: str, timeout_ms: int) -> list[
         if host:
             # Prefer A/AAAA from the mDNS response; if missing, fall back to local resolver.
             addresses = [
-                r.data
-                for r in records
-                if r.name == host and r.rtype in (1, 28) and isinstance(r.data, str) and r.data
+                r.data for r in records if r.name == host and r.rtype in (1, 28) and isinstance(r.data, str) and r.data
             ]
             if not addresses:
                 addresses = _best_effort_resolve(host)
@@ -385,7 +379,14 @@ def _best_effort_resolve(host: str) -> list[str]:
     try:
         infos = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
         for fam, _socktype, _proto, _canon, sockaddr in infos:
-            if fam == socket.AF_INET and isinstance(sockaddr, tuple) and len(sockaddr) >= 1 or fam == socket.AF_INET6 and isinstance(sockaddr, tuple) and len(sockaddr) >= 1:
+            if (
+                fam == socket.AF_INET
+                and isinstance(sockaddr, tuple)
+                and len(sockaddr) >= 1
+                or fam == socket.AF_INET6
+                and isinstance(sockaddr, tuple)
+                and len(sockaddr) >= 1
+            ):
                 ip = sockaddr[0]
                 if ip and ip not in out:
                     out.append(ip)

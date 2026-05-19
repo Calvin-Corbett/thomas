@@ -23,16 +23,17 @@ import os
 import shlex
 import shutil
 import subprocess
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, TypedDict, cast
-from collections.abc import Mapping
 
 from aiohttp import web
 
 # ---------------------------
 # Contracts
 # ---------------------------
+
 
 class GatewayUninstallRequestPayload(TypedDict, total=False):
     """JSON body accepted by the Gateway uninstall route."""
@@ -76,9 +77,7 @@ class GatewayUninstallRequest:
         allowed_keys = {"state_dir", "dry_run", "purge_state"}
         unknown = [k for k in payload.keys() if k not in allowed_keys]
         if unknown:
-            raise GatewayUninstallError.invalid_request(
-                f"Unknown field(s): {', '.join(sorted(map(str, unknown)))}"
-            )
+            raise GatewayUninstallError.invalid_request(f"Unknown field(s): {', '.join(sorted(map(str, unknown)))}")
 
         state_dir = payload.get("state_dir")
         if state_dir is not None and not isinstance(state_dir, str):
@@ -126,6 +125,7 @@ class GatewayUninstallResult:
 # ---------------------------
 # Errors
 # ---------------------------
+
 
 class GatewayUninstallError(RuntimeError):
     """Deterministic error for Gateway uninstall failures."""
@@ -324,9 +324,7 @@ def uninstall_gateway(
 
         if hasattr(gateway_resolved, "is_relative_to"):
             if not gateway_resolved.is_relative_to(state_dir):
-                raise GatewayUninstallError.filesystem_failure(
-                    "Refusing to remove path outside state_dir."
-                )
+                raise GatewayUninstallError.filesystem_failure("Refusing to remove path outside state_dir.")
 
         if gateway_dir.exists():
             shutil.rmtree(gateway_dir)

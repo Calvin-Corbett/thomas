@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
-from collections.abc import Awaitable, Callable, Iterable, Mapping
 
 
 class ServiceLifecycleError(Exception):
@@ -289,32 +289,24 @@ async def apply_lifecycle_request(
 
         if request.action == LifecycleAction.STATUS:
             if not request.service_id:
-                raise InvalidInputError(
-                    "service_id is required for status.", details={"action": request.action.value}
-                )
+                raise InvalidInputError("service_id is required for status.", details={"action": request.action.value})
             return ServiceLifecycleResponse(ok=True, services=[manager.status(request.service_id)])
 
         if request.action == LifecycleAction.START:
             if not request.service_id:
-                raise InvalidInputError(
-                    "service_id is required for start.", details={"action": request.action.value}
-                )
+                raise InvalidInputError("service_id is required for start.", details={"action": request.action.value})
             st = await manager.start(request.service_id, timeout_s=request.timeout_s)
             return ServiceLifecycleResponse(ok=True, services=[st])
 
         if request.action == LifecycleAction.STOP:
             if not request.service_id:
-                raise InvalidInputError(
-                    "service_id is required for stop.", details={"action": request.action.value}
-                )
+                raise InvalidInputError("service_id is required for stop.", details={"action": request.action.value})
             st = await manager.stop(request.service_id, timeout_s=request.timeout_s)
             return ServiceLifecycleResponse(ok=True, services=[st])
 
         if request.action == LifecycleAction.RESTART:
             if not request.service_id:
-                raise InvalidInputError(
-                    "service_id is required for restart.", details={"action": request.action.value}
-                )
+                raise InvalidInputError("service_id is required for restart.", details={"action": request.action.value})
             st = await manager.restart(request.service_id, timeout_s=request.timeout_s)
             return ServiceLifecycleResponse(ok=True, services=[st])
 

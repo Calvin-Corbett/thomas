@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from collections.abc import Iterator
 
 import pytest
 
@@ -29,7 +29,9 @@ class _GatewayHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path.rstrip("/") == "/plugins":
-            plugins = [{"name": name, "status": meta.get("status", "unknown")} for name, meta in sorted(self.state.items())]
+            plugins = [
+                {"name": name, "status": meta.get("status", "unknown")} for name, meta in sorted(self.state.items())
+            ]
             self._send_json(200, {"plugins": plugins})
             return
 

@@ -27,18 +27,18 @@ import asyncio
 import logging
 import threading
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
-from collections.abc import Callable
 
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-IDLE_THRESHOLD_S: float = 30 * 60   # 30 minutes
-POLL_INTERVAL_S: float = 60          # polling cadence
-DAILY_SUMMARY_HOUR: int = 8          # send daily summary at 8am local time
+IDLE_THRESHOLD_S: float = 30 * 60  # 30 minutes
+POLL_INTERVAL_S: float = 60  # polling cadence
+DAILY_SUMMARY_HOUR: int = 8  # send daily summary at 8am local time
 
 
 # ---------------------------------------------------------------------------
@@ -46,11 +46,22 @@ DAILY_SUMMARY_HOUR: int = 8          # send daily summary at 8am local time
 # ---------------------------------------------------------------------------
 
 _ROI_KEYWORDS: dict[str, int] = {
-    "crash": 12, "broken": 12, "fix": 10, "bug": 10, "error": 10,
-    "deploy": 8, "ship": 8, "release": 8,
-    "test": 6, "verify": 6, "check": 5,
-    "improve": 4, "refactor": 4, "clean": 3,
-    "document": 2, "research": 2,
+    "crash": 12,
+    "broken": 12,
+    "fix": 10,
+    "bug": 10,
+    "error": 10,
+    "deploy": 8,
+    "ship": 8,
+    "release": 8,
+    "test": 6,
+    "verify": 6,
+    "check": 5,
+    "improve": 4,
+    "refactor": 4,
+    "clean": 3,
+    "document": 2,
+    "research": 2,
 }
 
 
@@ -63,8 +74,7 @@ def _score_goal(goal: dict[str, Any]) -> int:
     if created:
         try:
             age_h = (
-                datetime.now(timezone.utc) -
-                datetime.fromisoformat(created.replace("Z", "+00:00"))
+                datetime.now(timezone.utc) - datetime.fromisoformat(created.replace("Z", "+00:00"))
             ).total_seconds() / 3600
             score += min(int(age_h / 4), 10)
         except Exception:
@@ -81,6 +91,7 @@ def pick_highest_roi(goals: list[dict[str, Any]]) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 # Initiative Engine
 # ---------------------------------------------------------------------------
+
 
 class InitiativeEngine:
     """
@@ -154,6 +165,7 @@ class InitiativeEngine:
             return
         try:
             from thomas.core.persistence import get_persistence
+
             goals = get_persistence().open_goals()
         except Exception as e:
             log.debug("InitiativeEngine: cannot get goals: %s", e)
@@ -163,7 +175,8 @@ class InitiativeEngine:
             return
         log.info(
             "InitiativeEngine: idle=%.0fs, executing goal %r.",
-            self.idle_seconds(), goal.get("id"),
+            self.idle_seconds(),
+            goal.get("id"),
         )
         self._active_goal_ids.add(goal.get("id"))
         threading.Thread(
@@ -192,6 +205,7 @@ class InitiativeEngine:
             # Mark done
             try:
                 from thomas.core.persistence import get_persistence
+
                 get_persistence().close_goal(goal_id)
             except Exception:
                 pass
@@ -202,11 +216,7 @@ class InitiativeEngine:
                 f"**Result:** {str(result)[:400]}"
             )
         except _BlockerError as e:
-            self._notify(
-                f"🚧 **Initiative Engine** blocked on goal:\n"
-                f"**Goal:** {goal_text}\n"
-                f"**Blocker:** {e}"
-            )
+            self._notify(f"🚧 **Initiative Engine** blocked on goal:\n" f"**Goal:** {goal_text}\n" f"**Blocker:** {e}")
         except Exception as e:
             log.error("InitiativeEngine: goal %r failed: %s", goal_id, e)
         finally:
@@ -219,6 +229,7 @@ class InitiativeEngine:
         self._last_summary_date = today
         try:
             from thomas.core.persistence import get_persistence
+
             summary = get_persistence().summary_text()
         except Exception as e:
             summary = f"(state unavailable: {e})"
@@ -235,6 +246,7 @@ class InitiativeEngine:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 class _BlockerError(Exception):
     """Raise inside executor_fn to signal a human-required blocker."""

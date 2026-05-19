@@ -7,7 +7,6 @@ and easy to audit; update when provider docs change.
 
 from __future__ import annotations
 
-
 from thomas.core.config import ModelConfig
 
 _BASE_FEATURES = (
@@ -151,4 +150,3 @@ def profile_capability_map(cfg: ModelConfig) -> dict[str, bool]:
 
 def supports(cfg: ModelConfig, capability: str) -> bool:
     return bool(profile_capability_map(cfg).get(str(capability or "").strip(), False))
-

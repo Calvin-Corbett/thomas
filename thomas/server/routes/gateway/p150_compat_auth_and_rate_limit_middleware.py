@@ -20,15 +20,16 @@ from __future__ import annotations
 import asyncio
 import os
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TypedDict
-from collections.abc import Awaitable, Callable
 
 from aiohttp import web
 
 # ----------------------------
 # Contracts
 # ----------------------------
+
 
 class CompatErrorDetail(TypedDict):
     code: str
@@ -81,6 +82,7 @@ class RateLimitConfig:
 # Helpers
 # ----------------------------
 
+
 def _json_error(status: int, code: str, message: str, *, headers: dict[str, str] | None = None) -> web.Response:
     body: CompatErrorResponse = {"ok": False, "error": {"code": code, "message": message}}
     return web.json_response(body, status=status, headers=headers)
@@ -127,6 +129,7 @@ def _truthy(v: str | None, default: bool) -> bool:
 # ----------------------------
 # Limiter
 # ----------------------------
+
 
 class TokenBucketLimiter:
     """Simple in-memory token bucket limiter.
@@ -184,6 +187,7 @@ class TokenBucketLimiter:
 # Configuration loading
 # ----------------------------
 
+
 def load_compat_security_from_env() -> tuple[CompatScopeConfig, CompatAuthConfig, RateLimitConfig]:
     """Env-driven configuration (local dev + CI friendly).
 
@@ -234,6 +238,7 @@ def load_compat_security_from_env() -> tuple[CompatScopeConfig, CompatAuthConfig
 # ----------------------------
 # Middlewares
 # ----------------------------
+
 
 def build_compat_middlewares(
     *,

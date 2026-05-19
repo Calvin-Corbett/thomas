@@ -14,10 +14,10 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
-from collections.abc import Iterable, Sequence
 
 from thomas.plugins.p121_plugin_list_command_runtime_backed import (
     PLUGIN_LIST_JSON_SCHEMA,
@@ -160,4 +160,3 @@ def _print_human(result: PluginListResult, out: TextIO) -> None:
         out.write("\nErrors:\n")
         for p in errors:
             out.write(f"- {p.plugin_id}: {p.error}\n")
-

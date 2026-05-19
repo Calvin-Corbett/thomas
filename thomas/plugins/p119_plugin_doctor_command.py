@@ -17,10 +17,10 @@ import importlib.util
 import os
 import pkgutil
 import re
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
-from collections.abc import Callable
 
 TOOL_NAME = "plugins.doctor"
 TOOL_DESCRIPTION = "Run diagnostics over installed Thomas plugins and return a structured report."
@@ -32,6 +32,7 @@ DoctorStatus = Literal["pass", "fail", "warn"]
 # ----------------------------
 # Contracts
 # ----------------------------
+
 
 @dataclass(frozen=True)
 class PluginDoctorRequest:
@@ -72,6 +73,7 @@ class PluginDoctorReport:
 # ----------------------------
 # Deterministic errors
 # ----------------------------
+
 
 class PluginDoctorError(RuntimeError):
     """Base class for deterministic doctor failures."""
@@ -114,9 +116,7 @@ def _normalize_path(p: str) -> str:
 def _validate_request(req: PluginDoctorRequest) -> None:
     if req.plugin is not None:
         if not isinstance(req.plugin, str) or req.plugin.strip() != req.plugin or req.plugin == "":
-            raise InvalidPluginDoctorInput(
-                "plugin must be a non-empty string without leading/trailing whitespace"
-            )
+            raise InvalidPluginDoctorInput("plugin must be a non-empty string without leading/trailing whitespace")
         if not _PLUGIN_TOKEN_RE.match(req.plugin):
             raise InvalidPluginDoctorInput(
                 "plugin contains invalid characters; allowed: letters, numbers, '_', '-', '.'"
@@ -301,9 +301,7 @@ def run_plugin_doctor(request: PluginDoctorRequest) -> PluginDoctorReport:
             )
         )
     else:
-        plugin_modules, discovery_err = _discover_plugin_module_names(
-            include_hidden=request.include_hidden
-        )
+        plugin_modules, discovery_err = _discover_plugin_module_names(include_hidden=request.include_hidden)
         if discovery_err is not None:
             checks.append(
                 DoctorCheck(

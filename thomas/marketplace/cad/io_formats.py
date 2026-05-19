@@ -83,9 +83,7 @@ class DXFReader:
         for line in lines:
             line = line.strip()
 
-            if line == "SECTION":
-                pass
-            elif line.startswith("$"):
+            if line == "SECTION" or line.startswith("$"):
                 pass
 
         self.sections = {}

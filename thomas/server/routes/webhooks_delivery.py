@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import base64
 import os
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
-from collections.abc import Awaitable, Callable
 
 from fastapi import HTTPException, Request
 
@@ -49,11 +49,7 @@ def _github_goal_text(
     event: str,
     max_commits_included: int,
 ) -> tuple[str, str]:
-    repo = (
-        payload.get("repository", {}).get("full_name")
-        or payload.get("repository", {}).get("name")
-        or "unknown-repo"
-    )
+    repo = payload.get("repository", {}).get("full_name") or payload.get("repository", {}).get("name") or "unknown-repo"
     if event == "push":
         ref = payload.get("ref") or ""
         branch = ref.split("/")[-1] if isinstance(ref, str) and ref else "unknown"
@@ -77,8 +73,10 @@ def _github_goal_text(
     raise HTTPException(status_code=400, detail=f"Unsupported GitHub event: {event or 'unknown'}")
 
 
-def _stripe_payment_goal(payload: dict[str, Any], *, format_stripe_amount: Callable[[Any, str], str]) -> tuple[str, str]:
-    obj = (((payload.get("data") or {}).get("object")) or {})
+def _stripe_payment_goal(
+    payload: dict[str, Any], *, format_stripe_amount: Callable[[Any, str], str]
+) -> tuple[str, str]:
+    obj = ((payload.get("data") or {}).get("object")) or {}
     if not isinstance(obj, dict):
         obj = {}
     amount = obj.get("amount_received") or obj.get("amount") or 0
@@ -118,11 +116,7 @@ async def inbox_retry_impl(
     if provider == "generic" and isinstance(webhook_id, str):
         payload = deps.require_json_object(body_bytes)
         stored = deps.store.get(webhook_id)
-        goal_text = (
-            deps.interpolate_template(stored.goal_template, payload)
-            if stored
-            else deps.payload_string(payload)
-        )
+        goal_text = deps.interpolate_template(stored.goal_template, payload) if stored else deps.payload_string(payload)
         meta: dict[str, Any] = {
             "webhook_id": webhook_id,
             "retry_of_event_id": event_id,

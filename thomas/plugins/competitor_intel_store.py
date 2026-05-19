@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
-from collections.abc import Mapping
 
 
 def load_registry(path: Path) -> dict[str, Any]:
@@ -33,7 +33,9 @@ def render_registry_markdown(registry: Mapping[str, Any]) -> str:
     lines.append("")
     lines.append("## Last Known Competitor State")
     lines.append("")
-    lines.append("| Competitor | Last Tested (UTC) | Version | Up To Date | Model (Day Snapshot) | Last Score | Last Result |")
+    lines.append(
+        "| Competitor | Last Tested (UTC) | Version | Up To Date | Model (Day Snapshot) | Last Score | Last Result |"
+    )
     lines.append("|---|---|---|---|---|---:|---|")
     for cid in sorted(competitors.keys()):
         row = dict(competitors.get(cid) or {})
@@ -57,9 +59,7 @@ def render_registry_markdown(registry: Mapping[str, Any]) -> str:
         return "\n".join(lines)
     for run in runs[-20:][::-1]:
         lines.append(
-            f"- `{run.get('computed_at_utc')}` suite=`{run.get('suite_id')}` "
-            f"result=`{run.get('result_json_path')}`"
+            f"- `{run.get('computed_at_utc')}` suite=`{run.get('suite_id')}` " f"result=`{run.get('result_json_path')}`"
         )
     lines.append("")
     return "\n".join(lines)
-

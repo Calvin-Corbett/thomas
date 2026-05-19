@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 import re
 import urllib.request
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
-from collections.abc import Mapping, Sequence
 
 
 def _safe_string(value: Any) -> str:
@@ -237,7 +237,9 @@ def fetch_issue(*, base_url: str, repo: str, issue_number: int, token: str, time
     return dict(data)
 
 
-def fetch_pull_request(*, base_url: str, repo: str, pr_number: int, token: str, timeout_s: float = 20.0) -> dict[str, Any]:
+def fetch_pull_request(
+    *, base_url: str, repo: str, pr_number: int, token: str, timeout_s: float = 20.0
+) -> dict[str, Any]:
     data = fetch_github_json(
         base_url=base_url,
         path=f"/repos/{_safe_string(repo)}/pulls/{int(pr_number)}",
@@ -270,4 +272,3 @@ def fetch_pull_request_files(
         if isinstance(item, Mapping):
             out.append(dict(item))
     return out
-

@@ -35,10 +35,10 @@ public dataclasses use a consistent Thomas naming style.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from collections.abc import Mapping
 
 # ---------------------------------------------------------------------------
 # Errors
@@ -597,7 +597,12 @@ def resolve_message_route(ctx: MessageRouteContext, config: RoutingConfig) -> Me
         # account_id either unset or wildcard.
         if rule.match.channel != ctx.channel:
             continue
-        if rule.match.peer is not None or rule.match.guild_id is not None or rule.match.roles is not None or rule.match.team_id is not None:
+        if (
+            rule.match.peer is not None
+            or rule.match.guild_id is not None
+            or rule.match.roles is not None
+            or rule.match.team_id is not None
+        ):
             continue
         if rule.match.account_id not in (None, "*"):
             continue

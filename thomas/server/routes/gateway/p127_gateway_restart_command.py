@@ -63,17 +63,15 @@ import shlex
 import subprocess
 import time
 from collections import deque
+from collections.abc import Awaitable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict, cast
-from collections.abc import Awaitable, Mapping, Sequence
 
 from aiohttp import web
 
 log = logging.getLogger(__name__)
 
-_APP_RATE_LIMIT_STATE: web.AppKey[dict[str, Any]] = web.AppKey(
-    "__p127_restart_rate_limit_state", dict
-)
+_APP_RATE_LIMIT_STATE: web.AppKey[dict[str, Any]] = web.AppKey("__p127_restart_rate_limit_state", dict)
 _APP_RATE_LIMIT_LOCK: web.AppKey[asyncio.Lock] = web.AppKey("__p127_restart_rate_limit_lock", asyncio.Lock)
 _APP_RESTART_LOCK: web.AppKey[asyncio.Lock] = web.AppKey("__p127_restart_lock", asyncio.Lock)
 _APP_REGISTERED: web.AppKey[bool] = web.AppKey("__p127_gateway_restart_registered", bool)
@@ -82,6 +80,7 @@ _APP_REGISTERED: web.AppKey[bool] = web.AppKey("__p127_gateway_restart_registere
 # -----------------------------
 # Contracts
 # -----------------------------
+
 
 class GatewayRestartRequestBody(TypedDict, total=False):
     gateway: str
@@ -203,6 +202,7 @@ class GatewayRestartRequest:
 # -----------------------------
 # Deterministic error types
 # -----------------------------
+
 
 class GatewayRestartError(Exception):
     code: str = "external_failure"
@@ -399,7 +399,9 @@ def _enforce_gateway_auth_policy_if_present(request: web.Request) -> None:
     except gw_auth.GatewayAuthPolicyExternalError as e:
         raise GatewayRestartConfigMissing(details={"reason": "gateway_auth_external_error", "message": str(e)}) from e
     except Exception as e:  # noqa: BLE001
-        raise GatewayRestartFailed(details={"reason": "gateway_auth_check_failed", "exception_type": type(e).__name__}) from e
+        raise GatewayRestartFailed(
+            details={"reason": "gateway_auth_check_failed", "exception_type": type(e).__name__}
+        ) from e
 
     if decision.allowed:
         return
@@ -485,9 +487,7 @@ async def _consume_restart_rate_limit(request: web.Request) -> None:
         if (now - gc_at) >= gc_interval:
             stale_before = now - float(window_seconds)
             stale_keys = [
-                k
-                for k, b in state.items()
-                if isinstance(b, deque) and (not b or float(b[-1]) <= stale_before)
+                k for k, b in state.items() if isinstance(b, deque) and (not b or float(b[-1]) <= stale_before)
             ]
             for stale_key in stale_keys:
                 state.pop(stale_key, None)

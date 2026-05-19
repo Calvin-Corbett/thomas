@@ -24,9 +24,9 @@ import json
 import os
 import time
 import uuid
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from typing import Any, Literal, TypedDict, Union, cast
-from collections.abc import Mapping, Sequence
 
 from aiohttp import ClientError, ClientResponse, ClientSession, ClientTimeout, web
 
@@ -299,7 +299,9 @@ def _error_payload(exc: GatewayError) -> ErrorEnvelope:
 
 
 def _json_response(payload: Any, *, status: int = 200) -> web.Response:
-    return web.json_response(payload, status=status, dumps=lambda o: json.dumps(o, separators=(",", ":"), ensure_ascii=False))
+    return web.json_response(
+        payload, status=status, dumps=lambda o: json.dumps(o, separators=(",", ":"), ensure_ascii=False)
+    )
 
 
 async def _read_json_object(request: web.Request) -> dict[str, Any]:
@@ -318,7 +320,9 @@ def _validate_input_items(inp: Any) -> None:
     if isinstance(inp, str):
         return
     if not isinstance(inp, list):
-        raise GatewayError(status=400, message="Field 'input' must be a string or array.", param="input", code="invalid_field")
+        raise GatewayError(
+            status=400, message="Field 'input' must be a string or array.", param="input", code="invalid_field"
+        )
     for idx, item in enumerate(inp):
         if not isinstance(item, dict):
             raise GatewayError(
@@ -391,17 +395,23 @@ def _validate_create_request(data: dict[str, Any]) -> ResponsesCompatCreateReque
     if "model" not in data:
         raise GatewayError(status=400, message="Missing required field: model", param="model", code="missing_field")
     if not isinstance(data["model"], str) or not data["model"].strip():
-        raise GatewayError(status=400, message="Field 'model' must be a non-empty string.", param="model", code="invalid_field")
+        raise GatewayError(
+            status=400, message="Field 'model' must be a non-empty string.", param="model", code="invalid_field"
+        )
 
     if "input" not in data:
         raise GatewayError(status=400, message="Missing required field: input", param="input", code="missing_field")
     _validate_input_items(data["input"])
 
     if "stream" in data and not isinstance(data["stream"], bool):
-        raise GatewayError(status=400, message="Field 'stream' must be a boolean.", param="stream", code="invalid_field")
+        raise GatewayError(
+            status=400, message="Field 'stream' must be a boolean.", param="stream", code="invalid_field"
+        )
 
     if "metadata" in data and not isinstance(data["metadata"], Mapping):
-        raise GatewayError(status=400, message="Field 'metadata' must be an object.", param="metadata", code="invalid_field")
+        raise GatewayError(
+            status=400, message="Field 'metadata' must be an object.", param="metadata", code="invalid_field"
+        )
 
     return cast(ResponsesCompatCreateRequest, data)
 
@@ -473,7 +483,9 @@ async def _read_upstream_json(resp: ClientResponse) -> Mapping[str, Any]:
     return cast(Mapping[str, Any], data)
 
 
-async def _proxy_to_upstream(*, request: web.Request, upstream_base_url: str, payload: dict[str, Any]) -> tuple[int, Mapping[str, Any]]:
+async def _proxy_to_upstream(
+    *, request: web.Request, upstream_base_url: str, payload: dict[str, Any]
+) -> tuple[int, Mapping[str, Any]]:
     url = f"{upstream_base_url}/v1/responses"
     timeout = ClientTimeout(total=_resolve_timeout_s())
 

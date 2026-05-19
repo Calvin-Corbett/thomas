@@ -18,9 +18,9 @@ import json
 import sys
 import urllib.error
 import urllib.request
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, TypedDict
-from collections.abc import Sequence
 
 from thomas.server.routes.gateway.p132_gateway_configured_command import (
     GatewayConfiguredStatus,
@@ -139,7 +139,9 @@ def _run_from_parsed_args(args: argparse.Namespace) -> int:
     return run(json_mode=bool(args.json), config_path=args.config_path, url=args.url, timeout_s=float(args.timeout))
 
 
-def run(*, json_mode: bool = False, config_path: str | None = None, url: str | None = None, timeout_s: float = 2.0) -> int:
+def run(
+    *, json_mode: bool = False, config_path: str | None = None, url: str | None = None, timeout_s: float = 2.0
+) -> int:
     if url is not None:
         if not (url.startswith("http://") or url.startswith("https://")):
             result = GatewayConfiguredCliResult(

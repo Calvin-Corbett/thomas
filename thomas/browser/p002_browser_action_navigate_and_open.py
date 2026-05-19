@@ -24,9 +24,9 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
-from collections.abc import Mapping
 from urllib.parse import urlparse
 
 NavigateOpenAction = Literal["navigate", "open"]

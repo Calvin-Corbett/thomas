@@ -15,9 +15,10 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Mapping, TypedDict
+from typing import Any, Literal, TypedDict
 
 try:
     import tomllib  # py3.11+
@@ -43,7 +44,7 @@ class PluginListError(RuntimeError):
             return f"{self.code}: {self.message} ({self.detail})"
         return f"{self.code}: {self.message}"
 
-    def to_dict(self) -> "PluginListErrorJSON":
+    def to_dict(self) -> PluginListErrorJSON:
         payload: PluginListErrorJSON = {"code": self.code, "message": self.message}
         if self.detail is not None:
             payload["detail"] = self.detail
@@ -80,7 +81,7 @@ class PluginListItem:
     path: str | None = None
     error: str | None = None
 
-    def to_dict(self) -> "PluginListItemJSON":
+    def to_dict(self) -> PluginListItemJSON:
         return {
             "id": self.plugin_id,
             "enabled": self.enabled,
@@ -116,7 +117,7 @@ class PluginListResult:
     plugins_dir: str
     plugins: tuple[PluginListItem, ...]
 
-    def to_json(self) -> "PluginListResultJSON":
+    def to_json(self) -> PluginListResultJSON:
         return {
             "ok": True,
             "config_path": self.config_path,
@@ -260,6 +261,7 @@ def list_plugins_runtime_backed(request: PluginListRequest) -> PluginListResult:
 
 # ------------------------- config discovery/parsing -------------------------
 
+
 def _resolve_config_path(explicit: Path | None) -> Path:
     if explicit is not None:
         path = explicit.expanduser()
@@ -370,6 +372,7 @@ def _resolve_plugins_dir(explicit: Path | None, config_path: Path, config: Mappi
 
 # -------------------------- plugin extraction --------------------------------
 
+
 def _extract_plugin_sections(config: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     plugins = config.get("plugins")
     if not isinstance(plugins, Mapping):
@@ -434,6 +437,7 @@ def _resolve_plugin_path(plugin_id: str, install_meta: Mapping[str, Any], plugin
 
 
 # ------------------------------ manifest -------------------------------------
+
 
 def _read_manifest(plugin_path: Path) -> dict[str, Any]:
     if not plugin_path.exists():

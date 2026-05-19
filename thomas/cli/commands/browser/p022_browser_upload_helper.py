@@ -12,9 +12,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
-from collections.abc import Sequence
 
 from thomas.browser.p022_browser_upload_helper import (
     BROWSER_UPLOAD_ERROR_JSON_SCHEMA,

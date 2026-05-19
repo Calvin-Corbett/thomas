@@ -32,11 +32,11 @@ import shutil
 import tempfile
 import threading
 import time
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Union
-from collections.abc import Mapping
+from typing import Any
 from uuid import uuid4
 
 
@@ -657,6 +657,7 @@ def export_trace(target: Any, params: BrowserTraceExportInput) -> BrowserTraceEx
 
 # --- JSON Schema helpers (no third-party deps) -----------------------------------
 
+
 def input_schemas() -> dict[str, Any]:
     """JSON Schemas for automation/routing layers."""
     return {
@@ -692,7 +693,11 @@ def output_schemas() -> dict[str, Any]:
         "stop": {
             "type": "object",
             "additionalProperties": False,
-            "properties": {"trace_id": {"type": "string"}, "temp_path": {"type": "string"}, "status": {"type": "string"}},
+            "properties": {
+                "trace_id": {"type": "string"},
+                "temp_path": {"type": "string"},
+                "status": {"type": "string"},
+            },
             "required": ["trace_id", "temp_path", "status"],
         },
         "export": {
@@ -721,6 +726,7 @@ def result_to_json(result: Any) -> str:
 
 
 # --- Compatibility exports for node/router layers --------------------------------
+
 
 def _coerce_dataclass(cls: Any, payload: Any) -> Any:
     if payload is None:

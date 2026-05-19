@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
-from collections.abc import Callable
 
 import click
 
@@ -108,8 +108,7 @@ def register_telegram_commands(
         selected_model = model_name or config.default_model
         if selected_model not in config.models:
             click.echo(
-                f"Unknown model profile '{selected_model}'. "
-                f"Available: {', '.join(config.models.keys())}",
+                f"Unknown model profile '{selected_model}'. " f"Available: {', '.join(config.models.keys())}",
                 err=True,
             )
             sys.exit(2)
@@ -183,4 +182,3 @@ def register_telegram_commands(
 
     if "telegram" not in cli.commands:
         cli.add_command(telegram)
-

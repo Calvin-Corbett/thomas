@@ -16,10 +16,10 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
-from collections.abc import Sequence
 
 from thomas.nodes.p049_nodes_pairing_handshake import (
     NodesPairingHandshakeError,

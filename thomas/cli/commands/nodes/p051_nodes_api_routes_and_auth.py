@@ -21,9 +21,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass
 from typing import Any, TypedDict, cast
-from collections.abc import Mapping, MutableMapping
 
 from thomas.nodes.p051_nodes_api_routes_and_auth import DEFAULT_TOKEN_ENV_VARS, get_nodes_api_schema
 

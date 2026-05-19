@@ -14,8 +14,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any
 from collections.abc import Sequence
+from typing import Any
 
 from thomas.nodes.p031_node_command_install import (
     NodeInstallError,

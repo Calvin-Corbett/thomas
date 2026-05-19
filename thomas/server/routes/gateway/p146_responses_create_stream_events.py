@@ -30,15 +30,16 @@ import json
 import os
 import time
 import uuid
-from dataclasses import dataclass
-from typing import Any, Literal, TypedDict, Union, cast
 from collections.abc import Iterable, Iterator, Mapping
+from dataclasses import dataclass
+from typing import Any, Literal, TypedDict, cast
 
 from aiohttp import ClientSession, ClientTimeout, ContentTypeError, web
 
 # -----------------------------
 # Contracts
 # -----------------------------
+
 
 class CreateResponseRequestDict(TypedDict, total=False):
     model: str
@@ -81,6 +82,7 @@ class RuntimeConfig:
 # Deterministic errors
 # -----------------------------
 
+
 class GatewayError(Exception):
     """Deterministic, machine-readable error used by this route."""
 
@@ -104,6 +106,7 @@ class GatewayError(Exception):
 # -----------------------------
 # Helpers
 # -----------------------------
+
 
 def load_runtime_config_from_env() -> RuntimeConfig:
     mode = os.environ.get("THOMAS_GATEWAY_RESPONSES_MODE", "stub").strip().lower()
@@ -185,13 +188,17 @@ def parse_create_response_request(payload: Mapping[str, Any]) -> ParsedCreateRes
 
     model = payload.get("model")
     if not isinstance(model, str) or not model.strip():
-        raise GatewayError(code="invalid_request", message="Missing or invalid 'model'.", http_status=400, param="model")
+        raise GatewayError(
+            code="invalid_request", message="Missing or invalid 'model'.", http_status=400, param="model"
+        )
 
     raw_input = payload.get("input")
     if raw_input is None:
         raise GatewayError(code="invalid_request", message="Missing required 'input'.", http_status=400, param="input")
     if not isinstance(raw_input, (str, list)):
-        raise GatewayError(code="invalid_request", message="'input' must be a string or an array.", http_status=400, param="input")
+        raise GatewayError(
+            code="invalid_request", message="'input' must be a string or an array.", http_status=400, param="input"
+        )
 
     stream = bool(payload.get("stream", False))
 
@@ -199,15 +206,24 @@ def parse_create_response_request(payload: Mapping[str, Any]) -> ParsedCreateRes
     if temperature is None:
         temperature = 1.0
     if not isinstance(temperature, (int, float)):
-        raise GatewayError(code="invalid_request", message="'temperature' must be a number.", http_status=400, param="temperature")
+        raise GatewayError(
+            code="invalid_request", message="'temperature' must be a number.", http_status=400, param="temperature"
+        )
 
     max_output_tokens = payload.get("max_output_tokens")
     if max_output_tokens is not None and not isinstance(max_output_tokens, int):
-        raise GatewayError(code="invalid_request", message="'max_output_tokens' must be an integer.", http_status=400, param="max_output_tokens")
+        raise GatewayError(
+            code="invalid_request",
+            message="'max_output_tokens' must be an integer.",
+            http_status=400,
+            param="max_output_tokens",
+        )
 
     metadata = payload.get("metadata") or {}
     if not isinstance(metadata, dict):
-        raise GatewayError(code="invalid_request", message="'metadata' must be an object.", http_status=400, param="metadata")
+        raise GatewayError(
+            code="invalid_request", message="'metadata' must be an object.", http_status=400, param="metadata"
+        )
 
     prompt_text = _extract_prompt_text(raw_input)
 
@@ -395,7 +411,11 @@ def build_stream_events(
     completed_at: int,
 ) -> list[StreamEvent]:
     """Convenience wrapper for tests/automation."""
-    return list(iter_stream_events(req, response_id=response_id, message_id=message_id, created_at=created_at, completed_at=completed_at))
+    return list(
+        iter_stream_events(
+            req, response_id=response_id, message_id=message_id, created_at=created_at, completed_at=completed_at
+        )
+    )
 
 
 def encode_sse_event(event_type: str, data_obj: dict[str, Any]) -> bytes:
@@ -440,7 +460,11 @@ async def _proxy_upstream(request: web.Request, payload: dict[str, Any]) -> web.
                     return web.Response(status=upstream_resp.status, body=body, headers={"Content-Type": content_type})
 
                 if upstream_resp.status >= 400:
-                    raise GatewayError(code="upstream_http_error", message=f"Upstream returned HTTP {upstream_resp.status}.", http_status=502)
+                    raise GatewayError(
+                        code="upstream_http_error",
+                        message=f"Upstream returned HTTP {upstream_resp.status}.",
+                        http_status=502,
+                    )
 
                 resp = web.StreamResponse(
                     status=200,
@@ -543,7 +567,9 @@ async def create_response(request: web.Request) -> web.StreamResponse:
 
     if not parsed.stream:
         try:
-            events = build_stream_events(parsed, response_id=response_id, message_id=message_id, created_at=created_at, completed_at=completed_at)
+            events = build_stream_events(
+                parsed, response_id=response_id, message_id=message_id, created_at=created_at, completed_at=completed_at
+            )
         except GatewayError as e:
             return web.json_response(e.to_openai_error(), status=e.http_status)
         final = next((ev["response"] for ev in reversed(events) if ev.get("type") == "response.completed"), None)
@@ -551,7 +577,9 @@ async def create_response(request: web.Request) -> web.StreamResponse:
 
     if request.rel_url.query.get("format") == "json":
         try:
-            events = build_stream_events(parsed, response_id=response_id, message_id=message_id, created_at=created_at, completed_at=completed_at)
+            events = build_stream_events(
+                parsed, response_id=response_id, message_id=message_id, created_at=created_at, completed_at=completed_at
+            )
         except GatewayError as e:
             return web.json_response(e.to_openai_error(), status=e.http_status)
         return web.json_response({"events": events}, status=200)
@@ -567,7 +595,9 @@ async def create_response(request: web.Request) -> web.StreamResponse:
     await resp.prepare(request)
 
     try:
-        for ev in iter_stream_events(parsed, response_id=response_id, message_id=message_id, created_at=created_at, completed_at=completed_at):
+        for ev in iter_stream_events(
+            parsed, response_id=response_id, message_id=message_id, created_at=created_at, completed_at=completed_at
+        ):
             await resp.write(encode_sse_event(str(ev.get("type", "message")), ev))
     except GatewayError as e:
         err_event: dict[str, Any] = {"type": "error", "sequence_number": 1, "error": e.to_openai_error()["error"]}

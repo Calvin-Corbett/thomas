@@ -3,17 +3,15 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
-from collections.abc import Callable, Sequence
 
 _COMMAND_NAME = "p013-browser-telemetry-console-stream"
 
 COMMAND_NAME = _COMMAND_NAME
 COMMAND_HELP = "Stream console messages from a live browser session."
-COMMAND_DESCRIPTION = (
-    "Stream console messages from a live browser session (bounded by duration and max events)."
-)
+COMMAND_DESCRIPTION = "Stream console messages from a live browser session (bounded by duration and max events)."
 
 
 @dataclass(frozen=True, slots=True)

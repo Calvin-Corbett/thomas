@@ -3,10 +3,10 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from collections.abc import Mapping, Sequence
 
 from thomas.demo.browser_duel import (
     DEFAULT_RUNS_DIR as DEFAULT_BROWSER_RUNS_DIR,
@@ -86,10 +86,7 @@ def render_campaign_report(
         lines.append("- No ranking data available.")
     else:
         for row in ranking:
-            lines.append(
-                f"- #{row.get('rank')} `{row.get('competitor')}`: "
-                f"{row.get('weighted_score_mean')} / 100"
-            )
+            lines.append(f"- #{row.get('rank')} `{row.get('competitor')}`: " f"{row.get('weighted_score_mean')} / 100")
     lines.append("")
 
     lines.append("## Aggregate Credibility Ranking")
@@ -115,9 +112,7 @@ def render_campaign_report(
             lines.append(f"### {competitor}")
             lines.append(f"- runs: {metrics.get('runs')}")
             lines.append(f"- weighted score mean: {metrics.get('weighted_score_mean')}")
-            lines.append(
-                f"- credibility weighted score mean: {metrics.get('credibility_weighted_score_mean')}"
-            )
+            lines.append(f"- credibility weighted score mean: {metrics.get('credibility_weighted_score_mean')}")
             lines.append(f"- success rate mean: {metrics.get('success_rate_mean')}")
             lines.append(f"- avg elapsed seconds mean: {metrics.get('avg_elapsed_seconds_mean')}")
             lines.append(f"- avg follow-up prompts mean: {metrics.get('avg_follow_up_prompts_mean')}")
@@ -385,7 +380,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--type-delay-ms", type=int, default=20, help="Per-character typing delay.")
     parser.add_argument("--reply-timeout", type=float, default=90.0, help="Per-step reply timeout seconds.")
-    parser.add_argument("--randomize-order", action=argparse.BooleanOptionalAction, default=True, help="Randomize execution plan.")
+    parser.add_argument(
+        "--randomize-order", action=argparse.BooleanOptionalAction, default=True, help="Randomize execution plan."
+    )
     parser.add_argument("--base-seed", type=int, default=42, help="Base seed for run randomization.")
     parser.add_argument("--runtime-root", default="", help="Runtime root for browser launch profile.")
     parser.add_argument(
@@ -448,4 +445,3 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

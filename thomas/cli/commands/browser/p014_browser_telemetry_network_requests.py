@@ -3,9 +3,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
-from collections.abc import Callable, Sequence
 
 _COMMAND_NAME = "p014-browser-telemetry-network-requests"
 
@@ -93,6 +93,7 @@ def _run_from_args(args: argparse.Namespace) -> int:
             out = capture_network_requests(request)
             _print_json(out.to_dict())
         else:
+
             def _printer(r):
                 status = r.response_status if r.response_status is not None else "-"
                 if r.failure_text:

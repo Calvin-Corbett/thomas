@@ -16,9 +16,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
-from collections.abc import Sequence
 
 from thomas.messages.p072_message_channel_specific_route_resolver import (
     InvalidRouteConfigError,

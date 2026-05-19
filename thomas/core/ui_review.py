@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import re
 import subprocess
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
-from collections.abc import Callable, Iterable
 
 _HEX_COLOR_RE = re.compile(r"#[0-9a-fA-F]{3,8}\b")
 _RGB_COLOR_RE = re.compile(r"\brgba?\([^)]+\)")
@@ -15,11 +15,55 @@ _ANIMATION_RE = re.compile(r"\banimation(?:-name)?\s*:")
 _WORD_RE = re.compile(r"[a-zA-Z][a-zA-Z0-9_-]{2,}")
 
 _INTENT_STOPWORDS = {
-    "the", "and", "for", "with", "that", "this", "from", "into", "over", "under",
-    "when", "while", "your", "their", "have", "has", "had", "will", "would", "should",
-    "could", "just", "more", "less", "very", "really", "about", "make", "makes", "made",
-    "need", "needs", "want", "wants", "user", "users", "page", "ui", "design", "update",
-    "edit", "edits", "better", "good", "solid", "please", "must", "match", "intent",
+    "the",
+    "and",
+    "for",
+    "with",
+    "that",
+    "this",
+    "from",
+    "into",
+    "over",
+    "under",
+    "when",
+    "while",
+    "your",
+    "their",
+    "have",
+    "has",
+    "had",
+    "will",
+    "would",
+    "should",
+    "could",
+    "just",
+    "more",
+    "less",
+    "very",
+    "really",
+    "about",
+    "make",
+    "makes",
+    "made",
+    "need",
+    "needs",
+    "want",
+    "wants",
+    "user",
+    "users",
+    "page",
+    "ui",
+    "design",
+    "update",
+    "edit",
+    "edits",
+    "better",
+    "good",
+    "solid",
+    "please",
+    "must",
+    "match",
+    "intent",
 }
 
 _UI_REVIEW_EXTS = {".css", ".js", ".jsx", ".ts", ".tsx", ".html"}
@@ -111,12 +155,18 @@ def review_ui_edits(
         if suffix != ".css":
             continue
         css_changed_count += 1
-        hardcoded_colors = len(_HEX_COLOR_RE.findall(content)) + len(_RGB_COLOR_RE.findall(content)) + len(_HSL_COLOR_RE.findall(content))
+        hardcoded_colors = (
+            len(_HEX_COLOR_RE.findall(content))
+            + len(_RGB_COLOR_RE.findall(content))
+            + len(_HSL_COLOR_RE.findall(content))
+        )
         hardcoded_colors_total += hardcoded_colors
         has_animation = bool(_ANIMATION_RE.search(content) or "@keyframes" in content)
         if has_animation and "prefers-reduced-motion" not in content.lower():
             animation_without_reduced_motion += 1
-        interactive_hint = any(token in content for token in (":hover", "button", "input", "select", "textarea", "a{", "a "))
+        interactive_hint = any(
+            token in content for token in (":hover", "button", "input", "select", "textarea", "a{", "a ")
+        )
         if interactive_hint and ":focus-visible" not in content:
             interactive_without_focus += 1
 

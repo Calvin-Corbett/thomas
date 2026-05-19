@@ -19,8 +19,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any
 from collections.abc import Sequence
+from typing import Any
 
 try:
     from thomas.marketplace.nodes.p040_nodes_notify_action import (
@@ -34,14 +34,14 @@ try:
     )
 except ImportError:  # pragma: no cover
     from thomas.nodes.p040_nodes_notify_action import (
-    NodesNotifyActionConfigError,
-    NodesNotifyActionError,
-    NodesNotifyActionExternalError,
-    NodesNotifyActionInput,
-    NodesNotifyActionInvalidInputError,
-    notify_action,
-    payload_from_json,
-)
+        NodesNotifyActionConfigError,
+        NodesNotifyActionError,
+        NodesNotifyActionExternalError,
+        NodesNotifyActionInput,
+        NodesNotifyActionInvalidInputError,
+        notify_action,
+        payload_from_json,
+    )
 
 
 COMMAND_NAME = "notify-action"

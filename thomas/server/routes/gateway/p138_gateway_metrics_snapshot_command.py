@@ -4,9 +4,9 @@ import asyncio
 import datetime as _dt
 import json
 import os
+from collections.abc import Awaitable, Callable, Mapping, MutableMapping
 from dataclasses import dataclass
 from typing import Any, TypedDict, cast
-from collections.abc import Awaitable, Callable, Mapping, MutableMapping
 
 from aiohttp import ClientError, ClientSession, ClientTimeout, web
 
@@ -259,7 +259,9 @@ async def _snapshot_from_app(request: web.Request, parsed: _ParsedRequest) -> tu
                 if isinstance(result, Mapping):
                     return (cast(Mapping[str, Any], result), f"app.{type(gateway_client).__name__}.{method_name}")
 
-    metrics_obj = request.app.get("gateway_metrics") or request.app.get("metrics") or request.app.get("metrics_registry")
+    metrics_obj = (
+        request.app.get("gateway_metrics") or request.app.get("metrics") or request.app.get("metrics_registry")
+    )
     if metrics_obj is not None:
         for method_name in ("snapshot", "to_dict", "as_dict"):
             method = getattr(metrics_obj, method_name, None)
@@ -280,11 +282,7 @@ async def _fetch_external_snapshot(request: web.Request, parsed: _ParsedRequest,
     if isinstance(t, int) and t > 0:
         timeout_seconds = t
 
-    session = (
-        request.app.get("http_session")
-        or request.app.get("client_session")
-        or request.app.get("aiohttp_session")
-    )
+    session = request.app.get("http_session") or request.app.get("client_session") or request.app.get("aiohttp_session")
     close_session = False
     if not isinstance(session, ClientSession) or session.closed:
         session = ClientSession(timeout=ClientTimeout(total=timeout_seconds))
