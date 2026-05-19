@@ -6,10 +6,10 @@ import asyncio
 import importlib
 import json
 import re
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from hashlib import sha256
 from typing import Any, Literal
-from collections.abc import Awaitable, Callable
 
 from aiohttp import web
 
@@ -327,10 +327,12 @@ def _resolve_initiative_enqueue() -> tuple[Any, str]:
         errors.append(f"{mod_name}: no enqueue method found")
 
     raise web.HTTPNotImplemented(
-        text=json.dumps({
-            "error": "initiative engine not found",
-            "probe_errors": errors[-6:],
-        }),
+        text=json.dumps(
+            {
+                "error": "initiative engine not found",
+                "probe_errors": errors[-6:],
+            }
+        ),
     )
 
 
@@ -549,16 +551,18 @@ def register_goals_routes(
             matches.sort(key=lambda g: -_parse_ts_seconds(g.get("created")))
             return web.json_response({"ok": True, "goal": _normalize_goal(matches[0])})
 
-        return web.json_response({
-            "ok": True,
-            "goal": {
-                "id": str(result) if result is not None else "unknown",
-                "text": text,
-                "priority": priority,
-                "status": "open",
-                "created": _utc_now_iso(),
-            },
-        })
+        return web.json_response(
+            {
+                "ok": True,
+                "goal": {
+                    "id": str(result) if result is not None else "unknown",
+                    "text": text,
+                    "priority": priority,
+                    "status": "open",
+                    "created": _utc_now_iso(),
+                },
+            }
+        )
 
     # ── PATCH /api/goals/{goal_id} ──
 

@@ -9,9 +9,9 @@ Tests cover:
 """
 
 import unittest
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
-from collections.abc import Callable
 
 # Note: These imports assume the modules exist or will be created
 try:
@@ -27,6 +27,7 @@ except ImportError:
 
     class StepStatus(str, Enum):
         """Step execution status."""
+
         PENDING = "pending"
         RUNNING = "running"
         COMPLETED = "completed"
@@ -35,6 +36,7 @@ except ImportError:
 
     class FlowStatus(str, Enum):
         """Flow execution status."""
+
         INITIALIZED = "initialized"
         RUNNING = "running"
         COMPLETED = "completed"
@@ -43,6 +45,7 @@ except ImportError:
 
     class FlowState:
         """State container for flow execution."""
+
         def __init__(self, name: str = "default"):
             self.name = name
             self.state = {}
@@ -78,6 +81,7 @@ except ImportError:
 
     class Step:
         """Individual step in a flow."""
+
         def __init__(self, name: str, action: Callable = None, on_error: Callable = None):
             self.name = name
             self.action = action
@@ -111,6 +115,7 @@ except ImportError:
 
     class Condition:
         """Conditional logic for flow control."""
+
         def __init__(self, predicate: Callable, description: str = ""):
             self.predicate = predicate
             self.description = description
@@ -121,6 +126,7 @@ except ImportError:
 
     class Flow:
         """Orchestrated flow of steps."""
+
         def __init__(self, name: str = "default", initial_state: dict = None):
             self.name = name
             self.state = FlowState(name)
@@ -158,6 +164,7 @@ except ImportError:
 
     class FlowBuilder:
         """Fluent API for building flows."""
+
         def __init__(self, name: str = "default"):
             self.flow = Flow(name)
 
@@ -172,9 +179,11 @@ except ImportError:
             self.flow.add_step(step)
             return self
 
-        def add_conditional_step(self, name: str, condition: Condition,
-                                 action_true: Callable, action_false: Callable) -> "FlowBuilder":
+        def add_conditional_step(
+            self, name: str, condition: Condition, action_true: Callable, action_false: Callable
+        ) -> "FlowBuilder":
             """Add conditional step."""
+
             def conditional_action(state):
                 if condition.evaluate(state):
                     return action_true(state)
@@ -298,6 +307,7 @@ class TestStep(unittest.TestCase):
 
     def test_step_execution_with_state_modification(self):
         """Test step that modifies state."""
+
         def action(state):
             state.set("counter", state.get("counter", 0) + 1)
             return state.get("counter")
@@ -372,19 +382,14 @@ class TestCondition(unittest.TestCase):
 
     def test_condition_with_description(self):
         """Test condition with description."""
-        condition = Condition(
-            lambda state: True,
-            "Always true condition"
-        )
+        condition = Condition(lambda state: True, "Always true condition")
 
         self.assertEqual(condition.description, "Always true condition")
 
     def test_complex_condition(self):
         """Test complex condition logic."""
         condition = Condition(
-            lambda state: (state.get("count", 0) > 0 and
-                          state.has("name") and
-                          state.get("status") == "active")
+            lambda state: (state.get("count", 0) > 0 and state.has("name") and state.get("status") == "active")
         )
         state = FlowState()
         state.set("count", 5)
@@ -516,11 +521,13 @@ class TestFlowBuilder(unittest.TestCase):
 
     def test_builder_fluent_interface(self):
         """Test fluent interface chaining."""
-        flow = (FlowBuilder("test")
-                .with_initial_state({"count": 0})
-                .add_step("step1", lambda s: s.set("count", 1))
-                .add_step("step2", lambda s: s.set("count", 2))
-                .build())
+        flow = (
+            FlowBuilder("test")
+            .with_initial_state({"count": 0})
+            .add_step("step1", lambda s: s.set("count", 1))
+            .add_step("step2", lambda s: s.set("count", 2))
+            .build()
+        )
 
         self.assertEqual(len(flow.steps), 2)
 
@@ -528,12 +535,7 @@ class TestFlowBuilder(unittest.TestCase):
         """Test adding conditional step."""
         condition = Condition(lambda s: s.get("flag", False))
         builder = FlowBuilder()
-        builder.add_conditional_step(
-            "conditional",
-            condition,
-            lambda s: "true",
-            lambda s: "false"
-        )
+        builder.add_conditional_step("conditional", condition, lambda s: "true", lambda s: "false")
 
         flow = builder.build()
 
@@ -548,12 +550,14 @@ class TestFlowBuilder(unittest.TestCase):
 
     def test_builder_complex_flow(self):
         """Test building complex flow."""
-        flow = (FlowBuilder("complex")
-                .with_initial_state({"total": 0})
-                .add_step("load", lambda s: s.set("loaded", True))
-                .add_step("process", lambda s: s.set("total", s.get("total") + 10))
-                .add_step("finalize", lambda s: s.set("done", True))
-                .build())
+        flow = (
+            FlowBuilder("complex")
+            .with_initial_state({"total": 0})
+            .add_step("load", lambda s: s.set("loaded", True))
+            .add_step("process", lambda s: s.set("total", s.get("total") + 10))
+            .add_step("finalize", lambda s: s.set("done", True))
+            .build()
+        )
 
         flow.run()
 
@@ -562,13 +566,11 @@ class TestFlowBuilder(unittest.TestCase):
 
     def test_builder_with_error_handling(self):
         """Test builder with error handling step."""
+
         def safe_action(s):
             return s.get("value") / s.get("divisor", 1)
 
-        flow = (FlowBuilder()
-                .with_initial_state({"value": 10, "divisor": 2})
-                .add_step("divide", safe_action)
-                .build())
+        flow = FlowBuilder().with_initial_state({"value": 10, "divisor": 2}).add_step("divide", safe_action).build()
 
         results = flow.run()
 

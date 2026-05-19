@@ -20,9 +20,9 @@ of fields that are useful for discovery and tooling.
 from __future__ import annotations
 
 import inspect
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
-from collections.abc import Mapping
 
 SchemaDraft = Literal["2020-12", "7"]
 
@@ -104,10 +104,7 @@ def build_plugin_manifest_schema(
     if req.schema_version not in SUPPORTED_SCHEMA_VERSIONS:
         raise PluginManifestSchemaError(
             code="unsupported_schema_version",
-            message=(
-                "Unsupported schema_version. Supported values: "
-                + ", ".join(sorted(SUPPORTED_SCHEMA_VERSIONS))
-            ),
+            message=("Unsupported schema_version. Supported values: " + ", ".join(sorted(SUPPORTED_SCHEMA_VERSIONS))),
             details={"schema_version": req.schema_version},
         )
 
@@ -115,10 +112,7 @@ def build_plugin_manifest_schema(
     if meta_schema is None:
         raise PluginManifestSchemaError(
             code="invalid_draft",
-            message=(
-                "Invalid JSON Schema draft. Supported values: "
-                + ", ".join(sorted(_DRAFT_TO_META_SCHEMA.keys()))
-            ),
+            message=("Invalid JSON Schema draft. Supported values: " + ", ".join(sorted(_DRAFT_TO_META_SCHEMA.keys()))),
             details={"draft": req.draft},
         )
 

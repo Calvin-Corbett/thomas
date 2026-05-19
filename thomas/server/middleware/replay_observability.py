@@ -1,7 +1,6 @@
 # thomas/server/middleware/replay_observability.py
 from __future__ import annotations
 
-
 from aiohttp import web
 
 from thomas.observability import auto_instrument
@@ -42,21 +41,31 @@ async def replay_observability_middleware(request: web.Request, handler):
     attach_run(run_id)
     try:
         # record request (do not store raw body; only metadata)
-        record_event("http.request", {
-            "method": request.method,
-            "path": path,
-            "query": dict(request.query),
-            "remote": request.remote,
-            "headers": {k: v for k, v in request.headers.items() if k.lower() in {"user-agent","content-type","accept","x-request-id","x-thomas-run-id"}},
-        })
+        record_event(
+            "http.request",
+            {
+                "method": request.method,
+                "path": path,
+                "query": dict(request.query),
+                "remote": request.remote,
+                "headers": {
+                    k: v
+                    for k, v in request.headers.items()
+                    if k.lower() in {"user-agent", "content-type", "accept", "x-request-id", "x-thomas-run-id"}
+                },
+            },
+        )
 
         resp = await handler(request)
 
         # record response metadata
-        record_event("http.response", {
-            "status": getattr(resp, "status", None),
-            "content_type": getattr(resp, "content_type", None),
-        })
+        record_event(
+            "http.response",
+            {
+                "status": getattr(resp, "status", None),
+                "content_type": getattr(resp, "content_type", None),
+            },
+        )
 
         # make run_id discoverable by clients
         try:

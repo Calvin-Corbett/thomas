@@ -24,12 +24,11 @@ Backups live under:
 
 from __future__ import annotations
 
-import re
 import json
+import re
 import shutil
-from pathlib import Path
 from datetime import datetime
-
+from pathlib import Path
 
 FEATURE_ID = "workspace.rbac_multi_tenant"
 BACKUP_DIR = Path(".thomas_feature_backups") / FEATURE_ID
@@ -121,7 +120,7 @@ def _patch_fastapi_entrypoint(p: Path, receipt: dict) -> None:
     else:
         m2 = re.search(r"^\s*def\s+create_app\s*\(.*\):\s*$", txt, flags=re.M)
         if m2:
-            after = re.search(r"^(\s*app\s*=\s*FastAPI\(.*\)\s*)$", txt[m2.end():], flags=re.M)
+            after = re.search(r"^(\s*app\s*=\s*FastAPI\(.*\)\s*)$", txt[m2.end() :], flags=re.M)
             if after:
                 insert_at = m2.end() + after.end()
                 txt = txt[:insert_at] + "\n    _install_workspace_rbac_multi_tenant(app)\n" + txt[insert_at:]
@@ -220,13 +219,13 @@ def _patch_web_header(p: Path, receipt: dict) -> None:
     for pat in [r"(\<UserMenu[^\n]*\/>\s*)", r"(\<AccountMenu[^\n]*\/>\s*)", r"(\<ProfileMenu[^\n]*\/>\s*)"]:
         m = re.search(pat, txt)
         if m:
-            txt = txt[:m.start()] + "<WorkspaceSwitcher />\n" + txt[m.start():]
+            txt = txt[: m.start()] + "<WorkspaceSwitcher />\n" + txt[m.start() :]
             inserted = True
             break
     if not inserted:
         m = re.search(r"\</header\>", txt)
         if m:
-            txt = txt[:m.start()] + "  <WorkspaceSwitcher />\n" + txt[m.start():]
+            txt = txt[: m.start()] + "  <WorkspaceSwitcher />\n" + txt[m.start() :]
             inserted = True
 
     if not inserted:
@@ -363,11 +362,13 @@ def rollback() -> None:
 
 def verify() -> None:
     from server.workspace.verify_install import main as verify_main  # local import for faster apply
+
     verify_main()
 
 
 def main() -> None:
     import sys
+
     if len(sys.argv) < 2:
         print("Usage: python -m server.workspace.feature_install [apply|verify|rollback]")
         raise SystemExit(2)

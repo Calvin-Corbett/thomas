@@ -28,9 +28,9 @@ import importlib
 import json
 import os
 import time
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from typing import Any, TypedDict
-from collections.abc import Mapping
 
 from aiohttp import ClientError, ClientSession, ClientTimeout, web
 from yarl import URL
@@ -78,17 +78,11 @@ def _coerce_float(value: Any, *, field: str) -> float:
     try:
         f = float(value)
     except (TypeError, ValueError) as e:
-        raise GatewayProbeException(
-            "invalid_input", f"Field '{field}' must be a number.", http_status=400
-        ) from e
+        raise GatewayProbeException("invalid_input", f"Field '{field}' must be a number.", http_status=400) from e
     if not (f > 0):
-        raise GatewayProbeException(
-            "invalid_input", f"Field '{field}' must be > 0.", http_status=400
-        )
+        raise GatewayProbeException("invalid_input", f"Field '{field}' must be > 0.", http_status=400)
     if f > 120:
-        raise GatewayProbeException(
-            "invalid_input", f"Field '{field}' must be <= 120.", http_status=400
-        )
+        raise GatewayProbeException("invalid_input", f"Field '{field}' must be <= 120.", http_status=400)
     return f
 
 
@@ -96,14 +90,10 @@ def _coerce_str(value: Any, *, field: str) -> str:
     if value is None:
         raise GatewayProbeException("invalid_input", f"Field '{field}' is required.")
     if not isinstance(value, str):
-        raise GatewayProbeException(
-            "invalid_input", f"Field '{field}' must be a string.", http_status=400
-        )
+        raise GatewayProbeException("invalid_input", f"Field '{field}' must be a string.", http_status=400)
     s = value.strip()
     if not s:
-        raise GatewayProbeException(
-            "invalid_input", f"Field '{field}' must not be empty.", http_status=400
-        )
+        raise GatewayProbeException("invalid_input", f"Field '{field}' must not be empty.", http_status=400)
     return s
 
 
@@ -177,10 +167,7 @@ def resolve_gateway_target(
     else:
         env = dict(environ or os.environ)
         target = (
-            env.get("THOMAS_GATEWAY_URL")
-            or env.get("THOMAS_GATEWAY_TARGET")
-            or env.get("THOMAS_GATEWAY")
-            or ""
+            env.get("THOMAS_GATEWAY_URL") or env.get("THOMAS_GATEWAY_TARGET") or env.get("THOMAS_GATEWAY") or ""
         ).strip()
 
         if not target:
@@ -208,9 +195,7 @@ def resolve_gateway_target(
     try:
         url = URL(target)
     except Exception as e:
-        raise GatewayProbeException(
-            "invalid_target", "Gateway target must be a valid URL.", http_status=400
-        ) from e
+        raise GatewayProbeException("invalid_target", "Gateway target must be a valid URL.", http_status=400) from e
 
     if not url.scheme or not url.host:
         raise GatewayProbeException(
@@ -230,9 +215,7 @@ async def probe_gateway(*, target: str, timeout_s: float = 3.0, path: str = "/")
     try:
         base = URL(target)
     except Exception as e:
-        raise GatewayProbeException(
-            "invalid_target", "Gateway target must be a valid URL.", http_status=400
-        ) from e
+        raise GatewayProbeException("invalid_target", "Gateway target must be a valid URL.", http_status=400) from e
 
     probe_path = path if isinstance(path, str) else "/"
     probe_path = probe_path.strip() or "/"
@@ -291,9 +274,7 @@ def _parse_request_payload(payload: Any) -> GatewayProbeRequest:
     if payload is None:
         return GatewayProbeRequest()
     if not isinstance(payload, Mapping):
-        raise GatewayProbeException(
-            "invalid_input", "Request body must be a JSON object.", http_status=400
-        )
+        raise GatewayProbeException("invalid_input", "Request body must be a JSON object.", http_status=400)
 
     target = payload.get("target")
     timeout_s = payload.get("timeout_s", 3.0)
@@ -320,9 +301,7 @@ async def gateway_probe(request: web.Request) -> web.Response:
             try:
                 payload = await request.json()
             except json.JSONDecodeError as e:
-                raise GatewayProbeException(
-                    "invalid_input", "Request body must be valid JSON.", http_status=400
-                ) from e
+                raise GatewayProbeException("invalid_input", "Request body must be valid JSON.", http_status=400) from e
             except Exception:
                 payload = None
 

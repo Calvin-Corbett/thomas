@@ -4,9 +4,9 @@ import argparse
 import json
 import os
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
-from collections.abc import Sequence
 
 from thomas.server.routes.gateway.p126_gateway_start_command import (
     GatewayStartException,
@@ -38,10 +38,7 @@ def run_gateway_start(options: GatewayStartCliOptions) -> dict[str, Any]:
 
 def _format_human(payload: dict[str, Any]) -> str:
     if payload.get("ok") is True:
-        return (
-            f"Gateway {payload.get('status')} "
-            f"(pid={payload.get('pid')}, config={payload.get('config_path')})"
-        )
+        return f"Gateway {payload.get('status')} " f"(pid={payload.get('pid')}, config={payload.get('config_path')})"
     err = payload.get("error") or {}
     return f"Gateway start failed: {err.get('type')}: {err.get('message')}"
 

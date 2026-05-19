@@ -4,9 +4,9 @@ import argparse
 import dataclasses
 import json
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
-from collections.abc import Sequence
 
 from thomas.server.routes.gateway.p128_gateway_install_command import (
     GatewayInstallCommandError,

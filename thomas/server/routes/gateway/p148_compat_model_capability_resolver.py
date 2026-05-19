@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from typing import Any, TypedDict
-from collections.abc import Mapping, Sequence
 
 
 class CompatModelCapabilityResolverError(Exception):
@@ -93,8 +93,7 @@ def _load_caps_override_map() -> dict[str, dict[str, Any]]:
         raise CompatModelCapabilityResolverError(
             code="invalid_config",
             message=(
-                "Failed to load THOMAS_COMPAT_MODEL_CAPS_JSON "
-                "(must be JSON object string or path to JSON file)."
+                "Failed to load THOMAS_COMPAT_MODEL_CAPS_JSON " "(must be JSON object string or path to JSON file)."
             ),
             details={"exception": type(e).__name__},
         )
@@ -103,8 +102,7 @@ def _load_caps_override_map() -> dict[str, dict[str, Any]]:
         raise CompatModelCapabilityResolverError(
             code="invalid_config",
             message=(
-                "THOMAS_COMPAT_MODEL_CAPS_JSON must be a JSON object mapping "
-                "model keys to capability objects."
+                "THOMAS_COMPAT_MODEL_CAPS_JSON must be a JSON object mapping " "model keys to capability objects."
             ),
         )
 
@@ -151,11 +149,7 @@ def _heuristic_caps(model: str) -> CompatModelCapabilities:
     supports_schema = False
 
     # Enable schema only for obvious modern OpenAI-ish families.
-    if (
-        re.search(r"\bgpt-4(\.|-|$)", m)
-        or re.search(r"\bgpt-4o(\.|-|$)", m)
-        or re.search(r"\bgpt-4\.1\b", m)
-    ):
+    if re.search(r"\bgpt-4(\.|-|$)", m) or re.search(r"\bgpt-4o(\.|-|$)", m) or re.search(r"\bgpt-4\.1\b", m):
         supports_schema = True
         notes.append("heuristic: gpt-4-family enables json_schema response format")
 

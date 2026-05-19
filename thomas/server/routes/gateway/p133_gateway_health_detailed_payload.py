@@ -25,9 +25,9 @@ import os
 import platform
 import time
 import uuid
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass
 from typing import Any
-from collections.abc import Mapping, MutableMapping
 
 from aiohttp import ClientSession, ClientTimeout, WSMsgType, web
 
@@ -142,7 +142,9 @@ class GatewayHealthExternalError(GatewayHealthError):
         details: Mapping[str, Any] | None = None,
         http_status: int = 502,
     ) -> None:
-        super().__init__(code=code, message=message, http_status=http_status, error_type="gateway_error", details=details)
+        super().__init__(
+            code=code, message=message, http_status=http_status, error_type="gateway_error", details=details
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,7 +182,9 @@ def _first_str(*values: Any) -> str | None:
     return None
 
 
-def _resolve_gateway_connection(*, overrides: GatewayHealthDetailedRequest, app: Mapping[str, Any] | None) -> _GatewayConn:
+def _resolve_gateway_connection(
+    *, overrides: GatewayHealthDetailedRequest, app: Mapping[str, Any] | None
+) -> _GatewayConn:
     cfg = _app_cfg(app)
 
     url = _first_str(
@@ -409,7 +413,9 @@ def _parse_int(value: Any, *, field: str) -> int:
     try:
         return int(value)
     except Exception as e:
-        raise GatewayHealthInputError(code="invalid_integer", message=f"{field} must be an integer", details={field: value}) from e
+        raise GatewayHealthInputError(
+            code="invalid_integer", message=f"{field} must be an integer", details={field: value}
+        ) from e
 
 
 @routes.get("/gateway/health/detailed")

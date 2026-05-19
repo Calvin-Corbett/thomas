@@ -57,15 +57,16 @@ import json
 import os
 import shlex
 import subprocess
+from collections.abc import Awaitable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict, cast
-from collections.abc import Awaitable, Mapping, Sequence
 
 from aiohttp import web
 
 # -----------------------------
 # Contracts
 # -----------------------------
+
 
 class GatewayRestartRequestBody(TypedDict, total=False):
     gateway: str
@@ -174,6 +175,7 @@ class GatewayRestartRequest:
 # -----------------------------
 # Deterministic error types
 # -----------------------------
+
 
 class GatewayRestartError(Exception):
     code: str = "external_failure"

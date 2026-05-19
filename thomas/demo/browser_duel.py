@@ -3,11 +3,11 @@ from __future__ import annotations
 import argparse
 import json
 import time
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from collections.abc import Mapping, Sequence
 
 from thomas.cli.live_browser import (
     LiveBrowserSmokeError,
@@ -496,11 +496,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     run_dir = Path(args.runs_dir).resolve() / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
 
-    runtime_root = (
-        Path(args.runtime_root).resolve()
-        if str(args.runtime_root or "").strip()
-        else (ROOT / "runtime")
-    )
+    runtime_root = Path(args.runtime_root).resolve() if str(args.runtime_root or "").strip() else (ROOT / "runtime")
     runtime_root.mkdir(parents=True, exist_ok=True)
 
     _write_json(run_dir / "task_pack.snapshot.json", task_pack)

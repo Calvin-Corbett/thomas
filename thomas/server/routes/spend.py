@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 import csv
 import json
-from io import StringIO
 from collections.abc import Callable
+from io import StringIO
 
 from aiohttp import web
 
@@ -28,25 +28,29 @@ def register_spend_routes(
     async def api_spend_today(request: web.Request) -> web.Response:
         require_api_access(request)
         ct = get_cost_tracker()
-        return web.json_response({
-            "total_usd": float(ct.today_usd()),
-            "by_model": ct.by_model(),
-            "by_model_detail": ct.today_by_model_detail(),
-            "call_count": int(ct.today_call_count()),
-            "tokens": ct.today_tokens(),
-        })
+        return web.json_response(
+            {
+                "total_usd": float(ct.today_usd()),
+                "by_model": ct.by_model(),
+                "by_model_detail": ct.today_by_model_detail(),
+                "call_count": int(ct.today_call_count()),
+                "tokens": ct.today_tokens(),
+            }
+        )
 
     # ── GET /api/spend/session ──
 
     async def api_spend_session(request: web.Request) -> web.Response:
         require_api_access(request)
         ct = get_cost_tracker()
-        return web.json_response({
-            "total_usd": float(ct.session_usd()),
-            "by_model_detail": ct.session_by_model_detail(),
-            "call_count": int(ct.session_call_count()),
-            "tokens": ct.session_tokens(),
-        })
+        return web.json_response(
+            {
+                "total_usd": float(ct.session_usd()),
+                "by_model_detail": ct.session_by_model_detail(),
+                "call_count": int(ct.session_call_count()),
+                "tokens": ct.session_tokens(),
+            }
+        )
 
     # ── POST /api/spend/session/reset ──
 

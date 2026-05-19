@@ -13,9 +13,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
-from collections.abc import Callable, Sequence
 
 
 def _load_core() -> Any:

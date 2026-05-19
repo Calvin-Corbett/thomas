@@ -6,16 +6,17 @@ import os
 import re
 import shutil
 import zipfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypedDict, cast
-from collections.abc import Mapping
 
 from aiohttp import web
 
 # -----------------------------
 # Contracts
 # -----------------------------
+
 
 class GatewayInstallCommandRequestDict(TypedDict, total=False):
     """JSON contract for /v1/gateway/install."""
@@ -58,6 +59,7 @@ class GatewayInstallCommandResult:
 # -----------------------------
 # Errors
 # -----------------------------
+
 
 @dataclass(frozen=True, slots=True)
 class GatewayInstallCommandError(Exception):
@@ -215,7 +217,9 @@ def install_gateway_artifact(
     """
 
     if not isinstance(request.source, str) or not request.source.strip():
-        raise GatewayInstallCommandError(code="invalid_input", message="'source' must be a non-empty string.", http_status=400)
+        raise GatewayInstallCommandError(
+            code="invalid_input", message="'source' must be a non-empty string.", http_status=400
+        )
 
     source_path = Path(request.source).expanduser()
     if not source_path.exists():
@@ -357,13 +361,21 @@ def parse_gateway_install_request(data: Mapping[str, Any]) -> GatewayInstallComm
     dry_run = data.get("dry_run", False)
 
     if source is None or not isinstance(source, str):
-        raise GatewayInstallCommandError(code="invalid_input", message="'source' is required and must be a string.", http_status=400)
+        raise GatewayInstallCommandError(
+            code="invalid_input", message="'source' is required and must be a string.", http_status=400
+        )
     if name is not None and not isinstance(name, str):
-        raise GatewayInstallCommandError(code="invalid_input", message="'name' must be a string when provided.", http_status=400)
+        raise GatewayInstallCommandError(
+            code="invalid_input", message="'name' must be a string when provided.", http_status=400
+        )
     if install_dir is not None and not isinstance(install_dir, str):
-        raise GatewayInstallCommandError(code="invalid_input", message="'install_dir' must be a string when provided.", http_status=400)
+        raise GatewayInstallCommandError(
+            code="invalid_input", message="'install_dir' must be a string when provided.", http_status=400
+        )
     if not isinstance(overwrite, bool):
-        raise GatewayInstallCommandError(code="invalid_input", message="'overwrite' must be a boolean.", http_status=400)
+        raise GatewayInstallCommandError(
+            code="invalid_input", message="'overwrite' must be a boolean.", http_status=400
+        )
     if not isinstance(dry_run, bool):
         raise GatewayInstallCommandError(code="invalid_input", message="'dry_run' must be a boolean.", http_status=400)
 

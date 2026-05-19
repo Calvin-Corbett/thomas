@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import subprocess
 from collections import Counter
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
-from collections.abc import Mapping, Sequence
 
 
 def _run_git(args: Sequence[str], *, cwd: Path, timeout_seconds: float = 90.0) -> dict[str, Any]:
@@ -82,19 +82,31 @@ def infer_focus_areas(hotspots: Sequence[Mapping[str, Any]]) -> list[str]:
 def recommend_counter_moves(focus_areas: Sequence[str]) -> list[str]:
     recs: list[str] = []
     if "plugin_ecosystem_expansion" in focus_areas:
-        recs.append("Expand Thomas plugin runtime contract tests and keep plugin command coverage at or above competitor levels.")
+        recs.append(
+            "Expand Thomas plugin runtime contract tests and keep plugin command coverage at or above competitor levels."
+        )
     if "gateway_and_protocol_surface" in focus_areas:
-        recs.append("Add gateway compatibility probes for new provider/protocol edges and keep p95 latency regressions gated.")
+        recs.append(
+            "Add gateway compatibility probes for new provider/protocol edges and keep p95 latency regressions gated."
+        )
     if "security_policy_hardening" in focus_areas:
-        recs.append("Increase policy and secret-scan strict checks and add negative authz tests for newly exposed routes.")
+        recs.append(
+            "Increase policy and secret-scan strict checks and add negative authz tests for newly exposed routes."
+        )
     if "test_depth_and_regression_control" in focus_areas:
         recs.append("Raise test LOC and e2e breadth for touched subsystems before release gate pass.")
     if "ui_and_operator_experience" in focus_areas:
-        recs.append("Add operator workflow smoke tests for mission control and browser surfaces to protect UX velocity.")
+        recs.append(
+            "Add operator workflow smoke tests for mission control and browser surfaces to protect UX velocity."
+        )
     if "agent_runtime_capability_growth" in focus_areas:
-        recs.append("Benchmark new model/runtime pathways weekly and enforce non-regression budgets on tool-call and token efficiency.")
+        recs.append(
+            "Benchmark new model/runtime pathways weekly and enforce non-regression budgets on tool-call and token efficiency."
+        )
     if "general_surface_growth" in focus_areas:
-        recs.append("Monitor breadth growth and preemptively add targeted strict checks in the fastest-growing directories.")
+        recs.append(
+            "Monitor breadth growth and preemptively add targeted strict checks in the fastest-growing directories."
+        )
     return recs
 
 
@@ -164,12 +176,9 @@ def build_prediction_evo_scope(
         "focus_agent": focus,
         "competitors": by_competitor,
         "aggregate_predicted_focus": [
-            {"area": area, "count": int(count)}
-            for area, count in focus_area_counts.most_common()
+            {"area": area, "count": int(count)} for area, count in focus_area_counts.most_common()
         ],
         "aggregate_recommended_counter_moves": [
-            {"move": move, "count": int(count)}
-            for move, count in rec_counts.most_common()
+            {"move": move, "count": int(count)} for move, count in rec_counts.most_common()
         ],
     }
-

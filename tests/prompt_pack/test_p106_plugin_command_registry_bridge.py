@@ -1,6 +1,5 @@
 import json
 
-
 from thomas.plugins.p106_plugin_command_registry_bridge import (
     dispatch_plugin_command,
     register_bridge_tool,

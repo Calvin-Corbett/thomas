@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import importlib
 import pkgutil
+from collections.abc import Callable
 from types import ModuleType
 from typing import Any
-from collections.abc import Callable
 
 import typer
 
@@ -39,4 +39,3 @@ def register(plugin_app: Any) -> None:
 
 register_command = register
 add_commands = register
-

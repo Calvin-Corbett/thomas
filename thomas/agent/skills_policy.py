@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from collections.abc import Iterable
 
 from thomas.skills import discover_native_skill_roots
 
@@ -91,7 +91,6 @@ def _memory_root_path(config: Any) -> Path:
     if root_text:
         return Path(str(root_text)).expanduser()
     return (Path.cwd() / "runtime").resolve()
-
 
 
 def _default_trusted_skill_roots(config: Any, *, cwd: Path | None = None) -> list[Path]:

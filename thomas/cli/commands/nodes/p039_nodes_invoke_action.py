@@ -15,8 +15,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any
 from collections.abc import Mapping, Sequence
+from typing import Any
 
 from thomas.nodes.p039_nodes_invoke_action import (
     InvalidInvokeActionInput,
@@ -100,9 +100,7 @@ def run(args: argparse.Namespace) -> int:
     if json_output:
         print(json.dumps(response_to_payload(resp), ensure_ascii=False))
     else:
-        print(
-            f"Invoked '{resp.action}' on '{resp.node}' (status {resp.status_code})"
-        )
+        print(f"Invoked '{resp.action}' on '{resp.node}' (status {resp.status_code})")
         if resp.result is not None:
             print(json.dumps(resp.result, indent=2, ensure_ascii=False))
 

@@ -12,8 +12,8 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
-from typing import Any
 from collections.abc import Sequence
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_BASELINE = "docs/monolith_guard_baseline.json"
@@ -245,9 +245,7 @@ def apply_approval_file_change_requirement(
 
 def run(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description=(
-            "Fail when monolith baseline constraints are relaxed without explicit approval entries."
-        )
+        description=("Fail when monolith baseline constraints are relaxed without explicit approval entries.")
     )
     parser.add_argument("--repo-root", default=None, help="Repository root (default: inferred from script path).")
     parser.add_argument("--base", default=None, help="Diff base ref/sha (optional).")
@@ -330,14 +328,9 @@ def run(argv: Sequence[str] | None = None) -> int:
                 f"(relaxations={payload['relaxation_count']}, approvals matched={len(payload['matched_approvals'])})"
             )
         else:
-            print(
-                "Monolith baseline approval gate: FAIL "
-                f"({len(payload['violations'])} unapproved relaxation(s))"
-            )
+            print("Monolith baseline approval gate: FAIL " f"({len(payload['violations'])} unapproved relaxation(s))")
             for row in payload["violations"]:
-                print(
-                    f"- {row.get('path')} [{row.get('change')}]: {row.get('detail', '')}"
-                )
+                print(f"- {row.get('path')} [{row.get('change')}]: {row.get('detail', '')}")
     return 0 if bool(payload["ok"]) else 1
 
 

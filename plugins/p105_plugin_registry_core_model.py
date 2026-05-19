@@ -18,9 +18,9 @@ from __future__ import annotations
 import importlib
 import json
 import pkgutil
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict, cast
-from collections.abc import Mapping, Sequence
 
 try:  # Python 3.11+
     from typing import NotRequired
@@ -361,9 +361,7 @@ def _extract_metadata_from_module(mod: Any, *, include_tools: bool) -> tuple[str
     name = _coerce_str(_get_field(plugin_obj, mod, "name")) or getattr(mod, "__name__", "")
     version = _coerce_str(_get_field(plugin_obj, mod, "version")) or ""
     description = (
-        _coerce_str(_get_field(plugin_obj, mod, "description"))
-        or _coerce_str(getattr(mod, "__doc__", None))
-        or ""
+        _coerce_str(_get_field(plugin_obj, mod, "description")) or _coerce_str(getattr(mod, "__doc__", None)) or ""
     )
 
     tools: list[ToolDescriptor] = []
@@ -439,7 +437,9 @@ def _coerce_tool(value: Any, fallback_name: str = "") -> ToolDescriptor:
         description = _coerce_str(value.get("description")) or ""
         input_schema = _coerce_schema(value.get("input_schema"))
         output_schema = _coerce_schema(value.get("output_schema"))
-        return ToolDescriptor(name=name, description=description, input_schema=input_schema, output_schema=output_schema)
+        return ToolDescriptor(
+            name=name, description=description, input_schema=input_schema, output_schema=output_schema
+        )
 
     # Object-like form
     name = _coerce_str(getattr(value, "name", None)) or fallback_name or value.__class__.__name__

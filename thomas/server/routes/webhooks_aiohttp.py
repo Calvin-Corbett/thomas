@@ -8,9 +8,9 @@ this bridge exposes equivalent aiohttp routes by adapting requests/responses.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
-from collections.abc import Callable
 
 from aiohttp import web
 from fastapi import HTTPException as FastAPIHTTPException

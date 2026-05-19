@@ -16,10 +16,10 @@ from __future__ import annotations
 
 import os
 import uuid
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
-from collections.abc import Callable, Mapping
 
 import httpx
 
@@ -184,6 +184,7 @@ def send_message(
 
     post = post_json
     if post is None:
+
         def post(url: str, payload: JsonDict, timeout_seconds: float) -> httpx.Response:  # type: ignore[misc]
             return _default_post_json(url, payload, timeout_seconds=timeout_seconds)
 

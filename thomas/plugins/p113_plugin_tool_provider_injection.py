@@ -14,9 +14,9 @@ This file intentionally avoids any OpenClaw naming reuse.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import Any, Protocol, TypedDict, runtime_checkable
-from collections.abc import Mapping, Sequence
 
 # -----------------------------
 # Public contracts
@@ -272,8 +272,6 @@ def inject_tool_provider(
         provider_id=provider_id,
         injected_tool_names=(tool_name,),
     )
-
-
 
 
 # -----------------------------

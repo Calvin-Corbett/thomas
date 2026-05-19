@@ -10,11 +10,11 @@ Usage (repo root):
 from __future__ import annotations
 
 import subprocess
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PATCH_DIR = ROOT / "patches"
+
 
 def main() -> int:
     if not PATCH_DIR.exists():
@@ -42,6 +42,7 @@ def main() -> int:
         print("- Open INTEGRATION_GUIDE.md")
         print("- Open each file in patches/ and transplant GUARDRAILS BEGIN/END blocks.")
         return 1
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

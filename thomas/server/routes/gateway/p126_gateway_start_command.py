@@ -7,10 +7,10 @@ import shlex
 import subprocess
 import time
 import weakref
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, TypedDict
-from collections.abc import Mapping, MutableMapping
 
 try:
     import tomllib  # py3.11+
@@ -267,9 +267,8 @@ def load_gateway_config(config_path: str) -> GatewayConfig:
     env_node = node.get("env")
     env: dict[str, str] | None = None
     if env_node is not None:
-        if (
-            not isinstance(env_node, dict)
-            or not all(isinstance(k, str) and isinstance(v, str) for k, v in env_node.items())
+        if not isinstance(env_node, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in env_node.items()
         ):
             raise GatewayStartException(
                 "invalid_input",

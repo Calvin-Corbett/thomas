@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from collections.abc import Iterator
 
 SCHEMA_SQL = """
 PRAGMA journal_mode=WAL;
@@ -44,6 +44,7 @@ CREATE TRIGGER IF NOT EXISTS events_au AFTER UPDATE ON events BEGIN
 END;
 """
 
+
 @dataclass
 class EventRow:
     id: int
@@ -53,6 +54,7 @@ class EventRow:
     text: str
     metadata: dict[str, Any]
     blob_id: str | None
+
 
 class ImmortalLog:
     def __init__(self, db_path: Path):
@@ -70,33 +72,47 @@ class ImmortalLog:
         except Exception:
             pass
 
-    def add_event(self, thread: str, etype: str, text: str, metadata: dict[str, Any] | None = None, blob_id: str | None = None) -> int:
+    def add_event(
+        self, thread: str, etype: str, text: str, metadata: dict[str, Any] | None = None, blob_id: str | None = None
+    ) -> int:
         ts = int(time.time())
         meta = json.dumps(metadata or {}, ensure_ascii=False)
         cur = self.conn.execute(
             "INSERT INTO events(ts_utc, thread, etype, text, metadata_json, blob_id) VALUES (?,?,?,?,?,?)",
-            (ts, thread, etype, text, meta, blob_id)
+            (ts, thread, etype, text, meta, blob_id),
         )
         self.conn.commit()
         return int(cur.lastrowid)
 
     def get_event(self, eid: int) -> EventRow | None:
-        cur = self.conn.execute("SELECT id, ts_utc, thread, etype, text, metadata_json, blob_id FROM events WHERE id=?", (eid,))
+        cur = self.conn.execute(
+            "SELECT id, ts_utc, thread, etype, text, metadata_json, blob_id FROM events WHERE id=?", (eid,)
+        )
         r = cur.fetchone()
         if not r:
             return None
-        return EventRow(id=r[0], ts_utc=r[1], thread=r[2], etype=r[3], text=r[4],
-                        metadata=json.loads(r[5] or "{}"), blob_id=r[6])
+        return EventRow(
+            id=r[0], ts_utc=r[1], thread=r[2], etype=r[3], text=r[4], metadata=json.loads(r[5] or "{}"), blob_id=r[6]
+        )
 
     def recent_events(self, thread: str, limit: int = 20) -> list[EventRow]:
         cur = self.conn.execute(
             "SELECT id, ts_utc, thread, etype, text, metadata_json, blob_id FROM events WHERE thread=? ORDER BY id DESC LIMIT ?",
-            (thread, limit)
+            (thread, limit),
         )
         out: list[EventRow] = []
         for r in cur.fetchall():
-            out.append(EventRow(id=r[0], ts_utc=r[1], thread=r[2], etype=r[3], text=r[4],
-                                metadata=json.loads(r[5] or "{}"), blob_id=r[6]))
+            out.append(
+                EventRow(
+                    id=r[0],
+                    ts_utc=r[1],
+                    thread=r[2],
+                    etype=r[3],
+                    text=r[4],
+                    metadata=json.loads(r[5] or "{}"),
+                    blob_id=r[6],
+                )
+            )
         return out
 
     def search_fts(self, query: str, thread: str | None = None, limit: int = 80) -> list[tuple[int, float]]:
@@ -121,10 +137,19 @@ class ImmortalLog:
         return out
 
     def iter_events(self) -> Iterator[EventRow]:
-        cur = self.conn.execute("SELECT id, ts_utc, thread, etype, text, metadata_json, blob_id FROM events ORDER BY id ASC")
+        cur = self.conn.execute(
+            "SELECT id, ts_utc, thread, etype, text, metadata_json, blob_id FROM events ORDER BY id ASC"
+        )
         for r in cur.fetchall():
-            yield EventRow(id=r[0], ts_utc=r[1], thread=r[2], etype=r[3], text=r[4],
-                           metadata=json.loads(r[5] or "{}"), blob_id=r[6])
+            yield EventRow(
+                id=r[0],
+                ts_utc=r[1],
+                thread=r[2],
+                etype=r[3],
+                text=r[4],
+                metadata=json.loads(r[5] or "{}"),
+                blob_id=r[6],
+            )
 
     def count_events(self) -> int:
         cur = self.conn.execute("SELECT COUNT(*) FROM events")

@@ -17,8 +17,8 @@ You can later wrap this logic inside an Alembic migration once you know your dow
 
 from __future__ import annotations
 
-from datetime import datetime
 from collections.abc import Iterable
+from datetime import datetime
 
 import sqlalchemy as sa
 from sqlalchemy import inspect
@@ -30,15 +30,25 @@ DEFAULT_MEMBERSHIP_ID = "00000000-0000-0000-0000-000000000002"
 
 CANDIDATE_TABLES = [
     # sessions
-    "sessions", "user_sessions", "auth_sessions",
+    "sessions",
+    "user_sessions",
+    "auth_sessions",
     # chat
-    "chats", "chat_sessions", "chat_threads", "chat_messages",
+    "chats",
+    "chat_sessions",
+    "chat_threads",
+    "chat_messages",
     # memory
-    "memories", "memory_items", "memory_entries",
+    "memories",
+    "memory_items",
+    "memory_entries",
     # autonomy jobs
-    "autonomy_jobs", "jobs", "task_runs",
+    "autonomy_jobs",
+    "jobs",
+    "task_runs",
     # api tokens
-    "api_tokens", "tokens",
+    "api_tokens",
+    "tokens",
 ]
 
 
@@ -93,57 +103,71 @@ def _create_tables(conn) -> None:
     insp = inspect(conn)
 
     if not _table_exists(insp, "workspaces"):
-        conn.execute(sa.text(
-            "CREATE TABLE workspaces ("
-            "workspace_id VARCHAR(36) PRIMARY KEY,"
-            "name VARCHAR(200) NOT NULL,"
-            "owner_user_id VARCHAR(64),"
-            "created_at DATETIME NOT NULL"
-            ")"
-        ))
+        conn.execute(
+            sa.text(
+                "CREATE TABLE workspaces ("
+                "workspace_id VARCHAR(36) PRIMARY KEY,"
+                "name VARCHAR(200) NOT NULL,"
+                "owner_user_id VARCHAR(64),"
+                "created_at DATETIME NOT NULL"
+                ")"
+            )
+        )
         _add_index(conn, "workspaces", "owner_user_id")
 
     if not _table_exists(insp, "workspace_memberships"):
-        conn.execute(sa.text(
-            "CREATE TABLE workspace_memberships ("
-            "membership_id VARCHAR(36) PRIMARY KEY,"
-            "workspace_id VARCHAR(36) NOT NULL,"
-            "user_id VARCHAR(64) NOT NULL,"
-            "role VARCHAR(20) NOT NULL DEFAULT 'member',"
-            "created_at DATETIME NOT NULL,"
-            "is_active BOOLEAN NOT NULL DEFAULT 1,"
-            "CONSTRAINT uq_workspace_memberships_workspace_user UNIQUE (workspace_id, user_id)"
-            ")"
-        ))
+        conn.execute(
+            sa.text(
+                "CREATE TABLE workspace_memberships ("
+                "membership_id VARCHAR(36) PRIMARY KEY,"
+                "workspace_id VARCHAR(36) NOT NULL,"
+                "user_id VARCHAR(64) NOT NULL,"
+                "role VARCHAR(20) NOT NULL DEFAULT 'member',"
+                "created_at DATETIME NOT NULL,"
+                "is_active BOOLEAN NOT NULL DEFAULT 1,"
+                "CONSTRAINT uq_workspace_memberships_workspace_user UNIQUE (workspace_id, user_id)"
+                ")"
+            )
+        )
         _add_index(conn, "workspace_memberships", "workspace_id")
         _add_index(conn, "workspace_memberships", "user_id")
         # composite index best-effort
         try:
-            conn.execute(sa.text("CREATE INDEX ix_workspace_memberships_workspace_role ON workspace_memberships (workspace_id, role)"))
+            conn.execute(
+                sa.text(
+                    "CREATE INDEX ix_workspace_memberships_workspace_role ON workspace_memberships (workspace_id, role)"
+                )
+            )
         except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
             pass
 
     if not _table_exists(insp, "workspace_invites"):
-        conn.execute(sa.text(
-            "CREATE TABLE workspace_invites ("
-            "invite_id VARCHAR(36) PRIMARY KEY,"
-            "workspace_id VARCHAR(36) NOT NULL,"
-            "email VARCHAR(320) NOT NULL,"
-            "role VARCHAR(20) NOT NULL DEFAULT 'member',"
-            "token_hash VARCHAR(64) NOT NULL UNIQUE,"
-            "created_by_user_id VARCHAR(64),"
-            "created_at DATETIME NOT NULL,"
-            "expires_at DATETIME NOT NULL,"
-            "accepted_at DATETIME,"
-            "revoked_at DATETIME,"
-            "note TEXT"
-            ")"
-        ))
+        conn.execute(
+            sa.text(
+                "CREATE TABLE workspace_invites ("
+                "invite_id VARCHAR(36) PRIMARY KEY,"
+                "workspace_id VARCHAR(36) NOT NULL,"
+                "email VARCHAR(320) NOT NULL,"
+                "role VARCHAR(20) NOT NULL DEFAULT 'member',"
+                "token_hash VARCHAR(64) NOT NULL UNIQUE,"
+                "created_by_user_id VARCHAR(64),"
+                "created_at DATETIME NOT NULL,"
+                "expires_at DATETIME NOT NULL,"
+                "accepted_at DATETIME,"
+                "revoked_at DATETIME,"
+                "note TEXT"
+                ")"
+            )
+        )
         _add_index(conn, "workspace_invites", "workspace_id")
         _add_index(conn, "workspace_invites", "email")
         _add_index(conn, "workspace_invites", "token_hash")
         try:
-            conn.execute(sa.text("CREATE INDEX ix_workspace_invites_workspace_status ON workspace_invites (workspace_id, revoked_at, accepted_at)"))
+            conn.execute(
+                sa.text(
+                    "CREATE INDEX ix_workspace_invites_workspace_status ON workspace_invites (workspace_id, revoked_at, accepted_at)"
+                )
+            )
         except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
             pass
 
@@ -166,17 +190,22 @@ def _ensure_default_workspace(conn) -> None:
     owner_id = _best_effort_owner_user_id(conn)
     now = _utcnow().isoformat(sep=" ", timespec="seconds")
 
-    row = conn.execute(sa.text("SELECT workspace_id FROM workspaces WHERE workspace_id = :ws"), {"ws": DEFAULT_WORKSPACE_ID}).fetchone()
+    row = conn.execute(
+        sa.text("SELECT workspace_id FROM workspaces WHERE workspace_id = :ws"), {"ws": DEFAULT_WORKSPACE_ID}
+    ).fetchone()
     if not row:
         conn.execute(
-            sa.text("INSERT INTO workspaces (workspace_id, name, owner_user_id, created_at) VALUES (:ws, :name, :owner, :created_at)"),
+            sa.text(
+                "INSERT INTO workspaces (workspace_id, name, owner_user_id, created_at) VALUES (:ws, :name, :owner, :created_at)"
+            ),
             {"ws": DEFAULT_WORKSPACE_ID, "name": "Personal", "owner": owner_id, "created_at": now},
         )
 
     if owner_id:
-        row2 = conn.execute(sa.text(
-            "SELECT membership_id FROM workspace_memberships WHERE workspace_id = :ws AND user_id = :u"
-        ), {"ws": DEFAULT_WORKSPACE_ID, "u": owner_id}).fetchone()
+        row2 = conn.execute(
+            sa.text("SELECT membership_id FROM workspace_memberships WHERE workspace_id = :ws AND user_id = :u"),
+            {"ws": DEFAULT_WORKSPACE_ID, "u": owner_id},
+        ).fetchone()
         if not row2:
             conn.execute(
                 sa.text(
@@ -204,7 +233,9 @@ def _add_workspace_column(conn, table: str) -> bool:
 
 def _backfill_workspace_column(conn, table: str) -> None:
     try:
-        conn.execute(sa.text(f"UPDATE {table} SET workspace_id = :ws WHERE workspace_id IS NULL"), {"ws": DEFAULT_WORKSPACE_ID})
+        conn.execute(
+            sa.text(f"UPDATE {table} SET workspace_id = :ws WHERE workspace_id IS NULL"), {"ws": DEFAULT_WORKSPACE_ID}
+        )
     except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
         pass
 

@@ -21,9 +21,9 @@ loaded by different plugin registries.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
-from typing import Any, TypedDict, Union, cast
 from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import Any, TypedDict, cast
 
 
 class ChatMessage(TypedDict, total=False):
@@ -402,7 +402,9 @@ def run_json(hook_input_json: str, *, config_json: str | None = None) -> str:
         hook_input = json.loads(hook_input_json)
     except Exception as e:
         return json.dumps(
-            BeforeModelError(code="INVALID_INPUT", message="Input is not valid JSON.", details={"error": str(e)}).to_dict(),
+            BeforeModelError(
+                code="INVALID_INPUT", message="Input is not valid JSON.", details={"error": str(e)}
+            ).to_dict(),
             sort_keys=True,
         )
 
@@ -412,7 +414,9 @@ def run_json(hook_input_json: str, *, config_json: str | None = None) -> str:
             cfg = cast(Mapping[str, Any], json.loads(config_json))
         except Exception as e:
             return json.dumps(
-                BeforeModelError(code="INVALID_CONFIG", message="Config is not valid JSON.", details={"error": str(e)}).to_dict(),
+                BeforeModelError(
+                    code="INVALID_CONFIG", message="Config is not valid JSON.", details={"error": str(e)}
+                ).to_dict(),
                 sort_keys=True,
             )
 

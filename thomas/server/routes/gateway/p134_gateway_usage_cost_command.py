@@ -14,10 +14,10 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from typing import Any, TypedDict, cast
-from collections.abc import Mapping, Sequence
 
 import aiohttp
 from aiohttp import web
@@ -174,17 +174,9 @@ def _resolve_gateway_config(
     key = (gateway_api_key or "").strip() or None
 
     if url is None:
-        url = (
-            os.environ.get("THOMAS_GATEWAY_URL")
-            or os.environ.get("GATEWAY_URL")
-            or ""
-        ).strip() or None
+        url = (os.environ.get("THOMAS_GATEWAY_URL") or os.environ.get("GATEWAY_URL") or "").strip() or None
     if key is None:
-        key = (
-            os.environ.get("THOMAS_GATEWAY_API_KEY")
-            or os.environ.get("GATEWAY_API_KEY")
-            or ""
-        ).strip() or None
+        key = (os.environ.get("THOMAS_GATEWAY_API_KEY") or os.environ.get("GATEWAY_API_KEY") or "").strip() or None
 
     # Best-effort: app may carry configuration.
     if app and (url is None or key is None):
@@ -204,12 +196,7 @@ def _resolve_gateway_config(
                 if isinstance(v, str) and v.strip():
                     url = v.strip()
             if key is None:
-                v = (
-                    cfg.get("gateway_api_key")
-                    or cfg.get("api_key")
-                    or cfg.get("token")
-                    or cfg.get("apiKey")
-                )
+                v = cfg.get("gateway_api_key") or cfg.get("api_key") or cfg.get("token") or cfg.get("apiKey")
                 if isinstance(v, str) and v.strip():
                     key = v.strip()
             if url is not None and key is not None:
@@ -218,17 +205,13 @@ def _resolve_gateway_config(
     if url is None:
         raise GatewayUsageCostError(
             code="missing_gateway_url",
-            message=(
-                "Gateway URL is not configured (set THOMAS_GATEWAY_URL or pass --gateway-url)"
-            ),
+            message=("Gateway URL is not configured (set THOMAS_GATEWAY_URL or pass --gateway-url)"),
             http_status=500,
         )
     if key is None:
         raise GatewayUsageCostError(
             code="missing_gateway_api_key",
-            message=(
-                "Gateway API key is not configured (set THOMAS_GATEWAY_API_KEY or pass --gateway-api-key)"
-            ),
+            message=("Gateway API key is not configured (set THOMAS_GATEWAY_API_KEY or pass --gateway-api-key)"),
             http_status=500,
         )
     return url, key

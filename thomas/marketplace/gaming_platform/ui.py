@@ -209,9 +209,7 @@ class Button(UIWidget):
             return
 
         # Choose color based on state
-        if self.is_pressed:
-            pass
-        elif self.is_hovered:
+        if self.is_pressed or self.is_hovered:
             pass
         else:
             pass

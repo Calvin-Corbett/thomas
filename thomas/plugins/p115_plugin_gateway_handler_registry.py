@@ -3,9 +3,9 @@ from __future__ import annotations
 import importlib
 import json
 import re
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
-from collections.abc import Callable, Mapping, Sequence
 
 GatewayHandler = Callable[..., Any]
 
@@ -374,8 +374,12 @@ def load_gateway_handlers_from_modules(
                 if callable(maybe_handler):
                     handler = maybe_handler
                 description = raw_value.get("description") if isinstance(raw_value.get("description"), str) else None
-                input_schema = raw_value.get("input_schema") if isinstance(raw_value.get("input_schema"), Mapping) else None
-                output_schema = raw_value.get("output_schema") if isinstance(raw_value.get("output_schema"), Mapping) else None
+                input_schema = (
+                    raw_value.get("input_schema") if isinstance(raw_value.get("input_schema"), Mapping) else None
+                )
+                output_schema = (
+                    raw_value.get("output_schema") if isinstance(raw_value.get("output_schema"), Mapping) else None
+                )
             elif (
                 isinstance(raw_value, tuple)
                 and len(raw_value) == 2

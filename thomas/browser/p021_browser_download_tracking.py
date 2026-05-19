@@ -26,9 +26,9 @@ from __future__ import annotations
 import hashlib
 import os
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from collections.abc import Mapping
 
 
 class DownloadTrackingError(RuntimeError):
@@ -144,7 +144,9 @@ def _snapshot_files(download_dir: Path, ignore_suffixes: tuple[str, ...]) -> dic
     try:
         entries = list(download_dir.iterdir())
     except FileNotFoundError as exc:
-        raise DownloadTrackingError("BROWSER.DOWNLOAD_DIR_NOT_FOUND", f"download_dir not found: {download_dir}") from exc
+        raise DownloadTrackingError(
+            "BROWSER.DOWNLOAD_DIR_NOT_FOUND", f"download_dir not found: {download_dir}"
+        ) from exc
     except NotADirectoryError as exc:
         raise DownloadTrackingError(
             "BROWSER.DOWNLOAD_DIR_NOT_DIRECTORY", f"download_dir is not a directory: {download_dir}"

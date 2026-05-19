@@ -106,9 +106,7 @@ def _build_config(
 @typer_app.command(COMMAND_NAME)
 def cli_view(
     message_id: str = typer.Option(..., "--message-id", "-m", help="Message identifier."),
-    user_id: str | None = typer.Option(
-        None, "--user-id", "-u", help="User identifier for which to view permissions."
-    ),
+    user_id: str | None = typer.Option(None, "--user-id", "-u", help="User identifier for which to view permissions."),
     json_output: bool = typer.Option(
         False,
         "--json",
@@ -163,18 +161,18 @@ def cli_view(
         else:
             typer.echo(f"ERROR[{exc.code}]: {exc}", err=True)
         raise typer.Exit(code=1)
- 
- 
+
+
 def register(parent_app: typer.Typer) -> None:
-     """Register this command under an existing Typer app.
- 
-     This helper prefers a nested structure: `messages permissions view`.
-     """
- 
-     parent_app.add_typer(typer_app, name=COMMAND_GROUP)
- 
- 
+    """Register this command under an existing Typer app.
+
+    This helper prefers a nested structure: `messages permissions view`.
+    """
+
+    parent_app.add_typer(typer_app, name=COMMAND_GROUP)
+
+
 def get_typer_app() -> typer.Typer:
-     """Compatibility helper for CLI composition layers."""
- 
-     return typer_app
+    """Compatibility helper for CLI composition layers."""
+
+    return typer_app

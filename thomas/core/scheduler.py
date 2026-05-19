@@ -7,12 +7,12 @@ import random
 import re
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
-from collections.abc import Callable
 
 from croniter import croniter
 
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 # ============================================================
 # Time + serialization helpers
 # ============================================================
+
 
 def _now_local() -> datetime:
     """Local tz-aware time. Cron is interpreted in local time by default."""
@@ -66,6 +67,7 @@ def _atomic_write_json(path: Path, payload: Any) -> None:
 # Cross-platform instance lock (prevents double-firing if Thomas runs twice)
 # ============================================================
 
+
 class _InstanceLock:
     """
     Best-effort single-process-instance lock using an OS-level file lock.
@@ -107,6 +109,7 @@ class _InstanceLock:
         try:
             if os.name == "nt":
                 import msvcrt  # type: ignore
+
                 try:
                     self._fh.seek(0)
                     msvcrt.locking(self._fh.fileno(), msvcrt.LK_UNLCK, 1)
@@ -114,6 +117,7 @@ class _InstanceLock:
                     pass
             else:
                 import fcntl  # type: ignore
+
                 try:
                     fcntl.flock(self._fh.fileno(), fcntl.LOCK_UN)
                 except Exception:
@@ -130,6 +134,7 @@ class _InstanceLock:
 # ============================================================
 # Best-effort integrations (events + persistence)
 # ============================================================
+
 
 def _best_effort_emit(event_name: str, payload: dict) -> None:
     """
@@ -234,8 +239,7 @@ def _normalize_cron(expr: str) -> str:
     parts = [p for p in expr.split() if p.strip()]
     if len(parts) != 5:
         raise ValueError(
-            f"Cron must be standard 5-field format: 'min hour day month weekday'. "
-            f"Got {len(parts)} fields: {expr}"
+            f"Cron must be standard 5-field format: 'min hour day month weekday'. " f"Got {len(parts)} fields: {expr}"
         )
     if not croniter.is_valid(expr):
         raise ValueError(f"Invalid cron expression: {expr}")
@@ -265,6 +269,7 @@ def _cron_human_hint(expr: str) -> str:
 # ============================================================
 # Data model (with consumer-friendly extras)
 # ============================================================
+
 
 @dataclass
 class ScheduledTask:
@@ -307,6 +312,7 @@ class ScheduledTask:
 # ============================================================
 # TaskScheduler
 # ============================================================
+
 
 class TaskScheduler:
     """
@@ -463,7 +469,9 @@ class TaskScheduler:
             self._persist_locked()
 
         _best_effort_emit("task_added", {"id": task_id, "cron": cron_expr, "channel": channel or "default"})
-        _best_effort_pe_set(f"scheduler.task.{task_id}", {"cron": cron_expr, "channel": channel or "default", "task": goal_text})
+        _best_effort_pe_set(
+            f"scheduler.task.{task_id}", {"cron": cron_expr, "channel": channel or "default", "task": goal_text}
+        )
 
     def remove_task(self, id: str) -> None:
         task_id = (id or "").strip()
@@ -562,9 +570,16 @@ class TaskScheduler:
             out.append(nxt.isoformat())
         return out
 
-    def update_task(self, id: str, cron: str | None = None, task: str | None = None,
-                    channel: str | None = None, misfire_policy: str | None = None,
-                    misfire_grace_s: int | None = None, jitter_s: int | None = None) -> None:
+    def update_task(
+        self,
+        id: str,
+        cron: str | None = None,
+        task: str | None = None,
+        channel: str | None = None,
+        misfire_policy: str | None = None,
+        misfire_grace_s: int | None = None,
+        jitter_s: int | None = None,
+    ) -> None:
         """
         Consumer-friendly update without removing/re-adding.
         """
@@ -861,7 +876,9 @@ class TaskScheduler:
                     self._persist_locked()
 
             if exc is not None:
-                _best_effort_emit("task_failed", {"id": task_id, "error": str(exc), "scheduled_for": _iso(scheduled_for)})
+                _best_effort_emit(
+                    "task_failed", {"id": task_id, "error": str(exc), "scheduled_for": _iso(scheduled_for)}
+                )
 
         fut.add_done_callback(_done)
 
@@ -889,11 +906,13 @@ def get_scheduler(execute_fn: Callable[[str, str], None] | None = None) -> TaskS
     with _SCHED_LOCK:
         if _SCHED is None:
             if execute_fn is None:
+
                 def _missing(goal_text: str, channel: str) -> None:
                     raise RuntimeError(
                         "Scheduler execute_fn is not configured. "
                         "Call get_scheduler(execute_fn=...) once at app startup."
                     )
+
                 _SCHED = TaskScheduler(execute_fn=_missing, auto_start=False)
             else:
                 _SCHED = TaskScheduler(execute_fn=execute_fn, auto_start=True)

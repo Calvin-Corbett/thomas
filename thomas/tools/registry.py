@@ -62,7 +62,7 @@ class ToolRegistry:
         # Common namespacing wrappers seen in model outputs.
         for prefix in ("functions.", "function.", "tool.", "tools.", "mcp.", "mcp__"):
             if lowered.startswith(prefix):
-                trimmed = raw[len(prefix):].strip()
+                trimmed = raw[len(prefix) :].strip()
                 if trimmed in self._tools:
                     return trimmed
                 trimmed_matches = [tool_name for tool_name in self._tools if tool_name.lower() == trimmed.lower()]
@@ -83,11 +83,7 @@ class ToolRegistry:
                 return variant
 
         target = self._canonical_name(raw)
-        canonical_matches = [
-            tool_name
-            for tool_name in self._tools
-            if self._canonical_name(tool_name) == target
-        ]
+        canonical_matches = [tool_name for tool_name in self._tools if self._canonical_name(tool_name) == target]
         if len(canonical_matches) == 1:
             return canonical_matches[0]
 
@@ -97,11 +93,7 @@ class ToolRegistry:
             if len(segments) < tail_len:
                 continue
             tail = ".".join(segments[-tail_len:])
-            tail_matches = [
-                tool_name
-                for tool_name in self._tools
-                if self._canonical_name(tool_name) == tail
-            ]
+            tail_matches = [tool_name for tool_name in self._tools if self._canonical_name(tool_name) == tail]
             if len(tail_matches) == 1:
                 return tail_matches[0]
 
@@ -121,34 +113,32 @@ class ToolRegistry:
         """Search tools by semantic keyword overlap."""
         if not query:
             return []
-            
+
         q_tokens = set(re.findall(r"\w+", query.lower()))
         scores: list[tuple[float, Tool]] = []
-        
+
         for tool in self._tools.values():
             score = 0.0
             # Exact name match (high)
             if query.lower() in tool.name.lower():
                 score += 10.0
-            
+
             # Token overlap
             t_name_tokens = set(re.findall(r"\w+", tool.name.lower()))
             score += len(q_tokens & t_name_tokens) * 3.0
-            
+
             if tool.description:
                 t_desc_tokens = set(re.findall(r"\w+", tool.description.lower()))
                 score += len(q_tokens & t_desc_tokens) * 1.0
-            
+
             if score > 0:
                 scores.append((score, tool))
-        
+
         # Sort by score desc, then name
         scores.sort(key=lambda x: (-x[0], x[1].name))
         return [s[1] for s in scores[:limit]]
 
-    def get_openai_specs(
-        self, category: str | None = None
-    ) -> list[dict[str, Any]]:
+    def get_openai_specs(self, category: str | None = None) -> list[dict[str, Any]]:
         """Generate OpenAI function-calling tool specs."""
         tools = self.list_tools(category)
         return [t.get_spec().to_openai() for t in tools]

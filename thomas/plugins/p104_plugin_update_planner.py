@@ -17,9 +17,9 @@ from __future__ import annotations
 import json
 import os
 import re
-from dataclasses import dataclass
-from typing import Any, Literal, TypedDict, Union, cast
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any, Literal, TypedDict, cast
 
 try:
     import requests  # type: ignore
@@ -485,7 +485,9 @@ def _normalize_installed_entry(entry: InstalledPluginDict | str) -> InstalledPlu
     pid = (entry.get("id") or entry.get("plugin_id") or entry.get("pluginId") or entry.get("name") or "").strip()
     ver = (entry.get("version") or entry.get("current_version") or entry.get("currentVersion") or "").strip()
     if not pid:
-        raise PluginUpdatePlannerInputError("Installed plugin is missing required field 'id'.", details={"entry": entry})
+        raise PluginUpdatePlannerInputError(
+            "Installed plugin is missing required field 'id'.", details={"entry": entry}
+        )
     if not ver:
         raise PluginUpdatePlannerInputError(
             "Installed plugin is missing required field 'version'.", details={"entry": entry}
@@ -555,9 +557,13 @@ def _load_catalog_from_path(path: str) -> dict[str, Any]:
         with open(path, encoding="utf-8") as f:
             raw = json.load(f)
     except json.JSONDecodeError as e:
-        raise PluginUpdatePlannerInputError("Catalog file is not valid JSON.", details={"catalog_path": path, "error": str(e)})
+        raise PluginUpdatePlannerInputError(
+            "Catalog file is not valid JSON.", details={"catalog_path": path, "error": str(e)}
+        )
     except OSError as e:
-        raise PluginUpdatePlannerExternalError("Failed to read catalog file.", details={"catalog_path": path, "error": str(e)})
+        raise PluginUpdatePlannerExternalError(
+            "Failed to read catalog file.", details={"catalog_path": path, "error": str(e)}
+        )
     return _parse_catalog_json(raw)
 
 
@@ -571,7 +577,9 @@ def _load_catalog_from_url(url: str, *, timeout_s: float) -> dict[str, Any]:
         resp.raise_for_status()
         raw = resp.json()
     except Exception as e:
-        raise PluginUpdatePlannerExternalError("Failed to fetch catalog from URL.", details={"catalog_url": url, "error": str(e)})
+        raise PluginUpdatePlannerExternalError(
+            "Failed to fetch catalog from URL.", details={"catalog_url": url, "error": str(e)}
+        )
     return _parse_catalog_json(raw)
 
 

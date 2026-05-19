@@ -25,10 +25,10 @@ from __future__ import annotations
 import builtins
 import json
 import threading
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypedDict
-from collections.abc import Iterable, Mapping, Sequence
 
 # -----------------------------
 # Error model (deterministic)

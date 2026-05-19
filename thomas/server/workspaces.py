@@ -4,10 +4,10 @@ import hashlib
 import json
 import secrets
 import threading
+from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-from collections.abc import Iterable
 
 
 def _utc_now() -> datetime:
@@ -255,7 +255,11 @@ class WorkspaceStore:
     def list_members(self, workspace_id: str, actor_user_id: str) -> list[dict[str, Any]]:
         with self._lock:
             self._ensure_manage_role(workspace_id, actor_user_id)
-            out = [dict(m) for m in self._state["memberships"] if str(m.get("workspace_id") or "") == str(workspace_id or "")]
+            out = [
+                dict(m)
+                for m in self._state["memberships"]
+                if str(m.get("workspace_id") or "") == str(workspace_id or "")
+            ]
             out.sort(key=lambda r: str(r.get("created_at") or ""))
             return out
 

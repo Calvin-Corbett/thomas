@@ -23,10 +23,10 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from collections.abc import Mapping
 
 from thomas.channels.p093_channel_retry_and_backoff_strategy import (
     ChannelRetryConfigError,
@@ -94,16 +94,12 @@ class RetryBackoffCliResponse:
 def _load_json_file(path: str) -> Mapping[str, Any]:
     p = Path(path)
     if not p.exists():
-        raise ChannelRetryConfigError(
-            "config_not_found", f"Retry policy config file not found: {path}"
-        )
+        raise ChannelRetryConfigError("config_not_found", f"Retry policy config file not found: {path}")
 
     try:
         raw = p.read_text(encoding="utf-8")
     except OSError as exc:
-        raise ChannelRetryConfigError(
-            "config_read_failed", f"Unable to read retry policy config file: {path}"
-        ) from exc
+        raise ChannelRetryConfigError("config_read_failed", f"Unable to read retry policy config file: {path}") from exc
 
     try:
         data = json.loads(raw)
@@ -209,14 +205,13 @@ def _emit_response(resp: RetryBackoffCliResponse, *, as_json: bool) -> None:
 
 def _emit_error(err: ChannelRetryError | Exception, *, as_json: bool) -> None:
     if isinstance(err, ChannelRetryError):
-        payload = RetryBackoffCliResponse(
-            ok=False, error=RetryBackoffCliError(code=err.code, message=str(err))
-        )
+        payload = RetryBackoffCliResponse(ok=False, error=RetryBackoffCliError(code=err.code, message=str(err)))
     else:
         payload = RetryBackoffCliResponse(
             ok=False,
             error=RetryBackoffCliError(
-                code="unexpected_error", message=f"Unexpected error: {err}"  # stable prefix
+                code="unexpected_error",
+                message=f"Unexpected error: {err}",  # stable prefix
             ),
         )
 
@@ -360,9 +355,7 @@ def get_click_command() -> Any:
                 click.echo(f"  {k}: {v}")
             click.echo("\nBackoff schedule:")
             for step in resp.plan.steps:
-                click.echo(
-                    f"  retry #{step.retry_index}: wait {step.delay_s:.3f}s ({step.reason})"
-                )
+                click.echo(f"  retry #{step.retry_index}: wait {step.delay_s:.3f}s ({step.reason})")
             click.echo(f"\nTotal planned delay: {resp.plan.total_delay_s:.3f}s")
         except ChannelRetryError as err:
             _emit_error(err, as_json=req.json)

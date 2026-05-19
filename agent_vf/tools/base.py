@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import builtins
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
-from collections.abc import Callable
 
 
 @dataclass
@@ -12,6 +12,7 @@ class Tool:
     description: str
     schema: dict[str, Any]
     handler: Callable[[dict[str, Any]], dict[str, Any]]
+
 
 class ToolRegistry:
     def __init__(self):
@@ -29,12 +30,14 @@ class ToolRegistry:
     def openai_tool_specs(self):
         specs = []
         for t in self._tools.values():
-            specs.append({
-                "type": "function",
-                "function": {
-                    "name": t.name,
-                    "description": t.description,
-                    "parameters": t.schema,
+            specs.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.schema,
+                    },
                 }
-            })
+            )
         return specs

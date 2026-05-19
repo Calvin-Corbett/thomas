@@ -4,9 +4,9 @@ import copy
 import hashlib
 import json
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict, Union, cast
-from collections.abc import Mapping, Sequence
 
 from aiohttp import web
 

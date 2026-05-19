@@ -15,14 +15,15 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from collections.abc import Mapping, MutableMapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
-from collections.abc import Mapping, MutableMapping
 
 # -------------------------------
 # Contracts
 # -------------------------------
+
 
 @dataclass(frozen=True, slots=True)
 class AfterResponseHookRequest:
@@ -36,9 +37,7 @@ class AfterResponseHookRequest:
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> AfterResponseHookRequest:
         if not isinstance(raw, Mapping):
-            raise AfterResponseHookInputError(
-                "request must be an object", field="request", got=type(raw).__name__
-            )
+            raise AfterResponseHookInputError("request must be an object", field="request", got=type(raw).__name__)
 
         if "response_text" not in raw:
             raise AfterResponseHookInputError("missing required field", field="response_text")
@@ -216,6 +215,7 @@ class AfterResponseHookResult:
 # Deterministic errors
 # -------------------------------
 
+
 class AfterResponseHookError(RuntimeError):
     """Base error for this hook with a stable error code."""
 
@@ -262,6 +262,7 @@ class AfterResponseHookExternalError(AfterResponseHookError):
 # Hook implementation
 # -------------------------------
 
+
 def run_after_response_hook(
     request: AfterResponseHookRequest | Mapping[str, Any] | str,
     config: AfterResponseHookConfig | Mapping[str, Any] | None,
@@ -275,8 +276,12 @@ def run_after_response_hook(
     """
 
     req_obj = AfterResponseHookRequest.from_any(request)
-    cfg_obj = config if isinstance(config, AfterResponseHookConfig) else AfterResponseHookConfig.from_mapping(
-        config  # type: ignore[arg-type]
+    cfg_obj = (
+        config
+        if isinstance(config, AfterResponseHookConfig)
+        else AfterResponseHookConfig.from_mapping(
+            config  # type: ignore[arg-type]
+        )
     )
 
     # Deterministic inspection output even for disabled mode.
@@ -340,6 +345,7 @@ def _append_to_file(file_path: str | None, content: str) -> str:
 # Optional helper: a callable hook object
 # -------------------------------
 
+
 @dataclass(slots=True)
 class AfterResponseHook:
     """A small callable wrapper useful for agent-loop integration."""
@@ -354,6 +360,7 @@ class AfterResponseHook:
 # -------------------------------
 # JSON helpers (automation)
 # -------------------------------
+
 
 def request_json_schema() -> dict[str, Any]:
     return {

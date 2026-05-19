@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Literal, TypedDict, Union, cast
 from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any, Literal, TypedDict, cast
 
 from aiohttp import web
 
@@ -65,6 +65,7 @@ class CompatValidationResult:
 # Helpers
 # ----------------------------------------------------------------------------
 
+
 def _err(code: str, message: str, *, path: str = "", hint: str = "") -> CompatValidationError:
     return CompatValidationError(code=code, message=message, path=path, hint=hint)
 
@@ -102,6 +103,7 @@ def _optional_bool(payload: Mapping[str, Any], key: str, *, path: str) -> None |
 # ----------------------------------------------------------------------------
 # Validators (conservative, deterministic)
 # ----------------------------------------------------------------------------
+
 
 def _validate_openai_chat_completions(payload: dict[str, Any]) -> CompatValidationResult:
     errors: list[CompatValidationError] = []
