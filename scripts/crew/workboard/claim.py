@@ -153,15 +153,13 @@ def run(argv: Sequence[str] | None = None) -> int:
         "--task-manager-agent",
         default=DEFAULT_TASK_MANAGER_AGENT,
         help=(
-            "Task-manager agent id used by temporary task-creator fallback " f"(default: {DEFAULT_TASK_MANAGER_AGENT})."
+            f"Task-manager agent id used by temporary task-creator fallback (default: {DEFAULT_TASK_MANAGER_AGENT})."
         ),
     )
     parser.add_argument(
         "--allow-dirty-release",
         action="store_true",
-        help=(
-            "Allow --release to proceed even when claimed scope has dirty files. " "Requires --dirty-release-reason."
-        ),
+        help=("Allow --release to proceed even when claimed scope has dirty files. Requires --dirty-release-reason."),
     )
     parser.add_argument(
         "--dirty-release-reason",
@@ -171,7 +169,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--allow-dirty-claim",
         action="store_true",
-        help=("Allow --claim to proceed even when the repo worktree is dirty. " "Requires --dirty-claim-reason."),
+        help=("Allow --claim to proceed even when the repo worktree is dirty. Requires --dirty-claim-reason."),
     )
     parser.add_argument(
         "--dirty-claim-reason",
@@ -274,7 +272,7 @@ def run(argv: Sequence[str] | None = None) -> int:
                 if ready:
                     print("- ready delegation suggestions:")
                     for item in ready:
-                        print(f"  - {item.get('task_id')}: {item.get('summary')} " f"(scope={item.get('scope')})")
+                        print(f"  - {item.get('task_id')}: {item.get('summary')} (scope={item.get('scope')})")
                         print(f"    {item.get('claim_command')}")
                 else:
                     print("- no non-overlapping delegation suggestions available")
@@ -325,7 +323,7 @@ def run(argv: Sequence[str] | None = None) -> int:
                 if claimed:
                     print("- claimed worker lanes:")
                     for item in claimed:
-                        print(f"  - {item.get('agent')} => {item.get('task_id')} " f"(scope={item.get('scope')})")
+                        print(f"  - {item.get('agent')} => {item.get('task_id')} (scope={item.get('scope')})")
                 else:
                     print("- no worker claims created in this dispatch pass")
                 temp_payload = payload.get("temp_task_creator")
@@ -335,8 +333,7 @@ def run(argv: Sequence[str] | None = None) -> int:
                     manager = str(temp_payload.get("manager_agent") or "").strip()
                     if temp_status and temp_status != "disabled":
                         print(
-                            f"- temp-task-creator={temp_status}; holder={holder or 'none'}; "
-                            f"manager={manager or 'none'}"
+                            f"- temp-task-creator={temp_status}; holder={holder or 'none'}; manager={manager or 'none'}"
                         )
                 guidance = str(payload.get("guidance") or "").strip()
                 if guidance:
@@ -375,13 +372,11 @@ def run(argv: Sequence[str] | None = None) -> int:
 
             payload = result if isinstance(result, dict) else {}
             print("Workboard claim tool: PASS")
-            print(
-                f"- task-manager={payload.get('task_manager_agent')}; " f"released={payload.get('released_count', 0)}"
-            )
+            print(f"- task-manager={payload.get('task_manager_agent')}; released={payload.get('released_count', 0)}")
             released_rows = list(payload.get("released") or [])
             if released_rows:
                 for row in released_rows:
-                    print(f"  - {row.get('holder_agent')} " f"(lease={row.get('lease_agent')})")
+                    print(f"  - {row.get('holder_agent')} (lease={row.get('lease_agent')})")
             return 0
 
         if args.release:

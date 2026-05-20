@@ -71,7 +71,7 @@ jobs:
           competitor_delta_exit_code=$?
           set -e
           printf "%s\n" "${competitor_delta_exit_code}" > artifacts/nightly_reliability/competitor_delta_alerting.exit_code
-          python scripts/workboard_issue.py --help > artifacts/nightly_reliability/workboard_issue_tool_help.txt
+          python scripts/crew/workboard/issue.py --help > artifacts/nightly_reliability/workboard_issue_tool_help.txt
           python scripts/module_audit_status.py --max-age-hours 24 --json > artifacts/nightly_reliability/module_audit_status_24h.json
           python scripts/focus_scorecard.py --days 7 --json > artifacts/nightly_reliability/focus_scorecard.json
 

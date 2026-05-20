@@ -15,15 +15,16 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from scripts import workboard_issue
     from scripts.crew.workboard import claim as workboard_claim
+    from scripts.crew.workboard import issue as workboard_issue
     from scripts.forge.gates import workboard_claim_freshness as freshness_gate
     from scripts.forge.gates import workboard_claims as claims_gate
 except Exception:  # pragma: no cover
-    import workboard_issue  # type: ignore
     from crew.workboard import claim as workboard_claim  # type: ignore
     from forge.gates import workboard_claim_freshness as freshness_gate  # type: ignore
     from forge.gates import workboard_claims as claims_gate  # type: ignore
+
+    from scripts.crew.workboard import issue as workboard_issue  # type: ignore
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -356,7 +357,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             print("Workboard claim cleanup: PASS")
         else:
             print("Workboard claim cleanup: FAIL")
-        print(f"- stale claims: {payload['stale_claim_count']} " f"(max age {float(args.max_age_hours):.1f}h)")
+        print(f"- stale claims: {payload['stale_claim_count']} (max age {float(args.max_age_hours):.1f}h)")
         if stale_agents:
             print(f"- stale agents: {', '.join(stale_agents)}")
         if args.apply:

@@ -177,7 +177,7 @@ When multiple agents are active, use a double-handshake before bundling commits.
 1. **Claim scope:** `python scripts/crew/brief/bootstrap_claim.py --agent "<name>" --scope "<path[,path...]>" --task "<short task>" --name "<name>"`
 2. **Mark ready:** `python scripts/crew/workboard/claim.py --claim --agent "<name>" --name "<callsign>" --role <role> --parent <parent-id> --scope "<paths>" --task "[READY][HSK-<id>] <summary>"`
 3. **Fan out (parents):** `python scripts/crew/workboard/claim.py --dispatch-workers --agent "<parent-name>" --dispatch-release-ready --dispatch-target-workers 2 --task-manager-agent "thomas"`
-4. **Report issues:** `python scripts/workboard_issue.py --block --task-id "<id>" --reporter "<agent>" --summary "<blocker>"`
+4. **Report issues:** `python scripts/crew/workboard/issue.py --block --task-id "<id>" --reporter "<agent>" --summary "<blocker>"`
 5. **Acknowledge handoff:** `python scripts/append_handoff.py --title "ACK HSK-<id>" --note "<agent> marked READY"`
 6. **Integrator bundles** only after READY+ACK.
 7. **Release claims:** `python scripts/crew/workboard/claim.py --release --agent "<name>"`

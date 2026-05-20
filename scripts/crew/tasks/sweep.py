@@ -14,15 +14,16 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from scripts import workboard_issue
     from scripts.crew.workboard import claim as workboard_claim
+    from scripts.crew.workboard import issue as workboard_issue
     from scripts.crew.workboard import message as workboard_message
     from scripts.forge.gates import workboard_claims as claims_gate
 except ImportError:  # pragma: no cover
-    import workboard_issue  # type: ignore
     from crew.workboard import claim as workboard_claim  # type: ignore
     from crew.workboard import message as workboard_message  # type: ignore
     from forge.gates import workboard_claims as claims_gate  # type: ignore
+
+    from scripts.crew.workboard import issue as workboard_issue  # type: ignore
 
 try:
     from scripts.crew.tasks.base import (

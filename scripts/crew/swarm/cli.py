@@ -17,13 +17,14 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from scripts import workboard_issue
+    from scripts.crew.workboard import issue as workboard_issue
     from scripts.crew.workboard import message as workboard_message
     from scripts.forge.gates import workboard_claims as claims_gate
 except Exception:  # pragma: no cover
-    import workboard_issue  # type: ignore
     from crew.workboard import message as workboard_message  # type: ignore
     from forge.gates import workboard_claims as claims_gate  # type: ignore
+
+    from scripts.crew.workboard import issue as workboard_issue  # type: ignore
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -323,16 +324,16 @@ def _make_manifest(
 
         startup_status_cmd = (
             "python scripts/crew/workboard/message.py "
-            f'--send --from-agent {_ps_single_quote(agent)} --to-agent {_ps_single_quote(coordinator)} '
-            f'--task-id {_ps_single_quote(task_id)} --kind status --priority p0 '
-            f'--summary {_ps_single_quote(f"swarm {swarm_id} terminal online")} '
+            f"--send --from-agent {_ps_single_quote(agent)} --to-agent {_ps_single_quote(coordinator)} "
+            f"--task-id {_ps_single_quote(task_id)} --kind status --priority p0 "
+            f"--summary {_ps_single_quote(f'swarm {swarm_id} terminal online')} "
             "--requested-action none --decision pending"
         )
         claim_cmd = (
             "python scripts/crew/workboard/claim.py "
-            f'--claim --agent {_ps_single_quote(agent)} --name {_ps_single_quote(agent)} --role solo --parent none '
-            f'--scope {_ps_single_quote(lane_scope)} '
-            f'--task {_ps_single_quote(f"[WIP][SWARM:{swarm_id}] {task_id} lane")}'
+            f"--claim --agent {_ps_single_quote(agent)} --name {_ps_single_quote(agent)} --role solo --parent none "
+            f"--scope {_ps_single_quote(lane_scope)} "
+            f"--task {_ps_single_quote(f'[WIP][SWARM:{swarm_id}] {task_id} lane')}"
         )
         bootstrap_parts = [
             f"Set-Location {_ps_single_quote(root_path)}",

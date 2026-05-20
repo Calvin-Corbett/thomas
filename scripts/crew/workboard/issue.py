@@ -6,16 +6,21 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 try:
     from scripts.forge.gates import workboard_claims as claims_gate
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     from forge.gates import workboard_claims as claims_gate  # type: ignore
 
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 NONE_ENTRY = "- none"
 
@@ -128,7 +133,7 @@ def _format_up_for_grabs(
     scope_clean = _normalize_scope_value(scope)
     summary_clean = _sanitize_field("summary", summary)
     reporter_clean = _sanitize_field("reported_by", reported_by)
-    line = f"- task_id={task_id_clean}; scope={scope_clean}; " f"summary={summary_clean}; reported_by={reporter_clean}"
+    line = f"- task_id={task_id_clean}; scope={scope_clean}; summary={summary_clean}; reported_by={reporter_clean}"
     depends_clean = str(depends_on or "").strip()
     if depends_clean:
         line += f"; depends_on={_sanitize_field('depends_on', depends_clean)}"

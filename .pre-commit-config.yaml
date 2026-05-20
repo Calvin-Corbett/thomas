@@ -84,7 +84,7 @@ repos:
 
       - id: thomas-workboard-issue-tool-smoke
         name: Thomas Workboard Issue Tool Smoke
-        entry: python scripts/workboard_issue.py --help
+        entry: python scripts/crew/workboard/issue.py --help
         language: system
         pass_filenames: false
 

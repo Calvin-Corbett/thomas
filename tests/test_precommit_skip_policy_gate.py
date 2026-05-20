@@ -94,7 +94,7 @@ def test_records_audit_log_on_valid_skip(tmp_path: Path, capsys, monkeypatch) ->
     monkeypatch.setenv("THOMAS_SKIP_REASON", "Scoped commit; unrelated repo-wide gate conflict.")
     monkeypatch.setenv("THOMAS_SKIP_BREAKGLASS", "1")
     monkeypatch.setenv("THOMAS_SKIP_TICKET", "OPS-1234")
-    monkeypatch.setattr(mod, "_staged_files", lambda: ["AGENTS.md", "scripts/workboard_issue.py"])
+    monkeypatch.setattr(mod, "_staged_files", lambda: ["AGENTS.md", "scripts/crew/workboard/issue.py"])
     monkeypatch.setattr(mod, "_run_git", lambda _args: "mock")
     _approve_breakglass(monkeypatch)
 
@@ -117,7 +117,7 @@ def test_records_audit_log_on_valid_skip(tmp_path: Path, capsys, monkeypatch) ->
         "thomas-release-update-gate",
     ]
     assert logged["reason"] == "Scoped commit; unrelated repo-wide gate conflict."
-    assert logged["staged_files"] == ["AGENTS.md", "scripts/workboard_issue.py"]
+    assert logged["staged_files"] == ["AGENTS.md", "scripts/crew/workboard/issue.py"]
     assert logged["breakglass_human_verified"] is True
     assert logged["breakglass_auth_method"] == "windows-credential-dialog"
     assert logged["breakglass_authorized_by"] == "WORKSTATION\\corbe"

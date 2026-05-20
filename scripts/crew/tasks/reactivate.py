@@ -18,17 +18,17 @@ except ImportError:  # pragma: no cover
     pass  # type: ignore
 
 try:
-    from scripts import workboard_issue
     from scripts.crew.tasks import sweep as workboard_task_manager_sweep
     from scripts.crew.workboard import claim as workboard_claim
+    from scripts.crew.workboard import issue as workboard_issue
     from scripts.forge.gates import workboard_claims as claims_gate
     from thomas.core import task_bot_runtime
 except ImportError:  # pragma: no cover
-    import workboard_issue  # type: ignore
     from crew.tasks import sweep as workboard_task_manager_sweep  # type: ignore
     from crew.workboard import claim as workboard_claim  # type: ignore
     from forge.gates import workboard_claims as claims_gate  # type: ignore
 
+    from scripts.crew.workboard import issue as workboard_issue  # type: ignore
     from thomas.core import task_bot_runtime  # type: ignore
 
 try:
