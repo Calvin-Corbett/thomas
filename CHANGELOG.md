@@ -9,6 +9,15 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+### Fixed
+- forge.publish: harden secret-scanning + publish flow after a Telegram bot token leaked through `library/entries/research-notes/*.md` on a feature-branch push to the public origin. Four changes in one commit:
+  1. `scripts/forge/publish/preflight.py` `SCAN_SKIP_PREFIXES` no longer skips `library/` or `plans/` — those were the exact directories where auto-indexed conversation content (and thus the leaked token) lived. Tests/ and docs/ stay skipped (false-positive sinks).
+  2. `scripts/forge/publish/preflight.py` `SECRET_PATTERNS` adds Telegram bot token regex (`\b\d{8,12}:[A-Za-z0-9_-]{30,}\b`) and Discord bot token regex (`\b[MN][A-Za-z0-9_-]{23}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27}\b`). `scripts/audit_secrets.py` gets the same two patterns.
+  3. `docs/repo_hygiene_baseline.json` adds a new `publish_strip_prefixes` field (separate from `forbidden_tracked_prefixes` so `repo_hygiene.py` does NOT start flagging the 229 legitimately-tracked library/plans files as violations). `scripts/forge/publish/snapshot.py` `_filter_publish_paths` reads the new field and excludes those prefixes from publish snapshots. Initial entries strip `library/entries/research-notes/`, `plans/thomas/problems/`, `plans/thomas/tasks/`.
+  4. `.pre-commit-config.yaml` adds `thomas-publish-preflight` as a `pre-push` hook so secret scanning fires on every push — not only on dev→prod CI merges. The hook runs `python scripts/forge/publish/preflight.py --skip-worktree-clean-check --required-branch master --strict`; the skip flag prevents pre-existing dirty-tree state from blocking unrelated pushes, and pointing `--required-branch` at `master` avoids the pre-existing dev/prod-not-set-up gate failure.
+
+  Why this was needed: the GitHub publish-safety workflow in `.github/workflows/github-publish-safety.yml` only triggers on `dev` and `prod` branches, so a direct push of a feature branch to the public origin bypassed every Thomas-side gate. The leaked token lived in an auto-generated `library/entries/research-notes/*.md` markdown file — preflight's skip list and missing Telegram regex meant `secret_finding_count: 0` even when invoked manually. After patches, preflight finds the regex and the snapshot filter strips the whole research-notes directory from public publishes. Verified: `python scripts/forge/publish/preflight.py --skip-worktree-clean-check --required-branch master --json` now returns `ok: true, secret_finding_count: 0` against the post-redaction working tree.
+
 ## [0.14.85] - 2026-05-19
 
 ### Added

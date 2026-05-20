@@ -92,6 +92,14 @@ def _filter_publish_paths(
     forbidden_prefixes = [
         _normalize_path(item) for item in (baseline.get("forbidden_tracked_prefixes") or []) if _normalize_path(item)
     ]
+    # publish_strip_prefixes: paths that are legitimately tracked in the source repo
+    # (so repo_hygiene.py does NOT flag them) but MUST be stripped before publishing.
+    # Use this for private content (research notes, internal plans, etc.) that lives
+    # in the dev repo but should not ship to the public mirror.
+    publish_strip_prefixes = [
+        _normalize_path(item) for item in (baseline.get("publish_strip_prefixes") or []) if _normalize_path(item)
+    ]
+    all_excluded_prefixes = forbidden_prefixes + publish_strip_prefixes
     blocked_suffixes = [str(item) for item in (baseline.get("blocked_tracked_suffixes") or []) if str(item).strip()]
 
     filtered: list[str] = []
@@ -101,7 +109,7 @@ def _filter_publish_paths(
             continue
         if "/" not in rel and allowed_root and rel not in allowed_root:
             continue
-        if _any_prefix(rel, forbidden_prefixes):
+        if _any_prefix(rel, all_excluded_prefixes):
             continue
         if _any_suffix(rel, blocked_suffixes):
             continue

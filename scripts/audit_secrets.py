@@ -22,6 +22,8 @@ PATTERNS: list[tuple[str, re.Pattern]] = [
     ("API key (Anthropic)", re.compile(r"sk-ant-[A-Za-z0-9\-]{20,}")),
     ("API key (xAI)", re.compile(r"xai-[A-Za-z0-9]{20,}")),
     ("API key (OpenRouter)", re.compile(r"sk-or-[A-Za-z0-9\-]{20,}")),
+    ("Bot token (Telegram)", re.compile(r"\b\d{8,12}:[A-Za-z0-9_-]{30,}\b")),
+    ("Bot token (Discord)", re.compile(r"\b[MN][A-Za-z0-9_-]{23}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27}\b")),
     ("Windows user path", re.compile(r"C:\\Users\\[A-Za-z0-9_]+\\")),
     ("Unix home path", re.compile(r"/home/[a-z][a-z0-9_]+/")),
     ("Email address", re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}")),

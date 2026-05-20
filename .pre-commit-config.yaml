@@ -148,3 +148,10 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-push]
+
+      - id: thomas-publish-preflight
+        name: Thomas Publish Preflight (secret scan + blocked-file check)
+        entry: python scripts/forge/publish/preflight.py --skip-worktree-clean-check --required-branch master --strict
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
