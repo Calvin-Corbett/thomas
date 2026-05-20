@@ -18,6 +18,12 @@ Versioning: Semantic Versioning.
 
   Why this was needed: the GitHub publish-safety workflow in `.github/workflows/github-publish-safety.yml` only triggers on `dev` and `prod` branches, so a direct push of a feature branch to the public origin bypassed every Thomas-side gate. The leaked token lived in an auto-generated `library/entries/research-notes/*.md` markdown file — preflight's skip list and missing Telegram regex meant `secret_finding_count: 0` even when invoked manually. After patches, preflight finds the regex and the snapshot filter strips the whole research-notes directory from public publishes. Verified: `python scripts/forge/publish/preflight.py --skip-worktree-clean-check --required-branch master --json` now returns `ok: true, secret_finding_count: 0` against the post-redaction working tree.
 
+## [0.14.88] - 2026-05-20
+
+### Fixed
+- crew.workboard.claim_utils: `_release_active_task` now reinserts `- none` when the last task is released, mirroring the `_release_claim` pattern in `claim_ops.py:264-267`. The previous `if section[0] < section[1]:` guard skipped insertion in the exact case it was needed for — a section with no body lines between its header and the next section header. Closes Bug 10 from the master-cleanup deferred-bugs list.
+- tests.test_architecture: `test_frontend_file_sizes` CSS branch now honors the `frontend_legacy_exempt` patterns via `_matches_frontend_legacy_pattern`, matching the JS branch behavior. CSS files in legacy migration paths no longer trigger false-positive size violations. Closes Bug 11 from the master-cleanup deferred-bugs list.
+
 ## [0.14.87] - 2026-05-20
 
 ### Fixed
