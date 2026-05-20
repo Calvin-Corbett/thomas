@@ -66,7 +66,7 @@ GATE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Workboard claims gate", (PY, "scripts/forge/gates/workboard_claims.py")),
     ("Workboard task problems gate", (PY, "scripts/forge/gates/workboard_task_problems.py")),
     ("Workboard issue tool smoke", (PY, "scripts/workboard_issue.py", "--help")),
-    ("Workboard problem recorder smoke", (PY, "scripts/workboard_problem_record.py", "--help")),
+    ("Workboard problem recorder smoke", (PY, "scripts/crew/workboard/problem_record.py", "--help")),
     ("Feature master sync gate", (PY, "scripts/sync_feature_master_list.py", "--check")),
     ("Release hygiene gate", (PY, "scripts/forge/gates/release_hygiene.py")),
     ("Release update gate", (PY, "scripts/forge/gates/release_update_gate.py")),
@@ -112,7 +112,7 @@ def _record_problem_failure(
 ) -> tuple[bool, str]:
     record_cmd: list[str] = [
         PY,
-        "scripts/workboard_problem_record.py",
+        "scripts/crew/workboard/problem_record.py",
         "--runner",
         "auto_checks",
         "--step",

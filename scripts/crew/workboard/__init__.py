@@ -4,8 +4,7 @@ Claims, issues, messaging, audit-backstop, brainstorm, worker. Where
 agents post READY/blocked/done. Renamed from ``scripts/workboard_*.py``
 to align with Praxis vocabulary.
 
-NOTE: ``scripts/workboard_issue.py`` and ``scripts/workboard_problem_record.py``
-remain at the original repo-root location because they are listed in
-``agent_safety.toml`` enforcement_scripts (protected); a future
-protected-files relocation session will move them.
+NOTE: ``scripts/workboard_issue.py`` still lives at the legacy path
+(Tier 5 relocation in progress). ``scripts/workboard_problem_record.py``
+has been moved here as ``problem_record.py``.
 """

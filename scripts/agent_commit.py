@@ -87,7 +87,7 @@ LOCAL_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     ("workboard_issue_smoke", (sys.executable, "scripts/workboard_issue.py", "--help")),
-    ("workboard_problem_record_smoke", (sys.executable, "scripts/workboard_problem_record.py", "--help")),
+    ("workboard_problem_record_smoke", (sys.executable, "scripts/crew/workboard/problem_record.py", "--help")),
     ("monolith_guard", (sys.executable, "scripts/forge/gates/monolith_guard.py", "--staged-only")),
     (
         "monolith_filename_guard",
