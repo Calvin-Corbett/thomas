@@ -18,10 +18,10 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from scripts import agent_identity
+    from scripts.crew.brief import identity as agent_identity
     from scripts.forge.gates import workboard_claims as claims_gate
 except (ImportError, ModuleNotFoundError):  # pragma: no cover
-    import agent_identity  # type: ignore
+    from crew.brief import identity as agent_identity  # type: ignore
     from forge.gates import workboard_claims as claims_gate  # type: ignore
 
 
@@ -541,7 +541,7 @@ def commit_scoped_changes(
                     ),
                     suggested_command=_fallback_suggested_command(include_paths),
                 )
-            except (OSError, RuntimeError, ValueError) as fallback_exc:
+            except (OSError, RuntimeError) as fallback_exc:
                 return CommitResult(
                     ok=False,
                     blocker_class="broken_repo_tool",
@@ -573,7 +573,7 @@ def commit_scoped_changes(
                     _fallback_suggested_command(include_paths) if "has no active claim" in error_message else None
                 ),
             )
-    except (OSError, RuntimeError, ValueError) as exc:
+    except (OSError, RuntimeError) as exc:
         return CommitResult(
             ok=False,
             blocker_class="broken_repo_tool",
@@ -600,7 +600,7 @@ def commit_scoped_changes(
             dry_run=bool(dry_run),
             scope_source=scope_selection.source,
         )
-    except (OSError, RuntimeError, ValueError) as exc:
+    except (OSError, RuntimeError) as exc:
         return CommitResult(
             ok=False,
             blocker_class="broken_repo_tool",
