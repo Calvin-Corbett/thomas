@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.agent_safety_config import load_config
+from scripts.crew.brief.safety_config import load_config
 from scripts.forge.gates.repo_hygiene import evaluate_worktree_change_budget
 
 REPO_MARKERS = (

@@ -130,7 +130,7 @@ def normalize_active_task_status(status: str) -> tuple[str | None, str | None]:
         allowed = ", ".join(ACTIVE_TASK_STATES)
         legacy = ", ".join(f"{source}->{target}" for source, target in sorted(ACTIVE_TASK_STATE_ALIASES.items()))
         if legacy:
-            return None, (f"invalid active task status `{status}` " f"(allowed: {allowed}; legacy aliases: {legacy})")
+            return None, (f"invalid active task status `{status}` (allowed: {allowed}; legacy aliases: {legacy})")
         return None, f"invalid active task status `{status}` (allowed: {allowed})"
     return normalized, None
 
@@ -484,7 +484,7 @@ def _evaluate_board(
         prior = claims_by_agent.get(key)
         if prior:
             violations.append(
-                "duplicate active claim for agent " f"`{claim.agent}` (lines {prior[0].line_no} and {claim.line_no})"
+                f"duplicate active claim for agent `{claim.agent}` (lines {prior[0].line_no} and {claim.line_no})"
             )
         claims_by_agent.setdefault(key, []).append(claim)
 
@@ -493,7 +493,7 @@ def _evaluate_board(
             prior_name = claims_by_name.get(name_key)
             if prior_name is not None and _normalize_agent(prior_name.agent) != key:
                 violations.append(
-                    "duplicate active claim name " f"`{claim.name}` (lines {prior_name.line_no} and {claim.line_no})"
+                    f"duplicate active claim name `{claim.name}` (lines {prior_name.line_no} and {claim.line_no})"
                 )
             else:
                 claims_by_name[name_key] = claim
@@ -539,9 +539,7 @@ def _evaluate_board(
         key = str(task.task_id).strip().lower()
         prior = active_task_ids.get(key)
         if prior is not None:
-            violations.append(
-                "duplicate active task_id " f"`{task.task_id}` (lines {prior.line_no} and {task.line_no})"
-            )
+            violations.append(f"duplicate active task_id `{task.task_id}` (lines {prior.line_no} and {task.line_no})")
         else:
             active_task_ids[key] = task
 
@@ -551,7 +549,7 @@ def _evaluate_board(
         prior = up_for_grabs_ids.get(key)
         if prior is not None:
             violations.append(
-                "duplicate up-for-grabs task_id " f"`{item.task_id}` (lines {prior.line_no} and {item.line_no})"
+                f"duplicate up-for-grabs task_id `{item.task_id}` (lines {prior.line_no} and {item.line_no})"
             )
         else:
             up_for_grabs_ids[key] = item
@@ -716,7 +714,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--require-identity-metadata",
         action="store_true",
-        help=("Require claim identity metadata fields: " "name, role, and parent."),
+        help=("Require claim identity metadata fields: name, role, and parent."),
     )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     args = parser.parse_args(argv)

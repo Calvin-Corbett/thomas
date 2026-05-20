@@ -32,7 +32,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from agent_safety_config import config as _cfg
+    from scripts.crew.brief.safety_config import config as _cfg
 
     FORBIDDEN_PAIRS: list[tuple[str, str]] = _cfg.circular_import_pairs()
     _MODULE_PREFIX = _cfg.module_prefix()

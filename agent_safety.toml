@@ -110,7 +110,7 @@ enforcement_scripts = [
     "scripts/forge/gates/boot_smoke_gate.py",
     "scripts/forge/gates/type_safety_gate.py",
     "scripts/post_commit_audit.py",
-    "scripts/agent_safety_config.py",
+    "scripts/crew/brief/safety_config.py",
     # ── Workboard & scope enforcement (Audit Finding 1) ──
     "scripts/forge/gates/workboard_claims.py",
     "scripts/forge/gates/workboard_task_problems.py",

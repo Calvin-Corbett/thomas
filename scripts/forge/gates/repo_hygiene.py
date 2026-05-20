@@ -15,14 +15,14 @@ if str(_REPO_ROOT) not in sys.path:
 from typing import Any
 
 try:
-    from scripts.agent_safety_config import load_config
+    from scripts.crew.brief.safety_config import load_config
 except ImportError:  # pragma: no cover
     import sys
 
     ROOT = Path(__file__).resolve().parent.parent
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
-    from scripts.agent_safety_config import load_config
+    from scripts.crew.brief.safety_config import load_config
 
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_BASELINE = "docs/repo_hygiene_baseline.json"
@@ -405,7 +405,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             if args.json:
                 print(json.dumps(payload, ensure_ascii=False, indent=2))
             else:
-                print("Repo hygiene baseline synced: " f"tracked_root_file_count={payload['tracked_root_file_count']}")
+                print(f"Repo hygiene baseline synced: tracked_root_file_count={payload['tracked_root_file_count']}")
             return 0
 
         status_lines = _git_status_porcelain(repo_root)

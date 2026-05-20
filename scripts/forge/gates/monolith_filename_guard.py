@@ -161,7 +161,7 @@ def run(argv: Iterable[str] | None = None) -> int:
         return 0
 
     parser = argparse.ArgumentParser(
-        description=("Fail when `.partNN.ext` filenames are present " "in repository sources.")
+        description=("Fail when `.partNN.ext` filenames are present in repository sources.")
     )
     parser.add_argument(
         "--repo-root",
@@ -197,9 +197,9 @@ def run(argv: Iterable[str] | None = None) -> int:
             )
         )
     elif ok:
-        print("Monolith filename guard: PASS " "(no legacy `.partNN.ext` filenames)")
+        print("Monolith filename guard: PASS (no legacy `.partNN.ext` filenames)")
     else:
-        print(f"Monolith filename guard: FAIL " f"({len(violations)} violation(s))")
+        print(f"Monolith filename guard: FAIL ({len(violations)} violation(s))")
         for row in violations:
             print(f"- {row['path']}: {row['reason']}")
 

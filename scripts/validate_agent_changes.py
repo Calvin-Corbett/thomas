@@ -14,7 +14,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-from agent_safety_config import load_config
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+try:
+    from scripts.crew.brief.safety_config import load_config
+except ImportError:  # pragma: no cover
+    from crew.brief.safety_config import load_config  # type: ignore
 
 
 def _default_dead_code_dirs() -> list[str]:

@@ -244,21 +244,113 @@ def _bootstrap_command(summary: str, paths: list[str]) -> str:
     )
 
 
-_BRANCH_SCAN_STOP_WORDS = frozenset({
-    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "do", "does", "did", "will", "would", "shall",
-    "should", "may", "might", "must", "can", "could", "to", "of", "in",
-    "for", "on", "with", "at", "by", "from", "as", "into", "through",
-    "during", "before", "after", "above", "below", "between", "out",
-    "up", "down", "and", "but", "or", "nor", "not", "so", "yet",
-    "both", "either", "neither", "each", "every", "all", "any",
-    "this", "that", "these", "those", "it", "its", "my", "our",
-    "add", "fix", "update", "create", "make", "build", "implement",
-    "change", "modify", "edit", "remove", "delete", "refactor",
-    "work", "get", "set", "new", "use", "run", "test", "check",
-    "file", "files", "code", "module", "function", "class", "method",
-    "thomas", "agent", "feature", "bug", "issue", "task", "page",
-})
+_BRANCH_SCAN_STOP_WORDS = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "shall",
+        "should",
+        "may",
+        "might",
+        "must",
+        "can",
+        "could",
+        "to",
+        "of",
+        "in",
+        "for",
+        "on",
+        "with",
+        "at",
+        "by",
+        "from",
+        "as",
+        "into",
+        "through",
+        "during",
+        "before",
+        "after",
+        "above",
+        "below",
+        "between",
+        "out",
+        "up",
+        "down",
+        "and",
+        "but",
+        "or",
+        "nor",
+        "not",
+        "so",
+        "yet",
+        "both",
+        "either",
+        "neither",
+        "each",
+        "every",
+        "all",
+        "any",
+        "this",
+        "that",
+        "these",
+        "those",
+        "it",
+        "its",
+        "my",
+        "our",
+        "add",
+        "fix",
+        "update",
+        "create",
+        "make",
+        "build",
+        "implement",
+        "change",
+        "modify",
+        "edit",
+        "remove",
+        "delete",
+        "refactor",
+        "work",
+        "get",
+        "set",
+        "new",
+        "use",
+        "run",
+        "test",
+        "check",
+        "file",
+        "files",
+        "code",
+        "module",
+        "function",
+        "class",
+        "method",
+        "thomas",
+        "agent",
+        "feature",
+        "bug",
+        "issue",
+        "task",
+        "page",
+    }
+)
 
 
 def _extract_keywords(summary: str, paths: list[str]) -> list[str]:
@@ -300,7 +392,10 @@ def _scan_related_branches(summary: str, paths: list[str]) -> dict[str, Any]:
         try:
             result = subprocess.run(
                 ["git", "branch", "-a", "--list", f"*{kw}*"],
-                capture_output=True, text=True, timeout=10, cwd=str(ROOT),
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=str(ROOT),
             )
             for line in result.stdout.strip().splitlines():
                 branch = line.strip().lstrip("* ").strip()
@@ -313,7 +408,10 @@ def _scan_related_branches(summary: str, paths: list[str]) -> dict[str, Any]:
         try:
             result = subprocess.run(
                 ["git", "log", "--all", "--oneline", "--grep", kw, "-n", "10"],
-                capture_output=True, text=True, timeout=10, cwd=str(ROOT),
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=str(ROOT),
             )
             for line in result.stdout.strip().splitlines():
                 line = line.strip()
@@ -644,7 +742,7 @@ def _text_output(payload: dict[str, Any]) -> str:
             f"workflow_mode: {payload['workflow_mode']}",
             f"workboard_required: {payload['workboard_required']}",
             (
-                'workboard: '
+                "workboard: "
                 f"{payload['workboard']['active_claims']} active claims"
                 + ("; conflict detected" if payload["workboard"]["claim_conflict"] else "")
                 + ("; metadata stale" if payload["workboard"]["stale"] else "")

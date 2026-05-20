@@ -222,7 +222,7 @@ def _validate_proof_payload(
                     actual_runtime_hash = _sha256_file(runtime_abs)
                     if actual_runtime_hash != runtime_hash:
                         errors.append(
-                            "runtime_report.sha256 mismatch: " f"expected {runtime_hash}, got {actual_runtime_hash}"
+                            f"runtime_report.sha256 mismatch: expected {runtime_hash}, got {actual_runtime_hash}"
                         )
                 try:
                     loaded_runtime = json.loads(runtime_abs.read_text(encoding="utf-8"))
@@ -447,8 +447,7 @@ def _validate_proof_payload(
             )
             if nav_top is not None and abs(nav_top) > 2:
                 errors.append(
-                    f"metrics.route_matrix[{index}] nav top drift too high at load "
-                    f"(got {nav_top:.2f}, expected <= 2px)"
+                    f"metrics.route_matrix[{index}] nav top drift too high at load (got {nav_top:.2f}, expected <= 2px)"
                 )
             if nav_top_after_scroll is not None and abs(nav_top_after_scroll) > 2:
                 errors.append(
@@ -466,7 +465,7 @@ def _validate_proof_payload(
                 )
             if route_broken_images is not None and route_broken_images > 0:
                 errors.append(
-                    f"metrics.route_matrix[{index}] broken_image_count must be 0 " f"(got {route_broken_images:.2f})"
+                    f"metrics.route_matrix[{index}] broken_image_count must be 0 (got {route_broken_images:.2f})"
                 )
         if not saw_probe_route:
             errors.append("metrics.route_matrix must include /__ui-route-smoke__ route entry")
@@ -588,23 +587,23 @@ def _validate_proof_payload(
     if pixel_diff_threshold_ratio is not None:
         if pixel_diff_threshold_ratio < 0 or pixel_diff_threshold_ratio > 1:
             errors.append(
-                "metrics.pixel_diff_threshold_ratio must be in [0, 1] " f"(got {pixel_diff_threshold_ratio:.6f})"
+                f"metrics.pixel_diff_threshold_ratio must be in [0, 1] (got {pixel_diff_threshold_ratio:.6f})"
             )
     if pixel_diff_full_page_ratio is not None:
         if pixel_diff_full_page_ratio < 0 or pixel_diff_full_page_ratio > 1:
             errors.append(
-                "metrics.pixel_diff_full_page_ratio must be in [0, 1] " f"(got {pixel_diff_full_page_ratio:.6f})"
+                f"metrics.pixel_diff_full_page_ratio must be in [0, 1] (got {pixel_diff_full_page_ratio:.6f})"
             )
     if pixel_diff_footer_focus_ratio is not None:
         if pixel_diff_footer_focus_ratio < 0 or pixel_diff_footer_focus_ratio > 1:
             errors.append(
-                "metrics.pixel_diff_footer_focus_ratio must be in [0, 1] " f"(got {pixel_diff_footer_focus_ratio:.6f})"
+                f"metrics.pixel_diff_footer_focus_ratio must be in [0, 1] (got {pixel_diff_footer_focus_ratio:.6f})"
             )
     if pixel_diff_max_ratio is not None:
         if pixel_diff_max_ratio < 0 or pixel_diff_max_ratio > 1:
-            errors.append("metrics.pixel_diff_max_ratio must be in [0, 1] " f"(got {pixel_diff_max_ratio:.6f})")
+            errors.append(f"metrics.pixel_diff_max_ratio must be in [0, 1] (got {pixel_diff_max_ratio:.6f})")
     if pixel_diff_size_mismatch_count is not None and pixel_diff_size_mismatch_count != 0:
-        errors.append("metrics.pixel_diff_size_mismatch_count must be 0 " f"(got {pixel_diff_size_mismatch_count:.2f})")
+        errors.append(f"metrics.pixel_diff_size_mismatch_count must be 0 (got {pixel_diff_size_mismatch_count:.2f})")
     if (
         pixel_diff_threshold_ratio is not None
         and pixel_diff_max_ratio is not None

@@ -401,8 +401,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         "--agent",
         default="",
         help=(
-            "Agent id override (otherwise resolved from "
-            f"{agent_identity.resolution_help(include_name_fallback=True)})."
+            f"Agent id override (otherwise resolved from {agent_identity.resolution_help(include_name_fallback=True)})."
         ),
     )
     parser.add_argument(
@@ -541,9 +540,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--allow-dirty-claim",
         action="store_true",
-        help=(
-            "Allow bootstrap claim to proceed even when the repo worktree is dirty. " "Requires --dirty-claim-reason."
-        ),
+        help=("Allow bootstrap claim to proceed even when the repo worktree is dirty. Requires --dirty-claim-reason."),
     )
     parser.add_argument(
         "--dirty-claim-reason",
@@ -902,8 +899,7 @@ def run(argv: Sequence[str] | None = None) -> int:
                     manager = str(temp_payload.get("manager_agent") or "").strip()
                     if temp_status and temp_status not in {"disabled"}:
                         print(
-                            f"- temp-task-creator={temp_status}; holder={holder or 'none'}; "
-                            f"manager={manager or 'none'}"
+                            f"- temp-task-creator={temp_status}; holder={holder or 'none'}; manager={manager or 'none'}"
                         )
                 if _to_bool(args.dispatch_dry_run):
                     ready = int(dispatch_result.get("ready_suggestion_count") or 0)

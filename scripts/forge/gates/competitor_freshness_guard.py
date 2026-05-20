@@ -203,8 +203,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         type=float,
         default=7.0,
         help=(
-            "Maximum allowed age in days for required timestamps "
-            "(result.computed_at_utc and registry.updated_at_utc)."
+            "Maximum allowed age in days for required timestamps (result.computed_at_utc and registry.updated_at_utc)."
         ),
     )
     parser.add_argument(
@@ -352,8 +351,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         if ok:
             print("Competitor freshness guard: PASS")
             print(
-                f"- latest run age: {payload['latest_run_age_days']:.3f} days "
-                f"(max {float(args.max_age_days):.3f} days)"
+                f"- latest run age: {payload['latest_run_age_days']:.3f} days (max {float(args.max_age_days):.3f} days)"
             )
             print(f"- latest run at: {payload['latest_run_at_utc']}")
             print(f"- source: {payload['latest_run_source']}")
@@ -371,7 +369,7 @@ def run(argv: Sequence[str] | None = None) -> int:
                 print("- required freshness sources are stale:")
                 for source in required_stale_sources:
                     source_age_days = float(required_age_days.get(source, 0.0))
-                    print(f"  - {source}: age={source_age_days:.3f} days " f"(max {float(args.max_age_days):.3f} days)")
+                    print(f"  - {source}: age={source_age_days:.3f} days (max {float(args.max_age_days):.3f} days)")
             if warnings:
                 print(f"- warnings: {len(warnings)}")
                 for item in warnings:

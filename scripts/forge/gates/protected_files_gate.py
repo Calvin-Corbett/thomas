@@ -35,7 +35,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from agent_safety_config import config as _cfg
+    from scripts.crew.brief.safety_config import config as _cfg
 
     PROTECTED_FILES: tuple[str, ...] = tuple(
         _cfg.protected_policy_files() + _cfg.protected_guardrails_files() + _cfg.protected_enforcement_files()
@@ -50,8 +50,7 @@ except ImportError:
     import warnings
 
     warnings.warn(
-        "agent_safety_config import failed — using hardcoded fallback. "
-        "This may indicate a compromised config loader.",
+        "agent_safety_config import failed — using hardcoded fallback. This may indicate a compromised config loader.",
         stacklevel=2,
     )
     PROTECTED_FILES = (
@@ -74,7 +73,7 @@ except ImportError:
         "scripts/forge/gates/protected_files_gate.py",
         "scripts/forge/gates/precommit_skip_policy.py",
         "scripts/forge/gates/exception_handler_gate.py",
-        "scripts/agent_safety_config.py",
+        "scripts/crew/brief/safety_config.py",
         "scripts/post_commit_audit.py",
         "scripts/agent_commit.py",
     )

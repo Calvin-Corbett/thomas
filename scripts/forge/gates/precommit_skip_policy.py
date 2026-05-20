@@ -18,11 +18,12 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from agent_safety_config import load_config
     from breakglass_auth import authorize_breakglass
+
+    from scripts.crew.brief.safety_config import load_config
 except ImportError:  # pragma: no cover
-    from scripts.agent_safety_config import load_config  # type: ignore
     from scripts.breakglass_auth import authorize_breakglass  # type: ignore
+    from scripts.crew.brief.safety_config import load_config  # type: ignore
 
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_AUDIT_LOG = ROOT / ".git" / "thomas_skip_audit.jsonl"
