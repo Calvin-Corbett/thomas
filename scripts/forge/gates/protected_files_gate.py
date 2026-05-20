@@ -75,7 +75,7 @@ except ImportError:
         "scripts/forge/gates/exception_handler_gate.py",
         "scripts/crew/brief/safety_config.py",
         "scripts/post_commit_audit.py",
-        "scripts/agent_commit.py",
+        "scripts/crew/brief/commit.py",
     )
 
 

@@ -43,9 +43,7 @@ def _git_status_paths(repo_root: Path) -> list[str]:
         check=False,
     )
     if proc.returncode != 0:
-        raise RuntimeError(
-            f"git status failed: {proc.stderr.decode('utf-8', 'replace').strip()}"
-        )
+        raise RuntimeError(f"git status failed: {proc.stderr.decode('utf-8', 'replace').strip()}")
     return _parse_porcelain_z(proc.stdout)
 
 
@@ -142,7 +140,7 @@ def _resolve_active_claim(repo_root: Path, agent: str) -> dict | None:
         stripped = line.strip()
         if not stripped.startswith("- agent="):
             continue
-        fields = _parse_claim_line(stripped[len("- "):])
+        fields = _parse_claim_line(stripped[len("- ") :])
         if fields.get("agent", "").strip().lower() == target:
             scope_raw = fields.get("scope", "")
             scope_paths = [p.strip() for p in scope_raw.split(",") if p.strip()]
@@ -199,7 +197,7 @@ def _invoke_agent_commit(
 ) -> dict:
     cmd: list[str] = [
         sys.executable,
-        "scripts/agent_commit.py",
+        "scripts/crew/brief/commit.py",
         "--message",
         message,
     ]

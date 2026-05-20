@@ -142,7 +142,7 @@ enforcement_scripts = [
     "scripts/auto_checks.py",
     "scripts/test_stepup_protocol.py",
     # ── Agent commit path (not in hooks but critical) ──
-    "scripts/agent_commit.py",
+    "scripts/crew/brief/commit.py",
     "scripts/forge/gates/monolith_baseline_approval_gate.py",
 ]
 

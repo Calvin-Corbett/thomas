@@ -187,7 +187,7 @@ def main() -> None:
             auto_reverted = True
             print("  Commit reverted (soft reset). Your changes are still staged.")
             print("  To commit properly, run WITHOUT --no-verify:")
-            print('    python scripts/agent_commit.py --message "<msg>"')
+            print('    python scripts/crew/brief/commit.py --message "<msg>"')
         else:
             print("  WARNING: Auto-revert failed. Manual review required.")
             print(f"  Error: {revert_result.stderr.strip()}")
