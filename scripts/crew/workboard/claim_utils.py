@@ -20,11 +20,12 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from scripts import agent_identity, virtual_office_identity
+    from scripts import virtual_office_identity
+    from scripts.crew.brief import identity as agent_identity
     from scripts.forge.gates import workboard_claims as claims_gate
 except Exception:  # pragma: no cover
-    import agent_identity  # type: ignore
     import virtual_office_identity  # type: ignore
+    from crew.brief import identity as agent_identity  # type: ignore
     from forge.gates import workboard_claims as claims_gate  # type: ignore
 
 try:

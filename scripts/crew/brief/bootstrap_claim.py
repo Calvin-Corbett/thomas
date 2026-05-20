@@ -17,10 +17,10 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from scripts import agent_identity
+    from scripts.crew.brief import identity as agent_identity
     from scripts.crew.workboard import claim as claim_tool
 except (ImportError, ModuleNotFoundError, AttributeError):  # pragma: no cover
-    import agent_identity  # type: ignore
+    from crew.brief import identity as agent_identity  # type: ignore
     from crew.workboard import claim as claim_tool  # type: ignore
 
 from thomas.core import agent_presence

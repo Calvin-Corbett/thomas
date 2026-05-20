@@ -23,11 +23,11 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 try:
-    from scripts import agent_identity
+    from scripts.crew.brief import identity as agent_identity
     from scripts.crew.workboard import claim as workboard_claim_tool
     from scripts.forge.gates import workboard_claims as claims_gate
 except ImportError:  # pragma: no cover
-    import agent_identity  # type: ignore
+    from crew.brief import identity as agent_identity  # type: ignore
     from crew.workboard import claim as workboard_claim_tool  # type: ignore
 
     from scripts.forge.gates import workboard_claims as claims_gate  # type: ignore
