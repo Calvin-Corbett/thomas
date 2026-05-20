@@ -18,6 +18,11 @@ Versioning: Semantic Versioning.
 
   Why this was needed: the GitHub publish-safety workflow in `.github/workflows/github-publish-safety.yml` only triggers on `dev` and `prod` branches, so a direct push of a feature branch to the public origin bypassed every Thomas-side gate. The leaked token lived in an auto-generated `library/entries/research-notes/*.md` markdown file — preflight's skip list and missing Telegram regex meant `secret_finding_count: 0` even when invoked manually. After patches, preflight finds the regex and the snapshot filter strips the whole research-notes directory from public publishes. Verified: `python scripts/forge/publish/preflight.py --skip-worktree-clean-check --required-branch master --json` now returns `ok: true, secret_finding_count: 0` against the post-redaction working tree.
 
+## [0.14.93] - 2026-05-20
+
+### Added
+- crew.brief.tray_agent (Tier 4 Layer 3): new `thomas/tray_agent/dirty_state_monitor.py` module. Provides `scan_worktrees_for_dirty(repo_root)` (walks all git worktrees, reports dirty file count + active claim per worktree), `is_agent_session_active(repo_root)` (heartbeat-based heuristic; True if recent runtime/heartbeat_dirty/ activity or recent git reflog entries), `should_notify(scan, last_notify_ts)` (debounce gate), `build_notification_payload(scan)` (tray-friendly body). Covers the "laptop closed all weekend, tray boots, notices stale dirty work" pattern. Wiring into the tray's main loop deferred to a follow-up touching agent.py directly. Smoke-tested: detects 6 worktrees, 5 dirty, in the current repo.
+
 ## [0.14.92] - 2026-05-20
 
 ### Added
