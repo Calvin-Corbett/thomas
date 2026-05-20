@@ -18,6 +18,12 @@ Versioning: Semantic Versioning.
 
   Why this was needed: the GitHub publish-safety workflow in `.github/workflows/github-publish-safety.yml` only triggers on `dev` and `prod` branches, so a direct push of a feature branch to the public origin bypassed every Thomas-side gate. The leaked token lived in an auto-generated `library/entries/research-notes/*.md` markdown file — preflight's skip list and missing Telegram regex meant `secret_finding_count: 0` even when invoked manually. After patches, preflight finds the regex and the snapshot filter strips the whole research-notes directory from public publishes. Verified: `python scripts/forge/publish/preflight.py --skip-worktree-clean-check --required-branch master --json` now returns `ok: true, secret_finding_count: 0` against the post-redaction working tree.
 
+## [0.14.87] - 2026-05-20
+
+### Fixed
+- CI: add `cryptography>=44` to `pyproject.toml` `dependencies`. `thomas/preferences/_db.py:9` imports `from cryptography.fernet import Fernet, InvalidToken` but the dep was never declared on the main install path, causing `ModuleNotFoundError: No module named 'cryptography'` in CI. Resolves deferred CI failure from the 2026-05-19 incident arc.
+- crew.workboard.worker: fix stale Crew-rename import (`scripts/crew/workboard/worker.py:29`). Was `from scripts import workboard_task_manager` (the pre-rename top-level module that no longer exists); now `from scripts.crew.tasks import manager as workboard_task_manager`. Resolves `ModuleNotFoundError: No module named 'crew.tasks'` in CI. Closes Bug 9 from the master-cleanup deferred-bugs list.
+
 ## [0.14.86] - 2026-05-20
 
 ### Fixed

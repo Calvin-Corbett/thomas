@@ -26,7 +26,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from scripts import workboard_task_manager
+    from scripts.crew.tasks import manager as workboard_task_manager
     from scripts.crew.workboard import claim as workboard_claim
     from scripts.crew.workboard import message as workboard_message
     from scripts.forge.gates import workboard_claims as claims_gate
