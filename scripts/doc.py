@@ -48,7 +48,7 @@ GATE_COMMANDS: Sequence[tuple[str, Sequence[str]]] = (
     ("Workboard task problems gate", (PY, "scripts/forge/gates/workboard_task_problems.py")),
     ("Repo identity gate", (PY, "scripts/forge/gates/repo_identity.py")),
     ("Workboard issue tool smoke", (PY, "scripts/workboard_issue.py", "--help")),
-    ("Workboard problem recorder smoke", (PY, "scripts/workboard_problem_record.py", "--help")),
+    ("Workboard problem recorder smoke", (PY, "scripts/crew/workboard/problem_record.py", "--help")),
     ("Release update gate", (PY, "scripts/forge/gates/release_update_gate.py")),
     ("Release hygiene gate", (PY, "scripts/forge/gates/release_hygiene.py")),
     ("Surface parity gate", (PY, "scripts/forge/gates/surface_parity.py")),
@@ -102,7 +102,7 @@ def _record_problem_failure(
 ) -> tuple[bool, str]:
     record_cmd: list[str] = [
         PY,
-        "scripts/workboard_problem_record.py",
+        "scripts/crew/workboard/problem_record.py",
         "--runner",
         "doc",
         "--step",

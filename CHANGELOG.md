@@ -18,6 +18,11 @@ Versioning: Semantic Versioning.
 
   Why this was needed: the GitHub publish-safety workflow in `.github/workflows/github-publish-safety.yml` only triggers on `dev` and `prod` branches, so a direct push of a feature branch to the public origin bypassed every Thomas-side gate. The leaked token lived in an auto-generated `library/entries/research-notes/*.md` markdown file — preflight's skip list and missing Telegram regex meant `secret_finding_count: 0` even when invoked manually. After patches, preflight finds the regex and the snapshot filter strips the whole research-notes directory from public publishes. Verified: `python scripts/forge/publish/preflight.py --skip-worktree-clean-check --required-branch master --json` now returns `ok: true, secret_finding_count: 0` against the post-redaction working tree.
 
+## [0.14.95] - 2026-05-20
+
+### Changed
+- Tier 5 (2/5): moved `scripts/workboard_problem_record.py` → `scripts/crew/workboard/problem_record.py`. Updated references in `.pre-commit-config.yaml` (smoke hook entry), `agent_safety.toml` (enforcement_scripts list — protected file edit via breakglass), `scripts/agent_commit.py` (LOCAL_GATE_COMMANDS), `scripts/auto_checks.py`, `scripts/crew/workboard/__init__.py` (docstring), `scripts/doc.py`. File is a Calvin-maintained `.pyc`-cache placeholder; move preserves placeholder behavior.
+
 ## [0.14.94] - 2026-05-20
 
 ### Changed

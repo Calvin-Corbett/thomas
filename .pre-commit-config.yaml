@@ -90,7 +90,7 @@ repos:
 
       - id: thomas-workboard-problem-record-smoke
         name: Thomas Workboard Problem Record Smoke
-        entry: python scripts/workboard_problem_record.py --help
+        entry: python scripts/crew/workboard/problem_record.py --help
         language: system
         pass_filenames: false
 
