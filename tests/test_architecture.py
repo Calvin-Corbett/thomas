@@ -676,6 +676,10 @@ def test_frontend_file_sizes():
         if any(part in str(css_file) for part in ["node_modules", ".git", "__pycache__", "dist", "build"]):
             continue
 
+        # Skip legacy exempted files (frontend_legacy_exempt patterns)
+        if _matches_frontend_legacy_pattern(css_file):
+            continue
+
         try:
             line_count = len(css_file.read_text(encoding="utf-8", errors="replace").splitlines())
         except OSError:

@@ -768,10 +768,9 @@ def _release_active_task(lines: list[str], *, agent: str) -> tuple[bool, str]:
     idx, task_id = matching[0]
     del lines[idx]
     section = _find_active_tasks_section(lines)
-    if section[0] < section[1]:
-        bullets = _bullet_indices(lines, section[0], section[1])
-        if not bullets:
-            lines.insert(section[0], NONE_ENTRY + "\n")
+    bullets = range(section[0], min(section[1], len(lines)))
+    if not any(lines[bullet_idx].strip().startswith("-") for bullet_idx in bullets):
+        lines.insert(section[0], NONE_ENTRY + "\n")
     return True, f"released active task `{task_id}`"
 
 
