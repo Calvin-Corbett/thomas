@@ -18,6 +18,11 @@ Versioning: Semantic Versioning.
 
   Why this was needed: the GitHub publish-safety workflow in `.github/workflows/github-publish-safety.yml` only triggers on `dev` and `prod` branches, so a direct push of a feature branch to the public origin bypassed every Thomas-side gate. The leaked token lived in an auto-generated `library/entries/research-notes/*.md` markdown file — preflight's skip list and missing Telegram regex meant `secret_finding_count: 0` even when invoked manually. After patches, preflight finds the regex and the snapshot filter strips the whole research-notes directory from public publishes. Verified: `python scripts/forge/publish/preflight.py --skip-worktree-clean-check --required-branch master --json` now returns `ok: true, secret_finding_count: 0` against the post-redaction working tree.
 
+## [0.14.86] - 2026-05-20
+
+### Fixed
+- forge.publish.preflight: `.pre-commit-config.yaml` `thomas-publish-preflight` entry now passes `--required-branch dev` instead of `--required-branch master`. After the 2026-05-19 incident cleanup, `master` was deleted from the local repo (only `dev` remains; public origin holds `main`). The stale `master` requirement caused every `git push` from `dev` to fail with `required local release branches missing: master`, including the new `dev → dev-origin` private-backup workflow established in this session. Token regex / blocked-file / repo-hygiene scans remain unchanged. `--required-branch dev` is trivially satisfied by the active branch, so the check is a no-op while the rest of the preflight still gates against leaks.
+
 ## [0.14.85] - 2026-05-19
 
 ### Added
