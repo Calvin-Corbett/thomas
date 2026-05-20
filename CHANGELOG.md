@@ -18,6 +18,19 @@ Versioning: Semantic Versioning.
 
   Why this was needed: the GitHub publish-safety workflow in `.github/workflows/github-publish-safety.yml` only triggers on `dev` and `prod` branches, so a direct push of a feature branch to the public origin bypassed every Thomas-side gate. The leaked token lived in an auto-generated `library/entries/research-notes/*.md` markdown file — preflight's skip list and missing Telegram regex meant `secret_finding_count: 0` even when invoked manually. After patches, preflight finds the regex and the snapshot filter strips the whole research-notes directory from public publishes. Verified: `python scripts/forge/publish/preflight.py --skip-worktree-clean-check --required-branch master --json` now returns `ok: true, secret_finding_count: 0` against the post-redaction working tree.
 
+## [0.14.92] - 2026-05-20
+
+### Added
+- crew.brief.startup_router (Tier 4 Layer 2): `_detect_orphaned_dirty_state(repo_root, max_age_hours=24)` scans `runtime/heartbeat_dirty/` for recent L1 auto-checkpoint failures and surfaces them as an `*** ORPHANED DIRTY STATE WARNING ***` block in the router's text output (and an `orphaned_state` field in the JSON payload). Each warning lists the last few records with timestamp, branch, dirty file count, and recommends running `scripts/heartbeat.py --checkpoint --force` to clear orphan state before starting new work. Detection only; remediation is the user's call (or a future L3 tray-agent layer).
+- forge.bible_drift (Tier 7 Phase A): new `scripts/forge/bible_drift.py` script implementing the stamp protocol and drift detection substrate. Sections in the bible carry a single-line `> Stamp: covers=[...] hash=sha256:... status=green|yellow|red depth=DEEP|SAMPLE|...` blockquote. The script computes the SHA-256 of each section's `covers` paths (sorted, canonicalized) and compares to the stamped hash. Reports four buckets: `green_drifted` (status=green but hash mismatch → must demote), `yellow_or_red` (already-stale, just surface), `missing_paths` (covers points at nonexistent path), `unstamped` (no stamp yet — advisory). Supports `--json` for CI and `--strict` to exit 1 on green drift. Phase B (audit cycle, yellow→green/red promotion) and Phase C (self-healing, history) deferred to future sessions.
+
+### Deferred
+- Tier 5 (protected-files relocation): 5 scripts to move into crew/ subdirs (`agent_commit.py` → `scripts/crew/brief/commit.py`, etc.) with atomic `agent_safety.toml` updates. agent_commit.py specifically is referenced from EVERY pre-commit hook, every CI workflow, and most agent code paths — renaming it atomically is high-risk and explicitly tagged "breakglass" in the goal. Recommend a dedicated session with the user at the keyboard to walk each rename and resolve cascade.
+- Tier 6 (Vault rename, ~5-8h): consolidate `thomas/agent/guarded_tools.py`, `thomas/marketplace/policy/`, `agent_safety.toml` scripts into `thomas/vault/` (Policy/ToolRunner/Breakglass). Multi-touch protected-file edit; 5-8h estimate is incompatible with single-session scope.
+- Tier 7 Phase B (~1-2 mo): audit cycle that promotes yellow→green or demotes to red. Requires actual stamps populated across the bible first.
+- Tier 7 Phase C (open): self-healing, history tracking, escalation rules.
+- Tier 8 (strategic): explicitly tagged "defer; flag when blocking" by the goal text. No execution.
+
 ## [0.14.91] - 2026-05-20
 
 ### Fixed
