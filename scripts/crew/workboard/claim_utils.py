@@ -36,10 +36,10 @@ except Exception:  # pragma: no cover
     except Exception:  # pragma: no cover
         workboard_message_mod = None  # type: ignore
 try:
-    from scripts import workboard_issue as workboard_issue_mod
+    from scripts.crew.workboard import issue as workboard_issue_mod
 except Exception:  # pragma: no cover
     try:
-        import workboard_issue as workboard_issue_mod  # type: ignore
+        from crew.workboard import issue as workboard_issue_mod  # type: ignore
     except Exception:  # pragma: no cover
         workboard_issue_mod = None  # type: ignore
 
@@ -225,8 +225,7 @@ def _validate_dirty_claim_reason(reason: str) -> str:
     reason = str(reason or "").strip()
     if len(reason) < DEFAULT_DIRTY_CLAIM_REASON_MIN_LEN:
         raise ValueError(
-            f"--dirty-claim-reason must be at least "
-            f"{DEFAULT_DIRTY_CLAIM_REASON_MIN_LEN} characters (got {len(reason)})"
+            f"--dirty-claim-reason must be at least {DEFAULT_DIRTY_CLAIM_REASON_MIN_LEN} characters (got {len(reason)})"
         )
     return reason
 
@@ -348,7 +347,7 @@ def _temp_task_creator_name(owner_name: str) -> str:
 
 
 def _temp_task_creator_task(owner_agent: str, task_manager_agent: str) -> str:
-    return f"{TEMP_TASK_CREATOR_TASK_TAG} " f"owner=`{owner_agent}`; manager=`{task_manager_agent}`"
+    return f"{TEMP_TASK_CREATOR_TASK_TAG} owner=`{owner_agent}`; manager=`{task_manager_agent}`"
 
 
 def _is_temp_task_creator_task(task: str) -> bool:

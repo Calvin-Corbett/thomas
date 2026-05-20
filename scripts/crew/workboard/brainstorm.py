@@ -23,13 +23,14 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from scripts import workboard_issue
+    from scripts.crew.workboard import issue as workboard_issue
     from scripts.crew.workboard import message as workboard_message
     from scripts.forge.gates import workboard_claims as claims_gate
 except Exception:  # pragma: no cover
-    import workboard_issue  # type: ignore
     from crew.workboard import message as workboard_message  # type: ignore
     from forge.gates import workboard_claims as claims_gate  # type: ignore
+
+    from scripts.crew.workboard import issue as workboard_issue  # type: ignore
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -914,13 +915,10 @@ def run(argv: Sequence[str] | None = None) -> int:
         if ok:
             if action_name == "list":
                 for row in list(payload.get("sessions") or []):
-                    print(
-                        f"- {row.get('session_id')}: {row.get('state')} "
-                        f"[{row.get('priority')}] {row.get('summary')}"
-                    )
+                    print(f"- {row.get('session_id')}: {row.get('state')} [{row.get('priority')}] {row.get('summary')}")
             elif action_name == "status":
                 row = dict(payload.get("session") or {})
-                print(f"- {row.get('session_id')}: {row.get('state')} " f"(pending={payload.get('pending_count', 0)})")
+                print(f"- {row.get('session_id')}: {row.get('state')} (pending={payload.get('pending_count', 0)})")
             else:
                 session = dict(payload.get("session") or {})
                 if session:

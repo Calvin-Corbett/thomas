@@ -741,8 +741,7 @@ def _worker_loop(
                 recipient=task_manager_agent,
                 task_id=task.task_id,
                 summary=(
-                    f"completed `{task.task_id}` using {len(runs)} command(s) in {elapsed_total:.2f}s "
-                    f"(log: {log_path})"
+                    f"completed `{task.task_id}` using {len(runs)} command(s) in {elapsed_total:.2f}s (log: {log_path})"
                 ),
                 kind="status",
                 priority="p1",
@@ -817,7 +816,7 @@ def _worker_loop(
                 sender=agent,
                 recipient=task_manager_agent,
                 task_id=task.task_id,
-                summary=(f"automation failed for `{task.task_id}` at command {failed_index} " f"(log: {log_path})"),
+                summary=(f"automation failed for `{task.task_id}` at command {failed_index} (log: {log_path})"),
                 kind="blocker",
                 priority="p1",
                 requested_action="triage failed worker command and update mapping",

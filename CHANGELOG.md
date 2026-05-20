@@ -18,6 +18,12 @@ Versioning: Semantic Versioning.
 
   Why this was needed: the GitHub publish-safety workflow in `.github/workflows/github-publish-safety.yml` only triggers on `dev` and `prod` branches, so a direct push of a feature branch to the public origin bypassed every Thomas-side gate. The leaked token lived in an auto-generated `library/entries/research-notes/*.md` markdown file — preflight's skip list and missing Telegram regex meant `secret_finding_count: 0` even when invoked manually. After patches, preflight finds the regex and the snapshot filter strips the whole research-notes directory from public publishes. Verified: `python scripts/forge/publish/preflight.py --skip-worktree-clean-check --required-branch master --json` now returns `ok: true, secret_finding_count: 0` against the post-redaction working tree.
 
+## [0.14.97] - 2026-05-20
+
+### Changed
+- Tier 5 (4/5): moved `scripts/workboard_issue.py` → `scripts/crew/workboard/issue.py`. Updated 19+ importing files spanning gates, crew/tasks/*.py, crew/workboard/*.py, swarm/cli.py, CI workflows (`.github/workflows/robustness-gates.yml`, `nightly-reliability.yml`), `.pre-commit-config.yaml`, `agent_safety.toml` (breakglass), AGENTS.md docs, tests. Fixed one batch-script syntax casualty in `claim_utils.py` (`import workboard_issue as X` was double-substituted to invalid `import issue as workboard_issue as X` — corrected to clean `from ...import issue as workboard_issue_mod`).
+- Opportunistic ruff/isort cleanup applied across `scripts/crew/`.
+
 ## [0.14.96] - 2026-05-20
 
 ### Changed

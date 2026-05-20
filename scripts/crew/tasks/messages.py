@@ -19,9 +19,10 @@ try:
     from scripts.forge.gates import workboard_claims as claims_gate
 except ImportError:  # pragma: no cover
     import task_specialists  # type: ignore
-    import workboard_issue  # type: ignore
     from crew.workboard import message as workboard_message  # type: ignore
     from forge.gates import workboard_claims as claims_gate  # type: ignore
+
+    from scripts.crew.workboard import issue as workboard_issue  # type: ignore
 
 try:
     from scripts.crew.tasks.base import (

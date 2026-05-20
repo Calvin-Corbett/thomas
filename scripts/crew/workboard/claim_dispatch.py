@@ -120,8 +120,8 @@ def suggest_delegation(
         task_label = f"[WIP][AUTO-{idx:02d}] {item['task_id']}: {item['summary']}"
         command = (
             "python scripts/crew/workboard/claim.py --claim "
-            f"--agent \"{child_agent}\" --name \"{child_name}\" --role worker "
-            f"--parent \"{parent_agent}\" --scope \"{item['scope']}\" --task \"{task_label}\""
+            f'--agent "{child_agent}" --name "{child_name}" --role worker '
+            f'--parent "{parent_agent}" --scope "{item["scope"]}" --task "{task_label}"'
         )
         commands.append(command)
         item["suggested_agent"] = child_agent
@@ -317,10 +317,7 @@ def release_temp_task_creator(
 
     # Authorize: either a task-manager role (releases ALL) or the original
     # holder of at least one temp-task-creator lease (releases their own).
-    holder_keys = {
-        _agent_key(_temp_task_creator_owner(row.task, fallback=row.agent))
-        for row in temp_claims
-    }
+    holder_keys = {_agent_key(_temp_task_creator_owner(row.task, fallback=row.agent)) for row in temp_claims}
     holder_keys.discard("")
     actor_is_holder = actor_key in holder_keys
 

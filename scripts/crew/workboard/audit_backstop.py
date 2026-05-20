@@ -14,11 +14,12 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from scripts import workboard_issue
+    from scripts.crew.workboard import issue as workboard_issue
     from scripts.forge.gates import workboard_claims as claims_gate
 except Exception:  # pragma: no cover
-    import workboard_issue  # type: ignore
     from forge.gates import workboard_claims as claims_gate  # type: ignore
+
+    from scripts.crew.workboard import issue as workboard_issue  # type: ignore
 
 
 ROOT = Path(__file__).resolve().parents[3]

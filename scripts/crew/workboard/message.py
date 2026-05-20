@@ -16,11 +16,12 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from scripts import workboard_issue
+    from scripts.crew.workboard import issue as workboard_issue
     from scripts.forge.gates import workboard_claims as claims_gate
 except Exception:  # pragma: no cover
-    import workboard_issue  # type: ignore
     from forge.gates import workboard_claims as claims_gate  # type: ignore
+
+    from scripts.crew.workboard import issue as workboard_issue  # type: ignore
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -353,7 +354,7 @@ def send_message(
     decision_clean = _validate_decision(decision or "pending")
     if _norm(kind_clean) not in TASK_ID_OPTIONAL_KINDS and _norm(task_clean) in {"", "none", "_none_"}:
         return False, {
-            "error": (f"task_id is required for kind `{kind_clean}` " "(only coordination/ping may use task_id=none)")
+            "error": (f"task_id is required for kind `{kind_clean}` (only coordination/ping may use task_id=none)")
         }
 
     lines = workboard_path.read_text(encoding="utf-8").splitlines()

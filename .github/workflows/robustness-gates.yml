@@ -185,7 +185,7 @@ jobs:
 
       - name: Workboard issue tooling smoke
         run: |
-          python scripts/workboard_issue.py --help
+          python scripts/crew/workboard/issue.py --help
 
       - name: Workboard audit backstop gate
         run: |

@@ -117,7 +117,7 @@ enforcement_scripts = [
     "scripts/forge/gates/workboard_changed_files.py",
     "scripts/forge/gates/workboard_agent_claim.py",
     "scripts/forge/gates/commit_scope_gate.py",
-    "scripts/workboard_issue.py",
+    "scripts/crew/workboard/issue.py",
     "scripts/crew/workboard/problem_record.py",
     # ── Repo & build integrity (Audit Finding 1) ──
     "scripts/forge/gates/monolith_filename_guard.py",

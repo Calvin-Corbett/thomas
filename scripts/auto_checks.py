@@ -65,7 +65,7 @@ GATE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Surface parity gate", (PY, "scripts/forge/gates/surface_parity.py")),
     ("Workboard claims gate", (PY, "scripts/forge/gates/workboard_claims.py")),
     ("Workboard task problems gate", (PY, "scripts/forge/gates/workboard_task_problems.py")),
-    ("Workboard issue tool smoke", (PY, "scripts/workboard_issue.py", "--help")),
+    ("Workboard issue tool smoke", (PY, "scripts/crew/workboard/issue.py", "--help")),
     ("Workboard problem recorder smoke", (PY, "scripts/crew/workboard/problem_record.py", "--help")),
     ("Feature master sync gate", (PY, "scripts/sync_feature_master_list.py", "--check")),
     ("Release hygiene gate", (PY, "scripts/forge/gates/release_hygiene.py")),
@@ -277,8 +277,7 @@ def run(argv: Iterable[str] | None = None) -> int:
         "--problem-task-id",
         default=str(os.getenv("THOMAS_TASK_ID", "")).strip() or DEFAULT_PROBLEM_TASK_ID,
         help=(
-            "Task id used for automatic PROBLEM.md failure logging "
-            "(defaults to THOMAS_TASK_ID or audit-24h-backstop)."
+            "Task id used for automatic PROBLEM.md failure logging (defaults to THOMAS_TASK_ID or audit-24h-backstop)."
         ),
     )
     parser.add_argument(

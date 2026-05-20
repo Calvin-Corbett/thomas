@@ -327,9 +327,7 @@ def list_claims(workboard_path: Path) -> tuple[bool, list[str] | str]:
                 return False, err
             if entry is not None:
                 claim_str = (
-                    f"- agent={entry}; "
-                    f"scope={fields.get('scope', 'unknown')}; "
-                    f"task={fields.get('task', 'unknown')}"
+                    f"- agent={entry}; scope={fields.get('scope', 'unknown')}; task={fields.get('task', 'unknown')}"
                 )
                 claims_list.append(claim_str)
 
