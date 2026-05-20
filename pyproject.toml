@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "thomas-ai"
-version = "0.14.98"
+version = "0.14.99"
 description = "Autonomous AI execution platform for local and remote deployments"
 readme = "README.md"
 license = {text = "MIT"}

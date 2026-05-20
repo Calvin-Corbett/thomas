@@ -41,6 +41,13 @@ MODULES = {
         "debt": "swarm.py exceeds 1130 lines, loop_execution.py exceeds 1190 lines, response_tone.py exceeds 860 lines, loop_core.py exceeds 800 lines",
         "description": "Agent loop, tool execution, streaming, guidance",
     },
+    "vault": {
+        "tier": "core",
+        "depends_on": [],
+        "health": "scaffold",
+        "debt": "scaffold-only; content migration deferred (see MIGRATION_PLAN.md). Target: consolidate agent guarded_tools (tool_runner), marketplace policy (policy package), breakglass scripts (breakglass package).",
+        "description": "Runtime safety substrate -- policy, tool runner, breakglass (Tier 6 scaffold)",
+    },
     "server": {
         "tier": "core",
         "depends_on": [

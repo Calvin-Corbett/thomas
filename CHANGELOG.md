@@ -18,6 +18,17 @@ Versioning: Semantic Versioning.
 
   Why this was needed: the GitHub publish-safety workflow in `.github/workflows/github-publish-safety.yml` only triggers on `dev` and `prod` branches, so a direct push of a feature branch to the public origin bypassed every Thomas-side gate. The leaked token lived in an auto-generated `library/entries/research-notes/*.md` markdown file — preflight's skip list and missing Telegram regex meant `secret_finding_count: 0` even when invoked manually. After patches, preflight finds the regex and the snapshot filter strips the whole research-notes directory from public publishes. Verified: `python scripts/forge/publish/preflight.py --skip-worktree-clean-check --required-branch master --json` now returns `ok: true, secret_finding_count: 0` against the post-redaction working tree.
 
+## [0.14.99] - 2026-05-20
+
+### Added
+- Tier 6 scaffold: created `thomas/vault/` package with `__init__.py` (Praxis.Vault docstring) and `MIGRATION_PLAN.md` documenting the 4-step migration: (1) policy package from `thomas/marketplace/policy/` → `thomas/vault/policy/`, (2) tool_runner from `thomas/agent/guarded_tools.py` → `thomas/vault/tool_runner.py`, (3) breakglass package from `scripts/breakglass_auth.py` + `scripts/runtime_protection_toggle.py` → `thomas/vault/breakglass/`, (4) `agent_safety.toml` reference updates. Scaffold only; the content migration with cascading import updates is deferred to a dedicated session per the goal's 5-8h estimate. The `tool_runner` cascade (chat-loop, tool registry, policy enforcement) is the largest in the entire rename arc.
+
+### Deferred (this session)
+- Tier 6 content migration: scaffold landed; full migration deferred per scope (see thomas/vault/MIGRATION_PLAN.md).
+- Tier 7 Phase B (audit cycle, ~1-2 months per goal): requires Phase A stamps populated across the bible first. Phase A substrate landed in commit ce71683b (v0.14.92).
+- Tier 7 Phase C (self-healing, open-ended): not started.
+- Tier 8 (strategic decisions): per goal text "defer; flag when blocking. Don't execute." These are Calvin's calls — bible single-file vs folder, agent modes vs specialists, 3 layering inversions in `_architecture.py` (core→marketplace, integrations→server, marketplace→server), frontend file-size hard ceiling. Documented; not executed.
+
 ## [0.14.98] - 2026-05-20
 
 ### Changed
