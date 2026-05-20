@@ -113,6 +113,11 @@ def run(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Release temporary task-creator assignments",
     )
+    mode_group.add_argument(
+        "--release",
+        action="store_true",
+        help="Release the agent's active claim (explicit form; default action if no mode flag is given)",
+    )
 
     parser.add_argument(
         "--max-suggestions",
@@ -377,6 +382,27 @@ def run(argv: Sequence[str] | None = None) -> int:
             if released_rows:
                 for row in released_rows:
                     print(f"  - {row.get('holder_agent')} " f"(lease={row.get('lease_agent')})")
+            return 0
+
+        if args.release:
+            agent = _resolve_agent(args.agent)
+            ok, msg = release(
+                workboard_path,
+                agent=agent,
+                allow_dirty=bool(args.allow_dirty_release),
+                dirty_reason=str(args.dirty_release_reason or ""),
+                allow_presence_override=bool(args.allow_presence_override),
+                presence_override_reason=str(args.presence_override_reason or ""),
+            )
+            if args.json:
+                out = {"ok": bool(ok), "action": "release", "message": str(msg)}
+                print(json.dumps(out, sort_keys=True))
+                return 0 if ok else 1
+            if not ok:
+                print(f"Workboard claim tool: FAIL\n- {msg}")
+                return 1
+            print("Workboard claim tool: PASS")
+            print(f"- {msg}")
             return 0
 
         if args.claim:

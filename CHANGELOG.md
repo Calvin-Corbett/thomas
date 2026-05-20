@@ -18,6 +18,11 @@ Versioning: Semantic Versioning.
 
   Why this was needed: the GitHub publish-safety workflow in `.github/workflows/github-publish-safety.yml` only triggers on `dev` and `prod` branches, so a direct push of a feature branch to the public origin bypassed every Thomas-side gate. The leaked token lived in an auto-generated `library/entries/research-notes/*.md` markdown file — preflight's skip list and missing Telegram regex meant `secret_finding_count: 0` even when invoked manually. After patches, preflight finds the regex and the snapshot filter strips the whole research-notes directory from public publishes. Verified: `python scripts/forge/publish/preflight.py --skip-worktree-clean-check --required-branch master --json` now returns `ok: true, secret_finding_count: 0` against the post-redaction working tree.
 
+## [0.14.89] - 2026-05-20
+
+### Added
+- crew.workboard.claim: explicit `--release` CLI flag in `scripts/crew/workboard/claim.py`. Closes Bug 8 from the master-cleanup deferred-bugs list. Previously the only way to release a claim was to run the script with NO mode flag (an implicit default), which made the operation hard to discover and led users to manually edit `WORKBOARD.md` instead. The new flag is mutually-exclusive with the other modes (`--list`, `--claim`, `--suggest-delegation`, `--dispatch-workers`, `--release-temp-task-creator`), supports `--json`, and reuses the existing `--allow-dirty-release` / `--dirty-release-reason` / `--allow-presence-override` / `--presence-override-reason` args. The implicit no-flag default still releases for backward compatibility.
+
 ## [0.14.88] - 2026-05-20
 
 ### Fixed
