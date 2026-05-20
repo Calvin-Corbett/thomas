@@ -75,6 +75,10 @@ tasks/
 !plans/thomas/tasks/
 !plans/thomas/tasks/**/
 !plans/thomas/tasks/**/PLAN.md
+!scripts/
+!scripts/crew/
+!scripts/crew/tasks/
+!scripts/crew/tasks/**
 archives/
 _archive/
 

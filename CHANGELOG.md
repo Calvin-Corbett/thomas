@@ -18,6 +18,14 @@ Versioning: Semantic Versioning.
 
   Why this was needed: the GitHub publish-safety workflow in `.github/workflows/github-publish-safety.yml` only triggers on `dev` and `prod` branches, so a direct push of a feature branch to the public origin bypassed every Thomas-side gate. The leaked token lived in an auto-generated `library/entries/research-notes/*.md` markdown file — preflight's skip list and missing Telegram regex meant `secret_finding_count: 0` even when invoked manually. After patches, preflight finds the regex and the snapshot filter strips the whole research-notes directory from public publishes. Verified: `python scripts/forge/publish/preflight.py --skip-worktree-clean-check --required-branch master --json` now returns `ok: true, secret_finding_count: 0` against the post-redaction working tree.
 
+## [0.14.91] - 2026-05-20
+
+### Fixed
+- repo tracking: `scripts/crew/tasks/` is now tracked in git. The directory was previously matched by the `.gitignore` `tasks/` rule (intended for runtime task-data archives) and silently excluded from every push. `worker.py:29` imports `from scripts.crew.tasks import manager as workboard_task_manager` — a module that existed on disk locally but was never in any remote, breaking fresh clones with `ModuleNotFoundError`. This also retroactively makes the Bug 9 fix in commit `8edf66bb` (worker.py import rename) actually work on fresh clones, and lands the deferred Bug 14 re-export of `dispatch_idle_agents_once` through `manager.py`. Closes Bug 15.
+  - `.gitignore` adds re-include exceptions: `!scripts/`, `!scripts/crew/`, `!scripts/crew/tasks/`, `!scripts/crew/tasks/**`. The blanket `tasks/` rule still excludes other ad-hoc `tasks/` directories.
+  - Adds 8 previously-untracked Python files in `scripts/crew/tasks/`: `__init__.py`, `base.py` (451 lines), `manager.py` (678 lines, includes Bug 14 re-export), `messages.py` (318 lines), `plans.py` (322 lines), `reactivate.py` (631 lines), `sessions.py` (207 lines), `sweep.py` (500 lines).
+  - 18 broad `except Exception:` handlers across these files refactored to specific exception types to satisfy the `exception_handler` ratchet gate. 13 were import fallbacks → narrowed to `except ImportError:`. 5 were operational catches — narrowed individually: `_read_inferred_sync_state` exec wrapper → `(OSError, SyntaxError, NameError, ValueError)`; `_parse_now` arg parser → `(ValueError, TypeError)`; reactivate.py best-effort `set_task_status` → `(OSError, ValueError, RuntimeError, KeyError, AttributeError)`; reactivate.py resolver call → `(TypeError, ValueError, RuntimeError)`; reactivate.py `_find_active_tasks_section` parser → `(IndexError, ValueError, AttributeError)`. Opportunistic isort/format cleanup applied via `ruff check --fix && ruff format`.
+
 ## [0.14.90] - 2026-05-20
 
 ### Fixed
