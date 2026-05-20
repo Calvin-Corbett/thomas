@@ -10,7 +10,7 @@ import re
 import sqlite3
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -500,6 +500,67 @@ def classify_task(
     }
 
 
+def _detect_orphaned_dirty_state(repo_root: Path, max_age_hours: float = 24.0) -> dict[str, Any]:
+    """Crew.Brief Layer 2 — detect orphaned dirty state from prior sessions.
+
+    Scans ``runtime/heartbeat_dirty/`` for recent auto-checkpoint failures (L1
+    records its failures there). A non-zero count of recent records implies a
+    prior session left dirty work uncommitted and is no longer running. The
+    payload here is informational; the recommended remediation is to run
+    ``scripts/heartbeat.py --checkpoint --force`` before starting new work.
+    """
+    dirty_dir = repo_root / "runtime" / "heartbeat_dirty"
+    if not dirty_dir.exists():
+        return {
+            "records_found": 0,
+            "recent_records": [],
+            "orphan_detected": False,
+            "recommendation": "",
+        }
+
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=float(max_age_hours))
+    except (TypeError, ValueError):
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=24.0)
+
+    recent: list[dict[str, Any]] = []
+    for record_path in sorted(dirty_dir.glob("*.json"), reverse=True)[:50]:
+        try:
+            data = json.loads(record_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, ValueError):
+            continue
+        ts_raw = str(data.get("ts") or "")
+        try:
+            ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if ts >= cutoff:
+            recent.append(
+                {
+                    "ts": ts_raw,
+                    "branch": str(data.get("branch") or ""),
+                    "dirty_file_count": int(data.get("dirty_file_count") or 0),
+                    "dirty_paths": list(data.get("dirty_paths") or [])[:10],
+                    "reason": str(data.get("reason") or "")[:200],
+                    "record": record_path.name,
+                }
+            )
+
+    return {
+        "records_found": len(recent),
+        "recent_records": recent[:5],
+        "orphan_detected": bool(recent),
+        "recommendation": (
+            "Prior session left dirty work uncommitted. Recommended: "
+            "`python scripts/heartbeat.py --checkpoint --force` to auto-checkpoint, "
+            "or `python scripts/agent_commit.py --message <msg>` to resolve manually "
+            "before starting new work."
+            if recent
+            else ""
+        ),
+    }
+
+
 def build_startup_payload(
     *,
     summary: str,
@@ -526,6 +587,7 @@ def build_startup_payload(
     )
     payload["preflight"] = agent_preflight.evaluate_preflight(root=ROOT, cwd=cwd)
     payload["branch_scan"] = _scan_related_branches(summary, paths)
+    payload["orphaned_state"] = _detect_orphaned_dirty_state(ROOT)
     return payload
 
 
@@ -614,6 +676,23 @@ def _text_output(payload: dict[str, Any]) -> str:
         lines.append("  - none")
     lines.append("escalate_when:")
     lines.extend([f"  - {item}" for item in payload["escalation_triggers"]])
+    orphaned_state = dict(payload.get("orphaned_state") or {})
+    if orphaned_state.get("orphan_detected"):
+        lines.append("")
+        lines.append("*** ORPHANED DIRTY STATE WARNING (Crew.Brief L2) ***")
+        lines.append(
+            f"Found {orphaned_state.get('records_found', 0)} recent heartbeat-checkpoint failure "
+            f"record(s) in runtime/heartbeat_dirty/. A prior session left work uncommitted."
+        )
+        for record in list(orphaned_state.get("recent_records") or [])[:3]:
+            ts = str(record.get("ts") or "")
+            branch = str(record.get("branch") or "")
+            count = record.get("dirty_file_count") or 0
+            lines.append(f"  - {ts} on {branch}: {count} dirty file(s)")
+        recommendation = str(orphaned_state.get("recommendation") or "").strip()
+        if recommendation:
+            lines.append(f"RECOMMENDATION: {recommendation}")
+
     branch_scan = dict(payload.get("branch_scan") or {})
     warning = str(branch_scan.get("warning") or "").strip()
     if warning:
