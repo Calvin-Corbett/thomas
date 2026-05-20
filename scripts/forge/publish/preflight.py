@@ -50,8 +50,6 @@ DEFAULT_REQUIRED_BRANCHES = ("dev", "prod")
 SCAN_SKIP_PREFIXES = (
     "tests/",
     "docs/",
-    "library/",
-    "plans/",
 )
 SCAN_SKIP_SUFFIXES = (
     ".md",
@@ -76,6 +74,8 @@ SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("aws_temp_access_key", re.compile(r"\bASIA[0-9A-Z]{16}\b")),
     ("slack_token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
     ("private_key_block", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |PRIVATE )?PRIVATE KEY-----")),
+    ("telegram_bot_token", re.compile(r"\b\d{8,12}:[A-Za-z0-9_-]{30,}\b")),
+    ("discord_bot_token", re.compile(r"\b[MN][A-Za-z0-9_-]{23}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27}\b")),
 )
 ALLOWLIST_FRAGMENTS = (
     "example",

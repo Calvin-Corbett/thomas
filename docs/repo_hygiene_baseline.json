@@ -57,6 +57,11 @@
     "dist/",
     ".inbox_extract_"
   ],
+  "publish_strip_prefixes": [
+    "library/entries/research-notes/",
+    "plans/thomas/problems/",
+    "plans/thomas/tasks/"
+  ],
   "forbidden_untracked_prefixes": [
     "runtime/",
     "output/",
