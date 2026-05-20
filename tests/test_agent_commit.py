@@ -18,7 +18,7 @@ def _load_module(name: str, path: Path):
     return module
 
 
-mod = _load_module("agent_commit", ROOT / "scripts" / "agent_commit.py")
+mod = _load_module("agent_commit", ROOT / "scripts" / "crew" / "brief" / "commit.py")
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -79,9 +79,9 @@ def test_site_visual_proof_gate_only_runs_for_site_paths() -> None:
     assert mod._gate_applies("site_visual_proof", ["apps/site/src/app/page.tsx"]) is True
     assert mod._gate_applies("site_visual_proof", ["apps/site/verification/ui-proof.json"]) is True
     assert (
-        mod._gate_applies("site_visual_proof", ["scripts/agent_commit.py", "tests/test_commit_gate_split.py"]) is False
+        mod._gate_applies("site_visual_proof", ["scripts/crew/brief/commit.py", "tests/test_commit_gate_split.py"]) is False
     )
-    assert mod._gate_applies("boot_smoke", ["scripts/agent_commit.py"]) is True
+    assert mod._gate_applies("boot_smoke", ["scripts/crew/brief/commit.py"]) is True
 
 
 def test_release_update_gate_command_is_scoped_to_selected_paths() -> None:
@@ -432,7 +432,7 @@ def test_agent_commit_run_json_emits_blocker_payload(monkeypatch, capsys) -> Non
         selected_paths=(),
         scope_source=mod.CLAIM_SOURCE,
         next_step="claim the scope",
-        suggested_command='python scripts/agent_commit.py --agent codex --message "x"',
+        suggested_command='python scripts/crew/brief/commit.py --agent codex --message "x"',
     )
     monkeypatch.setattr(mod, "commit_scoped_changes", lambda **kwargs: fake_result)
 

@@ -651,7 +651,7 @@ def _detect_orphaned_dirty_state(repo_root: Path, max_age_hours: float = 24.0) -
         "recommendation": (
             "Prior session left dirty work uncommitted. Recommended: "
             "`python scripts/heartbeat.py --checkpoint --force` to auto-checkpoint, "
-            "or `python scripts/agent_commit.py --message <msg>` to resolve manually "
+            "or `python scripts/crew/brief/commit.py --message <msg>` to resolve manually "
             "before starting new work."
             if recent
             else ""

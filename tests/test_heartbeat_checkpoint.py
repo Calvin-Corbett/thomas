@@ -78,7 +78,7 @@ def test_dirty_with_claim_commits(monkeypatch, tmp_path) -> None:
                 "Workboard claim tool: PASS\n"
                 "- agent=claude; scope=scripts/heartbeat.py; task=Crew.Brief Layer 1\n",
             )
-        if "scripts/agent_commit.py" in (args[1] if len(args) > 1 else ""):
+        if "scripts/crew/brief/commit.py" in (args[1] if len(args) > 1 else ""):
             invocations["agent_commit"] = list(args)
             return _Proc(0, "Agent commit: PASS\n- created abc123\n")
         if "rev-parse" in args and "HEAD" in args:
@@ -200,7 +200,7 @@ def test_agent_commit_failure_records_and_returns(monkeypatch, tmp_path) -> None
                 0,
                 "- agent=claude; scope=scripts/heartbeat.py; task=test\n",
             )
-        if "scripts/agent_commit.py" in (args[1] if len(args) > 1 else ""):
+        if "scripts/crew/brief/commit.py" in (args[1] if len(args) > 1 else ""):
             return _Proc(
                 1,
                 "Agent commit: FAIL\n- failed gate: monolith_guard\n",

@@ -2,7 +2,7 @@
 
 When a heartbeat tick fires, this module checks the worktree for
 uncommitted changes inside the active agent's workboard claim and runs
-``scripts/agent_commit.py`` to produce a tagged checkpoint commit.
+``scripts/crew/brief/commit.py`` to produce a tagged checkpoint commit.
 
 Failures are logged and recorded under ``runtime/heartbeat_dirty/`` but
 never raised, so the heartbeat loop above us keeps ticking. Configuration
