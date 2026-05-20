@@ -3,9 +3,9 @@ repos:
     rev: v0.8.0
     hooks:
       - id: ruff
-        args: [--fix]
         stages: [pre-commit]
       - id: ruff-format
+        args: [--check]
         stages: [pre-commit]
 
   - repo: local

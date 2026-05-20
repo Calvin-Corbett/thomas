@@ -18,6 +18,17 @@ Versioning: Semantic Versioning.
 
   Why this was needed: the GitHub publish-safety workflow in `.github/workflows/github-publish-safety.yml` only triggers on `dev` and `prod` branches, so a direct push of a feature branch to the public origin bypassed every Thomas-side gate. The leaked token lived in an auto-generated `library/entries/research-notes/*.md` markdown file — preflight's skip list and missing Telegram regex meant `secret_finding_count: 0` even when invoked manually. After patches, preflight finds the regex and the snapshot filter strips the whole research-notes directory from public publishes. Verified: `python scripts/forge/publish/preflight.py --skip-worktree-clean-check --required-branch master --json` now returns `ok: true, secret_finding_count: 0` against the post-redaction working tree.
 
+## [0.14.90] - 2026-05-20
+
+### Fixed
+- pre-commit ruff hooks: removed `args: [--fix]` from `ruff` and added `args: [--check]` to `ruff-format`. Both hooks are now check-only at commit time, eliminating the scope-creep where ruff would auto-modify files outside the agent_commit-scoped diff. Agents now run `ruff check --fix` and `ruff format` manually as part of their pre-commit workflow. Closes Bug 12.
+
+### Changed
+- Bug 13 (`thomas-core-overhead-guard` stages) resolved as working-as-intended. The current `stages: [pre-push]` configuration is the post-incident protection model: it gates pushes that include unauthorized changes to protected overhead files, and the `THOMAS_CORE_OVERHEAD_UNLOCK=1` env var is the documented "I know what I'm doing" affordance. Adding `stages: [pre-commit]` would make the gate more restrictive without solving the underlying friction; replacing `pre-push` with `pre-commit` would remove push protection. Decision: keep current behavior. Documented in `memory/thomas_security_incident_2026-05-19.md`.
+
+### Known unfixed
+- Bug 14 (`dispatch_idle_agents_once` re-export through `manager.py`) attempted but blocked by a more fundamental discovery: the entire `scripts/crew/tasks/` directory is silently excluded from git by the `.gitignore` `tasks/` rule. The module exists on disk locally but has never been tracked. This also makes the Bug 9 fix in commit 8edf66bb (worker.py import to `scripts.crew.tasks.manager`) effectively illusory — the import resolves locally but would fail with ModuleNotFoundError on any fresh clone, including dev-origin and any future public publish. Fixing requires (a) `.gitignore` re-include exception, (b) adding ~8 untracked files / 3113 lines, (c) refactoring 18 broad-except handlers in those files to satisfy the `exception_handler` ratchet gate, OR (d) Calvin authorizing a one-time gate baseline reset. Deferred to a follow-up session because of the scope of the refactor work.
+
 ## [0.14.89] - 2026-05-20
 
 ### Added
