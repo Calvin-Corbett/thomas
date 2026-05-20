@@ -25,7 +25,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from agent_safety_config import config as _cfg
+    from scripts.crew.brief.safety_config import config as _cfg
 
     _suffix_list = _cfg.forbidden_suffixes()
     _prefix_list = _cfg.forbidden_prefixes()
@@ -85,9 +85,7 @@ def run(argv: list[str] | None = None) -> int:
             violations.append(
                 {
                     "path": filepath,
-                    "reason": (
-                        f"filename '{name}' uses a duplication-signaling suffix " "(-v2, _v2, -fixed, _new, etc.)"
-                    ),
+                    "reason": (f"filename '{name}' uses a duplication-signaling suffix (-v2, _v2, -fixed, _new, etc.)"),
                 }
             )
             continue
@@ -96,8 +94,7 @@ def run(argv: list[str] | None = None) -> int:
                 {
                     "path": filepath,
                     "reason": (
-                        f"filename '{name}' uses a duplication-signaling prefix "
-                        "(new_, new-, copy_of_, copy-of-, etc.)"
+                        f"filename '{name}' uses a duplication-signaling prefix (new_, new-, copy_of_, copy-of-, etc.)"
                     ),
                 }
             )

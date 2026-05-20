@@ -56,4 +56,3 @@ def resolution_help(*, include_name_fallback: bool = True) -> str:
     if include_name_fallback:
         keys.extend(AGENT_NAME_ENV_KEYS)
     return "/".join(keys)
-

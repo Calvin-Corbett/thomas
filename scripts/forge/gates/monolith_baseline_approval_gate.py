@@ -328,7 +328,7 @@ def run(argv: Sequence[str] | None = None) -> int:
                 f"(relaxations={payload['relaxation_count']}, approvals matched={len(payload['matched_approvals'])})"
             )
         else:
-            print("Monolith baseline approval gate: FAIL " f"({len(payload['violations'])} unapproved relaxation(s))")
+            print(f"Monolith baseline approval gate: FAIL ({len(payload['violations'])} unapproved relaxation(s))")
             for row in payload["violations"]:
                 print(f"- {row.get('path')} [{row.get('change')}]: {row.get('detail', '')}")
     return 0 if bool(payload["ok"]) else 1

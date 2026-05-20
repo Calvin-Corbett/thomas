@@ -343,7 +343,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             "gate": "workboard_changed_files",
             "ok": False,
             "error": (
-                f"{FALLBACK_SCOPE_ENV} requires {FALLBACK_REASON_ENV} " "so fallback scope use is explicitly audited"
+                f"{FALLBACK_SCOPE_ENV} requires {FALLBACK_REASON_ENV} so fallback scope use is explicitly audited"
             ),
             "workboard": str(workboard_path),
             "require_identity_metadata": bool(args.require_identity_metadata),

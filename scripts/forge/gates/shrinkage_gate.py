@@ -155,7 +155,7 @@ def run(argv: list[str] | None = None) -> int:
         else:
             print("SAFETY GATE FAILED: Significant Code Removal Detected")
             print("=" * 70)
-            print(f"Found {len(shrunk_files)} file(s) that lost >{int(threshold*100)}% of content:")
+            print(f"Found {len(shrunk_files)} file(s) that lost >{int(threshold * 100)}% of content:")
             print()
             for sf in shrunk_files:
                 print(

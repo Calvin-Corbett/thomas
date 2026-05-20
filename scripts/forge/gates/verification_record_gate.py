@@ -160,7 +160,7 @@ def _check_shrinkage(record: dict, staged: list[str]) -> list[str]:
     if shrunk_files:
         justification = record.get("shrinkage", {}).get("deletions_justified", "")
         if not justification or len(str(justification).strip()) < 10:
-            errors.append(f"Found {len(shrunk_files)} file(s) that shrank by >{int(SHRINKAGE_THRESHOLD*100)}%:")
+            errors.append(f"Found {len(shrunk_files)} file(s) that shrank by >{int(SHRINKAGE_THRESHOLD * 100)}%:")
             for sf in shrunk_files[:5]:
                 errors.append(
                     f"  - {sf['file']}: {sf['head_lines']} -> {sf['current_lines']} lines ({sf['shrinkage_pct']}% removed)"

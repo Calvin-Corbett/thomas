@@ -114,7 +114,7 @@ def run(argv: list[str] | None = None) -> int:
             print(f"  openclaw commit: {payload['openclaw_commit']}")
             print("  failing metrics:")
             for row in payload["failures"]:
-                print(f"    - {row.get('metric')}: " f"Thomas={row.get('thomas')} OpenClaw={row.get('openclaw')}")
+                print(f"    - {row.get('metric')}: Thomas={row.get('thomas')} OpenClaw={row.get('openclaw')}")
 
     return 0 if payload["ok"] else 1
 

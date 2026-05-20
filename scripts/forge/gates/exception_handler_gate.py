@@ -28,9 +28,9 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from agent_safety_config import load_config
+    from scripts.crew.brief.safety_config import load_config
 except ImportError:  # pragma: no cover
-    from scripts.agent_safety_config import load_config  # type: ignore
+    from scripts.crew.brief.safety_config import load_config  # type: ignore
 
 ROOT = Path(__file__).resolve().parents[3]
 BROAD_EXCEPTION_TYPES = {"Exception", "BaseException"}
@@ -102,7 +102,7 @@ def _added_lines_per_file() -> dict[str, set[int]]:
     current_path: str | None = None
     for line in proc.stdout.splitlines():
         if line.startswith("+++ b/"):
-            current_path = line[len("+++ b/"):]
+            current_path = line[len("+++ b/") :]
             result.setdefault(current_path, set())
         elif line.startswith("+++ /dev/null"):
             current_path = None

@@ -580,7 +580,7 @@ def main() -> int:
                     f"{growth_ctx.get('head_ref')} ({growth_ctx.get('changed_file_count', 0)} changed files)."
                 )
             elif bool(growth_ctx.get("staged_only")):
-                growth_note = f" Staged-only mode enabled " f"({growth_ctx.get('changed_file_count', 0)} staged files)."
+                growth_note = f" Staged-only mode enabled ({growth_ctx.get('changed_file_count', 0)} staged files)."
             print(
                 f"Monolith guard OK. Scanned {result['measured_count']} files "
                 f"under {', '.join(result['scan_roots'])}.{growth_note}"
@@ -596,8 +596,7 @@ def main() -> int:
                 max_growth = row.get("max_growth_lines")
                 max_part = f", max {max_lines}" if max_lines is not None else ""
                 growth_part = (
-                    f", baseline {row.get('baseline_lines')}, growth {row.get('growth_lines')}, "
-                    f"max_growth {max_growth}"
+                    f", baseline {row.get('baseline_lines')}, growth {row.get('growth_lines')}, max_growth {max_growth}"
                     if max_growth is not None
                     else ""
                 )

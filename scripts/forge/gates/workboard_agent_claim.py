@@ -253,8 +253,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         "--agent",
         default="",
         help=(
-            "Agent id override (otherwise resolved from "
-            f"{agent_identity.resolution_help(include_name_fallback=True)})."
+            f"Agent id override (otherwise resolved from {agent_identity.resolution_help(include_name_fallback=True)})."
         ),
     )
     parser.add_argument(
@@ -297,8 +296,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         type=int,
         default=2,
         help=(
-            "Target minimum active workers for parent-role claims when throughput "
-            "enforcement is active (default: 2)."
+            "Target minimum active workers for parent-role claims when throughput enforcement is active (default: 2)."
         ),
     )
     parser.add_argument(
@@ -423,9 +421,7 @@ def run(argv: Sequence[str] | None = None) -> int:
                 print(f"- {message}")
             return 1
         if not fallback_reason:
-            message = (
-                f"{FALLBACK_SCOPE_ENV} requires {FALLBACK_REASON_ENV} " "so fallback scope use is explicitly audited"
-            )
+            message = f"{FALLBACK_SCOPE_ENV} requires {FALLBACK_REASON_ENV} so fallback scope use is explicitly audited"
             if args.json:
                 payload = {
                     "gate": "workboard_agent_claim",

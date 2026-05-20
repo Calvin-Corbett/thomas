@@ -23,7 +23,7 @@ if str(_REPO_ROOT) not in sys.path:
 ROOT = Path(__file__).resolve().parents[3]
 # Load config from agent_safety.toml if available
 try:
-    from agent_safety_config import config as _cfg
+    from scripts.crew.brief.safety_config import config as _cfg
 
     DEFAULT_THRESHOLD = _cfg.changelog_threshold()
     CHANGELOG_PATH = _cfg.changelog_file()
@@ -97,9 +97,7 @@ def run(argv: list[str] | None = None) -> int:
 
     if len(code_files) >= threshold and not changelog_staged:
         ok = False
-        reason = (
-            f"You staged {len(code_files)} code file(s) " f"(threshold: {threshold}) but CHANGELOG.md is not staged."
-        )
+        reason = f"You staged {len(code_files)} code file(s) (threshold: {threshold}) but CHANGELOG.md is not staged."
     elif len(code_files) >= threshold and changelog_staged:
         # Verify the CHANGELOG diff has real content, not just whitespace
         changelog_diff = _changelog_diff_content()

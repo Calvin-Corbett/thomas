@@ -140,7 +140,7 @@ def _describe_changes(changes: list[dict[str, str]]) -> str:
     deleted = sum(1 for c in changes if c["status"] == "deleted")
 
     lines = []
-    lines.append(f"**{len(changes)} files** were changed: " f"{added} added, {modified} modified, {deleted} deleted.")
+    lines.append(f"**{len(changes)} files** were changed: {added} added, {modified} modified, {deleted} deleted.")
     lines.append("")
 
     # Describe each module
@@ -199,7 +199,7 @@ def _check_safety_status(changes: list[dict[str, str]]) -> list[str]:
             line_count = len(full_path.read_text(encoding="utf-8").splitlines())
             if line_count > 800:
                 findings.append(
-                    f"- `{filepath}` is {line_count} lines (limit: 800). " f"The monolith guard should flag this."
+                    f"- `{filepath}` is {line_count} lines (limit: 800). The monolith guard should flag this."
                 )
         except (OSError, UnicodeDecodeError):
             continue

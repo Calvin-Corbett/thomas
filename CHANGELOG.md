@@ -18,6 +18,12 @@ Versioning: Semantic Versioning.
 
   Why this was needed: the GitHub publish-safety workflow in `.github/workflows/github-publish-safety.yml` only triggers on `dev` and `prod` branches, so a direct push of a feature branch to the public origin bypassed every Thomas-side gate. The leaked token lived in an auto-generated `library/entries/research-notes/*.md` markdown file — preflight's skip list and missing Telegram regex meant `secret_finding_count: 0` even when invoked manually. After patches, preflight finds the regex and the snapshot filter strips the whole research-notes directory from public publishes. Verified: `python scripts/forge/publish/preflight.py --skip-worktree-clean-check --required-branch master --json` now returns `ok: true, secret_finding_count: 0` against the post-redaction working tree.
 
+## [0.14.96] - 2026-05-20
+
+### Changed
+- Tier 5 (3/5): moved `scripts/agent_safety_config.py` → `scripts/crew/brief/safety_config.py`. Updated `from agent_safety_config` and `from scripts.agent_safety_config` import patterns across 15 importing files (gates, post_commit_audit, validate_agent_changes, tests, crew/brief/preflight). agent_safety.toml protected_files entry updated (breakglass). crew/brief/__init__.py docstring updated to reflect new state.
+- Opportunistic: `ruff check --fix && ruff format` applied across `scripts/crew/brief/`, `scripts/forge/gates/` to clean pre-existing isort/format slop that would otherwise have blocked the commit under the Bug 12 check-only ruff config. 29 files reformatted (format-only, no semantic changes).
+
 ## [0.14.95] - 2026-05-20
 
 ### Changed

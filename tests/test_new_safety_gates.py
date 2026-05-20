@@ -272,7 +272,7 @@ class TestProtectedFilesGate:
         monkeypatch.setattr(
             protected_gate,
             "_staged_files",
-            lambda: ["thomas/server/app.py", "agent_safety.toml", "scripts/agent_safety_config.py"],
+            lambda: ["thomas/server/app.py", "agent_safety.toml", "scripts/crew/brief/safety_config.py"],
         )
 
         rc = protected_gate.run([])
@@ -281,7 +281,7 @@ class TestProtectedFilesGate:
         assert rc == 1
         assert "SAFETY GATE FAILED: Protected Policy Files Modified" in out
         assert "agent_safety.toml" in out
-        assert "scripts/agent_safety_config.py" in out
+        assert "scripts/crew/brief/safety_config.py" in out
         assert "thomas/server/app.py" not in out
 
     def test_run_passes_when_only_regular_files_are_staged(self, monkeypatch, capsys):

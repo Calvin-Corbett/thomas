@@ -75,9 +75,9 @@ def run(
             )
         )
     elif ok:
-        print(f"Bulk commit guard: PASS " f"({count} staged file(s), limit {max_files})")
+        print(f"Bulk commit guard: PASS ({count} staged file(s), limit {max_files})")
     else:
-        print(f"Bulk commit guard: FAIL — {count} files staged " f"(limit is {max_files}).")
+        print(f"Bulk commit guard: FAIL — {count} files staged (limit is {max_files}).")
         print(
             "  Bulk dump commits are banned.  Break your work into "
             "smaller, focused commits.  If this is a genuine migration "

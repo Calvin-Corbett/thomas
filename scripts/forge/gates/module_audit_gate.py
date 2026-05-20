@@ -172,8 +172,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         if status not in READY_STATUSES:
             failed = True
             print(
-                f"\nInvalid audit entry for module={module}: "
-                f"status='{status}' is not one of {sorted(READY_STATUSES)}"
+                f"\nInvalid audit entry for module={module}: status='{status}' is not one of {sorted(READY_STATUSES)}"
             )
         if not signature:
             failed = True

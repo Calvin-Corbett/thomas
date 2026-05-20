@@ -129,7 +129,7 @@ def run(
 
     if os.environ.get("THOMAS_COMMIT_GROWTH_GUARD_DISABLE") == "1":
         if not json_output:
-            print("Commit growth guard: SKIP " "(THOMAS_COMMIT_GROWTH_GUARD_DISABLE=1)")
+            print("Commit growth guard: SKIP (THOMAS_COMMIT_GROWTH_GUARD_DISABLE=1)")
         return 0
 
     staged = _staged_files(repo_root)
@@ -173,7 +173,7 @@ def run(
             )
         )
     elif ok:
-        print(f"Commit growth guard: PASS " f"(no file grew by more than {max_growth} lines)")
+        print(f"Commit growth guard: PASS (no file grew by more than {max_growth} lines)")
     else:
         print(
             f"Commit growth guard: FAIL — {len(violations)} file(s) "
@@ -186,13 +186,13 @@ def run(
         )
         for v in violations:
             tag = " (NEW FILE)" if v["is_new_file"] else ""
-            print(f"  - {v['path']}: {v['prior_lines']} -> " f"{v['current_lines']} (+{v['growth']} lines){tag}")
+            print(f"  - {v['path']}: {v['prior_lines']} -> {v['current_lines']} (+{v['growth']} lines){tag}")
 
     return 0 if ok else 1
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=("Block commits where any single file " "grows by too many lines."))
+    parser = argparse.ArgumentParser(description=("Block commits where any single file grows by too many lines."))
     parser.add_argument(
         "--max-growth",
         type=int,

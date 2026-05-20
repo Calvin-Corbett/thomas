@@ -28,7 +28,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from agent_safety_config import config as _cfg
+    from scripts.crew.brief.safety_config import config as _cfg
 
     SOURCE_PREFIXES = tuple(d if d.endswith("/") else d + "/" for d in _cfg.source_dirs())
     TEST_PREFIXES = tuple(d if d.endswith("/") else d + "/" for d in _cfg.test_dirs())

@@ -83,7 +83,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(result, sort_keys=True))
     else:
         if result["ok"]:
-            print("release lane policy: PASS " f"(head={result['head_branch']}, base={result['base_branch']})")
+            print(f"release lane policy: PASS (head={result['head_branch']}, base={result['base_branch']})")
         else:
             print("release lane policy: FAIL")
             for item in list(result["violations"]):

@@ -31,7 +31,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from agent_safety_config import config as _cfg
+    from scripts.crew.brief.safety_config import config as _cfg
 
     SMOKE_IMPORTS: list[str] = _cfg.boot_imports()
     _TRIGGER_DIRS = _cfg.boot_trigger_dirs()
@@ -138,7 +138,7 @@ def run(argv: list[str] | None = None) -> int:
                 print(f"   ... and {len(triggered_files) - 8} more")
             print()
             print("2. Check for circular imports:")
-            print(f"   python -c \"import {failures[0]['module']}\"")
+            print(f'   python -c "import {failures[0]["module"]}"')
             print()
             print("3. Check for missing dependencies:")
             print("   pip install -r requirements-lock.txt")

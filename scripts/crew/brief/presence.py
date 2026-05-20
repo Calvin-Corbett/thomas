@@ -16,6 +16,8 @@ if str(_REPO_ROOT) not in sys.path:
 from thomas.core import agent_presence
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
 def _format_status(payload: dict[str, object]) -> str:
     agents = list(payload.get("agents") or [])
     groups = {

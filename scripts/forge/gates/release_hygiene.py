@@ -22,6 +22,8 @@ from thomas.marketplace.observability.run_db import resolve_runs_db_path
 from thomas.marketplace.security.security_audit import run_security_audit
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
@@ -224,7 +226,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         gate = onboarding_gate or {}
         summary = dict(gate.get("summary") or {})
         print(
-            '- onboarding gate: '
+            "- onboarding gate: "
             f"OK (events={int(summary.get('events', 0))}, "
             f"completion={float(summary.get('completion_rate', 0.0)):.4f}, "
             f"recovery={float(summary.get('recovery_success_rate', 0.0)):.4f}, "
@@ -235,7 +237,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         summary = dict(audit.get("summary") or {})
         failing = ", ".join(list(summary.get("failing_checks") or [])) or "none"
         print(
-            '- security audit: '
+            "- security audit: "
             f"OK (checks={int(summary.get('check_count', 0))}, "
             f"failing={failing}, warnings={int(summary.get('warning_count', 0))})"
         )
