@@ -217,9 +217,20 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     # Competitor data refreshes require Calvin's local OpenClaw snapshot. CI runners
     # can't refresh them, so the freshness window only makes sense as a developer-
-    # machine reminder. In CI (GITHUB_ACTIONS=true), skip with a clear hint when no
-    # snapshot path is set.
-    if os.environ.get("GITHUB_ACTIONS") == "true" and not os.environ.get("OPENCLAW_SNAPSHOT_PATH"):
+    # machine reminder. In CI workflow runs (GITHUB_ACTIONS=true) and only when no
+    # explicit artifact paths are supplied (tests pass --result-json etc.), skip
+    # with a clear hint when no snapshot path is set. This preserves the unit-test
+    # contract while unblocking CI.
+    explicit_artifact = bool(
+        str(args.result_json or "").strip()
+        or str(args.registry_json or "").strip()
+        or str(args.legacy_result_json or "").strip()
+    )
+    if (
+        os.environ.get("GITHUB_ACTIONS") == "true"
+        and not os.environ.get("OPENCLAW_SNAPSHOT_PATH")
+        and not explicit_artifact
+    ):
         print(
             "Competitor freshness guard: SKIPPED "
             "(refresh requires local OpenClaw snapshot which is not reachable from CI). "
