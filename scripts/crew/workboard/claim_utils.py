@@ -67,9 +67,9 @@ DEFAULT_DIRTY_RELEASE_REASON_MIN_LEN = 12
 DEFAULT_DIRTY_CLAIM_REASON_MIN_LEN = 12
 CLAIM_OVERRIDE_AUDIT_LOG = COORDINATION_DIR / "workboard_claim_override_audit.jsonl"
 DEFAULT_TASK_MANAGER_AGENT = "thomas"
-TEMP_TASK_CREATOR_TASK_TAG = "[temp-task-creator]"
+TEMP_TASK_CREATOR_TASK_TAG = "[TEMP-TASK-CREATOR]"
 TEMP_TASK_CREATOR_SCOPE = "runtime/coordination/temp-task-creator"
-TEMP_TASK_CREATOR_AGENT_PREFIX = "temp-task-creator"
+TEMP_TASK_CREATOR_AGENT_PREFIX = "TEMP-TASK-CREATOR"
 TEMP_TASK_CREATOR_NAME_PREFIX = "Temp-Task-Creator"
 TEMP_TASK_CREATOR_RELEASE_REASON = "task manager ended temporary task creator assignment"
 TASK_MANAGER_AGENT_ALIASES = {"thomas", "task-manager-agent", "task-manager"}
@@ -366,8 +366,8 @@ def _task_id_from_agent(agent: str) -> str:
 
 
 def _is_ready_task(task: str) -> bool:
-    token = str(task or "").strip()
-    return str(token).startswith("[ready]")
+    token = str(task or "").strip().lower()
+    return token.startswith("[ready]")
 
 
 def _slug_token(value: str) -> str:
