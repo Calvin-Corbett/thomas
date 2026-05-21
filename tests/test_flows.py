@@ -148,7 +148,12 @@ except ImportError:
                     result = step.execute(self.state)
                     self.results.append(result)
                 self.status = FlowStatus.COMPLETED
-            except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
+            except Exception:
+                # Catch every exception so the test's
+                # `test_flow_error_handling` (which raises ZeroDivisionError
+                # inside a step) sees status=FAILED. The narrower
+                # `(OSError, RuntimeError, ValueError, ...)` tuple let
+                # ZeroDivisionError propagate WITHOUT setting FAILED.
                 self.status = FlowStatus.FAILED
                 raise
             return self.results
@@ -289,14 +294,14 @@ class TestStep(unittest.TestCase):
 
     def test_step_with_action(self):
         """Test step with action function."""
-        action = lambda state: state.set("result", "done")
+        action = lambda state: state.set("result", "done")  # noqa: E731
         step = Step("action_step", action)
 
         self.assertIsNotNone(step.action)
 
     def test_execute_step(self):
         """Test executing step."""
-        action = lambda state: "result"
+        action = lambda state: "result"  # noqa: E731
         step = Step("exec_step", action)
         state = FlowState()
 
@@ -322,7 +327,7 @@ class TestStep(unittest.TestCase):
 
     def test_step_error_handling(self):
         """Test step with error."""
-        action = lambda state: 1 / 0
+        action = lambda state: 1 / 0  # noqa: E731
         step = Step("error_step", action)
         state = FlowState()
 
@@ -333,8 +338,8 @@ class TestStep(unittest.TestCase):
 
     def test_step_with_error_handler(self):
         """Test step with error handler."""
-        action = lambda state: 1 / 0
-        on_error = lambda state, e: "handled"
+        action = lambda state: 1 / 0  # noqa: E731
+        on_error = lambda state, e: "handled"  # noqa: E731
         step = Step("handled_error", action, on_error)
         state = FlowState()
 
@@ -355,7 +360,7 @@ class TestCondition(unittest.TestCase):
 
     def test_create_condition(self):
         """Test creating condition."""
-        predicate = lambda state: state.get("flag", False)
+        predicate = lambda state: state.get("flag", False)  # noqa: E731
         condition = Condition(predicate, "Check flag")
 
         self.assertIsNotNone(condition)
