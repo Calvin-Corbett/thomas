@@ -111,7 +111,7 @@ def _require_provider_secrets_for_signature_enforcement(
     joined = ", ".join(str(key).strip() for key in env_keys if str(key).strip())
     raise HTTPException(
         status_code=503,
-        detail=(f"{provider} webhook signature enforcement is enabled; configure " f"{joined or 'provider secrets'}."),
+        detail=(f"{provider} webhook signature enforcement is enabled; configure {joined or 'provider secrets'}."),
     )
 
 
@@ -664,3 +664,24 @@ def _emit_event(event_type: str, payload: dict[str, Any] | None = None) -> None:
 
 
 from thomas.server.routes import webhooks_routes  # noqa: F401,E402
+
+# Re-export the FastAPI handler functions + request models so the aiohttp shim
+# in webhooks_aiohttp.py can call them as attributes of this module
+# (e.g. webhook_mod.receive_github_webhook). Without these, the shim raises
+# AttributeError on app boot and routes (cancel, webhook receive) fail to register.
+from thomas.server.routes.webhooks_routes import (  # noqa: E402,F401
+    PatchWebhookRequest,
+    RegisterWebhookRequest,
+    delete_webhook,
+    get_webhook,
+    inbox_recent,
+    inbox_retry,
+    list_webhooks,
+    patch_webhook,
+    receive_github_webhook,
+    receive_stripe_webhook,
+    receive_webhook,
+    register_webhook,
+    stats_all,
+    test_webhook,
+)

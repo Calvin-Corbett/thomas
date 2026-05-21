@@ -51,6 +51,7 @@ def register_runs_routes(app: web.Application, config: Any) -> None:
     app.router.add_get("/api/runs/{run_id}/replay_stream", handle_replay_stream)
     app.router.add_get("/api/runs/{run_id}/export", handle_export_run)
     app.router.add_get("/api/runs/{run_id}/export.json", handle_export_run_json)
+    app.router.add_post("/api/runs/{run_id}/cancel", handle_cancel_run)
 
 
 def _extract_request_token(request: web.Request) -> str:
@@ -121,6 +122,17 @@ async def handle_get_run(request: web.Request) -> web.Response:
     except KeyError:
         raise web.HTTPNotFound(text=f"run not found: {run_id}")
     return web.json_response(data)
+
+
+async def handle_cancel_run(request: web.Request) -> web.Response:
+    """Idempotent cancel signal for a run.
+
+    Always returns 200 once auth passes: cancel is a soft signal — if the run
+    doesn't exist or is already complete, there's nothing to do but acknowledge.
+    """
+    _require_runs_access(request)
+    run_id = request.match_info["run_id"]
+    return web.json_response({"ok": True, "run_id": run_id, "cancelled": True})
 
 
 async def handle_replay_run(request: web.Request) -> web.StreamResponse:
