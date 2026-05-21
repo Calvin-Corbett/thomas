@@ -320,15 +320,19 @@ def test_workflows_wire_weekly_delta_alerting_guards() -> None:
 
     assert "python scripts/competitors/check_weekly_delta_alert.py --strict" in robustness
     assert "python -m pytest -q scripts/competitors/tests/test_check_weekly_delta_alert.py" in robustness
-    assert (
-        "python scripts/competitors/check_weekly_delta_alert.py --json > artifacts/nightly_reliability/competitor_delta_alerting.json"
-        in nightly
+    # Nightly runs the alert in --strict mode so a delta returns non-zero, then
+    # captures the exit code via `set +e` / `competitor_delta_exit_code=$?` so
+    # the workflow itself doesn't fail. The strict-mode invocation is asserted
+    # separately by tests/test_ci_workflow_guards.py::
+    #   test_nightly_reliability_uses_strict_competitor_and_security_checks
+    nightly_delta_lines = [line.strip() for line in nightly.splitlines() if "check_weekly_delta_alert.py" in line]
+    assert nightly_delta_lines
+    assert any(
+        "--json" in line and "artifacts/nightly_reliability/competitor_delta_alerting.json" in line
+        for line in nightly_delta_lines
     )
     assert "competitor_delta_exit_code=$?" in nightly
     assert "artifacts/nightly_reliability/competitor_delta_alerting.exit_code" in nightly
-    nightly_delta_lines = [line.strip() for line in nightly.splitlines() if "check_weekly_delta_alert.py" in line]
-    assert nightly_delta_lines
-    assert all("--strict" not in line for line in nightly_delta_lines)
     assert "competitor weekly delta strict-fail signal" in nightly
     assert "competitor weekly delta command exit code" in nightly
     assert "competitor weekly delta status" in nightly
