@@ -9,6 +9,14 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.53] - 2026-05-21
+
+### Fixed
+- ci-recovery (tail 52): `test_guarded_tool_runner_respects_no_human_override_allow` + `test_guarded_tool_runner_falls_back_to_instance_no_human_mode` were failing because the "allow" branch in `GuardedToolRunner.run()` still called `request_native_authorization()`, which always fails on headless Linux CI (no GUI) and on Windows CI when the credential UI can't bind. The semantic contract `no_human_mode="allow"` is "auto-approve without prompting any human OR OS dialog" (per the test name and assertion). Removed the native_auth call from the "allow" branch; native auth remains reachable via the default `no_human_mode="human"` branch.
+
+### Architecture
+- `no_human_mode` is now a clean three-state policy: `human` (broker approval), `allow` (auto-approve), `deny` (reject). The previous "allow" path was effectively a fourth state ("approve via OS dialog") that nobody documented.
+
 ## [0.15.52] - 2026-05-21
 
 ### Fixed
