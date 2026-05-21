@@ -89,6 +89,23 @@ def _git_changed_files(repo_root: Path) -> list[str]:
     return out
 
 
+def _git_diff_range(repo_root: Path, base: str, head: str) -> list[str]:
+    proc = subprocess.run(
+        ["git", "diff", "--name-only", f"{base}..{head}"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        return []
+    out: list[str] = []
+    for line in proc.stdout.splitlines():
+        rel = line.strip()
+        if rel:
+            out.append(rel)
+    return out
+
+
 def _is_forbidden_part_file(path: Path) -> bool:
     # Check the filename itself
     if any(pattern.search(path.name) for pattern in FORBIDDEN_PART_FILE_PATTERNS):
@@ -127,9 +144,9 @@ def _run_all_file_scan(repo_root: Path) -> list[dict[str, str]]:
     return out
 
 
-def _run_staged_scan(repo_root: Path) -> list[dict[str, str]]:
+def _run_changed_scan(repo_root: Path, changed_paths: list[str]) -> list[dict[str, str]]:
     out: list[dict[str, str]] = []
-    for rel in _git_changed_files(repo_root):
+    for rel in changed_paths:
         path = repo_root / rel
         try:
             if not path.is_file():
@@ -149,9 +166,11 @@ def _run_staged_scan(repo_root: Path) -> list[dict[str, str]]:
     return out
 
 
-def _scan(repo_root: Path, *, staged_only: bool) -> list[dict[str, str]]:
+def _scan(repo_root: Path, *, staged_only: bool, changed_paths: list[str] | None) -> list[dict[str, str]]:
+    if changed_paths is not None:
+        return _run_changed_scan(repo_root, changed_paths)
     if staged_only:
-        return _run_staged_scan(repo_root)
+        return _run_changed_scan(repo_root, _git_changed_files(repo_root))
     return _run_all_file_scan(repo_root)
 
 
@@ -174,6 +193,16 @@ def run(argv: Iterable[str] | None = None) -> int:
         help="Limit scan to staged files only.",
     )
     parser.add_argument(
+        "--base",
+        default=None,
+        help="Base commit/ref for diff-only scan (pairs with --head). Defaults to BASE_SHA env var.",
+    )
+    parser.add_argument(
+        "--head",
+        default=None,
+        help="Head commit/ref for diff-only scan (pairs with --base). Defaults to HEAD_SHA env var.",
+    )
+    parser.add_argument(
         "--json",
         action="store_true",
         help="Emit machine-readable JSON output.",
@@ -181,7 +210,19 @@ def run(argv: Iterable[str] | None = None) -> int:
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     repo_root = Path(args.repo_root).resolve() if args.repo_root else ROOT
-    violations = _scan(repo_root, staged_only=bool(args.staged_only))
+
+    # Diff-mode: if --base + --head (or BASE_SHA + HEAD_SHA env vars) are given,
+    # only scan files that changed in that range. This keeps the gate effective
+    # against new violations without flagging pre-existing legacy files that
+    # predate the gate (e.g. thomas/server/web/.../*_part01.css from the
+    # historical monolith-split era).
+    base_ref = args.base or os.environ.get("BASE_SHA") or None
+    head_ref = args.head or os.environ.get("HEAD_SHA") or None
+    changed_paths: list[str] | None = None
+    if base_ref and head_ref:
+        changed_paths = _git_diff_range(repo_root, base_ref, head_ref)
+
+    violations = _scan(repo_root, staged_only=bool(args.staged_only), changed_paths=changed_paths)
     ok = len(violations) == 0
 
     if args.json:
