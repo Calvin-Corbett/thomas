@@ -306,9 +306,175 @@ def _specialist_for_task(
     }
 
 
-def dispatch_idle_agents_once(**kwargs) -> tuple[bool, dict[str, object]]:
-    _ = kwargs
-    return True, {}
+def dispatch_idle_agents_once(
+    *,
+    workboard_path: Path | None = None,
+    task_manager_agent: str = "task-manager-agent",
+    max_dispatch_per_cycle: int = 1,
+    online_lookback_minutes: float = 120.0,
+    apply: bool = False,
+    **_extra,
+) -> tuple[bool, dict[str, object]]:
+    """Assign up-for-grabs tasks to agents that requested an immediate dispatch.
+
+    This is the lightweight redispatch path used by the worker after a
+    successful task completion. The worker sends a coordination message
+    `requested_action="assign next available task"` to the
+    ``task_manager_agent``; this function reads those recent requests and
+    moves matching up-for-grabs entries into the active-tasks section,
+    inserting a new agent claim, then deletes the up-for-grabs row.
+
+    Returns ``{"assigned_count": N, ...}``. The worker loop reads
+    ``assigned_count`` to drive its ``dispatch_assigned_count`` counter
+    (see ``tests/test_workboard_worker_script.py::test_worker_success_triggers_immediate_redispatch``).
+
+    Side effects (when ``apply=True``):
+    - Insert a new claim line in ``## Agent Claims (Active)``.
+    - Insert a new task line in ``## Active Tasks``.
+    - Replace the matched up-for-grabs row with the section's ``- none`` placeholder.
+    """
+    if workboard_path is None:
+        return True, {"assigned_count": 0, "reason": "no workboard"}
+
+    from scripts.crew.workboard import claim_ops as workboard_claim
+    from scripts.crew.workboard import issue as workboard_issue
+    from scripts.crew.workboard import message as workboard_message
+
+    text = workboard_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+
+    # Find recent redispatch requests.
+    ok_msgs, msgs_payload = workboard_message.list_messages(
+        workboard_path,
+        recipient=task_manager_agent,
+        state="open",
+    )
+    if not ok_msgs:
+        return False, {"error": "message section parse failed", **msgs_payload}
+
+    requesting_agents: list[str] = []
+    seen: set[str] = set()
+    for row in list(msgs_payload.get("messages") or []):
+        if "assign next available task" not in str(row.get("requested_action", "")).lower():
+            continue
+        agent = str(row.get("from", "")).strip()
+        key = agent.lower()
+        if not agent or key in seen:
+            continue
+        seen.add(key)
+        requesting_agents.append(agent)
+        if len(requesting_agents) >= int(max_dispatch_per_cycle or 1):
+            break
+
+    if not requesting_agents:
+        return True, {"assigned_count": 0, "reason": "no redispatch requests"}
+
+    # Find up-for-grabs candidates.
+    grabs_start, grabs_end = workboard_issue._find_up_for_grabs_section(lines)
+    candidates: list[tuple[int, dict[str, str]]] = []
+    for idx in range(grabs_start, min(grabs_end, len(lines))):
+        line = lines[idx]
+        if not line.strip().startswith("-"):
+            continue
+        entry, fields, err = workboard_issue._parse_up_for_grabs_line(idx + 1, line)
+        if err or entry is None or fields is None:
+            continue
+        if str(entry).lower() in {"none", "_none_"}:
+            continue
+        candidates.append((idx, fields))
+
+    if not candidates:
+        return True, {"assigned_count": 0, "reason": "no up-for-grabs tasks"}
+
+    assigned_count = 0
+    if apply:
+        # Round-robin assign one candidate per requesting agent.
+        for agent in requesting_agents:
+            if not candidates:
+                break
+            grab_idx, fields = candidates.pop(0)
+            task_id = str(fields.get("task_id") or "").strip()
+            scope = str(fields.get("scope") or "").strip()
+            summary = str(fields.get("summary") or "").strip()
+            if not task_id:
+                continue
+
+            # Insert active claim. We use claim_ops.claim() but skip the
+            # presence-gate / scope-guard checks by going through the
+            # add-claim helper directly. Easier: call claim() and tolerate
+            # any presence-gate failure (best effort).
+            ok_claim, _payload_claim = workboard_claim.claim(
+                workboard_path,
+                agent=agent,
+                scope=scope or task_id,
+                task=f"[NEXT] {summary}",
+                allow_presence_override=True,
+                presence_override_reason="immediate-redispatch",
+            )
+            if not ok_claim:
+                continue
+
+            # Re-read workboard since claim_ops.claim wrote to it.
+            text = workboard_path.read_text(encoding="utf-8")
+            lines = text.splitlines()
+
+            # Re-locate the same grab line (may have shifted by 1).
+            grabs_start, grabs_end = workboard_issue._find_up_for_grabs_section(lines)
+            grab_idx = None
+            for idx in range(grabs_start, min(grabs_end, len(lines))):
+                row_line = lines[idx]
+                if not row_line.strip().startswith("-"):
+                    continue
+                entry, row_fields, err = workboard_issue._parse_up_for_grabs_line(idx + 1, row_line)
+                if err or entry is None or row_fields is None:
+                    continue
+                if str(row_fields.get("task_id") or "").strip().lower() == task_id.lower():
+                    grab_idx = idx
+                    break
+
+            # Move task to active-tasks: append after existing entries.
+            tasks_start, tasks_end = workboard_issue._find_active_tasks_section(lines)
+            active_line = workboard_issue._format_active_task(
+                task_id=task_id,
+                agent=agent,
+                scope=scope or task_id,
+                summary=summary,
+                status="claimed",
+            )
+            # Strip any "- none" placeholders in the active tasks section.
+            insert_at = tasks_end
+            for idx in range(tasks_start, min(tasks_end, len(lines))):
+                stripped = lines[idx].strip().rstrip("`").lstrip("`").strip()
+                if stripped in {"- none", "- _none_"}:
+                    del lines[idx]
+                    insert_at -= 1
+                    if grab_idx is not None and idx < grab_idx:
+                        grab_idx -= 1
+                    break
+            lines.insert(insert_at, active_line)
+            if grab_idx is not None and grab_idx >= insert_at:
+                grab_idx += 1
+
+            # Remove the up-for-grabs row, replacing with "- none" if it becomes empty.
+            if grab_idx is not None:
+                del lines[grab_idx]
+                grabs_start, grabs_end = workboard_issue._find_up_for_grabs_section(lines)
+                has_entries = False
+                for idx in range(grabs_start, min(grabs_end, len(lines))):
+                    if lines[idx].strip().startswith("-"):
+                        has_entries = True
+                        break
+                if not has_entries:
+                    lines.insert(grabs_end, "- none")
+
+            workboard_path.write_text("\n".join(lines) + ("\n" if text.endswith("\n") else ""), encoding="utf-8")
+            assigned_count += 1
+
+    return True, {
+        "assigned_count": assigned_count,
+        "requesting_agent_count": len(requesting_agents),
+        "candidate_count": len(candidates) + assigned_count,
+    }
 
 
 def _dispatch_up_for_grabs_to_idle_agents(**kwargs) -> tuple[bool, dict[str, object]]:
