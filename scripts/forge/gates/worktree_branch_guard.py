@@ -40,6 +40,54 @@ def _branch_name() -> str:
     return proc.stdout.strip()
 
 
+def _local_branch_names() -> list[str]:
+    """All local branch names (one per line, no leading marker)."""
+    proc = subprocess.run(
+        ["git", "for-each-ref", "--format=%(refname:short)", "refs/heads/"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        return []
+    return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+
+
+def _branch_tip(name: str) -> str:
+    """Commit hash at the tip of `name`. Empty string if the branch is unknown."""
+    proc = subprocess.run(
+        ["git", "rev-parse", "--verify", f"{name}^{{commit}}"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        return ""
+    return proc.stdout.strip()
+
+
+def _is_ancestor(commit: str, ref: str) -> bool:
+    """True if `commit` is an ancestor of `ref` (i.e., reachable from it)."""
+    if not commit or not ref:
+        return False
+    proc = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", commit, ref],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    return proc.returncode == 0
+
+
+# Canonical base branches that topic branches may legitimately stack on.
+CANONICAL_BASE_BRANCHES: tuple[str, ...] = ("master", "release/oss-launch", "publish-clean")
+
+
+def _is_topic_branch(name: str) -> bool:
+    """A topic branch is any branch that isn't one of the canonical bases."""
+    return name not in CANONICAL_BASE_BRANCHES
+
+
 def run(_argv: Sequence[str] | None = None) -> int:
     # Honour the runtime protection toggle (requires Windows auth to disable).
     if (ROOT / "runtime" / ".runtime_protection_disabled").is_file():
@@ -61,23 +109,54 @@ def run(_argv: Sequence[str] | None = None) -> int:
         return 1
 
     expected = EXPECTED_BY_BRANCH.get(branch)
-    if not expected:
-        print("Worktree branch guard: PASS")
-        print(f"- branch '{branch}' is not mapped; no path restriction")
-        return 0
+    if expected:
+        actual_norm = _normalize_path(ROOT)
+        expected_norm = _normalize_path(expected)
+        if actual_norm != expected_norm:
+            print("Worktree branch guard: FAIL")
+            print(f"- branch '{branch}' must run from: {expected}")
+            print(f"- current worktree path is: {ROOT}")
+            print(f"- override only when intentional: set {DISABLE_ENV}=1")
+            return 1
 
-    actual_norm = _normalize_path(ROOT)
-    expected_norm = _normalize_path(expected)
-    if actual_norm == expected_norm:
-        print("Worktree branch guard: PASS")
+    # Topic-branch-stacking check: if the current branch is a topic branch,
+    # ensure it doesn't have another unmerged topic branch as an ancestor.
+    # Topic branches must start directly from canonical base branches
+    # (master, main, release/oss-launch, publish-clean).
+    if _is_topic_branch(branch):
+        current_tip = _branch_tip(branch)
+        if current_tip:
+            base_tips = {name: _branch_tip(name) for name in CANONICAL_BASE_BRANCHES}
+            local_branches = _local_branch_names()
+            unmerged_ancestors: list[str] = []
+            for other in local_branches:
+                if other == branch or not _is_topic_branch(other):
+                    continue
+                other_tip = _branch_tip(other)
+                if not other_tip or not _is_ancestor(other_tip, current_tip):
+                    continue
+                already_merged = any(
+                    base_tip and _is_ancestor(other_tip, base_tip) for base_tip in base_tips.values()
+                )
+                if not already_merged:
+                    unmerged_ancestors.append(other)
+            if unmerged_ancestors:
+                print("Worktree branch guard: FAIL")
+                print("- topic branches must start directly from canonical base branches")
+                print(f"  (one of: {', '.join(CANONICAL_BASE_BRANCHES)}).")
+                print(f"- branch '{branch}' is stacked on these unmerged topic ancestors:")
+                for ancestor in sorted(unmerged_ancestors):
+                    print(f"  - {ancestor}")
+                return 1
+
+    print("Worktree branch guard: PASS")
+    if expected:
         print(f"- branch '{branch}' is in expected worktree path")
-        return 0
-
-    print("Worktree branch guard: FAIL")
-    print(f"- branch '{branch}' must run from: {expected}")
-    print(f"- current worktree path is: {ROOT}")
-    print(f"- override only when intentional: set {DISABLE_ENV}=1")
-    return 1
+    elif _is_topic_branch(branch):
+        print(f"- branch '{branch}' has no unmerged topic-branch ancestors")
+    else:
+        print(f"- branch '{branch}' is not mapped; no path restriction")
+    return 0
 
 
 if __name__ == "__main__":
