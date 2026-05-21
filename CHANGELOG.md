@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.29] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 28): refresh `agent` module audit hash after 0.15.28's touch to `thomas/agent/loop_execution.py` (`agent` entry was 85.6 days stale).
+
 ## [0.15.28] - 2026-05-20
 
 ### Fixed
