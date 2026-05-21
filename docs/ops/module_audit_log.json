@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-05-21T18:34:06+00:00",
+  "updated_at": "2026-05-21T19:53:51+00:00",
   "latest_by_module": {
     "agent": {
       "id": "59cef78e32df4a84bc0f0933b1f6ee73",
@@ -213,24 +213,20 @@
       "signature": "565aeeea4b99a17e0f249e3183a0e24faf509a87baa566922abc9bddb35cacbb"
     },
     "server": {
-      "id": "42c030b445904785821f3e74aa809dcc",
+      "id": "f180aa6e1b294b20a18234722a2b1c17",
       "module": "server",
-      "audited_at": "2026-05-21T18:34:06+00:00",
+      "audited_at": "2026-05-21T19:53:51+00:00",
       "auditor": "claude",
       "status": "pass",
-      "summary": "ci-recovery 0.15.41: refresh chat_aiohttp_streaming.py hash with LF content",
-      "run_id": "ci-recovery-2026-05-20-server-streaming",
-      "files_touched": [
-        "thomas/server/routes/chat_aiohttp_streaming.py"
-      ],
-      "file_hashes": {
-        "thomas/server/routes/chat_aiohttp_streaming.py": "1be3c288b213be1b7daf0aa5f30c39890c99ef92d4d0b397eac1db1ce55f7e0e"
-      },
+      "summary": "0.15.42: ci recovery batch — autopilot shim, batch ledger updates, discord chat dispatch wired, memory engine sys.modules lookup",
+      "run_id": "",
+      "files_touched": [],
+      "file_hashes": {},
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "af371dbfa70c3a0556df84aeedfd058d11993e16ed34cc4d192720e1ccff2c41",
+      "prev_signature": "ff46ab9dcf54dfd4339fdc2e109c6acc5bb6e9aa528ce474362df14af58d159e",
       "signature_scheme": "sha256",
-      "signature": "4553cf90f20475e2c67651d8149b2bb425fbf3ebfc54795bec7c50e38ce84e1d"
+      "signature": "66867916f34a3f2a912d20c7d5ba0c7281af85c77c8107b7f82e98fb03675adf"
     },
     "tools": {
       "id": "6baf6ae9bb2242c2825e72fd9c76ad31",
@@ -1520,6 +1516,38 @@
       "prev_signature": "af371dbfa70c3a0556df84aeedfd058d11993e16ed34cc4d192720e1ccff2c41",
       "signature_scheme": "sha256",
       "signature": "4553cf90f20475e2c67651d8149b2bb425fbf3ebfc54795bec7c50e38ce84e1d"
+    },
+    {
+      "id": "d9951bd315a34237a8d605e0a3906f6a",
+      "module": "server",
+      "audited_at": "2026-05-21T19:50:16+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "0.15.42: ci recovery batch — autopilot shim, batch ledger updates, discord chat dispatch wired, memory engine sys.modules lookup",
+      "run_id": "",
+      "files_touched": [],
+      "file_hashes": {},
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "4553cf90f20475e2c67651d8149b2bb425fbf3ebfc54795bec7c50e38ce84e1d",
+      "signature_scheme": "sha256",
+      "signature": "ff46ab9dcf54dfd4339fdc2e109c6acc5bb6e9aa528ce474362df14af58d159e"
+    },
+    {
+      "id": "f180aa6e1b294b20a18234722a2b1c17",
+      "module": "server",
+      "audited_at": "2026-05-21T19:53:51+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "0.15.42: ci recovery batch — autopilot shim, batch ledger updates, discord chat dispatch wired, memory engine sys.modules lookup",
+      "run_id": "",
+      "files_touched": [],
+      "file_hashes": {},
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "ff46ab9dcf54dfd4339fdc2e109c6acc5bb6e9aa528ce474362df14af58d159e",
+      "signature_scheme": "sha256",
+      "signature": "66867916f34a3f2a912d20c7d5ba0c7281af85c77c8107b7f82e98fb03675adf"
     }
   ]
 }

@@ -46,13 +46,19 @@ class TestServerMissionControl(AioHTTPTestCase):
         sid = str((await sess_resp.json()).get("session_id") or "")
         self.assertTrue(sid)
 
+        # NOTE: must NOT match a UI control intent (see
+        # thomas/models/chat_controls.py:_BOOLEAN_SETTING_SPECS). UI control
+        # chats short-circuit before _start_run_writer fires, so the run
+        # store never gets a chat_run row and this assertion fails. The
+        # phrasing below is innocuous and falls through to the regular
+        # agent loop.
         chat_resp = await self.client.post(
             "/api/chat",
             json={
                 "session_id": sid,
                 "profile": "local",
                 "mode": "fast",
-                "text": "please turn on tool details",
+                "text": "Summarize the weather forecast for tomorrow.",
             },
         )
         self.assertEqual(chat_resp.status, 200)

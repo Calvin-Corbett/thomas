@@ -57,6 +57,24 @@ if "OpenAICompatBatchClient" not in globals():
 
     globals().setdefault("OpenAICompatBatchClient", _compat_batch_client)
 
+# Re-export AutonomyMemoryEngine so tests can monkeypatch it on
+# ``thomas.server.app`` and have ``_build_memory`` (in app_helpers) pick the
+# patched value up via sys.modules-based lookup. See
+# ``tests/test_memory_runtime_bootstrap.py::test_server_build_memory_respects_legacy_opt_in``.
+if "AutonomyMemoryEngine" not in globals():
+    try:
+        from thomas.memory.autonomy import AutonomyMemoryEngine as _compat_autonomy_memory
+    except (ImportError, ModuleNotFoundError):  # pragma: no cover
+        _compat_autonomy_memory = None
+    globals().setdefault("AutonomyMemoryEngine", _compat_autonomy_memory)
+
+# Re-export _build_memory so callers can do `server_app._build_memory(...)`
+# (matches the legacy API path used by ``test_memory_runtime_bootstrap``).
+if "_build_memory" not in globals():
+    from thomas.server.app_helpers import _build_memory as _compat_build_memory
+
+    globals().setdefault("_build_memory", _compat_build_memory)
+
 del _CURRENT_FILE
 del _PART_FILES
 del _PART_PATHS

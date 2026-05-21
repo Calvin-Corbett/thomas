@@ -217,7 +217,11 @@ def test_marketplace_uses_native_runtime_shell() -> None:
     architecture = _read_text("ARCHITECTURE.md")
 
     assert "/static/static/plugin_marketplace.html" not in primary_runtime
-    assert "/api/marketplace/plugins?limit=600" in primary_runtime
+    # Runtime moved from bare `/plugins?limit=600` to `/sync?limit=600` so the
+    # marketplace shell can pull plugins + sync metadata in one round-trip
+    # (catalog, generated_at, source_label, warnings, etc.). The legacy
+    # `plugins` route is still served, but the shell no longer calls it.
+    assert "/api/marketplace/sync?limit=600" in primary_runtime
     assert "data-module-marketplace-search" in primary_runtime
     assert "data-module-marketplace-select" in primary_runtime
     assert "marketplace-card-grid" in primary_runtime
@@ -235,11 +239,13 @@ def test_marketplace_uses_native_runtime_shell() -> None:
 
 def test_run_command_wraps_windows_batch_shims() -> None:
     project_root = ROOT
-    with patch("thomas.server.routes.local_projects_aiohttp.os.name", "nt"), patch(
-        "thomas.server.routes.local_projects_aiohttp.shutil.which", return_value=r"C:\Program Files\nodejs\pnpm.cmd"
-    ), patch(
-        "thomas.server.routes.local_projects_aiohttp.subprocess.Popen", return_value=Mock(pid=9090)
-    ) as popen:
+    with (
+        patch("thomas.server.routes.local_projects_aiohttp.os.name", "nt"),
+        patch(
+            "thomas.server.routes.local_projects_aiohttp.shutil.which", return_value=r"C:\Program Files\nodejs\pnpm.cmd"
+        ),
+        patch("thomas.server.routes.local_projects_aiohttp.subprocess.Popen", return_value=Mock(pid=9090)) as popen,
+    ):
         result = local_projects._run_command(["pnpm", "install"], project_root)
     assert result["kind"] == "command_started"
     assert result["command"] == ["pnpm", "install"]

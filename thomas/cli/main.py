@@ -6,17 +6,29 @@ import thomas.cli._commands_misc  # noqa: F401
 
 # These imports trigger registration of commands on the cli group
 import thomas.cli._commands_models  # noqa: F401
+from thomas.agent.loop import AgentLoop  # noqa: F401  -- re-export for tests
 
 # Import all command groups from submodules to register them
 from thomas.cli._commands_base import (  # noqa: F401  -- re-exports for tests
+    _build_memory,
+    _build_tools,
     _repl_needs_codex_event_loop,
     _resolve_model_profile_name,
+    _run_chat,
     cli,
     log,
 )
 from thomas.cli._commands_models import (  # noqa: F401  -- re-exports for tests
     _resolve_repl_profile_from_prefs,
 )
+
+# Re-export ``LLMClient`` so tests that
+# ``monkeypatch.setattr(thomas.cli.main, "LLMClient", ...)`` reach the
+# CLI's chat code path. The CLI consumes the symbol via
+# :mod:`thomas.cli._commands_base`, which imports from
+# :mod:`thomas.core.llm` — the patched value on this module is the legacy
+# test contract.
+from thomas.core.llm import LLMClient  # noqa: F401  -- re-export for tests
 
 app = cli
 

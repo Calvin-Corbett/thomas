@@ -297,18 +297,37 @@ async def _run_chat(
     autonomy_level: int = 3,
 ) -> None:
     """Run a single chat interaction with streaming output."""
+    # Resolve via sys.modules so tests that monkeypatch the symbols on
+    # ``thomas.cli.main`` (which re-exports them) intercept this call site.
+    # The defaults are the implementations imported above.
+    import sys as _sys
+
+    _cli_main = _sys.modules.get("thomas.cli.main")
+    llm_cls = getattr(_cli_main, "LLMClient", None) if _cli_main is not None else None
+    build_tools = getattr(_cli_main, "_build_tools", None) if _cli_main is not None else None
+    build_memory = getattr(_cli_main, "_build_memory", None) if _cli_main is not None else None
+    agent_cls = getattr(_cli_main, "AgentLoop", None) if _cli_main is not None else None
+    if llm_cls is None:
+        llm_cls = LLMClient
+    if build_tools is None:
+        build_tools = _build_tools
+    if build_memory is None:
+        build_memory = _build_memory
+    if agent_cls is None:
+        agent_cls = AgentLoop
+
     active_profile = model_name or config.default_model
     model_config = config.get_model(active_profile)
-    llm = LLMClient(
+    llm = llm_cls(
         model_config,
         fallback_configs=config.failover_chain(active_profile),
         failover_enabled=bool(config.failover.enabled and getattr(config.failover, "chat_auto_failover", False)),
         failover_cooldown_s=config.failover.cooldown_seconds,
         failover_on_auth_error=config.failover.fallback_on_auth_error,
     )
-    tools = _build_tools(config)
-    memory = _build_memory(config)
-    agent = AgentLoop(
+    tools = build_tools(config)
+    memory = build_memory(config)
+    agent = agent_cls(
         config,
         llm,
         tools,
