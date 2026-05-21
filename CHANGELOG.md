@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.8] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 6): `scripts/forge/gates/openclaw_metric_parity_gate.py` was hard-failing in CI because the `local_snapshot_path` in `docs/openclaw_gap_runs/latest_compare.json` points at `F:\DevHub\_tmp_openclaw_latest_20260306` — a path that only exists on Calvin's dev machine. CI runners can't reach it. Now: when `GITHUB_ACTIONS=true` and `OPENCLAW_SNAPSHOT_PATH` is unset and the baseline's `local_snapshot_path` doesn't exist, the gate prints `SKIPPED (snapshot path unavailable in CI: ...). Set OPENCLAW_SNAPSHOT_PATH env var to a reachable path to re-enable.` and exits 0. This gate is a competitive-research artifact (Thomas vs. OpenClaw CLI parity), not a correctness gate; running it in CI without the snapshot adds noise, not signal. Local invocations on Calvin's machine still enforce strictly.
+
 ## [0.15.7] - 2026-05-20
 
 ### Fixed
