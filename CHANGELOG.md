@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.13] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 11): the 0.15.9 CI-skip in `competitor_freshness_guard.py` was too aggressive — it triggered even from the gate's own unit tests in `tests/test_competitor_freshness_guard.py`, which run in CI but pass explicit `--result-json`/`--registry-json` args. Refined the guard: skip only when GITHUB_ACTIONS=true AND no snapshot path AND no explicit artifact paths supplied. All 10 unit tests in `test_competitor_freshness_guard.py` now pass; CI workflow step still skips since it invokes the gate with no args.
+
 ## [0.15.12] - 2026-05-20
 
 ### Fixed
