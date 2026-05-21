@@ -613,6 +613,25 @@ def _setup_routes_and_handlers(
 
     _register_webhooks_routes(app)
 
+    def _register_companion_routes(app_ref: web.Application, cfg_ref: AppConfig) -> None:
+        """Register companion-app management API routes (/api/companion/v1/*)."""
+        if not callable(_require_api_access) or not callable(_read_json):
+            log.warning("Companion route registration skipped: missing dependencies")
+            return
+        try:
+            from thomas.server.routes.companion_aiohttp import register_companion_routes
+
+            register_companion_routes(
+                app_ref,
+                require_api_access=_require_api_access,
+                read_json=_read_json,
+                config=cfg_ref,
+            )
+        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError, ValueError) as e:
+            log.warning("Companion routes unavailable: %s", e)
+
+    _register_companion_routes(app, config)
+
     def _register_workspace_routes(app_ref: web.Application, cfg_ref: AppConfig) -> None:
         """Register multi-tenant workspace APIs."""
         if not callable(_require_api_access):

@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.11] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 9): companion API routes (`/api/companion/v1/*`) defined in `thomas/server/routes/companion_aiohttp.py::register_companion_routes` were never being called from `app_routes_init.py`, so all 5 tests in `tests/test_server_companion_api.py` failed with `404` (route not registered). Wired the registration into `_register_companion_routes` following the same pattern as `_register_webhooks_routes` (deps: `_require_api_access`, `_read_json`, `config`). All 5 tests now pass locally.
+
 ## [0.15.10] - 2026-05-20
 
 ### Fixed
