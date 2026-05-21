@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.15] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 13): `.github/workflows/nightly-reliability.yml` was invoking `check_weekly_delta_alert.py --json --strict`, but the contract test `test_workflows_wire_weekly_delta_alerting_guards` asserts `--strict` MUST NOT appear in the nightly job (nightly is observation, not enforcement — robustness-gates handles the strict enforcement on each push). Removed `--strict` from the nightly invocation. The `set +e` / `competitor_delta_exit_code=$?` wrapping still captures non-zero exits without failing the workflow.
+
 ## [0.15.14] - 2026-05-20
 
 ### Fixed
