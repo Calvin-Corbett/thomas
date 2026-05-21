@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "0.15.22"
+__version__ = "0.15.23"
 
 
 def _patch_typer_testing_for_click() -> None:
