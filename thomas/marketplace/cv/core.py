@@ -3,7 +3,11 @@
 import math
 
 from thomas.marketplace.cv._exceptions import InvalidImageError, InvalidParameterError
-from thomas.marketplace.cv._types import ColorSpace, Image
+
+# Re-export `Point` so tests like `tests/test_cv_features.py` that read
+# `thomas.marketplace.cv.core.Point` (or build it via the module) succeed.
+# `Point` lives in `_types`, but the public surface needs it.
+from thomas.marketplace.cv._types import ColorSpace, Image, Point  # noqa: F401
 
 
 def create_image(width: int, height: int, channels: int = 3, color_space: ColorSpace = ColorSpace.RGB) -> Image:
