@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.37] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 36): `chat_aiohttp_streaming._normalize_usage_payload` was emitting Anthropic-shape keys (`cache_creation_input_tokens`, `cache_read_input_tokens`, `input_tokens`, `output_tokens`). Tests in `test_server_done_usage_contract.py` assert the standard contract `{prompt_tokens, completion_tokens, total_tokens}`. Normalized to accept either provider's input shape and emit the standard contract.
+
 ## [0.15.36] - 2026-05-20
 
 ### Fixed

@@ -142,13 +142,25 @@ async def _handle_plan_mode_request(
 
 
 def _normalize_usage_payload(usage: dict[str, Any] | None) -> dict[str, Any]:
+    """Normalize provider-specific usage payloads to the standard
+    {prompt_tokens, completion_tokens, total_tokens} contract that
+    tests/test_server_done_usage_contract.py asserts on. Source data may
+    arrive in Anthropic shape (input_tokens / output_tokens /
+    cache_*_input_tokens) or OpenAI shape (prompt_tokens / completion_tokens /
+    total_tokens).
+    """
     if not usage or not isinstance(usage, dict):
-        return {}
+        return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    # Prefer OpenAI-style if present; otherwise derive from Anthropic-style.
+    prompt = int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0)
+    completion = int(usage.get("completion_tokens") or usage.get("output_tokens") or 0)
+    total = int(usage.get("total_tokens") or 0)
+    if not total:
+        total = prompt + completion
     return {
-        "cache_creation_input_tokens": int(usage.get("cache_creation_input_tokens") or 0),
-        "cache_read_input_tokens": int(usage.get("cache_read_input_tokens") or 0),
-        "input_tokens": int(usage.get("input_tokens") or 0),
-        "output_tokens": int(usage.get("output_tokens") or 0),
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "total_tokens": total,
     }
 
 
