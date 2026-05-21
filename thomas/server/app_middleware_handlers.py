@@ -208,8 +208,7 @@ def setup_middleware_and_handlers(
             # In production + remote mode, rate limiting is mandatory.
             if mode == "remote" and cfg.is_production and not enabled:
                 log.warning(
-                    "Rate limiting was disabled but is mandatory in production+remote mode. "
-                    "Forcing rate limiting ON."
+                    "Rate limiting was disabled but is mandatory in production+remote mode. Forcing rate limiting ON."
                 )
                 enabled = True
             if mode == "remote" and enabled:
@@ -308,6 +307,12 @@ def setup_middleware_and_handlers(
             _require_api_token(request)
             return
         _require_loopback(request)
+
+    # Export the access check so app_core.py (audit handlers, realtime lambda) can use
+    # it without depending on closure scope. Reads back via app[APP_REQUIRE_API_ACCESS].
+    from thomas.server.app_keys import APP_REQUIRE_API_ACCESS
+
+    app[APP_REQUIRE_API_ACCESS] = _require_api_access
 
     def _is_mutating_control_plane_route(request: web.Request) -> bool:
         method = str(request.method or "").upper()

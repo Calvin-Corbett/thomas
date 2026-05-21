@@ -82,6 +82,18 @@ tasks/
 archives/
 _archive/
 
+# Auto-generated chat problem records. Curated records are explicitly re-included.
+# Security: prior incident (2026-05-19) leaked private content via plans/thomas/problems/*.
+plans/thomas/problems/
+!plans/thomas/problems/audit-24h-backstop/
+!plans/thomas/problems/audit-24h-backstop/**
+
+# Auto-indexed research notes from chat transcripts (private user content).
+# Security: prior incident (2026-05-19) leaked a Telegram token via library/entries/research-notes/.
+# Curated library entries under architecture/, competitive-research/, provider-api-research/
+# remain tracked because they are not auto-generated.
+library/entries/research-notes/
+
 # Local DB and debug artifacts
 thomas_search.db
 thomas_chat_debug.png

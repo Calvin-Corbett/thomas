@@ -46,7 +46,11 @@ REQUIRED_GITIGNORE_SNIPPETS = (
     "thomas.db",
     "thomas.marketplace.asset_studio.db",
 )
-DEFAULT_REQUIRED_BRANCHES = ("dev", "prod")
+# Production target is `main` on the public remote, not a local `prod` branch
+# (push-vs-publish model — see docs/ai/AGENT_ROUTER.md and the 2026-05-19 security
+# incident docs). Only `dev` is required locally; `main` is the deliberate publish
+# target and is force-pushed from a curated subset of `dev`.
+DEFAULT_REQUIRED_BRANCHES = ("dev",)
 SCAN_SKIP_PREFIXES = (
     "tests/",
     "docs/",

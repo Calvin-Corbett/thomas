@@ -17,6 +17,7 @@ from typing import Any
 
 from thomas.bootdoctor.runtime_helpers import (
     BootDoctorPathPolicy,
+    RestrictedTool,  # noqa: F401  -- re-exported for tests/test_bootdoctor_cli.py
     build_rescue_prompt,
     build_restricted_tools,
     load_startup_context,
@@ -530,7 +531,7 @@ def main(argv: list[str] | None = None) -> int:
     root = _resolve_repo_root(args.root)
     runtime_detected = _runtime_detected(str(args.host), int(args.port))
     if runtime_detected and not bool(args.force):
-        print(f"[bootdoctor] runtime detected on {args.host}:{int(args.port)}; " "refusing activation without --force.")
+        print(f"[bootdoctor] runtime detected on {args.host}:{int(args.port)}; refusing activation without --force.")
         return 2
 
     config, warning = _load_config_safe(args.config)

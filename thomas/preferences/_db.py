@@ -51,6 +51,13 @@ class PreferencesStore:
     def __init__(self, db_path: str | None = None) -> None:
         self.db_path = db_path or get_db_path()
         self._lock = threading.RLock()
+        # Ensure parent directory exists. sqlite3.connect fails with
+        # "unable to open database file" if the directory is missing — a common
+        # failure mode in CI sandboxes where the default db path lives under a
+        # not-yet-created HOME subtree.
+        parent = os.path.dirname(self.db_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         self._ensure_schema()
 
     def _connect(self) -> sqlite3.Connection:
