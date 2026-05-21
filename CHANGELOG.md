@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.25] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 23): refresh `demo` module audit hash after 0.15.24's touch to `agent_comparison_suite.py`. The `demo` entry was 85.6 days stale.
+
 ## [0.15.24] - 2026-05-20
 
 ### Fixed
