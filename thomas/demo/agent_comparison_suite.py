@@ -27,12 +27,24 @@ from thomas.demo.agent_comparison_suite_shared import (
     DEFAULT_WRITE_MD_PATH,
     DEFAULT_WRITE_PATH,
     ROOT,
+    MetricSpec,  # noqa: F401  -- re-exported for tests/test_agent_comparison_suite.py
+    _assertion_ok,  # noqa: F401  -- re-exported for tests
+    _collect_git_version_info,  # noqa: F401  -- re-exported for tests
+    _collect_model_snapshot,  # noqa: F401  -- re-exported for tests
     _is_number,
     _materialize_competitor_catalog_agents,
     _now_iso,
     _read_json,
+    _resolve_path_value,  # noqa: F401  -- re-exported for tests
     _update_competitor_registry,
     _write_json,
+)
+from thomas.demo.agent_comparison_suite_strict_checks import (
+    _collect_benchmark_evidence,  # noqa: F401  -- re-exported for tests
+    _collect_benchmark_summary,  # noqa: F401  -- re-exported for tests
+    _compute_token_efficiency,  # noqa: F401  -- re-exported for tests
+    _count_regex_hits,  # noqa: F401  -- re-exported for tests
+    _run_probe_suite,  # noqa: F401  -- re-exported for tests
 )
 from thomas.plugins.benchmark_program import evaluate_benchmark_program
 from thomas.plugins.competitor_evo_scope import build_prediction_evo_scope
