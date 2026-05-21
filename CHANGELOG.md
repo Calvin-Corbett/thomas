@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.20] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 18): refresh server module audit hash after 0.15.19's touch to `thomas/server/app_core.py`. Same recurring pattern as 0.15.4 / 0.15.12 — any change to server-tier files must be re-acknowledged in `docs/ops/module_audit_log.json`.
+
 ## [0.15.19] - 2026-05-20
 
 ### Fixed
