@@ -641,6 +641,30 @@ def _setup_routes_and_handlers(
 
     _register_companion_routes(app, config)
 
+    def _register_asset_studio_routes(app_ref: web.Application) -> None:
+        """Register Asset Studio API routes (/api/asset-studio/v1/*).
+
+        Same "designed but never wired" pattern as goals/spend/companion that
+        was caught earlier in this recovery arc (Pattern 1 in the bible).
+        ``register_asset_studio_routes`` existed but no caller invoked it,
+        so every test_asset_studio_routes assertion returned 404.
+        """
+        if not callable(_require_api_access) or not callable(_read_json):
+            log.warning("Asset Studio route registration skipped: missing dependencies")
+            return
+        try:
+            from thomas.server.routes.asset_studio_aiohttp import register_asset_studio_routes
+
+            register_asset_studio_routes(
+                app_ref,
+                require_api_access=_require_api_access,
+                read_json=_read_json,
+            )
+        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError, ValueError) as e:
+            log.warning("Asset Studio routes unavailable: %s", e)
+
+    _register_asset_studio_routes(app)
+
     def _register_goals_routes(app_ref: web.Application) -> None:
         """Register /api/goals/* routes."""
         if not callable(_require_api_access) or not callable(_read_json):
