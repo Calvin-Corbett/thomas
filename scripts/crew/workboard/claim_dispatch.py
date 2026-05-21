@@ -519,7 +519,16 @@ def dispatch_workers(
             task_label = f"[WIP][AUTO-{worker_index:02d}] {task_id}: {summary}"
 
             attempted_this_round = True
-            ok_claim, msg_claim = claim(
+            # Read `claim` via the public `claim` module so tests can monkeypatch
+            # it on `mod.claim` and have the dispatch flow honor the patch
+            # (used by test_dispatch_workers_retries_after_transient_claim_error).
+            _claim_fn = claim
+            _claim_mod = sys.modules.get("scripts.crew.workboard.claim")
+            if _claim_mod is not None:
+                patched = getattr(_claim_mod, "claim", None)
+                if callable(patched) and patched is not claim:
+                    _claim_fn = patched
+            ok_claim, msg_claim = _claim_fn(
                 workboard_path,
                 agent=child_agent,
                 scope=scope,

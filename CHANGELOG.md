@@ -9,6 +9,15 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.17] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 15): final 3 dispatch-test failures in `test_workboard_claim_script.py`:
+  - `_is_ready_task` now case-insensitive (`[READY]` and `[ready]` both recognized as ready-to-release).
+  - `TEMP_TASK_CREATOR_TASK_TAG` + `TEMP_TASK_CREATOR_AGENT_PREFIX` capitalized (`TEMP-TASK-CREATOR`) so the workboard text contains the uppercase marker that tests assert on.
+  - `claim_dispatch.dispatch_workers` reads `claim` via `sys.modules['scripts.crew.workboard.claim']` so test monkeypatches on `mod.claim` (used to simulate transient claim races) propagate to the worker-spawn loop.
+- All 33 tests in `tests/test_workboard_claim_script.py` now pass locally.
+
 ## [0.15.16] - 2026-05-20
 
 ### Fixed
