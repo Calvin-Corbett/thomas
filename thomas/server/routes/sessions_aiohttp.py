@@ -109,13 +109,25 @@ def register_sessions_routes(
         except (TypeError, ValueError, copy.Error, RecursionError) as e:
             log.warning("Session fork: deepcopy failed for %s, using safe fallback clone: %s", src, e)
             cloned = _clone_conversation_fallback(base.conversation)
-        request.app[APP_SESSIONS][sid] = ChatSession(
+        # Fork inherits the parent's plan-mode state (conversation_mode +
+        # deep-copied active_plan) so /plan continues working in the child
+        # without re-issuing /plan. Tests in
+        # tests/test_server_chat_plan_routes.py assert this carry-over.
+        forked_session = ChatSession(
             id=sid,
             conversation=cloned,
             profile=base.profile,
             model_id=base.model_id,
             autonomy_level=clamp_autonomy_level(getattr(base, "autonomy_level", 3), default=3),
         )
+        forked_session.conversation_mode = getattr(base, "conversation_mode", "default") or "default"
+        base_plan = getattr(base, "active_plan", None)
+        if base_plan is not None:
+            try:
+                forked_session.active_plan = copy.deepcopy(base_plan)
+            except (TypeError, ValueError, copy.Error, RecursionError):
+                forked_session.active_plan = dict(base_plan) if isinstance(base_plan, dict) else base_plan
+        request.app[APP_SESSIONS][sid] = forked_session
         copied_state = None
         ledger = request.app.get(APP_TASK_LEDGER)
         if ledger is not None:

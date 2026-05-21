@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-05-21T16:47:47+00:00",
+  "updated_at": "2026-05-21T17:49:24+00:00",
   "latest_by_module": {
     "agent": {
       "id": "59cef78e32df4a84bc0f0933b1f6ee73",
@@ -213,24 +213,28 @@
       "signature": "565aeeea4b99a17e0f249e3183a0e24faf509a87baa566922abc9bddb35cacbb"
     },
     "server": {
-      "id": "69ba24caa73549098049198224cbc612",
+      "id": "1a1875a6c5384010988d391cae41738c",
       "module": "server",
-      "audited_at": "2026-05-21T15:28:45+00:00",
+      "audited_at": "2026-05-21T17:49:24+00:00",
       "auditor": "claude",
       "status": "pass",
-      "summary": "ci-recovery 0.15.19: app_core._require_api_access module-level dispatch",
-      "run_id": "ci-recovery-2026-05-20-app-core",
+      "summary": "ci-recovery 0.15.36: goals/companion routes wired, codex marketplace path import, chats PUT/DELETE response shape, session fork plan-mode carry",
+      "run_id": "ci-recovery-2026-05-20-server-batch",
       "files_touched": [
-        "thomas/server/app_core.py"
+        "thomas/server/app_routes_init.py",
+        "thomas/server/routes/codex_aiohttp.py",
+        "thomas/server/routes/sessions_aiohttp.py"
       ],
       "file_hashes": {
-        "thomas/server/app_core.py": "0330c70cf876bd26fb7d33ae14e016d502f6caf2b4cb295d32bfe244326d8771"
+        "thomas/server/app_routes_init.py": "758b8e2219bf4d36bc49a8088e5a4bb3e52cede177831de33bdb83e3102b19cb",
+        "thomas/server/routes/codex_aiohttp.py": "9ed3dc3acd6ccbedcc4a8591b42b45360bc146778e91cda53b5c43f06003005c",
+        "thomas/server/routes/sessions_aiohttp.py": "06570bc79c7419b762dce3a17a3825379d50c0a5555e13ec16018bb52d71935f"
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "98c382d48d2bc1978f18a23f2c4187d8524562989d2794e8c1bb547e9153e9b7",
+      "prev_signature": "c2f2d369a36b04a261cd7ff5acf0d7fe5402b904a6f01df68aee45a02ae6efb0",
       "signature_scheme": "sha256",
-      "signature": "c2f2d369a36b04a261cd7ff5acf0d7fe5402b904a6f01df68aee45a02ae6efb0"
+      "signature": "78883a49db8a1ff998bcc577c9b418f1c841a73e8cafa6904131329203376770"
     },
     "tools": {
       "id": "6baf6ae9bb2242c2825e72fd9c76ad31",
@@ -1382,6 +1386,30 @@
       "prev_signature": "05b633bb4c1112779b70374361e3cd8a3240541da34c955009f22c1c124d35a4",
       "signature_scheme": "sha256",
       "signature": "8ccc4ba09950cecd18fdcede8de8ab007349a5e786edad2c89e4808a5edd2224"
+    },
+    {
+      "id": "1a1875a6c5384010988d391cae41738c",
+      "module": "server",
+      "audited_at": "2026-05-21T17:49:24+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "ci-recovery 0.15.36: goals/companion routes wired, codex marketplace path import, chats PUT/DELETE response shape, session fork plan-mode carry",
+      "run_id": "ci-recovery-2026-05-20-server-batch",
+      "files_touched": [
+        "thomas/server/app_routes_init.py",
+        "thomas/server/routes/codex_aiohttp.py",
+        "thomas/server/routes/sessions_aiohttp.py"
+      ],
+      "file_hashes": {
+        "thomas/server/app_routes_init.py": "758b8e2219bf4d36bc49a8088e5a4bb3e52cede177831de33bdb83e3102b19cb",
+        "thomas/server/routes/codex_aiohttp.py": "9ed3dc3acd6ccbedcc4a8591b42b45360bc146778e91cda53b5c43f06003005c",
+        "thomas/server/routes/sessions_aiohttp.py": "06570bc79c7419b762dce3a17a3825379d50c0a5555e13ec16018bb52d71935f"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "c2f2d369a36b04a261cd7ff5acf0d7fe5402b904a6f01df68aee45a02ae6efb0",
+      "signature_scheme": "sha256",
+      "signature": "78883a49db8a1ff998bcc577c9b418f1c841a73e8cafa6904131329203376770"
     }
   ]
 }

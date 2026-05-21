@@ -9,6 +9,15 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.36] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 35): batch of 22 server-route failures across 4 test files:
+  - **Goals routes (19 tests):** `thomas/server/routes/goals.py::register_goals_routes` existed but was never called from `app_routes_init.py`. All `/api/goals/*` endpoints 404'd. Wired the registration via a new `_register_goals_routes` block (same pattern as the companion-routes fix in 0.15.11).
+  - **Codex routes (3 tests):** `thomas/server/routes/codex_aiohttp.py::_ensure_bridge` imported `CodexBridge` from `thomas.codex.bridge` (the legacy re-export shim). Tests monkeypatch `thomas.marketplace.codex.bridge.CodexBridge` (the canonical path); the shim's `import *` captured the original reference at import time so the patch never reached the constructor. Switched to direct import from the marketplace path.
+  - **Chats PUT/DELETE (2 tests):** `api_chat_put` returned `status=201` with the chat as the bare body; tests expect `200` with `{"ok": True, "chat": {...}}`. `api_chat_delete` returned `204` no-content; tests expect `200` with `{"ok": True, "deleted": chat_id}`. Also added URL-vs-payload chat_id mismatch check returning `400` (was missing).
+  - **Session fork plan-mode carry-over (1 test):** `api_session_fork` in `sessions_aiohttp.py` was building the forked `ChatSession` without copying `conversation_mode` or `active_plan`. Fork inherited `default` mode and no plan, breaking `/plan` continuity in the child. Now deep-copies `active_plan` and inherits `conversation_mode`.
+
 ## [0.15.35] - 2026-05-20
 
 ### Fixed
