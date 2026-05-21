@@ -305,9 +305,13 @@ class OperationHandlersMixin:
         return []
 
     def _action_class(self, adapter, action: str) -> str:
-        from .contracts import ACTION_CLASSES
+        # ACTION_CLASSES is the tuple of valid class names; ACTION_CLASS_MAP
+        # is the (action → class) mapping. The historic call site read
+        # `ACTION_CLASSES.get(action)` — that confused the tuple of names
+        # with the mapping that should have been used.
+        from .contracts import ACTION_CLASS_MAP
 
-        return ACTION_CLASSES.get(action) or "generic"
+        return ACTION_CLASS_MAP.get(action) or "generic"
 
     def _supervisor_preflight(
         self,
@@ -316,8 +320,13 @@ class OperationHandlersMixin:
         *,
         action: str,
         payload: dict[str, Any],
+        # runtime.py passes adapter + action_class — accept them so the
+        # signature matches the caller. Both are recomputed if absent.
+        adapter: Any = None,
+        action_class: str | None = None,
     ) -> None:
-        action_class = self._action_class(self.adapter, action)
+        if action_class is None:
+            action_class = self._action_class(adapter or self.adapter, action)
 
         if action_class == "sensitive":
             raise session_error(
@@ -352,9 +361,9 @@ class OperationHandlersMixin:
     ) -> None:
         if not result.get("ok", False):
             return
-        from .contracts import ACTION_CLASSES
+        from .contracts import ACTION_CLASS_MAP
 
-        action_class = ACTION_CLASSES.get(action) or "generic"
+        action_class = ACTION_CLASS_MAP.get(action) or "generic"
 
         if action_class == "capture":
             self._detect_secret_zone_hits(result.get("profile_summary") or {}, result.get("ocr_text") or "")

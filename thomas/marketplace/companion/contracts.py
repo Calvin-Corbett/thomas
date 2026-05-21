@@ -16,6 +16,15 @@ _ALLOWED_PERMISSIONS = {
     "device.camera.read",
     "device.mic.read",
     "device.location.read",
+    # Desktop operator permissions — these gate the desktop_operator
+    # extension's access to screen / window introspection, accessibility
+    # tree reads, input injection, and VM control. Without these in the
+    # allowlist, the desktop_operator extension cannot enroll.
+    "device.screen.read",
+    "device.window.read",
+    "device.accessibility.read",
+    "device.input.write",
+    "device.vm.control",
 }
 
 

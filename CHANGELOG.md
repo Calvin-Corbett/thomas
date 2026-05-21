@@ -9,6 +9,15 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.50] - 2026-05-21
+
+### Fixed
+- ci-recovery (tail 49): more desktop_operator cleanups:
+  - `ACTION_CLASSES` was a tuple of valid class names but `_action_class`/`_supervisor_preflight` treated it as `{action: class}` dict. Added `ACTION_CLASS_MAP` next to `ACTION_CLASSES` in `contracts.py` and updated both call sites.
+  - Added missing desktop_operator permissions to `_ALLOWED_PERMISSIONS` in `companion/contracts.py` (`device.screen.read`, `device.window.read`, `device.accessibility.read`, `device.input.write`, `device.vm.control`).
+  - Guarded `winerror` import in `host_pipe.py` so the module loads on Linux CI (the Windows-only modules below it were already guarded; this one was a bare import).
+  - Extended `_supervisor_preflight` signature to accept the `adapter` + `action_class` kwargs that `runtime.act` passes (recomputes them if absent).
+
 ## [0.15.49] - 2026-05-21
 
 ### Fixed
