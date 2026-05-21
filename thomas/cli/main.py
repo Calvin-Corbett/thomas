@@ -8,7 +8,15 @@ import thomas.cli._commands_misc  # noqa: F401
 import thomas.cli._commands_models  # noqa: F401
 
 # Import all command groups from submodules to register them
-from thomas.cli._commands_base import cli, log
+from thomas.cli._commands_base import (  # noqa: F401  -- re-exports for tests
+    _repl_needs_codex_event_loop,
+    _resolve_model_profile_name,
+    cli,
+    log,
+)
+from thomas.cli._commands_models import (  # noqa: F401  -- re-exports for tests
+    _resolve_repl_profile_from_prefs,
+)
 
 app = cli
 
