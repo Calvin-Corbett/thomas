@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.4] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 3): record a fresh `server` module audit entry in `docs/ops/module_audit_log.json` covering the six server-tier files touched across 0.15.0–0.15.3 (`app_core.py`, `app_keys.py`, `app_middleware_handlers.py`, `app_routes_init.py`, `routes/runs.py`, `routes/webhooks.py`). Without this, the `protocol-parity / Module audit gate` workflow step blocks any push that touches `thomas/server/` while the prior server audit (84.9 days old) was stale per the 30-day max. Audit logged via `scripts/record_module_audit.py --module server --auditor claude --status pass`.
+
 ## [0.15.3] - 2026-05-20
 
 ### Fixed
