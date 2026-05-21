@@ -281,13 +281,24 @@ class AutonomyMemoryEngine:
                     source=source,
                     also_extract_profile=(role == "user"),
                 )
+                # ingest_episode may return either an int episode_id or a dict
+                # with shape `{"episode_id": int, ...}` depending on the
+                # fabric_v2 implementation revision in scope. Tolerate both.
+                if isinstance(v2_id, dict):
+                    raw_id = v2_id.get("episode_id") or v2_id.get("id") or 0
+                    v2_int = int(raw_id) if isinstance(raw_id, (int, str)) and str(raw_id).strip() else 0
+                else:
+                    try:
+                        v2_int = int(v2_id)
+                    except (TypeError, ValueError):
+                        v2_int = 0
                 if out_id <= 0:
-                    out_id = int(v2_id)
+                    out_id = v2_int
                 self.auto_promote_event_memory(
                     thread_id,
                     etype,
                     payload,
-                    source_episode_id=int(v2_id),
+                    source_episode_id=v2_int,
                 )
             except (RuntimeError, OSError) as e:
                 log.warning("Memory Fabric v2 add_event failed: %s", e)
@@ -341,14 +352,16 @@ class AutonomyMemoryEngine:
             if existing is not None:
                 duplicates += 1
                 continue
+            # fabric_v2.upsert_fact() does not accept `provenance_episode_id`
+            # or `ts_ms`; both are inferred internally (now_ms for ts, no
+            # provenance link recorded at this level). The promotion outcome
+            # is still tracked via the local duplicates counter above.
             self._fabric_v2.upsert_fact(
                 thread_id=None,
                 subject=normalized_subject,
                 predicate=normalized_predicate,
                 obj=normalized_obj,
                 confidence=float(max(0.0, min(1.0, confidence))),
-                provenance_episode_id=int(source_episode_id) if source_episode_id else None,
-                ts_ms=ts,
                 base_salience=1.15 if normalized_subject == "user" else 1.10,
             )
             promoted += 1
