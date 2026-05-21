@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.14] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 12): broaden the CI-bypass exception in `competitor_freshness_guard.py` to also honor a non-default `--suite-config` arg. The 3 remaining tests that supply only `--suite-config` (no `--result-json` etc.) were still triggering the bypass and crashing the test on JSON-decode of the SKIPPED text output. All 10 unit tests now pass under GITHUB_ACTIONS=true.
+
 ## [0.15.13] - 2026-05-20
 
 ### Fixed
