@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.19] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 17): two tests in `tests/test_server_app_core.py` broke because my 0.15.0 fix changed the audit handlers to call `request.app[APP_REQUIRE_API_ACCESS]` directly. Existing tests monkeypatch `app_core._require_api_access` (the old module-level name) expecting that to be the dispatch path. Reintroduced `_require_api_access` as a module-level function in `app_core.py` that defaults to reading the closure from `app[APP_REQUIRE_API_ACCESS]`, but is monkeypatchable. Audit handlers and the realtime-routes registration both call through this name. Tests pass; production behavior unchanged.
+
 ## [0.15.18] - 2026-05-20
 
 ### Fixed

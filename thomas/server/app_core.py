@@ -105,6 +105,23 @@ except (ImportError, ModuleNotFoundError, AttributeError, RuntimeError):  # prag
         raise web.HTTPInternalServerError(text="ui control handler unavailable")
 
 
+def _require_api_access(request: Any) -> None:
+    """Default access check used by audit/realtime routes.
+
+    Reads the closure populated by app_middleware_handlers.setup_middleware_and_handlers
+    from request.app[APP_REQUIRE_API_ACCESS]. Tests that need a custom behavior
+    monkeypatch this module-level function (`monkeypatch.setattr(app_core,
+    "_require_api_access", ...)`); the audit handlers call through this name so
+    such patches take effect.
+    """
+    from aiohttp import web
+
+    closure = request.app.get(APP_REQUIRE_API_ACCESS)
+    if closure is None:
+        raise web.HTTPInternalServerError(text="server access guard is not configured")
+    closure(request)
+
+
 def create_app(config: AppConfig | None = None):
     """Create and configure the aiohttp application with all routes and middleware."""
     from aiohttp import web
@@ -226,12 +243,12 @@ def create_app(config: AppConfig | None = None):
         _file_audit.init_audit(audit_db_path)
 
         async def _audit_files_handler(request: web.Request) -> web.Response:
-            request.app[APP_REQUIRE_API_ACCESS](request)
+            _require_api_access(request)
             body, status, headers = await handle_audit_files(request)
             return web.Response(body=body, status=status, headers=headers)
 
         async def _audit_run_files_handler(request: web.Request) -> web.Response:
-            request.app[APP_REQUIRE_API_ACCESS](request)
+            _require_api_access(request)
             run_id = request.match_info.get("run_id", "")
             body, status, headers = await handle_audit_run_files(request, run_id)
             return web.Response(body=body, status=status, headers=headers)
@@ -323,7 +340,7 @@ def create_app(config: AppConfig | None = None):
     try:
         from thomas.marketplace.realtime.routes import setup_realtime_routes
 
-        setup_realtime_routes(app, require_api_access=lambda req: req.app[APP_REQUIRE_API_ACCESS](req))
+        setup_realtime_routes(app, require_api_access=_require_api_access)
         _realtime_ok = True
     except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
         log.warning("Realtime routes unavailable: %s", e)
