@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections.abc import Sequence
 from datetime import datetime, timezone
@@ -213,6 +214,19 @@ def run(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output.")
     args = parser.parse_args(argv)
+
+    # Competitor data refreshes require Calvin's local OpenClaw snapshot. CI runners
+    # can't refresh them, so the freshness window only makes sense as a developer-
+    # machine reminder. In CI (GITHUB_ACTIONS=true), skip with a clear hint when no
+    # snapshot path is set.
+    if os.environ.get("GITHUB_ACTIONS") == "true" and not os.environ.get("OPENCLAW_SNAPSHOT_PATH"):
+        print(
+            "Competitor freshness guard: SKIPPED "
+            "(refresh requires local OpenClaw snapshot which is not reachable from CI). "
+            "Run `python scripts/refresh_openclaw_baseline.py` locally to refresh; "
+            "set OPENCLAW_SNAPSHOT_PATH env var to re-enable the check in CI."
+        )
+        return 0
 
     warnings: list[str] = []
     explicit_result = bool(str(args.result_json or "").strip())
