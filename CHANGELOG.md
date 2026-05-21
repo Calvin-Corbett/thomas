@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.33] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 32): in 0.15.32 the CI environment short-circuit was returning early before the topic-branch-stacking check could run. Restructured: only the worktree-PATH check is skipped when `CI=1`; the topic-branch state check still runs because it's a branch-state check (orthogonal to the runner's checkout path). All 3 tests pass with `CI=1` set.
+
 ## [0.15.32] - 2026-05-20
 
 ### Added
