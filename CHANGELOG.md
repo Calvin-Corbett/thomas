@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.52] - 2026-05-21
+
+### Fixed
+- ci-recovery (tail 51): `tests/test_flows.py::TestFlow::test_flow_error_handling` failed because the test file's fallback `Flow.run()` only caught `(OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError)`. The test injects a `ZeroDivisionError` (`lambda s: 1 / 0`), which is `ArithmeticError`, NOT in that tuple — so it propagated out of `try/except` without setting `status=FAILED`. Broadened the catch to `except Exception` (still re-raises after status update, matching the test contract).
+
 ## [0.15.51] - 2026-05-21
 
 ### Fixed
