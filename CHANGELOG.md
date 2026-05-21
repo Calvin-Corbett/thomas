@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.12] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 10): re-record server module audit entry — 0.15.11 modified `thomas/server/app_routes_init.py` to wire the companion routes, which invalidated the hash in the entry I recorded in 0.15.4. The fix is one more `scripts/record_module_audit.py --module server` invocation. (This is a real gate working as designed: any change to server-tier files must be acknowledged in the audit log.)
+
 ## [0.15.11] - 2026-05-20
 
 ### Fixed
