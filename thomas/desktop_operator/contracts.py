@@ -36,6 +36,38 @@ SESSION_STATES = (
 RISK_LEVELS = ("low", "medium", "high")
 ACTION_CLASSES = ("safe", "bounded", "approval_required", "blocked")
 
+# Default action → class mapping. Callers (operation_handlers._action_class)
+# look up an action and fall back to "generic" when unmapped. Adapters can
+# extend this via classify_action(); see Pattern 1 in the bible for the
+# wiring contract.
+ACTION_CLASS_MAP = {
+    # Safe (read-only / introspection)
+    "list_apps": "safe",
+    "get_window": "safe",
+    "read_state": "safe",
+    "screenshot": "safe",
+    "verify": "safe",
+    "verify_state": "safe",
+    # Bounded (modifies UI but no irreversible side effects)
+    "click": "bounded",
+    "type": "bounded",
+    "type_text": "bounded",
+    "press_keys": "bounded",
+    "drag": "bounded",
+    "ensure_visible": "bounded",
+    "focus_address_bar": "bounded",
+    "refresh_page": "bounded",
+    # Approval-required (touches network / files / external state)
+    "open_url": "approval_required",
+    "set_file_path": "approval_required",
+    "confirm_open": "approval_required",
+    "confirm_save": "approval_required",
+    "import_assets": "approval_required",
+    "start_export": "approval_required",
+    "new_project": "approval_required",
+    "read_timeline_state": "safe",
+}
+
 
 @dataclass(frozen=True)
 class Rect:

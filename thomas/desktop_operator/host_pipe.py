@@ -7,7 +7,15 @@ from collections.abc import Callable
 from multiprocessing.connection import Client, Listener
 from typing import Any
 
-import winerror
+# `winerror` is a Windows-only module. The bare `import winerror` at module
+# load broke `thomas.desktop_operator.host_pipe` imports on Linux CI, even
+# in tests that don't exercise the host pipe (e.g. `test_host_service_runner_*`
+# which only patches win32serviceutil). Guard the import behind the same
+# pattern as the other Windows-only modules below.
+try:  # pragma: no cover - Windows-only integration surface
+    import winerror
+except ImportError:  # pragma: no cover
+    winerror = None
 
 try:  # pragma: no cover - Windows-only integration surface
     import ntsecuritycon
