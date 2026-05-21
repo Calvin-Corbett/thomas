@@ -29,7 +29,10 @@ def register_codex_routes(
         bridge = bridge_ref.get("bridge")
         if bridge is not None:
             return bridge
-        from thomas.codex.bridge import CodexBridge
+        # Import directly from marketplace path (not the thomas.codex re-export
+        # shim) so test monkeypatches on
+        # `thomas.marketplace.codex.bridge.CodexBridge` reach this constructor.
+        from thomas.marketplace.codex.bridge import CodexBridge
 
         bridge = CodexBridge()
         await bridge.start()

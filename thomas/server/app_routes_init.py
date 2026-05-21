@@ -239,8 +239,16 @@ def _setup_routes_and_handlers(
 
         payload = await _read_json(request)
         chat = _sanitize_chat_payload(payload)
+
+        # If the URL specifies a chat_id, it must match the payload id (prevents
+        # accidental cross-chat overwrites). Returns 400 on mismatch.
+        url_chat_id = request.match_info.get("chat_id", "").strip()
+        payload_chat_id = str(chat.get("id") or "").strip()
+        if url_chat_id and payload_chat_id and url_chat_id != payload_chat_id:
+            raise web.HTTPBadRequest(text=f"chat id mismatch: URL='{url_chat_id}' payload='{payload_chat_id}'")
+
         await _save_chat_to_disk(chat)
-        return web.json_response(chat, status=201)
+        return web.json_response({"ok": True, "chat": chat})
 
     async def api_chat_delete(request: web.Request) -> web.Response:
         """Delete a chat."""
@@ -252,7 +260,8 @@ def _setup_routes_and_handlers(
         deleted = await _delete_chat_from_disk(chat_id)
         if not deleted:
             raise web.HTTPNotFound(text=f"chat {chat_id} not found")
-        return web.Response(status=204)
+        # Tests expect 200 with a small JSON ack (was 204 no-content).
+        return web.json_response({"ok": True, "deleted": chat_id})
 
     run_store_janitor_task: asyncio.Task | None = None
 
@@ -631,6 +640,24 @@ def _setup_routes_and_handlers(
             log.warning("Companion routes unavailable: %s", e)
 
     _register_companion_routes(app, config)
+
+    def _register_goals_routes(app_ref: web.Application) -> None:
+        """Register /api/goals/* routes."""
+        if not callable(_require_api_access) or not callable(_read_json):
+            log.warning("Goals route registration skipped: missing dependencies")
+            return
+        try:
+            from thomas.server.routes.goals import register_goals_routes
+
+            register_goals_routes(
+                app_ref,
+                require_api_access=_require_api_access,
+                read_json=_read_json,
+            )
+        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError, ValueError) as e:
+            log.warning("Goals routes unavailable: %s", e)
+
+    _register_goals_routes(app)
 
     def _register_workspace_routes(app_ref: web.Application, cfg_ref: AppConfig) -> None:
         """Register multi-tenant workspace APIs."""
