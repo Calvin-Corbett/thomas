@@ -9,6 +9,12 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.28] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 26): inject best-practice gate hint into system prompt unconditionally (not only inside library-context block). Tests `test_best_practice_gate_forced_by_non_coder_profile` + `test_best_practice_gate_hint_injected_into_system_prompt_and_report` assert the hint reaches the system message whenever `non_coder_profile=True`; previously the hint only landed when `library_context` was being included (which excludes reply_first_route and coding-task non-thinking routes). Now `thomas/agent/loop_execution.py` always appends the hint to `memory_text` when the gate is active.
+- ci-recovery (tail 27): `scripts/forge/gates/precommit_skip_policy.py` — same CI-trusted breakglass pattern as 0.15.23 (auto_checks). In GitHub Actions runs, skip the Windows-only human-confirmation dialog and treat the workflow YAML itself as the audit trail.
+
 ## [0.15.27] - 2026-05-20
 
 ### Fixed

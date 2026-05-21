@@ -622,6 +622,14 @@ async def _agent_loop_run(
     if overhead_policy.include_test_visibility_hint and not reply_first_route:
         test_visibility_hint = live_test_default_hint(prompt_text)
     library_text = ""
+    # Ensure best-practice gate hint reaches the system prompt even when the
+    # library-context block doesn't run (e.g. reply_first_route or coding-task
+    # routes without thinking mode). Tests in test_agent_loop_conversation.py
+    # assert the hint is present whenever non_coder_profile=True.
+    if best_practice_gate_active and best_practice_hint and not memory_text:
+        memory_text = str(best_practice_hint)
+    elif best_practice_gate_active and best_practice_hint and best_practice_hint not in memory_text:
+        memory_text = memory_text + "\n\n" + str(best_practice_hint)
     if (
         overhead_policy.include_library_context
         and (not reply_first_route)
@@ -633,7 +641,7 @@ async def _agent_loop_run(
             extra_context_parts.append(str(memory_text))
         if continuity_hint:
             extra_context_parts.append(str(continuity_hint))
-        if best_practice_gate_active and best_practice_hint:
+        if best_practice_gate_active and best_practice_hint and best_practice_hint not in memory_text:
             extra_context_parts.append(str(best_practice_hint))
         if code_output_validation_enabled:
             extra_context_parts.append("Return ONLY the requested output format for this task, no prose or commentary.")
