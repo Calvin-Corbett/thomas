@@ -97,9 +97,10 @@ def run(_argv: Sequence[str] | None = None) -> int:
         print(f"Worktree branch guard: SKIP ({DISABLE_ENV}=1)")
         return 0
 
-    if _truthy(os.environ.get("CI")):
-        print("Worktree branch guard: SKIP (CI environment)")
-        return 0
+    # CI environments skip the worktree-PATH check (CI runners check out the
+    # default path, not the per-branch path). The topic-branch-stacking check
+    # below still runs because it's a branch-state check, not a path check.
+    ci_env = _truthy(os.environ.get("CI"))
 
     try:
         branch = _branch_name()
@@ -108,16 +109,19 @@ def run(_argv: Sequence[str] | None = None) -> int:
         print(f"- {exc}")
         return 1
 
-    expected = EXPECTED_BY_BRANCH.get(branch)
-    if expected:
-        actual_norm = _normalize_path(ROOT)
-        expected_norm = _normalize_path(expected)
-        if actual_norm != expected_norm:
-            print("Worktree branch guard: FAIL")
-            print(f"- branch '{branch}' must run from: {expected}")
-            print(f"- current worktree path is: {ROOT}")
-            print(f"- override only when intentional: set {DISABLE_ENV}=1")
-            return 1
+    if not ci_env:
+        expected = EXPECTED_BY_BRANCH.get(branch)
+        if expected:
+            actual_norm = _normalize_path(ROOT)
+            expected_norm = _normalize_path(expected)
+            if actual_norm != expected_norm:
+                print("Worktree branch guard: FAIL")
+                print(f"- branch '{branch}' must run from: {expected}")
+                print(f"- current worktree path is: {ROOT}")
+                print(f"- override only when intentional: set {DISABLE_ENV}=1")
+                return 1
+    else:
+        expected = None
 
     # Topic-branch-stacking check: if the current branch is a topic branch,
     # ensure it doesn't have another unmerged topic branch as an ancestor.
