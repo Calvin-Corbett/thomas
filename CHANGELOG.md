@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.9] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 7): `scripts/forge/gates/competitor_freshness_guard.py` was failing in CI because the 7-day freshness window expects regular refreshes via Calvin's local OpenClaw snapshot, which CI runners can't reach. Same fix pattern as 0.15.8: when `GITHUB_ACTIONS=true` and `OPENCLAW_SNAPSHOT_PATH` is unset, the gate prints a `SKIPPED` message pointing at `scripts/refresh_openclaw_baseline.py` (the local refresh tool) and exits 0. Strictness preserved on dev machine.
+
 ## [0.15.8] - 2026-05-20
 
 ### Fixed
