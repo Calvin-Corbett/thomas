@@ -9,6 +9,13 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.43] - 2026-05-21
+
+### Fixed
+- ci-recovery (tail 42): `Robustness Gates` failed only on `Calvin-Corbett/thomas` (public main) — not on dev-origin — because three gate `_normalize_path` helpers stripped a leading `<ROOT_DIRNAME>/` segment from every path. On dev-origin the repo dir is `thomas-dev`, so the segment never matches the `thomas/` package prefix. On public main, the repo is cloned into `thomas/`, so `ROOT_DIRNAME = "thomas"` collides with the package, and paths like `thomas/__init__.py` get silently rewritten to `__init__.py`. That broke the `REQUIRED_FILES - changed_set` literal lookup in `release_update_gate.py` and (similarly) in `module_audit_gate.py` and `model_onboarding_gate.py`.
+  - **Fix**: only strip when the segment is **doubled** (`thomas/thomas/...`), which is the actual artifact of absolute paths in same-named-dir checkouts. Bare relative paths like `thomas/__init__.py` are now preserved verbatim.
+  - Touched: `scripts/forge/gates/release_update_gate.py`, `scripts/forge/gates/module_audit_gate.py`, `scripts/forge/gates/model_onboarding_gate.py`. The 3 sites that had this pattern are now uniformly safe.
+
 ## [0.15.42] - 2026-05-21
 
 ### Fixed

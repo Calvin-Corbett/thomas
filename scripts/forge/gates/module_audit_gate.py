@@ -33,8 +33,14 @@ READY_STATUSES = {"pass", "warn", "fail"}
 
 def _normalize_path(path: str) -> str:
     p = normalize_path(path)
+    # Only strip a doubled `<repo-dirname>/<repo-dirname>/` prefix (artifact of
+    # absolute paths in checkouts where the repo is cloned into a directory
+    # of the same name). Stripping a single `<repo-dirname>/` would silently
+    # eat the `thomas/` package prefix on public-`thomas/` checkouts where
+    # repo dir and package dir share the name — that broke release_update_gate
+    # on public main (0.15.42 follow-up).
     prefix = ROOT_DIRNAME + "/"
-    if p.startswith(prefix):
+    if p.startswith(prefix + prefix):
         p = p[len(prefix) :]
     return p
 

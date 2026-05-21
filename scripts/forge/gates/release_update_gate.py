@@ -76,8 +76,14 @@ def _normalize(path: str) -> str:
     p = str(path or "").strip().replace("\\", "/")
     if p.startswith("./"):
         p = p[2:]
+    # Only strip a leading `<repo-dirname>/` segment when it's a doubled
+    # prefix from an absolute path (e.g. `/home/runner/work/thomas/thomas/...`
+    # → `thomas/thomas/file.py` after path-relative resolution). Bare
+    # relative paths like `thomas/__init__.py` MUST be preserved verbatim —
+    # otherwise REQUIRED_FILES lookups break on public `thomas/` checkouts
+    # where the repo dir name and the package name collide.
     prefix = ROOT_DIRNAME + "/"
-    if p.startswith(prefix):
+    if p.startswith(prefix + prefix):
         p = p[len(prefix) :]
     return p
 
