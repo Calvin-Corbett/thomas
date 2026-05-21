@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-05-21T16:43:10+00:00",
+  "updated_at": "2026-05-21T16:47:47+00:00",
   "latest_by_module": {
     "agent": {
       "id": "59cef78e32df4a84bc0f0933b1f6ee73",
@@ -95,13 +95,13 @@
       "signature": "13177ef9c8cdcd1542e784f66a6084a561b25eaa5179bd5756d32ada7fdf6917"
     },
     "memory": {
-      "id": "ed0bdae0752744f9a0913a980778a3d1",
+      "id": "8f6a0eb5fefe4005b6c1c8224ad9a271",
       "module": "memory",
-      "audited_at": "2026-05-21T16:43:10+00:00",
+      "audited_at": "2026-05-21T16:47:47+00:00",
       "auditor": "claude",
       "status": "pass",
-      "summary": "ci-recovery 0.15.30: handle dict return from ingest_episode + drop unsupported upsert_fact kwargs",
-      "run_id": "ci-recovery-2026-05-20-memory",
+      "summary": "ci-recovery 0.15.31: refresh memory audit (file modified post-record)",
+      "run_id": "ci-recovery-2026-05-20-memory-refresh",
       "files_touched": [
         "thomas/memory/autonomy.py"
       ],
@@ -110,9 +110,9 @@
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "44ece9db7eff5d7ad6c2b318981f3e5b8a4f90a062bbd35501612b20a66ebdd2",
+      "prev_signature": "05b633bb4c1112779b70374361e3cd8a3240541da34c955009f22c1c124d35a4",
       "signature_scheme": "sha256",
-      "signature": "05b633bb4c1112779b70374361e3cd8a3240541da34c955009f22c1c124d35a4"
+      "signature": "8ccc4ba09950cecd18fdcede8de8ab007349a5e786edad2c89e4808a5edd2224"
     },
     "models": {
       "id": "792fc26f23824f4da56d5f35fffcfc04",
@@ -1362,6 +1362,26 @@
       "prev_signature": "44ece9db7eff5d7ad6c2b318981f3e5b8a4f90a062bbd35501612b20a66ebdd2",
       "signature_scheme": "sha256",
       "signature": "05b633bb4c1112779b70374361e3cd8a3240541da34c955009f22c1c124d35a4"
+    },
+    {
+      "id": "8f6a0eb5fefe4005b6c1c8224ad9a271",
+      "module": "memory",
+      "audited_at": "2026-05-21T16:47:47+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "ci-recovery 0.15.31: refresh memory audit (file modified post-record)",
+      "run_id": "ci-recovery-2026-05-20-memory-refresh",
+      "files_touched": [
+        "thomas/memory/autonomy.py"
+      ],
+      "file_hashes": {
+        "thomas/memory/autonomy.py": "e6a24480869755413fce9ec6f5f8ab7672593892384494e11a581a34c560636f"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "05b633bb4c1112779b70374361e3cd8a3240541da34c955009f22c1c124d35a4",
+      "signature_scheme": "sha256",
+      "signature": "8ccc4ba09950cecd18fdcede8de8ab007349a5e786edad2c89e4808a5edd2224"
     }
   ]
 }

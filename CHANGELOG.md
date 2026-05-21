@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.31] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 30): re-record memory audit; the 0.15.30 entry was recorded against the pre-format file content, but ruff-format reflowed the diff between record and commit, leaving a stale hash.
+
 ## [0.15.30] - 2026-05-20
 
 ### Fixed
