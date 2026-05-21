@@ -9,6 +9,12 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.47] - 2026-05-21
+
+### Fixed
+- ci-recovery (tail 46): cleared `test_server_csrf_audit.py::TestServerMutatingAuthzAuditRemote::test_all_mutating_control_plane_routes_require_auth_in_remote_mode`. The test iterates every guarded mutating route in a single async loop, posting `{}` to each. The remote rate-limiter defaults to 120 requests / 60 seconds, so the audit started getting 429s after ~120 routes instead of the 401s it was asserting. Bumped `rate_limit_max_requests=10000` for the test's `ServerConfig`. Real fix should expose a test-only `rate_limit_max_requests=None` (disabled) mode — added to improvement opportunities doc.
+- ci-recovery (tail 46): refreshed module audit hash for `thomas/server/routes/asset_studio_aiohttp.py` after ruff fix.
+
 ## [0.15.46] - 2026-05-21
 
 ### Fixed

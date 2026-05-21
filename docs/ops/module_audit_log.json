@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-05-21T21:31:57+00:00",
+  "updated_at": "2026-05-21T21:38:18+00:00",
   "latest_by_module": {
     "agent": {
       "id": "59cef78e32df4a84bc0f0933b1f6ee73",
@@ -215,12 +215,12 @@
       "signature": "565aeeea4b99a17e0f249e3183a0e24faf509a87baa566922abc9bddb35cacbb"
     },
     "server": {
-      "id": "918b1760ee194d88855d559262a6515c",
+      "id": "6b2e8c245a2f4b7089c44fa48c59697b",
       "module": "server",
-      "audited_at": "2026-05-21T21:31:57+00:00",
+      "audited_at": "2026-05-21T21:38:18+00:00",
       "auditor": "claude",
       "status": "pass",
-      "summary": "0.15.46: wire asset studio routes + use marketplace import path",
+      "summary": "0.15.46+csrf: wire asset studio routes + bump rate limit in test",
       "run_id": "",
       "files_touched": [
         "thomas/server/app_routes_init.py",
@@ -228,13 +228,13 @@
       ],
       "file_hashes": {
         "thomas/server/app_routes_init.py": "99085fc7b4579ce282a3a665fef30bdf78febd1b1af3ce12ef8cfac1a3e708e6",
-        "thomas/server/routes/asset_studio_aiohttp.py": "cdc361ebd3449eda6ea832a6c99c8ec2ac31bb01f5fa4a6f02d7a989a8949bcc"
+        "thomas/server/routes/asset_studio_aiohttp.py": "1d9ac9cd7636090112a714c80ccc95e0ab3be279d95fb32fad730661aa224461"
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "51b18e7f8d2a6c0e39d5cd12f04b06dd70a60c567ccdfe7d935bb71632e1c83c",
+      "prev_signature": "d5cbc55415352af0b0a82de04e7c4577a496c559bcfc6afdac16aca8a027751d",
       "signature_scheme": "sha256",
-      "signature": "d5cbc55415352af0b0a82de04e7c4577a496c559bcfc6afdac16aca8a027751d"
+      "signature": "413d6f8634145dc9e6ccd4db15f3b8d12c590f17d36ddf78e82c8d87e553b5d4"
     },
     "tools": {
       "id": "6baf6ae9bb2242c2825e72fd9c76ad31",
@@ -1628,6 +1628,28 @@
       "prev_signature": "51b18e7f8d2a6c0e39d5cd12f04b06dd70a60c567ccdfe7d935bb71632e1c83c",
       "signature_scheme": "sha256",
       "signature": "d5cbc55415352af0b0a82de04e7c4577a496c559bcfc6afdac16aca8a027751d"
+    },
+    {
+      "id": "6b2e8c245a2f4b7089c44fa48c59697b",
+      "module": "server",
+      "audited_at": "2026-05-21T21:38:18+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "0.15.46+csrf: wire asset studio routes + bump rate limit in test",
+      "run_id": "",
+      "files_touched": [
+        "thomas/server/app_routes_init.py",
+        "thomas/server/routes/asset_studio_aiohttp.py"
+      ],
+      "file_hashes": {
+        "thomas/server/app_routes_init.py": "99085fc7b4579ce282a3a665fef30bdf78febd1b1af3ce12ef8cfac1a3e708e6",
+        "thomas/server/routes/asset_studio_aiohttp.py": "1d9ac9cd7636090112a714c80ccc95e0ab3be279d95fb32fad730661aa224461"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "d5cbc55415352af0b0a82de04e7c4577a496c559bcfc6afdac16aca8a027751d",
+      "signature_scheme": "sha256",
+      "signature": "413d6f8634145dc9e6ccd4db15f3b8d12c590f17d36ddf78e82c8d87e553b5d4"
     }
   ]
 }

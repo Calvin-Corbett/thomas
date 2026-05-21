@@ -168,11 +168,20 @@ class TestServerCsrfAuditLocal(_BaseServerMutatingAudit):
 
 class TestServerMutatingAuthzAuditRemote(_BaseServerMutatingAudit):
     async def get_application(self):
+        # Iterating every mutating route in a single test hammers the remote
+        # rate-limiter (default 120 req / 60s). After ~120 requests the limiter
+        # starts returning 429 instead of the 401 we want to assert. Bump the
+        # limit to a high number so the audit can complete without tripping it.
         cfg = AppConfig(
             models={"local": ModelConfig(name="local", model="dummy")},
             default_model="local",
             memory=MemoryConfig(root=self._memory_root),
-            server=ServerConfig(access_mode="remote", api_token="test-token"),
+            server=ServerConfig(
+                access_mode="remote",
+                api_token="test-token",
+                rate_limit_max_requests=10000,
+                rate_limit_window_seconds=60,
+            ),
         )
         return create_app(cfg)
 
