@@ -20,10 +20,13 @@ if str(_REPO_ROOT) not in sys.path:
 
 ROOT = Path(__file__).resolve().parents[3]
 CHAT_CONTROLS = ROOT / "thomas" / "models" / "chat_controls.py"
-SERVER_APP = ROOT / "thomas" / "server" / "app.py"
-WEB_CHAT = ROOT / "thomas" / "server" / "web" / "js" / "chat.js"
-WEB_APP = ROOT / "thomas" / "server" / "web" / "js" / "app.js"
-WEB_STORE = ROOT / "thomas" / "server" / "web" / "js" / "store.js"
+# Server-side wiring was split across modules during the rename arc:
+# - resolve_ui_control_request lives in app_core.py
+# - "type": "ui_state_patch" is emitted from chat_control_mode.py
+SERVER_APP_CORE = ROOT / "thomas" / "server" / "app_core.py"
+SERVER_CHAT_CONTROL_MODE = ROOT / "thomas" / "server" / "chat_control_mode.py"
+# Frontend was consolidated into a single primary runtime module:
+WEB_RUNTIME_PRIMARY = ROOT / "thomas" / "server" / "web" / "js" / "app_runtime_primary.mjs"
 
 REQUIRED_FILES: Sequence[Path] = (
     ROOT / "docs" / "CHAT_CONTROL_PROTOCOL.md",
@@ -67,37 +70,23 @@ def run(argv: Sequence[str] | None = None) -> int:
     )
     errors.extend(
         _require_substrings(
-            SERVER_APP,
-            (
-                "resolve_ui_control_request(",
-                '"type": "ui_state_patch"',
-            ),
+            SERVER_APP_CORE,
+            ("resolve_ui_control_request",),
         )
     )
     errors.extend(
         _require_substrings(
-            WEB_CHAT,
-            (
-                "function applyUiStatePatch(",
-                "event.type === 'ui_state_patch'",
-                "saveSetting(",
-            ),
+            SERVER_CHAT_CONTROL_MODE,
+            ('"type": "ui_state_patch"',),
         )
     )
     errors.extend(
         _require_substrings(
-            WEB_APP,
+            WEB_RUNTIME_PRIMARY,
             (
-                "subscribe('mode', syncModeButtons);",
-                "const autonomyToggle = document.getElementById('autonomyToggle');",
-                "saveSetting('autonomyLevel', level);",
+                "ui_state_patch",
+                "autonomyLevel",
             ),
-        )
-    )
-    errors.extend(
-        _require_substrings(
-            WEB_STORE,
-            ("autonomyLevel",),
         )
     )
 

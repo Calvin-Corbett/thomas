@@ -9,6 +9,14 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.10] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 8): `scripts/forge/gates/chat_control_protocol.py` was pointing at stale file paths after the rename arc and the frontend consolidation. The chat-control protocol IS implemented, just in different files now:
+  - Server: `resolve_ui_control_request` lives in `thomas/server/app_core.py`, `"type": "ui_state_patch"` is emitted from `thomas/server/chat_control_mode.py` (the gate was checking the now-decomposed `thomas/server/app.py`).
+  - Frontend: the protocol patterns (`ui_state_patch`, `autonomyLevel` handling) consolidated into `thomas/server/web/js/app_runtime_primary.mjs` (the gate was checking obsolete `chat.js`, `app.js`, `store.js` files that no longer exist post-refactor).
+  Updated the gate's file pointers and needle list to match current reality. Local invocation: `Chat control protocol check: OK`.
+
 ## [0.15.9] - 2026-05-20
 
 ### Fixed
