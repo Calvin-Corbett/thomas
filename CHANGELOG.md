@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.48] - 2026-05-21
+
+### Fixed
+- ci-recovery (tail 47): `tests/test_cv_features.py::TestHomographyEstimation::test_homography_*` failed with `AttributeError: module 'thomas.marketplace.cv.core' has no attribute 'Point'`. `Point` lives in `_types.py`. Re-exported it on `core.py` so the public surface is complete.
+
 ## [0.15.47] - 2026-05-21
 
 ### Fixed
