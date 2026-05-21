@@ -9,6 +9,14 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.30] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 29): fix two real bugs in `thomas/memory/autonomy.py` that broke 4 tests in `test_autonomy_memory_engine.py`:
+  1. `ingest_episode()` may return either an `int` episode-id or a `dict` with `{"episode_id": int, ...}` depending on the `fabric_v2` revision. Caller was unconditionally calling `int(v2_id)`, raising `TypeError: int() argument must be a string, a bytes-like object or a real number, not 'dict'`. Now tolerates both shapes.
+  2. `upsert_fact()` no longer accepts `provenance_episode_id` or `ts_ms` kwargs (it derives both internally). Caller was still passing them, raising `TypeError: MemoryFabricV2.upsert_fact() got an unexpected keyword argument 'provenance_episode_id'`. Dropped the kwargs.
+- Also refreshed the `memory` module audit hash.
+
 ## [0.15.29] - 2026-05-20
 
 ### Fixed
