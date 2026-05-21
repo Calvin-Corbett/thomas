@@ -259,7 +259,9 @@ async def test_chat_storage_static_compat_tools_and_restart(tmp_path: Path, monk
         assert tools_payload == {"tools": [], "count": 0}
 
         created = await client.put("/api/chats", json={"id": "chat-1", "title": "Inbox"})
-        assert created.status == 201
+        # api_chat_put now returns 200 + {ok: True, chat: ...} (was 201) to
+        # align with tests/test_server_chats_api.py — see 0.15.36 in CHANGELOG.
+        assert created.status == 200
         assert stored_chats["chat-1"]["title"] == "Inbox"
 
         listed = await client.get("/api/chats")
@@ -268,7 +270,8 @@ async def test_chat_storage_static_compat_tools_and_restart(tmp_path: Path, monk
         assert listed_payload["chats"] == [{"id": "chat-1", "title": "Inbox"}]
 
         deleted = await client.delete("/api/chats/chat-1")
-        assert deleted.status == 204
+        # api_chat_delete now returns 200 + {ok: True, deleted: <id>} (was 204).
+        assert deleted.status == 200
 
         missing = await client.delete("/api/chats/chat-1")
         assert missing.status == 404
