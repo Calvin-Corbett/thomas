@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.41] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 40): the module audit gate kept failing because `record_module_audit.py` was hashing the local CRLF version of files on Windows, while CI checked out the LF-only version. The hashes diverged by 810+ bytes (CRLF count) per file. Workaround: locally re-normalize the touched files to LF before re-recording the audit. Real fix should be in `sha256_file` itself (normalize line endings before hashing) — added to "Planned features" section of the bible.
+
 ## [0.15.40] - 2026-05-20
 
 ### Fixed

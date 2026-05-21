@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-05-21T18:24:36+00:00",
+  "updated_at": "2026-05-21T18:34:06+00:00",
   "latest_by_module": {
     "agent": {
       "id": "59cef78e32df4a84bc0f0933b1f6ee73",
@@ -213,26 +213,24 @@
       "signature": "565aeeea4b99a17e0f249e3183a0e24faf509a87baa566922abc9bddb35cacbb"
     },
     "server": {
-      "id": "a36efdfc8055429f8cadb625ae67c8b0",
+      "id": "42c030b445904785821f3e74aa809dcc",
       "module": "server",
-      "audited_at": "2026-05-21T18:24:36+00:00",
+      "audited_at": "2026-05-21T18:34:06+00:00",
       "auditor": "claude",
       "status": "pass",
-      "summary": "ci-recovery 0.15.40: spend routes wired, usage normalization clamps negatives",
-      "run_id": "ci-recovery-2026-05-20-server-spend",
+      "summary": "ci-recovery 0.15.41: refresh chat_aiohttp_streaming.py hash with LF content",
+      "run_id": "ci-recovery-2026-05-20-server-streaming",
       "files_touched": [
-        "thomas/server/app_routes_init.py",
         "thomas/server/routes/chat_aiohttp_streaming.py"
       ],
       "file_hashes": {
-        "thomas/server/app_routes_init.py": "c4975659bbb94cbb375342cbe642b8ef22370238cab8d19c094ad74f707ca777",
-        "thomas/server/routes/chat_aiohttp_streaming.py": "3441d84c7c8b43cfa3392884c8731d08e8bbe3b39cb160e0b67afac4378863fe"
+        "thomas/server/routes/chat_aiohttp_streaming.py": "1be3c288b213be1b7daf0aa5f30c39890c99ef92d4d0b397eac1db1ce55f7e0e"
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "ad9566773d18afe27dc8a3518bd58f8d5556889baaf416e557690bb54edfafb7",
+      "prev_signature": "af371dbfa70c3a0556df84aeedfd058d11993e16ed34cc4d192720e1ccff2c41",
       "signature_scheme": "sha256",
-      "signature": "7f36f1843f09787f2ee6eb91885cde150f6a21ae6440d23c72bac2171c09ef7c"
+      "signature": "4553cf90f20475e2c67651d8149b2bb425fbf3ebfc54795bec7c50e38ce84e1d"
     },
     "tools": {
       "id": "6baf6ae9bb2242c2825e72fd9c76ad31",
@@ -1456,6 +1454,72 @@
       "prev_signature": "ad9566773d18afe27dc8a3518bd58f8d5556889baaf416e557690bb54edfafb7",
       "signature_scheme": "sha256",
       "signature": "7f36f1843f09787f2ee6eb91885cde150f6a21ae6440d23c72bac2171c09ef7c"
+    },
+    {
+      "id": "30febd56b85e4cb1aea87647a5131971",
+      "module": "server",
+      "audited_at": "2026-05-21T18:32:21+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "ci-recovery 0.15.41: refresh chat_aiohttp_streaming.py hash post-format",
+      "run_id": "ci-recovery-2026-05-20-server-refresh-2",
+      "files_touched": [
+        "thomas/server/routes/chat_aiohttp_streaming.py"
+      ],
+      "file_hashes": {
+        "thomas/server/routes/chat_aiohttp_streaming.py": "3441d84c7c8b43cfa3392884c8731d08e8bbe3b39cb160e0b67afac4378863fe"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "7f36f1843f09787f2ee6eb91885cde150f6a21ae6440d23c72bac2171c09ef7c",
+      "signature_scheme": "sha256",
+      "signature": "9e420d64c08d3409b2a1c3a62d7fbcb86cfcf38aff958d6b7e7f563e7f5680d7"
+    },
+    {
+      "id": "a467dbdd0bf14039a58cb3efbbfe1f36",
+      "module": "server",
+      "audited_at": "2026-05-21T18:33:23+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "ci-recovery 0.15.41: refresh server audit after LF normalization",
+      "run_id": "ci-recovery-2026-05-20-server-lf",
+      "files_touched": [
+        "thomas/server/app_routes_init.py",
+        "thomas/server/routes/chat_aiohttp_streaming.py",
+        "thomas/server/routes/codex_aiohttp.py",
+        "thomas/server/routes/sessions_aiohttp.py"
+      ],
+      "file_hashes": {
+        "thomas/server/app_routes_init.py": "638fb6cd6378a404fe32a76bf710136657c0e77e8834faa29f7e4f6c9b986db6",
+        "thomas/server/routes/chat_aiohttp_streaming.py": "1be3c288b213be1b7daf0aa5f30c39890c99ef92d4d0b397eac1db1ce55f7e0e",
+        "thomas/server/routes/codex_aiohttp.py": "fa2afd3f2daa0934c8fabc16778a5d33e54712cdc3eb921d7ae7630a519e1b9d",
+        "thomas/server/routes/sessions_aiohttp.py": "5d430c021fecc647a58281cc20c5946d89067750839c37fc1e4c9b7cef06214b"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "9e420d64c08d3409b2a1c3a62d7fbcb86cfcf38aff958d6b7e7f563e7f5680d7",
+      "signature_scheme": "sha256",
+      "signature": "af371dbfa70c3a0556df84aeedfd058d11993e16ed34cc4d192720e1ccff2c41"
+    },
+    {
+      "id": "42c030b445904785821f3e74aa809dcc",
+      "module": "server",
+      "audited_at": "2026-05-21T18:34:06+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "ci-recovery 0.15.41: refresh chat_aiohttp_streaming.py hash with LF content",
+      "run_id": "ci-recovery-2026-05-20-server-streaming",
+      "files_touched": [
+        "thomas/server/routes/chat_aiohttp_streaming.py"
+      ],
+      "file_hashes": {
+        "thomas/server/routes/chat_aiohttp_streaming.py": "1be3c288b213be1b7daf0aa5f30c39890c99ef92d4d0b397eac1db1ce55f7e0e"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "af371dbfa70c3a0556df84aeedfd058d11993e16ed34cc4d192720e1ccff2c41",
+      "signature_scheme": "sha256",
+      "signature": "4553cf90f20475e2c67651d8149b2bb425fbf3ebfc54795bec7c50e38ce84e1d"
     }
   ]
 }
