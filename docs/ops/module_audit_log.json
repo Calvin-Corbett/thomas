@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-05-21T19:57:12+00:00",
+  "updated_at": "2026-05-21T21:11:48+00:00",
   "latest_by_module": {
     "agent": {
       "id": "59cef78e32df4a84bc0f0933b1f6ee73",
@@ -59,24 +59,26 @@
       "signature": "f6839a58329bc796536c671911bd5f75b1c27e9c7873659cc36cc1522baa4df1"
     },
     "demo": {
-      "id": "2a534f05b7a848be816f96188b4d7728",
+      "id": "b353fb2ee2304d20a475402833055c40",
       "module": "demo",
-      "audited_at": "2026-05-21T16:05:04+00:00",
+      "audited_at": "2026-05-21T21:11:48+00:00",
       "auditor": "claude",
       "status": "pass",
-      "summary": "ci-recovery 0.15.24: re-export helpers for agent_comparison_suite tests",
-      "run_id": "ci-recovery-2026-05-20-demo",
+      "summary": "0.15.45: re-exports + sys.modules lookup helpers for test patch reachability",
+      "run_id": "",
       "files_touched": [
-        "thomas/demo/agent_comparison_suite.py"
+        "thomas/demo/agentic_benchmark.py",
+        "thomas/demo/agentic_benchmark_runners.py"
       ],
       "file_hashes": {
-        "thomas/demo/agent_comparison_suite.py": "83381caa65a8ca872dc4d36a85c6bbd6d10751f9dada4849fd1669b5f6415c96"
+        "thomas/demo/agentic_benchmark.py": "a4e9301beb267145454a7992e5ed52aa2704ad6cf5b9f9c3df84b6522743db6d",
+        "thomas/demo/agentic_benchmark_runners.py": "a1ddfa23157e31575a541ed25df92d5e33fecae65b38cc1dffc0b8c56a46c133"
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "9d6483058837ee3daf924edfcb5babb37756fd68820bbc3c72108055a93b84d4",
+      "prev_signature": "95ed236186e147e40d86ed56e0f5a466a07405a8500438787de34f79138df03c",
       "signature_scheme": "sha256",
-      "signature": "95ed236186e147e40d86ed56e0f5a466a07405a8500438787de34f79138df03c"
+      "signature": "ba5108a61f1118155e70dff5762ecfbaa89a667775dfbeb97375c19a215934bf"
     },
     "intake": {
       "id": "0bfc7266929948808a34c023cf049d1b",
@@ -1588,6 +1590,28 @@
       "prev_signature": "66867916f34a3f2a912d20c7d5ba0c7281af85c77c8107b7f82e98fb03675adf",
       "signature_scheme": "sha256",
       "signature": "51b18e7f8d2a6c0e39d5cd12f04b06dd70a60c567ccdfe7d935bb71632e1c83c"
+    },
+    {
+      "id": "b353fb2ee2304d20a475402833055c40",
+      "module": "demo",
+      "audited_at": "2026-05-21T21:11:48+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "0.15.45: re-exports + sys.modules lookup helpers for test patch reachability",
+      "run_id": "",
+      "files_touched": [
+        "thomas/demo/agentic_benchmark.py",
+        "thomas/demo/agentic_benchmark_runners.py"
+      ],
+      "file_hashes": {
+        "thomas/demo/agentic_benchmark.py": "a4e9301beb267145454a7992e5ed52aa2704ad6cf5b9f9c3df84b6522743db6d",
+        "thomas/demo/agentic_benchmark_runners.py": "a1ddfa23157e31575a541ed25df92d5e33fecae65b38cc1dffc0b8c56a46c133"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "95ed236186e147e40d86ed56e0f5a466a07405a8500438787de34f79138df03c",
+      "signature_scheme": "sha256",
+      "signature": "ba5108a61f1118155e70dff5762ecfbaa89a667775dfbeb97375c19a215934bf"
     }
   ]
 }
