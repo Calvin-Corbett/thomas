@@ -18,6 +18,8 @@ from typing import Any
 from thomas.bootdoctor.runtime_helpers import (
     BootDoctorPathPolicy,
     RestrictedTool,  # noqa: F401  -- re-exported for tests/test_bootdoctor_cli.py
+    _extract_patch_targets,  # noqa: F401  -- re-exported for tests/test_bootdoctor_cli.py
+    _extract_repo_paths_from_text,  # noqa: F401  -- re-exported for tests/test_bootdoctor_cli.py
     build_rescue_prompt,
     build_restricted_tools,
     load_startup_context,

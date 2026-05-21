@@ -9,6 +9,15 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.2] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail): fix two additional pytest collection errors uncovered by full-test-matrix run after 0.15.1 landed:
+  1. `tests/test_commit_gate_split.py:18` loaded `scripts/agent_commit.py`, which was moved to `scripts/crew/brief/commit.py` in the Tier 5 rename arc (commit 80c4b177). Updated the path.
+  2. `tests/test_workboard_issue_script.py:7` imported `scripts.workboard_issue`, which was moved to `scripts.crew.workboard.issue` in the Tier 5 rename arc (commit a50a2a9f). Updated the import.
+  3. `thomas/bootdoctor/__main__.py` re-exports `_extract_patch_targets` + `_extract_repo_paths_from_text` from `runtime_helpers` alongside the previously-fixed `RestrictedTool`, satisfying all four `tests/test_bootdoctor_cli.py:9` imports.
+- All 10,902 tests now collect without errors.
+
 ## [0.15.1] - 2026-05-20
 
 ### Fixed
