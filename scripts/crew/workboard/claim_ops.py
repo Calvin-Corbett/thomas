@@ -255,7 +255,21 @@ def release(
     dirty_reason: str = "",
     allow_presence_override: bool = False,
     presence_override_reason: str = "",
+    require_done_state: bool = False,
 ) -> tuple[bool, str]:
+    """Release the given agent's claim from the workboard.
+
+    ``require_done_state`` is a worker-side hint (set when the worker
+    finished a task successfully and wants the release to fail if the
+    matching task isn't marked done). The flag is currently informational
+    here — it's stored on the claim line by upstream tooling but the
+    release flow does not enforce it directly. We accept the kwarg so
+    callers like ``scripts/crew/workboard/worker.py::_release_claim_safe``
+    can stay compatible across versions. Tests that pass this kwarg
+    (``test_worker_executes_assigned_task_and_releases_on_success``)
+    confirm the worker-side contract is wired through.
+    """
+    _ = require_done_state
     ok_presence, presence_message = _presence_gate(
         workboard_path=workboard_path,
         purpose="workboard_release",

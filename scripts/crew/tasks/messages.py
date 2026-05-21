@@ -13,16 +13,18 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-try:
-    from scripts import task_specialists, workboard_issue
-    from scripts.crew.workboard import message as workboard_message
-    from scripts.forge.gates import workboard_claims as claims_gate
-except ImportError:  # pragma: no cover
-    import task_specialists  # type: ignore
-    from crew.workboard import message as workboard_message  # type: ignore
-    from forge.gates import workboard_claims as claims_gate  # type: ignore
-
-    from scripts.crew.workboard import issue as workboard_issue  # type: ignore
+# `scripts.workboard_issue` was relocated to `scripts.crew.workboard.issue`
+# during the Tier 5 rename arc — use the new path directly. The bare
+# `import task_specialists` fallback that previously sat in a defensive
+# `except ImportError` block only worked on Windows where the repo root
+# happened to be on sys.path; on Linux CI it raised ModuleNotFoundError
+# and broke collection of every test that imports from this module. The
+# `_REPO_ROOT` sys.path insert above this block guarantees `scripts.*` is
+# importable, so the fallback is no longer needed.
+from scripts import task_specialists
+from scripts.crew.workboard import issue as workboard_issue
+from scripts.crew.workboard import message as workboard_message
+from scripts.forge.gates import workboard_claims as claims_gate
 
 try:
     from scripts.crew.tasks.base import (
