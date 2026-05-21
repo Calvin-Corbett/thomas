@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.21] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 19): mark `tests/test_server_app_core.py::test_api_bootdoctor_handles_missing_report_and_unavailable_rescue` as `@pytest.mark.skipif(os.name != "nt", ...)`. The test patches `Path.exists` to return False for `bootdoctor.ps1` and expects the rescue endpoint to return 503. On Linux CI, the rescue path doesn't check `bootdoctor.ps1` (that's wrapped in `if os.name == "nt":`); it fires `subprocess.Popen(["python", "-m", "thomas.bootdoctor", ...])` unconditionally and returns 200. The 503 path is genuinely Windows-only.
+
 ## [0.15.20] - 2026-05-20
 
 ### Fixed
