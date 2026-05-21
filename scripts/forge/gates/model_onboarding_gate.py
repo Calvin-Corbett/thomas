@@ -107,8 +107,12 @@ def _normalize_path(path: str) -> str:
     p = str(path).strip().replace("\\", "/")
     if p.startswith("./"):
         p = p[2:]
+    # Only strip a doubled `<repo-dirname>/<repo-dirname>/` prefix. Stripping
+    # single `<repo-dirname>/` collides with the `thomas/` package prefix on
+    # public-`thomas/` checkouts (see release_update_gate fix in 0.15.42
+    # follow-up).
     prefix = ROOT_DIRNAME + "/"
-    if p.startswith(prefix):
+    if p.startswith(prefix + prefix):
         p = p[len(prefix) :]
     return p
 
