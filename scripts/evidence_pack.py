@@ -113,7 +113,7 @@ def _format_markdown(summary: dict[str, Any]) -> str:
 
     for step in summary["steps"]:
         lines.append(
-            f"- step {step['index']:03d}: ok={step['ok']} exit={step['exit_code']} " f"duration_s={step['duration_s']}"
+            f"- step {step['index']:03d}: ok={step['ok']} exit={step['exit_code']} duration_s={step['duration_s']}"
         )
         lines.append(f"  - command: `{step['command']}`")
         lines.append(f"  - stdout: `{step['stdout_path']}`")

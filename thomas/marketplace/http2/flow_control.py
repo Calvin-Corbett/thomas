@@ -19,7 +19,7 @@ class FlowControlEngine:
             ValueError: If window size is invalid.
         """
         if initial_window_size < 1 or initial_window_size > self.MAX_WINDOW_SIZE:
-            raise ValueError(f"Window size must be 1-{self.MAX_WINDOW_SIZE}, " f"got {initial_window_size}")
+            raise ValueError(f"Window size must be 1-{self.MAX_WINDOW_SIZE}, got {initial_window_size}")
 
         self.connection_window = initial_window_size
         self.stream_windows: dict[int, int] = {}
@@ -92,7 +92,7 @@ class FlowControlEngine:
         if stream_use < length:
             # Restore connection window
             self.connection_window += conn_use
-            raise FlowControlError(f"Stream {stream_id} window exhausted: " f"need {length}, have {stream_window}")
+            raise FlowControlError(f"Stream {stream_id} window exhausted: need {length}, have {stream_window}")
 
         self.stream_windows[stream_id] = stream_window - stream_use
         return conn_use, stream_use
@@ -155,7 +155,7 @@ class FlowControlEngine:
         stream_before = stream_window
 
         if stream_window < length:
-            raise FlowControlError(f"Stream {stream_id} window exhausted: " f"need {length}, have {stream_window}")
+            raise FlowControlError(f"Stream {stream_id} window exhausted: need {length}, have {stream_window}")
 
         self.stream_windows[stream_id] = stream_window - length
         return self.connection_window, stream_before
@@ -172,7 +172,7 @@ class FlowControlEngine:
             FlowControlError: If window would overflow.
         """
         if increment < 1 or increment > self.MAX_WINDOW_SIZE:
-            raise ValueError(f"Window increment must be 1-{self.MAX_WINDOW_SIZE}, " f"got {increment}")
+            raise ValueError(f"Window increment must be 1-{self.MAX_WINDOW_SIZE}, got {increment}")
 
         if stream_id == 0:
             # Connection-level

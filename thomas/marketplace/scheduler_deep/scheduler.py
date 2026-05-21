@@ -479,4 +479,4 @@ class Scheduler:
     def __repr__(self) -> str:
         """String representation."""
         with self._lock:
-            return f"Scheduler(" f"jobs={len(self._jobs)}, " f"running={self._running})"
+            return f"Scheduler(jobs={len(self._jobs)}, running={self._running})"

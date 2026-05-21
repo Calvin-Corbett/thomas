@@ -1,14 +1,14 @@
 {
   "rule_version": 2,
-  "captured_at_utc": "2026-03-28T15:52:47.847Z",
+  "captured_at_utc": "2026-05-21T23:35:21.166181Z",
   "target_url": "http://127.0.0.1:3108",
   "generator": {
     "script": "scripts/refresh_site_visual_proof.py",
     "runtime_verifier": "scripts/verify_site_visual_runtime.mjs",
-    "generated_at_utc": "2026-03-28T15:52:49.869212+00:00"
+    "generated_at_utc": "2026-05-21T23:35:21.166181+00:00"
   },
   "git": {
-    "head_sha": "c0361aae0238989fab36a4ad614e3713ccb657d2",
+    "head_sha": "c06c82199ba88cfd721d6083f3520021aaa6de3a",
     "ui_changed_paths": [
       "apps/site/src/app/[locale]/deep-dive/page.tsx",
       "apps/site/src/app/[locale]/docs/[[...slug]]/page.tsx",
@@ -27,6 +27,7 @@
       "apps/site/src/app/docs/[[...slug]]/page.tsx",
       "apps/site/src/app/download/page.tsx",
       "apps/site/src/app/globals.css",
+      "apps/site/src/app/globals_part02.css",
       "apps/site/src/app/journey/page.tsx",
       "apps/site/src/app/layout.tsx",
       "apps/site/src/app/marketplace/page.tsx",
@@ -57,16 +58,16 @@
   },
   "runtime_report": {
     "path": "apps/site/verification/runtime-report.json",
-    "sha256": "20361939dbd3ac836e3bee801031c5469b4615bca85ccadf6f426b4b0e994733"
+    "sha256": "2c66d91f81feda45ed1bce334e33483ef109bde06052318fff75710498b95eaf"
   },
   "screenshots": {
     "full_page": {
       "path": "apps/site/verification/screenshots/full-page.png",
-      "sha256": "7c0cb84a9062f45a8c83dd1420a306f40820b2b54ea999c50d2bee3692753d84"
+      "sha256": "fa473cfa23e673910b43da2d4e3d4e6ec96d304dddb7641b8a2661ace465fd5a"
     },
     "footer_focus": {
       "path": "apps/site/verification/screenshots/footer-focus.png",
-      "sha256": "f78781ec86eeb8521acd82db78b876cf7b9ae3d0a3f506bfeec86b26f123caa4"
+      "sha256": "c517ecacccd512959182bbcb8831568f2f0c0c8735f25aa39ad4fdba1ca8a286"
     }
   },
   "metrics": {

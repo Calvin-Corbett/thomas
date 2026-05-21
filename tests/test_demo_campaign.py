@@ -19,7 +19,7 @@ class TestDemoCampaign(unittest.TestCase):
                             "avg_quality_score": 4.5,
                             "evidence_coverage": 1.0,
                         },
-                        "openclaw": {
+                        "reference_cli": {
                             "weighted_score": 60,
                             "credibility_weighted_score": 30,
                             "success_rate": 0.6,
@@ -35,18 +35,18 @@ class TestDemoCampaign(unittest.TestCase):
         rows = build_run_index_rows(cards)
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[0]["run_id"], "r1")
-        self.assertIn(rows[0]["competitor"], {"thomas", "openclaw"})
+        self.assertIn(rows[0]["competitor"], {"thomas", "reference_cli"})
 
     def test_render_campaign_report_includes_rankings(self):
         aggregate = {
             "runs_count": 2,
             "ranking": [
                 {"rank": 1, "competitor": "thomas", "weighted_score_mean": 96.0},
-                {"rank": 2, "competitor": "openclaw", "weighted_score_mean": 62.0},
+                {"rank": 2, "competitor": "reference_cli", "weighted_score_mean": 62.0},
             ],
             "credibility_ranking": [
                 {"rank": 1, "competitor": "thomas", "credibility_weighted_score_mean": 94.0},
-                {"rank": 2, "competitor": "openclaw", "credibility_weighted_score_mean": 40.0},
+                {"rank": 2, "competitor": "reference_cli", "credibility_weighted_score_mean": 40.0},
             ],
             "competitors": {
                 "thomas": {
@@ -75,4 +75,3 @@ class TestDemoCampaign(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

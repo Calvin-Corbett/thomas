@@ -20,7 +20,7 @@
   "policy": {
     "strict_name_guard": true,
     "name_guard_blocklist": [
-      "openclaw",
+      "reference_cli",
       "clawbot"
     ]
   },

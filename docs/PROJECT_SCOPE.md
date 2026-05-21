@@ -6,22 +6,22 @@ Thomas is an autonomous AI execution platform for public use, not a localhost-on
 
 Thomas exists to deliver consumer value first: reliable execution, strong safety, fast response,
 predictable cost, and clear operator control.
-Outperforming OpenClaw is a quality instrument to improve those outcomes, not the sole product purpose.
+Outperforming Reference CLI is a quality instrument to improve those outcomes, not the sole product purpose.
 
 ## Competitive Program (Release-Bound)
 
-For release planning, Thomas must be measurably better than the currently released OpenClaw baseline
+For release planning, Thomas must be measurably better than the currently released Reference CLI baseline
 on capability surface and execution outcomes.
 Scope for this program is not considered complete unless the win gates below are met.
 
-## OpenClaw Baseline Lock
+## Reference CLI Baseline Lock
 
-- Baseline system: OpenClaw.
-- Pinned baseline artifact: `demo/baselines/openclaw.current.json`.
-- Current pinned OpenClaw baseline commit: `fa6c0e1b` (captured 2026-03-06 from `origin/main`).
-- Baseline revision policy: the exact OpenClaw commit/tag used for head-to-head runs must be recorded in release notes and benchmark artifacts.
+- Baseline system: Reference CLI.
+- Pinned baseline artifact: `demo/baselines/reference_cli.current.json`.
+- Current pinned Reference CLI baseline commit: `fa6c0e1b` (captured 2026-03-06 from `origin/main`).
+- Baseline revision policy: the exact Reference CLI commit/tag used for head-to-head runs must be recorded in release notes and benchmark artifacts.
 - Baseline environment parity: same hardware tier, same provider tier, same task corpus, same timeout budgets.
-- Baseline refresh cadence: monthly or when OpenClaw releases a major capability update.
+- Baseline refresh cadence: monthly or when Reference CLI releases a major capability update.
 
 ## Capability Contract (Must Exist)
 
@@ -52,7 +52,7 @@ Thomas must deliver all of the following:
 
 ## Hard Win Gates (Must All Pass)
 
-Against the pinned currently released OpenClaw baseline on the same benchmark suite:
+Against the pinned currently released Reference CLI baseline on the same benchmark suite:
 
 - Task Success Rate: Thomas must be at least `+10` percentage points.
 - p95 Time-to-First-Useful-Output: Thomas must be at least `20%` faster.
@@ -61,13 +61,13 @@ Against the pinned currently released OpenClaw baseline on the same benchmark su
 - Unsafe Action Block Rate: Thomas must be at least `99%`.
 - False Block Rate (safe action blocked): Thomas must be `<=5%`.
 - Cross-Provider Pass Rate: same task corpus must pass on at least `3` distinct provider profiles.
-- Cost-per-Success: median token+tool cost per successful task must be no worse than OpenClaw by more than `5%`.
+- Cost-per-Success: median token+tool cost per successful task must be no worse than Reference CLI by more than `5%`.
 
 ## Evidence Policy
 
 - No subjective release claims without benchmark evidence.
-- OpenClaw outperformance is necessary for this release program, but not sufficient on its own; consumer reliability/safety/cost gates are required.
-- "Better than OpenClaw" may be stated only when every hard win gate is green.
+- Reference CLI outperformance is necessary for this release program, but not sufficient on its own; consumer reliability/safety/cost gates are required.
+- "Better than Reference CLI" may be stated only when every hard win gate is green.
 - Gate status must remain green for two consecutive weekly benchmark runs before claiming durable superiority.
 
 ## Non-Goals
@@ -75,12 +75,12 @@ Against the pinned currently released OpenClaw baseline on the same benchmark su
 - Regressing to localhost-only assumptions.
 - Provider-specific behavior that breaks shared tool/event contracts.
 - Shipping model onboarding changes without validation evidence.
-- Claiming "better than OpenClaw" using ad-hoc demos without reproducible benchmark artifacts.
+- Claiming "better than Reference CLI" using ad-hoc demos without reproducible benchmark artifacts.
 
 ## Enforcement
 
 - Competitive scope gate: `scripts/forge/gates/competitive_scope_gate.py`
-- OpenClaw metric parity gate: `scripts/forge/gates/openclaw_metric_parity_gate.py`
+- Reference CLI metric parity gate: `scripts/forge/gates/reference_cli_metric_parity_gate.py`
 - Model onboarding gate: `scripts/forge/gates/model_onboarding_gate.py`
 - API capability onboarding protocol: `docs/API_CAPABILITY_ONBOARDING_PROTOCOL.md`
 - Surface parity gate: `scripts/forge/gates/surface_parity.py`

@@ -32,7 +32,7 @@ Commands:
 
 Batch seeding helper:
 - `python scripts/forge/intake/seed_batch.py --batch-id B01`
-- Seeds incoming drops from `docs/OPENCLAW_CATCHUP_PROMPT_BATCH_INDEX_216_2026-02-20.csv`
+- Seeds incoming drops from `docs/REFERENCE_CLI_CATCHUP_PROMPT_BATCH_INDEX_216_2026-02-20.csv`
 - Creates manifest + diff placeholder per prompt in that batch
 
 ## Supported Artifact Types
@@ -62,7 +62,7 @@ Batch seeding helper:
   - `ownership.allowed_paths`
   - `ownership.forbidden_paths`
 - Naming guard:
-  - blocks benchmark-name leakage in added lines (`openclaw`, `clawbot`) by default
+  - blocks benchmark-name leakage in added lines (`reference_cli`, `clawbot`) by default
 - Artifact integrity:
   - optional `artifact.sha256`
 - Reports:
@@ -71,8 +71,8 @@ Batch seeding helper:
 ## Suggested Operating Cadence
 
 Use prompt batches from:
-- `docs/OPENCLAW_CATCHUP_PROMPT_PACK_216_2026-02-20.md`
-- `docs/OPENCLAW_CATCHUP_PROMPT_BATCH_INDEX_216_2026-02-20.csv`
+- `docs/REFERENCE_CLI_CATCHUP_PROMPT_PACK_216_2026-02-20.md`
+- `docs/REFERENCE_CLI_CATCHUP_PROMPT_BATCH_INDEX_216_2026-02-20.csv`
 
 Recommended batch cycle:
 1. Seed one batch into `incoming`
@@ -81,4 +81,4 @@ Recommended batch cycle:
 3. Stage only passing drops
 4. Apply one-by-one with tests after each
 5. Move failures to `rejected` with reason
-6. Update `docs/OPENCLAW_GAP_CHANGELOG.md`
+6. Update `docs/REFERENCE_CLI_GAP_CHANGELOG.md`

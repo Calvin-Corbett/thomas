@@ -120,7 +120,10 @@ def test_robot_surface_uses_shared_frame_and_teleport_contract() -> None:
     portal_css = _read(ROBOT_PORTAL_CSS)
     dock_css = _read(ROBOT_DOCK_CSS)
 
-    assert "const CHAT_ROBOT_ANIMATIONS = ['fishing', 'bouncing', 'looking', 'napping', 'waving', 'lifting', 'scanning', 'shimmy'];" in js
+    assert (
+        "const CHAT_ROBOT_ANIMATIONS = ['fishing', 'bouncing', 'looking', 'napping', 'waving', 'lifting', 'scanning', 'shimmy'];"
+        in js
+    )
     assert "const CHAT_ROBOT_DOCK_WIDTH = 31;" in js
     assert "const CHAT_ROBOT_DOCK_HEIGHT = 29;" in js
     assert "const CHAT_ROBOT_EXIT_FALL_MS = 860;" in js

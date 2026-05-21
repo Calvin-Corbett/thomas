@@ -97,9 +97,7 @@ class DenseEmbedder:
         if self._model is not None:
             return
         if not _HAS_SBERT:
-            raise RuntimeError(
-                "sentence-transformers not installed. " "Install with: pip install sentence-transformers"
-            )
+            raise RuntimeError("sentence-transformers not installed. Install with: pip install sentence-transformers")
 
         device = self._resolve_device()
         log.info("Loading embedding model: %s on %s", self._config.model, device)

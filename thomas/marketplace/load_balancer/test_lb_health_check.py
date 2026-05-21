@@ -231,7 +231,7 @@ class TestHealthChecker:
         checker = HealthChecker(health_config)
         checker.start(backends)
 
-        assert checker.get_status("b1") != None
+        assert checker.get_status("b1") is not None
         checker.remove_backend("b1")
 
         # Status should return UNKNOWN after removal

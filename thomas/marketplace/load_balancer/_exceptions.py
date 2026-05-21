@@ -65,4 +65,4 @@ class CircuitOpenError(LoadBalancerError):
         """
         self.backend_id = backend_id
         self.reset_time = reset_time
-        super().__init__(f"Circuit breaker open for backend {backend_id}, " f"will retry at {reset_time}")
+        super().__init__(f"Circuit breaker open for backend {backend_id}, will retry at {reset_time}")

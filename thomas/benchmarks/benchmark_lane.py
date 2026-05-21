@@ -48,9 +48,7 @@ def resolve_benchmark_root(repo_root: Path, raw_root: str) -> tuple[Path | None,
         return None, f"{BENCHMARK_ROOT_ENV} could not be resolved: {exc}"
     allowed_parent = benchmark_root_parent(repo_root)
     if not _commonpath_startswith(allowed_parent, candidate):
-        return None, (
-            f"{BENCHMARK_ROOT_ENV} must resolve under {allowed_parent}"
-        )
+        return None, (f"{BENCHMARK_ROOT_ENV} must resolve under {allowed_parent}")
     return candidate, None
 
 

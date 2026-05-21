@@ -186,7 +186,7 @@ class ConstraintViolationError(EnergyModuleException):
         self.value = value
         self.limit = limit
 
-        message = f"Constraint violation in plant {plant_id}: {constraint} " f"{value:.2f} exceeds limit {limit:.2f}"
+        message = f"Constraint violation in plant {plant_id}: {constraint} {value:.2f} exceeds limit {limit:.2f}"
         super().__init__(message)
 
 

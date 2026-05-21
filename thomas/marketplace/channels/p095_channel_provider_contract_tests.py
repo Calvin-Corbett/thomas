@@ -4,7 +4,7 @@ This module implements a provider-focused diagnostic runner for Thomas channel
 integrations.
 
 Design goals:
-* Thomas-native (no OpenClaw naming reuse)
+* Thomas-native (no Reference CLI naming reuse)
 * Deterministic failures: stable error codes for automation
 * Optional external checks: safe, read-only upstream API calls when possible
 * Machine-readable output: JSON report + JSON schema

@@ -42,9 +42,7 @@ class ConcurrencyLimiter:
         async with self._lock:
             self._queued_count += 1
             if self._queued_count > 1:
-                logger.warning(
-                    f"Workflow queue building up: {self._queued_count} waiting, " f"{self._active_count} active"
-                )
+                logger.warning(f"Workflow queue building up: {self._queued_count} waiting, {self._active_count} active")
 
         # Wait for slot to become available
         await self._semaphore.acquire()
@@ -53,7 +51,7 @@ class ConcurrencyLimiter:
             self._queued_count -= 1
             self._active_count += 1
             logger.debug(
-                f"Acquired concurrency slot for {workflow_id} " f"({self._active_count}/{self.max_concurrent} active)"
+                f"Acquired concurrency slot for {workflow_id} ({self._active_count}/{self.max_concurrent} active)"
             )
 
     async def release(self, workflow_id: str) -> None:
@@ -67,7 +65,7 @@ class ConcurrencyLimiter:
 
         self._semaphore.release()
         logger.debug(
-            f"Released concurrency slot from {workflow_id} " f"({self._active_count}/{self.max_concurrent} active)"
+            f"Released concurrency slot from {workflow_id} ({self._active_count}/{self.max_concurrent} active)"
         )
 
     async def with_limit(self, workflow_id: str, coro):

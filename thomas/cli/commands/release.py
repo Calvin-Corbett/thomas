@@ -120,7 +120,7 @@ def register_release_commands(cli_group: click.Group) -> None:
         if not root:
             click.echo(
                 click.style(
-                    "  Cannot find project root (pyproject.toml).\n" "  Run this from the Thomas project directory.",
+                    "  Cannot find project root (pyproject.toml).\n  Run this from the Thomas project directory.",
                     fg="red",
                 )
             )

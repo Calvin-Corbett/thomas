@@ -285,7 +285,7 @@ class ReadingOrderDetector:
 
         sorted_indices = sorted(
             indices,
-            key=lambda i: (blocks[i].bbox.x0 if direction == "vertical" else blocks[i].bbox.y0),
+            key=lambda i: blocks[i].bbox.x0 if direction == "vertical" else blocks[i].bbox.y0,
         )
 
         for idx in sorted_indices:

@@ -235,8 +235,12 @@ def run(argv: list[str] | None = None) -> int:
         print(json.dumps(report, sort_keys=True))
     else:
         print(f"Bible drift: {'PASS' if report['ok'] else 'WARN'}")
-        print(f"- sections={report['section_count']} stamped={report['stamped_count']} unstamped={report['unstamped_count']}")
-        print(f"- green_drifted={report['green_drifted_count']} yellow_or_red={report['yellow_or_red_count']} missing_paths={report['missing_paths_count']}")
+        print(
+            f"- sections={report['section_count']} stamped={report['stamped_count']} unstamped={report['unstamped_count']}"
+        )
+        print(
+            f"- green_drifted={report['green_drifted_count']} yellow_or_red={report['yellow_or_red_count']} missing_paths={report['missing_paths_count']}"
+        )
         for section in report["green_drifted"][:10]:
             print(f"  DRIFTED: section L{section['line_no']} `{section['title']}` (covers={section['covers']})")
         for section in report["missing_paths"][:10]:

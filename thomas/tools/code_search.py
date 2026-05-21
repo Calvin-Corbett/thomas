@@ -17,16 +17,53 @@ from typing import Any
 from thomas.tools.base import Tool, ToolResult
 
 _SKIP_DIRS = {
-    ".git", "node_modules", "__pycache__", ".venv", "venv",
-    ".tox", "dist", "build", ".mypy_cache", ".pytest_cache",
+    ".git",
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".tox",
+    "dist",
+    "build",
+    ".mypy_cache",
+    ".pytest_cache",
 }
 
 _CODE_EXTS = {
-    ".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java",
-    ".c", ".cpp", ".h", ".hpp", ".cs", ".rb", ".php", ".swift",
-    ".kt", ".scala", ".lua", ".sh", ".bash", ".ps1", ".toml",
-    ".yaml", ".yml", ".json", ".xml", ".html", ".css", ".scss",
-    ".sql", ".md", ".rst", ".txt",
+    ".py",
+    ".js",
+    ".ts",
+    ".tsx",
+    ".jsx",
+    ".go",
+    ".rs",
+    ".java",
+    ".c",
+    ".cpp",
+    ".h",
+    ".hpp",
+    ".cs",
+    ".rb",
+    ".php",
+    ".swift",
+    ".kt",
+    ".scala",
+    ".lua",
+    ".sh",
+    ".bash",
+    ".ps1",
+    ".toml",
+    ".yaml",
+    ".yml",
+    ".json",
+    ".xml",
+    ".html",
+    ".css",
+    ".scss",
+    ".sql",
+    ".md",
+    ".rst",
+    ".txt",
 }
 
 
@@ -140,7 +177,9 @@ class CodeSearchTool(Tool):
             py_result = await self._search_python(args)
             if py_result.ok and stderr_clean:
                 py_data = str(py_result.data or "").strip()
-                py_result.data = f"{py_data}\n[rg warning] {stderr_clean}" if py_data else f"[rg warning] {stderr_clean}"
+                py_result.data = (
+                    f"{py_data}\n[rg warning] {stderr_clean}" if py_data else f"[rg warning] {stderr_clean}"
+                )
             if py_result.ok:
                 return py_result
             return ToolResult(ok=False, error=stderr_clean or py_result.error or "rg error")
@@ -188,7 +227,7 @@ class CodeSearchTool(Tool):
                             end = min(len(lines), lineno + context_n)
                             for i in range(start, end):
                                 prefix = ">" if i == lineno - 1 else " "
-                                matches.append(f"{rel_path}:{i+1}{prefix} {lines[i]}")
+                                matches.append(f"{rel_path}:{i + 1}{prefix} {lines[i]}")
                             matches.append("--")
                         else:
                             matches.append(f"{rel_path}:{lineno}: {line.rstrip()}")
@@ -209,8 +248,7 @@ class FindDefinitionTool(Tool):
     name = "code.find_definition"
     category = "code"
     description = (
-        "Find where a function, class, or variable is defined. "
-        "Returns file path, line number, and surrounding context."
+        "Find where a function, class, or variable is defined. Returns file path, line number, and surrounding context."
     )
     parameters = {
         "type": "object",
@@ -304,7 +342,7 @@ class FindDefinitionTool(Tool):
                     if any(p.search(line) for p in patterns):
                         start = max(0, lineno - 1)
                         end = min(len(lines), lineno + 3)
-                        ctx = "\n".join(f"  {i+1}: {lines[i]}" for i in range(start, end))
+                        ctx = "\n".join(f"  {i + 1}: {lines[i]}" for i in range(start, end))
                         results.append(f"{rel_path}:{lineno}\n{ctx}")
                         if len(results) >= 20:
                             break
@@ -362,8 +400,13 @@ class FindReferencesTool(Tool):
 
         if self._has_rg:
             cmd = [
-                "rg", "--line-number", "--with-filename",
-                "-m", str(max_results), pattern, str(base),
+                "rg",
+                "--line-number",
+                "--with-filename",
+                "-m",
+                str(max_results),
+                pattern,
+                str(base),
             ]
             try:
                 proc = await asyncio.create_subprocess_exec(

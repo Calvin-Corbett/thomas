@@ -69,7 +69,9 @@ def test_apply_runtime_data_env_defaults_sets_stateful_paths(tmp_path: Path, mon
     )
     assert mapping["THOMAS_PROFILE"] == "demo"
     assert os.environ["THOMAS_HOME"] == str(tmp_path / "base" / "demo")
-    assert os.environ["THOMAS_RUNS_DB_PATH"].endswith(".thomas\\runs.sqlite3") or os.environ["THOMAS_RUNS_DB_PATH"].endswith(".thomas/runs.sqlite3")
+    assert os.environ["THOMAS_RUNS_DB_PATH"].endswith(".thomas\\runs.sqlite3") or os.environ[
+        "THOMAS_RUNS_DB_PATH"
+    ].endswith(".thomas/runs.sqlite3")
 
 
 def test_env_override_and_type_coercion_cover_nested_sections(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -221,7 +223,9 @@ def test_helper_paths_and_runtime_objects_expose_resolved_paths(tmp_path: Path) 
     assert JournalConfig(dir=str(tmp_path / "journal")).dir_path == (tmp_path / "journal").resolve()
 
 
-def test_env_override_ignores_invalid_model_fields_and_allows_extension_sections(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_env_override_ignores_invalid_model_fields_and_allows_extension_sections(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("THOMAS_MODELS_LOCAL_NOT_REAL", "x")
     monkeypatch.setenv("THOMAS_POLICY_ENABLED", "true")
     monkeypatch.setenv("THOMAS_WORKSPACE_ROOT", "repo")
@@ -299,7 +303,9 @@ def test_load_config_defaults_profile_runtime_env_and_production_overrides(
     assert cfg.memory.root == "runtime"
     assert cfg.memory.data_dir == str((tmp_path / "data-root").resolve())
     assert os.environ["THOMAS_HOME"] == str(resolve_thomas_data_dir(tmp_path / "data-root", "demo"))
-    assert os.environ["THOMAS_RUNTIME_DIR"].endswith("demo\\runtime") or os.environ["THOMAS_RUNTIME_DIR"].endswith("demo/runtime")
+    assert os.environ["THOMAS_RUNTIME_DIR"].endswith("demo\\runtime") or os.environ["THOMAS_RUNTIME_DIR"].endswith(
+        "demo/runtime"
+    )
     assert cfg.journal.dir == "notes"
     assert cfg.journal.dir_path == Path("notes").resolve()
     assert cfg.keybindings["accept"] == "ctrl-enter"
@@ -331,7 +337,7 @@ def test_load_config_uses_env_path_invalid_environment_and_fallback_sections(
     cfg_path.write_text(
         "\n".join(
             [
-                '[models.local]',
+                "[models.local]",
                 'model = "dummy"',
                 'base_url = "http://127.0.0.1:11434/v1"',
                 "",
@@ -341,7 +347,7 @@ def test_load_config_uses_env_path_invalid_environment_and_fallback_sections(
                 "[failover]",
                 "profiles = 123",
                 "",
-                '[keybindings]',
+                "[keybindings]",
                 'accept = "ctrl-enter"',
                 "",
                 "journal = 'not-a-dict'",
@@ -374,7 +380,7 @@ def test_load_config_without_explicit_root_uses_effective_data_dir_when_subpath_
     cfg_path.write_text(
         "\n".join(
             [
-                '[models.local]',
+                "[models.local]",
                 'model = "dummy"',
                 'base_url = "http://127.0.0.1:11434/v1"',
                 "",

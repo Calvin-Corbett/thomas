@@ -142,7 +142,7 @@ ode_modules, 	asks, output.
 - Created commit d865441 for active-folder hardening and staged-edit guard.
 - Installed local git hook: python -m pre_commit install.
 - python -m pre_commit run --all-files: Active Folder Guard passed; Release Update Gate failed in dirty workspace due product-surface change detection on thomas/demo/agent_comparison_suite.py.
-- Concurrent agent changes are present in apps/site and docs/openclaw_gap_runs and were intentionally not modified.
+- Concurrent agent changes are present in apps/site and docs/reference_cli_gap_runs and were intentionally not modified.
 
 ## 2026-02-21T14:41:19-06:00
 

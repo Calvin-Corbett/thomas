@@ -46,6 +46,10 @@ jobs:
         run: |
           python scripts/forge/publish/preflight.py --deep --json --strict
 
+      - name: Public repo leak guard (competitor names + internal docs)
+        run: |
+          python scripts/forge/gates/public_repo_leak_guard.py
+
       - name: Production launch smoke (prod branch only)
         if: github.ref_name == 'prod'
         shell: bash

@@ -73,7 +73,9 @@ def _load_args(args_json: str | None, args_file: Path | None) -> dict[str, Any]:
 @click.option("--schema", "schema_mode", is_flag=True, help="Print the bridge request/response JSON schemas.")
 @click.option("--list", "list_mode", is_flag=True, help="List discovered plugin command names.")
 @click.option("--command", "command_name", type=str, default=None, help="Invoke a specific plugin command by name.")
-@click.option("--args-json", "args_json", type=str, default=None, help="JSON object of arguments to pass to the command.")
+@click.option(
+    "--args-json", "args_json", type=str, default=None, help="JSON object of arguments to pass to the command."
+)
 @click.option(
     "--args-file",
     "args_file",

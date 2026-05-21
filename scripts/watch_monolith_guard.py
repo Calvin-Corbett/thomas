@@ -263,8 +263,7 @@ def main() -> int:
         return 0
 
     print(
-        f"[monolith-watch] watching changed files every {interval:.1f}s "
-        f"(repo={repo_root}, baseline={baseline_path})",
+        f"[monolith-watch] watching changed files every {interval:.1f}s (repo={repo_root}, baseline={baseline_path})",
         flush=True,
     )
 

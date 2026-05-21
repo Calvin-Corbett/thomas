@@ -50,7 +50,9 @@ def test_runner_failure_tool_error_is_returned() -> None:
     def tool(_inp):
         raise RuntimeError("boom")
 
-    resp = run_after_tool_hook(AfterToolHookRequest(tool_name="unit_test_fail", tool_input={"x": 1}, tool_callable=tool))
+    resp = run_after_tool_hook(
+        AfterToolHookRequest(tool_name="unit_test_fail", tool_input={"x": 1}, tool_callable=tool)
+    )
 
     assert resp.ok is False
     assert resp.success is False

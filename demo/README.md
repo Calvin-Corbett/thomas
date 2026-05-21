@@ -1,6 +1,6 @@
 # Head-to-Head Demo Harness
 
-Run a standardized comparison between assistants (default: `thomas` vs `openclaw`) and emit reproducible scoring artifacts.
+Run a standardized comparison between assistants (default: `thomas` vs `reference_cli`) and emit reproducible scoring artifacts.
 
 ## One-command run
 
@@ -30,7 +30,7 @@ Default behavior:
 ```powershell
 python scripts/run_head_to_head_demo.py `
   --competitor thomas `
-  --competitor openclaw `
+  --competitor reference_cli `
   --task-pack demo/task_pack.default.json `
   --run-id release-demo-001 `
   --template-out demo/results-template.json `
@@ -69,7 +69,7 @@ Automated dual-browser execution with timestamp capture:
 ```powershell
 python scripts/run_dual_browser_demo.py `
   --target thomas=http://127.0.0.1:8899/ `
-  --target openclaw=http://127.0.0.1:3000/ `
+  --target reference_cli=http://127.0.0.1:3000/ `
   --selectors-json demo/selectors.example.json `
   --randomize-order `
   --seed 42
@@ -86,7 +86,7 @@ One-command 10-run campaign (execute + score + aggregate + publish pack):
 python scripts/run_demo_campaign.py `
   --runs-count 10 `
   --target thomas=http://127.0.0.1:8899/ `
-  --target openclaw=http://127.0.0.1:3000/ `
+  --target reference_cli=http://127.0.0.1:3000/ `
   --selectors-json demo/selectors.example.json `
   --base-seed 42
 ```

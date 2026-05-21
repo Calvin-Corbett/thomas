@@ -349,4 +349,4 @@ class DistributedScheduler:
 
     def __repr__(self) -> str:
         """String representation."""
-        return f"DistributedScheduler(" f"node_id={self.node_id}, " f"is_leader={self._is_leader})"
+        return f"DistributedScheduler(node_id={self.node_id}, is_leader={self._is_leader})"

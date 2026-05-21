@@ -64,7 +64,6 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     try:
         agents_text = _load_text(Path(args.agents))
-        rules_text = _load_text(Path(args.rules))
     except Exception as exc:
         print("Worktree rules gate: FAIL")
         print(f"- {exc}")
@@ -74,9 +73,21 @@ def run(argv: Sequence[str] | None = None) -> int:
     for item in missing_agents:
         violations.append(f"AGENTS.md missing required snippet: {item}")
 
-    missing_rules = _missing_snippets(rules_text, REQUIRED_RULES_SNIPPETS)
-    for item in missing_rules:
-        violations.append(f"WORKTREE_RULES.md missing required snippet: {item}")
+    # WORKTREE_RULES.md was deleted in the 2026-05-21 pre-public cleanup
+    # (it contained personal directory paths like C:\Users\corbe\... that
+    # exposed the developer's local filesystem layout). When the file is
+    # present, we still check its content; when absent, we skip silently
+    # so the gate doesn't block public-repo cleanups.
+    rules_path = Path(args.rules)
+    if rules_path.is_file():
+        try:
+            rules_text = _load_text(rules_path)
+        except Exception as exc:  # pragma: no cover
+            violations.append(f"could not read {rules_path}: {exc}")
+        else:
+            missing_rules = _missing_snippets(rules_text, REQUIRED_RULES_SNIPPETS)
+            for item in missing_rules:
+                violations.append(f"WORKTREE_RULES.md missing required snippet: {item}")
 
     if violations:
         print("Worktree rules gate: FAIL")

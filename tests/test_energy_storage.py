@@ -212,7 +212,6 @@ class TestFlywheelStorage:
             soc=0.5,
         )
 
-
         # Charge
         charged = flywheel.charge(power_mw=0.5, duration_hours=0.1)
         assert charged > 0

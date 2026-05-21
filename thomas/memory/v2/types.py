@@ -20,4 +20,3 @@ class RetrievalResult:
     items: list[RetrievalItem]
     latency_ms: int
     pack_tokens_est: int
-

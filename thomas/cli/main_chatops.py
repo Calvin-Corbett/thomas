@@ -176,13 +176,9 @@ def register_chatops_commands(
         click.echo("Doppelganger paths:")
         click.echo(f"  blue_root      : {paths.blue_root}")
         click.echo(f"  dg_root        : {paths.dg_root}")
-        click.echo(
-            f"  green_root     : {paths.green_root} " f"({'present' if paths.green_root.exists() else 'missing'})"
-        )
+        click.echo(f"  green_root     : {paths.green_root} ({'present' if paths.green_root.exists() else 'missing'})")
         click.echo(f"  green_runtime  : {paths.green_runtime}")
-        click.echo(
-            f"  green_venv     : {paths.green_venv} " f"({'present' if paths.green_venv.exists() else 'missing'})"
-        )
+        click.echo(f"  green_venv     : {paths.green_venv} ({'present' if paths.green_venv.exists() else 'missing'})")
         click.echo(f"  backups_root   : {paths.backups_root}")
 
     @doppelganger.command("sync")

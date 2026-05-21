@@ -472,7 +472,10 @@ class TestChatLogger:
         logger.configure(enabled=True)
 
         received = []
-        cb = lambda e: received.append(e)
+
+        def cb(e):
+            return received.append(e)
+
         logger.add_observer(cb)
         logger.log_event(ChatEventKind.REQUEST_IN, {"text": "a"})
         logger.remove_observer(cb)

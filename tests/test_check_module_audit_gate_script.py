@@ -23,9 +23,7 @@ def _set_repo_root(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(mod, "ROOT_DIRNAME", tmp_path.name)
 
 
-def test_module_audit_gate_fails_when_changed_file_not_covered(
-    tmp_path: Path, monkeypatch, capsys
-) -> None:
+def test_module_audit_gate_fails_when_changed_file_not_covered(tmp_path: Path, monkeypatch, capsys) -> None:
     _set_repo_root(monkeypatch, tmp_path)
     _write_module_file(tmp_path, "thomas/models/discovery.py", "print('ok')\n")
 
@@ -93,9 +91,7 @@ def test_module_audit_gate_fails_on_hash_mismatch(tmp_path: Path, monkeypatch, c
     assert "stale hash" in out
 
 
-def test_module_audit_gate_passes_with_covered_matching_hash(
-    tmp_path: Path, monkeypatch, capsys
-) -> None:
+def test_module_audit_gate_passes_with_covered_matching_hash(tmp_path: Path, monkeypatch, capsys) -> None:
     _set_repo_root(monkeypatch, tmp_path)
     digest = _write_module_file(tmp_path, "thomas/models/discovery.py", "print('ok')\n")
 

@@ -59,7 +59,7 @@ def render_registry_markdown(registry: Mapping[str, Any]) -> str:
         return "\n".join(lines)
     for run in runs[-20:][::-1]:
         lines.append(
-            f"- `{run.get('computed_at_utc')}` suite=`{run.get('suite_id')}` " f"result=`{run.get('result_json_path')}`"
+            f"- `{run.get('computed_at_utc')}` suite=`{run.get('suite_id')}` result=`{run.get('result_json_path')}`"
         )
     lines.append("")
     return "\n".join(lines)

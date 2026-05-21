@@ -94,7 +94,7 @@ class PanoramaStitcher:
             )
 
             if len(matches) < 4:
-                raise RegistrationError(f"Insufficient matches between images {i} and {i+1}")
+                raise RegistrationError(f"Insufficient matches between images {i} and {i + 1}")
 
             H = self._ransac_homography(
                 keypoints_list[i],
@@ -105,7 +105,7 @@ class PanoramaStitcher:
             )
 
             if H is None:
-                raise RegistrationError(f"RANSAC failed between images {i} and {i+1}")
+                raise RegistrationError(f"RANSAC failed between images {i} and {i + 1}")
 
             homographies.append(H)
 

@@ -162,9 +162,7 @@ class MinimaxSearcher:
                 best_score = score
                 best_move = move
 
-        logger.debug(
-            f"Search complete: score={best_score}, nodes={self._nodes_evaluated}, " f"pruned={self._nodes_pruned}"
-        )
+        logger.debug(f"Search complete: score={best_score}, nodes={self._nodes_evaluated}, pruned={self._nodes_pruned}")
 
         return best_score, best_move
 

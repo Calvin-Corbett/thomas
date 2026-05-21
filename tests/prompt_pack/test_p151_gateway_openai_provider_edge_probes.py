@@ -101,7 +101,7 @@ def test_p151_stream_preserves_multiple_tool_calls_without_indices() -> None:
             'data: {"choices":[{"delta":{"tool_calls":['
             '{"id":"call_a","function":{"name":"tool.alpha","arguments":"{\\"a\\":1}"}},'
             '{"id":"call_b","function":{"name":"tool.beta","arguments":"{\\"b\\":2}"}}'
-            ']}}]}'
+            "]}}]}"
         ),
         'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}',
         "data: [DONE]",
@@ -121,16 +121,8 @@ def test_p151_stream_preserves_multiple_tool_calls_without_indices() -> None:
 
 def test_p151_stream_continues_single_tool_call_when_provider_omits_id_and_index() -> None:
     lines = [
-        (
-            'data: {"choices":[{"delta":{"tool_calls":['
-            '{"id":"call_1","index":0,"function":{"name":"fs.read_file"}}'
-            ']}}]}'
-        ),
-        (
-            'data: {"choices":[{"delta":{"tool_calls":['
-            '{"function":{"arguments":"{\\"path\\":\\"README.md\\"}"}}'
-            ']}}]}'
-        ),
+        ('data: {"choices":[{"delta":{"tool_calls":[{"id":"call_1","index":0,"function":{"name":"fs.read_file"}}]}}]}'),
+        ('data: {"choices":[{"delta":{"tool_calls":[{"function":{"arguments":"{\\"path\\":\\"README.md\\"}"}}]}}]}'),
         'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}',
         "data: [DONE]",
     ]

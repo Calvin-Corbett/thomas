@@ -58,6 +58,7 @@ def _get_desktop() -> Path:
         # Use the Shell API for localized desktops
         try:
             import ctypes.wintypes
+
             buf = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
             # CSIDL_DESKTOPDIRECTORY = 0x0010
             ctypes.windll.shell32.SHGetFolderPathW(None, 0x0010, None, 0, buf)
@@ -79,7 +80,9 @@ def _get_desktop() -> Path:
         try:
             result = subprocess.run(
                 ["xdg-user-dir", "DESKTOP"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if result.returncode == 0 and result.stdout.strip():
                 return Path(result.stdout.strip())
@@ -89,6 +92,7 @@ def _get_desktop() -> Path:
 
 
 # ── Windows ──────────────────────────────────────────────────────
+
 
 def _create_windows_shortcut(
     target_dir: Path,
@@ -113,7 +117,9 @@ def _create_windows_shortcut(
 
     result = subprocess.run(
         ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
-        capture_output=True, text=True, timeout=30,
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     if result.returncode != 0:
         raise RuntimeError(f"Failed to create shortcut:\n{result.stderr}")
@@ -133,6 +139,7 @@ def _create_windows_start_menu(name: str = "Thomas") -> Path:
 
 # ── macOS ────────────────────────────────────────────────────────
 
+
 def _create_macos_shortcut(
     target_dir: Path,
     name: str = "Thomas",
@@ -142,7 +149,8 @@ def _create_macos_shortcut(
 
     # Create a .command file (double-clickable terminal script)
     cmd_file = target_dir / f"{name}.command"
-    cmd_file.write_text(textwrap.dedent(f"""\
+    cmd_file.write_text(
+        textwrap.dedent(f"""\
         #!/bin/bash
         # Thomas AI Workspace Launcher
         cd "{REPO_ROOT}"
@@ -156,7 +164,9 @@ def _create_macos_shortcut(
             echo "Thomas not found. Run: pip install -e ."
             read -p "Press Enter to close..."
         fi
-    """), encoding="utf-8")
+    """),
+        encoding="utf-8",
+    )
     cmd_file.chmod(cmd_file.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
     # Set custom icon using the PNG via macOS resource forks
@@ -177,20 +187,37 @@ def _set_macos_icon(target: Path) -> None:
             iconset.mkdir(exist_ok=True)
             for size in [16, 32, 64, 128, 256, 512]:
                 subprocess.run(
-                    ["sips", "-z", str(size), str(size), str(PNG_PATH),
-                     "--out", str(iconset / f"icon_{size}x{size}.png")],
-                    capture_output=True, timeout=15,
+                    [
+                        "sips",
+                        "-z",
+                        str(size),
+                        str(size),
+                        str(PNG_PATH),
+                        "--out",
+                        str(iconset / f"icon_{size}x{size}.png"),
+                    ],
+                    capture_output=True,
+                    timeout=15,
                 )
                 if size <= 256:
                     double = size * 2
                     subprocess.run(
-                        ["sips", "-z", str(double), str(double), str(PNG_PATH),
-                         "--out", str(iconset / f"icon_{size}x{size}@2x.png")],
-                        capture_output=True, timeout=15,
+                        [
+                            "sips",
+                            "-z",
+                            str(double),
+                            str(double),
+                            str(PNG_PATH),
+                            "--out",
+                            str(iconset / f"icon_{size}x{size}@2x.png"),
+                        ],
+                        capture_output=True,
+                        timeout=15,
                     )
             subprocess.run(
                 ["iconutil", "-c", "icns", str(iconset), "-o", str(icns_path)],
-                capture_output=True, timeout=30,
+                capture_output=True,
+                timeout=30,
             )
             shutil.rmtree(iconset, ignore_errors=True)
 
@@ -198,13 +225,15 @@ def _set_macos_icon(target: Path) -> None:
         if icns_path.exists():
             subprocess.run(
                 ["fileicon", "set", str(target), str(icns_path)],
-                capture_output=True, timeout=15,
+                capture_output=True,
+                timeout=15,
             )
     except Exception:
         pass  # Icon setting is best-effort on macOS
 
 
 # ── Linux ────────────────────────────────────────────────────────
+
 
 def _create_linux_shortcut(
     target_dir: Path,
@@ -225,7 +254,8 @@ def _create_linux_shortcut(
             exec_line = "python -m thomas.server"
 
     desktop_file = target_dir / f"{name.lower()}.desktop"
-    desktop_file.write_text(textwrap.dedent(f"""\
+    desktop_file.write_text(
+        textwrap.dedent(f"""\
         [Desktop Entry]
         Version=1.1
         Type=Application
@@ -238,19 +268,20 @@ def _create_linux_shortcut(
         Categories=Development;Utility;
         StartupNotify=true
         StartupWMClass=thomas
-    """), encoding="utf-8")
-
-    desktop_file.chmod(
-        desktop_file.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+    """),
+        encoding="utf-8",
     )
+
+    desktop_file.chmod(desktop_file.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
     # Trust the desktop file if gio is available
     import contextlib
+
     with contextlib.suppress(Exception):
         subprocess.run(
-            ["gio", "set", str(desktop_file),
-             "metadata::trusted", "true"],
-            capture_output=True, timeout=10,
+            ["gio", "set", str(desktop_file), "metadata::trusted", "true"],
+            capture_output=True,
+            timeout=10,
         )
 
     # Also install to ~/.local/share/applications for app launcher
@@ -264,6 +295,7 @@ def _create_linux_shortcut(
 
 
 # ── Public API ───────────────────────────────────────────────────
+
 
 def create_desktop_shortcut(name: str = "Thomas") -> Path:
     """Create a desktop shortcut for the current platform.  Returns the path."""
@@ -293,16 +325,13 @@ def create_start_menu_shortcut(name: str = "Thomas") -> Path | None:
 
 # ── CLI ──────────────────────────────────────────────────────────
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Create Thomas desktop shortcut")
-    parser.add_argument("--desktop", action="store_true", default=True,
-                        help="Create desktop shortcut (default)")
-    parser.add_argument("--start-menu", action="store_true",
-                        help="Also create Start Menu / app launcher entry")
-    parser.add_argument("--name", default="Thomas",
-                        help="Shortcut display name (default: Thomas)")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Show what would be created without doing it")
+    parser.add_argument("--desktop", action="store_true", default=True, help="Create desktop shortcut (default)")
+    parser.add_argument("--start-menu", action="store_true", help="Also create Start Menu / app launcher entry")
+    parser.add_argument("--name", default="Thomas", help="Shortcut display name (default: Thomas)")
+    parser.add_argument("--dry-run", action="store_true", help="Show what would be created without doing it")
     args = parser.parse_args()
 
     system = platform.system()

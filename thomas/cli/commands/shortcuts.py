@@ -60,7 +60,7 @@ Type=Application
 Name={name}
 Comment={comment}
 Exec={cmd}
-Terminal={'true' if mode == 'repl' else 'false'}
+Terminal={"true" if mode == "repl" else "false"}
 Categories=Development;Utility;
 Keywords=AI;assistant;chat;
 """

@@ -72,10 +72,7 @@ def _v2_matches(root_path: Path, query: str, *, limit: int) -> list[dict[str, An
     fabric = MemoryFabricV2(root_path=str(fabric_db.parent))
     try:
         episodes = fabric.db.execute(
-            "SELECT id, thread_id, role, content, ts_ms "
-            "FROM episodes "
-            "WHERE content LIKE ? "
-            "ORDER BY ts_ms DESC LIMIT ?",
+            "SELECT id, thread_id, role, content, ts_ms FROM episodes WHERE content LIKE ? ORDER BY ts_ms DESC LIMIT ?",
             (needle, int(limit)),
         ).fetchall()
         facts = fabric.db.execute(
@@ -100,7 +97,7 @@ def _v2_matches(root_path: Path, query: str, *, limit: int) -> list[dict[str, An
                 }
             )
         for row in facts:
-            snippet = f"{row['subject']} {row['predicate']} {row['obj']} " f"(conf {float(row['confidence']):.2f})"
+            snippet = f"{row['subject']} {row['predicate']} {row['obj']} (conf {float(row['confidence']):.2f})"
             rows.append(
                 {
                     "source": "v2_fact",

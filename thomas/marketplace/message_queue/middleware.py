@@ -58,14 +58,13 @@ class LoggingMiddleware(Middleware):
     async def process_inbound(self, message: Message) -> Message | None:
         """Log inbound message."""
         self.logger(
-            f"[INBOUND] Topic: {message.topic}, ID: {message.id}, "
-            f"Payload size: {len(str(message.payload).encode())}"
+            f"[INBOUND] Topic: {message.topic}, ID: {message.id}, Payload size: {len(str(message.payload).encode())}"
         )
         return message
 
     async def process_outbound(self, message: Message) -> Message | None:
         """Log outbound message."""
-        self.logger(f"[OUTBOUND] Topic: {message.topic}, ID: {message.id}, " f"Retries: {message.retry_count}")
+        self.logger(f"[OUTBOUND] Topic: {message.topic}, ID: {message.id}, Retries: {message.retry_count}")
         return message
 
 

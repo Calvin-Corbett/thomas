@@ -330,7 +330,7 @@ class AutonomyMemoryEngine:
             log.debug("Runtime fact promotion helper unavailable: %s", e)
             return {"promoted": 0, "duplicates": 0, "reason": "extractor_unavailable"}
 
-        ts = int(ts_ms or time.time() * 1000)
+        int(ts_ms or time.time() * 1000)
         promoted = 0
         duplicates = 0
         for subject, predicate, obj, confidence in extract_episode_facts(payload):
@@ -532,7 +532,7 @@ class AutonomyMemoryEngine:
             if warn_cap > 0:
                 pressure = float(max_spend) / float(max(1, warn_cap))
                 if pressure >= float(self._token_report_budget_pressure_threshold):
-                    reasons.append("iteration_budget_pressure" f">={self._token_report_budget_pressure_threshold:.2f}")
+                    reasons.append(f"iteration_budget_pressure>={self._token_report_budget_pressure_threshold:.2f}")
 
         if not reasons:
             return {"checked": True, "triggered": False, "reasons": []}

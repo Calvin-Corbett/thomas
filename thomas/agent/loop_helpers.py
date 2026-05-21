@@ -157,9 +157,7 @@ def _validate_benchmark_code_output(
     if not has_non_trivial:
         issue = reason
         if entry_point:
-            issue = (
-                f"{issue} (expected a non-trivial continuation for entry point '{entry_point}'," " avoid no-op stubs)"
-            )
+            issue = f"{issue} (expected a non-trivial continuation for entry point '{entry_point}', avoid no-op stubs)"
         return False, issue, entry_point
 
     # Import here to avoid circular dependency

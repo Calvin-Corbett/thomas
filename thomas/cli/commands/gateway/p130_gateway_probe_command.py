@@ -70,7 +70,7 @@ async def run_probe(
 
 def _render_human(result: GatewayProbeResponse) -> str:
     if result.ok:
-        return f"Gateway reachable: {result.target} " f"(HTTP {result.status_code}, {result.latency_ms}ms)"
+        return f"Gateway reachable: {result.target} (HTTP {result.status_code}, {result.latency_ms}ms)"
     code = result.error["code"] if result.error else "error"
     msg = result.error["message"] if result.error else "Gateway probe failed."
     tgt = result.target or "<unknown>"

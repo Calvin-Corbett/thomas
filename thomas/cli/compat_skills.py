@@ -119,7 +119,7 @@ def skills_show(ctx: click.Context, name: str, as_json: bool) -> None:
     click.echo(f"Skill: {payload['name']} (matches={payload['match_count']})")
     for row in payload["entries"]:
         click.echo(
-            f"- path={row.get('path')} | pinned={bool(row.get('pinned'))} | " f"runs={int(row.get('run_count') or 0)}"
+            f"- path={row.get('path')} | pinned={bool(row.get('pinned'))} | runs={int(row.get('run_count') or 0)}"
         )
         desc = str(row.get("description") or "").strip()
         if desc:
@@ -153,9 +153,7 @@ def skills_sync(ctx: click.Context, include_root: str, as_json: bool) -> None:
     if as_json:
         click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
         return
-    click.echo(
-        f"Skill sync complete: {payload['count']} discovered " f"across {len(payload.get('roots') or [])} roots."
-    )
+    click.echo(f"Skill sync complete: {payload['count']} discovered across {len(payload.get('roots') or [])} roots.")
 
 
 @skills.command("pin")
@@ -316,7 +314,6 @@ def skills_check(ctx: click.Context, as_json: bool) -> None:
         raise SystemExit(1)
 
 
-
 @skills.command("scan-external")
 @click.option("--root", "scan_root", required=True, help="Explicit local path to inspect for external skills.")
 @click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
@@ -326,7 +323,7 @@ def skills_scan_external(scan_root: str, as_json: bool) -> None:
         click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
         return
     click.echo(f"External scan: {payload['count']} candidate skill(s) under {payload['root']}")
-    for row in payload.get('skills') or []:
+    for row in payload.get("skills") or []:
         click.echo(f"- {row.get('name')} | kind={row.get('kind')} | path={row.get('path')}")
 
 
@@ -341,7 +338,9 @@ def skills_distill(ctx: click.Context, source: str, name: str, as_json: bool) ->
     if as_json:
         click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
         return
-    click.echo(f"Created draft {payload.get('draft_id')} for {((payload.get('generated') or {}).get('skill_name') or '')}")
+    click.echo(
+        f"Created draft {payload.get('draft_id')} for {((payload.get('generated') or {}).get('skill_name') or '')}"
+    )
 
 
 @skills.command("review")

@@ -70,7 +70,7 @@ def _wait_for_health(
             output_tail = ""
 
     raise AssertionError(
-        f"Demo server failed to become healthy at {url}; " f"last_error={last_error}; " f"output_tail={output_tail}"
+        f"Demo server failed to become healthy at {url}; last_error={last_error}; output_tail={output_tail}"
     )
 
 

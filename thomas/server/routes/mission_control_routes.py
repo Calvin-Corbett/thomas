@@ -98,9 +98,9 @@ def build_mission_control_routes(
         out["pending_total"] = int(len(out["autonomy"]) + len(out["guardrails"]))
         return out
 
-    def _desktop_operator_snapshot_payload() -> (
-        tuple[dict[str, Any] | None, dict[str, Any] | None, list[dict[str, Any]]]
-    ):
+    def _desktop_operator_snapshot_payload() -> tuple[
+        dict[str, Any] | None, dict[str, Any] | None, list[dict[str, Any]]
+    ]:
         try:
             snapshot = desktop_operator_manager.get_global_desktop_operator_manager().status_snapshot()
         except Exception:

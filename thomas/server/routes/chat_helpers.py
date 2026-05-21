@@ -437,7 +437,7 @@ class _LLMSwarmSubagent:
                 prior_bits.append(f"[{tid}] {txt[:500]}")
             prior_blob = "\n".join(prior_bits[:10]).strip()
 
-            user_prompt = f"Task ID: {task.id}\n" f"Task title: {task.title}\n" f"Task prompt:\n{task.prompt}\n\n"
+            user_prompt = f"Task ID: {task.id}\nTask title: {task.title}\nTask prompt:\n{task.prompt}\n\n"
             if getattr(task, "acceptance", None):
                 user_prompt += "Acceptance:\n" + "\n".join(f"- {x}" for x in task.acceptance) + "\n\n"
             if prior_blob:

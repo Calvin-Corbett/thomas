@@ -104,12 +104,7 @@ class TestStripToolCallArtifacts(unittest.TestCase):
         self.assertFalse(changed)
 
     def test_preserves_indentation_for_code_like_output(self):
-        text = (
-            '{"name":"search","arguments":{"q":"x"}}\n'
-            "    for i in range(3):\n"
-            "        total += i\n"
-            "    return total\n"
-        )
+        text = '{"name":"search","arguments":{"q":"x"}}\n    for i in range(3):\n        total += i\n    return total\n'
         out, changed = strip_tool_call_artifacts(
             text,
             prompt_text="give me only python code",

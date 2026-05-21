@@ -86,7 +86,7 @@ def render_campaign_report(
         lines.append("- No ranking data available.")
     else:
         for row in ranking:
-            lines.append(f"- #{row.get('rank')} `{row.get('competitor')}`: " f"{row.get('weighted_score_mean')} / 100")
+            lines.append(f"- #{row.get('rank')} `{row.get('competitor')}`: {row.get('weighted_score_mean')} / 100")
     lines.append("")
 
     lines.append("## Aggregate Credibility Ranking")
@@ -97,8 +97,7 @@ def render_campaign_report(
     else:
         for row in cred:
             lines.append(
-                f"- #{row.get('rank')} `{row.get('competitor')}`: "
-                f"{row.get('credibility_weighted_score_mean')} / 100"
+                f"- #{row.get('rank')} `{row.get('competitor')}`: {row.get('credibility_weighted_score_mean')} / 100"
             )
     lines.append("")
 

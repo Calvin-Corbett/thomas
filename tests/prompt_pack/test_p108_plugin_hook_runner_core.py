@@ -95,7 +95,7 @@ def test_cli_json_success_with_config(tmp_path: Path, monkeypatch: pytest.Monkey
             "run-hook",
             "demo",
             "--payload",
-            "{\"x\": 7}",
+            '{"x": 7}',
             "--config",
             str(config_path),
             "--json",

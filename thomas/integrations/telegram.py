@@ -592,7 +592,7 @@ def run_telegram_polling(
         from telegram.ext import Application, MessageHandler, filters
     except ImportError as e:
         raise RuntimeError(
-            "Telegram integration requires python-telegram-bot. " 'Install with: pip install -e ".[telegram]"'
+            'Telegram integration requires python-telegram-bot. Install with: pip install -e ".[telegram]"'
         ) from e
 
     bridge = TelegramBridge(

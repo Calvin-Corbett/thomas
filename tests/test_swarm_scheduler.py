@@ -6,6 +6,7 @@ from thomas.agent.swarm import SwarmConfig, SwarmOrchestrator, TaskResult
 
 class Planner:
     agent_id = "planner"
+
     def __init__(self, graph_obj):
         self.graph_obj = graph_obj
 
@@ -13,7 +14,7 @@ class Planner:
         # emit JSON in chunks to exercise parser
         s = json.dumps(self.graph_obj)
         for i in range(0, len(s), 20):
-            await emit_text(s[i:i+20])
+            await emit_text(s[i : i + 20])
             await asyncio.sleep(0)
         return TaskResult(ok=True, output=s)
 
@@ -47,6 +48,7 @@ class ConcurrencyAgent:
 
 class Reviewer:
     agent_id = "reviewer"
+
     async def run_task(self, *, task, graph, prior_results, emit_text, call_tool, cancel_event):
         return TaskResult(ok=True, output="final")
 

@@ -133,7 +133,9 @@ def send_message(
         timeout_seconds=payload["timeout_seconds"],
     )
     response_payload = as_mapping(response.get("payload"))
-    message_id = text_value(response_payload.get("message_id"), response_payload.get("id"), response_payload.get("timestamp"))
+    message_id = text_value(
+        response_payload.get("message_id"), response_payload.get("id"), response_payload.get("timestamp")
+    )
     delivered = bool(response.get("ok"))
     return {
         "delivered": delivered,
@@ -172,5 +174,9 @@ def _cli_send(cli_path: str, account: str, recipient: str, body_text: str, timeo
     return {
         "delivered": result.returncode == 0,
         "message_id": "signal-cli-delivered" if result.returncode == 0 else "",
-        "provider_response": {"stdout": result.stdout.strip(), "stderr": result.stderr.strip(), "status": result.returncode},
+        "provider_response": {
+            "stdout": result.stdout.strip(),
+            "stderr": result.stderr.strip(),
+            "status": result.returncode,
+        },
     }

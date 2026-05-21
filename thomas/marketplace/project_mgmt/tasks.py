@@ -235,7 +235,7 @@ class TaskManager:
         # Check for circular dependencies
         if self._would_create_cycle(predecessor_id, successor_id):
             raise CircularDependencyError(
-                f"Adding dependency from {predecessor_id} to {successor_id} " "would create a circular dependency"
+                f"Adding dependency from {predecessor_id} to {successor_id} would create a circular dependency"
             )
 
         dep_id = str(uuid.uuid4())

@@ -181,9 +181,7 @@ async def probe_ollama_model(
     """Run a deterministic readiness probe for one local model."""
     url = _join_url(base_url, "/api/generate")
     timeout = httpx.Timeout(connect=3.0, read=45.0, write=20.0, pool=10.0)
-    prompt = (
-        "Reply with JSON only and no prose: " '{"tool_ready": true, "probe": "ok", "model": "' + str(model_id) + '"}'
-    )
+    prompt = 'Reply with JSON only and no prose: {"tool_ready": true, "probe": "ok", "model": "' + str(model_id) + '"}'
     payload = {
         "model": model_id,
         "prompt": prompt,

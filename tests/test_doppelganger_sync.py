@@ -31,4 +31,3 @@ def test_sync_tree_mirrors_and_deletes(tmp_path: Path) -> None:
     _write(src / "a.txt", "changed")
     _sync_tree(src, dst)
     assert (dst / "a.txt").read_text(encoding="utf-8") == "changed"
-

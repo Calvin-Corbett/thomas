@@ -9,6 +9,7 @@ Subcommands:
 
 Both support `--json` for automation-friendly output.
 """
+
 from __future__ import annotations
 
 import json
@@ -49,9 +50,7 @@ def _emit_result(result: MessageRoleChangeResult, *, as_json: bool) -> None:
 
 
 def _emit_error(exc: Exception, *, as_json: bool) -> None:
-    if as_json and isinstance(
-        exc, (InvalidMessageRoleInput, MissingMessageRoleConfig, ExternalMessageRoleFailure)
-    ):
+    if as_json and isinstance(exc, (InvalidMessageRoleInput, MissingMessageRoleConfig, ExternalMessageRoleFailure)):
         # Keep JSON on stdout for automation. Avoid leaking secrets (token never included by core module).
         payload: dict[str, Any] = {"ok": False, "error": exc.to_dict()}  # type: ignore[attr-defined]
         typer.echo(json.dumps(payload, sort_keys=True))
@@ -110,6 +109,7 @@ def cli_remove(
 
 
 # ---- Registration helpers (defensive: different Thomas parity loaders may look for different hooks) ----
+
 
 def register(parent: typer.Typer, *, name: str = "role") -> None:
     """Register this command group under an existing Typer parent."""

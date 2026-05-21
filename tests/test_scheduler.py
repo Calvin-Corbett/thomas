@@ -46,6 +46,7 @@ class SchedulerDelightTests(unittest.TestCase):
             clock.advance(timedelta(minutes=2))
             s._poll_once()  # should skip stale occurrences, and not fire due to grace window
             import time as _t
+
             _t.sleep(0.05)
 
             self.assertEqual(len(fired), 0)
@@ -64,6 +65,7 @@ class SchedulerDelightTests(unittest.TestCase):
             s.run_now("m")
 
             import time as _t
+
             _t.sleep(0.05)
 
             tasks = s.list_tasks()

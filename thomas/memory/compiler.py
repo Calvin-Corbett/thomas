@@ -87,9 +87,7 @@ class DeltaIngester:
 
         # 4. Extract and store graph entities
         all_text = "\n".join(texts)
-        e_count, r_count = self._graph.ingest_text(
-            all_text, event_ids=[ev.id for ev in events]
-        )
+        e_count, r_count = self._graph.ingest_text(all_text, event_ids=[ev.id for ev in events])
 
         # Track progress
         if events:
@@ -118,7 +116,7 @@ class DeltaIngester:
         total_stats: dict[str, Any] = {"indexed": 0, "entities": 0, "relations": 0}
 
         for i in range(0, len(new_events), batch_size):
-            batch = new_events[i:i + batch_size]
+            batch = new_events[i : i + batch_size]
             stats = self.ingest_events(batch)
             total_stats["indexed"] += stats["indexed"]
             total_stats["entities"] += stats["entities"]
@@ -237,8 +235,6 @@ class BaseRebuilder:
 
         # Graph extraction
         all_text = "\n".join(texts)
-        e_count, r_count = graph.ingest_text(
-            all_text, event_ids=[ev.id for ev in events]
-        )
+        e_count, r_count = graph.ingest_text(all_text, event_ids=[ev.id for ev in events])
 
         return {"indexed": len(events), "entities": e_count, "relations": r_count}

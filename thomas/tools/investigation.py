@@ -21,12 +21,14 @@ log = logging.getLogger(__name__)
 def _get_store():
     """Lazy-import store so we don't break anything at import time."""
     from thomas.investigation.store import InvestigationStore
+
     return InvestigationStore()
 
 
 # ---------------------------------------------------------------------------
 # investigate.status
 # ---------------------------------------------------------------------------
+
 
 class InvestigateStatusTool(Tool):
     name = "investigate.status"
@@ -58,7 +60,9 @@ class InvestigateStatusTool(Tool):
 
             if not case:
                 store.close()
-                return ToolResult(ok=True, data="No investigation cases found. Run 'thomas investigate run <folder>' first.")
+                return ToolResult(
+                    ok=True, data="No investigation cases found. Run 'thomas investigate run <folder>' first."
+                )
 
             summary = store.get_case_summary(case.id)
             store.close()
@@ -70,6 +74,7 @@ class InvestigateStatusTool(Tool):
 # ---------------------------------------------------------------------------
 # investigate.query
 # ---------------------------------------------------------------------------
+
 
 class InvestigateQueryTool(Tool):
     name = "investigate.query"
@@ -126,12 +131,15 @@ class InvestigateQueryTool(Tool):
             if not claims:
                 return ToolResult(ok=True, data=f"No claims matching '{query}'.")
 
-            return ToolResult(ok=True, data={
-                "case_name": case.name,
-                "query": query,
-                "count": len(claims),
-                "claims": claims,
-            })
+            return ToolResult(
+                ok=True,
+                data={
+                    "case_name": case.name,
+                    "query": query,
+                    "count": len(claims),
+                    "claims": claims,
+                },
+            )
         except Exception as exc:
             return ToolResult(ok=False, error=str(exc))
 
@@ -139,6 +147,7 @@ class InvestigateQueryTool(Tool):
 # ---------------------------------------------------------------------------
 # investigate.patterns
 # ---------------------------------------------------------------------------
+
 
 class InvestigatePatternsTool(Tool):
     name = "investigate.patterns"
@@ -190,11 +199,14 @@ class InvestigatePatternsTool(Tool):
             if not patterns:
                 return ToolResult(ok=True, data="No patterns found. Run 'thomas investigate run <folder>' first.")
 
-            return ToolResult(ok=True, data={
-                "case_name": case.name,
-                "count": len(patterns),
-                "patterns": patterns,
-            })
+            return ToolResult(
+                ok=True,
+                data={
+                    "case_name": case.name,
+                    "count": len(patterns),
+                    "patterns": patterns,
+                },
+            )
         except Exception as exc:
             return ToolResult(ok=False, error=str(exc))
 
@@ -202,6 +214,7 @@ class InvestigatePatternsTool(Tool):
 # ---------------------------------------------------------------------------
 # investigate.timeline
 # ---------------------------------------------------------------------------
+
 
 class InvestigateTimelineTool(Tool):
     name = "investigate.timeline"
@@ -252,11 +265,14 @@ class InvestigateTimelineTool(Tool):
             if not events:
                 return ToolResult(ok=True, data="No timeline events found.")
 
-            return ToolResult(ok=True, data={
-                "case_name": case.name,
-                "count": len(events),
-                "events": events,
-            })
+            return ToolResult(
+                ok=True,
+                data={
+                    "case_name": case.name,
+                    "count": len(events),
+                    "events": events,
+                },
+            )
         except Exception as exc:
             return ToolResult(ok=False, error=str(exc))
 
@@ -265,6 +281,7 @@ class InvestigateTimelineTool(Tool):
 # Registration
 # ---------------------------------------------------------------------------
 
+
 def register_investigation_tools(registry) -> None:
     """Register investigation tools if the investigation DB exists.
 
@@ -272,6 +289,7 @@ def register_investigation_tools(registry) -> None:
     """
     try:
         from thomas.investigation.store import InvestigationStore
+
         store = InvestigationStore()
         cases = store.list_cases()
         store.close()

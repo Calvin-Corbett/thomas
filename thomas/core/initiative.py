@@ -216,7 +216,7 @@ class InitiativeEngine:
                 f"**Result:** {str(result)[:400]}"
             )
         except _BlockerError as e:
-            self._notify(f"🚧 **Initiative Engine** blocked on goal:\n" f"**Goal:** {goal_text}\n" f"**Blocker:** {e}")
+            self._notify(f"🚧 **Initiative Engine** blocked on goal:\n**Goal:** {goal_text}\n**Blocker:** {e}")
         except Exception as e:
             log.error("InitiativeEngine: goal %r failed: %s", goal_id, e)
         finally:

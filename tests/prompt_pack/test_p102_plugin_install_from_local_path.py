@@ -50,14 +50,10 @@ def test_install_from_local_path_already_installed_requires_overwrite(tmp_path: 
     src = _make_minimal_pyproject_plugin(tmp_path, name="demo_plugin")
     install_root = tmp_path / "installed"
 
-    install_plugin_from_local_path(
-        PluginInstallFromLocalPathRequest(source_path=src, install_root=install_root)
-    )
+    install_plugin_from_local_path(PluginInstallFromLocalPathRequest(source_path=src, install_root=install_root))
 
     with pytest.raises(PluginInstallFromLocalPathError) as ei:
-        install_plugin_from_local_path(
-            PluginInstallFromLocalPathRequest(source_path=src, install_root=install_root)
-        )
+        install_plugin_from_local_path(PluginInstallFromLocalPathRequest(source_path=src, install_root=install_root))
     assert ei.value.code == "already_installed"
 
 
@@ -65,9 +61,7 @@ def test_install_from_local_path_overwrite(tmp_path: Path) -> None:
     src = _make_minimal_pyproject_plugin(tmp_path, name="demo_plugin")
     install_root = tmp_path / "installed"
 
-    r1 = install_plugin_from_local_path(
-        PluginInstallFromLocalPathRequest(source_path=src, install_root=install_root)
-    )
+    r1 = install_plugin_from_local_path(PluginInstallFromLocalPathRequest(source_path=src, install_root=install_root))
     # Modify source and overwrite.
     (src / "README.md").write_text("hello2", encoding="utf-8")
 
@@ -86,9 +80,7 @@ def test_install_from_local_path_missing_config(tmp_path: Path) -> None:
     (src / "some_file.txt").write_text("x", encoding="utf-8")
 
     with pytest.raises(PluginInstallFromLocalPathError) as ei:
-        install_plugin_from_local_path(
-            PluginInstallFromLocalPathRequest(source_path=src, install_root=tmp_path / "r")
-        )
+        install_plugin_from_local_path(PluginInstallFromLocalPathRequest(source_path=src, install_root=tmp_path / "r"))
 
     assert ei.value.code == "missing_plugin_config"
 

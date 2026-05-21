@@ -82,7 +82,7 @@ class NudgeEngine:
             t = recent_tasks[0]
             return Nudge(
                 title="Continue",
-                text=f"Last task was '{t.get('title','(task)')}'. Want to resume where you left off?"
+                text=f"Last task was '{t.get('title', '(task)')}'. Want to resume where you left off?"
                 f" I can summarize state + next actions.",
                 kind="task_resume",
                 confidence=0.58,

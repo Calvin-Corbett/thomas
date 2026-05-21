@@ -94,7 +94,7 @@ def _is_protected_runtime_path(sandbox_root: Path, target: Path) -> str | None:
     # Check individual protected files at the repo root.
     for pfile in _HARDCODED_PROTECTED_FILES:
         if rel_posix == PurePosixPath(pfile):
-            return f"BLOCKED: '{rel_posix}' is a protected policy file. " f"Agent-spawned tools cannot modify it."
+            return f"BLOCKED: '{rel_posix}' is a protected policy file. Agent-spawned tools cannot modify it."
 
     return None
 
@@ -240,7 +240,7 @@ class ListDirTool(Tool):
     name = "fs.list_dir"
     category = "filesystem"
     description = (
-        "List files and directories. Supports glob patterns. " "Returns file names with type indicators (/ for dirs)."
+        "List files and directories. Supports glob patterns. Returns file names with type indicators (/ for dirs)."
     )
     parameters = {
         "type": "object",

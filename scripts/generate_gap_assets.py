@@ -349,7 +349,7 @@ def generate_extension_packs() -> int:
                         "healthcheck",
                     ],
                     "description": (
-                        f"Operational extension pack for {domain} workflows via {target} " f"with {mode} mode policies."
+                        f"Operational extension pack for {domain} workflows via {target} with {mode} mode policies."
                     ),
                 }
                 _write_json(ext_dir / "manifest.json", manifest)

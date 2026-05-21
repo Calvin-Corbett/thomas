@@ -282,8 +282,7 @@ class InvestigationStore:
     def find_case_by_source(self, source_path: str) -> Case | None:
         with self._lock:
             row = self._conn.execute(
-                "SELECT * FROM cases WHERE source_path = ? AND status = 'active' "
-                "ORDER BY created_at_ms DESC LIMIT 1",
+                "SELECT * FROM cases WHERE source_path = ? AND status = 'active' ORDER BY created_at_ms DESC LIMIT 1",
                 (source_path,),
             ).fetchone()
         if row is None:
@@ -335,7 +334,7 @@ class InvestigationStore:
     def get_pending_documents(self, case_id: str) -> list[Document]:
         with self._lock:
             rows = self._conn.execute(
-                "SELECT * FROM documents WHERE case_id = ? AND analysis_status = 'pending' " "ORDER BY id",
+                "SELECT * FROM documents WHERE case_id = ? AND analysis_status = 'pending' ORDER BY id",
                 (case_id,),
             ).fetchall()
         return [self._row_to_doc(r) for r in rows]
@@ -432,8 +431,7 @@ class InvestigationStore:
     def mark_document_failed(self, doc_id: int, error: str) -> None:
         with self._lock:
             self._conn.execute(
-                "UPDATE documents SET analysis_status = 'failed', analysis_error = ?, analyzed_at_ms = ? "
-                "WHERE id = ?",
+                "UPDATE documents SET analysis_status = 'failed', analysis_error = ?, analyzed_at_ms = ? WHERE id = ?",
                 (error, _now_ms(), doc_id),
             )
             self._conn.commit()
@@ -474,7 +472,7 @@ class InvestigationStore:
             claim_id = cur.lastrowid
             # Update FTS
             self._conn.execute(
-                "INSERT INTO claims_fts(rowid, claim_text, category, quote_excerpt) " "VALUES (?, ?, ?, ?)",
+                "INSERT INTO claims_fts(rowid, claim_text, category, quote_excerpt) VALUES (?, ?, ?, ?)",
                 (claim_id, claim.claim_text, claim.category, claim.quote_excerpt or ""),
             )
             self._conn.commit()
@@ -496,12 +494,12 @@ class InvestigationStore:
         with self._lock:
             if category:
                 rows = self._conn.execute(
-                    "SELECT * FROM claims WHERE case_id = ? AND category = ? " "ORDER BY date_referenced, id LIMIT ?",
+                    "SELECT * FROM claims WHERE case_id = ? AND category = ? ORDER BY date_referenced, id LIMIT ?",
                     (case_id, category, limit),
                 ).fetchall()
             else:
                 rows = self._conn.execute(
-                    "SELECT * FROM claims WHERE case_id = ? " "ORDER BY date_referenced, id LIMIT ?",
+                    "SELECT * FROM claims WHERE case_id = ? ORDER BY date_referenced, id LIMIT ?",
                     (case_id, limit),
                 ).fetchall()
         return [self._claim_row_to_dict(r) for r in rows]

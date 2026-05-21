@@ -181,13 +181,13 @@ def read_fastq(filepath: str) -> list[FastqRecord]:
                 qual_line = lines[i + 3].strip()
 
                 if not header_line.startswith("@"):
-                    raise ValueError(f"Invalid FASTQ header at line {i+1}")
+                    raise ValueError(f"Invalid FASTQ header at line {i + 1}")
 
                 if not sep_line.startswith("+"):
-                    raise ValueError(f"Invalid FASTQ separator at line {i+3}")
+                    raise ValueError(f"Invalid FASTQ separator at line {i + 3}")
 
                 if len(seq_line) != len(qual_line):
-                    raise ValueError(f"Sequence/quality length mismatch at record {i//4 + 1}")
+                    raise ValueError(f"Sequence/quality length mismatch at record {i // 4 + 1}")
 
                 header = header_line[1:]
                 parts = header.split(None, 1)

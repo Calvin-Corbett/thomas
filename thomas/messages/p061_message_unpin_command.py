@@ -1,6 +1,6 @@
 """Thomas-native message unpin command.
 
-This module intentionally avoids any OpenClaw naming. It provides a small,
+This module intentionally avoids any Reference CLI naming. It provides a small,
 deterministic contract for unpinning a message from a channel across supported
 messaging backends.
 
@@ -337,11 +337,11 @@ def _call_unpin_backend(client: Any, *, channel_id: str, message_id: str) -> Non
                     return
                 except TypeError:
                     pass
-                except (RuntimeError, ValueError, KeyError, AttributeError, TypeError) as exc:
+                except (RuntimeError, ValueError, KeyError, AttributeError) as exc:
                     raise MessageUnpinExternalError(
                         f"Failed to unpin message via {method_name}: {exc.__class__.__name__}"
                     ) from exc
-            except (RuntimeError, ValueError, KeyError, AttributeError, TypeError) as exc:
+            except (RuntimeError, ValueError, KeyError, AttributeError) as exc:
                 raise MessageUnpinExternalError(
                     f"Failed to unpin message via {method_name}: {exc.__class__.__name__}"
                 ) from exc

@@ -644,9 +644,7 @@ class InventoryManager:
 
         for warehouse in warehouses:
             # Demand is proportional to warehouse's share of total demand
-            next(
-                (l.quantity_on_hand for l in inventory_levels if l.warehouse_id == warehouse.id), Decimal("0")
-            )
+            next((l.quantity_on_hand for l in inventory_levels if l.warehouse_id == warehouse.id), Decimal("0"))
 
             # Calculate optimal level for this warehouse
             eoq = Decimal(str(math.sqrt(float(Decimal(2) * annual_demand * order_cost / holding_cost))))

@@ -40,14 +40,14 @@ def create_math_suite() -> BenchmarkSuite:
             "algebra_quadratic",
             TaskDifficulty.MEDIUM,
             "algebra",
-            "Find all real solutions to x^2 - 5x + 6 = 0. " "List the solutions separated by comma.",
+            "Find all real solutions to x^2 - 5x + 6 = 0. List the solutions separated by comma.",
             "2, 3",
         ),
         (
             "algebra_system",
             TaskDifficulty.MEDIUM,
             "algebra",
-            "Solve the system: 2x + y = 7, x - y = 2. " "Give the answer as (x, y).",
+            "Solve the system: 2x + y = 7, x - y = 2. Give the answer as (x, y).",
             "(3, 1)",
         ),
         (
@@ -68,7 +68,7 @@ def create_math_suite() -> BenchmarkSuite:
             "counting_combinations",
             TaskDifficulty.MEDIUM,
             "counting",
-            "How many ways can you choose 3 items from 10? " "Calculate C(10, 3).",
+            "How many ways can you choose 3 items from 10? Calculate C(10, 3).",
             "120",
         ),
         (
@@ -82,21 +82,21 @@ def create_math_suite() -> BenchmarkSuite:
             "geometry_triangle",
             TaskDifficulty.MEDIUM,
             "geometry",
-            "A right triangle has legs of length 5 and 12. " "What is the length of the hypotenuse?",
+            "A right triangle has legs of length 5 and 12. What is the length of the hypotenuse?",
             "13",
         ),
         (
             "geometry_circle",
             TaskDifficulty.EASY,
             "geometry",
-            "A circle has radius 7. What is its area? " "Express as a multiple of pi (e.g., '49pi').",
+            "A circle has radius 7. What is its area? Express as a multiple of pi (e.g., '49pi').",
             "49pi",
         ),
         (
             "probability_dice",
             TaskDifficulty.MEDIUM,
             "probability",
-            "What is the probability of rolling a sum of 7 with two " "fair six-sided dice? Express as a fraction.",
+            "What is the probability of rolling a sum of 7 with two fair six-sided dice? Express as a fraction.",
             "1/6",
         ),
         (
@@ -111,7 +111,7 @@ def create_math_suite() -> BenchmarkSuite:
             "calculus_derivative",
             TaskDifficulty.HARD,
             "calculus",
-            "Find the derivative of f(x) = x^3 * sin(x). " "Express in terms of x.",
+            "Find the derivative of f(x) = x^3 * sin(x). Express in terms of x.",
             "3x^2*sin(x) + x^3*cos(x)",
         ),
         (
@@ -125,14 +125,14 @@ def create_math_suite() -> BenchmarkSuite:
             "sequences_arithmetic",
             TaskDifficulty.EASY,
             "sequences",
-            "In an arithmetic sequence, a_1 = 3 and d = 5. " "What is a_10?",
+            "In an arithmetic sequence, a_1 = 3 and d = 5. What is a_10?",
             "48",
         ),
         (
             "sequences_geometric",
             TaskDifficulty.MEDIUM,
             "sequences",
-            "A geometric sequence starts with 2, 6, 18, ... " "What is the sum of the first 5 terms?",
+            "A geometric sequence starts with 2, 6, 18, ... What is the sum of the first 5 terms?",
             "242",
         ),
     ]
@@ -171,20 +171,19 @@ def create_gsm8k_suite() -> BenchmarkSuite:
         (
             "gsm_shopping",
             TaskDifficulty.EASY,
-            "Janet has 5 apples. She buys 3 more bags of apples with "
-            "4 apples each. How many apples does she have now?",
+            "Janet has 5 apples. She buys 3 more bags of apples with 4 apples each. How many apples does she have now?",
             "17",
         ),
         (
             "gsm_speed",
             TaskDifficulty.EASY,
-            "A train travels 60 miles per hour. How far does it travel " "in 2 hours and 30 minutes?",
+            "A train travels 60 miles per hour. How far does it travel in 2 hours and 30 minutes?",
             "150",
         ),
         (
             "gsm_discount",
             TaskDifficulty.EASY,
-            "A shirt costs $40. It's on sale for 25% off. " "What is the sale price?",
+            "A shirt costs $40. It's on sale for 25% off. What is the sale price?",
             "30",
         ),
         (
@@ -197,7 +196,7 @@ def create_gsm8k_suite() -> BenchmarkSuite:
         (
             "gsm_ratio",
             TaskDifficulty.MEDIUM,
-            "In a class, the ratio of boys to girls is 3:5. " "If there are 24 students total, how many are girls?",
+            "In a class, the ratio of boys to girls is 3:5. If there are 24 students total, how many are girls?",
             "15",
         ),
         (
@@ -226,7 +225,7 @@ def create_gsm8k_suite() -> BenchmarkSuite:
         (
             "gsm_average",
             TaskDifficulty.EASY,
-            "A student scored 85, 92, 78, 96, and 89 on five tests. " "What is the average score?",
+            "A student scored 85, 92, 78, 96, and 89 on five tests. What is the average score?",
             "88",
         ),
         (
@@ -245,7 +244,7 @@ def create_gsm8k_suite() -> BenchmarkSuite:
                 name=name,
                 category="word_problem",
                 difficulty=difficulty,
-                prompt=f"Solve this math problem step by step, then give " f"the final numeric answer.\n\n{prompt}",
+                prompt=f"Solve this math problem step by step, then give the final numeric answer.\n\n{prompt}",
                 expected_output=expected,
                 eval_metric=EvalMetric.CONTAINS,
                 time_limit_seconds=60,

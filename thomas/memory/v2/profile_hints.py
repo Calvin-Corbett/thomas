@@ -40,4 +40,3 @@ def extract_profile_hints(text: str) -> list[ProfileHint]:
             seen.add(k)
             out.append(ProfileHint(key=key, value=val, confidence=float(conf)))
     return out
-

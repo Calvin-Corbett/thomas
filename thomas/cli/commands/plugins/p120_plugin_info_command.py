@@ -53,9 +53,11 @@ def register(app: typer.Typer) -> None:
     The surrounding Thomas CLI loads command modules and calls `register`.
     """
     if getattr(app, "registered_callback", None) is None:
+
         @app.callback(invoke_without_command=True)
         def _root() -> None:
             return
+
     app.command("info", help=_COMMAND_HELP)(plugins_info)
 
 

@@ -47,7 +47,7 @@ class TestDemoHarness(unittest.TestCase):
     def test_default_task_pack_is_valid(self):
         repo_root = Path(__file__).resolve().parents[1]
         pack = load_task_pack(repo_root / "demo" / "task_pack.default.json")
-        self.assertEqual(pack["id"], "thomas-vs-openclaw-v1")
+        self.assertEqual(pack["id"], "thomas-vs-reference_cli-v1")
         self.assertEqual(len(pack["tasks"]), 5)
 
     def test_compute_summary_ranks_expected_winner(self):
@@ -78,7 +78,7 @@ class TestDemoHarness(unittest.TestCase):
             },
             {
                 "task_id": "t1",
-                "competitor": "openclaw",
+                "competitor": "reference_cli",
                 "success": True,
                 "elapsed_seconds": 200,
                 "follow_up_prompts": 2,
@@ -86,7 +86,7 @@ class TestDemoHarness(unittest.TestCase):
             },
             {
                 "task_id": "t2",
-                "competitor": "openclaw",
+                "competitor": "reference_cli",
                 "success": False,
                 "elapsed_seconds": 260,
                 "follow_up_prompts": 3,
@@ -97,7 +97,7 @@ class TestDemoHarness(unittest.TestCase):
         self.assertEqual(summary["ranking"][0]["competitor"], "thomas")
         self.assertGreater(
             summary["competitors"]["thomas"]["weighted_score"],
-            summary["competitors"]["openclaw"]["weighted_score"],
+            summary["competitors"]["reference_cli"]["weighted_score"],
         )
 
     def test_build_results_template_creates_full_matrix(self):
@@ -108,10 +108,10 @@ class TestDemoHarness(unittest.TestCase):
             ],
             "quality_scale": {"min": 1, "max": 5},
         }
-        template = build_results_template(pack, ["thomas", "openclaw"])
+        template = build_results_template(pack, ["thomas", "reference_cli"])
         self.assertEqual(len(template), 4)
         pairs = {(row["task_id"], row["competitor"]) for row in template}
-        self.assertEqual(pairs, {("t1", "thomas"), ("t1", "openclaw"), ("t2", "thomas"), ("t2", "openclaw")})
+        self.assertEqual(pairs, {("t1", "thomas"), ("t1", "reference_cli"), ("t2", "thomas"), ("t2", "reference_cli")})
 
     def test_build_execution_plan_is_deterministic_for_seed(self):
         pack = {
@@ -122,13 +122,13 @@ class TestDemoHarness(unittest.TestCase):
         }
         plan_a = build_execution_plan(
             task_pack=pack,
-            competitors=["thomas", "openclaw"],
+            competitors=["thomas", "reference_cli"],
             randomize=True,
             seed=7,
         )
         plan_b = build_execution_plan(
             task_pack=pack,
-            competitors=["thomas", "openclaw"],
+            competitors=["thomas", "reference_cli"],
             randomize=True,
             seed=7,
         )
@@ -154,7 +154,7 @@ class TestDemoHarness(unittest.TestCase):
             },
             {
                 "task_id": "t1",
-                "competitor": "openclaw",
+                "competitor": "reference_cli",
                 "success": True,
                 "elapsed_seconds": 20,
                 "follow_up_prompts": 1,
@@ -170,7 +170,7 @@ class TestDemoHarness(unittest.TestCase):
             },
         ]
         with self.assertRaises(ValueError):
-            validate_records(task_pack=pack, competitors=["thomas", "openclaw"], records=records)
+            validate_records(task_pack=pack, competitors=["thomas", "reference_cli"], records=records)
 
     def test_validate_records_can_require_evidence(self):
         pack = {
@@ -239,7 +239,7 @@ class TestDemoHarness(unittest.TestCase):
         summary = compute_summary(pack, records)
         execution_plan = build_execution_plan(
             task_pack=pack,
-            competitors=["thomas", "openclaw"],
+            competitors=["thomas", "reference_cli"],
             randomize=False,
             seed=None,
         )
@@ -247,7 +247,7 @@ class TestDemoHarness(unittest.TestCase):
             runs_dir=self.tmp_path / "runs",
             run_id="demo-run",
             task_pack=pack,
-            competitors=["thomas", "openclaw"],
+            competitors=["thomas", "reference_cli"],
             execution_plan=execution_plan,
             randomized_order=False,
             random_seed=None,
@@ -281,7 +281,7 @@ class TestDemoHarness(unittest.TestCase):
                         "avg_quality_score": 4.5,
                         "evidence_coverage": 0.9,
                     },
-                    "openclaw": {
+                    "reference_cli": {
                         "weighted_score": 60,
                         "credibility_weighted_score": 30,
                         "success_rate": 0.6,
@@ -306,7 +306,7 @@ class TestDemoHarness(unittest.TestCase):
                         "avg_quality_score": 4.6,
                         "evidence_coverage": 0.95,
                     },
-                    "openclaw": {
+                    "reference_cli": {
                         "weighted_score": 55,
                         "credibility_weighted_score": 20,
                         "success_rate": 0.5,
@@ -327,7 +327,7 @@ class TestDemoHarness(unittest.TestCase):
         self.assertEqual(summary["ranking"][0]["competitor"], "thomas")
         self.assertGreater(
             summary["competitors"]["thomas"]["weighted_score_mean"],
-            summary["competitors"]["openclaw"]["weighted_score_mean"],
+            summary["competitors"]["reference_cli"]["weighted_score_mean"],
         )
 
     def test_build_blind_pack_hides_competitor(self):
@@ -341,7 +341,7 @@ class TestDemoHarness(unittest.TestCase):
             },
             {
                 "task_id": "t1",
-                "competitor": "openclaw",
+                "competitor": "reference_cli",
                 "elapsed_seconds": 20,
                 "follow_up_prompts": 1,
                 "evidence": "b.txt",

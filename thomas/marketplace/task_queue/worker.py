@@ -335,7 +335,7 @@ class Worker:
         print(f"[{self.config.worker_id}] {message}")
 
     def __repr__(self) -> str:
-        return f"Worker(id={self.config.worker_id}, running={self.is_alive()}, " f"tasks_executed={self._task_count})"
+        return f"Worker(id={self.config.worker_id}, running={self.is_alive()}, tasks_executed={self._task_count})"
 
 
 class WorkerPool:

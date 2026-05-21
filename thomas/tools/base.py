@@ -203,7 +203,7 @@ class ToolResult:
         else:
             text = json.dumps(self.data, ensure_ascii=False, default=str)
         if len(text) > max_len:
-            text = text[:max_len - 50] + f"\n... (truncated, {len(text)} chars total)"
+            text = text[: max_len - 50] + f"\n... (truncated, {len(text)} chars total)"
         return text
 
 

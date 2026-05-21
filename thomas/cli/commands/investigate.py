@@ -205,8 +205,7 @@ def investigate_run(ctx, folder_path, case_name, profile, resume, no_synthesis, 
                 synth = InvestigationSynthesizer(store)
                 syn_result = await synth.run_full_synthesis(case.id, llm_call)
                 click.echo(
-                    f"[synthesis ] {syn_result.patterns_found} patterns, "
-                    f"{syn_result.timeline_events} timeline events"
+                    f"[synthesis ] {syn_result.patterns_found} patterns, {syn_result.timeline_events} timeline events"
                 )
                 if syn_result.error:
                     click.echo(f"[synthesis ] Warning: {syn_result.error}", err=True)
@@ -308,9 +307,7 @@ def investigate_transcribe(case_id, profile, save_txt, verbose):
                 else:
                     click.echo(" FAILED")
 
-            click.echo(
-                f"[transcribe] Done: {transcribed}/{len(image_docs)} transcribed, " f"{total_chars:,} total chars"
-            )
+            click.echo(f"[transcribe] Done: {transcribed}/{len(image_docs)} transcribed, {total_chars:,} total chars")
 
         finally:
             try:
@@ -368,7 +365,7 @@ def investigate_patterns(case_id, category, min_strength, as_json):
             return
         click.echo(f"Patterns for case: {case.name} ({len(patterns)} found)\n")
         for p in patterns:
-            click.echo(f"  [{p['category']}] strength={p['strength']:.2f} " f"evidence={p['evidence_count']}")
+            click.echo(f"  [{p['category']}] strength={p['strength']:.2f} evidence={p['evidence_count']}")
             click.echo(f"    {p['pattern_text']}")
             if p.get("first_seen") or p.get("last_seen"):
                 click.echo(f"    Period: {p.get('first_seen', '?')} → {p.get('last_seen', '?')}")
@@ -427,7 +424,7 @@ def investigate_search(query, case_id, category, limit, as_json):
             click.echo(f"  [{c['category']}]{date_str}{sev}")
             click.echo(f"    {c['claim_text']}")
             if c.get("quote_excerpt"):
-                click.echo(f"    Source: \"{c['quote_excerpt']}\"")
+                click.echo(f'    Source: "{c["quote_excerpt"]}"')
             click.echo()
 
 
@@ -499,7 +496,7 @@ def investigate_export(case_id, fmt, output_path, copy_sources_dir):
             "",
             f"**Case ID:** {case.id}",
             f"**Source:** {case.source_path}",
-            f"**Documents:** {summary['documents']['total']} " f"({summary['documents']['analyzed']} analyzed)",
+            f"**Documents:** {summary['documents']['total']} ({summary['documents']['analyzed']} analyzed)",
             f"**Claims:** {summary['claims']}",
             f"**Exported:** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
             "",
@@ -655,7 +652,7 @@ def _build_court_report(case, summary, patterns, timeline, claims, documents) ->
                     sev = f" (severity {c['severity']})" if c.get("severity", 0) > 2 else ""
                     lines.append(f"  - {c['claim_text']}{date_str}{sev} *(Doc #{dnum}{src_ref})*")
                     if c.get("quote_excerpt"):
-                        lines.append(f"    > \"{c['quote_excerpt']}\"")
+                        lines.append(f'    > "{c["quote_excerpt"]}"')
             lines.append("")
 
         # Show remaining uncited high-severity claims
@@ -670,9 +667,9 @@ def _build_court_report(case, summary, patterns, timeline, claims, documents) ->
                 src_name = c.get("source_file_name", "")
                 src_ref = f" ({src_name})" if src_name else ""
                 date_str = f" [{c['date_referenced']}]" if c.get("date_referenced") else ""
-                lines.append(f"- {c['claim_text']}{date_str} — severity {c['severity']} " f"*(Doc #{dnum}{src_ref})*")
+                lines.append(f"- {c['claim_text']}{date_str} — severity {c['severity']} *(Doc #{dnum}{src_ref})*")
                 if c.get("quote_excerpt"):
-                    lines.append(f"  > \"{c['quote_excerpt']}\"")
+                    lines.append(f'  > "{c["quote_excerpt"]}"')
             lines.append("")
 
     # ── Timeline ──

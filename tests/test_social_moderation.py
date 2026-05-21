@@ -223,13 +223,9 @@ class TestModerationEngine:
 
     def test_report_priority_calculation(self) -> None:
         """Test report priority calculation."""
-        self.engine.create_report(
-            reporter_id=self.user_id, reason="hate", reported_user_id=uuid4()
-        )
+        self.engine.create_report(reporter_id=self.user_id, reason="hate", reported_user_id=uuid4())
 
-        self.engine.create_report(
-            reporter_id=self.user_id, reason="spam", reported_user_id=uuid4()
-        )
+        self.engine.create_report(reporter_id=self.user_id, reason="spam", reported_user_id=uuid4())
 
         # High priority should be returned first
         first = self.engine.get_next_report()

@@ -2,7 +2,7 @@
 
 Thomas-native behavior for replying inside an existing message thread.
 
-This module intentionally avoids any OpenClaw naming. It offers a small, explicit
+This module intentionally avoids any Reference CLI naming. It offers a small, explicit
 contract used by the CLI (and usable from server routes).
 
 Currently supported providers:
@@ -520,7 +520,7 @@ def message_thread_reply(
     )
 
 
-# ---- Minimal Thomas-native aliases (avoid OpenClaw naming) ----
+# ---- Minimal Thomas-native aliases (avoid Reference CLI naming) ----
 reply_in_thread = message_thread_reply
 thread_reply = message_thread_reply
 

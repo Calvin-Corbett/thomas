@@ -394,7 +394,7 @@ class TestCondition(unittest.TestCase):
     def test_complex_condition(self):
         """Test complex condition logic."""
         condition = Condition(
-            lambda state: (state.get("count", 0) > 0 and state.has("name") and state.get("status") == "active")
+            lambda state: state.get("count", 0) > 0 and state.has("name") and state.get("status") == "active"
         )
         state = FlowState()
         state.set("count", 5)

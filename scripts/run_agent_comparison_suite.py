@@ -16,11 +16,11 @@ from thomas.demo import agent_comparison_suite as _suite
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SUITE_CONFIG = ROOT / "demo" / "baselines" / "agent_comparison_suite.current.json"
 DEFAULT_ARTIFACT_PATHS_REL = {
-    "latest_json": "docs/openclaw_gap_runs/latest_full_suite_compare.json",
-    "latest_markdown": "docs/openclaw_gap_runs/latest_full_suite_compare.md",
-    "latest_legacy_json": "docs/openclaw_gap_runs/latest_compare.json",
-    "registry_json": "docs/openclaw_gap_runs/competitor_registry.json",
-    "registry_markdown": "docs/openclaw_gap_runs/competitor_registry.md",
+    "latest_json": "docs/reference_cli_gap_runs/latest_full_suite_compare.json",
+    "latest_markdown": "docs/reference_cli_gap_runs/latest_full_suite_compare.md",
+    "latest_legacy_json": "docs/reference_cli_gap_runs/latest_compare.json",
+    "registry_json": "docs/reference_cli_gap_runs/competitor_registry.json",
+    "registry_markdown": "docs/reference_cli_gap_runs/competitor_registry.md",
 }
 BENCHMARK_GLOB_KEYS: dict[str, tuple[str, ...]] = {
     "benchmark_scorecard_globs": (
@@ -115,7 +115,7 @@ def _coerce_string_list(raw: Any) -> list[str]:
             if key in raw:
                 values = [str(raw.get(key) or "")]
                 break
-    elif isinstance(raw, Sequence) and not isinstance(raw, (str, bytes, bytearray)):
+    elif isinstance(raw, Sequence) and not isinstance(raw, str | bytes | bytearray):
         for item in raw:
             if isinstance(item, Mapping):
                 for key in ("glob", "path", "pattern", "value"):
@@ -143,7 +143,7 @@ def _safe_float(value: Any) -> float | None:
     if value is None or isinstance(value, bool):
         return None
     parsed: float
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         parsed = float(value)
     else:
         text = str(value).strip()
@@ -161,7 +161,7 @@ def _safe_float(value: Any) -> float | None:
 def _coerce_bool(value: Any, *, allow_numeric: bool = True) -> bool | None:
     if isinstance(value, bool):
         return value
-    if allow_numeric and isinstance(value, (int, float)) and value in {0, 1}:
+    if allow_numeric and isinstance(value, int | float) and value in {0, 1}:
         return bool(int(value))
     if value is None:
         return None
@@ -297,7 +297,7 @@ def _looks_like_checks_mapping(payload: Mapping[str, Any]) -> bool:
     if not has_check_like_key:
         return False
     for value in payload.values():
-        if not isinstance(value, (Mapping, str, int, float, bool)):
+        if not isinstance(value, Mapping | str | int | float | bool):
             return False
     return True
 
@@ -345,7 +345,7 @@ def _coerce_evidence_rows(raw: Any) -> list[dict[str, Any]]:
                 row["check_id"] = str(key)
             rows.append(row)
         return rows
-    if isinstance(raw, Sequence) and not isinstance(raw, (str, bytes, bytearray)):
+    if isinstance(raw, Sequence) and not isinstance(raw, str | bytes | bytearray):
         for item in raw:
             if isinstance(item, Mapping):
                 rows.append(dict(item))
@@ -354,7 +354,7 @@ def _coerce_evidence_rows(raw: Any) -> list[dict[str, Any]]:
 
 
 def _extract_evidence_rows(payload: Any) -> list[dict[str, Any]]:
-    if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes, bytearray)):
+    if isinstance(payload, Sequence) and not isinstance(payload, str | bytes | bytearray):
         return _coerce_evidence_rows(payload)
     if not isinstance(payload, Mapping):
         return []
@@ -439,10 +439,10 @@ def _checks_payload_is_core_compatible(payload: Mapping[str, Any]) -> bool:
             if score_value is not None and _safe_float(score_value) is None:
                 return False
             value_field = raw.get("value")
-            if value_field is not None and not isinstance(value_field, (str, int, float, bool)):
+            if value_field is not None and not isinstance(value_field, str | int | float | bool):
                 return False
             continue
-        if not isinstance(raw, (str, int, float, bool)):
+        if not isinstance(raw, str | int | float | bool):
             return False
     return True
 
@@ -504,7 +504,7 @@ def _evidence_payload_is_core_compatible(payload: Any, *, aliases: Sequence[str]
         if _looks_like_checks_mapping(payload):
             return _checks_payload_is_core_compatible(payload)
         return False
-    if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes, bytearray)):
+    if isinstance(payload, Sequence) and not isinstance(payload, str | bytes | bytearray):
         return _rows_payload_is_core_compatible(payload, aliases=aliases)
     return False
 

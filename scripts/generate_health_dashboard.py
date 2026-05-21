@@ -223,15 +223,15 @@ def generate_dashboard() -> str:
   </div>
   <div class="card">
     <div class="label">Over Size Limit</div>
-    <div class="value {'red' if critical_files else 'green'}">{len(critical_files)}</div>
+    <div class="value {"red" if critical_files else "green"}">{len(critical_files)}</div>
   </div>
   <div class="card">
     <div class="label">Approaching Limit</div>
-    <div class="value {'yellow' if warning_files else 'green'}">{len(warning_files)}</div>
+    <div class="value {"yellow" if warning_files else "green"}">{len(warning_files)}</div>
   </div>
   <div class="card">
     <div class="label">Broad Exceptions</div>
-    <div class="value {'red' if total_broad_exceptions > 100 else 'yellow' if total_broad_exceptions > 0 else 'green'}">{total_broad_exceptions}</div>
+    <div class="value {"red" if total_broad_exceptions > 100 else "yellow" if total_broad_exceptions > 0 else "green"}">{total_broad_exceptions}</div>
   </div>
 </div>
 
@@ -248,7 +248,7 @@ def generate_dashboard() -> str:
         debt_html = f'<div class="debt">{debt[:120]}{"..." if len(debt) > 120 else ""}</div>' if debt else ""
 
         html += f"""    <div class="module-card">
-      <div class="name">{mod['name']} <span class="badge {badge_class}">{health}</span></div>
+      <div class="name">{mod["name"]} <span class="badge {badge_class}">{health}</span></div>
       <div class="desc">{desc}</div>
       {debt_html}
     </div>
@@ -288,7 +288,7 @@ def generate_dashboard() -> str:
     <tbody>
 """
         for f in exception_files[:20]:
-            html += f'      <tr><td>{f["path"]}</td><td>{f["broad_exceptions"]}</td><td>{f["lines"]}</td></tr>\n'
+            html += f"      <tr><td>{f['path']}</td><td>{f['broad_exceptions']}</td><td>{f['lines']}</td></tr>\n"
         html += """    </tbody>
   </table>
 </div>

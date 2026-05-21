@@ -29,7 +29,7 @@ def test_pricing_override_provider_scoped(tmp_path: Path):
     spend = tmp_path / "spend.jsonl"
     toml = tmp_path / "thomas.toml"
     toml.write_text(
-        "[pricing.\"openai:gpt-4o\"]\ninput_per_1k = 0.01\noutput_per_1k = 0.02\n",
+        '[pricing."openai:gpt-4o"]\ninput_per_1k = 0.01\noutput_per_1k = 0.02\n',
         encoding="utf-8",
     )
 

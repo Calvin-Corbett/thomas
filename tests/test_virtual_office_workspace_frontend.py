@@ -92,20 +92,23 @@ def test_virtual_office_workspace_keeps_only_the_base_map_shell() -> None:
     assert "panel.dataset.officeEditorPanel = '1';" in js
     assert "officeSceneWrap.addEventListener('click', officeHandleDraftMapClick);" in js
     assert "officeSceneWrap.setPointerCapture(event.pointerId);" in js
-    assert "data-office-editor-catalog-asset=\"couch\"" in js
+    assert 'data-office-editor-catalog-asset="couch"' in js
     assert "Click and drag into a room to place a three-seat couch." in js
     assert "data-office-editor-rotation-step" in js
-    assert "data-office-editor-grid-toggle=\"1\"" in js
+    assert 'data-office-editor-grid-toggle="1"' in js
     assert "${state.autosaveEnabled ? 'Autosave On' : 'Autosave Off'}" in js
-    assert "data-office-editor-autosave-toggle=\"1\"" in js
-    assert "data-office-editor-save=\"1\"" in js
+    assert 'data-office-editor-autosave-toggle="1"' in js
+    assert 'data-office-editor-save="1"' in js
     assert "Save Layout" in js
     assert "data-office-editor-asset-color" in js
     assert "data-office-editor-asset-scale" in js
     assert "Select a placed couch to edit its color, change its scale, and rotate it with A / D." in js
     assert "A / D rotate selected asset" in js
     assert "space.floorPalette = safeString(floorBtn.dataset.officeEditorFloorPalette) || 'tan';" in js
-    assert "officeDraftBeginCatalogPlacement(catalogBtn.dataset.officeEditorCatalogAsset, event.pointerId, event.clientX, event.clientY);" in js
+    assert (
+        "officeDraftBeginCatalogPlacement(catalogBtn.dataset.officeEditorCatalogAsset, event.pointerId, event.clientX, event.clientY);"
+        in js
+    )
     assert "state.gridEnabled = !state.gridEnabled;" in js
     assert "state.rotationStep = Number(rotationBtn.dataset.officeEditorRotationStep) || 15;" in js
     assert "state.catalogPendingType = safeString(assetType);" in js
@@ -128,7 +131,10 @@ def test_virtual_office_workspace_keeps_only_the_base_map_shell() -> None:
     assert "resizeHandle.setAttribute('aria-label', 'Resize minimap');" in js
     assert "resizeHandle.style.borderRight = '3px solid rgba(152, 193, 255, 0.92)';" in js
     assert "roomLabel.style.top = '-32px';" in js
-    assert "room.style.border = isSelectedSpace ? '4px solid rgba(122, 181, 255, 0.82)' : '4px solid rgba(158, 196, 255, 0.62)';" in js
+    assert (
+        "room.style.border = isSelectedSpace ? '4px solid rgba(122, 181, 255, 0.82)' : '4px solid rgba(158, 196, 255, 0.62)';"
+        in js
+    )
 
 
 def test_virtual_office_entry_points_are_placeholder_shells() -> None:

@@ -304,7 +304,9 @@ def suggested_retry_command(*, gate_name: str, agent: str, message: str) -> str 
         "workboard_changed_files",
         "workboard_agent_claim",
     }:
-        return f'python scripts/crew/brief/bootstrap_claim.py --agent "{agent}" --task "{safe_message}" --no-auto-dispatch'
+        return (
+            f'python scripts/crew/brief/bootstrap_claim.py --agent "{agent}" --task "{safe_message}" --no-auto-dispatch'
+        )
     if gate_name == "site_visual_proof":
         return "python scripts/refresh_site_visual_proof.py; python scripts/forge/gates/site_visual_proof.py"
     if gate_name == "release_update":

@@ -571,13 +571,13 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
         active_tasks=current_active_tasks,
         requires_inline_tools=dispatch_inline_actionable,
     )
-    launch_background = bool(mode == "max" or reply_first_background or explicit_delegation or auto_actionable_background)
+    launch_background = bool(
+        mode == "max" or reply_first_background or explicit_delegation or auto_actionable_background
+    )
     force_background = bool(reply_first_background or explicit_delegation or auto_actionable_background)
     background_ack_only = bool(auto_actionable_background and not reply_first_background and not explicit_delegation)
     visible_prompt = (
-        _foreground_reply_prompt(prompt)
-        if reply_first_background or auto_actionable_background
-        else prompt
+        _foreground_reply_prompt(prompt) if reply_first_background or auto_actionable_background else prompt
     )
 
     try:

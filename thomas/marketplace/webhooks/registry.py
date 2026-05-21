@@ -55,7 +55,7 @@ class WebhookRegistry:
 
         if not re.match(r"^[a-z]+(\.[a-z]+)*$", event_type):
             raise ValueError(
-                f"Invalid event type format: {event_type}. " "Must be lowercase with dots (e.g., order.created)"
+                f"Invalid event type format: {event_type}. Must be lowercase with dots (e.g., order.created)"
             )
 
         self._event_types.add(event_type)

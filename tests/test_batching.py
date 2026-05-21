@@ -27,13 +27,7 @@ def test_parse_batch_state_marks_done_when_pending_zero() -> None:
 def test_extract_result_text_from_completion_response_choices() -> None:
     result = {
         "batch_request_id": "r1",
-        "response": {
-            "completion_response": {
-                "choices": [
-                    {"message": {"content": "BATCH_OK"}}
-                ]
-            }
-        },
+        "response": {"completion_response": {"choices": [{"message": {"content": "BATCH_OK"}}]}},
     }
     assert extract_result_text(result) == "BATCH_OK"
 

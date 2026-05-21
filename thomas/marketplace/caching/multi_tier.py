@@ -95,7 +95,7 @@ class MultiTierCache(Generic[T]):
         self._stats = MultiTierStats()
         self._lock = threading.RLock()
         logger.info(
-            "Initialized multi-tier cache: " "write_policy=%s, inclusivity=%s, tiers=%d",
+            "Initialized multi-tier cache: write_policy=%s, inclusivity=%s, tiers=%d",
             write_policy.value,
             inclusivity.value,
             self._count_tiers(),

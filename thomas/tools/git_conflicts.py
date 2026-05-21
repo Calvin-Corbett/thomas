@@ -51,15 +51,13 @@ except Exception:
 
 def _ensure_shell() -> None:
     if shell_exec is None:
-        raise RuntimeError(
-            "thomas.tools.shell.exec could not be imported. "
-            f"Original error: {_SHELL_IMPORT_ERROR}"
-        )
+        raise RuntimeError(f"thomas.tools.shell.exec could not be imported. Original error: {_SHELL_IMPORT_ERROR}")
 
 
 # ---------------------------------------------------------------------------
 # Shell/Git helpers (tolerant to multiple exec shapes)
 # ---------------------------------------------------------------------------
+
 
 def _shell(cmd: list[str], cwd: str | None = None) -> dict[str, Any]:
     """
@@ -104,7 +102,7 @@ def _run_git(args: list[str], cwd: str | None) -> dict[str, Any]:
         raise RuntimeError(
             "git command failed: git "
             + " ".join(args)
-            + f"\ncode={code}\nstdout={res.get('stdout','')}\nstderr={res.get('stderr','')}"
+            + f"\ncode={code}\nstdout={res.get('stdout', '')}\nstderr={res.get('stderr', '')}"
         )
     return res
 
@@ -132,6 +130,7 @@ def _git_root() -> str:
 # ---------------------------------------------------------------------------
 # File IO (best-effort encoding + binary detection + atomic write)
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class _ReadResult:
@@ -175,7 +174,9 @@ def _read_text_best_effort(path: str) -> _ReadResult:
         except UnicodeDecodeError:
             continue
 
-    return _ReadResult(text=data.decode("utf-8", errors="replace"), encoding="utf-8", had_decode_errors=True, is_binary=False, raw=data)
+    return _ReadResult(
+        text=data.decode("utf-8", errors="replace"), encoding="utf-8", had_decode_errors=True, is_binary=False, raw=data
+    )
 
 
 def _encode_text(text: str, encoding: str) -> bytes:
@@ -191,6 +192,7 @@ def _detect_newline_style(raw: bytes) -> str:
 # ---------------------------------------------------------------------------
 # Backups (reversible writes)
 # ---------------------------------------------------------------------------
+
 
 def _new_run_id() -> str:
     ts = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
@@ -325,7 +327,11 @@ def _parse_conflicts_with_recovery(text: str) -> tuple[list[Conflict], list[str]
             j += 1
 
         if end is None:
-            conflicts.append(Conflict(ours="", theirs="", start_line=start_line, end_line=n - 1, head_marker=head_marker, tail_marker=""))
+            conflicts.append(
+                Conflict(
+                    ours="", theirs="", start_line=start_line, end_line=n - 1, head_marker=head_marker, tail_marker=""
+                )
+            )
             break
 
         if mid is None or mid > end:
@@ -336,7 +342,16 @@ def _parse_conflicts_with_recovery(text: str) -> tuple[list[Conflict], list[str]
             theirs = "".join(lines[mid + 1 : end])
 
         tail_marker = lines[end].rstrip("\r\n")
-        conflicts.append(Conflict(ours=ours, theirs=theirs, start_line=start_line, end_line=end, head_marker=head_marker, tail_marker=tail_marker))
+        conflicts.append(
+            Conflict(
+                ours=ours,
+                theirs=theirs,
+                start_line=start_line,
+                end_line=end,
+                head_marker=head_marker,
+                tail_marker=tail_marker,
+            )
+        )
         i = end + 1
 
     return conflicts, lines
@@ -370,7 +385,9 @@ def _in_block_comment_before(lines: list[str], line_index: int, cap: int = 20000
                 in_block = False
         for open_ in _BLOCK_OPEN:
             if open_ in ln:
-                closes_same = any((close in ln) and (ln.index(close) > ln.index(open_)) for close in _BLOCK_CLOSE if close in ln)
+                closes_same = any(
+                    (close in ln) and (ln.index(close) > ln.index(open_)) for close in _BLOCK_CLOSE if close in ln
+                )
                 if not closes_same:
                     in_block = True
     return in_block
@@ -406,7 +423,7 @@ def _git_show_index_stage(repo_root: str, stage: int, rel_path: str) -> str | No
     res = _try_git(["show", spec], cwd=repo_root)
     if not res.get("ok"):
         return None
-    return (res.get("stdout") or "")
+    return res.get("stdout") or ""
 
 
 def _json_normalize(s: str) -> Any:
@@ -442,7 +459,9 @@ def _json_merge3(base: Any, ours: Any, theirs: Any, path: tuple[str, ...] = ()) 
 
         # preserve base key order first, then ours-only, then theirs-only
         seen = set()
-        key_order: list[str] = list(b.keys()) + [k for k in o.keys() if k not in b] + [k for k in t.keys() if k not in b and k not in o]
+        key_order: list[str] = (
+            list(b.keys()) + [k for k in o.keys() if k not in b] + [k for k in t.keys() if k not in b and k not in o]
+        )
 
         for k in key_order:
             if k in seen:
@@ -557,6 +576,7 @@ def _json_structured_merge(repo_root: str, rel_path: str) -> tuple[str | None, l
 # ---------------------------------------------------------------------------
 # Auto resolution heuristics (spec + safe extensions)
 # ---------------------------------------------------------------------------
+
 
 def _semantic_equal_json(ours: str, theirs: str) -> bool:
     try:
@@ -700,6 +720,7 @@ def _apply_marker_based_resolution(
 # Diff preview + report builder (dry_run)
 # ---------------------------------------------------------------------------
 
+
 def _unified_diff(old: str, new: str, rel_path: str, max_lines: int = 2000) -> tuple[str, bool]:
     if old == new:
         return "", False
@@ -751,7 +772,9 @@ def _build_markdown_report(file_previews: list[dict[str, Any]]) -> str:
             lines.append("| idx | reason | chosen | confidence |")
             lines.append("|---:|---|---|---:|")
             for d in decs:
-                lines.append(f"| {d['conflict_index']} | {d['reason']} | {d.get('chosen') or ''} | {d.get('confidence',0):.2f} |")
+                lines.append(
+                    f"| {d['conflict_index']} | {d['reason']} | {d.get('chosen') or ''} | {d.get('confidence', 0):.2f} |"
+                )
             lines.append("")
         diff_txt = fp.get("diff") or ""
         if diff_txt:
@@ -769,6 +792,7 @@ def _normalize_relpath(p: str) -> str:
 # ---------------------------------------------------------------------------
 # Public tools
 # ---------------------------------------------------------------------------
+
 
 def conflict_summary() -> dict[str, Any]:
     """
@@ -914,7 +938,14 @@ def resolve_conflicts(
                         "would_stage": True,
                         "diff_truncated": False,
                         "diff": "",
-                        "decisions": [{"conflict_index": 0, "reason": "already_clean_stage", "chosen": None, "confidence": _confidence_for_reason("already_clean_stage")}],
+                        "decisions": [
+                            {
+                                "conflict_index": 0,
+                                "reason": "already_clean_stage",
+                                "chosen": None,
+                                "confidence": _confidence_for_reason("already_clean_stage"),
+                            }
+                        ],
                         "notes": "file has no conflict markers; will stage as resolved",
                     }
                 )
@@ -927,7 +958,13 @@ def resolve_conflicts(
         if strategy == "manual":
             conflicts, _ = _parse_conflicts_with_recovery(original)
             if conflicts:
-                needs_manual.append({"file": rel, "conflict_count": len(conflicts), "conflicts": [{"ours": c.ours, "theirs": c.theirs} for c in conflicts]})
+                needs_manual.append(
+                    {
+                        "file": rel,
+                        "conflict_count": len(conflicts),
+                        "conflicts": [{"ours": c.ours, "theirs": c.theirs} for c in conflicts],
+                    }
+                )
             if dry_run:
                 file_previews.append(
                     {
@@ -942,7 +979,10 @@ def resolve_conflicts(
                         "would_stage": False,
                         "diff_truncated": False,
                         "diff": "",
-                        "decisions": [{"conflict_index": i, "reason": "manual", "chosen": None, "confidence": 0.0} for i in range(len(conflicts))],
+                        "decisions": [
+                            {"conflict_index": i, "reason": "manual", "chosen": None, "confidence": 0.0}
+                            for i in range(len(conflicts))
+                        ],
                     }
                 )
             continue
@@ -962,14 +1002,25 @@ def resolve_conflicts(
 
         if merged_json_text is not None:
             # We have a full-file resolved text, bypass marker-based parsing
-            new_text = merged_json_text.replace("\n", newline) + (newline if merged_json_text and not merged_json_text.endswith("\n") else "")
+            new_text = merged_json_text.replace("\n", newline) + (
+                newline if merged_json_text and not merged_json_text.endswith("\n") else ""
+            )
             total_conflicts = _fallback_conflict_count(original)  # best-effort count for reporting
             unresolved_count = 0
             unresolved_conflicts: list[dict[str, str]] = []
-            decisions = [Decision(conflict_index=0, chosen_side="ours", reason="structured_json_merged", confidence=_confidence_for_reason("structured_json_merged"), start_line=None, end_line=None)]
+            decisions = [
+                Decision(
+                    conflict_index=0,
+                    chosen_side="ours",
+                    reason="structured_json_merged",
+                    confidence=_confidence_for_reason("structured_json_merged"),
+                    start_line=None,
+                    end_line=None,
+                )
+            ]
         else:
-            new_text, total_conflicts, unresolved_count, unresolved_conflicts, decisions = _apply_marker_based_resolution(
-                original, strategy=strategy, rel_path=rel
+            new_text, total_conflicts, unresolved_count, unresolved_conflicts, decisions = (
+                _apply_marker_based_resolution(original, strategy=strategy, rel_path=rel)
             )
 
         fully_resolved = (unresolved_count == 0) and not _has_conflict_markers(new_text)
@@ -983,7 +1034,9 @@ def resolve_conflicts(
                     "conflicts": unresolved_conflicts,
                     # extra niceties (optional)
                     "notes": notes,
-                    "structured_conflict_paths": [["/".join(p) or "<root>"] for p in structured_conflicts[:20]] if structured_conflicts else [],
+                    "structured_conflict_paths": [["/".join(p) or "<root>"] for p in structured_conflicts[:20]]
+                    if structured_conflicts
+                    else [],
                 }
             )
 
@@ -1065,9 +1118,20 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "parameters": {
             "type": "object",
             "properties": {
-                "strategy": {"type": "string", "description": "auto | ours | theirs | manual. Default: auto", "default": "auto"},
-                "file": {"type": "string", "description": "Specific file path to resolve. Optional — all conflicted files if omitted."},
-                "dry_run": {"type": "boolean", "description": "If true, show proposed resolutions without applying. Default: false", "default": False},
+                "strategy": {
+                    "type": "string",
+                    "description": "auto | ours | theirs | manual. Default: auto",
+                    "default": "auto",
+                },
+                "file": {
+                    "type": "string",
+                    "description": "Specific file path to resolve. Optional — all conflicted files if omitted.",
+                },
+                "dry_run": {
+                    "type": "boolean",
+                    "description": "If true, show proposed resolutions without applying. Default: false",
+                    "default": False,
+                },
             },
             "additionalProperties": False,
         },

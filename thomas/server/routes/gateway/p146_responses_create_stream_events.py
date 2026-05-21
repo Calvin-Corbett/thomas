@@ -22,7 +22,7 @@ Proxy support (optional):
   Optional: THOMAS_GATEWAY_RESPONSES_API_KEY (Bearer)
 
 Notes:
-- This is intentionally "Thomas-native" and does not reuse any OpenClaw naming.
+- This is intentionally "Thomas-native" and does not reuse any Reference CLI naming.
 - The streaming event catalog is minimal but structurally compatible; expand as needed.
 """
 
@@ -420,7 +420,7 @@ def build_stream_events(
 
 def encode_sse_event(event_type: str, data_obj: dict[str, Any]) -> bytes:
     data = json.dumps(data_obj, ensure_ascii=False, separators=(",", ":"))
-    return f"event: {event_type}\n" f"data: {data}\n\n".encode()
+    return f"event: {event_type}\ndata: {data}\n\n".encode()
 
 
 def events_to_sse(events: Iterable[StreamEvent]) -> str:

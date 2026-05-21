@@ -63,7 +63,7 @@ class SVGElement:
 
         content = ""
         if self.text:
-            content += f'{"  " * (indent + 1)}{self.text}\n'
+            content += f"{'  ' * (indent + 1)}{self.text}\n"
 
         for child in self.children:
             content += child.to_svg(indent + 1)

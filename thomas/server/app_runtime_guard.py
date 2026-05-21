@@ -211,10 +211,10 @@ def _runtime_guard_refresh(app: web.Application) -> dict[str, Any]:
     if stale:
         if "serve_lock_points_to_other_pid" in reasons:
             alert_message = (
-                "Not on the newest Thomas server process. " "Please restart Thomas so this tab uses the latest runtime."
+                "Not on the newest Thomas server process. Please restart Thomas so this tab uses the latest runtime."
             )
         else:
-            alert_message = "Code changed after this Thomas server booted. " "Restart Thomas to run the newest version."
+            alert_message = "Code changed after this Thomas server booted. Restart Thomas to run the newest version."
     else:
         alert_message = ""
 

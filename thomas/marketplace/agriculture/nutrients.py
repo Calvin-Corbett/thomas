@@ -248,7 +248,7 @@ class VariableRatePrescription:
             if start_idx < len(combined_sorted):
                 lower = combined_sorted[start_idx]
                 upper = combined_sorted[end_idx - 1] if end_idx <= len(combined_sorted) else 1.0
-                zone_name = ["Low", "Medium", "High"][i] if num_zones == 3 else f"Zone {i+1}"
+                zone_name = ["Low", "Medium", "High"][i] if num_zones == 3 else f"Zone {i + 1}"
                 zones.append((zone_name, lower, upper))
 
         return zones

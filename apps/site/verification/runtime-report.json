@@ -1,5 +1,5 @@
 {
-  "captured_at_utc": "2026-03-28T15:52:47.847Z",
+  "captured_at_utc": "2026-05-21T23:36:18.034241Z",
   "target_url": "http://127.0.0.1:3108",
   "viewport": {
     "width": 1424,
@@ -362,7 +362,7 @@
         "current_path": "apps/site/verification/screenshots/full-page.png",
         "diff_path": "apps/site/verification/diffs/full-page-diff.png",
         "baseline_sha256": "7c0cb84a9062f45a8c83dd1420a306f40820b2b54ea999c50d2bee3692753d84",
-        "current_sha256": "7c0cb84a9062f45a8c83dd1420a306f40820b2b54ea999c50d2bee3692753d84",
+        "current_sha256": "fa473cfa23e673910b43da2d4e3d4e6ec96d304dddb7641b8a2661ace465fd5a",
         "diff_sha256": "1ac780f60a6c9c8a52ff684033ab738b5b49e7d1f45841d5e5e9d445500fa04c"
       },
       "footer_focus": {
@@ -376,7 +376,7 @@
         "current_path": "apps/site/verification/screenshots/footer-focus.png",
         "diff_path": "apps/site/verification/diffs/footer-focus-diff.png",
         "baseline_sha256": "f78781ec86eeb8521acd82db78b876cf7b9ae3d0a3f506bfeec86b26f123caa4",
-        "current_sha256": "f78781ec86eeb8521acd82db78b876cf7b9ae3d0a3f506bfeec86b26f123caa4",
+        "current_sha256": "c517ecacccd512959182bbcb8831568f2f0c0c8735f25aa39ad4fdba1ca8a286",
         "diff_sha256": "9e8eab47304dcbca6f3a5c0f517cc206f3057a1c53ea9b30f2a5909c3c9a5f6e"
       }
     }

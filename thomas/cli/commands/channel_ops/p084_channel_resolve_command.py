@@ -31,11 +31,11 @@ try:
     )
 except ImportError:  # pragma: no cover
     from thomas.channels.p084_channel_resolve_command import (
-    ChannelResolveError,
-    ChannelResolveRequest,
-    resolve_channel,
-    result_json_schema,
-)
+        ChannelResolveError,
+        ChannelResolveRequest,
+        resolve_channel,
+        result_json_schema,
+    )
 
 COMMAND_NAME = "resolve"
 HELP = "Resolve a channel reference to a canonical destination."

@@ -205,7 +205,7 @@ class LeaveManager:
 
         if request.days_requested > balance.balance:
             raise LeaveBalanceError(
-                f"Insufficient balance: {balance.balance} available, " f"{request.days_requested} requested"
+                f"Insufficient balance: {balance.balance} available, {request.days_requested} requested"
             )
 
         request.status = "approved"

@@ -67,15 +67,15 @@ async def test_restricted_tool_blocks_out_of_scope_write(tmp_path: Path) -> None
 
 
 def test_extract_patch_targets_handles_git_prefixes() -> None:
-    patch = "--- a/scripts/run-ui.ps1\n" "+++ b/scripts/run-ui.ps1\n" "@@ -1,1 +1,1 @@\n" "-old\n" "+new\n"
+    patch = "--- a/scripts/run-ui.ps1\n+++ b/scripts/run-ui.ps1\n@@ -1,1 +1,1 @@\n-old\n+new\n"
     assert _extract_patch_targets(patch) == ["scripts/run-ui.ps1"]
 
 
 def test_extract_repo_paths_from_traceback_text(tmp_path: Path) -> None:
     text = (
         "Traceback (most recent call last):\n"
-        f"  File \"{tmp_path / 'thomas' / 'agent' / 'loop.py'}\", line 324, in <module>\n"
-        f"  File \"{tmp_path / 'thomas' / 'server' / 'app.py'}\", line 52, in <module>\n"
+        f'  File "{tmp_path / "thomas" / "agent" / "loop.py"}", line 324, in <module>\n'
+        f'  File "{tmp_path / "thomas" / "server" / "app.py"}", line 52, in <module>\n'
     )
 
     assert _extract_repo_paths_from_text(text, tmp_path) == [

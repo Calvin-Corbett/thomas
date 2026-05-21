@@ -59,8 +59,12 @@ def test_ui_editor_now_has_inspector_and_stable_targets() -> None:
 def test_ui_editor_rescue_loader_is_wired_into_app_boot() -> None:
     app_loader = _read_text("thomas/server/web/js/app.js")
     rescue_loader = _read_text("thomas/server/web/js/ui_editor_rescue.js")
-    runtime_module_core = _read_text("thomas/server/web/js/src/runtime_modules/063_module_studio_comfy_style_id_helpers.js")
-    runtime_module_shell = _read_text("thomas/server/web/js/src/runtime_modules/063_module_studio_comfy_style_id_workspace.js")
+    runtime_module_core = _read_text(
+        "thomas/server/web/js/src/runtime_modules/063_module_studio_comfy_style_id_helpers.js"
+    )
+    runtime_module_shell = _read_text(
+        "thomas/server/web/js/src/runtime_modules/063_module_studio_comfy_style_id_workspace.js"
+    )
     runtime_editor = _read_many(
         [
             "thomas/server/web/js/src/runtime_modules/063_module_studio_comfy_style_id_bootstrap.js",

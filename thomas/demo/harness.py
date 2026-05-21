@@ -15,7 +15,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_TASK_PACK = ROOT / "demo" / "task_pack.default.json"
 DEFAULT_RUNS_DIR = ROOT / "demo" / "runs"
-DEFAULT_COMPETITORS: Sequence[str] = ("thomas", "openclaw")
+DEFAULT_COMPETITORS: Sequence[str] = ("thomas", "reference_cli")
 DEFAULT_WEIGHTS: dict[str, float] = {
     "success_rate": 0.40,
     "speed": 0.20,
@@ -438,7 +438,7 @@ def _render_report_markdown(
         lines.append("- No ranking data available.")
     else:
         for row in ranking:
-            lines.append(f"- #{row.get('rank')} `{row.get('competitor')}`: " f"{row.get('weighted_score')} / 100")
+            lines.append(f"- #{row.get('rank')} `{row.get('competitor')}`: {row.get('weighted_score')} / 100")
     lines.append("")
 
     credibility = list(summary.get("credibility_ranking") or [])
@@ -449,7 +449,7 @@ def _render_report_markdown(
     else:
         for row in credibility:
             lines.append(
-                f"- #{row.get('rank')} `{row.get('competitor')}`: " f"{row.get('credibility_weighted_score')} / 100"
+                f"- #{row.get('rank')} `{row.get('competitor')}`: {row.get('credibility_weighted_score')} / 100"
             )
     lines.append("")
 
@@ -937,7 +937,7 @@ def _print_summary(summary: Mapping[str, Any]) -> None:
         print("")
         print("Credibility ranking (evidence-adjusted):")
         for row in credibility:
-            print(f"  #{row.get('rank')} {row.get('competitor')}: " f"{row.get('credibility_weighted_score')} / 100")
+            print(f"  #{row.get('rank')} {row.get('competitor')}: {row.get('credibility_weighted_score')} / 100")
     print("")
     for competitor, metrics in (summary.get("competitors") or {}).items():
         print(
@@ -958,7 +958,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--competitor",
         action="append",
         default=[],
-        help="Competitor label (repeatable). Defaults to: thomas, openclaw.",
+        help="Competitor label (repeatable). Defaults to: thomas, reference_cli.",
     )
     parser.add_argument(
         "--results-json",
@@ -1062,7 +1062,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if ranking:
             print("Aggregate ranking:")
             for row in ranking:
-                print(f"  #{row.get('rank')} {row.get('competitor')}: " f"{row.get('weighted_score_mean')} / 100")
+                print(f"  #{row.get('rank')} {row.get('competitor')}: {row.get('weighted_score_mean')} / 100")
         return 0
 
     task_pack = load_task_pack(Path(args.task_pack).resolve())

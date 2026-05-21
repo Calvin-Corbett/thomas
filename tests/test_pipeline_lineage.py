@@ -164,7 +164,7 @@ class TestImpactAnalyzer:
         for i in range(5):
             graph.add_step(TransformationStep(f"step{i}", f"Step {i}", "transform"))
             if i > 0:
-                graph.add_edge(f"step{i-1}", f"step{i}")
+                graph.add_edge(f"step{i - 1}", f"step{i}")
 
         analyzer = ImpactAnalyzer(graph)
         scope = analyzer.estimate_impact_scope("step0")

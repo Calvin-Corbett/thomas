@@ -8,20 +8,12 @@ import scripts.record_module_audit as mod
 
 def _write_changelog(path: Path) -> None:
     path.write_text(
-        (
-            "# Changelog\n\n"
-            "## [Unreleased]\n\n"
-            "### Added\n\n"
-            "- placeholder\n\n"
-            "## [0.0.1] - 2026-01-01\n"
-        ),
+        ("# Changelog\n\n## [Unreleased]\n\n### Added\n\n- placeholder\n\n## [0.0.1] - 2026-01-01\n"),
         encoding="utf-8",
     )
 
 
-def test_record_module_audit_persists_file_hashes_and_issues(
-    tmp_path: Path, monkeypatch, capsys
-) -> None:
+def test_record_module_audit_persists_file_hashes_and_issues(tmp_path: Path, monkeypatch, capsys) -> None:
     repo = tmp_path
     module_file = repo / "thomas" / "models" / "discovery.py"
     module_file.parent.mkdir(parents=True, exist_ok=True)

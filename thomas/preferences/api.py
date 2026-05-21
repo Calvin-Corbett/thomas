@@ -11,6 +11,7 @@ Integration:
     from thomas.preferences.api import router as preferences_router
     app.include_router(preferences_router)
 """
+
 from __future__ import annotations
 
 from functools import lru_cache

@@ -316,8 +316,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             token = prompted
     if not token:
         message = (
-            f"GitHub token required (pass --token or set {args.token_env}); "
-            "needs repository administration permission"
+            f"GitHub token required (pass --token or set {args.token_env}); needs repository administration permission"
         )
         if args.json:
             print(

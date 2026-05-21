@@ -341,7 +341,7 @@ class TypeChecker(ASTVisitor):
             arg_type = arg.accept(self)
             expected_type = func_type.param_types[i]
             if arg_type and not self.is_assignable(expected_type, arg_type):
-                self.type_error(f"Argument {i+1} type {arg_type} cannot be assigned to {expected_type}", arg.location)
+                self.type_error(f"Argument {i + 1} type {arg_type} cannot be assigned to {expected_type}", arg.location)
 
         return func_type.return_type
 

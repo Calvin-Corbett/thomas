@@ -46,9 +46,7 @@ def test_auto_background_actionable_helper_respects_mode_autonomy_inline_tools(m
     assert mod._should_auto_background_actionable("do the task", mode="max", autonomy_level=4) is False
     assert mod._should_auto_background_actionable("do the task", mode="auto", autonomy_level=2) is False
     assert (
-        mod._should_auto_background_actionable(
-            "do the task", mode="auto", autonomy_level=4, requires_inline_tools=True
-        )
+        mod._should_auto_background_actionable("do the task", mode="auto", autonomy_level=4, requires_inline_tools=True)
         is False
     )
     assert mod._should_auto_background_actionable("do the task", mode="auto", autonomy_level=4) is True

@@ -105,9 +105,11 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 "AppStub",
                 (),
                 {
-                    "get": lambda self, key, default=None: {"bridge": type("BridgeStub", (), {"is_running": True})()}
-                    if key == chat_delegation.APP_CODEX_BRIDGE
-                    else default,
+                    "get": lambda self, key, default=None: (
+                        {"bridge": type("BridgeStub", (), {"is_running": True})()}
+                        if key == chat_delegation.APP_CODEX_BRIDGE
+                        else default
+                    ),
                 },
             )()
             result = await chat_delegation.start_background_delegation(
@@ -263,12 +265,15 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
         await emitter.failed(record, specialist_id="coding", bot=bot, text="Boom.")
 
         payloads = [call.args[0] for call in emit_event.await_args_list]
-        self.assertEqual([payload["type"] for payload in payloads], [
-            "delegation_started",
-            "delegation_progress",
-            "delegation_completed",
-            "delegation_failed",
-        ])
+        self.assertEqual(
+            [payload["type"] for payload in payloads],
+            [
+                "delegation_started",
+                "delegation_progress",
+                "delegation_completed",
+                "delegation_failed",
+            ],
+        )
         self.assertEqual(payloads[0]["bot_name"], "Nova")
         self.assertEqual(payloads[1]["last_progress"], "Using grep.")
         self.assertEqual(payloads[2]["state"], "completed")
@@ -285,7 +290,10 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(chat_delegation._infer_specialist("Please investigate and compare this."), "research")
         self.assertEqual(chat_delegation._infer_specialist("Run this command and configure it."), "tools")
         self.assertEqual(chat_delegation._infer_specialist("Just think it through."), "reasoning")
-        self.assertEqual(chat_delegation._helper_prompt("Do the task", helper_index=1, helper_count=1, bot_name="Nova"), "Do the task")
+        self.assertEqual(
+            chat_delegation._helper_prompt("Do the task", helper_index=1, helper_count=1, bot_name="Nova"),
+            "Do the task",
+        )
         self.assertIn(
             "[Helper assignment]",
             chat_delegation._helper_prompt("Do the task", helper_index=2, helper_count=3, bot_name="Zach"),

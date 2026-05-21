@@ -45,4 +45,3 @@ def contradiction_score_for_fact(
         return ContradictionSignal(score=0.8, reason="boolean_conflict")
 
     return None
-

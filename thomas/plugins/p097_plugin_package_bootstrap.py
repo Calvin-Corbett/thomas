@@ -381,7 +381,7 @@ def bootstrap_plugin_package(req: PluginBootstrapRequest) -> PluginBootstrapResu
     installation_manifest_path: str | None = None
     install_root: str | None = None
 
-    init_py = "from __future__ import annotations\n\n" "from .plugin import Plugin\n\n" '__all__ = ["Plugin"]\n'
+    init_py = 'from __future__ import annotations\n\nfrom .plugin import Plugin\n\n__all__ = ["Plugin"]\n'
 
     plugin_py = _build_plugin_code(name, req.description, req.plugin_version)
 

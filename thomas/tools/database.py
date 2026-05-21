@@ -584,7 +584,7 @@ def _json_safe(v: Any) -> tuple[Any, bool]:
     if isinstance(v, (bytes, bytearray, memoryview)):
         b = bytes(v)
         preview = b[:32].hex()
-        suffix = "" if len(b) <= 32 else f"...(+{len(b)-32} bytes)"
+        suffix = "" if len(b) <= 32 else f"...(+{len(b) - 32} bytes)"
         return f"0x{preview}{suffix}", False
 
     try:

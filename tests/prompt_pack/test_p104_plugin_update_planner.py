@@ -63,14 +63,18 @@ def test_plan_plugin_updates_missing_catalog_config():
 
 def test_plan_plugin_updates_invalid_version():
     with pytest.raises(PluginUpdatePlannerInputError):
-        plan_plugin_updates({"installed": [{"id": "alpha", "version": "not-a-version"}], "available": {"alpha": "1.0.1"}})
+        plan_plugin_updates(
+            {"installed": [{"id": "alpha", "version": "not-a-version"}], "available": {"alpha": "1.0.1"}}
+        )
 
 
 def test_plan_plugin_updates_external_failure_url(monkeypatch):
     import thomas.plugins.p104_plugin_update_planner as mod
+
     class DummyRequests:
         def get(self, *_args, **_kwargs):
             raise RuntimeError("boom")
+
     monkeypatch.setattr(mod, "requests", DummyRequests())
     with pytest.raises(PluginUpdatePlannerExternalError):
         plan_plugin_updates(

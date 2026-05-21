@@ -807,7 +807,7 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         if self._logs_panel_open:
             panel_state.append("Logs")
         panels = f" [{'/'.join(panel_state)}]" if panel_state else ""
-        line = f"{self._status_badges()}{panels}  " "F1 Help  F2 Activity  F3 Logs  Ctrl+Space Commands  Tab Focus"
+        line = f"{self._status_badges()}{panels}  F1 Help  F2 Activity  F3 Logs  Ctrl+Space Commands  Tab Focus"
         if bg_info:
             line = f"{line}  {bg_info}"
         if token_info:

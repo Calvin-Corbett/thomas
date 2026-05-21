@@ -239,7 +239,7 @@ def _normalize_cron(expr: str) -> str:
     parts = [p for p in expr.split() if p.strip()]
     if len(parts) != 5:
         raise ValueError(
-            f"Cron must be standard 5-field format: 'min hour day month weekday'. " f"Got {len(parts)} fields: {expr}"
+            f"Cron must be standard 5-field format: 'min hour day month weekday'. Got {len(parts)} fields: {expr}"
         )
     if not croniter.is_valid(expr):
         raise ValueError(f"Invalid cron expression: {expr}")

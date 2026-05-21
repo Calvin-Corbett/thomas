@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_run_seq ON events(run_id, seq, id);
 """
 
+
 def init_db(path: Path) -> None:
     con = sqlite3.connect(str(path))
     try:
@@ -35,6 +36,7 @@ def init_db(path: Path) -> None:
         con.commit()
     finally:
         con.close()
+
 
 def seed_run(path: Path, run_id: str = "run_test_1") -> None:
     con = sqlite3.connect(str(path))

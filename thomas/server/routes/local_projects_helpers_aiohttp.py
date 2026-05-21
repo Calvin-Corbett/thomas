@@ -594,9 +594,7 @@ def _build_launch_candidates(
 
 def _build_actions(launch_candidates: list[dict[str, Any]]) -> dict[str, Any]:
     ordered = [
-        _safe_text(candidate.get("action"))
-        for candidate in launch_candidates
-        if _safe_text(candidate.get("action"))
+        _safe_text(candidate.get("action")) for candidate in launch_candidates if _safe_text(candidate.get("action"))
     ]
     primary = ordered[0] if ordered else "open_folder"
     secondary = [action for action in ordered[1:] if action != primary]
@@ -671,7 +669,9 @@ def _build_project_dossier(
         "board_position": board_position,
         "board_icon": {
             "emoji": _emoji_for_project(kind, framework_label, root.name),
-            "accent": existing.get("board_icon", {}).get("accent") if isinstance(existing.get("board_icon"), dict) else "",
+            "accent": existing.get("board_icon", {}).get("accent")
+            if isinstance(existing.get("board_icon"), dict)
+            else "",
         },
         "entry_path": entry_path,
         "summary": summary,

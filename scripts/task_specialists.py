@@ -48,7 +48,7 @@ SPECIALIST_RULES: tuple[SpecialistRule, ...] = (
         specialist="specialist-competitor-benchmark",
         keywords=(
             "benchmark",
-            "openclaw",
+            "reference_cli",
             "crewai",
             "agent_comparison",
             "baselines",

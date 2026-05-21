@@ -236,7 +236,7 @@ class InvestigationSynthesizer:
             for c in claims:
                 date_str = f" [{c.get('date_referenced', '?')}]" if c.get("date_referenced") else ""
                 parts.append(
-                    f"  ID={c['id']}{date_str} severity={c.get('severity', 0)}: " f"{c.get('claim_text', '')[:200]}"
+                    f"  ID={c['id']}{date_str} severity={c.get('severity', 0)}: {c.get('claim_text', '')[:200]}"
                 )
         return "\n".join(parts)
 

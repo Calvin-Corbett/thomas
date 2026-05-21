@@ -867,7 +867,7 @@ def register_marketplace_catalog_routes(
 
         response = web.Response(body=archive_bytes, content_type="application/zip")
         response.headers["Content-Disposition"] = (
-            f"attachment; filename=\"{_safe_string(plugin_row.get('download_filename')) or f'{plugin_id}.zip'}\""
+            f'attachment; filename="{_safe_string(plugin_row.get("download_filename")) or f"{plugin_id}.zip"}"'
         )
         response.headers["Content-Length"] = str(len(archive_bytes))
         return response

@@ -33,10 +33,10 @@ try:
     )
 except ImportError:  # pragma: no cover
     from thomas.nodes.p035_node_command_stop import (
-    NodeCommandStopError,
-    NodeCommandStopInput,
-    node_command_stop,
-)
+        NodeCommandStopError,
+        NodeCommandStopInput,
+        node_command_stop,
+    )
 
 COMMAND_GROUP = "nodes"
 COMMAND_NAME = "stop"

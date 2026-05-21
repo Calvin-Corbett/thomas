@@ -180,7 +180,7 @@ async def upload_image(file: list[UploadFile] = File(...)) -> JSONResponse:
         sha_stream = hashlib.sha256()
 
         # Stream bytes into a temp file while tracking size and sha.
-        tmp_path = upload_dir / f".tmp-{int(time.time()*1000)}-{os.getpid()}.bin"
+        tmp_path = upload_dir / f".tmp-{int(time.time() * 1000)}-{os.getpid()}.bin"
         try:
             with tmp_path.open("wb") as out:
                 while True:

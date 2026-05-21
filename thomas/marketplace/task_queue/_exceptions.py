@@ -95,7 +95,7 @@ class RetryExhaustedError(TaskQueueException):
             max_retries: Maximum number of retries allowed.
             last_error: The last error that occurred.
         """
-        super().__init__(f"Task {task_id} exhausted {max_retries} retries. " f"Last error: {last_error}")
+        super().__init__(f"Task {task_id} exhausted {max_retries} retries. Last error: {last_error}")
         self.task_id = task_id
         self.max_retries = max_retries
         self.last_error = last_error

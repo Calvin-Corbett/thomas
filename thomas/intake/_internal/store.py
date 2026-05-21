@@ -96,11 +96,15 @@ class IntakeStore:
             h.update(ocr_text.encode("utf-8", errors="ignore"))
         return h.hexdigest()
 
-    def find_by_idempotency_or_hash(self, idempotency_key: str | None, content_hash: str, window_s: float) -> StoredIntake | None:
+    def find_by_idempotency_or_hash(
+        self, idempotency_key: str | None, content_hash: str, window_s: float
+    ) -> StoredIntake | None:
         con = self._connect()
         try:
             if idempotency_key:
-                row = con.execute("SELECT * FROM intake WHERE idempotency_key = ? LIMIT 1", (idempotency_key,)).fetchone()
+                row = con.execute(
+                    "SELECT * FROM intake WHERE idempotency_key = ? LIMIT 1", (idempotency_key,)
+                ).fetchone()
                 if row:
                     return StoredIntake(**dict(row))
             cutoff = time.time() - window_s
@@ -144,7 +148,20 @@ class IntakeStore:
                 INSERT INTO intake (item_id, created_at, source, content_type, text, blob_path, blob_bytes, ocr_text, meta_json, content_hash, idempotency_key, chat_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (item_id, created_at, source, content_type, text, blob_path, blob_bytes, ocr_text, meta_json, content_hash, idempotency_key, chat_id),
+                (
+                    item_id,
+                    created_at,
+                    source,
+                    content_type,
+                    text,
+                    blob_path,
+                    blob_bytes,
+                    ocr_text,
+                    meta_json,
+                    content_hash,
+                    idempotency_key,
+                    chat_id,
+                ),
             )
             con.commit()
         finally:

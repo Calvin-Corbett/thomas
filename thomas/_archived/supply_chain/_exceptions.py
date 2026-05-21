@@ -58,9 +58,7 @@ class InsufficientHistoricalDataException(DemandForecastException):
         self.sku = sku
         self.min_periods = min_periods
         self.available = available
-        message = (
-            f"Insufficient historical data for SKU {sku}. " f"Required: {min_periods} periods, Available: {available}"
-        )
+        message = f"Insufficient historical data for SKU {sku}. Required: {min_periods} periods, Available: {available}"
         super().__init__(message)
 
 
@@ -92,7 +90,7 @@ class CapacityException(LogisticsException):
         self.resource = resource
         self.capacity = capacity
         self.required = required
-        message = f"Capacity exceeded for {resource}. " f"Capacity: {capacity}, Required: {required}"
+        message = f"Capacity exceeded for {resource}. Capacity: {capacity}, Required: {required}"
         super().__init__(message)
 
 
@@ -136,7 +134,7 @@ class WarehouseCapacityException(WarehouseException):
         self.warehouse_id = warehouse_id
         self.current = current
         self.capacity = capacity
-        message = f"Warehouse {warehouse_id} capacity exceeded. " f"Current: {current}, Capacity: {capacity}"
+        message = f"Warehouse {warehouse_id} capacity exceeded. Current: {current}, Capacity: {capacity}"
         super().__init__(message)
 
 
@@ -159,7 +157,7 @@ class MaterialShortageException(ProductionException):
         self.sku = sku
         self.required = required
         self.available = available
-        message = f"Material shortage for SKU {sku}. " f"Required: {required}, Available: {available}"
+        message = f"Material shortage for SKU {sku}. Required: {required}, Available: {available}"
         super().__init__(message)
 
 
@@ -221,7 +219,7 @@ class QualityInspectionFailedException(QualityException):
     def __init__(self, batch_number: str, defect_rate: float) -> None:
         self.batch_number = batch_number
         self.defect_rate = defect_rate
-        message = f"Quality inspection failed for batch {batch_number}. " f"Defect rate: {defect_rate}%"
+        message = f"Quality inspection failed for batch {batch_number}. Defect rate: {defect_rate}%"
         super().__init__(message)
 
 

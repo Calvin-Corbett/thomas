@@ -36,6 +36,7 @@ def search(tmp_path, monkeypatch):
     persistence = DummyPersistence(turns)
 
     import thomas.core.search_history as mod
+
     monkeypatch.setattr(mod, "get_persistence", lambda: persistence)
 
     s.reindex_all()

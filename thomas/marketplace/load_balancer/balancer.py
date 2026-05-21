@@ -359,7 +359,7 @@ class LoadBalancer:
         }
 
         if algorithm_name not in algorithms:
-            raise ValueError(f"Unknown algorithm: {algorithm_name}. " f"Available: {', '.join(algorithms.keys())}")
+            raise ValueError(f"Unknown algorithm: {algorithm_name}. Available: {', '.join(algorithms.keys())}")
 
         return algorithms[algorithm_name]()
 

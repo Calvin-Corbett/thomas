@@ -38,7 +38,7 @@ def init_databases(root_path: Path | None = None) -> None:
 
     except ImportError as e:
         log.warning(
-            f"Cannot initialize migrations (missing dependency): {e}. " "Install alembic with: pip install alembic"
+            f"Cannot initialize migrations (missing dependency): {e}. Install alembic with: pip install alembic"
         )
     except Exception as e:
         # Log error but don't crash - allow server to start in degraded mode

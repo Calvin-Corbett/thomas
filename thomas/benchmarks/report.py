@@ -109,14 +109,12 @@ class BenchmarkReport:
         lines.extend(["", "-" * 64, "  RESULTS BY MODEL", "-" * 64])
 
         for model, data in s["by_model"].items():
-            lines.append(f"  {model:20s}  pass={data['pass_rate']:.1%}  " f"avg={data['avg_score']:.3f}")
+            lines.append(f"  {model:20s}  pass={data['pass_rate']:.1%}  avg={data['avg_score']:.3f}")
 
         lines.extend(["", "-" * 64, "  RESULTS BY CATEGORY", "-" * 64])
 
         for cat, data in s["by_category"].items():
-            lines.append(
-                f"  {cat:20s}  pass={data['pass_rate']:.1%}  " f"avg={data['avg_score']:.3f}  n={data['count']}"
-            )
+            lines.append(f"  {cat:20s}  pass={data['pass_rate']:.1%}  avg={data['avg_score']:.3f}  n={data['count']}")
 
         lines.extend(["", "=" * 64])
         return "\n".join(lines)

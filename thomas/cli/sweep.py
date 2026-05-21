@@ -18,6 +18,7 @@ REPO_ROOT = THOMAS_ROOT.parent
 
 def _scan_forbidden() -> list[dict]:
     import fnmatch
+
     hits = []
     for pattern in RULES["forbidden_patterns"]:
         for match in REPO_ROOT.glob(pattern):
@@ -27,16 +28,19 @@ def _scan_forbidden() -> list[dict]:
             if "__pycache__" in str(py_file):
                 continue
             if fnmatch.fnmatch(py_file.name, pattern):
-                hits.append({
-                    "file": str(py_file.relative_to(REPO_ROOT)),
-                    "pattern": pattern,
-                    "location": "thomas/",
-                })
+                hits.append(
+                    {
+                        "file": str(py_file.relative_to(REPO_ROOT)),
+                        "pattern": pattern,
+                        "location": "thomas/",
+                    }
+                )
     return hits
 
 
 def _scan_oversized() -> list[dict]:
     import fnmatch
+
     hard_limit = RULES["max_file_lines_hard"]
     legacy_patterns = RULES.get("legacy_patterns", [])
     debt_files = set()
@@ -105,11 +109,13 @@ def _scan_ceremony_tests() -> list[dict]:
                     if isinstance(cmp, ast.Compare) and len(cmp.ops) == 1:
                         if isinstance(cmp.ops[0], ast.In) and isinstance(cmp.left, ast.Constant):
                             if isinstance(cmp.left.value, str):
-                                hits.append({
-                                    "file": test_file.name,
-                                    "test": node.name,
-                                    "issue": "ceremony_test",
-                                })
+                                hits.append(
+                                    {
+                                        "file": test_file.name,
+                                        "test": node.name,
+                                        "issue": "ceremony_test",
+                                    }
+                                )
     return hits
 
 
@@ -135,7 +141,9 @@ def sweep_command(as_json: bool) -> None:
             if items:
                 click.echo(f"  {label}: {len(items)} issues")
                 for item in items[:5]:
-                    click.echo(f"    - {item.get('file', item.get('module', ''))}: {item.get('issue', item.get('pattern', ''))}")
+                    click.echo(
+                        f"    - {item.get('file', item.get('module', ''))}: {item.get('issue', item.get('pattern', ''))}"
+                    )
                 if len(items) > 5:
                     click.echo(f"    ... and {len(items) - 5} more")
             else:

@@ -127,9 +127,7 @@ def test_snapshot_is_atomic_on_failure(tmp_path: Path, monkeypatch: pytest.Monke
 
     # Best-effort cleanup: no lingering temp files with our naming convention.
     leftovers = [
-        p
-        for p in tmp_path.iterdir()
-        if p.is_file() and p.name.startswith("out.zip.") and p.name.endswith(".tmp")
+        p for p in tmp_path.iterdir() if p.is_file() and p.name.startswith("out.zip.") and p.name.endswith(".tmp")
     ]
     assert leftovers == []
 

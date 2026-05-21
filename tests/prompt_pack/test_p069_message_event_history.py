@@ -45,10 +45,28 @@ def test_event_history_reads_and_sorts(tmp_path: Path) -> None:
     _write_jsonl(
         store,
         [
-            {"schema": "thomas.messages.event.v1", "message_id": "abc", "event_type": "delivered", "occurred_at": "2025-01-02T03:04:05Z", "raw": {"status": "delivered"}},
+            {
+                "schema": "thomas.messages.event.v1",
+                "message_id": "abc",
+                "event_type": "delivered",
+                "occurred_at": "2025-01-02T03:04:05Z",
+                "raw": {"status": "delivered"},
+            },
             {"messageId": "abc", "status": "sent", "timestamp": "2025-01-01T00:00:01Z"},
-            {"schema": "thomas.messages.event.v1", "message_id": "def", "event_type": "sent", "occurred_at": "2025-01-01T00:00:00Z", "raw": {}},
-            {"schema": "thomas.messages.event.v1", "message_id": "abc", "event_type": "queued", "occurred_at": "2024-12-31T23:59:59Z", "raw": {"status": "queued"}},
+            {
+                "schema": "thomas.messages.event.v1",
+                "message_id": "def",
+                "event_type": "sent",
+                "occurred_at": "2025-01-01T00:00:00Z",
+                "raw": {},
+            },
+            {
+                "schema": "thomas.messages.event.v1",
+                "message_id": "abc",
+                "event_type": "queued",
+                "occurred_at": "2024-12-31T23:59:59Z",
+                "raw": {"status": "queued"},
+            },
         ],
     )
 
@@ -65,7 +83,13 @@ def test_event_history_discovers_default_store(tmp_path: Path, monkeypatch: pyte
     _write_jsonl(
         store,
         [
-            {"schema": "thomas.messages.event.v1", "message_id": "abc", "event_type": "sent", "occurred_at": "2025-01-01T00:00:00Z", "raw": {"status": "sent"}},
+            {
+                "schema": "thomas.messages.event.v1",
+                "message_id": "abc",
+                "event_type": "sent",
+                "occurred_at": "2025-01-01T00:00:00Z",
+                "raw": {"status": "sent"},
+            },
         ],
     )
     monkeypatch.setenv("THOMAS_STATE_DIR", str(tmp_path))
@@ -99,7 +123,13 @@ def test_cli_json_success(tmp_path: Path, capsys: pytest.CaptureFixture[str]) ->
     _write_jsonl(
         store,
         [
-            {"schema": "thomas.messages.event.v1", "message_id": "abc", "event_type": "sent", "occurred_at": "2025-01-01T00:00:00Z", "raw": {"status": "sent"}},
+            {
+                "schema": "thomas.messages.event.v1",
+                "message_id": "abc",
+                "event_type": "sent",
+                "occurred_at": "2025-01-01T00:00:00Z",
+                "raw": {"status": "sent"},
+            },
         ],
     )
 

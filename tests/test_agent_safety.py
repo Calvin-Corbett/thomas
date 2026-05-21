@@ -60,9 +60,7 @@ class TestAgentSafety:
             for js_file in runtime_files:
                 result = subprocess.run(["node", "--check", str(js_file)], capture_output=True, text=True, timeout=5)
                 assert result.returncode == 0, (
-                    f"JavaScript syntax error in {js_file}:\n"
-                    f"{result.stderr}\n\n"
-                    f"Fix the syntax errors and try again."
+                    f"JavaScript syntax error in {js_file}:\n{result.stderr}\n\nFix the syntax errors and try again."
                 )
         except FileNotFoundError:
             # node.js not available, skip this check
@@ -204,7 +202,7 @@ class TestAgentSafety:
 
         for rule_file in rule_files:
             assert rule_file.exists(), (
-                f"Missing guardrails file: {rule_file}\n" f"This file documents constraints for agent edits."
+                f"Missing guardrails file: {rule_file}\nThis file documents constraints for agent edits."
             )
 
     def test_no_circular_dependencies_introduced(self):

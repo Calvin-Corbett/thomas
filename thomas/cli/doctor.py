@@ -25,6 +25,7 @@ def _count_lines(path: pathlib.Path) -> int:
 
 def _check_forbidden(repo_root: pathlib.Path, thomas_root: pathlib.Path) -> list[str]:
     import fnmatch
+
     hits = []
     for pattern in RULES["forbidden_patterns"]:
         for match in repo_root.glob(pattern):
@@ -49,6 +50,7 @@ def _check_debt() -> list[str]:
 
 def _check_ext_isolation(thomas_root: pathlib.Path) -> list[str]:
     import ast
+
     ext_modules = set(get_all_by_tier("ext").keys())
     exceptions = {(a, b) for a, b in RULES.get("ext_isolation_exceptions", [])}
     violations = []
@@ -134,9 +136,13 @@ def doctor_command() -> None:
     # 6. Fitness tests summary
     try:
         import subprocess
+
         result = subprocess.run(
             [sys.executable, "-m", "pytest", "tests/test_architecture.py", "-x", "--tb=no", "-q"],
-            capture_output=True, text=True, cwd=str(REPO_ROOT), timeout=30,
+            capture_output=True,
+            text=True,
+            cwd=str(REPO_ROOT),
+            timeout=30,
         )
         if result.returncode == 0:
             # Extract pass count from pytest output

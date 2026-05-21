@@ -39,9 +39,7 @@ def test_plugin_allows_modify_of_text_arg() -> None:
 
 
 def test_plugin_blocks_on_dangerous_pattern() -> None:
-    plugin = P110BeforeToolHookPlugin(
-        config=BeforeToolHookConfig(mode="allow", blocked_substrings=("rm -rf /",))
-    )
+    plugin = P110BeforeToolHookPlugin(config=BeforeToolHookConfig(mode="allow", blocked_substrings=("rm -rf /",)))
     call = ToolCall(name="demo.shell", args={"command": "rm -rf /"})
 
     decision, _ = apply_before_tool_hook(plugin, call)
@@ -69,9 +67,7 @@ def test_missing_config_strict_load_is_deterministic() -> None:
 
 
 def test_external_failure_is_deterministic() -> None:
-    plugin = P110BeforeToolHookPlugin(
-        config=BeforeToolHookConfig(mode="allow", simulate_external_failure=True)
-    )
+    plugin = P110BeforeToolHookPlugin(config=BeforeToolHookConfig(mode="allow", simulate_external_failure=True))
     call = ToolCall(name="demo.echo", args={"text": "hi"})
 
     with pytest.raises(ExternalHookFailure) as exc:

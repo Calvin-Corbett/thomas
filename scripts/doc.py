@@ -54,7 +54,7 @@ GATE_COMMANDS: Sequence[tuple[str, Sequence[str]]] = (
     ("Surface parity gate", (PY, "scripts/forge/gates/surface_parity.py")),
     ("Feature catalog gate", (PY, "scripts/forge/gates/feature_catalog_gate.py")),
     ("Competitive scope gate", (PY, "scripts/forge/gates/competitive_scope_gate.py")),
-    ("OpenClaw metric parity gate", (PY, "scripts/forge/gates/openclaw_metric_parity_gate.py")),
+    ("Reference CLI metric parity gate", (PY, "scripts/forge/gates/reference_cli_metric_parity_gate.py")),
     ("Chat control protocol gate", (PY, "scripts/forge/gates/chat_control_protocol.py")),
 )
 
@@ -71,7 +71,7 @@ CRITICAL_TEST_FILES: Sequence[str] = (
     "tests/test_realtime_ws.py",
     "tests/test_companion_policy_compliance.py",
     "tests/test_server_companion_api.py",
-    "tests/test_openclaw_metric_parity_gate.py",
+    "tests/test_reference_cli_metric_parity_gate.py",
 )
 
 

@@ -53,10 +53,10 @@ class TestBitmapIndex:
 
         result = idx1.and_mask(idx2)
 
-        assert result[0] == True
-        assert result[1] == False
-        assert result[2] == False
-        assert result[4] == True
+        assert result[0]
+        assert not result[1]
+        assert not result[2]
+        assert result[4]
 
     def test_or_operation(self) -> None:
         """Test OR operation between bitmaps."""
@@ -71,10 +71,10 @@ class TestBitmapIndex:
 
         result = idx1.or_mask(idx2)
 
-        assert result[0] == True
-        assert result[1] == True
-        assert result[2] == True
-        assert result[3] == True
+        assert result[0]
+        assert result[1]
+        assert result[2]
+        assert result[3]
 
     def test_count_set_bits(self) -> None:
         """Test counting set bits."""

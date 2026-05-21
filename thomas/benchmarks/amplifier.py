@@ -197,7 +197,7 @@ class AmplificationScorer:
             lines.append("  Per-Model Amplification:")
             for model, data in metrics["by_model"].items():
                 lines.append(
-                    f"    {model}: {data['raw_avg']:.3f} -> " f"{data['thomas_avg']:.3f} ({data['amplification']}x)"
+                    f"    {model}: {data['raw_avg']:.3f} -> {data['thomas_avg']:.3f} ({data['amplification']}x)"
                 )
             lines.append("")
 

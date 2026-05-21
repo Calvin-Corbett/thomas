@@ -415,9 +415,7 @@ class AnalyticsEngine:
         # Order counts
         total_orders = len([o for o in self._orders if start_date <= o.created_at <= end_date])
 
-        len(
-            [o for o in self._orders if (start_date <= o.created_at <= end_date and o.status == OrderStatus.COMPLETED)]
-        )
+        len([o for o in self._orders if (start_date <= o.created_at <= end_date and o.status == OrderStatus.COMPLETED)])
 
         # Items
         total_items = sum(

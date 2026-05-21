@@ -21,10 +21,10 @@ try:
     )
 except ImportError:  # pragma: no cover
     from thomas.nodes.p042_nodes_camera_action import (
-    NodesCameraActionError,
-    NodesCameraActionRequest,
-    execute_nodes_camera_action,
-)
+        NodesCameraActionError,
+        NodesCameraActionRequest,
+        execute_nodes_camera_action,
+    )
 
 
 def _coerce_scalar(value: str) -> Any:

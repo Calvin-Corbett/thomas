@@ -77,27 +77,27 @@ def test_head_to_head_score_counts_unique_runtime_metrics() -> None:
         "prediction_evo_scope": {},
         "agents": [
             {"id": "thomas", "metrics": {}},
-            {"id": "openclaw", "metrics": {}},
+            {"id": "reference_cli", "metrics": {}},
         ],
         "metric_board": [
             {
                 "metric": "m_only_thomas",
                 "preference": "higher_is_better",
-                "values": {"thomas": 1, "openclaw": None},
+                "values": {"thomas": 1, "reference_cli": None},
                 "participants": ["thomas"],
                 "winners": ["thomas"],
             },
             {
-                "metric": "m_only_openclaw",
+                "metric": "m_only_reference_cli",
                 "preference": "higher_is_better",
-                "values": {"thomas": None, "openclaw": 1},
-                "participants": ["openclaw"],
-                "winners": ["openclaw"],
+                "values": {"thomas": None, "reference_cli": 1},
+                "participants": ["reference_cli"],
+                "winners": ["reference_cli"],
             },
             {
                 "metric": "m_neither",
                 "preference": "higher_is_better",
-                "values": {"thomas": None, "openclaw": None},
+                "values": {"thomas": None, "reference_cli": None},
                 "participants": [],
                 "winners": [],
             },
@@ -107,7 +107,7 @@ def test_head_to_head_score_counts_unique_runtime_metrics() -> None:
         contract=sample_contract,
         result=result,
         focus_agent="thomas",
-        head_to_head_pair=["thomas", "openclaw"],
+        head_to_head_pair=["thomas", "reference_cli"],
     )
     h2h = dict(dict(evaluation["scores"]).get("head_to_head") or {})
     assert bool(h2h.get("enabled")) is True
@@ -129,22 +129,22 @@ def test_head_to_head_tie_policy_exclude_removes_ties_from_denominator() -> None
         "prediction_evo_scope": {},
         "agents": [
             {"id": "thomas", "metrics": {}},
-            {"id": "openclaw", "metrics": {}},
+            {"id": "reference_cli", "metrics": {}},
         ],
         "metric_board": [
             {
                 "metric": "m_tie",
                 "preference": "higher_is_better",
-                "values": {"thomas": 1, "openclaw": 1},
-                "participants": ["thomas", "openclaw"],
-                "winners": ["thomas", "openclaw"],
+                "values": {"thomas": 1, "reference_cli": 1},
+                "participants": ["thomas", "reference_cli"],
+                "winners": ["thomas", "reference_cli"],
                 "test_mode": "quick",
             },
             {
                 "metric": "m_win",
                 "preference": "higher_is_better",
-                "values": {"thomas": 2, "openclaw": 1},
-                "participants": ["thomas", "openclaw"],
+                "values": {"thomas": 2, "reference_cli": 1},
+                "participants": ["thomas", "reference_cli"],
                 "winners": ["thomas"],
                 "test_mode": "quick",
             },
@@ -154,7 +154,7 @@ def test_head_to_head_tie_policy_exclude_removes_ties_from_denominator() -> None
         contract=sample_contract,
         result=result,
         focus_agent="thomas",
-        head_to_head_pair=["thomas", "openclaw"],
+        head_to_head_pair=["thomas", "reference_cli"],
     )
     h2h = dict(dict(evaluation["scores"]).get("head_to_head") or {})
     assert h2h.get("tie_policy") == "exclude"
@@ -216,7 +216,7 @@ def test_lane_suite_scores_and_h2h_mode_breakdown_are_reported() -> None:
                 },
             },
             {
-                "id": "openclaw",
+                "id": "reference_cli",
                 "metrics": {
                     "tests.files": 1,
                     "tests.loc": 5,
@@ -244,8 +244,8 @@ def test_lane_suite_scores_and_h2h_mode_breakdown_are_reported() -> None:
                 "category": "test_rigor",
                 "test_mode": "quick",
                 "preference": "higher_is_better",
-                "values": {"thomas": 10, "openclaw": 1},
-                "participants": ["thomas", "openclaw"],
+                "values": {"thomas": 10, "reference_cli": 1},
+                "participants": ["thomas", "reference_cli"],
                 "winners": ["thomas"],
             },
             {
@@ -253,8 +253,8 @@ def test_lane_suite_scores_and_h2h_mode_breakdown_are_reported() -> None:
                 "category": "performance_load",
                 "test_mode": "dynamic",
                 "preference": "higher_is_better",
-                "values": {"thomas": 1.0, "openclaw": 0.0},
-                "participants": ["thomas", "openclaw"],
+                "values": {"thomas": 1.0, "reference_cli": 0.0},
+                "participants": ["thomas", "reference_cli"],
                 "winners": ["thomas"],
             },
         ],
@@ -263,7 +263,7 @@ def test_lane_suite_scores_and_h2h_mode_breakdown_are_reported() -> None:
         contract=sample_contract,
         result=result,
         focus_agent="thomas",
-        head_to_head_pair=["thomas", "openclaw"],
+        head_to_head_pair=["thomas", "reference_cli"],
     )
     h2h = dict(dict(evaluation["scores"]).get("head_to_head") or {})
     h2h_by_mode = dict(h2h.get("by_mode") or {})
@@ -299,7 +299,7 @@ def test_token_efficiency_head_to_head_prefers_lower_token_cost() -> None:
                 },
             },
             {
-                "id": "openclaw",
+                "id": "reference_cli",
                 "metrics": {
                     "cost.token_efficiency_score": 60.0,
                     "cost.token_efficiency_tokens_per_success_effective": 700.0,
@@ -315,8 +315,8 @@ def test_token_efficiency_head_to_head_prefers_lower_token_cost() -> None:
             {
                 "metric": "cost.token_efficiency_score",
                 "preference": "higher_is_better",
-                "values": {"thomas": 82.0, "openclaw": 60.0},
-                "participants": ["thomas", "openclaw"],
+                "values": {"thomas": 82.0, "reference_cli": 60.0},
+                "participants": ["thomas", "reference_cli"],
                 "winners": ["thomas"],
             }
         ],
@@ -325,7 +325,7 @@ def test_token_efficiency_head_to_head_prefers_lower_token_cost() -> None:
         contract=sample_contract,
         result=result,
         focus_agent="thomas",
-        head_to_head_pair=["thomas", "openclaw"],
+        head_to_head_pair=["thomas", "reference_cli"],
     )
     token_h2h = dict(dict(dict(evaluation["scores"]).get("token_efficiency") or {}).get("head_to_head") or {})
     assert bool(token_h2h.get("enabled")) is True

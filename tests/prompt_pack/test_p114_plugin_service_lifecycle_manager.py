@@ -159,7 +159,9 @@ def test_cli_json_success_and_failure_and_apply() -> None:
     async def start_a() -> None:
         return None
 
-    mgr = PluginServiceLifecycleManager(services=[ServiceDefinition(service_id="a", start=lambda: start_a(), stop=lambda: None)])
+    mgr = PluginServiceLifecycleManager(
+        services=[ServiceDefinition(service_id="a", start=lambda: start_a(), stop=lambda: None)]
+    )
 
     @dataclass
     class CtxObj:

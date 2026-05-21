@@ -55,9 +55,7 @@ except Exception:  # pragma: no cover
     try:
         from thomas.tools.tool import Tool, ToolResult  # type: ignore
     except Exception as e:  # pragma: no cover
-        raise ImportError(
-            "Could not import Tool/ToolResult. Expected thomas.tools.base or thomas.tools.tool."
-        ) from e
+        raise ImportError("Could not import Tool/ToolResult. Expected thomas.tools.base or thomas.tools.tool.") from e
 
 # --- Playwright ---
 _PLAYWRIGHT_AVAILABLE = True
@@ -130,12 +128,14 @@ _STRIP_SELECTORS = [
 # Shared singleton browser + session pages
 # ----------------------------
 
+
 @dataclass
 class _SessionState:
     context: BrowserContext | None = None
     page: Page | None = None
     last_url: str | None = None
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
 
 @dataclass
 class _BrowserState:
@@ -144,6 +144,7 @@ class _BrowserState:
     headless: bool | None = None
     sessions: dict[str, _SessionState] = field(default_factory=dict)
     active_session: str = "default"
+
 
 _STATE = _BrowserState()
 
@@ -154,6 +155,7 @@ _init_lock = asyncio.Lock()
 # ----------------------------
 # Helper utilities
 # ----------------------------
+
 
 def _require_playwright() -> None:
     if not _PLAYWRIGHT_AVAILABLE:
@@ -292,6 +294,7 @@ async def _best_effort_stabilize(page: Page, *, max_ms: int = 3000) -> None:
 # Lifecycle: singleton browser + session pages
 # ----------------------------
 
+
 async def _cleanup_locked() -> None:
     """Close all sessions and the browser+playwright. Caller must hold _init_lock."""
     # Close sessions first
@@ -366,7 +369,9 @@ def _get_session_name(args: dict[str, Any]) -> str:
 
 async def _ensure_session_page(session_name: str, *, headless: bool | None = None) -> tuple[_SessionState, Page]:
     """Ensure session exists with an alive context+page."""
-    desired_headless = bool(headless) if headless is not None else (_STATE.headless if _STATE.headless is not None else True)
+    desired_headless = (
+        bool(headless) if headless is not None else (_STATE.headless if _STATE.headless is not None else True)
+    )
     browser = await get_browser(headless=desired_headless)
 
     async with _init_lock:
@@ -439,6 +444,7 @@ def _ensure_navigated(page: Page) -> str | None:
 # "Consumer-friendly" locator resolution
 # ----------------------------
 
+
 async def _resolve_locator_for_click(page: Page, selector: str) -> Locator:
     """
     If selector looks like CSS/XPath/engine, use page.locator.
@@ -487,6 +493,7 @@ async def _resolve_locator_for_type(page: Page, selector: str) -> Locator:
 # ----------------------------
 # Better text extraction
 # ----------------------------
+
 
 async def _extract_best_text(page: Page) -> str:
     """
@@ -567,6 +574,7 @@ async def _extract_best_text(page: Page) -> str:
 # Tools
 # ----------------------------
 
+
 class BrowserOpenTool(Tool):
     name = "browser.open"
     category = "browser"
@@ -577,7 +585,10 @@ class BrowserOpenTool(Tool):
             "url": {"type": "string", "description": "URL to navigate to."},
             "wait_for": {"type": "string", "description": "Optional CSS selector to wait for."},
             "headless": {"type": "boolean", "description": "Run headless (default true).", "default": True},
-            "session": {"type": "string", "description": "Optional session name (isolated cookies). Default 'default'."},
+            "session": {
+                "type": "string",
+                "description": "Optional session name (isolated cookies). Default 'default'.",
+            },
         },
         "required": ["url"],
         "additionalProperties": False,
@@ -612,9 +623,13 @@ class BrowserOpenTool(Tool):
 
                 if wait_for:
                     try:
-                        await page.wait_for_selector(_normalize_selector(wait_for), timeout=_NAV_TIMEOUT_MS, state="attached")
+                        await page.wait_for_selector(
+                            _normalize_selector(wait_for), timeout=_NAV_TIMEOUT_MS, state="attached"
+                        )
                     except Exception as e:
-                        return ToolResult(ok=False, data=None, error=_fmt_action_error("Wait for selector", e, wait_for))
+                        return ToolResult(
+                            ok=False, data=None, error=_fmt_action_error("Wait for selector", e, wait_for)
+                        )
 
                 await _best_effort_stabilize(page, max_ms=5000)
 

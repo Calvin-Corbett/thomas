@@ -83,7 +83,7 @@ def _emit(result: dict[str, Any], *, json_mode: bool) -> None:
         typer.echo(f"Action: {action.get('method')} {action.get('args')}")
         typer.echo(f"Waits:  {len(waits)}")
         for idx, w in enumerate(waits):
-            typer.echo(f"  {idx+1}. {w.get('method')} args={w.get('args')} kwargs={w.get('kwargs')}")
+            typer.echo(f"  {idx + 1}. {w.get('method')} args={w.get('args')} kwargs={w.get('kwargs')}")
     else:
         err = result.get("error", {})
         typer.echo(f"Error ({err.get('code')}): {err.get('message')}", err=True)

@@ -179,8 +179,7 @@ class EventEnvelope:
 
     def __repr__(self) -> str:
         return (
-            f"EventEnvelope(event={self.event.type!r}, "
-            f"sequence={self.sequence_number}, version={self.stream_version})"
+            f"EventEnvelope(event={self.event.type!r}, sequence={self.sequence_number}, version={self.stream_version})"
         )
 
 

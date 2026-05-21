@@ -107,7 +107,8 @@ class TestMonteCarloWithDistributions:
         mci = MonteCarloIntegration(seed=42)
 
         # Integrate standard normal from -1 to 1
-        normal_pdf = lambda x: (1 / math.sqrt(2 * math.pi)) * math.exp(-(x**2) / 2)
+        def normal_pdf(x):
+            return (1 / math.sqrt(2 * math.pi)) * math.exp(-(x**2) / 2)
 
         result = mci.estimate_area_under_curve(
             func=normal_pdf,

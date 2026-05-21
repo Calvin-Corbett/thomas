@@ -10,7 +10,7 @@ Design goals:
 - Idempotent per node_id while a pending request is unexpired.
 - Minimal assumptions about surrounding CLI / HTTP registries.
 
-This prompt intentionally does *not* reuse OpenClaw naming.
+This prompt intentionally does *not* reuse Reference CLI naming.
 """
 
 from __future__ import annotations

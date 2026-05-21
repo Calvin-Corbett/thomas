@@ -126,7 +126,7 @@ class WindowsAuthGate:
             import win32api
             import win32cred
         except ImportError:
-            log.error("WindowsAuthGate: pywin32 not installed. " "Run: pip install pywin32")
+            log.error("WindowsAuthGate: pywin32 not installed. Run: pip install pywin32")
             return False
 
         target = f"THOMAS-AUTH:{action_description[:60]}"

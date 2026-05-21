@@ -12,7 +12,7 @@
       "ready"
     ]
   },
-  "openclaw": {
+  "reference_cli": {
     "composer_selector": "textarea",
     "send_selector": "button[type='submit']",
     "assistant_container_selector": ".message",

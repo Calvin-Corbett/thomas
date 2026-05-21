@@ -186,7 +186,7 @@ class TestNERIntegration(unittest.TestCase):
 
     def test_complex_sentence(self) -> None:
         """Test NER on complex sentence with multiple entity types."""
-        text = "Apple Inc. is located in Cupertino, California. " "Contact: john@apple.com or visit https://apple.com"
+        text = "Apple Inc. is located in Cupertino, California. Contact: john@apple.com or visit https://apple.com"
         sentence = Sentence(text=text)
 
         tagger = NERTagger()

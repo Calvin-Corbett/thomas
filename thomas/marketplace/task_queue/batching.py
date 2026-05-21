@@ -62,8 +62,7 @@ class BatchTask(Task):
 
     def __repr__(self) -> str:
         return (
-            f"BatchTask(id={self.task_id}, name={self.name}, "
-            f"batch_size={self.batch_size}, status={self.status.value})"
+            f"BatchTask(id={self.task_id}, name={self.name}, batch_size={self.batch_size}, status={self.status.value})"
         )
 
 
@@ -277,7 +276,7 @@ class BatchExecutor:
             return False
 
     def __repr__(self) -> str:
-        return f"BatchExecutor(max_size={self.max_batch_size}, " f"accumulators={len(self._accumulator)})"
+        return f"BatchExecutor(max_size={self.max_batch_size}, accumulators={len(self._accumulator)})"
 
 
 class BatchProcessor:

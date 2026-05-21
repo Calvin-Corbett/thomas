@@ -75,8 +75,9 @@ def main_context_set_user_agent(argv: Optional[Sequence[str]] = None) -> int:
         add_init_script = getattr(handles.context, "add_init_script", None)
         if callable(add_init_script):
             script = (
-                "Object.defineProperty(navigator, 'userAgent', " "{get: () => %s, configurable: true});"
-            ) % json.dumps(user_agent)
+                "Object.defineProperty(navigator, 'userAgent', "
+                f"{{get: () => {json.dumps(user_agent)}, configurable: true}});"
+            )
             _call_maybe_async(add_init_script, script)
             applied.append("add_init_script")
 
@@ -248,7 +249,7 @@ def main_network_set_offline(argv: Optional[Sequence[str]] = None) -> int:
         return _build_session_success(
             command,
             handles,
-            summary=(f"Network set to {'offline' if offline else 'online'} " f"for session '{handles.session_name}'."),
+            summary=(f"Network set to {'offline' if offline else 'online'} for session '{handles.session_name}'."),
             offline=offline,
         )
 

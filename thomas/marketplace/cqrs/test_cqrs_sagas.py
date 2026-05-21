@@ -127,7 +127,7 @@ class TestSagaBase:
 
         saga = SagaBase()
         for i in range(3):
-            saga.add_step(OrderTrackingStep(f"step{i+1}", execution_order))
+            saga.add_step(OrderTrackingStep(f"step{i + 1}", execution_order))
 
         await saga.execute()
 

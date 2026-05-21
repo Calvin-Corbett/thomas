@@ -58,9 +58,9 @@ class DeadLetterQueue:
                     )
                     """
                 )
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_dlq_workflow_id " "ON workflow_dead_letters(workflow_id)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_dlq_run_id " "ON workflow_dead_letters(run_id)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_dlq_resolved " "ON workflow_dead_letters(resolved)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_dlq_workflow_id ON workflow_dead_letters(workflow_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_dlq_run_id ON workflow_dead_letters(run_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_dlq_resolved ON workflow_dead_letters(resolved)")
                 conn.commit()
         except Exception as e:
             logger.error(f"Failed to initialize DLQ database: {e}")
@@ -111,7 +111,7 @@ class DeadLetterQueue:
                     conn.commit()
 
                 logger.error(
-                    f"Enqueued to DLQ: workflow={workflow_id}, " f"run={run_id}, step={step_id}, retries={retry_count}"
+                    f"Enqueued to DLQ: workflow={workflow_id}, run={run_id}, step={step_id}, retries={retry_count}"
                 )
 
             except Exception as e:

@@ -264,25 +264,24 @@ class PolicyComplianceChecker:
         if expense.category == "lodging":
             if expense.amount > self.policy.max_daily_hotel_rate:
                 violations.append(
-                    f"Hotel rate ${expense.amount} exceeds policy limit " f"${self.policy.max_daily_hotel_rate}"
+                    f"Hotel rate ${expense.amount} exceeds policy limit ${self.policy.max_daily_hotel_rate}"
                 )
 
         if expense.category == "meals":
             if expense.amount > self.policy.max_daily_meal_allowance:
                 violations.append(
-                    f"Meal expense ${expense.amount} exceeds daily limit " f"${self.policy.max_daily_meal_allowance}"
+                    f"Meal expense ${expense.amount} exceeds daily limit ${self.policy.max_daily_meal_allowance}"
                 )
 
         if expense.category == "transportation":
             if expense.amount > self.policy.max_ground_transportation:
                 violations.append(
-                    f"Ground transportation ${expense.amount} exceeds limit "
-                    f"${self.policy.max_ground_transportation}"
+                    f"Ground transportation ${expense.amount} exceeds limit ${self.policy.max_ground_transportation}"
                 )
 
         # Check receipt requirement
         if expense.amount > self.policy.requires_receipt_above and not expense.receipt_url:
-            violations.append(f"Receipt required for expenses over " f"${self.policy.requires_receipt_above}")
+            violations.append(f"Receipt required for expenses over ${self.policy.requires_receipt_above}")
 
         is_compliant = len(violations) == 0
         expense.policy_compliant = is_compliant

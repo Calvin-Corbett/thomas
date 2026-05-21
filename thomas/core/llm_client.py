@@ -538,7 +538,7 @@ class LLMClient:
                 }
                 self._attempt_trace.append(attempt)
                 raise LLMError(
-                    f"Rate-limit cooldown active for profile '{self.config.name}' " f"({int(rem)}s remaining).",
+                    f"Rate-limit cooldown active for profile '{self.config.name}' ({int(rem)}s remaining).",
                     status=429,
                     retryable=True,
                 )
@@ -593,7 +593,7 @@ class LLMClient:
                 if idx < len(candidates) - 1:
                     continue
                 last_error = LLMError(
-                    f"Rate-limit cooldown active for profile '{cfg.name}' " f"({int(rate_limited_for)}s remaining).",
+                    f"Rate-limit cooldown active for profile '{cfg.name}' ({int(rate_limited_for)}s remaining).",
                     status=429,
                     retryable=True,
                 )

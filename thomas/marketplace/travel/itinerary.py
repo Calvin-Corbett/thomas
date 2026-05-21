@@ -83,7 +83,7 @@ class MultiSegmentAssembler:
 
             if current.arrival_time > next_flight.departure_time:
                 raise BookingError(
-                    f"Flights overlap: arrival {current.arrival_time} > " f"departure {next_flight.departure_time}"
+                    f"Flights overlap: arrival {current.arrival_time} > departure {next_flight.departure_time}"
                 )
 
     def _generate_itinerary_id(self) -> str:
@@ -469,7 +469,7 @@ class ConflictDetector:
 
                 # Check for overlap
                 if start1 < end2 and start2 < end1:
-                    conflict_msg = f"Conflict: {type1} ({name1}) overlaps with " f"{type2} ({name2})"
+                    conflict_msg = f"Conflict: {type1} ({name1}) overlaps with {type2} ({name2})"
                     conflicts.append(conflict_msg)
 
                     # Critical conflicts
@@ -562,7 +562,7 @@ class BudgetTracker:
         new_spent = spent + amount
 
         if new_spent > category_budget:
-            raise BookingError(f"Category {category} budget exceeded: " f"${new_spent} > ${category_budget}")
+            raise BookingError(f"Category {category} budget exceeded: ${new_spent} > ${category_budget}")
 
         if "spent" not in allocation:
             allocation["spent"] = {}

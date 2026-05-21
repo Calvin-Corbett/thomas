@@ -21,11 +21,11 @@ except ImportError:
 
 
 # ── Robot color palette (variant-blue) ───────────────────────────
-PRIMARY = (154, 216, 255)       # #9ad8ff — head, upper body
-SECONDARY = (90, 174, 255)     # #5aaeff — lower body, legs
-TRIM = (13, 17, 23)            # #0d1117 — borders
-EYE = (11, 23, 38)             # #0b1726 — eyes
-BG = (0, 0, 0, 0)              # transparent
+PRIMARY = (154, 216, 255)  # #9ad8ff — head, upper body
+SECONDARY = (90, 174, 255)  # #5aaeff — lower body, legs
+TRIM = (13, 17, 23)  # #0d1117 — borders
+EYE = (11, 23, 38)  # #0b1726 — eyes
+BG = (0, 0, 0, 0)  # transparent
 
 # ── CSS pixel-art geometry (absolute positions) ──────────────────
 # All coordinates relative to the 58×54 bot container.
@@ -51,7 +51,10 @@ CROP_W, CROP_H = 38, 47
 
 def _draw_bordered_rect(
     draw: ImageDraw.ImageDraw,
-    x: int, y: int, w: int, h: int,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
     border: int,
     fill: tuple,
     border_color: tuple = TRIM,
@@ -68,7 +71,10 @@ def _draw_bordered_rect(
 
 def _draw_body_gradient(
     img: Image.Image,
-    x: int, y: int, w: int, h: int,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
     border: int,
 ) -> None:
     """Draw body with the two-tone gradient from CSS (44% primary, 56% secondary)."""
@@ -101,47 +107,59 @@ def draw_robot(size: int) -> Image.Image:
 
     # Antenna
     draw.rectangle(
-        [ANTENNA["x"], ANTENNA["y"],
-         ANTENNA["x"] + ANTENNA["w"] - 1, ANTENNA["y"] + ANTENNA["h"] - 1],
+        [ANTENNA["x"], ANTENNA["y"], ANTENNA["x"] + ANTENNA["w"] - 1, ANTENNA["y"] + ANTENNA["h"] - 1],
         fill=TRIM,
     )
 
     # Head
     _draw_bordered_rect(
         draw,
-        HEAD["x"], HEAD["y"], HEAD["w"], HEAD["h"],
-        HEAD["border"], PRIMARY,
+        HEAD["x"],
+        HEAD["y"],
+        HEAD["w"],
+        HEAD["h"],
+        HEAD["border"],
+        PRIMARY,
     )
 
     # Eyes
     draw.rectangle(
-        [EYE_L["x"], EYE_L["y"],
-         EYE_L["x"] + EYE_L["w"] - 1, EYE_L["y"] + EYE_L["h"] - 1],
+        [EYE_L["x"], EYE_L["y"], EYE_L["x"] + EYE_L["w"] - 1, EYE_L["y"] + EYE_L["h"] - 1],
         fill=EYE,
     )
     draw.rectangle(
-        [EYE_R["x"], EYE_R["y"],
-         EYE_R["x"] + EYE_R["w"] - 1, EYE_R["y"] + EYE_R["h"] - 1],
+        [EYE_R["x"], EYE_R["y"], EYE_R["x"] + EYE_R["w"] - 1, EYE_R["y"] + EYE_R["h"] - 1],
         fill=EYE,
     )
 
     # Body (gradient)
     _draw_body_gradient(
         img,
-        BODY["x"], BODY["y"], BODY["w"], BODY["h"],
+        BODY["x"],
+        BODY["y"],
+        BODY["w"],
+        BODY["h"],
         BODY["border"],
     )
 
     # Legs
     _draw_bordered_rect(
         draw,
-        LEG_L["x"], LEG_L["y"], LEG_L["w"], LEG_L["h"],
-        LEG_L["border"], SECONDARY,
+        LEG_L["x"],
+        LEG_L["y"],
+        LEG_L["w"],
+        LEG_L["h"],
+        LEG_L["border"],
+        SECONDARY,
     )
     _draw_bordered_rect(
         draw,
-        LEG_R["x"], LEG_R["y"], LEG_R["w"], LEG_R["h"],
-        LEG_R["border"], SECONDARY,
+        LEG_R["x"],
+        LEG_R["y"],
+        LEG_R["w"],
+        LEG_R["h"],
+        LEG_R["border"],
+        SECONDARY,
     )
 
     # Crop to the interesting region
@@ -187,12 +205,14 @@ def generate_png(output_path: str | Path, size: int = 256) -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate Thomas robot icon")
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         default=None,
         help="Output path (default: assets/thomas.ico)",
     )
     parser.add_argument(
-        "--png", action="store_true",
+        "--png",
+        action="store_true",
         help="Also generate a 256px PNG alongside the ICO",
     )
     args = parser.parse_args()

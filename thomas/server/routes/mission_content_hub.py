@@ -41,6 +41,7 @@ def _iso_to_epoch(value: Any) -> float:
     except Exception:
         return 0.0
 
+
 def _content_count_installed_skills() -> int:
     roots: list[Path] = []
     codex_home = str(os.environ.get("CODEX_HOME") or "").strip()
@@ -207,11 +208,7 @@ def _content_job_platforms(job_row: dict[str, Any]) -> list[str]:
                 _content_collect_platform_labels(source.get(key), labels)
         for key, val in source.items():
             low_key = str(key or "").strip().lower()
-            if (
-                low_key in _CONTENT_HINT_FIELDS
-                or low_key.endswith("_platform")
-                or low_key.endswith("_platforms")
-            ):
+            if low_key in _CONTENT_HINT_FIELDS or low_key.endswith("_platform") or low_key.endswith("_platforms"):
                 _content_collect_platform_labels(val, labels)
 
     text_blob = _content_job_text_blob(job_row)
@@ -493,7 +490,9 @@ def _build_content_hub_payload(
     scheduler_rows.sort(
         key=lambda row: (
             0 if bool(row.get("_has_run_at")) else 1,
-            float(row.get("_sort_epoch") or 0.0) if bool(row.get("_has_run_at")) else -float(row.get("_sort_epoch") or 0.0),
+            float(row.get("_sort_epoch") or 0.0)
+            if bool(row.get("_has_run_at"))
+            else -float(row.get("_sort_epoch") or 0.0),
         )
     )
     scheduler_rows = scheduler_rows[:24]
@@ -673,7 +672,9 @@ def _build_content_hub_payload(
             status = "partial"
         if cid in {"content_model", "planning", "composer"} and (workflow_rows or content_jobs > 0):
             status = "partial"
-        if cid in {"scheduling", "publishing_reliability", "automation"} and (scheduled_jobs > 0 or recurring_cron_jobs > 0):
+        if cid in {"scheduling", "publishing_reliability", "automation"} and (
+            scheduled_jobs > 0 or recurring_cron_jobs > 0
+        ):
             status = "partial"
         if cid in {"collaboration", "engagement_hub"} and approvals_pending_total >= 0:
             status = "partial"

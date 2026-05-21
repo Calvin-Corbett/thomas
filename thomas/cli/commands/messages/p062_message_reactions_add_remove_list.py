@@ -50,7 +50,9 @@ def _emit(result: dict, *, json_mode: bool) -> None:
         typer.echo(f"Error[{err.get('code')}]: {err.get('message')}")
 
 
-def _run_payload(payload: dict, *, backend: str | None, api_base_url: str | None, api_token: str | None, timeout_seconds: float) -> dict:
+def _run_payload(
+    payload: dict, *, backend: str | None, api_base_url: str | None, api_token: str | None, timeout_seconds: float
+) -> dict:
     from thomas.messages.p062_message_reactions_add_remove_list import MessageReactionsConfig, run
 
     cfg = None

@@ -13,7 +13,7 @@
     },
     "head_to_head_pair": [
       "thomas",
-      "openclaw"
+      "reference_cli"
     ],
     "head_to_head_tie_policy": "exclude",
     "tracked_cli_commands": [
@@ -66,9 +66,9 @@
   },
   "preparation": [
     {
-      "id": "openclaw",
-      "root": "F:\\DevHub\\_tmp_openclaw_latest_20260306",
-      "repo_url": "https://github.com/openclaw/openclaw.git",
+      "id": "reference_cli",
+      "root": "F:\\DevHub\\_tmp_reference_cli_latest_20260306",
+      "repo_url": "https://github.com/reference_cli/reference_cli.git",
       "branch": "main",
       "cloned": false,
       "status": "ok",
@@ -993,8 +993,8 @@
               "-m",
               "pytest",
               "-q",
-              "tests/test_openclaw_metric_parity_gate.py",
-              "tests/test_compare_openclaw_baseline_metrics.py"
+              "tests/test_reference_cli_metric_parity_gate.py",
+              "tests/test_compare_reference_cli_baseline_metrics.py"
             ],
             "stdout_preview": ".......                                                                  [100%]\n7 passed in 0.30s\n",
             "stderr_preview": ""
@@ -1332,9 +1332,9 @@
       }
     },
     {
-      "id": "openclaw",
-      "label": "OpenClaw",
-      "root": "F:\\DevHub\\_tmp_openclaw_latest_20260306",
+      "id": "reference_cli",
+      "label": "Reference CLI",
+      "root": "F:\\DevHub\\_tmp_reference_cli_latest_20260306",
       "metrics": {
         "loc.total_files": 4545,
         "loc.total_loc": 782809,
@@ -1468,7 +1468,7 @@
       },
       "version_info": {
         "kind": "git",
-        "root": "F:\\DevHub\\_tmp_openclaw_latest_20260306",
+        "root": "F:\\DevHub\\_tmp_reference_cli_latest_20260306",
         "enabled": true,
         "remote": "origin",
         "branch": "main",
@@ -1492,19 +1492,19 @@
         "command": [
           "node",
           "-e",
-          "const p=require('./package.json'); console.log(JSON.stringify({model:'runtime-configured', provider:'multi-provider', profile:'openclaw', version:p.version}));"
+          "const p=require('./package.json'); console.log(JSON.stringify({model:'runtime-configured', provider:'multi-provider', profile:'reference_cli', version:p.version}));"
         ],
         "returncode": 0,
         "stderr": "",
         "payload": {
           "model": "runtime-configured",
           "provider": "multi-provider",
-          "profile": "openclaw",
+          "profile": "reference_cli",
           "version": "2026.3.3"
         },
         "model": "runtime-configured",
         "provider": "multi-provider",
-        "profile": "openclaw"
+        "profile": "reference_cli"
       },
       "errors": [],
       "strict_checks": {
@@ -6741,7 +6741,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 8.880333,
-        "openclaw": 8.880333,
+        "reference_cli": 8.880333,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -6756,7 +6756,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -6775,13 +6775,13 @@
       ],
       "status": "ok",
       "winners": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -6797,7 +6797,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -6821,7 +6821,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 9.459688,
-        "openclaw": 9.459688,
+        "reference_cli": 9.459688,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -6836,7 +6836,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -6855,13 +6855,13 @@
       ],
       "status": "ok",
       "winners": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -6877,7 +6877,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -6901,7 +6901,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 20.0,
-        "openclaw": 20.0,
+        "reference_cli": 20.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -6916,7 +6916,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -6935,13 +6935,13 @@
       ],
       "status": "ok",
       "winners": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -6957,7 +6957,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -6981,7 +6981,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -6996,7 +6996,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -7015,13 +7015,13 @@
       ],
       "status": "ok",
       "winners": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -7037,7 +7037,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -7061,7 +7061,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -7076,7 +7076,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -7095,13 +7095,13 @@
       ],
       "status": "ok",
       "winners": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -7117,7 +7117,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -7141,7 +7141,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 8.880333,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -7159,7 +7159,7 @@
         "thomas"
       ],
       "missing": [
-        "openclaw",
+        "reference_cli",
         "aider",
         "open_interpreter",
         "openhands",
@@ -7180,7 +7180,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -7196,7 +7196,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -7220,7 +7220,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 20.3105,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -7238,7 +7238,7 @@
         "thomas"
       ],
       "missing": [
-        "openclaw",
+        "reference_cli",
         "aider",
         "open_interpreter",
         "openhands",
@@ -7259,7 +7259,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -7275,7 +7275,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -7299,7 +7299,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 9.459688,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -7317,7 +7317,7 @@
         "thomas"
       ],
       "missing": [
-        "openclaw",
+        "reference_cli",
         "aider",
         "open_interpreter",
         "openhands",
@@ -7338,7 +7338,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -7354,7 +7354,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -7378,7 +7378,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 3,
-        "openclaw": 0,
+        "reference_cli": 0,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -7402,7 +7402,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -7416,7 +7416,7 @@
       "spread": 3.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -7432,7 +7432,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 3.0,
+        "reference_cli": 3.0,
         "aider": 3.0,
         "open_interpreter": 3.0,
         "openhands": 3.0,
@@ -7456,7 +7456,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 0.0,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -7474,7 +7474,7 @@
         "thomas"
       ],
       "missing": [
-        "openclaw",
+        "reference_cli",
         "aider",
         "open_interpreter",
         "openhands",
@@ -7495,7 +7495,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -7511,7 +7511,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -7535,7 +7535,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 3,
-        "openclaw": 3,
+        "reference_cli": 3,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -7559,7 +7559,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -7568,13 +7568,13 @@
       "missing": [],
       "status": "ok",
       "winners": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "spread": 3.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -7590,7 +7590,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 3.0,
         "open_interpreter": 3.0,
         "openhands": 3.0,
@@ -7614,7 +7614,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -7629,7 +7629,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -7648,13 +7648,13 @@
       ],
       "status": "ok",
       "winners": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -7670,7 +7670,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -7694,7 +7694,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -7709,7 +7709,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -7728,13 +7728,13 @@
       ],
       "status": "ok",
       "winners": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -7750,7 +7750,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -7774,7 +7774,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 20.0,
-        "openclaw": 20.0,
+        "reference_cli": 20.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -7789,7 +7789,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -7808,13 +7808,13 @@
       ],
       "status": "ok",
       "winners": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -7830,7 +7830,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -7854,7 +7854,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -7869,7 +7869,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -7888,13 +7888,13 @@
       ],
       "status": "ok",
       "winners": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -7910,7 +7910,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -7934,7 +7934,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 1797,
-        "openclaw": 145,
+        "reference_cli": 145,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -7958,7 +7958,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -7972,7 +7972,7 @@
       "spread": 1797.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.08069,
+        "reference_cli": 0.08069,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -7988,7 +7988,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 1652.0,
+        "reference_cli": 1652.0,
         "aider": 1797.0,
         "open_interpreter": 1797.0,
         "openhands": 1797.0,
@@ -8012,7 +8012,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 874258,
-        "openclaw": 21157,
+        "reference_cli": 21157,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -8036,7 +8036,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -8050,7 +8050,7 @@
       "spread": 874258.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0242,
+        "reference_cli": 0.0242,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -8066,7 +8066,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 853101.0,
+        "reference_cli": 853101.0,
         "aider": 874258.0,
         "open_interpreter": 874258.0,
         "openhands": 874258.0,
@@ -8090,7 +8090,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 2,
-        "openclaw": 2,
+        "reference_cli": 2,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8105,7 +8105,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -8124,13 +8124,13 @@
       ],
       "status": "ok",
       "winners": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -8146,7 +8146,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8170,7 +8170,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 4,
-        "openclaw": 4,
+        "reference_cli": 4,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8185,7 +8185,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -8204,13 +8204,13 @@
       ],
       "status": "ok",
       "winners": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -8226,7 +8226,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8250,7 +8250,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 13,
-        "openclaw": 4,
+        "reference_cli": 4,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8265,7 +8265,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -8289,7 +8289,7 @@
       "spread": 9.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -8305,7 +8305,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 9.0,
+        "reference_cli": 9.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8329,7 +8329,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 45,
-        "openclaw": 43,
+        "reference_cli": 43,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8344,7 +8344,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -8368,7 +8368,7 @@
       "spread": 2.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -8384,7 +8384,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 2.0,
+        "reference_cli": 2.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8408,7 +8408,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 31,
-        "openclaw": 10,
+        "reference_cli": 10,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8423,7 +8423,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -8447,7 +8447,7 @@
       "spread": 21.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -8463,7 +8463,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 21.0,
+        "reference_cli": 21.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8487,7 +8487,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 2,
-        "openclaw": 2,
+        "reference_cli": 2,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8502,7 +8502,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -8521,13 +8521,13 @@
       ],
       "status": "ok",
       "winners": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -8543,7 +8543,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8567,7 +8567,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 6,
-        "openclaw": 3,
+        "reference_cli": 3,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8582,7 +8582,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -8606,7 +8606,7 @@
       "spread": 3.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -8622,7 +8622,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 3.0,
+        "reference_cli": 3.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8646,7 +8646,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 16,
-        "openclaw": 10,
+        "reference_cli": 10,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8661,7 +8661,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -8685,7 +8685,7 @@
       "spread": 6.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -8701,7 +8701,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 6.0,
+        "reference_cli": 6.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8725,7 +8725,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 7,
-        "openclaw": 7,
+        "reference_cli": 7,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8740,7 +8740,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -8759,13 +8759,13 @@
       ],
       "status": "ok",
       "winners": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -8781,7 +8781,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8805,7 +8805,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 11,
-        "openclaw": 8,
+        "reference_cli": 8,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8820,7 +8820,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -8844,7 +8844,7 @@
       "spread": 3.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -8860,7 +8860,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 3.0,
+        "reference_cli": 3.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8884,7 +8884,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 9,
-        "openclaw": 3,
+        "reference_cli": 3,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8899,7 +8899,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -8923,7 +8923,7 @@
       "spread": 6.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -8939,7 +8939,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 6.0,
+        "reference_cli": 6.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8963,7 +8963,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 2,
-        "openclaw": 2,
+        "reference_cli": 2,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -8978,7 +8978,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -8997,13 +8997,13 @@
       ],
       "status": "ok",
       "winners": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -9019,7 +9019,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9043,7 +9043,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 36,
-        "openclaw": 13,
+        "reference_cli": 13,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9058,7 +9058,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -9082,7 +9082,7 @@
       "spread": 23.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -9098,7 +9098,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 23.0,
+        "reference_cli": 23.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9122,7 +9122,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 44,
-        "openclaw": 44,
+        "reference_cli": 44,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9137,7 +9137,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -9156,13 +9156,13 @@
       ],
       "status": "ok",
       "winners": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -9178,7 +9178,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9202,7 +9202,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 7,
-        "openclaw": 7,
+        "reference_cli": 7,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9217,7 +9217,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -9236,13 +9236,13 @@
       ],
       "status": "ok",
       "winners": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -9258,7 +9258,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9282,7 +9282,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 11,
-        "openclaw": 4,
+        "reference_cli": 4,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9297,7 +9297,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -9321,7 +9321,7 @@
       "spread": 7.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -9337,7 +9337,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 7.0,
+        "reference_cli": 7.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9361,7 +9361,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 29,
-        "openclaw": 24,
+        "reference_cli": 24,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9376,7 +9376,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -9400,7 +9400,7 @@
       "spread": 5.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -9416,7 +9416,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 5.0,
+        "reference_cli": 5.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9440,7 +9440,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 12,
-        "openclaw": 9,
+        "reference_cli": 9,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9455,7 +9455,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -9479,7 +9479,7 @@
       "spread": 3.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -9495,7 +9495,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 3.0,
+        "reference_cli": 3.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9519,7 +9519,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 17,
-        "openclaw": 7,
+        "reference_cli": 7,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9534,7 +9534,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -9558,7 +9558,7 @@
       "spread": 10.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -9574,7 +9574,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 10.0,
+        "reference_cli": 10.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9598,7 +9598,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 24,
-        "openclaw": 16,
+        "reference_cli": 16,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9613,7 +9613,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -9637,7 +9637,7 @@
       "spread": 8.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -9653,7 +9653,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 8.0,
+        "reference_cli": 8.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9677,7 +9677,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 11,
-        "openclaw": 3,
+        "reference_cli": 3,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9692,7 +9692,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -9716,7 +9716,7 @@
       "spread": 8.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -9732,7 +9732,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 8.0,
+        "reference_cli": 8.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9756,7 +9756,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 41,
-        "openclaw": 9,
+        "reference_cli": 9,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9771,7 +9771,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -9795,7 +9795,7 @@
       "spread": 32.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -9811,7 +9811,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 32.0,
+        "reference_cli": 32.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9835,7 +9835,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 3,
-        "openclaw": 3,
+        "reference_cli": 3,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9850,7 +9850,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -9869,13 +9869,13 @@
       ],
       "status": "ok",
       "winners": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -9891,7 +9891,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9915,7 +9915,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 7,
-        "openclaw": 2,
+        "reference_cli": 2,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9930,7 +9930,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -9954,7 +9954,7 @@
       "spread": 5.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -9970,7 +9970,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 5.0,
+        "reference_cli": 5.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -9994,7 +9994,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 16,
-        "openclaw": 3,
+        "reference_cli": 3,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -10009,7 +10009,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -10033,7 +10033,7 @@
       "spread": 13.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -10049,7 +10049,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 13.0,
+        "reference_cli": 13.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -10073,7 +10073,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 13,
-        "openclaw": 4,
+        "reference_cli": 4,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -10088,7 +10088,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -10112,7 +10112,7 @@
       "spread": 9.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -10128,7 +10128,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 9.0,
+        "reference_cli": 9.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -10152,7 +10152,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 9,
-        "openclaw": 2,
+        "reference_cli": 2,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -10167,7 +10167,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -10191,7 +10191,7 @@
       "spread": 7.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -10207,7 +10207,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 7.0,
+        "reference_cli": 7.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -10231,7 +10231,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 14,
-        "openclaw": 2,
+        "reference_cli": 2,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -10246,7 +10246,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -10270,7 +10270,7 @@
       "spread": 12.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -10286,7 +10286,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 12.0,
+        "reference_cli": 12.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -10310,7 +10310,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 442,
-        "openclaw": 250,
+        "reference_cli": 250,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -10325,7 +10325,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -10349,7 +10349,7 @@
       "spread": 192.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -10365,7 +10365,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 192.0,
+        "reference_cli": 192.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -10389,7 +10389,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 72,
-        "openclaw": 44,
+        "reference_cli": 44,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -10404,7 +10404,7 @@
         "langgraph": null
       },
       "participants": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "missing": [
@@ -10428,7 +10428,7 @@
       "spread": 28.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -10444,7 +10444,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 28.0,
+        "reference_cli": 28.0,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -10468,7 +10468,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 4202,
-        "openclaw": 4545,
+        "reference_cli": 4545,
         "aider": 89,
         "open_interpreter": 19,
         "openhands": 1070,
@@ -10492,7 +10492,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -10501,12 +10501,12 @@
       "missing": [],
       "status": "ok",
       "winners": [
-        "openclaw"
+        "reference_cli"
       ],
       "spread": 4529.0,
       "normalized": {
         "thomas": 0.924266,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.016118,
         "open_interpreter": 0.000662,
         "openhands": 0.232722,
@@ -10522,7 +10522,7 @@
       },
       "gap_to_best": {
         "thomas": 343.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 4456.0,
         "open_interpreter": 4526.0,
         "openhands": 3475.0,
@@ -10546,7 +10546,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 4003,
-        "openclaw": 0,
+        "reference_cli": 0,
         "aider": 147,
         "open_interpreter": 144,
         "openhands": 1142,
@@ -10570,7 +10570,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -10584,7 +10584,7 @@
       "spread": 4003.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.036722,
         "open_interpreter": 0.035973,
         "openhands": 0.285286,
@@ -10600,7 +10600,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 4003.0,
+        "reference_cli": 4003.0,
         "aider": 3856.0,
         "open_interpreter": 3859.0,
         "openhands": 2861.0,
@@ -10624,7 +10624,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 3692,
-        "openclaw": 7,
+        "reference_cli": 7,
         "aider": 35,
         "open_interpreter": 14,
         "openhands": 57,
@@ -10648,7 +10648,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -10662,7 +10662,7 @@
       "spread": 3685.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.007598,
         "open_interpreter": 0.0019,
         "openhands": 0.013569,
@@ -10678,7 +10678,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 3685.0,
+        "reference_cli": 3685.0,
         "aider": 3657.0,
         "open_interpreter": 3678.0,
         "openhands": 3635.0,
@@ -10702,7 +10702,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": null,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -10719,7 +10719,7 @@
       "participants": [],
       "missing": [
         "thomas",
-        "openclaw",
+        "reference_cli",
         "aider",
         "open_interpreter",
         "openhands",
@@ -10738,7 +10738,7 @@
       "spread": null,
       "normalized": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -10754,7 +10754,7 @@
       },
       "gap_to_best": {
         "thomas": null,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -10778,7 +10778,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": null,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -10795,7 +10795,7 @@
       "participants": [],
       "missing": [
         "thomas",
-        "openclaw",
+        "reference_cli",
         "aider",
         "open_interpreter",
         "openhands",
@@ -10814,7 +10814,7 @@
       "spread": null,
       "normalized": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -10830,7 +10830,7 @@
       },
       "gap_to_best": {
         "thomas": null,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -10854,7 +10854,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 52.0,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -10872,7 +10872,7 @@
         "thomas"
       ],
       "missing": [
-        "openclaw",
+        "reference_cli",
         "aider",
         "open_interpreter",
         "openhands",
@@ -10893,7 +10893,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -10909,7 +10909,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -10933,7 +10933,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 0.781,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -10951,7 +10951,7 @@
         "thomas"
       ],
       "missing": [
-        "openclaw",
+        "reference_cli",
         "aider",
         "open_interpreter",
         "openhands",
@@ -10972,7 +10972,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -10988,7 +10988,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -11012,7 +11012,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 0,
-        "openclaw": 1,
+        "reference_cli": 1,
         "aider": 1,
         "open_interpreter": 1,
         "openhands": 1,
@@ -11036,7 +11036,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -11050,7 +11050,7 @@
       "spread": 1.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -11066,7 +11066,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 1.0,
@@ -11090,7 +11090,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -11114,7 +11114,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -11128,7 +11128,7 @@
       "spread": 1.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -11144,7 +11144,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 1.0,
@@ -11168,7 +11168,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 1,
-        "openclaw": 0,
+        "reference_cli": 0,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -11192,7 +11192,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -11206,7 +11206,7 @@
       "spread": 1.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -11222,7 +11222,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 1.0,
@@ -11246,7 +11246,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 1,
-        "openclaw": 1,
+        "reference_cli": 1,
         "aider": 1,
         "open_interpreter": 1,
         "openhands": 1,
@@ -11270,7 +11270,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -11288,7 +11288,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -11297,7 +11297,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 1.0,
@@ -11313,7 +11313,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -11337,7 +11337,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 75.159602,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -11355,7 +11355,7 @@
         "thomas"
       ],
       "missing": [
-        "openclaw",
+        "reference_cli",
         "aider",
         "open_interpreter",
         "openhands",
@@ -11376,7 +11376,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -11392,7 +11392,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -11416,7 +11416,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 0.75,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -11440,7 +11440,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -11454,7 +11454,7 @@
       "spread": 0.75,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -11470,7 +11470,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.75,
+        "reference_cli": 0.75,
         "aider": 0.75,
         "open_interpreter": 0.75,
         "openhands": 0.75,
@@ -11494,7 +11494,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 52.0,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -11512,7 +11512,7 @@
         "thomas"
       ],
       "missing": [
-        "openclaw",
+        "reference_cli",
         "aider",
         "open_interpreter",
         "openhands",
@@ -11533,7 +11533,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -11549,7 +11549,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -11573,7 +11573,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 737,
-        "openclaw": 7,
+        "reference_cli": 7,
         "aider": 149,
         "open_interpreter": 16,
         "openhands": 99,
@@ -11597,7 +11597,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -11611,7 +11611,7 @@
       "spread": 730.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.194521,
         "open_interpreter": 0.012329,
         "openhands": 0.126027,
@@ -11627,7 +11627,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 730.0,
+        "reference_cli": 730.0,
         "aider": 588.0,
         "open_interpreter": 721.0,
         "openhands": 638.0,
@@ -11651,7 +11651,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 529,
-        "openclaw": 40,
+        "reference_cli": 40,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -11675,7 +11675,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -11689,7 +11689,7 @@
       "spread": 529.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.075614,
+        "reference_cli": 0.075614,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -11705,7 +11705,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 489.0,
+        "reference_cli": 489.0,
         "aider": 529.0,
         "open_interpreter": 529.0,
         "openhands": 529.0,
@@ -11729,7 +11729,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 4,
-        "openclaw": 4,
+        "reference_cli": 4,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -11753,7 +11753,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -11762,13 +11762,13 @@
       "missing": [],
       "status": "ok",
       "winners": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "spread": 4.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -11784,7 +11784,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 4.0,
         "open_interpreter": 4.0,
         "openhands": 4.0,
@@ -11808,7 +11808,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 12,
-        "openclaw": 9,
+        "reference_cli": 9,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -11832,7 +11832,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -11846,7 +11846,7 @@
       "spread": 12.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.75,
+        "reference_cli": 0.75,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -11862,7 +11862,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 3.0,
+        "reference_cli": 3.0,
         "aider": 12.0,
         "open_interpreter": 12.0,
         "openhands": 12.0,
@@ -11886,7 +11886,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 8,
-        "openclaw": 5,
+        "reference_cli": 5,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -11910,7 +11910,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -11924,7 +11924,7 @@
       "spread": 8.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.625,
+        "reference_cli": 0.625,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -11940,7 +11940,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 3.0,
+        "reference_cli": 3.0,
         "aider": 8.0,
         "open_interpreter": 8.0,
         "openhands": 8.0,
@@ -11964,7 +11964,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 26,
-        "openclaw": 8,
+        "reference_cli": 8,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -11988,7 +11988,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -12002,7 +12002,7 @@
       "spread": 26.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.307692,
+        "reference_cli": 0.307692,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -12018,7 +12018,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 18.0,
+        "reference_cli": 18.0,
         "aider": 26.0,
         "open_interpreter": 26.0,
         "openhands": 26.0,
@@ -12042,7 +12042,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 0,
-        "openclaw": 0,
+        "reference_cli": 0,
         "aider": 1,
         "open_interpreter": 0,
         "openhands": 1,
@@ -12066,7 +12066,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -12080,14 +12080,14 @@
         "crewai",
         "gpt_engineer",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "roo_code",
         "thomas"
       ],
       "spread": 5.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.8,
         "open_interpreter": 1.0,
         "openhands": 0.8,
@@ -12103,7 +12103,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 1.0,
         "open_interpreter": 0.0,
         "openhands": 1.0,
@@ -12127,7 +12127,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 0,
-        "openclaw": 0,
+        "reference_cli": 0,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -12151,7 +12151,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -12169,7 +12169,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -12178,7 +12178,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 1.0,
@@ -12194,7 +12194,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -12218,7 +12218,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 0,
-        "openclaw": 0,
+        "reference_cli": 0,
         "aider": 1,
         "open_interpreter": 1,
         "openhands": 4,
@@ -12242,7 +12242,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -12253,14 +12253,14 @@
       "winners": [
         "crewai",
         "gpt_engineer",
-        "openclaw",
+        "reference_cli",
         "swe_agent",
         "thomas"
       ],
       "spread": 13.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.923077,
         "open_interpreter": 0.923077,
         "openhands": 0.692308,
@@ -12276,7 +12276,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 4.0,
@@ -12300,7 +12300,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 0,
-        "openclaw": 0,
+        "reference_cli": 0,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -12324,7 +12324,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -12342,7 +12342,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -12351,7 +12351,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 1.0,
@@ -12367,7 +12367,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -12391,7 +12391,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 0,
-        "openclaw": 0,
+        "reference_cli": 0,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -12415,7 +12415,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -12432,7 +12432,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "thomas"
@@ -12440,7 +12440,7 @@
       "spread": 5.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 1.0,
@@ -12456,7 +12456,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -12480,7 +12480,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 8205,
-        "openclaw": 4545,
+        "reference_cli": 4545,
         "aider": 236,
         "open_interpreter": 163,
         "openhands": 2212,
@@ -12504,7 +12504,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -12518,7 +12518,7 @@
       "spread": 8105.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.548427,
+        "reference_cli": 0.548427,
         "aider": 0.01678,
         "open_interpreter": 0.007773,
         "openhands": 0.26058,
@@ -12534,7 +12534,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 3660.0,
+        "reference_cli": 3660.0,
         "aider": 7969.0,
         "open_interpreter": 8042.0,
         "openhands": 5993.0,
@@ -12558,7 +12558,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 2722546,
-        "openclaw": 782809,
+        "reference_cli": 782809,
         "aider": 56292,
         "open_interpreter": 17153,
         "openhands": 341738,
@@ -12582,7 +12582,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -12596,7 +12596,7 @@
       "spread": 2712691.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.28494,
+        "reference_cli": 0.28494,
         "aider": 0.017118,
         "open_interpreter": 0.00269,
         "openhands": 0.122345,
@@ -12612,7 +12612,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 1939737.0,
+        "reference_cli": 1939737.0,
         "aider": 2666254.0,
         "open_interpreter": 2705393.0,
         "openhands": 2380808.0,
@@ -12636,7 +12636,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 2.460932,
-        "openclaw": 14.051959,
+        "reference_cli": 14.051959,
         "aider": 30.199673,
         "open_interpreter": 11.659768,
         "openhands": 16.386823,
@@ -12660,7 +12660,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -12674,7 +12674,7 @@
       "spread": 33.989394,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.658981,
+        "reference_cli": 0.658981,
         "aider": 0.1839,
         "open_interpreter": 0.729362,
         "openhands": 0.590287,
@@ -12690,7 +12690,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 11.591027,
+        "reference_cli": 11.591027,
         "aider": 27.738741,
         "open_interpreter": 9.198836,
         "openhands": 13.925891,
@@ -12714,7 +12714,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 4,
-        "openclaw": 4,
+        "reference_cli": 4,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -12738,7 +12738,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -12747,13 +12747,13 @@
       "missing": [],
       "status": "ok",
       "winners": [
-        "openclaw",
+        "reference_cli",
         "thomas"
       ],
       "spread": 4.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -12769,7 +12769,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 4.0,
         "open_interpreter": 4.0,
         "openhands": 4.0,
@@ -12793,7 +12793,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 0.5814,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -12811,7 +12811,7 @@
         "thomas"
       ],
       "missing": [
-        "openclaw",
+        "reference_cli",
         "aider",
         "open_interpreter",
         "openhands",
@@ -12832,7 +12832,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -12848,7 +12848,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -12872,7 +12872,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 949.13819,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -12890,7 +12890,7 @@
         "thomas"
       ],
       "missing": [
-        "openclaw",
+        "reference_cli",
         "aider",
         "open_interpreter",
         "openhands",
@@ -12911,7 +12911,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -12927,7 +12927,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -12951,7 +12951,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 0,
-        "openclaw": 0,
+        "reference_cli": 0,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -12975,7 +12975,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -12993,7 +12993,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -13002,7 +13002,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 1.0,
@@ -13018,7 +13018,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -13042,7 +13042,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 0.591,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -13060,7 +13060,7 @@
         "thomas"
       ],
       "missing": [
-        "openclaw",
+        "reference_cli",
         "aider",
         "open_interpreter",
         "openhands",
@@ -13081,7 +13081,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -13097,7 +13097,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -13121,7 +13121,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 1.0,
@@ -13145,7 +13145,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -13163,7 +13163,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -13172,7 +13172,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 1.0,
@@ -13188,7 +13188,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -13212,7 +13212,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 5,
-        "openclaw": 1,
+        "reference_cli": 1,
         "aider": 1,
         "open_interpreter": 1,
         "openhands": 1,
@@ -13236,7 +13236,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -13250,7 +13250,7 @@
       "spread": 4.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -13266,7 +13266,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 4.0,
+        "reference_cli": 4.0,
         "aider": 4.0,
         "open_interpreter": 4.0,
         "openhands": 4.0,
@@ -13290,7 +13290,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 5,
-        "openclaw": 1,
+        "reference_cli": 1,
         "aider": 1,
         "open_interpreter": 1,
         "openhands": 1,
@@ -13314,7 +13314,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -13328,7 +13328,7 @@
       "spread": 4.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -13344,7 +13344,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 4.0,
+        "reference_cli": 4.0,
         "aider": 4.0,
         "open_interpreter": 4.0,
         "openhands": 4.0,
@@ -13368,7 +13368,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 2872,
-        "openclaw": 80,
+        "reference_cli": 80,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -13392,7 +13392,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -13406,7 +13406,7 @@
       "spread": 2872.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.027855,
+        "reference_cli": 0.027855,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -13422,7 +13422,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 2792.0,
+        "reference_cli": 2792.0,
         "aider": 2872.0,
         "open_interpreter": 2872.0,
         "openhands": 2872.0,
@@ -13446,7 +13446,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 898955,
-        "openclaw": 13287,
+        "reference_cli": 13287,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -13470,7 +13470,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -13484,7 +13484,7 @@
       "spread": 898955.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.01478,
+        "reference_cli": 0.01478,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -13500,7 +13500,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 885668.0,
+        "reference_cli": 885668.0,
         "aider": 898955.0,
         "open_interpreter": 898955.0,
         "openhands": 898955.0,
@@ -13524,7 +13524,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 0,
-        "openclaw": 0,
+        "reference_cli": 0,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -13548,7 +13548,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -13566,7 +13566,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -13575,7 +13575,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 1.0,
@@ -13591,7 +13591,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -13615,7 +13615,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 1.301,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -13633,7 +13633,7 @@
         "thomas"
       ],
       "missing": [
-        "openclaw",
+        "reference_cli",
         "aider",
         "open_interpreter",
         "openhands",
@@ -13654,7 +13654,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -13670,7 +13670,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -13694,7 +13694,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 0,
-        "openclaw": 0,
+        "reference_cli": 0,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -13718,7 +13718,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -13736,7 +13736,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -13745,7 +13745,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 1.0,
@@ -13761,7 +13761,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -13785,7 +13785,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 0,
-        "openclaw": 0,
+        "reference_cli": 0,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -13809,7 +13809,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -13827,7 +13827,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -13836,7 +13836,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 1.0,
@@ -13852,7 +13852,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -13876,7 +13876,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 1.0,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -13894,7 +13894,7 @@
         "thomas"
       ],
       "missing": [
-        "openclaw",
+        "reference_cli",
         "aider",
         "open_interpreter",
         "openhands",
@@ -13915,7 +13915,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -13931,7 +13931,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -13955,7 +13955,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 4,
-        "openclaw": 0,
+        "reference_cli": 0,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -13979,7 +13979,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -13993,7 +13993,7 @@
       "spread": 4.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -14009,7 +14009,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 4.0,
+        "reference_cli": 4.0,
         "aider": 4.0,
         "open_interpreter": 4.0,
         "openhands": 4.0,
@@ -14033,7 +14033,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 4,
-        "openclaw": 0,
+        "reference_cli": 0,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -14057,7 +14057,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -14071,7 +14071,7 @@
       "spread": 4.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -14087,7 +14087,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 4.0,
+        "reference_cli": 4.0,
         "aider": 4.0,
         "open_interpreter": 4.0,
         "openhands": 4.0,
@@ -14111,7 +14111,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 1.299333,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -14129,7 +14129,7 @@
         "thomas"
       ],
       "missing": [
-        "openclaw",
+        "reference_cli",
         "aider",
         "open_interpreter",
         "openhands",
@@ -14150,7 +14150,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -14166,7 +14166,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -14190,7 +14190,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 0,
-        "openclaw": 0,
+        "reference_cli": 0,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -14214,7 +14214,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -14232,7 +14232,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -14241,7 +14241,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 1.0,
@@ -14257,7 +14257,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -14281,7 +14281,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 3.83975,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -14299,7 +14299,7 @@
         "thomas"
       ],
       "missing": [
-        "openclaw",
+        "reference_cli",
         "aider",
         "open_interpreter",
         "openhands",
@@ -14320,7 +14320,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -14336,7 +14336,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -14360,7 +14360,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 1.0,
@@ -14384,7 +14384,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -14402,7 +14402,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -14411,7 +14411,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 1.0,
@@ -14427,7 +14427,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -14451,7 +14451,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 6,
-        "openclaw": 3,
+        "reference_cli": 3,
         "aider": 3,
         "open_interpreter": 3,
         "openhands": 3,
@@ -14475,7 +14475,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -14489,7 +14489,7 @@
       "spread": 3.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -14505,7 +14505,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 3.0,
+        "reference_cli": 3.0,
         "aider": 3.0,
         "open_interpreter": 3.0,
         "openhands": 3.0,
@@ -14529,7 +14529,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 6,
-        "openclaw": 3,
+        "reference_cli": 3,
         "aider": 3,
         "open_interpreter": 3,
         "openhands": 3,
@@ -14553,7 +14553,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -14567,7 +14567,7 @@
       "spread": 3.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -14583,7 +14583,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 3.0,
+        "reference_cli": 3.0,
         "aider": 3.0,
         "open_interpreter": 3.0,
         "openhands": 3.0,
@@ -14607,7 +14607,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 27,
-        "openclaw": 0,
+        "reference_cli": 0,
         "aider": 16,
         "open_interpreter": 4,
         "openhands": 12,
@@ -14631,7 +14631,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -14645,7 +14645,7 @@
       "spread": 27.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.592593,
         "open_interpreter": 0.148148,
         "openhands": 0.444444,
@@ -14661,7 +14661,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 27.0,
+        "reference_cli": 27.0,
         "aider": 11.0,
         "open_interpreter": 23.0,
         "openhands": 15.0,
@@ -14685,7 +14685,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 0.938,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -14703,7 +14703,7 @@
         "thomas"
       ],
       "missing": [
-        "openclaw",
+        "reference_cli",
         "aider",
         "open_interpreter",
         "openhands",
@@ -14724,7 +14724,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -14740,7 +14740,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": null,
+        "reference_cli": null,
         "aider": null,
         "open_interpreter": null,
         "openhands": null,
@@ -14764,7 +14764,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 0,
-        "openclaw": 0,
+        "reference_cli": 0,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -14788,7 +14788,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -14806,7 +14806,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -14815,7 +14815,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 1.0,
@@ -14831,7 +14831,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -14855,7 +14855,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 1.0,
@@ -14879,7 +14879,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -14897,7 +14897,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -14906,7 +14906,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 1.0,
@@ -14922,7 +14922,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -14946,7 +14946,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 1,
-        "openclaw": 1,
+        "reference_cli": 1,
         "aider": 1,
         "open_interpreter": 1,
         "openhands": 1,
@@ -14970,7 +14970,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -14988,7 +14988,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -14997,7 +14997,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 1.0,
@@ -15013,7 +15013,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -15037,7 +15037,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 1,
-        "openclaw": 1,
+        "reference_cli": 1,
         "aider": 1,
         "open_interpreter": 1,
         "openhands": 1,
@@ -15061,7 +15061,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -15079,7 +15079,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -15088,7 +15088,7 @@
       "spread": 0.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 1.0,
+        "reference_cli": 1.0,
         "aider": 1.0,
         "open_interpreter": 1.0,
         "openhands": 1.0,
@@ -15104,7 +15104,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -15128,7 +15128,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 0.0,
-        "openclaw": 3.080308,
+        "reference_cli": 3.080308,
         "aider": 0.0,
         "open_interpreter": 30.674847,
         "openhands": 4.972875,
@@ -15152,7 +15152,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -15168,7 +15168,7 @@
       "spread": 30.674847,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.899582,
+        "reference_cli": 0.899582,
         "aider": 1.0,
         "open_interpreter": 0.0,
         "openhands": 0.837884,
@@ -15184,7 +15184,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 3.080308,
+        "reference_cli": 3.080308,
         "aider": 0.0,
         "open_interpreter": 30.674847,
         "openhands": 4.972875,
@@ -15208,7 +15208,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 0.0,
-        "openclaw": 5.237548,
+        "reference_cli": 5.237548,
         "aider": 0.0,
         "open_interpreter": 40.809188,
         "openhands": 4.974571,
@@ -15232,7 +15232,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -15248,7 +15248,7 @@
       "spread": 40.809188,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.871658,
+        "reference_cli": 0.871658,
         "aider": 1.0,
         "open_interpreter": 0.0,
         "openhands": 0.878102,
@@ -15264,7 +15264,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 5.237548,
+        "reference_cli": 5.237548,
         "aider": 0.0,
         "open_interpreter": 40.809188,
         "openhands": 4.974571,
@@ -15288,7 +15288,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 0,
-        "openclaw": 39,
+        "reference_cli": 39,
         "aider": 1,
         "open_interpreter": 0,
         "openhands": 3,
@@ -15312,7 +15312,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -15332,7 +15332,7 @@
       "spread": 39.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.974359,
         "open_interpreter": 1.0,
         "openhands": 0.923077,
@@ -15348,7 +15348,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 39.0,
+        "reference_cli": 39.0,
         "aider": 1.0,
         "open_interpreter": 0.0,
         "openhands": 3.0,
@@ -15372,7 +15372,7 @@
       "test_mode": "dynamic",
       "values": {
         "thomas": 0,
-        "openclaw": 104,
+        "reference_cli": 104,
         "aider": 18,
         "open_interpreter": 0,
         "openhands": 10,
@@ -15396,7 +15396,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -15416,7 +15416,7 @@
       "spread": 104.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.826923,
         "open_interpreter": 1.0,
         "openhands": 0.903846,
@@ -15432,7 +15432,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 104.0,
+        "reference_cli": 104.0,
         "aider": 18.0,
         "open_interpreter": 0.0,
         "openhands": 10.0,
@@ -15456,7 +15456,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 1536,
-        "openclaw": 0,
+        "reference_cli": 0,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -15480,7 +15480,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -15494,7 +15494,7 @@
       "spread": 1536.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -15510,7 +15510,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 1536.0,
+        "reference_cli": 1536.0,
         "aider": 1536.0,
         "open_interpreter": 1536.0,
         "openhands": 1536.0,
@@ -15534,7 +15534,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 852466,
-        "openclaw": 0,
+        "reference_cli": 0,
         "aider": 0,
         "open_interpreter": 0,
         "openhands": 0,
@@ -15558,7 +15558,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -15572,7 +15572,7 @@
       "spread": 852466.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.0,
+        "reference_cli": 0.0,
         "aider": 0.0,
         "open_interpreter": 0.0,
         "openhands": 0.0,
@@ -15588,7 +15588,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 852466.0,
+        "reference_cli": 852466.0,
         "aider": 852466.0,
         "open_interpreter": 852466.0,
         "openhands": 852466.0,
@@ -15612,7 +15612,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 3838,
-        "openclaw": 35,
+        "reference_cli": 35,
         "aider": 60,
         "open_interpreter": 5,
         "openhands": 220,
@@ -15636,7 +15636,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -15650,7 +15650,7 @@
       "spread": 3837.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.008861,
+        "reference_cli": 0.008861,
         "aider": 0.015377,
         "open_interpreter": 0.001042,
         "openhands": 0.057076,
@@ -15666,7 +15666,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 3803.0,
+        "reference_cli": 3803.0,
         "aider": 3778.0,
         "open_interpreter": 3833.0,
         "openhands": 3618.0,
@@ -15690,7 +15690,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 1837713,
-        "openclaw": 2226,
+        "reference_cli": 2226,
         "aider": 10214,
         "open_interpreter": 1216,
         "openhands": 69601,
@@ -15714,7 +15714,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -15728,7 +15728,7 @@
       "spread": 1837609.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.001155,
+        "reference_cli": 0.001155,
         "aider": 0.005502,
         "open_interpreter": 0.000605,
         "openhands": 0.037819,
@@ -15744,7 +15744,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 1835487.0,
+        "reference_cli": 1835487.0,
         "aider": 1827499.0,
         "open_interpreter": 1836497.0,
         "openhands": 1768112.0,
@@ -15768,7 +15768,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 478.820479,
-        "openclaw": 63.6,
+        "reference_cli": 63.6,
         "aider": 170.233333,
         "open_interpreter": 243.2,
         "openhands": 316.368182,
@@ -15792,7 +15792,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -15806,7 +15806,7 @@
       "spread": 423.33772,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.019174,
+        "reference_cli": 0.019174,
         "aider": 0.271062,
         "open_interpreter": 0.443422,
         "openhands": 0.616258,
@@ -15822,7 +15822,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 415.220479,
+        "reference_cli": 415.220479,
         "aider": 308.587146,
         "open_interpreter": 235.620479,
         "openhands": 162.452297,
@@ -15846,7 +15846,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 0.878864,
-        "openclaw": 0.007761,
+        "reference_cli": 0.007761,
         "aider": 0.340909,
         "open_interpreter": 0.031646,
         "openhands": 0.110442,
@@ -15870,7 +15870,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -15884,7 +15884,7 @@
       "spread": 1.067557,
       "normalized": {
         "thomas": 0.822635,
-        "openclaw": 0.006657,
+        "reference_cli": 0.006657,
         "aider": 0.318723,
         "open_interpreter": 0.029031,
         "openhands": 0.10284,
@@ -15900,7 +15900,7 @@
       },
       "gap_to_best": {
         "thomas": 0.189347,
-        "openclaw": 1.06045,
+        "reference_cli": 1.06045,
         "aider": 0.727302,
         "open_interpreter": 1.036565,
         "openhands": 0.957769,
@@ -15924,7 +15924,7 @@
       "test_mode": "quick",
       "values": {
         "thomas": 2.076904,
-        "openclaw": 0.002852,
+        "reference_cli": 0.002852,
         "aider": 0.221668,
         "open_interpreter": 0.0763,
         "openhands": 0.255757,
@@ -15948,7 +15948,7 @@
         "gpt_engineer",
         "langgraph",
         "open_interpreter",
-        "openclaw",
+        "reference_cli",
         "openhands",
         "roo_code",
         "swe_agent",
@@ -15962,7 +15962,7 @@
       "spread": 2.076736,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.001292,
+        "reference_cli": 0.001292,
         "aider": 0.106658,
         "open_interpreter": 0.036659,
         "openhands": 0.123072,
@@ -15978,7 +15978,7 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 2.074052,
+        "reference_cli": 2.074052,
         "aider": 1.855236,
         "open_interpreter": 2.000604,
         "openhands": 1.821147,
@@ -16000,7 +16000,7 @@
     "tie_metrics": 41,
     "wins_by_agent": {
       "thomas": 54,
-      "openclaw": 1,
+      "reference_cli": 1,
       "aider": 0,
       "open_interpreter": 0,
       "openhands": 0,
@@ -16047,7 +16047,7 @@
         "dynamic_lane_score": 82.186
       },
       {
-        "agent": "openclaw",
+        "agent": "reference_cli",
         "weighted_points": 56.197549,
         "composite_score": 46.851,
         "coverage": 0.843478,
@@ -16545,7 +16545,7 @@
           "comparable_metrics_with_data": 7
         }
       },
-      "openclaw": {
+      "reference_cli": {
         "benchmark_execution": {
           "score": 85.714,
           "weighted_points": 9.0,
@@ -17759,9 +17759,9 @@
   "prediction_evo_scope": {
     "focus_agent": "thomas",
     "competitors": {
-      "openclaw": {
-        "competitor": "openclaw",
-        "root": "F:\\DevHub\\_tmp_openclaw_latest_20260306",
+      "reference_cli": {
+        "competitor": "reference_cli",
+        "root": "F:\\DevHub\\_tmp_reference_cli_latest_20260306",
         "previous_head": "36e2e04a32c2a94eafc83fd7e1e82a89045e2e9f",
         "current_head": "fa6c0e1b404f094e579b5fb192c6643c7822c1b6",
         "status": "diff_failed",
@@ -17974,7 +17974,7 @@
         "preference": "higher_is_better",
         "values": {
           "thomas": 0.878864,
-          "openclaw": 0.007761,
+          "reference_cli": 0.007761,
           "aider": 0.340909,
           "open_interpreter": 0.031646,
           "openhands": 0.110442,
@@ -18000,7 +18000,7 @@
         "preference": "higher_is_better",
         "values": {
           "thomas": 4202,
-          "openclaw": 4545,
+          "reference_cli": 4545,
           "aider": 89,
           "open_interpreter": 19,
           "openhands": 1070,
@@ -18015,7 +18015,7 @@
           "langgraph": 75
         },
         "winners": [
-          "openclaw"
+          "reference_cli"
         ],
         "gap_to_best": 343.0
       }
@@ -18025,7 +18025,7 @@
       "focus_agent": "thomas",
       "ranked_competitors": [
         {
-          "competitor": "openclaw",
+          "competitor": "reference_cli",
           "composite_score": 46.851,
           "composite_delta_vs_focus": -52.908,
           "metrics_beating_focus": 1,
@@ -18157,7 +18157,7 @@
       ],
       "top_threats": [
         {
-          "competitor": "openclaw",
+          "competitor": "reference_cli",
           "composite_score": 46.851,
           "composite_delta_vs_focus": -52.908,
           "metrics_beating_focus": 1,
@@ -18180,7 +18180,7 @@
     },
     "competitors_beating_focus": [
       {
-        "competitor": "openclaw",
+        "competitor": "reference_cli",
         "composite_score": 46.851,
         "composite_delta_vs_focus": -52.908,
         "metrics_beating_focus": 1,
@@ -21516,7 +21516,7 @@
           "overall_rank": 1
         },
         {
-          "agent": "openclaw",
+          "agent": "reference_cli",
           "head_to_head_score": 1.316,
           "head_to_head_decisive_score": 1.316,
           "overall_suite_score": 55.452,
@@ -22358,7 +22358,7 @@
           "overall_rank": 1
         },
         {
-          "agent": "openclaw",
+          "agent": "reference_cli",
           "head_to_head_score": 1.316,
           "head_to_head_decisive_score": 1.316,
           "overall_suite_score": 55.452,
@@ -23148,7 +23148,7 @@
             "overall_passed": 217
           },
           {
-            "agent": "openclaw",
+            "agent": "reference_cli",
             "rank": 2,
             "suite_score": 50.746,
             "overall_applicable": 201,
@@ -23248,7 +23248,7 @@
             "overall_passed": 0
           },
           {
-            "agent": "openclaw",
+            "agent": "reference_cli",
             "rank": 2,
             "suite_score": 0.0,
             "overall_applicable": 0,
@@ -23348,7 +23348,7 @@
             "overall_passed": 118
           },
           {
-            "agent": "openclaw",
+            "agent": "reference_cli",
             "rank": 2,
             "suite_score": 63.333,
             "overall_applicable": 120,
@@ -23443,7 +23443,7 @@
       "head_to_head": {
         "enabled": true,
         "agent_a": "thomas",
-        "agent_b": "openclaw",
+        "agent_b": "reference_cli",
         "tie_policy": "exclude",
         "counted_metrics": 76,
         "ties": 0,
@@ -23492,7 +23492,7 @@
             "token_efficiency_rank": 1
           },
           {
-            "agent": "openclaw",
+            "agent": "reference_cli",
             "token_efficiency_score": null,
             "effective_tokens_per_success": null,
             "telemetry_coverage": 0.0,
@@ -23648,7 +23648,7 @@
             "token_efficiency_rank": 1
           },
           {
-            "agent": "openclaw",
+            "agent": "reference_cli",
             "token_efficiency_score": null,
             "effective_tokens_per_success": null,
             "telemetry_coverage": 0.0,
@@ -23794,7 +23794,7 @@
         "head_to_head": {
           "enabled": true,
           "agent_a": "thomas",
-          "agent_b": "openclaw",
+          "agent_b": "reference_cli",
           "counted_metrics": 3,
           "ties": 0,
           "agent_a_score": 100.0,
@@ -24164,7 +24164,7 @@
         "rank": 1
       },
       {
-        "agent": "openclaw",
+        "agent": "reference_cli",
         "overall_benchmark_capability_score": 42.815,
         "lane_scores": {
           "dynamic": {
@@ -26367,7 +26367,7 @@
         "dynamic_lane_score": 82.186
       },
       {
-        "agent": "openclaw",
+        "agent": "reference_cli",
         "head_to_head_score": 1.316,
         "head_to_head_decisive_score": 1.316,
         "token_efficiency_score": null,

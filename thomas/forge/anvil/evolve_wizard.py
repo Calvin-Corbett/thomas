@@ -167,8 +167,7 @@ def build_preflight_report(project_root: Path, session: EvolveWizardSession) -> 
     )
     if oversized:
         report["warnings"].append(
-            f"{len(oversized)} file(s) exceed the hard limit of {HARD_LIMIT} lines "
-            f"and will be refactored first."
+            f"{len(oversized)} file(s) exceed the hard limit of {HARD_LIMIT} lines and will be refactored first."
         )
     if session.promote_on_pass:
         report["warnings"].append(
@@ -208,8 +207,7 @@ def wizard_step_tier() -> dict[str, Any]:
                 "key": "focused",
                 "label": "Focused",
                 "description": (
-                    "Pick a specific area to focus on: "
-                    "refactoring, features, efficiency, reliability, or security."
+                    "Pick a specific area to focus on: refactoring, features, efficiency, reliability, or security."
                 ),
             },
             {

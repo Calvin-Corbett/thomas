@@ -88,7 +88,7 @@ class TestCircuitBreaker:
         # Should be open
         try:
             breaker.call(lambda: 42)
-            assert False, "Should have raised CircuitBreakerOpen"
+            raise AssertionError("Should have raised CircuitBreakerOpen")
         except CircuitBreakerOpen:
             pass
 

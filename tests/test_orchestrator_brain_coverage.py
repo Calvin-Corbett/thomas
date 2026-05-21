@@ -59,7 +59,9 @@ class _Registry:
 class _ChatDictLLM:
     async def chat(self, *, messages: list[dict[str, object]]) -> dict[str, object]:
         _ = messages
-        return {"text": '{"specialists":["tools","missing"],"parallel":true,"reasoning":"json route","confidence":0.93}'}
+        return {
+            "text": '{"specialists":["tools","missing"],"parallel":true,"reasoning":"json route","confidence":0.93}'
+        }
 
 
 class _CompleteLLM:
@@ -157,7 +159,9 @@ async def test_call_llm_supports_chat_and_complete_clients() -> None:
 
 
 @pytest.mark.asyncio
-async def test_dispatch_single_handles_missing_specialist_validation_and_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_dispatch_single_handles_missing_specialist_validation_and_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     brain = OrchestratorBrain(config=None, llm=None, memory_engine=None, registry=_Registry(["reasoning"], {}))
     dispatcher = _Dispatcher()
     thinking = SimpleNamespace(start=lambda *a, **k: None, append=lambda *a, **k: None, end=lambda *a, **k: None)
@@ -356,7 +360,9 @@ def test_background_status_helpers_cover_active_failed_and_mixed_states() -> Non
     assert brain_mod._wants_background_status("what is the status?") is True
     assert brain_mod._wants_background_status("tell me a joke") is False
 
-    assert brain_mod._should_answer_background_status_directly("what is the status of the background worker?", []) is True
+    assert (
+        brain_mod._should_answer_background_status_directly("what is the status of the background worker?", []) is True
+    )
     assert brain_mod._should_answer_background_status_directly("tell me a joke", []) is False
 
     active = brain_mod._summarize_background_status(

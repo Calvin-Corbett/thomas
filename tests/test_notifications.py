@@ -22,13 +22,16 @@ def test_create_and_list(app_and_client):
     _, client = app_and_client
 
     # create
-    r = client.post("/api/notifications", json={
-        "type": "task.complete",
-        "title": "Done",
-        "body": "Your task completed.",
-        "severity": "info",
-        "action_url": "/tasks/1"
-    })
+    r = client.post(
+        "/api/notifications",
+        json={
+            "type": "task.complete",
+            "title": "Done",
+            "body": "Your task completed.",
+            "severity": "info",
+            "action_url": "/tasks/1",
+        },
+    )
     assert r.status_code == 200, r.text
     created = r.json()
     assert created["type"] == "task.complete"
@@ -46,12 +49,10 @@ def test_create_and_list(app_and_client):
 def test_mark_read_and_unread_count(app_and_client):
     _, client = app_and_client
 
-    r = client.post("/api/notifications", json={
-        "type": "reminder.fired",
-        "title": "Reminder",
-        "body": "Time to do the thing",
-        "severity": "warn"
-    })
+    r = client.post(
+        "/api/notifications",
+        json={"type": "reminder.fired", "title": "Reminder", "body": "Time to do the thing", "severity": "warn"},
+    )
     nid = r.json()["id"]
 
     r = client.get("/api/notifications/unread_count")
@@ -69,18 +70,13 @@ def test_mark_read_and_unread_count(app_and_client):
 
 def test_filters(app_and_client):
     _, client = app_and_client
-    client.post("/api/notifications", json={
-        "type": "autonomy.done",
-        "title": "Auto job finished",
-        "body": "All good",
-        "severity": "info"
-    })
-    client.post("/api/notifications", json={
-        "type": "error",
-        "title": "Boom",
-        "body": "Something failed",
-        "severity": "error"
-    })
+    client.post(
+        "/api/notifications",
+        json={"type": "autonomy.done", "title": "Auto job finished", "body": "All good", "severity": "info"},
+    )
+    client.post(
+        "/api/notifications", json={"type": "error", "title": "Boom", "body": "Something failed", "severity": "error"}
+    )
 
     r = client.get("/api/notifications?severity=error")
     assert r.status_code == 200
@@ -97,12 +93,10 @@ def test_filters(app_and_client):
 
 def test_clear(app_and_client):
     _, client = app_and_client
-    client.post("/api/notifications", json={
-        "type": "file.ingested",
-        "title": "Ingested",
-        "body": "File imported",
-        "severity": "info"
-    })
+    client.post(
+        "/api/notifications",
+        json={"type": "file.ingested", "title": "Ingested", "body": "File imported", "severity": "info"},
+    )
     r = client.delete("/api/notifications/clear?mode=all")
     assert r.status_code == 200
     assert r.json()["deleted"] == 1

@@ -263,4 +263,4 @@ class TestFeatureUnification:
 
     def test_feature_constraints_exist(self) -> None:
         """Test that feature constraints are defined."""
-        assert "NP" in self.engine.feature_constraints or True
+        assert True

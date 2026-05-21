@@ -359,7 +359,7 @@ class PreferenceManager:
         summary = {
             "global_opt_out": str(preference.global_opt_out),
             "quiet_hours_enabled": str(preference.quiet_hours_enabled),
-            "quiet_hours": (f"{preference.quiet_hours_start}-" f"{preference.quiet_hours_end}"),
+            "quiet_hours": (f"{preference.quiet_hours_start}-{preference.quiet_hours_end}"),
         }
 
         for category, channels in preference.preferences.items():
@@ -400,7 +400,7 @@ class PreferenceManager:
 
         if not enabled_channels:
             raise PreferenceException(
-                "Transactional notifications must have at least " "one enabled channel",
+                "Transactional notifications must have at least one enabled channel",
                 code="TRANSACTIONAL_CHANNEL_REQUIRED",
             )
 
@@ -425,4 +425,4 @@ class PreferenceManager:
                 raise ValueError()
 
         except (ValueError, AttributeError):
-            raise PreferenceException(f"Invalid time format: {time_str}. " "Expected HH:MM (24-hour format)")
+            raise PreferenceException(f"Invalid time format: {time_str}. Expected HH:MM (24-hour format)")

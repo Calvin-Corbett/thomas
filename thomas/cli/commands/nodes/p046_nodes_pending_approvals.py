@@ -2,7 +2,7 @@
 
 This command prints either a human-readable table or machine-readable JSON.
 
-Thomas-native behavior (no OpenClaw naming reuse).
+Thomas-native behavior (no Reference CLI naming reuse).
 """
 
 from __future__ import annotations

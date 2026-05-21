@@ -281,6 +281,7 @@ def run_wizard() -> str | None:
         except ImportError:
             # Fallback: add scripts dir to path
             import sys as _sys
+
             _scripts = Path(__file__).resolve().parents[3] / "scripts"
             _sys.path.insert(0, str(_scripts))
             try:
@@ -289,34 +290,45 @@ def run_wizard() -> str | None:
                     create_start_menu_shortcut,
                 )
             except ImportError:
-                click.echo(click.style(
-                    "  Warning: shortcut module not found. Skipping.",
-                    fg="yellow",
-                ))
+                click.echo(
+                    click.style(
+                        "  Warning: shortcut module not found. Skipping.",
+                        fg="yellow",
+                    )
+                )
                 create_desktop_shortcut = None  # type: ignore[assignment]
 
         if create_desktop_shortcut is not None:
             try:
                 shortcut_path = create_desktop_shortcut()
-                click.echo(click.style(
-                    f"  OK: Shortcut created at {shortcut_path}",
-                    fg="green",
-                ))
+                click.echo(
+                    click.style(
+                        f"  OK: Shortcut created at {shortcut_path}",
+                        fg="green",
+                    )
+                )
 
                 # Also offer Start Menu / app launcher on Windows and Linux
                 import platform as _plat
-                if _plat.system() in ("Windows", "Linux") and click.confirm("  Also add to Start Menu / app launcher?", default=True):
+
+                if _plat.system() in ("Windows", "Linux") and click.confirm(
+                    "  Also add to Start Menu / app launcher?", default=True
+                ):
                     sm_path = create_start_menu_shortcut()
                     if sm_path:
-                        click.echo(click.style(
-                            f"  OK: Added to app launcher: {sm_path}",
-                            fg="green",
-                        ))
+                        click.echo(
+                            click.style(
+                                f"  OK: Added to app launcher: {sm_path}",
+                                fg="green",
+                            )
+                        )
             except Exception as exc:
-                click.echo(click.style(
-                    f"  Warning: Could not create shortcut: {exc}",
-                    fg="yellow",
-                ))
+                click.echo(
+                    click.style(
+                        f"  Warning: Could not create shortcut: {exc}",
+                        fg="yellow",
+                    )
+                )
     else:
         click.echo("  Skipped. You can create one later with:")
         click.echo(click.style("    python scripts/create_shortcut.py", fg="yellow"))

@@ -34,12 +34,7 @@ def _format_human(payload: dict[str, Any]) -> str:
         [
             f"Gateway usage & cost: {data.get('start_date')} -> {data.get('end_date')}",
             f"Requests: {data.get('requests')}",
-            (
-                "Tokens: "
-                f"in={data.get('input_tokens')} "
-                f"out={data.get('output_tokens')} "
-                f"total={data.get('total_tokens')}"
-            ),
+            (f"Tokens: in={data.get('input_tokens')} out={data.get('output_tokens')} total={data.get('total_tokens')}"),
             f"Cost: {data.get('total_cost_usd')} {currency}",
         ]
     )

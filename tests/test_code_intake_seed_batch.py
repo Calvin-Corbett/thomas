@@ -25,7 +25,7 @@ def test_channels_domain_uses_channel_ops_path() -> None:
 def test_load_rows_has_batch_b01() -> None:
     mod = _load_module()
     repo_root = Path(__file__).resolve().parents[1]
-    idx = repo_root / "docs" / "OPENCLAW_CATCHUP_PROMPT_BATCH_INDEX_216_2026-02-20.csv"
+    idx = repo_root / "docs" / "REFERENCE_CLI_CATCHUP_PROMPT_BATCH_INDEX_216_2026-02-20.csv"
     rows = mod._load_rows(idx, "B01")
     assert rows
     assert rows[0]["prompt_id"] == "P001"

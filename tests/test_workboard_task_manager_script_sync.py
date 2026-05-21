@@ -468,7 +468,7 @@ def test_sync_specialists_apply_writes_routing_rows(tmp_path: Path, capsys) -> N
         claims_block="- agent=Codex 2; scope=scripts/competitors; task=benchmark routing",
         active_tasks_block=(
             "- task_id=benchmark-routing; agent=Codex 2; scope=scripts/competitors; "
-            "summary=Benchmark OpenClaw latency and reliability lanes; status=active"
+            "summary=Benchmark Reference CLI latency and reliability lanes; status=active"
         ),
     )
 

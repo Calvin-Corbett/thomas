@@ -73,17 +73,29 @@ _CONTENT_HUB_NAV_ITEMS: list[dict[str, str]] = [
     {"id": "home", "label": "Home", "description": "Today view with live control status, approvals, and health."},
     {"id": "planner", "label": "Planner", "description": "Ideas, briefs, campaigns, and assignment tracking."},
     {"id": "create", "label": "Create", "description": "Composer for multi-platform variants and reusable templates."},
-    {"id": "calendar", "label": "Calendar", "description": "Schedule and queue management with recurrence + drag/drop planning."},
+    {
+        "id": "calendar",
+        "label": "Calendar",
+        "description": "Schedule and queue management with recurrence + drag/drop planning.",
+    },
     {"id": "library", "label": "Library", "description": "Asset vault, metadata, rights, and brand-kit governance."},
     {"id": "inbox", "label": "Inbox", "description": "Unified comments, mentions, and DM operations."},
     {"id": "analytics", "label": "Analytics", "description": "Cross-platform performance and reporting summaries."},
     {"id": "automations", "label": "Automations", "description": "Trigger-condition-action workflows and agent runs."},
-    {"id": "integrations", "label": "Integrations", "description": "Platform connections, API keys, and capability checks."},
+    {
+        "id": "integrations",
+        "label": "Integrations",
+        "description": "Platform connections, API keys, and capability checks.",
+    },
     {"id": "settings", "label": "Settings", "description": "Security, roles, permissions, and workspace controls."},
 ]
 _CONTENT_HUB_ORGANIZATION_AXES: list[dict[str, str]] = [
     {"id": "time", "label": "By time", "description": "Calendar schedule, queues, recurrence, and launch shifts."},
-    {"id": "campaign", "label": "By campaign/project", "description": "Launches, pillars, goals, dependencies, and owners."},
+    {
+        "id": "campaign",
+        "label": "By campaign/project",
+        "description": "Launches, pillars, goals, dependencies, and owners.",
+    },
     {"id": "asset", "label": "By asset", "description": "Library-first flow for media, variants, metadata, and reuse."},
 ]
 _CONTENT_HUB_CHECKLIST_TEMPLATE: list[dict[str, Any]] = [

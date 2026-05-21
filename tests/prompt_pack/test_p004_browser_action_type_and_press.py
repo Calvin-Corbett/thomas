@@ -97,7 +97,11 @@ def test_cli_emits_json(monkeypatch):
     locator = _FakeLocator()
     page = _FakePage(locator)
 
-    monkeypatch.setattr(cli_mod, "_resolve_page_with_cleanup", lambda url: cli_mod._ResolvedPage(page=page, cleanup=lambda: None, source="test"))
+    monkeypatch.setattr(
+        cli_mod,
+        "_resolve_page_with_cleanup",
+        lambda url: cli_mod._ResolvedPage(page=page, cleanup=lambda: None, source="test"),
+    )
 
     runner = CliRunner()
     result = runner.invoke(

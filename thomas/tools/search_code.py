@@ -52,11 +52,7 @@ class RagSearchTool:
             results = idx.search(query, k=k_int, filter_ext=ext_str)
             st = idx.status()
         except Exception as e:
-            return (
-                "RAG search unavailable.\n"
-                f"Error: {e}\n"
-                "Fix: pip install chromadb sentence-transformers"
-            )
+            return f"RAG search unavailable.\nError: {e}\nFix: pip install chromadb sentence-transformers"
 
         if not results:
             build_state = "running" if st.get("build_running") else "idle"
@@ -82,7 +78,9 @@ class RagSearchTool:
 
         lines = []
         lines.append(f"Repo search results (k={k_int})")
-        lines.append(f"Index: vectors={st.get('vector_count')} files={st.get('manifest_files')} fts={st.get('fts_enabled')}")
+        lines.append(
+            f"Index: vectors={st.get('vector_count')} files={st.get('manifest_files')} fts={st.get('fts_enabled')}"
+        )
         lines.append("")
 
         shown = 0

@@ -92,18 +92,14 @@ def _load_caps_override_map() -> dict[str, dict[str, Any]]:
     except Exception as e:
         raise CompatModelCapabilityResolverError(
             code="invalid_config",
-            message=(
-                "Failed to load THOMAS_COMPAT_MODEL_CAPS_JSON " "(must be JSON object string or path to JSON file)."
-            ),
+            message=("Failed to load THOMAS_COMPAT_MODEL_CAPS_JSON (must be JSON object string or path to JSON file)."),
             details={"exception": type(e).__name__},
         )
 
     if not isinstance(data, dict):
         raise CompatModelCapabilityResolverError(
             code="invalid_config",
-            message=(
-                "THOMAS_COMPAT_MODEL_CAPS_JSON must be a JSON object mapping " "model keys to capability objects."
-            ),
+            message=("THOMAS_COMPAT_MODEL_CAPS_JSON must be a JSON object mapping model keys to capability objects."),
         )
 
     out: dict[str, dict[str, Any]] = {}

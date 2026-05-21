@@ -84,7 +84,7 @@ class ConcurrencyException(CQRSException):
         self.expected_version = expected_version
         self.actual_version = actual_version
         super().__init__(
-            f"Concurrency conflict on {aggregate_id}: " f"expected {expected_version}, got {actual_version}",
+            f"Concurrency conflict on {aggregate_id}: expected {expected_version}, got {actual_version}",
             error_code="CONCURRENCY_CONFLICT",
         )
 

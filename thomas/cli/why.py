@@ -19,8 +19,12 @@ def why_command(path: str) -> None:
 
     mod = MODULES[mod_name]
     tier = mod["tier"]
-    tier_labels = {"core": "core (stable foundation)", "ext": "ext (extension)",
-                   "infra": "infra (cross-cutting)", "support": "support (utility)"}
+    tier_labels = {
+        "core": "core (stable foundation)",
+        "ext": "ext (extension)",
+        "infra": "infra (cross-cutting)",
+        "support": "support (utility)",
+    }
 
     click.echo(f"Module:     {mod_name}")
     click.echo(f"Tier:       {tier_labels.get(tier, tier)}")

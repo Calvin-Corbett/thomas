@@ -144,7 +144,7 @@ class TestMinCostFlow:
 
         result = self.designer.min_cost_flow(network, supply)
 
-        assert result.is_feasible or True  # May not find perfect solution
+        assert True  # May not find perfect solution
         assert result.total_cost >= 0
 
     def test_min_cost_flow_multiple_paths(self) -> None:

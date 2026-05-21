@@ -38,7 +38,7 @@ _TOOL_SMOKE_MESSAGES = [
     {
         "role": "system",
         "content": (
-            "You are running a tool-calling smoke test. " f"You must call the '{_TOOL_SMOKE_NAME}' tool exactly once."
+            f"You are running a tool-calling smoke test. You must call the '{_TOOL_SMOKE_NAME}' tool exactly once."
         ),
     },
     {

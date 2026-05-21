@@ -18,7 +18,7 @@ DEFAULT_RUNS_DIR = ROOT / "demo" / "agentic-runs"
 DEFAULT_INPUT_FILENAME = "benchmark_results.raw.json"
 DEFAULT_OUTPUT_FILENAME = "benchmark_results.prog_evidence.json"
 DEFAULT_MANUAL_OVERRIDES_PATH = DEFAULT_RUNS_DIR / "human_lane_evidence.overrides.json"
-DEFAULT_TRACKS = ("thomas_os", "openclaw")
+DEFAULT_TRACKS = ("thomas_os", "reference_cli")
 TARGET_FAMILIES = (
     "evaluation_governance",
     "safety_and_policy",
@@ -399,7 +399,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         "--track",
         action="append",
         default=[],
-        help="Track alias to emit (repeatable or comma-separated). Default: thomas_os,openclaw.",
+        help="Track alias to emit (repeatable or comma-separated). Default: thomas_os,reference_cli.",
     )
     parser.add_argument(
         "--include-missing-tracks",

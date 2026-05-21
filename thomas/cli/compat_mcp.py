@@ -74,9 +74,7 @@ def mcp(ctx: click.Context, as_json: bool) -> None:
         return
     click.echo(f"MCP servers: {len(rows)}")
     for row in rows:
-        click.echo(
-            f"- {row.get('name')} | transport={row.get('transport')} | " f"enabled={bool(row.get('enabled', True))}"
-        )
+        click.echo(f"- {row.get('name')} | transport={row.get('transport')} | enabled={bool(row.get('enabled', True))}")
     click.echo(f"State file: {payload['state_file']}")
 
 
@@ -92,9 +90,7 @@ def mcp_list(ctx: click.Context, as_json: bool) -> None:
         return
     click.echo(f"MCP servers: {len(rows)}")
     for row in rows:
-        click.echo(
-            f"- {row.get('name')} | transport={row.get('transport')} | " f"enabled={bool(row.get('enabled', True))}"
-        )
+        click.echo(f"- {row.get('name')} | transport={row.get('transport')} | enabled={bool(row.get('enabled', True))}")
 
 
 @mcp.command("add")

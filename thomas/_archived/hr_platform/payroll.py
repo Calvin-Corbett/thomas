@@ -349,7 +349,7 @@ class PayrollEngine:
         """
         stub = f"""
 PAY STUB
-{'='*60}
+{"=" * 60}
 Employee ID: {payroll_record.employee_id}
 Pay Period: {payroll_record.pay_period_start} to {payroll_record.pay_period_end}
 
@@ -358,7 +358,7 @@ EARNINGS:
   Bonus:                      ${payroll_record.bonus:>12.2f}
   Overtime Hours:             {payroll_record.overtime_hours:>12.2f}
   Overtime Pay:               ${payroll_record.overtime_pay:>12.2f}
-  {'─'*55}
+  {"─" * 55}
   TOTAL EARNINGS:             ${payroll_record.gross_salary + payroll_record.bonus + payroll_record.overtime_pay:>12.2f}
 
 TAXES:
@@ -366,19 +366,19 @@ TAXES:
   State Income Tax:           ${payroll_record.state_tax:>12.2f}
   Social Security:            ${payroll_record.social_security_tax:>12.2f}
   Medicare:                   ${payroll_record.medicare_tax:>12.2f}
-  {'─'*55}
+  {"─" * 55}
   TOTAL TAXES:                ${payroll_record.federal_tax + payroll_record.social_security_tax + payroll_record.medicare_tax + payroll_record.state_tax:>12.2f}
 
 DEDUCTIONS:
   Pre-Tax Deductions (401k):  ${payroll_record.pre_tax_deductions:>12.2f}
   Post-Tax Deductions:        ${payroll_record.post_tax_deductions:>12.2f}
-  {'─'*55}
+  {"─" * 55}
   TOTAL DEDUCTIONS:           ${payroll_record.pre_tax_deductions + payroll_record.post_tax_deductions:>12.2f}
 
-{'='*60}
+{"=" * 60}
 NET PAY:                        ${payroll_record.net_salary:>12.2f}
 Year-to-Date:                   ${payroll_record.year_to_date:>12.2f}
-{'='*60}
+{"=" * 60}
 """
         return stub
 

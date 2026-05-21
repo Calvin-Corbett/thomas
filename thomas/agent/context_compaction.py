@@ -642,9 +642,7 @@ def _apply_heuristic_compaction(
         log.info("Heuristic compaction: dropped %d messages, now %d tokens", dropped, current_tokens)
         marker = {
             "role": "system",
-            "content": (
-                f"[{dropped} earlier messages trimmed to fit context window. " f"Recent conversation preserved.]"
-            ),
+            "content": (f"[{dropped} earlier messages trimmed to fit context window. Recent conversation preserved.]"),
         }
         insert_idx = 0
         for idx, m in enumerate(messages):

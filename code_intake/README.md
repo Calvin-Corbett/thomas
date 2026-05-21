@@ -21,7 +21,7 @@ Primary CLI:
 
 Security and quality controls:
 - Path ownership enforcement (`allowed_paths` / `forbidden_paths`)
-- Naming guard to avoid benchmark-name leakage (`openclaw`, `clawbot`)
+- Naming guard to avoid benchmark-name leakage (`reference_cli`, `clawbot`)
 - `git apply --check` validation for unified diff artifacts
 - Per-drop JSON reports in `reports/`
 

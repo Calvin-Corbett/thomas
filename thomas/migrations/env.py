@@ -75,8 +75,7 @@ def run_migrations_offline() -> None:
 
     with context.begin_transaction():
         context.execute(
-            "-- Offline migration mode (SQL generation only)\n"
-            "-- Apply these SQL statements manually to your database\n"
+            "-- Offline migration mode (SQL generation only)\n-- Apply these SQL statements manually to your database\n"
         )
 
 

@@ -197,7 +197,7 @@ class DijkstraRouter:
 
         if connection_minutes < min_time:
             raise InvalidConnectionError(
-                f"Insufficient connection time: {connection_minutes:.0f} minutes " f"(minimum {min_time} required)"
+                f"Insufficient connection time: {connection_minutes:.0f} minutes (minimum {min_time} required)"
             )
 
         return True

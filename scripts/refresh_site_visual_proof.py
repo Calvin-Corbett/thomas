@@ -241,8 +241,7 @@ def _apply_pixel_diff_gate(
         baseline_abs = (PROOF_BASELINES_DIR / filename).resolve()
         if not baseline_abs.exists():
             raise RuntimeError(
-                "pixel baseline is missing: "
-                f"{_rel_to_root(baseline_abs)} (run refresh with --init-pixel-baseline once)"
+                f"pixel baseline is missing: {_rel_to_root(baseline_abs)} (run refresh with --init-pixel-baseline once)"
             )
         diff_abs = (PROOF_DIFFS_DIR / f"{Path(filename).stem}-diff.png").resolve()
         stats = _pixel_diff_stats(

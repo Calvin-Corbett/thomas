@@ -115,7 +115,9 @@ def send_message(
         timeout_seconds=payload["timeout_seconds"],
     )
     response_payload = as_mapping(response.get("payload"))
-    message_id = text_value(response_payload.get("name"), response_payload.get("message_id"), response_payload.get("id"))
+    message_id = text_value(
+        response_payload.get("name"), response_payload.get("message_id"), response_payload.get("id")
+    )
     delivered = bool(response.get("ok"))
     return {
         "delivered": delivered,

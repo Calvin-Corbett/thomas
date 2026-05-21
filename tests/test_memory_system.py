@@ -26,18 +26,14 @@ except ImportError:
     # Fallback: define minimal mock classes
     class ShortTermMemory:
         """In-memory short-term memory."""
+
         def __init__(self, max_items: int = 100):
             self.max_items = max_items
             self.items = []
 
         def add(self, key: str, value: Any, metadata: dict = None) -> None:
             """Add item to memory."""
-            self.items.append({
-                "key": key,
-                "value": value,
-                "metadata": metadata or {},
-                "timestamp": datetime.now()
-            })
+            self.items.append({"key": key, "value": value, "metadata": metadata or {}, "timestamp": datetime.now()})
             if len(self.items) > self.max_items:
                 self.items.pop(0)
 
@@ -58,6 +54,7 @@ except ImportError:
 
     class LongTermMemory:
         """Persistent long-term memory."""
+
         def __init__(self, path: str):
             self.path = Path(path)
             self.path.mkdir(parents=True, exist_ok=True)
@@ -73,15 +70,12 @@ except ImportError:
 
         def _save(self) -> None:
             """Save to disk."""
-            with open(self.db_file, 'w') as f:
+            with open(self.db_file, "w") as f:
                 json.dump(self.data, f)
 
         def store(self, key: str, value: Any) -> None:
             """Store item persistently."""
-            self.data[key] = {
-                "value": value,
-                "timestamp": datetime.now().isoformat()
-            }
+            self.data[key] = {"value": value, "timestamp": datetime.now().isoformat()}
             self._save()
 
         def retrieve(self, key: str) -> Any | None:
@@ -102,6 +96,7 @@ except ImportError:
 
     class EntityMemory:
         """Track entities and their attributes."""
+
         def __init__(self):
             self.entities = {}
 
@@ -111,7 +106,7 @@ except ImportError:
                 "type": entity_type,
                 "attributes": attributes or {},
                 "created": datetime.now(),
-                "updated": datetime.now()
+                "updated": datetime.now(),
             }
 
         def get_entity(self, entity_id: str) -> dict | None:
@@ -132,6 +127,7 @@ except ImportError:
 
     class MemorySearch:
         """Search through memory."""
+
         def __init__(self, memory: dict):
             self.memory = memory
 
@@ -150,11 +146,11 @@ except ImportError:
 
         def search_by_type(self, item_type: str) -> list[dict]:
             """Search by item type."""
-            return [{"key": k, "value": v, "type": item_type}
-                    for k, v in self.memory.items()]
+            return [{"key": k, "value": v, "type": item_type} for k, v in self.memory.items()]
 
     class MemoryManager:
         """Unified memory management."""
+
         def __init__(self, path: str = None):
             self.short_term = ShortTermMemory()
             self.long_term = LongTermMemory(path or tempfile.mkdtemp())
@@ -279,6 +275,7 @@ class TestLongTermMemory(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_store_and_retrieve(self):
@@ -425,7 +422,7 @@ class TestMemorySearch(unittest.TestCase):
         self.memory_data = {
             "user_alice": {"name": "Alice", "email": "alice@example.com"},
             "user_bob": {"name": "Bob", "email": "bob@example.com"},
-            "config_api": {"key": "api_key_123"}
+            "config_api": {"key": "api_key_123"},
         }
         self.search = MemorySearch(self.memory_data)
 
@@ -477,6 +474,7 @@ class TestMemoryManager(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_add_to_short_term(self):

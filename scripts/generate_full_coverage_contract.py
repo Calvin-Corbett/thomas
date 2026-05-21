@@ -9,7 +9,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 CONTRACT_PATH = ROOT / "demo" / "baselines" / "agent_test_suite_full_coverage.contract.json"
 DOC_PATH = ROOT / "docs" / "AGENT_TEST_SUITE_FULL_COVERAGE.md"
-LATEST_RESULT_PATH = ROOT / "docs" / "openclaw_gap_runs" / "latest_full_suite_compare.json"
+LATEST_RESULT_PATH = ROOT / "docs" / "reference_cli_gap_runs" / "latest_full_suite_compare.json"
 
 
 CORE_GROUPS: Sequence[tuple[str, Sequence[str]]] = [

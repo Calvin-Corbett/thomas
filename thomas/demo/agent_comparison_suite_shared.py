@@ -18,10 +18,10 @@ from thomas.plugins.competitor_intel_store import load_registry, render_registry
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SUITE_CONFIG = ROOT / "demo" / "baselines" / "agent_comparison_suite.current.json"
-DEFAULT_WRITE_PATH = ROOT / "docs" / "openclaw_gap_runs" / "latest_full_suite_compare.json"
-DEFAULT_WRITE_MD_PATH = ROOT / "docs" / "openclaw_gap_runs" / "latest_full_suite_compare.md"
-DEFAULT_REGISTRY_PATH = ROOT / "docs" / "openclaw_gap_runs" / "competitor_registry.json"
-DEFAULT_REGISTRY_MD_PATH = ROOT / "docs" / "openclaw_gap_runs" / "competitor_registry.md"
+DEFAULT_WRITE_PATH = ROOT / "docs" / "reference_cli_gap_runs" / "latest_full_suite_compare.json"
+DEFAULT_WRITE_MD_PATH = ROOT / "docs" / "reference_cli_gap_runs" / "latest_full_suite_compare.md"
+DEFAULT_REGISTRY_PATH = ROOT / "docs" / "reference_cli_gap_runs" / "competitor_registry.json"
+DEFAULT_REGISTRY_MD_PATH = ROOT / "docs" / "reference_cli_gap_runs" / "competitor_registry.md"
 DEFAULT_TEST_SUITE_CONTRACT_PATH = ROOT / "demo" / "baselines" / "agent_test_suite_full_coverage.contract.json"
 DEFAULT_EXECUTION_POLICY = {
     "quality_is_king": True,
@@ -729,8 +729,8 @@ def _default_competitor_benchmark_aliases(cid: str) -> tuple[list[str], list[str
     normalized = str(cid or "").strip().lower()
     if normalized == "thomas":
         return ["thomas", "thomas_os"], list(DEFAULT_BENCHMARK_EVIDENCE_GLOBS)
-    if normalized == "openclaw":
-        return ["openclaw"], list(DEFAULT_BENCHMARK_EVIDENCE_GLOBS)
+    if normalized == "reference_cli":
+        return ["reference_cli"], list(DEFAULT_BENCHMARK_EVIDENCE_GLOBS)
     return ([str(cid).strip()] if str(cid or "").strip() else []), []
 
 

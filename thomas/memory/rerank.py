@@ -27,18 +27,18 @@ class CandidateFeatures:
     event: EventRow | None = None
 
     # Retrieval scores (from different sources)
-    fts_score: float = 0.0        # BM25 full-text search score
-    sparse_score: float = 0.0     # Sparse vector cosine similarity
-    dense_score: float = 0.0      # Dense vector cosine similarity
-    graph_score: float = 0.0      # Graph relevance score
+    fts_score: float = 0.0  # BM25 full-text search score
+    sparse_score: float = 0.0  # Sparse vector cosine similarity
+    dense_score: float = 0.0  # Dense vector cosine similarity
+    graph_score: float = 0.0  # Graph relevance score
 
     # Temporal features
-    recency: float = 0.0          # 0.0 = oldest, 1.0 = most recent
-    age_hours: float = 0.0        # Age in hours
+    recency: float = 0.0  # 0.0 = oldest, 1.0 = most recent
+    age_hours: float = 0.0  # Age in hours
 
     # Content features
-    text_length: int = 0          # Length of the event text
-    etype_weight: float = 1.0     # Weight multiplier by event type
+    text_length: int = 0  # Length of the event text
+    etype_weight: float = 1.0  # Weight multiplier by event type
 
     # Combined score (set by reranker)
     final_score: float = 0.0

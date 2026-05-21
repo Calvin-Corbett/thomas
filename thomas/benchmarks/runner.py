@@ -178,7 +178,7 @@ class BenchmarkRunner:
         models = models or self.config.models
         results: list[BenchmarkResult] = []
 
-        logger.info(f"Running suite '{suite.name}' with {len(suite.tasks)} tasks " f"across {len(models)} models")
+        logger.info(f"Running suite '{suite.name}' with {len(suite.tasks)} tasks across {len(models)} models")
 
         for model in models:
             for mode in self.config.run_modes:
@@ -261,7 +261,7 @@ class BenchmarkRunner:
             time_limit_ms = max(0.0, float(task.time_limit_seconds) * 1000.0)
             if attempt_duration_ms > time_limit_ms:
                 attempt_record["timed_out"] = True
-                timeout_error = f"Task exceeded time limit ({attempt_duration_ms:.1f}ms > " f"{time_limit_ms:.1f}ms)"
+                timeout_error = f"Task exceeded time limit ({attempt_duration_ms:.1f}ms > {time_limit_ms:.1f}ms)"
                 attempt_error = f"{attempt_error}; {timeout_error}" if attempt_error else timeout_error
 
             attempt_record["error"] = attempt_error

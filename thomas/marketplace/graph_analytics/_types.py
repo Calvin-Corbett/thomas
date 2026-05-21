@@ -135,7 +135,7 @@ class CommunityResult:
 
     def __repr__(self) -> str:
         """Return string representation of community result."""
-        return f"CommunityResult(num_communities={self.num_communities()}, " f"modularity={self.modularity:.4f})"
+        return f"CommunityResult(num_communities={self.num_communities()}, modularity={self.modularity:.4f})"
 
 
 @dataclass
@@ -196,7 +196,7 @@ class AnalyticsConfig:
 
     def __repr__(self) -> str:
         """Return string representation of config."""
-        return f"AnalyticsConfig(max_iter={self.max_iterations}, " f"tol={self.tolerance})"
+        return f"AnalyticsConfig(max_iter={self.max_iterations}, tol={self.tolerance})"
 
 
 # Type aliases for common patterns

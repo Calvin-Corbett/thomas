@@ -124,7 +124,7 @@ def audit_tool_sizes():
 
     # Ensure thomas.tools is importable
     try:
-        import thomas.tools
+        import thomas.tools  # noqa: F401  -- import only for availability probe
     except ImportError as e:
         print(f"Could not import thomas.tools: {e}")
 

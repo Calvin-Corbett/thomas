@@ -128,7 +128,10 @@ class TestRunnableLambda(unittest.TestCase):
 
     def test_simple_lambda(self):
         """Test wrapping simple lambda function."""
-        func = lambda x: x * 2
+
+        def func(x):
+            return x * 2
+
         runnable = RunnableLambda(func)
         result = runnable.invoke(5)
 
@@ -136,7 +139,10 @@ class TestRunnableLambda(unittest.TestCase):
 
     def test_lambda_with_string(self):
         """Test lambda with string input."""
-        func = lambda s: s.upper()
+
+        def func(s):
+            return s.upper()
+
         runnable = RunnableLambda(func)
         result = runnable.invoke("hello")
 
@@ -144,7 +150,10 @@ class TestRunnableLambda(unittest.TestCase):
 
     def test_lambda_with_dict(self):
         """Test lambda with dictionary input."""
-        func = lambda d: {**d, "processed": True}
+
+        def func(d):
+            return {**d, "processed": True}
+
         runnable = RunnableLambda(func)
         result = runnable.invoke({"key": "value"})
 
@@ -153,7 +162,10 @@ class TestRunnableLambda(unittest.TestCase):
 
     def test_lambda_with_list(self):
         """Test lambda with list input."""
-        func = lambda lst: [x * 2 for x in lst]
+
+        def func(lst):
+            return [x * 2 for x in lst]
+
         runnable = RunnableLambda(func)
         result = runnable.invoke([1, 2, 3])
 
@@ -161,7 +173,10 @@ class TestRunnableLambda(unittest.TestCase):
 
     def test_lambda_with_exception(self):
         """Test lambda that raises exception."""
-        func = lambda x: x / 0
+
+        def func(x):
+            return x / 0
+
         runnable = RunnableLambda(func)
 
         with self.assertRaises(ZeroDivisionError):
@@ -331,7 +346,10 @@ class TestRunnableBranch(unittest.TestCase):
 
     def test_branch_true_condition(self):
         """Test branch when condition is true."""
-        condition = lambda x: x > 5
+
+        def condition(x):
+            return x > 5
+
         true_branch = RunnableLambda(lambda x: "big")
         false_branch = RunnableLambda(lambda x: "small")
 
@@ -342,7 +360,10 @@ class TestRunnableBranch(unittest.TestCase):
 
     def test_branch_false_condition(self):
         """Test branch when condition is false."""
-        condition = lambda x: x > 5
+
+        def condition(x):
+            return x > 5
+
         true_branch = RunnableLambda(lambda x: "big")
         false_branch = RunnableLambda(lambda x: "small")
 
@@ -353,7 +374,10 @@ class TestRunnableBranch(unittest.TestCase):
 
     def test_branch_with_string_condition(self):
         """Test branch with string-based condition."""
-        condition = lambda s: len(s) > 5
+
+        def condition(s):
+            return len(s) > 5
+
         true_branch = RunnableLambda(lambda s: "long")
         false_branch = RunnableLambda(lambda s: "short")
 
@@ -364,7 +388,10 @@ class TestRunnableBranch(unittest.TestCase):
 
     def test_branch_with_dict_condition(self):
         """Test branch with dictionary-based condition."""
-        condition = lambda d: "error" in d
+
+        def condition(d):
+            return "error" in d
+
         true_branch = RunnableLambda(lambda d: "has_error")
         false_branch = RunnableLambda(lambda d: "ok")
 
@@ -375,7 +402,10 @@ class TestRunnableBranch(unittest.TestCase):
 
     def test_branch_with_complex_logic(self):
         """Test branch with complex transformation logic."""
-        condition = lambda x: x % 2 == 0
+
+        def condition(x):
+            return x % 2 == 0
+
         true_branch = RunnableLambda(lambda x: {"value": x, "type": "even"})
         false_branch = RunnableLambda(lambda x: {"value": x, "type": "odd"})
 

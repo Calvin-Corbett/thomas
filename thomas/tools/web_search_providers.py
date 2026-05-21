@@ -535,11 +535,7 @@ def _ensure_db_sync(db_path: str) -> None:
     conn = sqlite3.connect(db_path)
     try:
         conn.execute(
-            "CREATE TABLE IF NOT EXISTS web_tools_cache ("
-            "k TEXT PRIMARY KEY,"
-            "exp REAL NOT NULL,"
-            "v TEXT NOT NULL"
-            ")"
+            "CREATE TABLE IF NOT EXISTS web_tools_cache (k TEXT PRIMARY KEY,exp REAL NOT NULL,v TEXT NOT NULL)"
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_web_tools_cache_exp ON web_tools_cache(exp)")
         conn.commit()

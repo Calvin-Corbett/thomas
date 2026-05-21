@@ -169,7 +169,7 @@ def build_openai_tool_call_passthrough_mapping(
             candidate = f"{mapped}_{suffix}"
             if len(candidate) > DEFAULT_MAX_ID_LEN:
                 trim = DEFAULT_MAX_ID_LEN - (len(suffix) + 1)
-                candidate = f"{mapped[:max(1, trim)]}_{suffix}"
+                candidate = f"{mapped[: max(1, trim)]}_{suffix}"
             mapped = candidate
             if mapped in used_ids and used_ids[mapped] != canonical:
                 i = 2

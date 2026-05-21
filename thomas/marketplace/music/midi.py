@@ -309,7 +309,6 @@ class MidiFile:
                 if meta_type == META_EVENT_SEQUENCE_NAME:
                     track.name = meta_data.decode("utf-8", errors="replace")
 
-
             elif status_byte & 0x80:
                 channel = status_byte & 0x0F
                 event_type = status_byte & 0xF0

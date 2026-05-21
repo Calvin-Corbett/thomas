@@ -27,8 +27,7 @@ _USER_AGENT = "Thomas-AI-Agent/1.0"
 # Default identity when posting as the Thomas platform itself.
 _DEFAULT_AGENT_NAME = "thomas"
 _DEFAULT_AGENT_DESCRIPTION = (
-    "Thomas — an AI-first workspace platform with domain intelligence. "
-    "Not a lobster, but happy to be here."
+    "Thomas — an AI-first workspace platform with domain intelligence. Not a lobster, but happy to be here."
 )
 
 
@@ -245,7 +244,8 @@ class MoltbookClient:
             if qs:
                 url = f"{url}?{qs}"
         result = _http_request(
-            method, url,
+            method,
+            url,
             headers=self._headers(),
             body=body,
             timeout_s=self._config.timeout_s,
@@ -258,9 +258,7 @@ class MoltbookClient:
             return
         try:
             self._rate.limit = int(info.get("X-RateLimit-Limit", self._rate.limit))
-            self._rate.remaining = int(
-                info.get("X-RateLimit-Remaining", self._rate.remaining)
-            )
+            self._rate.remaining = int(info.get("X-RateLimit-Remaining", self._rate.remaining))
             reset_raw = info.get("X-RateLimit-Reset", "")
             if reset_raw:
                 self._rate.reset_at = float(reset_raw)
@@ -277,15 +275,21 @@ class MoltbookClient:
         """Register a new agent. Returns profile with api_key and claim_url."""
         agent_name = str(name or self._config.agent_name).strip()
         agent_desc = str(description or self._config.agent_description).strip()
-        result = self._call("POST", "/agents/register", body={
-            "name": agent_name,
-            "description": agent_desc,
-        })
+        result = self._call(
+            "POST",
+            "/agents/register",
+            body={
+                "name": agent_name,
+                "description": agent_desc,
+            },
+        )
         payload = result.get("payload", {})
         if not result.get("ok"):
             log.error("Moltbook agent registration failed: %s", result.get("error"))
             return MoltbookAgentProfile(
-                name=agent_name, description=agent_desc, raw=payload,
+                name=agent_name,
+                description=agent_desc,
+                raw=payload,
             )
         return MoltbookAgentProfile(
             name=str(payload.get("name", agent_name)),
@@ -320,25 +324,41 @@ class MoltbookClient:
     # -- Posts -------------------------------------------------------------
 
     def create_text_post(
-        self, *, submolt: str, title: str, content: str,
+        self,
+        *,
+        submolt: str,
+        title: str,
+        content: str,
     ) -> MoltbookPost:
         """Create a text post in a submolt."""
-        result = self._call("POST", "/posts", body={
-            "submolt": submolt,
-            "title": title,
-            "content": content,
-        })
+        result = self._call(
+            "POST",
+            "/posts",
+            body={
+                "submolt": submolt,
+                "title": title,
+                "content": content,
+            },
+        )
         return self._parse_post(result)
 
     def create_link_post(
-        self, *, submolt: str, title: str, url: str,
+        self,
+        *,
+        submolt: str,
+        title: str,
+        url: str,
     ) -> MoltbookPost:
         """Create a link post in a submolt."""
-        result = self._call("POST", "/posts", body={
-            "submolt": submolt,
-            "title": title,
-            "url": url,
-        })
+        result = self._call(
+            "POST",
+            "/posts",
+            body={
+                "submolt": submolt,
+                "title": title,
+                "url": url,
+            },
+        )
         return self._parse_post(result)
 
     def get_feed(
@@ -348,10 +368,14 @@ class MoltbookClient:
         limit: int = 25,
     ) -> list[MoltbookPost]:
         """Get posts from the global feed."""
-        result = self._call("GET", "/posts", params={
-            "sort": sort,
-            "limit": str(limit),
-        })
+        result = self._call(
+            "GET",
+            "/posts",
+            params={
+                "sort": sort,
+                "limit": str(limit),
+            },
+        )
         return self._parse_post_list(result)
 
     def get_personalized_feed(
@@ -361,10 +385,14 @@ class MoltbookClient:
         limit: int = 25,
     ) -> list[MoltbookPost]:
         """Get posts from followed agents and subscribed submolts."""
-        result = self._call("GET", "/feed", params={
-            "sort": sort,
-            "limit": str(limit),
-        })
+        result = self._call(
+            "GET",
+            "/feed",
+            params={
+                "sort": sort,
+                "limit": str(limit),
+            },
+        )
         return self._parse_post_list(result)
 
     def get_post(self, post_id: str) -> MoltbookPost:
@@ -380,7 +408,11 @@ class MoltbookClient:
     # -- Comments ----------------------------------------------------------
 
     def add_comment(
-        self, *, post_id: str, content: str, parent_id: str = "",
+        self,
+        *,
+        post_id: str,
+        content: str,
+        parent_id: str = "",
     ) -> MoltbookComment:
         """Add a comment (or reply) to a post."""
         body: dict[str, Any] = {"content": content}
@@ -397,7 +429,8 @@ class MoltbookClient:
     ) -> list[MoltbookComment]:
         """List comments on a post."""
         result = self._call(
-            "GET", f"/posts/{post_id}/comments",
+            "GET",
+            f"/posts/{post_id}/comments",
             params={"sort": sort},
         )
         return self._parse_comment_list(result)
@@ -426,11 +459,15 @@ class MoltbookClient:
         description: str,
     ) -> MoltbookSubmolt:
         """Create a new submolt community."""
-        result = self._call("POST", "/submolts", body={
-            "name": name,
-            "display_name": display_name,
-            "description": description,
-        })
+        result = self._call(
+            "POST",
+            "/submolts",
+            body={
+                "name": name,
+                "display_name": display_name,
+                "description": description,
+            },
+        )
         return self._parse_submolt(result)
 
     def list_submolts(self) -> list[MoltbookSubmolt]:
@@ -439,7 +476,7 @@ class MoltbookClient:
         payload = result.get("payload", {})
         items = payload if isinstance(payload, list) else payload.get("submolts", [])
         out: list[MoltbookSubmolt] = []
-        for item in (items if isinstance(items, list) else []):
+        for item in items if isinstance(items, list) else []:
             if isinstance(item, dict):
                 out.append(self._submolt_from_dict(item))
         return out
@@ -471,10 +508,14 @@ class MoltbookClient:
 
     def search(self, query: str, *, limit: int = 25) -> dict[str, Any]:
         """Search posts, agents, and submolts."""
-        result = self._call("GET", "/search", params={
-            "q": query,
-            "limit": str(limit),
-        })
+        result = self._call(
+            "GET",
+            "/search",
+            params={
+                "q": query,
+                "limit": str(limit),
+            },
+        )
         return result.get("payload", {})
 
     # -- Parsing helpers ---------------------------------------------------
@@ -487,11 +528,11 @@ class MoltbookClient:
 
     def _parse_post_list(self, result: dict[str, Any]) -> list[MoltbookPost]:
         payload = result.get("payload", {})
-        items = payload if isinstance(payload, list) else (
-            payload.get("posts", []) if isinstance(payload, dict) else []
+        items = (
+            payload if isinstance(payload, list) else (payload.get("posts", []) if isinstance(payload, dict) else [])
         )
         out: list[MoltbookPost] = []
-        for item in (items if isinstance(items, list) else []):
+        for item in items if isinstance(items, list) else []:
             if isinstance(item, dict):
                 out.append(self._post_from_dict(item))
         return out
@@ -519,11 +560,11 @@ class MoltbookClient:
 
     def _parse_comment_list(self, result: dict[str, Any]) -> list[MoltbookComment]:
         payload = result.get("payload", {})
-        items = payload if isinstance(payload, list) else (
-            payload.get("comments", []) if isinstance(payload, dict) else []
+        items = (
+            payload if isinstance(payload, list) else (payload.get("comments", []) if isinstance(payload, dict) else [])
         )
         out: list[MoltbookComment] = []
-        for item in (items if isinstance(items, list) else []):
+        for item in items if isinstance(items, list) else []:
             if isinstance(item, dict):
                 out.append(self._comment_from_dict(item))
         return out
@@ -633,21 +674,12 @@ def _resolve_config(
         merged.update({str(k): v for k, v in config.items()})
     merged.update({str(k): v for k, v in kwargs.items()})
     return MoltbookConfig(
-        api_key=str(
-            merged.get("api_key")
-            or merged.get("token")
-            or os.environ.get("MOLTBOOK_API_KEY", "")
-        ).strip(),
-        agent_name=str(
-            merged.get("agent_name") or os.environ.get("MOLTBOOK_AGENT_NAME", _DEFAULT_AGENT_NAME)
-        ).strip(),
+        api_key=str(merged.get("api_key") or merged.get("token") or os.environ.get("MOLTBOOK_API_KEY", "")).strip(),
+        agent_name=str(merged.get("agent_name") or os.environ.get("MOLTBOOK_AGENT_NAME", _DEFAULT_AGENT_NAME)).strip(),
         agent_description=str(
-            merged.get("agent_description")
-            or os.environ.get("MOLTBOOK_AGENT_DESCRIPTION", _DEFAULT_AGENT_DESCRIPTION)
+            merged.get("agent_description") or os.environ.get("MOLTBOOK_AGENT_DESCRIPTION", _DEFAULT_AGENT_DESCRIPTION)
         ).strip(),
-        base_url=str(
-            merged.get("base_url") or os.environ.get("MOLTBOOK_BASE_URL", _BASE_URL)
-        ).strip(),
+        base_url=str(merged.get("base_url") or os.environ.get("MOLTBOOK_BASE_URL", _BASE_URL)).strip(),
         timeout_s=float(merged.get("timeout_s", _DEFAULT_TIMEOUT_S)),
     )
 
@@ -657,12 +689,22 @@ def describe(config: Mapping[str, Any] | None = None, **_: Any) -> dict[str, Any
         "provider_id": "moltbook",
         "name": "Moltbook",
         "capabilities": [
-            "send", "health_check", "post", "comment", "vote",
-            "submolt", "feed", "search", "follow",
+            "send",
+            "health_check",
+            "post",
+            "comment",
+            "vote",
+            "submolt",
+            "feed",
+            "search",
+            "follow",
         ],
         "required_config_keys": ["api_key"],
         "optional_config_keys": [
-            "agent_name", "agent_description", "base_url", "timeout_s",
+            "agent_name",
+            "agent_description",
+            "base_url",
+            "timeout_s",
         ],
         "native": {
             "social": True,
@@ -703,10 +745,7 @@ def login(config: Mapping[str, Any] | None = None, **kwargs: Any) -> dict[str, A
 
 def logout(**_: Any) -> dict[str, Any]:
     return {
-        "message": (
-            "Moltbook logout is local-state only. "
-            "Remove the stored API key to disconnect."
-        ),
+        "message": ("Moltbook logout is local-state only. Remove the stored API key to disconnect."),
     }
 
 

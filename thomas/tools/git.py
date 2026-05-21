@@ -159,10 +159,7 @@ class GitLogTool(Tool):
 class GitCommitTool(Tool):
     name = "git.commit"
     category = "git"
-    description = (
-        "Stage specific files and create a commit. "
-        "Only stages the listed files, not everything."
-    )
+    description = "Stage specific files and create a commit. Only stages the listed files, not everything."
     parameters = {
         "type": "object",
         "properties": {

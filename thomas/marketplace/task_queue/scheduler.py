@@ -295,4 +295,4 @@ class TaskScheduler:
         print(f"[Scheduler] {message}")
 
     def __repr__(self) -> str:
-        return f"TaskScheduler(running={self.is_running()}, " f"scheduled_tasks={len(self._scheduled_tasks)})"
+        return f"TaskScheduler(running={self.is_running()}, scheduled_tasks={len(self._scheduled_tasks)})"

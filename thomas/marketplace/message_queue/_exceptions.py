@@ -83,7 +83,7 @@ class DeadLetterError(QueueError):
         self.topic = topic
         self.reason = reason
         self.max_retries = max_retries
-        super().__init__(f"Message routed to DLQ for topic '{topic}': {reason} " f"(max retries: {max_retries})")
+        super().__init__(f"Message routed to DLQ for topic '{topic}': {reason} (max retries: {max_retries})")
 
 
 class SerializationError(QueueError):

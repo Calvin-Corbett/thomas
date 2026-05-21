@@ -35,7 +35,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="If provided, POST to <base-url>/v1/responses?format=json and read the event list response.",
     )
-    parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON to stdout (list of event objects).")
+    parser.add_argument(
+        "--json", action="store_true", help="Emit machine-readable JSON to stdout (list of event objects)."
+    )
     parser.add_argument("--timeout", type=float, default=30.0, help="HTTP timeout (seconds) for --base-url mode.")
     return parser
 

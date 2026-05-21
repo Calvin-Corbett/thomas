@@ -2,7 +2,7 @@
 P067 - Message role assign and remove (Thomas-native).
 
 Provides deterministic functions to assign/remove a Discord role for a guild member.
-No OpenClaw naming is reused.
+No Reference CLI naming is reused.
 """
 
 from __future__ import annotations

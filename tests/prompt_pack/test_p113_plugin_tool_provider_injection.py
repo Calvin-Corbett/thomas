@@ -89,13 +89,17 @@ def test_inject_tool_provider_missing_config_disabled():
 
 def test_inject_tool_provider_failure_unsupported_registry():
     with pytest.raises(UnsupportedRegistryError) as excinfo:
-        inject_tool_provider(NoProviderRegistry(), ToolProviderInjectionRequest(provider_id="x", tool_name="y", enabled=True))
+        inject_tool_provider(
+            NoProviderRegistry(), ToolProviderInjectionRequest(provider_id="x", tool_name="y", enabled=True)
+        )
     assert excinfo.value.code == "unsupported_registry"
 
 
 def test_inject_tool_provider_external_failure_wrapped():
     with pytest.raises(ExternalFailureError) as excinfo:
-        inject_tool_provider(ExplodingRegistry(), ToolProviderInjectionRequest(provider_id="x", tool_name="y", enabled=True))
+        inject_tool_provider(
+            ExplodingRegistry(), ToolProviderInjectionRequest(provider_id="x", tool_name="y", enabled=True)
+        )
     assert excinfo.value.code == "external_failure"
 
 
@@ -111,7 +115,9 @@ def test_cli_json_success():
 
 
 def test_cli_json_failure():
-    code, out = run_cli(provider_id="demo.provider", tool_name="demo_echo", json_output=True, registry=NoProviderRegistry())
+    code, out = run_cli(
+        provider_id="demo.provider", tool_name="demo_echo", json_output=True, registry=NoProviderRegistry()
+    )
     assert code == 2
 
     payload = json.loads(out)
