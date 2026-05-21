@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.38] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 37): refresh server audit hashes after pre-commit ruff-format reflowed `codex_aiohttp.py`, `sessions_aiohttp.py`, `app_routes_init.py`, `chat_aiohttp_streaming.py` between audit-record and commit. Same pattern as 0.15.31.
+
 ## [0.15.37] - 2026-05-20
 
 ### Fixed
