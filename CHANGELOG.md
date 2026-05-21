@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.1] - 2026-05-20
+
+### Fixed
+- codex.bridge: extract `_extract_usage_payload` + `_event_matches_turn` from `bridge.py` into a new `bridge_helpers.py` module. The previous commit (0.15.0) added them inline and pushed `bridge.py` to 805 lines, tripping the monolith-guard soft limit of 800 for unbaselined files. Mirrors the codex-branch refactor pattern; `bridge.py` now re-imports them with the leading-underscore names that the test (`tests/test_codex_bridge_usage.py`) and the bridge's existing call sites expect. `bridge.py`: 805 → 722 lines.
+
 ## [0.15.0] - 2026-05-20
 
 ### Fixed
