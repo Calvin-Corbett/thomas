@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.39] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 38): `tests/test_server_app_routes_init.py::test_chat_storage_static_compat_tools_and_restart` was asserting the OLD chats endpoint contract (PUT returns 201, DELETE returns 204) which contradicted the NEW contract that `tests/test_server_chats_api.py` asserts (PUT returns 200 + {ok, chat}, DELETE returns 200 + {ok, deleted}). Both tests exercise the same handler; the only resolution is to align them on one contract. Updated the test to match the new contract (the one that explicitly mentions `ok` and `deleted` in its assertions — the more informative response shape).
+
 ## [0.15.38] - 2026-05-20
 
 ### Fixed
