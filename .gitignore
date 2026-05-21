@@ -84,9 +84,12 @@ _archive/
 
 # Auto-generated chat problem records. Curated records are explicitly re-included.
 # Security: prior incident (2026-05-19) leaked private content via plans/thomas/problems/*.
-plans/thomas/problems/
+# (Use /* not / so git still descends into the directory for re-includes below.)
+plans/thomas/problems/*
 !plans/thomas/problems/audit-24h-backstop/
 !plans/thomas/problems/audit-24h-backstop/**
+!plans/thomas/problems/ci-recovery-2026-05-20/
+!plans/thomas/problems/ci-recovery-2026-05-20/**
 
 # Auto-indexed research notes from chat transcripts (private user content).
 # Security: prior incident (2026-05-19) leaked a Telegram token via library/entries/research-notes/.
