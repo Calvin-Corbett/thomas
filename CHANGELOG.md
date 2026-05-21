@@ -9,6 +9,14 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.49] - 2026-05-21
+
+### Fixed
+- ci-recovery (tail 48): partial fix for `test_desktop_operator_runtime.py`:
+  - Moved `_SECRET_VALUE_RE`, `_SECRET_LABEL_RE`, `_HIGH_RISK_TEXT_RE` from `runtime.py` to `contracts.py` (the canonical surface). `operation_handlers.py` already imported them from `contracts` — that import path was raising `ImportError` because the patterns lived in `runtime` instead. Tests that import from contracts now succeed.
+  - Fixed `OperationHandlersMixin._require_isolated` to read `vm_context.isolated` instead of the removed `vm_context.is_isolated` accessor. Now raises the expected "Action requires an isolated desktop operator vm/session" error instead of `AttributeError`.
+- ⚠️ The remaining 4-5 `test_desktop_operator_runtime` failures are deeper contract mismatches (`_action_class` reading `ACTION_CLASSES` as a dict when it's a tuple; `_supervisor_preflight` signature drift). Deferred to a focused desktop-operator session.
+
 ## [0.15.48] - 2026-05-21
 
 ### Fixed

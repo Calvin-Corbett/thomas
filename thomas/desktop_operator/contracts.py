@@ -1,10 +1,26 @@
 from __future__ import annotations
 
 import platform
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
+
+# Sensitive-text patterns. Defined here (the canonical contracts module) so
+# both ``runtime.py`` and ``operation_handlers.py`` can import them from a
+# single place without creating a circular dependency. Tests in
+# ``test_desktop_operator_runtime.py`` also read these from `contracts`,
+# making this module the public surface for the sensitive-zone heuristics.
+_SECRET_VALUE_RE = re.compile(r"(?ix)" r"(password\s*[:=]\s*\S+)" r"|([A-Za-z0-9_\-]{24,})" r"|(\b\d{6,8}\b)")
+_SECRET_LABEL_RE = re.compile(
+    r"(?ix)"
+    r"(password|passkey|verification\ code|security\ code|one[- ]time\ code|otp|2fa|mfa|authenticator|secret|token)"
+)
+_HIGH_RISK_TEXT_RE = re.compile(
+    r"(?ix)"
+    r"(password|passkey|verification\ code|security\ code|mfa|2fa|otp|billing|payment|checkout|publish|share|send|upload|delete|remove|security\ settings|account\ settings|installer|administrator|elevat)"
+)
 
 DESKTOP_OPERATOR_SERVICE_ID = "desktop.operator"
 DESKTOP_OPERATOR_VERSION = "3.1.0"

@@ -278,22 +278,27 @@ class OperationHandlersMixin:
             )
 
     def _require_isolated(self, action: str) -> None:
-        if not self.vm_context.is_isolated:
+        # `DesktopVmContext.isolated` is the canonical field; the old
+        # `is_isolated` accessor was removed during the contracts refactor.
+        # This call site still referenced the old name, raising
+        # AttributeError instead of the expected "requires an isolated
+        # desktop operator vm/session" message that the tests look for.
+        if not getattr(self.vm_context, "isolated", False):
             raise session_error(
-                "Action requires isolated VM context.",
+                "Action requires an isolated desktop operator vm/session.",
                 action=action,
                 isolation_required=True,
             )
 
     def _normalize_allowed_domains(self, raw: Any, defaults: tuple[str, ...]) -> list[str]:
-        if isinstance(raw, (list, tuple)):
+        if isinstance(raw, list | tuple):
             return [str(x or "").strip().lower() for x in raw if str(x or "").strip()]
         if isinstance(raw, str):
             return [raw.strip().lower()] if raw.strip() else list(defaults)
         return list(defaults)
 
     def _normalize_allowed_paths(self, raw: Any) -> list[str]:
-        if isinstance(raw, (list, tuple)):
+        if isinstance(raw, list | tuple):
             return [str(x or "").strip() for x in raw if str(x or "").strip()]
         if isinstance(raw, str):
             return [raw.strip()] if raw.strip() else []
@@ -334,7 +339,7 @@ class OperationHandlersMixin:
 
         if action_class in ("file_dialog", "filesystem"):
             paths = payload.get("path") or payload.get("paths") or []
-            if not isinstance(paths, (list, tuple)):
+            if not isinstance(paths, list | tuple):
                 paths = [paths] if paths else []
             for path in paths:
                 self._require_allowed_path(session, path)
@@ -487,7 +492,7 @@ class OperationHandlersMixin:
             return value
         if isinstance(value, dict):
             return {k: self._sanitize_for_log(v) for k, v in value.items()}
-        if isinstance(value, (list, tuple)):
+        if isinstance(value, list | tuple):
             return [self._sanitize_for_log(v) for v in value]
         return value
 
