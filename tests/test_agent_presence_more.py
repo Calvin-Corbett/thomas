@@ -16,6 +16,10 @@ def test_agent_presence_env_and_parse_helpers(tmp_path: Path, monkeypatch: pytes
     monkeypatch.delenv("THOMAS_AGENT_SESSION_ID", raising=False)
     monkeypatch.setenv("AGENT_SESSION_ID", "sess-env")
     monkeypatch.delenv("THOMAS_AGENT_ID", raising=False)
+    # GitHub Actions runners set AGENT_ID at the runner level; clear it so the
+    # test's CODEX_AGENT_ID="Codex Env" assertion exercises the intended fallback
+    # path. AGENT_ENV_KEYS = ("THOMAS_AGENT_ID", "AGENT_ID", "CODEX_AGENT_ID", ...).
+    monkeypatch.delenv("AGENT_ID", raising=False)
     monkeypatch.setenv("CODEX_AGENT_ID", "Codex Env")
     monkeypatch.setenv("THOMAS_AGENT_PRESENCE_STALE_SECONDS", "-5")
 
