@@ -147,16 +147,28 @@ def _normalize_usage_payload(usage: dict[str, Any] | None) -> dict[str, Any]:
     tests/test_server_done_usage_contract.py asserts on. Source data may
     arrive in Anthropic shape (input_tokens / output_tokens /
     cache_*_input_tokens) or OpenAI shape (prompt_tokens / completion_tokens /
-    total_tokens).
+    total_tokens). Negative values and non-numeric values are clamped to 0;
+    total is recomputed when the provider's total is absent or smaller than
+    prompt+completion (per test_done_usage_is_normalized_for_malformed_values).
     """
     if not usage or not isinstance(usage, dict):
         return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+    def _coerce_nonneg_int(value: Any) -> int:
+        try:
+            v = int(value)
+        except (TypeError, ValueError):
+            return 0
+        return max(0, v)
+
     # Prefer OpenAI-style if present; otherwise derive from Anthropic-style.
-    prompt = int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0)
-    completion = int(usage.get("completion_tokens") or usage.get("output_tokens") or 0)
-    total = int(usage.get("total_tokens") or 0)
-    if not total:
-        total = prompt + completion
+    prompt = _coerce_nonneg_int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0)
+    completion = _coerce_nonneg_int(usage.get("completion_tokens") or usage.get("output_tokens") or 0)
+    declared_total = _coerce_nonneg_int(usage.get("total_tokens") or 0)
+    # If the provider's total is missing OR less than prompt+completion (malformed),
+    # use the derived sum so the invariant total >= prompt + completion holds.
+    derived_total = prompt + completion
+    total = declared_total if declared_total >= derived_total and declared_total > 0 else derived_total
     return {
         "prompt_tokens": prompt,
         "completion_tokens": completion,

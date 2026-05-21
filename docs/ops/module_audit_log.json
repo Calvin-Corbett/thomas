@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-05-21T18:03:13+00:00",
+  "updated_at": "2026-05-21T18:24:36+00:00",
   "latest_by_module": {
     "agent": {
       "id": "59cef78e32df4a84bc0f0933b1f6ee73",
@@ -213,30 +213,26 @@
       "signature": "565aeeea4b99a17e0f249e3183a0e24faf509a87baa566922abc9bddb35cacbb"
     },
     "server": {
-      "id": "e8859c293c5545b0b0a42b9df808f2b7",
+      "id": "a36efdfc8055429f8cadb625ae67c8b0",
       "module": "server",
-      "audited_at": "2026-05-21T18:03:13+00:00",
+      "audited_at": "2026-05-21T18:24:36+00:00",
       "auditor": "claude",
       "status": "pass",
-      "summary": "ci-recovery 0.15.38: refresh hash after pre-commit format reflow",
-      "run_id": "ci-recovery-2026-05-20-server-refresh",
+      "summary": "ci-recovery 0.15.40: spend routes wired, usage normalization clamps negatives",
+      "run_id": "ci-recovery-2026-05-20-server-spend",
       "files_touched": [
         "thomas/server/app_routes_init.py",
-        "thomas/server/routes/chat_aiohttp_streaming.py",
-        "thomas/server/routes/codex_aiohttp.py",
-        "thomas/server/routes/sessions_aiohttp.py"
+        "thomas/server/routes/chat_aiohttp_streaming.py"
       ],
       "file_hashes": {
-        "thomas/server/app_routes_init.py": "758b8e2219bf4d36bc49a8088e5a4bb3e52cede177831de33bdb83e3102b19cb",
-        "thomas/server/routes/chat_aiohttp_streaming.py": "4a723ba3d55a04d99fc707cc5cff6a4ef5091184a458b1aa5432751d8763895b",
-        "thomas/server/routes/codex_aiohttp.py": "9ed3dc3acd6ccbedcc4a8591b42b45360bc146778e91cda53b5c43f06003005c",
-        "thomas/server/routes/sessions_aiohttp.py": "06570bc79c7419b762dce3a17a3825379d50c0a5555e13ec16018bb52d71935f"
+        "thomas/server/app_routes_init.py": "c4975659bbb94cbb375342cbe642b8ef22370238cab8d19c094ad74f707ca777",
+        "thomas/server/routes/chat_aiohttp_streaming.py": "3441d84c7c8b43cfa3392884c8731d08e8bbe3b39cb160e0b67afac4378863fe"
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "78883a49db8a1ff998bcc577c9b418f1c841a73e8cafa6904131329203376770",
+      "prev_signature": "ad9566773d18afe27dc8a3518bd58f8d5556889baaf416e557690bb54edfafb7",
       "signature_scheme": "sha256",
-      "signature": "ad9566773d18afe27dc8a3518bd58f8d5556889baaf416e557690bb54edfafb7"
+      "signature": "7f36f1843f09787f2ee6eb91885cde150f6a21ae6440d23c72bac2171c09ef7c"
     },
     "tools": {
       "id": "6baf6ae9bb2242c2825e72fd9c76ad31",
@@ -1438,6 +1434,28 @@
       "prev_signature": "78883a49db8a1ff998bcc577c9b418f1c841a73e8cafa6904131329203376770",
       "signature_scheme": "sha256",
       "signature": "ad9566773d18afe27dc8a3518bd58f8d5556889baaf416e557690bb54edfafb7"
+    },
+    {
+      "id": "a36efdfc8055429f8cadb625ae67c8b0",
+      "module": "server",
+      "audited_at": "2026-05-21T18:24:36+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "ci-recovery 0.15.40: spend routes wired, usage normalization clamps negatives",
+      "run_id": "ci-recovery-2026-05-20-server-spend",
+      "files_touched": [
+        "thomas/server/app_routes_init.py",
+        "thomas/server/routes/chat_aiohttp_streaming.py"
+      ],
+      "file_hashes": {
+        "thomas/server/app_routes_init.py": "c4975659bbb94cbb375342cbe642b8ef22370238cab8d19c094ad74f707ca777",
+        "thomas/server/routes/chat_aiohttp_streaming.py": "3441d84c7c8b43cfa3392884c8731d08e8bbe3b39cb160e0b67afac4378863fe"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "ad9566773d18afe27dc8a3518bd58f8d5556889baaf416e557690bb54edfafb7",
+      "signature_scheme": "sha256",
+      "signature": "7f36f1843f09787f2ee6eb91885cde150f6a21ae6440d23c72bac2171c09ef7c"
     }
   ]
 }

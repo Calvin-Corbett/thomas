@@ -9,6 +9,13 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.40] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 39): batch of 13 server failures:
+  - **Spend routes (12 tests):** `thomas/server/routes/spend.py::register_spend_routes` existed but was never called from `app_routes_init.py`. Wired via new `_register_spend_routes` (same pattern as goals/companion fixes).
+  - **Usage normalization (1 test):** `_normalize_usage_payload` in `chat_aiohttp_streaming.py` was passing negative values + bad total through. Now clamps each component to `max(0, int(v))` and recomputes `total_tokens = prompt + completion` when the declared total is missing or smaller than the sum (preserves the invariant `total >= prompt + completion`). Matches `tests/test_server_usage_invariants.py::test_done_usage_is_normalized_for_malformed_values`.
+
 ## [0.15.39] - 2026-05-20
 
 ### Fixed
