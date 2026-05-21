@@ -303,7 +303,10 @@ def _ensure_none_if_empty(lines: list[str], *, section_start: int, section_end: 
 
     for idx in sorted(bullet_idxs, reverse=True):
         del lines[idx]
-    lines.insert(section_end - len(bullet_idxs), NONE_ENTRY)
+    # Append the newline; `lines` is splitlines(keepends=True) so each element
+    # carries its own trailing \n. Without one here, the `- none` bullet runs
+    # into the following section header on serialization.
+    lines.insert(section_end - len(bullet_idxs), NONE_ENTRY + "\n")
 
 
 def _validate_and_write(

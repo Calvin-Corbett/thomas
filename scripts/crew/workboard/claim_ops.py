@@ -14,7 +14,6 @@ try:
     from scripts.crew.workboard.claim_utils import (
         LOCK_FILE,
         NONE_ENTRY,
-        ROOT,
         _agent_key,
         _append_claim_override_audit,
         _append_release_override_audit,
@@ -36,7 +35,6 @@ try:
         _validate_and_write,
         _validate_dirty_claim_reason,
         _validate_dirty_release_reason,
-        _worktree_dirty_paths,
         workboard_issue_mod,
     )
 except ImportError:  # pragma: no cover
@@ -66,6 +64,19 @@ except ImportError:  # pragma: no cover
         _validate_dirty_release_reason,
         workboard_issue_mod,
     )
+
+
+# Test-patchable function resolution: tests patch attributes on
+# `scripts.crew.workboard.claim`; this helper makes those patches reach the
+# internals here. If `claim` doesn't override a name (production), fall through
+# to the module-local symbol.
+def _via_claim(name: str, default):
+    claim_mod = sys.modules.get("scripts.crew.workboard.claim")
+    if claim_mod is not None:
+        value = getattr(claim_mod, name, None)
+        if value is not None and value is not default:
+            return value
+    return default
 
 
 def _remove_up_for_grabs_entry(lines: list[str], task_id: str) -> tuple[bool, str]:
@@ -126,11 +137,13 @@ def claim(
     if not ok_presence:
         return False, presence_message
 
-    with _file_lock(LOCK_FILE):
+    with _via_claim("_file_lock", _file_lock)(_via_claim("LOCK_FILE", LOCK_FILE)):
         dirty_paths = {"staged": [], "unstaged": [], "untracked": []}
         scope_norm = _normalize_scope_value(scope)
-        if _scope_guard_supported(workboard_path):
-            dirty_paths = _claimed_scope_dirty_paths(scope_norm.split(","))
+        scope_guard = _via_claim("_scope_guard_supported", _scope_guard_supported)
+        dirty_paths_fn = _via_claim("_claimed_scope_dirty_paths", _claimed_scope_dirty_paths)
+        if scope_guard(workboard_path):
+            dirty_paths = dirty_paths_fn(scope_norm.split(","))
             offenders = sorted(
                 set(
                     list(dirty_paths.get("staged") or [])
@@ -173,27 +186,36 @@ def claim(
         text = workboard_path.read_text(encoding="utf-8")
         lines = text.splitlines(keepends=True)
         section = _find_claim_section(lines)
+        # If the agent already has a claim, UPDATE the existing line in place
+        # (idempotent claim semantics — agent can refine scope/task without
+        # release-then-reclaim). The "already has a claim" error is reserved for
+        # the edge cases below (parse errors, etc).
+        existing_idx: int | None = None
         for idx in range(section[0], min(section[1], len(lines))):
             if lines[idx].strip().startswith("-"):
                 entry, fields, err = _parse_claim_line(idx + 1, lines[idx])
                 if err:
                     return False, err
                 if entry and _agent_key(entry) == _agent_key(agent):
-                    return False, f"agent {agent} already has an active claim"
+                    existing_idx = idx
+                    break
 
-        none_idx: int | None = None
-        for idx in range(section[0], min(section[1], len(lines))):
-            if lines[idx].strip() == NONE_ENTRY:
-                none_idx = idx
-                break
-        if none_idx is not None:
-            lines[none_idx] = formatted + "\n"
+        if existing_idx is not None:
+            lines[existing_idx] = formatted + "\n"
         else:
-            insert_idx = section[1]
-            if insert_idx <= len(lines):
-                lines.insert(insert_idx, formatted + "\n")
+            none_idx: int | None = None
+            for idx in range(section[0], min(section[1], len(lines))):
+                if lines[idx].strip() == NONE_ENTRY:
+                    none_idx = idx
+                    break
+            if none_idx is not None:
+                lines[none_idx] = formatted + "\n"
             else:
-                lines.append(formatted + "\n")
+                insert_idx = section[1]
+                if insert_idx <= len(lines):
+                    lines.insert(insert_idx, formatted + "\n")
+                else:
+                    lines.append(formatted + "\n")
 
         active_ok, active_message = _upsert_active_task(
             lines,
@@ -220,6 +242,8 @@ def claim(
         except Exception as exc:
             return False, str(exc)
 
+        if existing_idx is not None:
+            return True, f"updated claim for `{agent}` to scope `{scope_norm}` with task `{task}`"
         return True, f"claimed scope `{scope_norm}` for agent `{agent}` with task `{task}`"
 
 
@@ -243,7 +267,7 @@ def release(
     if not ok_presence:
         return False, presence_message
 
-    with _file_lock(LOCK_FILE):
+    with _via_claim("_file_lock", _file_lock)(_via_claim("LOCK_FILE", LOCK_FILE)):
         text = workboard_path.read_text(encoding="utf-8")
         lines = text.splitlines(keepends=True)
         section = _find_claim_section(lines)
@@ -259,7 +283,7 @@ def release(
                     break
 
         if not release_scope:
-            return False, f"agent {agent} has no active claim to release"
+            return False, f"no active claim found for `{agent}`"
 
         section = _find_claim_section(lines)
         bullets = range(section[0], min(section[1], len(lines)))
@@ -267,10 +291,10 @@ def release(
             lines.insert(section[0], NONE_ENTRY + "\n")
 
         dirty_paths = {"staged": [], "unstaged": [], "untracked": []}
-        if _scope_guard_supported(workboard_path):
-            from crew.workboard.claim_utils import _claimed_scope_dirty_paths
-
-            dirty_paths = _claimed_scope_dirty_paths([release_scope])
+        scope_guard = _via_claim("_scope_guard_supported", _scope_guard_supported)
+        dirty_paths_fn = _via_claim("_claimed_scope_dirty_paths", _claimed_scope_dirty_paths)
+        if scope_guard(workboard_path):
+            dirty_paths = dirty_paths_fn([release_scope])
             offenders = sorted(
                 set(
                     list(dirty_paths.get("staged") or [])
@@ -283,7 +307,7 @@ def release(
                 return (
                     False,
                     (
-                        f"scope `{release_scope}` has dirty files ({len(offenders)} paths): {sample}. "
+                        f"dirty files in claimed scope `{release_scope}` ({len(offenders)} paths): {sample}. "
                         "Refusing to release until the scope is clean, "
                         "or pass --allow-dirty-release with --dirty-release-reason."
                     ),
@@ -299,7 +323,39 @@ def release(
                     scope=release_scope,
                 )
 
+        # Collect task_ids about to be released BEFORE _release_active_task
+        # mutates the lines list, so we can clean up any `auto-inactive`
+        # issues that reference them (otherwise validation will fail with
+        # "issue X references unknown task_id Y" after the active-task line
+        # is gone).
+        from scripts.crew.workboard.claim_utils import _find_active_tasks_section, _parse_active_task_line
+
+        released_task_ids: list[str] = []
+        at_section = _find_active_tasks_section(lines)
+        for idx in range(at_section[0], min(at_section[1], len(lines))):
+            raw = lines[idx]
+            if not raw.strip().startswith("-"):
+                continue
+            try:
+                entry, fields, err = _parse_active_task_line(idx + 1, raw)
+            except (ValueError, KeyError, IndexError, TypeError):
+                continue
+            if err:
+                continue
+            if fields and _agent_key(str(fields.get("agent") or "")) == _agent_key(agent):
+                task_id = str(entry or fields.get("task_id") or "").strip()
+                if task_id:
+                    released_task_ids.append(task_id)
+
         ok, release_msg = _release_active_task(lines, agent=agent)
+        cleaned_count = 0
+        if released_task_ids:
+            from scripts.crew.workboard.claim_utils import _cleanup_auto_inactive_issues_for_tasks
+
+            cleanup_ok, cleaned_count = _cleanup_auto_inactive_issues_for_tasks(lines, released_task_ids)
+            if not cleanup_ok:
+                cleaned_count = 0
+
         new_text = "".join(lines)
         try:
             ok, violations = _validate_and_write(workboard_path, text, new_text)
@@ -308,7 +364,10 @@ def release(
         except Exception as exc:
             return False, str(exc)
 
-        return True, f"released claim for agent `{agent}` from scope `{release_scope}`"
+        msg = f"released claim for `{agent}` from scope `{release_scope}`"
+        if cleaned_count:
+            msg += f"; cleaned_auto_inactive_issues={cleaned_count}"
+        return True, msg
 
 
 def list_claims(workboard_path: Path) -> tuple[bool, list[str] | str]:

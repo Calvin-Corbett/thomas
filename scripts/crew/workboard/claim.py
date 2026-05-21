@@ -17,13 +17,25 @@ try:
     from scripts.crew.workboard.claim_dispatch import dispatch_workers, release_temp_task_creator, suggest_delegation
     from scripts.crew.workboard.claim_ops import claim, list_claims, release
     from scripts.crew.workboard.claim_utils import (
+        CLAIM_OVERRIDE_AUDIT_LOG,  # noqa: F401  -- re-exported for tests/test_workboard_claim_script.py
         DEFAULT_DISPATCH_MAX_SUGGESTIONS,
         DEFAULT_DISPATCH_TARGET_WORKERS,
         DEFAULT_TASK_MANAGER_AGENT,
         DEFAULT_WORKBOARD,
+        LOCK_FILE,  # noqa: F401  -- re-exported for tests
+        RELEASE_OVERRIDE_AUDIT_LOG,  # noqa: F401  -- re-exported for tests
+        _claimed_scope_dirty_paths,  # noqa: F401  -- re-exported for tests
+        _detect_agent_default,  # noqa: F401  -- re-exported for tests
+        _detect_branch_name,  # noqa: F401  -- re-exported for tests
+        _file_lock,  # noqa: F401  -- re-exported for tests
+        _find_active_tasks_section,  # noqa: F401  -- re-exported for tests
+        _find_claim_section,  # noqa: F401  -- re-exported for tests
+        _is_temp_task_creator_task,  # noqa: F401  -- re-exported for tests
         _resolve_agent,
+        _resolve_display_name,  # noqa: F401  -- re-exported for tests
         _resolve_task,
-        agent_presence,
+        _scope_guard_supported,  # noqa: F401  -- re-exported for tests
+        agent_presence,  # noqa: F401  -- re-exported for tests (mocked via mod.agent_presence.evaluate_soft_gate)
         claims_gate,
     )
 except ImportError:  # pragma: no cover
@@ -34,12 +46,24 @@ except ImportError:  # pragma: no cover
     )
     from crew.workboard.claim_ops import claim, list_claims, release  # type: ignore
     from crew.workboard.claim_utils import (  # type: ignore
+        CLAIM_OVERRIDE_AUDIT_LOG,  # noqa: F401
         DEFAULT_DISPATCH_MAX_SUGGESTIONS,
         DEFAULT_DISPATCH_TARGET_WORKERS,
         DEFAULT_TASK_MANAGER_AGENT,
         DEFAULT_WORKBOARD,
+        LOCK_FILE,  # noqa: F401
+        RELEASE_OVERRIDE_AUDIT_LOG,  # noqa: F401
+        _claimed_scope_dirty_paths,  # noqa: F401
+        _detect_agent_default,  # noqa: F401
+        _detect_branch_name,  # noqa: F401
+        _file_lock,  # noqa: F401
+        _find_active_tasks_section,  # noqa: F401
+        _find_claim_section,  # noqa: F401
+        _is_temp_task_creator_task,  # noqa: F401
         _resolve_agent,
+        _resolve_display_name,  # noqa: F401
         _resolve_task,
+        _scope_guard_supported,  # noqa: F401
         claims_gate,
     )
 
