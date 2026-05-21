@@ -312,6 +312,11 @@ async def test_api_bootdoctor_report_and_actions_cover_success_and_failures(
         await client.close()
 
 
+@pytest.mark.skipif(
+    os.name != "nt",
+    reason="Rescue-unavailable path checks bootdoctor.ps1 which only exists on the Windows branch. "
+    "On Linux the rescue subprocess fires unconditionally; the 503 path the test asserts is Windows-only.",
+)
 @pytest.mark.asyncio
 async def test_api_bootdoctor_handles_missing_report_and_unavailable_rescue(
     tmp_path: Path, patch_create_app_dependencies: None, monkeypatch: pytest.MonkeyPatch

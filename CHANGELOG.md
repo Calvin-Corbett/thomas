@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.22] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 20): 0.15.21 only committed the `import os` line; the `@pytest.mark.skipif(os.name != "nt", ...)` decorator was dropped by a stale-state edit. Re-applied the decorator. (Tooling lesson: always re-verify file diffs after Edit calls when there were intermediate tool errors.)
+
 ## [0.15.21] - 2026-05-20
 
 ### Fixed
