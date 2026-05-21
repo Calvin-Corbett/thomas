@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.27] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 25): re-apply the `monkeypatch.delenv("AGENT_ID")` to `test_agent_presence_env_and_parse_helpers`. The 0.15.26 commit only picked up `test_agent_safety.py`; the agent_presence test fix was lost (same tooling lesson as 0.15.22). Recurring pattern: when running multiple Edits across files in one batch, the workboard commit tool sometimes only includes a subset. Always verify the post-commit `selected paths` list.
+
 ## [0.15.26] - 2026-05-20
 
 ### Fixed
