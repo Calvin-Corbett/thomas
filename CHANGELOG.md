@@ -9,6 +9,15 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.3] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 2): three more security-regression failures uncovered after the audit-handler closure bug was fixed in 0.15.0. With the audit auth path no longer crashing on every request, the matrix surfaced these pre-existing bugs:
+  1. `thomas/server/routes/webhooks.py` re-export shim: the existing `from thomas.server.routes import webhooks_routes` only imported the module, leaving 12 functions + 2 request models inaccessible as attributes of `webhooks` (which is what `webhooks_aiohttp.py:220` expects via `webhook_mod.receive_github_webhook`). Now explicitly re-exports `register_webhook`, `patch_webhook`, `delete_webhook`, `list_webhooks`, `get_webhook`, `stats_all`, `inbox_recent`, `inbox_retry`, `test_webhook`, `receive_webhook`, `receive_github_webhook`, `receive_stripe_webhook`, `RegisterWebhookRequest`, `PatchWebhookRequest`. Eliminates `AttributeError` on webhook receive paths.
+  2. `thomas/server/routes/runs.py`: add missing `/api/runs/{run_id}/cancel` POST route (`handle_cancel_run`) that `tests/test_server_access_mode.py::test_remote_mode_cancel_endpoint_requires_token` expected. Idempotent — 200 once auth passes, no run lookup required (cancel is a soft signal).
+  3. `thomas/server/app_routes_init.py` `_register_webhooks_routes`: pass `signature_enforcement_default=True` when `access_mode == "remote"`. Operators who forget to set `THOMAS_GITHUB_WEBHOOK_SECRET` now get the deterministic 503 ("signature enforcement is enabled") that the test expects, not a generic 500. Matches the policy intent of `_webhook_signature_enforcement_enabled` in production environments.
+- All 39 tests in `tests/test_server_access_mode.py` + `tests/test_server_csrf_audit.py` now pass locally.
+
 ## [0.15.2] - 2026-05-20
 
 ### Fixed

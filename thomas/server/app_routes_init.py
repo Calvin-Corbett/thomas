@@ -589,16 +589,24 @@ def _setup_routes_and_handlers(
     _register_secrets_routes(app)
 
     def _register_webhooks_routes(app_ref: web.Application) -> None:
-        """Register webhook management and public receive routes."""
+        """Register webhook management and public receive routes.
+
+        In remote-access mode, signature enforcement defaults to ON so that an
+        operator who forgets to set the provider secret gets a deterministic 503
+        instead of a 500. Local mode keeps the historical opt-in behavior.
+        """
         if not callable(_require_api_access):
             log.warning("Webhook route registration skipped: missing API access guard")
             return
         try:
             from thomas.server.routes.webhooks_aiohttp import register_webhooks_routes
 
+            mode = str(getattr(getattr(config, "server", None), "access_mode", "local") or "local").strip().lower()
+            sig_default = True if mode == "remote" else None
             register_webhooks_routes(
                 app_ref,
                 require_api_access=_require_api_access,
+                signature_enforcement_default=sig_default,
             )
         except (ImportError, ModuleNotFoundError, RuntimeError, KeyError, ValueError) as e:
             log.warning("Webhook routes unavailable: %s", e)
