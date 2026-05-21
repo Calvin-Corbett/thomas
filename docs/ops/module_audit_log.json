@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-05-21T15:28:45+00:00",
+  "updated_at": "2026-05-21T16:05:04+00:00",
   "latest_by_module": {
     "agent": {
       "id": "519e8ebd2ed94be6a5e5391e6254b717",
@@ -57,22 +57,24 @@
       "signature": "f6839a58329bc796536c671911bd5f75b1c27e9c7873659cc36cc1522baa4df1"
     },
     "demo": {
-      "id": "619814fbf74048368ba63694f067d8a9",
+      "id": "2a534f05b7a848be816f96188b4d7728",
       "module": "demo",
-      "audited_at": "2026-02-25T02:15:32+00:00",
-      "auditor": "Codex 2",
-      "status": "warn",
-      "summary": "24h module audit sweep from architecture debt map",
-      "run_id": "timing-check",
-      "files_touched": [],
-      "file_hashes": {},
-      "issues": [
-        "agentic_benchmark.py exceeds 930 lines, agent_comparison_suite.py exceeds 3400 lines, harness.py exceeds 1150 lines"
+      "audited_at": "2026-05-21T16:05:04+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "ci-recovery 0.15.24: re-export helpers for agent_comparison_suite tests",
+      "run_id": "ci-recovery-2026-05-20-demo",
+      "files_touched": [
+        "thomas/demo/agent_comparison_suite.py"
       ],
-      "issue_count": 1,
-      "prev_signature": "2af9ecdc23852fe74cb65e21fecbb9a0fe704f8c2649e710dd2efde6694d49a7",
+      "file_hashes": {
+        "thomas/demo/agent_comparison_suite.py": "83381caa65a8ca872dc4d36a85c6bbd6d10751f9dada4849fd1669b5f6415c96"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "9d6483058837ee3daf924edfcb5babb37756fd68820bbc3c72108055a93b84d4",
       "signature_scheme": "sha256",
-      "signature": "9d6483058837ee3daf924edfcb5babb37756fd68820bbc3c72108055a93b84d4"
+      "signature": "95ed236186e147e40d86ed56e0f5a466a07405a8500438787de34f79138df03c"
     },
     "intake": {
       "id": "0bfc7266929948808a34c023cf049d1b",
@@ -1296,6 +1298,26 @@
       "prev_signature": "98c382d48d2bc1978f18a23f2c4187d8524562989d2794e8c1bb547e9153e9b7",
       "signature_scheme": "sha256",
       "signature": "c2f2d369a36b04a261cd7ff5acf0d7fe5402b904a6f01df68aee45a02ae6efb0"
+    },
+    {
+      "id": "2a534f05b7a848be816f96188b4d7728",
+      "module": "demo",
+      "audited_at": "2026-05-21T16:05:04+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "ci-recovery 0.15.24: re-export helpers for agent_comparison_suite tests",
+      "run_id": "ci-recovery-2026-05-20-demo",
+      "files_touched": [
+        "thomas/demo/agent_comparison_suite.py"
+      ],
+      "file_hashes": {
+        "thomas/demo/agent_comparison_suite.py": "83381caa65a8ca872dc4d36a85c6bbd6d10751f9dada4849fd1669b5f6415c96"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "9d6483058837ee3daf924edfcb5babb37756fd68820bbc3c72108055a93b84d4",
+      "signature_scheme": "sha256",
+      "signature": "95ed236186e147e40d86ed56e0f5a466a07405a8500438787de34f79138df03c"
     }
   ]
 }
