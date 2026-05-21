@@ -1,24 +1,26 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-05-21T16:05:04+00:00",
+  "updated_at": "2026-05-21T16:33:44+00:00",
   "latest_by_module": {
     "agent": {
-      "id": "519e8ebd2ed94be6a5e5391e6254b717",
+      "id": "59cef78e32df4a84bc0f0933b1f6ee73",
       "module": "agent",
-      "audited_at": "2026-02-25T02:15:32+00:00",
-      "auditor": "Codex 2",
-      "status": "warn",
-      "summary": "24h module audit sweep from architecture debt map",
-      "run_id": "timing-check",
-      "files_touched": [],
-      "file_hashes": {},
-      "issues": [
-        "loop.py exceeds 2500 lines, swarm.py exceeds 930 lines"
+      "audited_at": "2026-05-21T16:33:44+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "ci-recovery 0.15.28: best_practice gate hint injection",
+      "run_id": "ci-recovery-2026-05-20-agent",
+      "files_touched": [
+        "thomas/agent/loop_execution.py"
       ],
-      "issue_count": 1,
-      "prev_signature": "6e9c007bbc6a6c485f6fa269925478183ae496bcf93ef237945d29a847b4d4dc",
+      "file_hashes": {
+        "thomas/agent/loop_execution.py": "88ccf38c34ca2c37a58bf93cab6d9881e01777fd3bd220d6387fb74e37bc9567"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "6d8fa771b890edca70f9f008432d6e7c67fb97087580bdee1ab7b2155b321c80",
       "signature_scheme": "sha256",
-      "signature": "6d8fa771b890edca70f9f008432d6e7c67fb97087580bdee1ab7b2155b321c80"
+      "signature": "6e625b67e8c285ae06197e443d3cca7064b95b0aff2383e4ccb4afc41be79580"
     },
     "autonomy": {
       "id": "403f260c96524847a295b589d40c1780",
@@ -1318,6 +1320,26 @@
       "prev_signature": "9d6483058837ee3daf924edfcb5babb37756fd68820bbc3c72108055a93b84d4",
       "signature_scheme": "sha256",
       "signature": "95ed236186e147e40d86ed56e0f5a466a07405a8500438787de34f79138df03c"
+    },
+    {
+      "id": "59cef78e32df4a84bc0f0933b1f6ee73",
+      "module": "agent",
+      "audited_at": "2026-05-21T16:33:44+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "ci-recovery 0.15.28: best_practice gate hint injection",
+      "run_id": "ci-recovery-2026-05-20-agent",
+      "files_touched": [
+        "thomas/agent/loop_execution.py"
+      ],
+      "file_hashes": {
+        "thomas/agent/loop_execution.py": "88ccf38c34ca2c37a58bf93cab6d9881e01777fd3bd220d6387fb74e37bc9567"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "6d8fa771b890edca70f9f008432d6e7c67fb97087580bdee1ab7b2155b321c80",
+      "signature_scheme": "sha256",
+      "signature": "6e625b67e8c285ae06197e443d3cca7064b95b0aff2383e4ccb4afc41be79580"
     }
   ]
 }
