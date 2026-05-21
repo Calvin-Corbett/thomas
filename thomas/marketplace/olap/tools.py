@@ -43,16 +43,12 @@ class CubeManagementTool(Tool):
                 return ToolResult(ok=True, data={"status": "cube_created", "cube_name": cube_name})
 
             elif action == "add_dimension":
-                core.Dimension(
-                    args.get("name"), args.get("description", ""), members=args.get("dimension_members", [])
-                )
+                core.Dimension(args.get("name"), args.get("description", ""), members=args.get("dimension_members", []))
                 return ToolResult(ok=True, data={"status": "dimension_added", "dimension": args.get("name")})
 
             elif action == "add_measure":
                 agg = args.get("aggregation", "sum").upper()
-                core.Measure(
-                    args.get("name"), args.get("description", ""), aggregation=core.AggregationFunction[agg]
-                )
+                core.Measure(args.get("name"), args.get("description", ""), aggregation=core.AggregationFunction[agg])
                 return ToolResult(
                     ok=True, data={"status": "measure_added", "measure": args.get("name"), "aggregation": agg}
                 )

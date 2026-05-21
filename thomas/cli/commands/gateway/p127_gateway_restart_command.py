@@ -145,7 +145,7 @@ def _format_human(out: GatewayRestartOutput) -> str:
         msg = out.message or "Gateway restart requested."
         return f"{msg} (gateway={out.gateway})"
     err = out.error or {"code": "external_failure", "message": "Gateway restart failed.", "details": {}}
-    return f"{err.get('code','external_failure')}: {err.get('message','Gateway restart failed.')}"
+    return f"{err.get('code', 'external_failure')}: {err.get('message', 'Gateway restart failed.')}"
 
 
 def run(

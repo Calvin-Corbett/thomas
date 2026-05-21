@@ -35,7 +35,7 @@ def _poetry_spec_to_pip(name: str, s: str) -> str:
         parts = base.split(".")
         if parts and parts[0].isdigit():
             major = int(parts[0])
-            upper = f"<{major+1}.0.0"
+            upper = f"<{major + 1}.0.0"
             return f"{name}>={base},{upper}"
         return f"{name}{s}"
     if re.fullmatch(r"\d+(\.\d+)*([a-zA-Z0-9\.\-\+]+)?", s):
@@ -156,7 +156,7 @@ def _ensure_pip_audit_available() -> None:
 
     code, out, err = _run_cmd([sys.executable, "-m", "pip", "install", "--upgrade", "pip-audit"], timeout_s=600)
     if code != 0:
-        raise DepScanError("pip-audit is not installed and auto-install failed.\n" f"stdout:\n{out}\n\nstderr:\n{err}")
+        raise DepScanError(f"pip-audit is not installed and auto-install failed.\nstdout:\n{out}\n\nstderr:\n{err}")
 
 
 def _run_pip_audit_json(args: list[str], cwd: Path) -> Any:

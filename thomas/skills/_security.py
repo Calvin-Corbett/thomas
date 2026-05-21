@@ -47,7 +47,9 @@ def _iter_text_files(paths: list[Path]) -> list[Path]:
     return out
 
 
-def build_no_copy_report(source_paths: list[Path], generated_paths: list[Path], *, ngram_size: int = 12) -> dict[str, Any]:
+def build_no_copy_report(
+    source_paths: list[Path], generated_paths: list[Path], *, ngram_size: int = 12
+) -> dict[str, Any]:
     source_files = _iter_text_files(source_paths)
     generated_files = _iter_text_files(generated_paths)
     exact_matches: list[dict[str, str]] = []

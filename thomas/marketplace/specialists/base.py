@@ -100,7 +100,7 @@ class BaseSpecialist:
         if token.specialist_id != self.specialist_id:
             yield {
                 "type": "error",
-                "error": f"Token issued for '{token.specialist_id}', " f"not '{self.specialist_id}'",
+                "error": f"Token issued for '{token.specialist_id}', not '{self.specialist_id}'",
             }
             return
 
@@ -136,7 +136,7 @@ class BaseSpecialist:
             self._error_count += 1
             yield {
                 "type": "error",
-                "error": f"Specialist '{self.specialist_id}' timed out " f"after {contract.timeout_seconds}s",
+                "error": f"Specialist '{self.specialist_id}' timed out after {contract.timeout_seconds}s",
             }
 
         except Exception as exc:
@@ -197,8 +197,7 @@ class BaseSpecialist:
             yield {
                 "type": "error",
                 "error": (
-                    f"Specialist '{self.specialist_id}' returned unsupported "
-                    f"event payload type {type(result).__name__}"
+                    f"Specialist '{self.specialist_id}' returned unsupported event payload type {type(result).__name__}"
                 ),
             }
             return

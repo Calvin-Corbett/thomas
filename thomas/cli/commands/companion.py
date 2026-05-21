@@ -90,9 +90,7 @@ def companion_module_list(ctx: click.Context, root: str, as_json: bool) -> None:
         return
     click.echo(f"Installed modules: {len(rows)}")
     for item in rows:
-        click.echo(
-            f"- {item['module_id']} | v{item['version']} | {item['status']} | entrypoint={item['entrypoint']}"
-        )
+        click.echo(f"- {item['module_id']} | v{item['version']} | {item['status']} | entrypoint={item['entrypoint']}")
 
 
 @companion.command("module-enable")

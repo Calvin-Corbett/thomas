@@ -415,7 +415,7 @@ class TestingSuite:
             )
         try:
             rp.write_text("\n".join(lines), encoding="utf-8")
-            self._notify(f"📋 **Test Report** ({len(results)} cycles) — " f"composite **{composite_avg:.1f}** → `{rp}`")
+            self._notify(f"📋 **Test Report** ({len(results)} cycles) — composite **{composite_avg:.1f}** → `{rp}`")
         except Exception as e:
             log.error("TestingSuite: report write error: %s", e)
 
@@ -443,9 +443,7 @@ class TestingSuite:
         if not results:
             return "Testing suite: 0 cycles."
         avg = sum(r.composite for r in results) / len(results)
-        return (
-            f"Testing suite: {len(results)} cycles | " f"avg composite {avg:.1f} | est spend ${self._daily_spend:.3f}"
-        )
+        return f"Testing suite: {len(results)} cycles | avg composite {avg:.1f} | est spend ${self._daily_spend:.3f}"
 
     def _notify(self, msg: str) -> None:
         if self._notify_fn:

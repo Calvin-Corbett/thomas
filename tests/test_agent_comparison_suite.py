@@ -29,14 +29,16 @@ def test_load_suite_config_infers_tracked_cli_commands_from_fixed_depth(tmp_path
 def test_load_suite_config_preserves_competitor_catalog(tmp_path: Path) -> None:
     cfg = {
         "id": "x",
-        "competitor_catalog": [{"id": "openclaw", "repo_url": "https://example.com/openclaw.git", "enabled": True}],
+        "competitor_catalog": [
+            {"id": "reference_cli", "repo_url": "https://example.com/reference_cli.git", "enabled": True}
+        ],
         "agents": [{"id": "thomas", "root": "."}],
     }
     path = tmp_path / "suite.json"
     path.write_text(json.dumps(cfg), encoding="utf-8")
     loaded = suite.load_suite_config(path)
     assert len(loaded["competitor_catalog"]) == 1
-    assert loaded["competitor_catalog"][0]["id"] == "openclaw"
+    assert loaded["competitor_catalog"][0]["id"] == "reference_cli"
 
 
 def test_load_suite_config_reads_test_suite_contract_path(tmp_path: Path) -> None:
@@ -82,7 +84,7 @@ def test_load_suite_config_reads_head_to_head_tie_policy(tmp_path: Path) -> None
     assert loaded["head_to_head_tie_policy"] == "exclude"
 
 
-def test_default_suite_config_wires_benchmark_evidence_globs_for_thomas_and_openclaw() -> None:
+def test_default_suite_config_wires_benchmark_evidence_globs_for_thomas_and_reference_cli() -> None:
     loaded = suite.load_suite_config(suite.DEFAULT_SUITE_CONFIG)
     agents = {
         str(agent.get("id") or "").strip(): dict(agent)
@@ -90,17 +92,17 @@ def test_default_suite_config_wires_benchmark_evidence_globs_for_thomas_and_open
         if str(agent.get("id") or "").strip()
     }
     assert agents["thomas"]["benchmark_evidence_globs"] == ["demo/agentic-runs/*/benchmark_results.prog_evidence.json"]
-    assert agents["openclaw"]["benchmark_evidence_globs"] == [
+    assert agents["reference_cli"]["benchmark_evidence_globs"] == [
         "demo/agentic-runs/*/benchmark_results.prog_evidence.json"
     ]
 
 
-def test_materialize_competitor_catalog_adds_benchmark_defaults_for_thomas_and_openclaw(tmp_path: Path) -> None:
+def test_materialize_competitor_catalog_adds_benchmark_defaults_for_thomas_and_reference_cli(tmp_path: Path) -> None:
     config = {
         "agents": [],
         "competitor_catalog": [
             {"id": "thomas"},
-            {"id": "openclaw"},
+            {"id": "reference_cli"},
         ],
     }
     prepared_agents, _ = suite._materialize_competitor_catalog_agents(
@@ -109,9 +111,9 @@ def test_materialize_competitor_catalog_adds_benchmark_defaults_for_thomas_and_o
     )
     by_id = {str(agent.get("id") or "").strip(): dict(agent) for agent in prepared_agents}
     assert by_id["thomas"]["benchmark_aliases"] == ["thomas", "thomas_os"]
-    assert by_id["openclaw"]["benchmark_aliases"] == ["openclaw"]
+    assert by_id["reference_cli"]["benchmark_aliases"] == ["reference_cli"]
     assert by_id["thomas"]["benchmark_evidence_globs"] == ["demo/agentic-runs/*/benchmark_results.raw.json"]
-    assert by_id["openclaw"]["benchmark_evidence_globs"] == ["demo/agentic-runs/*/benchmark_results.raw.json"]
+    assert by_id["reference_cli"]["benchmark_evidence_globs"] == ["demo/agentic-runs/*/benchmark_results.raw.json"]
 
 
 def test_assertion_resolution_and_ops() -> None:
@@ -236,10 +238,10 @@ def test_collect_benchmark_evidence_reads_raw_rows_by_alias(tmp_path: Path) -> N
         },
         {
             "task_id": "prog.001",
-            "track": "openclaw",
+            "track": "reference_cli",
             "success": False,
             "quality_score": 20.0,
-            "evidence": "transcripts/openclaw/prog.001.md",
+            "evidence": "transcripts/reference_cli/prog.001.md",
         },
         {
             "task_id": "prog.002",
@@ -260,13 +262,13 @@ def test_collect_benchmark_evidence_reads_raw_rows_by_alias(tmp_path: Path) -> N
     assert thomas_evidence["checks"]["prog.001"]["source"] == "transcripts/thomas/prog.001.md"
     assert thomas_evidence["checks"]["prog.002"]["pass"] is True
 
-    openclaw_evidence = suite._collect_benchmark_evidence(
-        {"id": "openclaw", "benchmark_aliases": ["openclaw"], "benchmark_evidence_globs": [pattern]},
+    reference_cli_evidence = suite._collect_benchmark_evidence(
+        {"id": "reference_cli", "benchmark_aliases": ["reference_cli"], "benchmark_evidence_globs": [pattern]},
         suite_root=tmp_path,
     )
-    assert openclaw_evidence["checks"]["prog.001"]["pass"] is False
-    assert openclaw_evidence["checks"]["prog.001"]["score"] == 20.0
-    assert "prog.002" not in openclaw_evidence["checks"]
+    assert reference_cli_evidence["checks"]["prog.001"]["pass"] is False
+    assert reference_cli_evidence["checks"]["prog.001"]["score"] == 20.0
+    assert "prog.002" not in reference_cli_evidence["checks"]
 
 
 def test_compute_token_efficiency_returns_blended_score() -> None:
@@ -337,7 +339,7 @@ def test_count_regex_hits_ignores_python_comments_and_strings(tmp_path: Path) ->
     src = tmp_path / "src"
     src.mkdir(parents=True, exist_ok=True)
     (src / "scan.py").write_text(
-        "# exec(code)\n" "PATTERN = 'exec(code)'\n" 'doc = """eval(value)"""\n' "exec(code)\n",
+        '# exec(code)\nPATTERN = \'exec(code)\'\ndoc = """eval(value)"""\nexec(code)\n',
         encoding="utf-8",
     )
 
@@ -384,11 +386,11 @@ def test_build_metric_rows_and_focus_gaps() -> None:
     }
     agents = [
         {"id": "thomas", "metrics": {"m1": 5, "m2": 5}},
-        {"id": "openclaw", "metrics": {"m1": 7, "m2": 3}},
+        {"id": "reference_cli", "metrics": {"m1": 7, "m2": 3}},
     ]
     rows = suite._build_metric_rows(metric_specs=metric_specs, agents=agents)
     scoreboard = suite._build_scoreboard(rows, agents=agents)
-    assert scoreboard["wins_by_agent"]["openclaw"] == 2
+    assert scoreboard["wins_by_agent"]["reference_cli"] == 2
     gaps = suite._focus_gaps(rows, focus_agent="thomas", top_n=10)
     assert len(gaps) == 2
     assert gaps[0]["metric"] in {"m1", "m2"}
@@ -402,20 +404,20 @@ def test_build_scoreboard_ignores_single_agent_metrics_in_composite_scoring() ->
             "weight": 10.0,
             "participants": ["thomas"],
             "winners": ["thomas"],
-            "normalized": {"thomas": 1.0, "openclaw": 0.0},
-            "values": {"thomas": 7, "openclaw": None},
+            "normalized": {"thomas": 1.0, "reference_cli": 0.0},
+            "values": {"thomas": 7, "reference_cli": None},
         },
         {
             "metric": "shared",
             "category": "code_surface",
             "weight": 1.0,
-            "participants": ["thomas", "openclaw"],
+            "participants": ["thomas", "reference_cli"],
             "winners": ["thomas"],
-            "normalized": {"thomas": 1.0, "openclaw": 0.0},
-            "values": {"thomas": 5, "openclaw": 1},
+            "normalized": {"thomas": 1.0, "reference_cli": 0.0},
+            "values": {"thomas": 5, "reference_cli": 1},
         },
     ]
-    agents = [{"id": "thomas", "metrics": {}}, {"id": "openclaw", "metrics": {}}]
+    agents = [{"id": "thomas", "metrics": {}}, {"id": "reference_cli", "metrics": {}}]
     scoreboard = suite._build_scoreboard(rows, agents=agents)
     assert scoreboard["measured_metrics"] == 1
     assert scoreboard["max_weight_total"] == 1.0
@@ -738,7 +740,7 @@ def test_update_competitor_registry_records_last_test_and_version(tmp_path: Path
             "tie_metrics": 1,
             "ranking": [
                 {"agent": "thomas", "rank": 1, "wins": 5, "composite_score": 90.0},
-                {"agent": "openclaw", "rank": 2, "wins": 2, "composite_score": 70.0},
+                {"agent": "reference_cli", "rank": 2, "wins": 2, "composite_score": 70.0},
             ],
         },
         "agents": [
@@ -750,9 +752,9 @@ def test_update_competitor_registry_records_last_test_and_version(tmp_path: Path
                 "model_snapshot": {"ok": True, "day_utc": "2026-02-21", "model": "m1"},
             },
             {
-                "id": "openclaw",
-                "label": "OpenClaw",
-                "root": "C:/repo/openclaw",
+                "id": "reference_cli",
+                "label": "Reference CLI",
+                "root": "C:/repo/reference_cli",
                 "version_info": {"kind": "git", "local_head": "bbb", "is_up_to_date": False},
                 "model_snapshot": {"ok": True, "day_utc": "2026-02-21", "model": "m2"},
             },
@@ -769,8 +771,8 @@ def test_update_competitor_registry_records_last_test_and_version(tmp_path: Path
 
     payload = json.loads(registry_path.read_text(encoding="utf-8"))
     assert payload["updated_at_utc"] == "2026-02-21T18:30:00Z"
-    assert payload["competitors"]["openclaw"]["version"]["local_head"] == "bbb"
-    assert payload["competitors"]["openclaw"]["last_result_json"] == str(result_json)
+    assert payload["competitors"]["reference_cli"]["version"]["local_head"] == "bbb"
+    assert payload["competitors"]["reference_cli"]["last_result_json"] == str(result_json)
     assert registry_md_path.exists()
 
 

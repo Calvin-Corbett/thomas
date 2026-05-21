@@ -40,9 +40,7 @@ def test_delete_message_success():
     assert resp.deleted is True
     assert resp.to_dict()["to"] == "channel:123"
     assert resp.to_dict()["messageId"] == "456"
-    assert deleter.calls == [
-        {"channel": "slack", "account": None, "target": "channel:123", "message_id": "456"}
-    ]
+    assert deleter.calls == [{"channel": "slack", "account": None, "target": "channel:123", "message_id": "456"}]
 
 
 def test_delete_message_dry_run_skips_backend():

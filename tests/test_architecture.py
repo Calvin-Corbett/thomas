@@ -368,8 +368,7 @@ def test_forbidden_patterns():
             if fnmatch.fnmatch(py_file.name, pattern):
                 rel = py_file.relative_to(REPO_ROOT)
                 violations.append(
-                    f"  {rel} matches forbidden pattern '{pattern}'\n"
-                    f"  FIX: Remove debug/temp files before committing."
+                    f"  {rel} matches forbidden pattern '{pattern}'\n  FIX: Remove debug/temp files before committing."
                 )
 
     if violations:

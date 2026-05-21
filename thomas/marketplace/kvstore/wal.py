@@ -234,7 +234,7 @@ class WAL:
 
                     if crc_calculated != crc_expected:
                         raise CorruptionError(
-                            f"CRC mismatch in WAL {wal_file}: " f"expected {crc_expected}, got {crc_calculated}"
+                            f"CRC mismatch in WAL {wal_file}: expected {crc_expected}, got {crc_calculated}"
                         )
 
                     timestamp = struct.unpack(">d", timestamp_bytes)[0]

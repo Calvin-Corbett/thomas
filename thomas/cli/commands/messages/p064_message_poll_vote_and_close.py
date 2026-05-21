@@ -135,4 +135,3 @@ def register(app: Any) -> None:
         register(_a)
     except ImportError:  # pragma: no cover
         pass
-

@@ -195,7 +195,7 @@ def test_review_task_cannot_have_open_issue(tmp_path: Path, capsys) -> None:
         tmp_path,
         "- agent=Codex 9; scope=thomas/cli/main.py; task=review lane",
         active_tasks_block=(
-            "- task_id=review-lane; agent=Codex 9; scope=thomas/cli/main.py; " "summary=review lane; status=review"
+            "- task_id=review-lane; agent=Codex 9; scope=thomas/cli/main.py; summary=review lane; status=review"
         ),
         issues_block=(
             "- issue_id=review-lane-1; task_id=review-lane; reporter=Codex 9; "

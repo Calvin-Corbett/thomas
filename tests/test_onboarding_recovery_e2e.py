@@ -206,4 +206,3 @@ class TestOnboardingRecoveryE2E(AioHTTPTestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

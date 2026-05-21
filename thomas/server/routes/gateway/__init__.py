@@ -23,4 +23,5 @@ def register_gateway_routes(app: web.Application, config: object | None = None) 
         if routes is not None:
             app.add_routes(routes)
 
+
 __all__ = ["register_gateway_routes"]

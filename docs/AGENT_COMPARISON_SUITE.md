@@ -141,16 +141,16 @@ python scripts/run_agent_comparison_suite.py --write --write-md
 
 JSON output defaults to:
 
-- `docs/openclaw_gap_runs/latest_full_suite_compare.json`
+- `docs/reference_cli_gap_runs/latest_full_suite_compare.json`
 
 Markdown report defaults to:
 
-- `docs/openclaw_gap_runs/latest_full_suite_compare.md`
+- `docs/reference_cli_gap_runs/latest_full_suite_compare.md`
 
 Competitor registry defaults to:
 
-- `docs/openclaw_gap_runs/competitor_registry.json`
-- `docs/openclaw_gap_runs/competitor_registry.md`
+- `docs/reference_cli_gap_runs/competitor_registry.json`
+- `docs/reference_cli_gap_runs/competitor_registry.md`
 
 ## Config
 

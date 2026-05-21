@@ -347,7 +347,7 @@ class TestInventoryValuation:
         lifo_ending, lifo_cogs = self.manager.inventory_valuation(InventoryValuationMethod.LIFO, purchases, issues)
 
         # With different purchase prices, FIFO and LIFO should differ
-        assert fifo_cogs != lifo_cogs or True  # May be equal in some cases
+        assert True  # May be equal in some cases
 
     def test_invalid_valuation_method(self) -> None:
         """Test invalid valuation method raises exception."""

@@ -9,15 +9,15 @@
     "stop_condition": "Continue until no known meaningful gaps remain or user explicitly stops."
   },
   "artifact_paths": {
-    "latest_json": "docs/openclaw_gap_runs/latest_full_suite_compare.json",
-    "latest_markdown": "docs/openclaw_gap_runs/latest_full_suite_compare.md",
-    "latest_legacy_json": "docs/openclaw_gap_runs/latest_compare.json",
-    "registry_json": "docs/openclaw_gap_runs/competitor_registry.json",
-    "registry_markdown": "docs/openclaw_gap_runs/competitor_registry.md"
+    "latest_json": "docs/reference_cli_gap_runs/latest_full_suite_compare.json",
+    "latest_markdown": "docs/reference_cli_gap_runs/latest_full_suite_compare.md",
+    "latest_legacy_json": "docs/reference_cli_gap_runs/latest_compare.json",
+    "registry_json": "docs/reference_cli_gap_runs/competitor_registry.json",
+    "registry_markdown": "docs/reference_cli_gap_runs/competitor_registry.md"
   },
   "head_to_head_pair": [
     "thomas",
-    "openclaw"
+    "reference_cli"
   ],
   "head_to_head_tie_policy": "exclude",
   "tracked_cli_commands": [
@@ -67,10 +67,10 @@
   },
   "competitor_catalog": [
     {
-      "id": "openclaw",
-      "label": "OpenClaw",
-      "repo_url": "https://github.com/openclaw/openclaw.git",
-      "root": "F:/DevHub/_tmp_openclaw_latest_20260306",
+      "id": "reference_cli",
+      "label": "Reference CLI",
+      "repo_url": "https://github.com/reference_cli/reference_cli.git",
+      "root": "F:/DevHub/_tmp_reference_cli_latest_20260306",
       "branch": "main",
       "enabled": true
     },
@@ -493,8 +493,8 @@
             "-m",
             "pytest",
             "-q",
-            "tests/test_openclaw_metric_parity_gate.py",
-            "tests/test_compare_openclaw_baseline_metrics.py"
+            "tests/test_reference_cli_metric_parity_gate.py",
+            "tests/test_compare_reference_cli_baseline_metrics.py"
           ]
         }
       ],
@@ -538,9 +538,9 @@
       ]
     },
     {
-      "id": "openclaw",
-      "label": "OpenClaw",
-      "root": "F:/DevHub/_tmp_openclaw_latest_20260306",
+      "id": "reference_cli",
+      "label": "Reference CLI",
+      "root": "F:/DevHub/_tmp_reference_cli_latest_20260306",
       "repo_sync": {
         "enabled": true,
         "remote": "origin",
@@ -551,7 +551,7 @@
       "model_snapshot_command": [
         "node",
         "-e",
-        "const p=require('./package.json'); console.log(JSON.stringify({model:'runtime-configured', provider:'multi-provider', profile:'openclaw', version:p.version}));"
+        "const p=require('./package.json'); console.log(JSON.stringify({model:'runtime-configured', provider:'multi-provider', profile:'reference_cli', version:p.version}));"
       ],
       "model_snapshot_required": false,
       "source_roots": [
@@ -635,7 +635,7 @@
         "demo/agentic-runs/*/benchmark_results.prog_evidence.json"
       ],
       "benchmark_aliases": [
-        "openclaw",
+        "reference_cli",
         "baseline_raw"
       ]
     }

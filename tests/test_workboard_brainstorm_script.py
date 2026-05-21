@@ -47,7 +47,7 @@ def test_start_all_hands_creates_session_and_summons(tmp_path: Path, capsys) -> 
     workboard = _write_workboard(
         tmp_path,
         claims_block=(
-            "- agent=Codex 1; scope=scripts/a.py; task=lane a\n" "- agent=Codex 2; scope=scripts/b.py; task=lane b"
+            "- agent=Codex 1; scope=scripts/a.py; task=lane a\n- agent=Codex 2; scope=scripts/b.py; task=lane b"
         ),
         active_tasks_block=(
             "- task_id=brainstorm-target; agent=Codex 1; scope=scripts/a.py; summary=lane a; status=active\n"

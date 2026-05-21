@@ -62,7 +62,7 @@ def create_gpqa_suite() -> BenchmarkSuite:
             "chemistry_orbital",
             TaskDifficulty.HARD,
             "chemistry",
-            "How many radial nodes does a 3p orbital have? " "Use the formula: radial nodes = n - l - 1.",
+            "How many radial nodes does a 3p orbital have? Use the formula: radial nodes = n - l - 1.",
             "1",
         ),
         (
@@ -107,8 +107,7 @@ def create_gpqa_suite() -> BenchmarkSuite:
             "cs_complexity",
             TaskDifficulty.HARD,
             "computer_science",
-            "What is the time complexity of finding the median of "
-            "medians algorithm for selection? Express in Big-O.",
+            "What is the time complexity of finding the median of medians algorithm for selection? Express in Big-O.",
             "O(n)",
         ),
         (
@@ -123,7 +122,7 @@ def create_gpqa_suite() -> BenchmarkSuite:
             "cs_graph_theory",
             TaskDifficulty.HARD,
             "computer_science",
-            "A complete graph K_6 has how many edges? Use the formula " "n*(n-1)/2.",
+            "A complete graph K_6 has how many edges? Use the formula n*(n-1)/2.",
             "15",
         ),
         # ── Mathematics ──────────────────────────────────────
@@ -131,7 +130,7 @@ def create_gpqa_suite() -> BenchmarkSuite:
             "math_topology",
             TaskDifficulty.EXPERT,
             "mathematics",
-            "What is the Euler characteristic of a torus? " "Use V - E + F for a standard triangulation.",
+            "What is the Euler characteristic of a torus? Use V - E + F for a standard triangulation.",
             "0",
         ),
         (

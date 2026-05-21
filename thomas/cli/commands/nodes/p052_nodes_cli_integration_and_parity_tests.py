@@ -19,13 +19,13 @@ try:
     )
 except ImportError:  # pragma: no cover
     from thomas.nodes.p052_nodes_cli_integration_and_parity_tests import (
-    NodesCliIntegrationError,
-    NodesCliRequest,
-    fetch_nodes_sync,
-    format_result_human,
-    format_result_json,
-    run_parity_tests_sync,
-)
+        NodesCliIntegrationError,
+        NodesCliRequest,
+        fetch_nodes_sync,
+        format_result_human,
+        format_result_json,
+        run_parity_tests_sync,
+    )
 
 # Primary Typer app (some registries look specifically for an `app` attribute).
 app = typer.Typer(

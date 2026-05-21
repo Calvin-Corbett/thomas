@@ -6,7 +6,10 @@ from thomas.agent.swarm import SwarmConfig, SwarmOrchestrator, TaskResult
 
 class Planner:
     agent_id = "planner"
-    def __init__(self, graph_obj): self.graph_obj = graph_obj
+
+    def __init__(self, graph_obj):
+        self.graph_obj = graph_obj
+
     async def run_task(self, *, task, graph, prior_results, emit_text, call_tool, cancel_event):
         s = json.dumps(self.graph_obj)
         await emit_text(s)
@@ -14,7 +17,9 @@ class Planner:
 
 
 class Agent:
-    def __init__(self, agent_id): self.agent_id = agent_id
+    def __init__(self, agent_id):
+        self.agent_id = agent_id
+
     async def run_task(self, *, task, graph, prior_results, emit_text, call_tool, cancel_event):
         await emit_text("hello\n")
         return TaskResult(ok=True, output="ok")
@@ -22,6 +27,7 @@ class Agent:
 
 class Reviewer:
     agent_id = "reviewer"
+
     async def run_task(self, *, task, graph, prior_results, emit_text, call_tool, cancel_event):
         return TaskResult(ok=True, output="final")
 

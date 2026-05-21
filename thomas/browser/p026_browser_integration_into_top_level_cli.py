@@ -280,9 +280,7 @@ def open_url(request: BrowserOpenRequest) -> BrowserOpenResult:
         config = _load_config(request.config_path)
         normalized_url = _normalize_url(request.url)
         if normalized_url is None:
-            raise BrowserOpenException(
-                BrowserOpenError(kind="invalid_input", message="url is required", details={})
-            )
+            raise BrowserOpenException(BrowserOpenError(kind="invalid_input", message="url is required", details={}))
 
         if request.dry_run:
             return BrowserOpenResult(

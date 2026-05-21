@@ -452,21 +452,17 @@ class MemoryFabricV2Retrieval:
             ).fetchall()
         elif scope:
             rows = self.db.execute(
-                "SELECT id, text, tokens_est, waste FROM packs "
-                "WHERE scope=? "
-                "ORDER BY updated_at_ms DESC LIMIT 200",
+                "SELECT id, text, tokens_est, waste FROM packs WHERE scope=? ORDER BY updated_at_ms DESC LIMIT 200",
                 (scope,),
             ).fetchall()
         elif thread_id is not None:
             rows = self.db.execute(
-                "SELECT id, text, tokens_est, waste FROM packs "
-                "WHERE thread_id=? "
-                "ORDER BY updated_at_ms DESC LIMIT 200",
+                "SELECT id, text, tokens_est, waste FROM packs WHERE thread_id=? ORDER BY updated_at_ms DESC LIMIT 200",
                 (thread_id,),
             ).fetchall()
         else:
             rows = self.db.execute(
-                "SELECT id, text, tokens_est, waste FROM packs " "ORDER BY updated_at_ms DESC LIMIT 200"
+                "SELECT id, text, tokens_est, waste FROM packs ORDER BY updated_at_ms DESC LIMIT 200"
             ).fetchall()
 
         updated = 0

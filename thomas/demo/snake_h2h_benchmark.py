@@ -1,4 +1,4 @@
-"""Side-by-side Snake benchmark runner for Thomas vs OpenClaw."""
+"""Side-by-side Snake benchmark runner for Thomas vs Reference CLI."""
 
 from __future__ import annotations
 
@@ -22,14 +22,14 @@ from thomas.demo.agentic_benchmark_runners import _run_thomas_api_task
 from thomas.demo.harness import build_execution_plan, compute_summary
 
 ROOT = Path(__file__).resolve().parents[2]
-OPENCLAW_ROOT = Path(r"C:\Users\corbe\openclaw-h2h")
-OPENCLAW_HOME = Path(r"C:\Users\corbe")
+REFERENCE_CLI_ROOT = Path(r"C:\Users\corbe\reference_cli-h2h")
+REFERENCE_CLI_HOME = Path(r"C:\Users\corbe")
 THOMAS_PAGE_PORT = 8891
-OPENCLAW_PAGE_PORT = 8892
-OPENCLAW_PROFILE = "h2h2"
+REFERENCE_CLI_PAGE_PORT = 8892
+REFERENCE_CLI_PROFILE = "h2h2"
 RUNS_DIR = ROOT / "output" / "benchmarks" / "snake"
 THOMAS_PAGE_URL = f"http://127.0.0.1:{THOMAS_PAGE_PORT}"
-OPENCLAW_PAGE_URL = f"http://127.0.0.1:{OPENCLAW_PAGE_PORT}"
+REFERENCE_CLI_PAGE_URL = f"http://127.0.0.1:{REFERENCE_CLI_PAGE_PORT}"
 DEFAULT_THOMAS_API_BASE = "http://127.0.0.1:8899"
 DEFAULT_THOMAS_PORT = 8910
 TIMEOUT_SECONDS = 600
@@ -120,7 +120,7 @@ def _build_prompt(*, output_root: Path, local_url: str, competitor: str, benchma
         "- UI contract: canvas#game, #score, #status, button#start-btn, and button#restart-btn if you use a separate restart control.\n"
         "- Game contract: single centered canvas, start screen, arrow keys and WASD, live score, food spawning, wall collision, self collision, restart flow, and no console errors.\n"
         "- Deterministic hooks are mandatory.\n"
-        '- window.render_game_to_text() must return a concise JSON string with mode, score, direction, snake, food, width, height, and a coordinate_note.\n'
+        "- window.render_game_to_text() must return a concise JSON string with mode, score, direction, snake, food, width, height, and a coordinate_note.\n"
         "- window.advanceTime(ms) must advance the game deterministically without relying on requestAnimationFrame.\n"
         "- Leave a short build/test log in progress.md.\n"
         f"- This is the {competitor} side of a head-to-head benchmark.\n"
@@ -128,12 +128,12 @@ def _build_prompt(*, output_root: Path, local_url: str, competitor: str, benchma
     )
 
 
-def _task_pack(prompt_thomas: str, prompt_openclaw: str) -> dict[str, Any]:
+def _task_pack(prompt_thomas: str, prompt_reference_cli: str) -> dict[str, Any]:
     return {
         "id": "snake-h2h",
         "name": "Snake Head-to-Head",
         "version": 1,
-        "description": "Static Snake game benchmark for Thomas and OpenClaw.",
+        "description": "Static Snake game benchmark for Thomas and Reference CLI.",
         "protocol": [
             "Same prompt contract for both competitors.",
             "Static output only; no product-code edits allowed.",
@@ -152,12 +152,12 @@ def _task_pack(prompt_thomas: str, prompt_openclaw: str) -> dict[str, Any]:
         ],
         "prompt_artifacts": {
             "thomas": prompt_thomas,
-            "openclaw": prompt_openclaw,
+            "reference_cli": prompt_reference_cli,
         },
     }
 
 
-def _parse_openclaw_json(raw_text: str) -> tuple[dict[str, Any] | None, str]:
+def _parse_reference_cli_json(raw_text: str) -> tuple[dict[str, Any] | None, str]:
     text = str(raw_text or "").strip()
     if not text:
         return None, ""
@@ -270,7 +270,7 @@ def _ensure_server_process(directory: Path, port: int, log_prefix: str) -> dict[
     }
 
 
-async def _run_openclaw_task(
+async def _run_reference_cli_task(
     prompt: str,
     raw_path: Path,
     *,
@@ -279,14 +279,14 @@ async def _run_openclaw_task(
 ) -> tuple[str, float, str]:
     start = time.monotonic()
     escaped_session_id = str(session_id).replace("'", "''")
-    escaped_profile = str(OPENCLAW_PROFILE).replace("'", "''")
+    escaped_profile = str(REFERENCE_CLI_PROFILE).replace("'", "''")
     command = (
         "$prompt = @'\n"
         f"{prompt}\n"
         "'@; "
         f"$sessionId = '{escaped_session_id}'; "
         f"$profile = '{escaped_profile}'; "
-        "openclaw --no-color --profile $profile agent --session-id $sessionId "
+        "reference_cli --no-color --profile $profile agent --session-id $sessionId "
         f"--message $prompt --thinking xhigh --timeout {TIMEOUT_SECONDS} --json"
     )
     process = await asyncio.create_subprocess_exec(
@@ -304,8 +304,8 @@ async def _run_openclaw_task(
     text = stdout.decode("utf-8", errors="replace")
     raw_path.write_text(text, encoding="utf-8")
     if process.returncode != 0:
-        raise RuntimeError(f"OpenClaw exited with code {process.returncode}")
-    parsed, blob = _parse_openclaw_json(text)
+        raise RuntimeError(f"Reference CLI exited with code {process.returncode}")
+    parsed, blob = _parse_reference_cli_json(text)
     reply = ""
     if parsed:
         payloads = list((parsed.get("result") or {}).get("payloads") or [])
@@ -337,19 +337,19 @@ def _write_json(path: Path, payload: Any) -> None:
 def _render_report(*, run_id: str, records: list[dict[str, Any]]) -> str:
     by_name = {str(row["competitor"]): row for row in records}
     thomas = by_name["thomas"]
-    openclaw = by_name["openclaw"]
+    reference_cli = by_name["reference_cli"]
     lines = [
         f"# Snake Head-to-Head ({run_id})",
         "",
-        f"- Benchmark session: `{thomas.get('benchmark_session_id') or openclaw.get('benchmark_session_id') or '--'}`",
-        f"- Attempt: `{thomas.get('attempt_number') or openclaw.get('attempt_number') or '--'}`",
+        f"- Benchmark session: `{thomas.get('benchmark_session_id') or reference_cli.get('benchmark_session_id') or '--'}`",
+        f"- Attempt: `{thomas.get('attempt_number') or reference_cli.get('attempt_number') or '--'}`",
         f"- Thomas page: `{THOMAS_PAGE_URL}`",
-        f"- OpenClaw page: `{OPENCLAW_PAGE_URL}`",
+        f"- Reference CLI page: `{REFERENCE_CLI_PAGE_URL}`",
         "",
         "| Competitor | Success | Time (s) | Quality | Served Root | Scored Root | Notes |",
         "| --- | --- | ---: | ---: | --- | --- | --- |",
         f"| Thomas | {thomas['success']} | {thomas['elapsed_seconds']} | {thomas['quality_score']} | {thomas['served_root']} | {thomas['scored_root']} | {thomas['notes']} |",
-        f"| OpenClaw | {openclaw['success']} | {openclaw['elapsed_seconds']} | {openclaw['quality_score']} | {openclaw['served_root']} | {openclaw['scored_root']} | {openclaw['notes']} |",
+        f"| Reference CLI | {reference_cli['success']} | {reference_cli['elapsed_seconds']} | {reference_cli['quality_score']} | {reference_cli['served_root']} | {reference_cli['scored_root']} | {reference_cli['notes']} |",
         "",
     ]
     return "\n".join(lines) + "\n"
@@ -366,9 +366,17 @@ async def run_benchmark(args: argparse.Namespace) -> Path:
     run_dir = _attempt_dir(session_dir, attempt_number)
     run_dir.mkdir(parents=True, exist_ok=True)
     thomas_root = run_dir / "thomas"
-    openclaw_root = OPENCLAW_ROOT / "output" / "benchmarks" / "snake" / benchmark_session_id / f"attempt-{attempt_number:02d}" / "openclaw"
+    reference_cli_root = (
+        REFERENCE_CLI_ROOT
+        / "output"
+        / "benchmarks"
+        / "snake"
+        / benchmark_session_id
+        / f"attempt-{attempt_number:02d}"
+        / "reference_cli"
+    )
     thomas_root.mkdir(parents=True, exist_ok=True)
-    openclaw_root.mkdir(parents=True, exist_ok=True)
+    reference_cli_root.mkdir(parents=True, exist_ok=True)
     stale_attempt_roots = _list_stale_attempt_roots(session_dir, attempt_number)
     managed_thomas_runtime = None
     thomas_api_base = str(args.thomas_api_base or DEFAULT_THOMAS_API_BASE)
@@ -384,10 +392,10 @@ async def run_benchmark(args: argparse.Namespace) -> Path:
 
     page_servers = {
         "thomas": _ensure_server_process(thomas_root, THOMAS_PAGE_PORT, "page_server"),
-        "openclaw": _ensure_server_process(openclaw_root, OPENCLAW_PAGE_PORT, "page_server"),
+        "reference_cli": _ensure_server_process(reference_cli_root, REFERENCE_CLI_PAGE_PORT, "page_server"),
     }
     await _wait_for_http_ok(THOMAS_PAGE_URL)
-    await _wait_for_http_ok(OPENCLAW_PAGE_URL)
+    await _wait_for_http_ok(REFERENCE_CLI_PAGE_URL)
 
     prompt_thomas = _build_prompt(
         output_root=thomas_root,
@@ -395,14 +403,14 @@ async def run_benchmark(args: argparse.Namespace) -> Path:
         competitor="Thomas",
         benchmark_mode=True,
     )
-    prompt_openclaw = _build_prompt(
-        output_root=openclaw_root,
-        local_url=OPENCLAW_PAGE_URL,
-        competitor="OpenClaw",
+    prompt_reference_cli = _build_prompt(
+        output_root=reference_cli_root,
+        local_url=REFERENCE_CLI_PAGE_URL,
+        competitor="Reference CLI",
         benchmark_mode=False,
     )
     (run_dir / "prompt.thomas.txt").write_text(prompt_thomas, encoding="utf-8")
-    (run_dir / "prompt.openclaw.txt").write_text(prompt_openclaw, encoding="utf-8")
+    (run_dir / "prompt.reference_cli.txt").write_text(prompt_reference_cli, encoding="utf-8")
 
     benchmark_context = {
         "run_id": run_id,
@@ -419,9 +427,9 @@ async def run_benchmark(args: argparse.Namespace) -> Path:
             "benchmark_session_id": benchmark_session_id,
             "attempt_number": attempt_number,
             "thomas_root": str(thomas_root),
-            "openclaw_root": str(openclaw_root),
+            "reference_cli_root": str(reference_cli_root),
             "thomas_page_url": THOMAS_PAGE_URL,
-            "openclaw_page_url": OPENCLAW_PAGE_URL,
+            "reference_cli_page_url": REFERENCE_CLI_PAGE_URL,
             "thomas_api_base": thomas_api_base,
             "stale_attempt_roots": stale_attempt_roots,
             "is_visible_active_attempt": True,
@@ -429,12 +437,12 @@ async def run_benchmark(args: argparse.Namespace) -> Path:
     )
 
     webbrowser.open_new(THOMAS_PAGE_URL)
-    webbrowser.open_new(OPENCLAW_PAGE_URL)
+    webbrowser.open_new(REFERENCE_CLI_PAGE_URL)
 
     thomas_raw = run_dir / "thomas.raw.json"
-    openclaw_raw = run_dir / "openclaw.raw.json"
+    reference_cli_raw = run_dir / "reference_cli.raw.json"
     thomas_started_at = _now_iso()
-    openclaw_started_at = _now_iso()
+    reference_cli_started_at = _now_iso()
 
     async def _run_thomas() -> tuple[str, float, dict[str, Any]]:
         result = await _run_thomas_api_task(
@@ -452,24 +460,24 @@ async def run_benchmark(args: argparse.Namespace) -> Path:
         reply = str(result.get("text") or "")
         return reply, float(result.get("elapsed_seconds") or 0.0), result
 
-    async def _run_openclaw() -> tuple[str, float, str]:
-        reply, elapsed, raw_blob = await _run_openclaw_task(
-            prompt_openclaw,
-            openclaw_raw,
+    async def _run_reference_cli() -> tuple[str, float, str]:
+        reply, elapsed, raw_blob = await _run_reference_cli_task(
+            prompt_reference_cli,
+            reference_cli_raw,
             session_id=f"snake-{run_id}",
-            workdir=openclaw_root,
+            workdir=reference_cli_root,
         )
         return reply, elapsed, raw_blob
 
     thomas_task = asyncio.create_task(_run_thomas())
-    openclaw_task = asyncio.create_task(_run_openclaw())
+    reference_cli_task = asyncio.create_task(_run_reference_cli())
     thomas_reply, thomas_elapsed, thomas_result = await thomas_task
-    openclaw_reply, openclaw_elapsed, openclaw_blob = await openclaw_task
+    reference_cli_reply, reference_cli_elapsed, reference_cli_blob = await reference_cli_task
 
     thomas_ok, thomas_quality, thomas_notes = _artifact_quality(thomas_root)
-    openclaw_ok, openclaw_quality, openclaw_notes = _artifact_quality(openclaw_root)
+    reference_cli_ok, reference_cli_quality, reference_cli_notes = _artifact_quality(reference_cli_root)
 
-    task_pack = _task_pack(prompt_thomas, prompt_openclaw)
+    task_pack = _task_pack(prompt_thomas, prompt_reference_cli)
     records = [
         {
             "task_id": "snake_static_game",
@@ -489,24 +497,24 @@ async def run_benchmark(args: argparse.Namespace) -> Path:
         },
         {
             "task_id": "snake_static_game",
-            "competitor": "openclaw",
+            "competitor": "reference_cli",
             "benchmark_session_id": benchmark_session_id,
             "attempt_number": attempt_number,
-            "success": openclaw_ok,
-            "elapsed_seconds": openclaw_elapsed,
+            "success": reference_cli_ok,
+            "elapsed_seconds": reference_cli_elapsed,
             "follow_up_prompts": 0,
-            "quality_score": openclaw_quality,
-            "evidence": str(openclaw_root / "proof.json"),
-            "served_root": str(openclaw_root.resolve()),
-            "scored_root": str(openclaw_root.resolve()),
+            "quality_score": reference_cli_quality,
+            "evidence": str(reference_cli_root / "proof.json"),
+            "served_root": str(reference_cli_root.resolve()),
+            "scored_root": str(reference_cli_root.resolve()),
             "is_visible_active_attempt": True,
-            "notes": openclaw_notes,
+            "notes": reference_cli_notes,
             "captured_at": _now_iso(),
         },
     ]
     execution_plan = build_execution_plan(
         task_pack=task_pack,
-        competitors=["thomas", "openclaw"],
+        competitors=["thomas", "reference_cli"],
         randomize=False,
         seed=None,
     )
@@ -535,14 +543,14 @@ async def run_benchmark(args: argparse.Namespace) -> Path:
             "created_at": _now_iso(),
             "task_pack_id": task_pack["id"],
             "task_pack_version": task_pack["version"],
-            "competitors": ["thomas", "openclaw"],
+            "competitors": ["thomas", "reference_cli"],
             "served_root": {
                 "thomas": str(thomas_root.resolve()),
-                "openclaw": str(openclaw_root.resolve()),
+                "reference_cli": str(reference_cli_root.resolve()),
             },
             "scored_root": {
                 "thomas": str(thomas_root.resolve()),
-                "openclaw": str(openclaw_root.resolve()),
+                "reference_cli": str(reference_cli_root.resolve()),
             },
             "is_visible_active_attempt": True,
             "stale_attempt_roots": stale_attempt_roots,
@@ -573,20 +581,20 @@ async def run_benchmark(args: argparse.Namespace) -> Path:
             "raw_path": str(thomas_raw),
             "proof_path": str(thomas_root / "proof.json"),
         },
-        "openclaw": {
-            "root": str(openclaw_root),
-            "page_url": OPENCLAW_PAGE_URL,
-            "started_at": openclaw_started_at,
-            "elapsed_seconds": openclaw_elapsed,
-            "success": openclaw_ok,
-            "quality_score": openclaw_quality,
-            "served_root": str(openclaw_root.resolve()),
-            "scored_root": str(openclaw_root.resolve()),
+        "reference_cli": {
+            "root": str(reference_cli_root),
+            "page_url": REFERENCE_CLI_PAGE_URL,
+            "started_at": reference_cli_started_at,
+            "elapsed_seconds": reference_cli_elapsed,
+            "success": reference_cli_ok,
+            "quality_score": reference_cli_quality,
+            "served_root": str(reference_cli_root.resolve()),
+            "scored_root": str(reference_cli_root.resolve()),
             "is_visible_active_attempt": True,
-            "reply": openclaw_reply,
-            "notes": openclaw_notes,
-            "raw_path": str(openclaw_raw),
-            "proof_path": str(openclaw_root / "proof.json"),
+            "reply": reference_cli_reply,
+            "notes": reference_cli_notes,
+            "raw_path": str(reference_cli_raw),
+            "proof_path": str(reference_cli_root / "proof.json"),
         },
         "servers": {
             "thomas_execution": {
@@ -600,10 +608,10 @@ async def run_benchmark(args: argparse.Namespace) -> Path:
                 "stdout_path": str(page_servers["thomas"]["stdout_path"]),
                 "stderr_path": str(page_servers["thomas"]["stderr_path"]),
             },
-            "openclaw_page": {
-                "url": OPENCLAW_PAGE_URL,
-                "stdout_path": str(page_servers["openclaw"]["stdout_path"]),
-                "stderr_path": str(page_servers["openclaw"]["stderr_path"]),
+            "reference_cli_page": {
+                "url": REFERENCE_CLI_PAGE_URL,
+                "stdout_path": str(page_servers["reference_cli"]["stdout_path"]),
+                "stderr_path": str(page_servers["reference_cli"]["stderr_path"]),
             },
         },
         "managed_thomas_runtime": None
@@ -616,7 +624,7 @@ async def run_benchmark(args: argparse.Namespace) -> Path:
             "pid": int(managed_thomas_runtime["process"].pid),
         },
         "summary": summary,
-        "openclaw_json_blob": openclaw_blob,
+        "reference_cli_json_blob": reference_cli_blob,
         "thomas_result": thomas_result,
     }
     _write_json(run_dir / "snake_benchmark.json", benchmark_payload)
@@ -628,9 +636,9 @@ async def run_benchmark(args: argparse.Namespace) -> Path:
             "benchmark_session_id": benchmark_session_id,
             "attempt_number": attempt_number,
             "thomas_elapsed_seconds": thomas_elapsed,
-            "openclaw_elapsed_seconds": openclaw_elapsed,
+            "reference_cli_elapsed_seconds": reference_cli_elapsed,
             "thomas_success": thomas_ok,
-            "openclaw_success": openclaw_ok,
+            "reference_cli_success": reference_cli_ok,
             "report_path": str(run_dir / "report.md"),
         },
     )
@@ -638,7 +646,7 @@ async def run_benchmark(args: argparse.Namespace) -> Path:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the Thomas vs OpenClaw Snake benchmark.")
+    parser = argparse.ArgumentParser(description="Run the Thomas vs Reference CLI Snake benchmark.")
     parser.add_argument("--run-id", default="", help="Optional run id override.")
     parser.add_argument(
         "--benchmark-session-id",
@@ -674,7 +682,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"  - {run_dir / 'report.md'}")
     print(f"  - {run_dir / 'scorecard.json'}")
     print(f"  - Thomas page: {THOMAS_PAGE_URL}")
-    print(f"  - OpenClaw page: {OPENCLAW_PAGE_URL}")
+    print(f"  - Reference CLI page: {REFERENCE_CLI_PAGE_URL}")
     return 0
 
 

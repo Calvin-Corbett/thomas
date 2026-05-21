@@ -163,7 +163,7 @@ def test_gate_fails_when_agent_owns_unresolved_issue(tmp_path: Path, monkeypatch
         "- agent=Codex 2; scope=thomas/cli/main.py; task=models scan",
         active_tasks_block="- task_id=models-scan; agent=Codex 2; scope=thomas/cli/main.py; summary=models scan; status=blocked",
         issues_block=(
-            "- issue_id=ISS-9; task_id=models-scan; reporter=qa; owner=Codex 2; " "state=open; summary=scan traceback"
+            "- issue_id=ISS-9; task_id=models-scan; reporter=qa; owner=Codex 2; state=open; summary=scan traceback"
         ),
     )
     monkeypatch.setenv("AGENT_ID", "codex 2")

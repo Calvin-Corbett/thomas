@@ -412,8 +412,7 @@ class APISource(DataSource):
     def _fetch_all_pages(self) -> Iterator[list[dict[str, Any]]]:
         """Fetch all pages from API."""
         # Simulated implementation
-        for page in self._simulated_pages:
-            yield page
+        yield from self._simulated_pages
 
     def get_schema(self) -> Schema:
         """Get schema from API response."""
@@ -500,8 +499,7 @@ class FileWatcherSource(DataSource):
             if str(filepath) not in self._processed_files:
                 try:
                     source = self.reader_source or CSVSource(filepath)
-                    for record in source.stream():
-                        yield record
+                    yield from source.stream()
                     self._processed_files.add(str(filepath))
                 except Exception as e:
                     raise SourceError(f"Failed to read file {filepath}: {e}", "FileWatcherSource")

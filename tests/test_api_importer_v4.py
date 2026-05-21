@@ -14,13 +14,19 @@ def test_v4_freeze_snapshot_and_deepobject_query(tmp_path: Path):
                 "get": {
                     "operationId": "search",
                     "parameters": [
-                        {"name": "filter", "in": "query", "required": False, "style": "deepObject", "explode": True,
-                         "schema": {"type":"object", "additionalProperties": {"type":"string"}}}
+                        {
+                            "name": "filter",
+                            "in": "query",
+                            "required": False,
+                            "style": "deepObject",
+                            "explode": True,
+                            "schema": {"type": "object", "additionalProperties": {"type": "string"}},
+                        }
                     ],
-                    "responses": {"200": {"description": "ok"}}
+                    "responses": {"200": {"description": "ok"}},
                 }
             }
-        }
+        },
     }
     spec_path = tmp_path / "spec.json"
     spec_path.write_text(json.dumps(spec), encoding="utf-8")

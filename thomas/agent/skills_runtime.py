@@ -219,7 +219,6 @@ def load_pinned_skill_names(config: Any) -> list[str]:
     return _ordered_unique(pinned)
 
 
-
 def discover_skill_roots(
     config: Any,
     *,
@@ -229,7 +228,7 @@ def discover_skill_roots(
     _ = config
     roots = [path for path, _origin in discover_native_skill_roots(cwd=cwd)]
     for extra in include_roots or []:
-        path_text = str(extra or '').strip()
+        path_text = str(extra or "").strip()
         if path_text:
             roots.append(Path(path_text).expanduser())
 
@@ -310,7 +309,6 @@ class RuntimeSkillSelection:
         }
 
 
-
 def discover_runtime_skills(
     config: Any,
     *,
@@ -329,14 +327,14 @@ def discover_runtime_skills(
         if key in seen:
             return
         seen.add(key)
-        excerpt = excerpt_body(str(bundle.body or ''), max_chars=max(350, int(max_excerpt_chars)))
-        skill_sha = ''
+        excerpt = excerpt_body(str(bundle.body or ""), max_chars=max(350, int(max_excerpt_chars)))
+        skill_sha = ""
         try:
             skill_sha = _sha256_file(Path(bundle.skill_file))
         except Exception:
-            skill_sha = ''
+            skill_sha = ""
         risk_level, risk_tags = classify_skill_risk(bundle.name, bundle.description, excerpt)
-        skill_tokens = _keyword_tokens('\n'.join([bundle.name, bundle.description, excerpt[:450]]))
+        skill_tokens = _keyword_tokens("\n".join([bundle.name, bundle.description, excerpt[:450]]))
         rows.append(
             RuntimeSkill(
                 name=str(bundle.name),
@@ -358,7 +356,7 @@ def discover_runtime_skills(
     extra_roots: list[str] = []
     root_keys = {str(root).lower() for root in roots}
     for extra in include_roots or []:
-        path_text = str(extra or '').strip()
+        path_text = str(extra or "").strip()
         if not path_text:
             continue
         extra_root = Path(path_text).expanduser()
@@ -372,11 +370,11 @@ def discover_runtime_skills(
         root_keys.add(root_key)
         extra_roots.append(str(resolved_root))
         try:
-            skill_files = list(resolved_root.rglob('SKILL.md'))
+            skill_files = list(resolved_root.rglob("SKILL.md"))
         except Exception:
             skill_files = []
         for skill_md in skill_files:
-            bundle = read_skill_bundle(skill_md.parent, source_root=resolved_root, origin='extra')
+            bundle = read_skill_bundle(skill_md.parent, source_root=resolved_root, origin="extra")
             if bundle is not None:
                 _append_bundle(bundle, str(resolved_root))
 

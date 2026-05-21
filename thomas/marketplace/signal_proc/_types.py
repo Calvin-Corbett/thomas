@@ -193,7 +193,7 @@ class Spectrogram:
         n_freq = len(self.frequencies)
 
         if self.magnitude.shape != (n_frames, n_freq):
-            raise ValueError(f"Magnitude shape {self.magnitude.shape} doesn't match " f"({n_frames}, {n_freq})")
+            raise ValueError(f"Magnitude shape {self.magnitude.shape} doesn't match ({n_frames}, {n_freq})")
         if self.phase.shape != (n_frames, n_freq):
             raise ValueError(f"Phase shape {self.phase.shape} doesn't match ({n_frames}, {n_freq})")
 

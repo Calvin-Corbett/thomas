@@ -250,7 +250,12 @@ async def test_handle_slash_model_profile_matching_is_case_insensitive() -> None
     runtime.config = type(
         "Config",
         (),
-        {"models": {"Codex": type("Model", (), {"model": "gpt-codex"})(), "Local": type("Model", (), {"model": "gpt-local"})()}},
+        {
+            "models": {
+                "Codex": type("Model", (), {"model": "gpt-codex"})(),
+                "Local": type("Model", (), {"model": "gpt-local"})(),
+            }
+        },
     )()
 
     should_exit, handled = await runtime._handle_slash("/model local")

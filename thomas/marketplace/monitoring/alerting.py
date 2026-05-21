@@ -322,7 +322,6 @@ class AlertManager:
     def get_alert_groups(self) -> list[AlertGroup]:
         """Get grouped alerts."""
         with self._lock:
-
             # Group alerts by labels
             grouping: dict[AlertGroupKey, AlertGroup] = defaultdict(lambda: AlertGroup(key=AlertGroupKey({})))
 

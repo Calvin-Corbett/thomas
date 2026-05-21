@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-DEFAULT_BLOCKLIST = ["openclaw", "clawbot"]
+DEFAULT_BLOCKLIST = ["reference_cli", "clawbot"]
 
 
 def _repo_root() -> Path:
@@ -43,12 +43,18 @@ def _now_iso() -> str:
 
 
 def _domain_allowed_paths(domain: str) -> list[str]:
-    shared = ["tests/prompt_pack", "docs/openclaw_gap_runs"]
+    shared = ["tests/prompt_pack", "docs/reference_cli_gap_runs"]
     mapping = {
         "browser": ["thomas/cli/commands/browser", "thomas/browser", *shared],
         "nodes": ["thomas/cli/commands/nodes", "thomas/nodes", "thomas/server/routes/gateway", *shared],
         "messages": ["thomas/cli/commands/messages", "thomas/messages", "thomas/cli/parity_compat.py", *shared],
-        "channels": ["thomas/cli/commands/channel_ops", "thomas/channels", "thomas/cli/commands/channels.py", "thomas/integrations", *shared],
+        "channels": [
+            "thomas/cli/commands/channel_ops",
+            "thomas/channels",
+            "thomas/cli/commands/channels.py",
+            "thomas/integrations",
+            *shared,
+        ],
         "plugins": ["thomas/cli/commands/plugins", "thomas/plugins", "thomas/agent", *shared],
         "gateway": ["thomas/cli/commands/gateway", "thomas/server/routes/gateway", "thomas/server/routes", *shared],
         "memory": ["thomas/cli/commands/memory", "thomas/memory", *shared],
@@ -70,7 +76,9 @@ def _domain_tests(domain: str) -> list[str]:
         "gateway": ["python -m pytest -q tests/test_server_access_mode.py tests/test_server_chats_api.py"],
         "memory": ["python -m pytest -q tests/test_memory_fabric_v2.py tests/test_memory_curator.py"],
         "security": ["python -m pytest -q tests/test_policy_redact.py tests/test_server_access_mode.py"],
-        "system": ["python -m pytest -q tests/test_server_usage_invariants.py tests/test_server_done_usage_contract.py"],
+        "system": [
+            "python -m pytest -q tests/test_server_usage_invariants.py tests/test_server_done_usage_contract.py"
+        ],
         "approvals": ['python -m pytest -q tests/test_approval_broker.py tests/test_autonomy_api.py -k "approval"'],
         "hardening": ["python -m pytest -q tests/test_repo_hygiene.py tests/test_monolith_guard.py"],
     }
@@ -133,7 +141,7 @@ def _manifest(row: dict[str, str], drop_id: str, source: str, strict_name_guard:
         "meta": {
             "source": source,
             "created_at": _now_iso(),
-            "notes": f'Lane={row["lane"]}; Domain={domain}',
+            "notes": f"Lane={row['lane']}; Domain={domain}",
         },
     }
 
@@ -143,7 +151,7 @@ def main() -> int:
     ap.add_argument("--root", default="", help="Override intake root (default: <repo>/code_intake)")
     ap.add_argument(
         "--index",
-        default="docs/OPENCLAW_CATCHUP_PROMPT_BATCH_INDEX_216_2026-02-20.csv",
+        default="docs/REFERENCE_CLI_CATCHUP_PROMPT_BATCH_INDEX_216_2026-02-20.csv",
         help="Prompt batch CSV index path (repo-relative or absolute)",
     )
     ap.add_argument("--batch-id", required=True, help="Batch id such as B01 .. B27")

@@ -8,7 +8,7 @@ Why this exists:
 - Agents need a structured view of what tools exist and where they came from.
 
 Design goals:
-- Thomas-native naming (no OpenClaw naming reuse).
+- Thomas-native naming (no Reference CLI naming reuse).
 - Defensive introspection: works across a range of plugin styles.
 - Deterministic error codes and stable output ordering.
 """
@@ -191,7 +191,7 @@ def parse_build_request(data: Mapping[str, Any] | None) -> BuildPluginRegistryRe
     if plugin_modules_raw is None:
         plugin_modules = None
     else:
-        if not isinstance(plugin_modules_raw, Sequence) or isinstance(plugin_modules_raw, (str, bytes)):
+        if not isinstance(plugin_modules_raw, Sequence) or isinstance(plugin_modules_raw, str | bytes):
             raise InvalidInputError(
                 "plugin_modules must be a list of strings.",
                 details={"field": "plugin_modules", "got": type(plugin_modules_raw).__name__},
@@ -410,7 +410,7 @@ def _coerce_tools(value: Any) -> list[ToolDescriptor]:
         return [_coerce_tool(v, fallback_name=str(k)) for k, v in value.items()]
 
     # Sequence of tool specs
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes):
         return [_coerce_tool(v) for v in value]
 
     raise InvalidInputError(

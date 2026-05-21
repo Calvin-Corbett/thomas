@@ -363,7 +363,7 @@ class DocumentManager:
             )
         elif format == "bates":
             if doc.bates_number_start:
-                return f"BATES: {doc.bates_number_start:06d} - " f"{doc.bates_number_end:06d}"
+                return f"BATES: {doc.bates_number_start:06d} - {doc.bates_number_end:06d}"
             return "No Bates numbers assigned"
         else:
             raise ValueError(f"Unsupported format: {format}")

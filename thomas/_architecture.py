@@ -165,7 +165,7 @@ MODULES = {
         "tier": "ext",
         "depends_on": ["core", "agent", "tools", "server"],
         "health": "yellow",
-        "debt": "TODO[batch-8]: discord-bridge-runtime imports server --add a server-side interface that integrations consume, instead of having integrations reach up into server",
+        "debt": "moltbook.py exceeds 830 lines (over the 800-line soft cap; needs split); TODO[batch-8]: discord-bridge-runtime imports server --add a server-side interface that integrations consume, instead of having integrations reach up into server",
         "description": "Third-party service connectors",
     },
     "realtime": {
@@ -1065,11 +1065,11 @@ MODULES = {
         "health": "yellow",
         "description": "olap utilities",
     },
-    "openclaw_compat": {
+    "reference_cli_compat": {
         "tier": "support",
         "depends_on": ["core", "tools", "marketplace"],
         "health": "yellow",
-        "description": "openclaw compat utilities",
+        "description": "reference_cli compat utilities",
     },
     "orchestrator": {
         "tier": "support",

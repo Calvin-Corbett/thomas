@@ -15,6 +15,7 @@ class ApiImportTool(Tool):
       - persists tool list + base_url + non-secret security summary
       - supports HTTP tuning (timeout/retries/ssl verify)
     """
+
     def __init__(self, registry: Any, importer: ApiImporter | None = None):
         self._registry = registry
         self._importer = importer or ApiImporter()
@@ -35,7 +36,10 @@ class ApiImportTool(Tool):
                     "name": {"type": "string", "description": "API short name used for tool naming (api.{name}.*)."},
                     "auth_header": {"type": "string", "description": "Optional token or 'Header: value'."},
                     "base_url": {"type": "string", "description": "Optional override for the API base URL."},
-                    "freeze_spec": {"type": "boolean", "description": "If true, stores a compressed spec snapshot for restart reliability."},
+                    "freeze_spec": {
+                        "type": "boolean",
+                        "description": "If true, stores a compressed spec snapshot for restart reliability.",
+                    },
                     "timeout_seconds": {"type": "number", "description": "Total request timeout (default 30)."},
                     "connect_timeout_seconds": {"type": "number", "description": "Connect timeout (default 10)."},
                     "retries": {"type": "integer", "description": "Retries on 429/5xx/network errors (default 2)."},
@@ -80,7 +84,9 @@ class ApiImportTool(Tool):
 
         try:
             self._importer.api_name_hint = str(name)
-            tools = self._importer.import_from_url(spec_url=str(url), base_url=base_url, auth_header=auth_header, freeze_spec=freeze_spec)
+            tools = self._importer.import_from_url(
+                spec_url=str(url), base_url=base_url, auth_header=auth_header, freeze_spec=freeze_spec
+            )
             self._importer.register_all(tools, self._registry)
             self._importer.save_imported_api(name=str(name), spec_url=str(url), tools=tools)
 
@@ -121,6 +127,7 @@ class ApiListImportedTool(Tool):
     Tool: api.list_imported
     Lists saved imported APIs + tool counts, and whether spec was frozen.
     """
+
     def __init__(self, importer: ApiImporter | None = None):
         self._importer = importer or ApiImporter()
         self._spec = _make_toolspec(
@@ -162,6 +169,7 @@ class ApiRemoveTool(Tool):
     params: { name: str }
     Removes all tools for an API and deletes its persisted entry.
     """
+
     def __init__(self, registry: Any, importer: ApiImporter | None = None):
         self._registry = registry
         self._importer = importer or ApiImporter()
@@ -234,6 +242,7 @@ class ApiReloadImportedTool(Tool):
     Tool: api.reload_imported
     Reloads all saved imported APIs on demand.
     """
+
     def __init__(self, registry: Any, importer: ApiImporter | None = None):
         self._registry = registry
         self._importer = importer or ApiImporter()

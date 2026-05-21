@@ -21,8 +21,10 @@ def _patch_backend_open(monkeypatch, *, value=True, exc: Exception | None = None
             fn = getattr(tb, name, None)
             if callable(fn):
                 if exc is not None:
+
                     def _raise(*a, **k):
                         raise exc
+
                     monkeypatch.setattr(tb, name, _raise)
                 else:
                     monkeypatch.setattr(tb, name, lambda *a, **k: value)
@@ -30,8 +32,10 @@ def _patch_backend_open(monkeypatch, *, value=True, exc: Exception | None = None
 
     # Fallback
     if exc is not None:
+
         def _raise(*a, **k):
             raise exc
+
         monkeypatch.setattr(webbrowser, "open", _raise)
     else:
         monkeypatch.setattr(webbrowser, "open", lambda *a, **k: value)

@@ -400,7 +400,7 @@ class DependencyTreeTool(Tool):
     name = "eng.dependency_tree"
     category = "engineering"
     description = (
-        "Analyze Python import dependencies for a file or module. " "Shows what a file imports and what imports it."
+        "Analyze Python import dependencies for a file or module. Shows what a file imports and what imports it."
     )
     parameters = {
         "type": "object",
@@ -487,9 +487,7 @@ class DependencyTreeTool(Tool):
 class CodeFormatTool(Tool):
     name = "eng.format_code"
     category = "engineering"
-    description = (
-        "Format Python code using ruff (fast, modern formatter). " "Can also fix lint issues and sort imports."
-    )
+    description = "Format Python code using ruff (fast, modern formatter). Can also fix lint issues and sort imports."
     parameters = {
         "type": "object",
         "properties": {
@@ -528,7 +526,7 @@ class LintTool(Tool):
     name = "eng.lint"
     category = "engineering"
     description = (
-        "Lint Python code using ruff. Finds style issues, potential bugs, " "unused imports, and common mistakes."
+        "Lint Python code using ruff. Finds style issues, potential bugs, unused imports, and common mistakes."
     )
     parameters = {
         "type": "object",
@@ -639,8 +637,7 @@ class DetectEncodingTool(Tool):
     name = "eng.detect_encoding"
     category = "engineering"
     description = (
-        "Detect the character encoding of a file. "
-        "Useful for fixing corrupted text or handling international content."
+        "Detect the character encoding of a file. Useful for fixing corrupted text or handling international content."
     )
     parameters = {
         "type": "object",
@@ -778,7 +775,7 @@ class ProjectStatsTool(Tool):
     name = "eng.project_stats"
     category = "engineering"
     description = (
-        "Get quick stats about a project: line counts by language, " "file counts, largest files, and directory sizes."
+        "Get quick stats about a project: line counts by language, file counts, largest files, and directory sizes."
     )
     parameters = {
         "type": "object",

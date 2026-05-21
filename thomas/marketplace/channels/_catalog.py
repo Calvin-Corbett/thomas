@@ -293,7 +293,9 @@ def local_validation_checks(name: str, settings: dict[str, str]) -> list[dict[st
         checks.append({"check": "whatsapp_phone_number_id", "ok": bool(target), "detail": "phone number id required"})
     elif name == "slack":
         if token:
-            checks.append({"check": "slack_token_prefix", "ok": token.startswith("xox"), "detail": "expected xox* token"})
+            checks.append(
+                {"check": "slack_token_prefix", "ok": token.startswith("xox"), "detail": "expected xox* token"}
+            )
         if webhook:
             checks.append(
                 {
@@ -315,7 +317,9 @@ def local_validation_checks(name: str, settings: dict[str, str]) -> list[dict[st
             {
                 "check": "msteams_webhook",
                 "ok": webhook.startswith("https://")
-                and any(host in webhook for host in ("office.com", "office365.com", "logic.azure.com", "powerautomate.com")),
+                and any(
+                    host in webhook for host in ("office.com", "office365.com", "logic.azure.com", "powerautomate.com")
+                ),
                 "detail": "expected Microsoft Teams webhook/workflow URL",
             }
         )

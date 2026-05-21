@@ -9,7 +9,7 @@ Key properties:
 - Deterministic error *kinds* for automation.
 - Minimal assumptions about the upstream browser client (duck-typed adapter).
 
-This module intentionally avoids any OpenClaw naming reuse.
+This module intentionally avoids any Reference CLI naming reuse.
 """
 
 from __future__ import annotations

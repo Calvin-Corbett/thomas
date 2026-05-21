@@ -172,7 +172,7 @@ class TestNetworkManager:
 
         ids = []
         for i in range(5):
-            client_id = server.accept_client(f"192.168.1.{100+i}:12345")
+            client_id = server.accept_client(f"192.168.1.{100 + i}:12345")
             ids.append(client_id)
 
         assert len(ids) == 5

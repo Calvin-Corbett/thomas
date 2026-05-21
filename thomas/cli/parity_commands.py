@@ -1,4 +1,4 @@
-"""Additional CLI command families for high-visibility OpenClaw parity."""
+"""Additional CLI command families for high-visibility Reference CLI parity."""
 
 from __future__ import annotations
 

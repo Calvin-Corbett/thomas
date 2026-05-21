@@ -2,14 +2,7 @@ import thomas.tools.git_conflicts as gc
 
 
 def _mk_conflict(ours: str, theirs: str, tail: str = ">>>>>>> branch") -> str:
-    return (
-        "<<<<<<< HEAD\n"
-        + ours
-        + "=======\n"
-        + theirs
-        + tail
-        + "\n"
-    )
+    return "<<<<<<< HEAD\n" + ours + "=======\n" + theirs + tail + "\n"
 
 
 def test_marker_auto_whitespace_only_takes_ours():
@@ -52,6 +45,22 @@ def test_json_merge3_same_key_conflict():
 
 
 def test_report_builder_runs():
-    md = gc._build_markdown_report([{"file":"x","total_conflicts":1,"auto_resolved":1,"unresolved":0,"fully_resolved":True,"would_write":True,"would_stage":True,"decisions":[{"conflict_index":0,"reason":"identical_deduplicate","chosen":"ours","confidence":0.99}],"diff":"@@\n"}])
+    md = gc._build_markdown_report(
+        [
+            {
+                "file": "x",
+                "total_conflicts": 1,
+                "auto_resolved": 1,
+                "unresolved": 0,
+                "fully_resolved": True,
+                "would_write": True,
+                "would_stage": True,
+                "decisions": [
+                    {"conflict_index": 0, "reason": "identical_deduplicate", "chosen": "ours", "confidence": 0.99}
+                ],
+                "diff": "@@\n",
+            }
+        ]
+    )
     assert "Git conflict resolver preview" in md
     assert "identical_deduplicate" in md

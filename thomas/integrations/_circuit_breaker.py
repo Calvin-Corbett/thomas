@@ -100,13 +100,13 @@ class CircuitBreaker:
                 # Check if recovery timeout has elapsed
                 elapsed = time.monotonic() - self._last_state_change
                 if elapsed >= self.recovery_timeout:
-                    logger.info(f"{self.name}: recovery timeout elapsed, " f"transitioning to HALF_OPEN")
+                    logger.info(f"{self.name}: recovery timeout elapsed, transitioning to HALF_OPEN")
                     self._state = CircuitState.HALF_OPEN
                     self._success_count = 0
                     self._last_state_change = time.monotonic()
                 else:
                     raise CircuitBreakerError(
-                        f"{self.name}: circuit is OPEN (recovery in " f"{self.recovery_timeout - elapsed:.1f}s)"
+                        f"{self.name}: circuit is OPEN (recovery in {self.recovery_timeout - elapsed:.1f}s)"
                     )
 
             if self._state == CircuitState.HALF_OPEN:
@@ -138,22 +138,18 @@ class CircuitBreaker:
             self._last_failure_time = time.monotonic()
 
             if self._state == CircuitState.HALF_OPEN:
-                logger.warning(f"{self.name}: failure in HALF_OPEN state, " f"reopening circuit")
+                logger.warning(f"{self.name}: failure in HALF_OPEN state, reopening circuit")
                 self._state = CircuitState.OPEN
                 self._last_state_change = time.monotonic()
                 self._success_count = 0
 
             elif self._state == CircuitState.CLOSED:
                 if self._failure_count >= self.failure_threshold:
-                    logger.error(
-                        f"{self.name}: failure threshold ({self.failure_threshold}) " f"reached, opening circuit"
-                    )
+                    logger.error(f"{self.name}: failure threshold ({self.failure_threshold}) reached, opening circuit")
                     self._state = CircuitState.OPEN
                     self._last_state_change = time.monotonic()
                 else:
-                    logger.warning(
-                        f"{self.name}: failure recorded " f"({self._failure_count}/{self.failure_threshold})"
-                    )
+                    logger.warning(f"{self.name}: failure recorded ({self._failure_count}/{self.failure_threshold})")
 
     def state(self) -> CircuitState:
         """Get current circuit state.

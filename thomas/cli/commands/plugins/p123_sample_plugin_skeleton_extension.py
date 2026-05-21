@@ -77,7 +77,7 @@ def main(
             typer.echo(result.get("rendered", ""))
         else:
             error = wrapper.get("error") or {}
-            typer.echo(f"ERROR [{error.get('code','error')}]: {error.get('message','')}", err=True)
+            typer.echo(f"ERROR [{error.get('code', 'error')}]: {error.get('message', '')}", err=True)
 
     if not wrapper.get("ok"):
         raise typer.Exit(code=1)

@@ -9,7 +9,7 @@ from thomas.core import task_bot_runtime
 def _write_workboard(tmp_path: Path) -> Path:
     workboard = tmp_path / "WORKBOARD.md"
     workboard.write_text(
-        "# Thomas Workboard\n\n" "## Up For Grabs\n\n" "- none\n\n" "## Agent Message Traffic\n\n" "- none\n",
+        "# Thomas Workboard\n\n## Up For Grabs\n\n- none\n\n## Agent Message Traffic\n\n- none\n",
         encoding="utf-8",
     )
     return workboard

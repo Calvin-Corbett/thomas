@@ -20,7 +20,7 @@ class NoSignalError(TelecomError):
         self.msisdn = msisdn
         self.cell_id = cell_id
         self.signal_dbm = signal_dbm
-        message = f"Subscriber {msisdn} has no signal in cell {cell_id} " f"(signal: {signal_dbm} dBm)"
+        message = f"Subscriber {msisdn} has no signal in cell {cell_id} (signal: {signal_dbm} dBm)"
         super().__init__(message)
 
 
@@ -46,7 +46,7 @@ class HandoverFailedError(TelecomError):
         self.source_cell = source_cell
         self.target_cell = target_cell
         self.reason = reason
-        message = f"Handover failed for subscriber {msisdn} from {source_cell} to " f"{target_cell}: {reason}"
+        message = f"Handover failed for subscriber {msisdn} from {source_cell} to {target_cell}: {reason}"
         super().__init__(message)
 
 
@@ -81,7 +81,7 @@ class ResourceAllocationError(TelecomError):
         self.resource_type = resource_type
         self.requested = requested
         self.available = available
-        message = f"Cannot allocate {resource_type}: requested {requested}, " f"available {available}"
+        message = f"Cannot allocate {resource_type}: requested {requested}, available {available}"
         super().__init__(message)
 
 
@@ -92,7 +92,7 @@ class QoSViolationError(TelecomError):
         self.qos_param = qos_param
         self.required = required
         self.achieved = achieved
-        message = f"QoS violation for {qos_param}: required {required}, " f"achieved {achieved}"
+        message = f"QoS violation for {qos_param}: required {required}, achieved {achieved}"
         super().__init__(message)
 
 
@@ -131,7 +131,7 @@ class RoamingError(TelecomError):
         self.msisdn = msisdn
         self.home_network = home_network
         self.visited_network = visited_network
-        message = f"Roaming error for subscriber {msisdn} from {home_network} " f"to {visited_network}"
+        message = f"Roaming error for subscriber {msisdn} from {home_network} to {visited_network}"
         super().__init__(message)
 
 

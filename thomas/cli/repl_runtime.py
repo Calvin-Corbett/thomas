@@ -360,9 +360,7 @@ class ThomasREPLRuntimeMixin:
                     return should_exit, handled
                 return False, True
 
-            self._console.print(
-                f"[red]Unknown model/profile '{arg}'. " "Use /model and select from popup results.[/red]"
-            )
+            self._console.print(f"[red]Unknown model/profile '{arg}'. Use /model and select from popup results.[/red]")
 
         elif command == "/autonomy":
             if not arg:
@@ -467,7 +465,7 @@ class ThomasREPLRuntimeMixin:
                 tool_count += len(self.tools.list_tools(cat))
             self._console.print(f"[dim]Model: {self._current_model}[/dim]")
             self._console.print(
-                f"[dim]Autonomy: L{self._autonomy_level} " f"({autonomy_level_name(self._autonomy_level)})[/dim]"
+                f"[dim]Autonomy: L{self._autonomy_level} ({autonomy_level_name(self._autonomy_level)})[/dim]"
             )
             self._console.print(f"[dim]Tools policy: {self._tools_policy}[/dim]")
             self._console.print(f"[dim]Route: {route}[/dim]")
@@ -560,7 +558,7 @@ class ThomasREPLRuntimeMixin:
         elif command == "/permissions":
             self._console.print(f"[dim]server.access_mode = {self.config.server.access_mode}[/dim]")
             self._console.print(
-                f"[dim]server.api_token configured = " f"{bool(str(self.config.server.api_token or '').strip())}[/dim]"
+                f"[dim]server.api_token configured = {bool(str(self.config.server.api_token or '').strip())}[/dim]"
             )
             self._console.print(f"[dim]tools.allow_shell = {bool(self.config.tools.allow_shell)}[/dim]")
             self._console.print(f"[dim]tools.sandbox_root = {self.config.tools.sandbox_path}[/dim]")
@@ -586,8 +584,7 @@ class ThomasREPLRuntimeMixin:
                     f"total={session_tokens.get('total_tokens', 0)}[/dim]"
                 )
                 self._console.print(
-                    f"[dim]Cost tracker: calls={tracker.session_call_count()}, "
-                    f"usd={tracker.session_usd():.6f}[/dim]"
+                    f"[dim]Cost tracker: calls={tracker.session_call_count()}, usd={tracker.session_usd():.6f}[/dim]"
                 )
             except Exception as e:
                 self._console.print(f"[yellow]Cost tracker unavailable: {type(e).__name__}[/yellow]")
@@ -892,7 +889,9 @@ class ThomasREPLRuntimeMixin:
             skills = list_all_skills()
             if not arg:
                 if not skills:
-                    self._console.print("[dim]No skills available. Add Thomas-native bundles under skills/, .thomas/skills/, or ~/.thomas/skills/[/dim]")
+                    self._console.print(
+                        "[dim]No skills available. Add Thomas-native bundles under skills/, .thomas/skills/, or ~/.thomas/skills/[/dim]"
+                    )
                 else:
                     self._console.print(f"[dim]Available skills ({len(skills)}):[/dim]")
                     for name, skill in sorted(skills.items()):

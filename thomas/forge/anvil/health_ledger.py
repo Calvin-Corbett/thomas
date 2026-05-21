@@ -68,9 +68,9 @@ class HealthLedger:
     def from_dict(cls, payload: dict[str, Any]) -> HealthLedger:
         records: dict[str, FileAuditRecord] = {}
         for key, val in (payload.get("records") or {}).items():
-            records[key] = FileAuditRecord(**{
-                k: v for k, v in val.items() if k in FileAuditRecord.__dataclass_fields__
-            })
+            records[key] = FileAuditRecord(
+                **{k: v for k, v in val.items() if k in FileAuditRecord.__dataclass_fields__}
+            )
         return cls(
             version=int(payload.get("version") or LEDGER_VERSION),
             last_full_sweep_at=str(payload.get("last_full_sweep_at") or ""),

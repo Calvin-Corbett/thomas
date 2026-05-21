@@ -163,7 +163,10 @@ def test_chat_runtime_uses_ambient_robot_status_and_office_delegation_bridge() -
     assert "chat-robot-thinking-details" not in create_robot_block
     assert "function _syncDelegationWorkerVisual(evt, status, taskText) {" in text
     assert "officeQueueTask(taskText, {" in text
-    assert "const previewSessionId = safeString(evt?.session_id) || _delegationSessionId || safeString(activeChatId) || 'chat';" in text
+    assert (
+        "const previewSessionId = safeString(evt?.session_id) || _delegationSessionId || safeString(activeChatId) || 'chat';"
+        in text
+    )
     assert "source: `chat-delegation:${previewSessionId}:${activityId}`," in text
     assert "const previewScoped = Boolean(officeWorkspace?.classList.contains('chat-preview-active'));" in text
     assert "officeState.tasks.filter((task) => officeTaskMatchesChatPreview(task))" in text

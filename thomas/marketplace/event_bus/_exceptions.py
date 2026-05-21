@@ -53,7 +53,7 @@ class ReplayError(EventBusError):
         self.stream_name = stream_name
         self.position = position
         self.original_error = original_error
-        super().__init__(f"Replay failed in stream {stream_name} at position {position}: " f"{original_error}")
+        super().__init__(f"Replay failed in stream {stream_name} at position {position}: {original_error}")
 
 
 class SubscriptionError(EventBusError):

@@ -110,7 +110,7 @@ class VM:
         frame.pc += 1
 
         if self.debug:
-            print(f"PC={frame.pc-1}: {instr}")
+            print(f"PC={frame.pc - 1}: {instr}")
 
         opcode = instr.opcode
 

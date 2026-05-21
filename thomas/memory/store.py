@@ -224,7 +224,7 @@ class ImmortalLog:
     ) -> int:
         meta_json = json.dumps(metadata or {}, ensure_ascii=False)
         cur = self._conn.execute(
-            "INSERT INTO events (ts_utc, thread, etype, text, metadata_json, blob_id) " "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO events (ts_utc, thread, etype, text, metadata_json, blob_id) VALUES (?, ?, ?, ?, ?, ?)",
             (int(time.time()), thread, etype, text, meta_json, blob_id),
         )
         self._conn.commit()
@@ -232,7 +232,7 @@ class ImmortalLog:
 
     def get_event(self, eid: int) -> EventRow | None:
         row = self._conn.execute(
-            "SELECT id, ts_utc, thread, etype, text, metadata_json, blob_id " "FROM events WHERE id = ?", (eid,)
+            "SELECT id, ts_utc, thread, etype, text, metadata_json, blob_id FROM events WHERE id = ?", (eid,)
         ).fetchone()
         if row is None:
             return None
@@ -262,7 +262,7 @@ class ImmortalLog:
             rows = []
             for eid in eids:
                 row = self._conn.execute(
-                    "SELECT id, ts_utc, thread, etype, text, metadata_json, blob_id " "FROM events WHERE id = ?",
+                    "SELECT id, ts_utc, thread, etype, text, metadata_json, blob_id FROM events WHERE id = ?",
                     (int(eid),),
                 ).fetchone()
                 if row is not None:
@@ -295,14 +295,12 @@ class ImmortalLog:
             return []
         if thread:
             rows = self._conn.execute(
-                "SELECT rowid, rank FROM events_fts "
-                "WHERE events_fts MATCH ? AND thread = ? "
-                "ORDER BY rank LIMIT ?",
+                "SELECT rowid, rank FROM events_fts WHERE events_fts MATCH ? AND thread = ? ORDER BY rank LIMIT ?",
                 (sanitized, thread, limit),
             ).fetchall()
         else:
             rows = self._conn.execute(
-                "SELECT rowid, rank FROM events_fts " "WHERE events_fts MATCH ? ORDER BY rank LIMIT ?",
+                "SELECT rowid, rank FROM events_fts WHERE events_fts MATCH ? ORDER BY rank LIMIT ?",
                 (sanitized, limit),
             ).fetchall()
         # Convert rank (negative BM25) to positive score
@@ -315,7 +313,7 @@ class ImmortalLog:
             after_id: Only yield events with id > after_id (0 = all events)
         """
         cur = self._conn.execute(
-            "SELECT id, ts_utc, thread, etype, text, metadata_json, blob_id " "FROM events WHERE id > ? ORDER BY id",
+            "SELECT id, ts_utc, thread, etype, text, metadata_json, blob_id FROM events WHERE id > ? ORDER BY id",
             (after_id,),
         )
         for r in cur:
@@ -427,7 +425,7 @@ class MetaDB:
 
     def trace_add(self, thread: str, mode: str, query: str, trace: dict[str, Any]) -> None:
         self._conn.execute(
-            "INSERT INTO traces (ts_utc, thread, mode, query, trace_json) " "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO traces (ts_utc, thread, mode, query, trace_json) VALUES (?, ?, ?, ?, ?)",
             (int(time.time()), thread, mode, query, json.dumps(trace)),
         )
         self._conn.commit()
@@ -441,7 +439,7 @@ class MetaDB:
             ).fetchall()
         else:
             rows = self._conn.execute(
-                "SELECT id, ts_utc, thread, mode, query, trace_json " "FROM traces ORDER BY id DESC LIMIT ?",
+                "SELECT id, ts_utc, thread, mode, query, trace_json FROM traces ORDER BY id DESC LIMIT ?",
                 (int(limit),),
             ).fetchall()
 
@@ -545,7 +543,7 @@ class DerivedDB:
         c.execute("CREATE INDEX IF NOT EXISTS idx_edges_dst ON g_edges(dst_node)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_edges_rel ON g_edges(rel)")
         # NEW: compound index for efficient graph traversal
-        c.execute("CREATE INDEX IF NOT EXISTS idx_edges_src_rel_live " "ON g_edges(src_node, rel, tombstoned)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_edges_src_rel_live ON g_edges(src_node, rel, tombstoned)")
 
         # Rollups
         c.execute("""
@@ -653,7 +651,7 @@ class DerivedDB:
             rows = []
             for event_id in event_ids:
                 row = self._conn.execute(
-                    "SELECT event_id, vec_dense FROM vec " "WHERE event_id = ? AND vec_dense IS NOT NULL",
+                    "SELECT event_id, vec_dense FROM vec WHERE event_id = ? AND vec_dense IS NOT NULL",
                     (int(event_id),),
                 ).fetchone()
                 if row is not None:
@@ -717,7 +715,7 @@ class DerivedDB:
     def node_get_by_id(self, node_id: int) -> dict[str, Any] | None:
         """Look up a single node by its ID."""
         row = self._conn.execute(
-            "SELECT node_id, type_name, key, label FROM g_nodes " "WHERE node_id = ? AND tombstoned = 0",
+            "SELECT node_id, type_name, key, label FROM g_nodes WHERE node_id = ? AND tombstoned = 0",
             (node_id,),
         ).fetchone()
         if row is None:
@@ -740,7 +738,7 @@ class DerivedDB:
             rows = []
             for node_id in node_ids:
                 row = self._conn.execute(
-                    "SELECT node_id, type_name, key, label FROM g_nodes " "WHERE node_id = ? AND tombstoned = 0",
+                    "SELECT node_id, type_name, key, label FROM g_nodes WHERE node_id = ? AND tombstoned = 0",
                     (int(node_id),),
                 ).fetchone()
                 if row is not None:
@@ -749,7 +747,7 @@ class DerivedDB:
 
     def nodes_search_label(self, like: str, limit: int = 50) -> list[dict[str, Any]]:
         rows = self._conn.execute(
-            "SELECT node_id, type_name, key, label FROM g_nodes " "WHERE label LIKE ? AND tombstoned = 0 LIMIT ?",
+            "SELECT node_id, type_name, key, label FROM g_nodes WHERE label LIKE ? AND tombstoned = 0 LIMIT ?",
             (f"%{like}%", limit),
         ).fetchall()
         return [{"node_id": r[0], "type": r[1], "key": r[2], "label": r[3]} for r in rows]

@@ -243,8 +243,7 @@ class JSONCodec(Codec):
         try:
             obj = decoder.decode(json_str)
             if isinstance(obj, list):
-                for item in obj:
-                    yield item
+                yield from obj
                 return
             else:
                 yield obj

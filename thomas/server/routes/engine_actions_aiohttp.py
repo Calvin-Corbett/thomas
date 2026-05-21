@@ -94,9 +94,7 @@ def register_engine_actions_routes(
         try:
             force = _parse_bool(force_raw, default=False)
         except ValueError:
-            raise web.HTTPBadRequest(
-                text=("payload.force must be one of: " "true/false/1/0/yes/no/on/off/y/n")
-            ) from None
+            raise web.HTTPBadRequest(text=("payload.force must be one of: true/false/1/0/yes/no/on/off/y/n")) from None
         reason = str(payload.get("reason") or "manual").strip() or "manual"
 
         if action not in {"run", "run_once"}:

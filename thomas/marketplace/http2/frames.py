@@ -24,9 +24,7 @@ class FrameCodec:
             ValueError: If max_frame_size is out of range.
         """
         if max_frame_size < 16384 or max_frame_size > self.MAX_FRAME_SIZE:
-            raise ValueError(
-                f"max_frame_size must be between 16384 and " f"{self.MAX_FRAME_SIZE}, got {max_frame_size}"
-            )
+            raise ValueError(f"max_frame_size must be between 16384 and {self.MAX_FRAME_SIZE}, got {max_frame_size}")
         self.max_frame_size = max_frame_size
 
     def encode(self, frame: Frame) -> bytes:
@@ -42,7 +40,7 @@ class FrameCodec:
             ValueError: If payload exceeds max_frame_size.
         """
         if len(frame.payload) > self.max_frame_size:
-            raise ValueError(f"Frame payload too large: {len(frame.payload)} " f"> {self.max_frame_size}")
+            raise ValueError(f"Frame payload too large: {len(frame.payload)} > {self.max_frame_size}")
 
         # Frame header: 3-byte length + 1-byte type + 1-byte flags + 4-byte stream ID
         length = len(frame.payload)
@@ -78,7 +76,7 @@ class FrameCodec:
         stream_id = struct.unpack("!i", data[5:9])[0] & 0x7FFFFFFF
 
         if length > self.max_frame_size:
-            raise ProtocolError(f"Frame payload exceeds max_frame_size: {length} " f"> {self.max_frame_size}")
+            raise ProtocolError(f"Frame payload exceeds max_frame_size: {length} > {self.max_frame_size}")
 
         try:
             frame_type = FrameType(frame_type)
@@ -157,7 +155,7 @@ class FrameCodec:
                 raise ProtocolError("HEADERS frame with PADDED flag has no padding length")
             padding_length = payload[offset]
             if padding_length >= len(payload) - offset:
-                raise ProtocolError(f"Padding length too large: {padding_length} " f">= {len(payload) - offset}")
+                raise ProtocolError(f"Padding length too large: {padding_length} >= {len(payload) - offset}")
 
     def _validate_priority_frame(self, payload: bytes) -> None:
         """Validate PRIORITY frame payload."""
@@ -172,7 +170,7 @@ class FrameCodec:
     def _validate_settings_frame(self, payload: bytes) -> None:
         """Validate SETTINGS frame payload."""
         if len(payload) % 6 != 0:
-            raise ProtocolError(f"SETTINGS frame payload must be multiple of 6 bytes, " f"got {len(payload)}")
+            raise ProtocolError(f"SETTINGS frame payload must be multiple of 6 bytes, got {len(payload)}")
 
     def _validate_push_promise_frame(self, flags: int, payload: bytes) -> None:
         """Validate PUSH_PROMISE frame payload."""
@@ -183,7 +181,7 @@ class FrameCodec:
                 raise ProtocolError("PUSH_PROMISE frame with PADDED flag has no padding length")
             padding_length = payload[4]
             if padding_length >= len(payload) - 4:
-                raise ProtocolError(f"Padding length too large: {padding_length} " f">= {len(payload) - 4}")
+                raise ProtocolError(f"Padding length too large: {padding_length} >= {len(payload) - 4}")
 
     def _validate_ping_frame(self, payload: bytes) -> None:
         """Validate PING frame payload."""

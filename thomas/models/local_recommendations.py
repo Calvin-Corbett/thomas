@@ -216,7 +216,7 @@ def _detect_gpu_with_windows_cim() -> list[dict[str, Any]]:
             "powershell",
             "-NoProfile",
             "-Command",
-            ("Get-CimInstance Win32_VideoController " "| Select-Object Name,AdapterRAM " "| ConvertTo-Json -Compress"),
+            ("Get-CimInstance Win32_VideoController | Select-Object Name,AdapterRAM | ConvertTo-Json -Compress"),
         ],
         timeout_s=4.0,
     )

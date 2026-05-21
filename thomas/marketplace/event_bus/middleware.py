@@ -56,7 +56,7 @@ class LoggingMiddleware(Middleware):
 
     async def before_publish(self, event: Event) -> Event:
         """Log event before publishing."""
-        self.log_func(f"Publishing event: type={event.type}, " f"source={event.source}, id={event.id}")
+        self.log_func(f"Publishing event: type={event.type}, source={event.source}, id={event.id}")
         return event
 
     async def after_publish(self, event: Event, success: bool) -> None:

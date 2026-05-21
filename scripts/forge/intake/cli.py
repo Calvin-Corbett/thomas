@@ -13,7 +13,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 QUEUE_NAMES = ("incoming", "staged", "applied", "rejected")
-DEFAULT_BLOCKLIST = ["openclaw", "clawbot"]
+DEFAULT_BLOCKLIST = ["reference_cli", "clawbot"]
 ARTIFACT_TYPES = {"unified_diff", "feature_pack", "file_bundle"}
 
 

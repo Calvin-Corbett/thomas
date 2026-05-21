@@ -187,7 +187,7 @@ def _invoke_main(
 ) -> dict[str, Any]:
     main_fn = getattr(module, "main", None)
     if not callable(main_fn):
-        msg = f"Module {getattr(module, '__name__', '?')} has no callable main(); " "command is not implemented."
+        msg = f"Module {getattr(module, '__name__', '?')} has no callable main(); command is not implemented."
         if not strict_missing_main:
             return {
                 "ok": True,

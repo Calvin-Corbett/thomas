@@ -9,13 +9,7 @@ import thomas.core.agent_presence as mod
 def _write_workboard(tmp_path: Path, claims_block: str = "- none") -> Path:
     path = tmp_path / "WORKBOARD.md"
     path.write_text(
-        (
-            "# Thomas Workboard\n\n"
-            "## Agent Claims (Active)\n\n"
-            f"{claims_block}\n\n"
-            "## Active Tasks\n\n"
-            "- none\n"
-        ),
+        (f"# Thomas Workboard\n\n## Agent Claims (Active)\n\n{claims_block}\n\n## Active Tasks\n\n- none\n"),
         encoding="utf-8",
     )
     return path

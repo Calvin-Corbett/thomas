@@ -41,9 +41,7 @@ class GeometryTool(Tool):
                 if dimension == "2d":
                     cad.Point2D(x=float(coords[0]), y=float(coords[1]))
                 else:
-                    cad.Point3D(
-                        x=float(coords[0]), y=float(coords[1]), z=float(coords[2]) if len(coords) > 2 else 0
-                    )
+                    cad.Point3D(x=float(coords[0]), y=float(coords[1]), z=float(coords[2]) if len(coords) > 2 else 0)
 
                 return ToolResult(ok=True, data={"type": "point", "dimension": dimension, "coords": coords})
 

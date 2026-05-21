@@ -82,7 +82,7 @@ class TestExceptionHandlerGate:
 
     def test_rejects_broad_with_only_reraise(self):
         """Broad except with re-raise but NO logging should be caught."""
-        source = "def f():\n" "    try:\n" "        x()\n" "    except Exception as e:\n" "        raise\n"
+        source = "def f():\n    try:\n        x()\n    except Exception as e:\n        raise\n"
         violations = _find_broad_handlers(source)
         assert len(violations) == 1
 
@@ -359,8 +359,7 @@ class TestWorktreeCleanCheck:
         result = evaluate_preflight()
         check_ids = [c["id"] for c in result["checks"]]
         assert "worktree-clean" in check_ids, (
-            "evaluate_preflight() must include a worktree-clean check. "
-            "See agent_preflight.py _check_worktree_clean()."
+            "evaluate_preflight() must include a worktree-clean check. See agent_preflight.py _check_worktree_clean()."
         )
 
     def test_worktree_check_returns_valid_status(self):

@@ -77,4 +77,3 @@ def truncate_to_token_budget(text: str, budget_tokens: int) -> tuple[str, int]:
     if out and best < len(words):
         out += "\n... (memory pack truncated)"
     return out, estimate_tokens(out)
-

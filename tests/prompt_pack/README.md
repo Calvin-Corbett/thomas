@@ -6,7 +6,7 @@ Naming convention:
 - `test_pNNN_<slug>.py`
 
 Current source prompt pack:
-- `docs/OPENCLAW_CATCHUP_PROMPT_PACK_216_2026-02-20.md`
+- `docs/REFERENCE_CLI_CATCHUP_PROMPT_PACK_216_2026-02-20.md`
 
 Each prompt-owned test should validate:
 - success path

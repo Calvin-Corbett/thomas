@@ -91,7 +91,11 @@ def test_cli_json_failure_is_machine_readable_and_nonzero_exit():
 def test_schema_is_stable_and_machine_readable():
     sch = hook_json_schema()
     assert sch["type"] == "object"
-    assert "request" in sch.get("properties", {}) and "config" in sch.get("properties", {}) and "result" in sch.get("properties", {})
+    assert (
+        "request" in sch.get("properties", {})
+        and "config" in sch.get("properties", {})
+        and "result" in sch.get("properties", {})
+    )
 
     runner = CliRunner()
     result = runner.invoke(cli_app, ["schema", "--json"])

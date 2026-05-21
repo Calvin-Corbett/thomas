@@ -773,7 +773,7 @@ def _guard_staged(args: argparse.Namespace) -> int:
     resolved_agent = _resolve_agent(args.agent)
     explicit_agent, explicit_source = _require_explicit_agent(args.agent)
     if args.require_explicit_agent and not explicit_agent:
-        message = "explicit agent id required for staged guard; set AGENT_ID/THOMAS_AGENT_ID " "or pass --agent"
+        message = "explicit agent id required for staged guard; set AGENT_ID/THOMAS_AGENT_ID or pass --agent"
         if args.json:
             print(json.dumps({"ok": False, "error": message, "paths": paths}, indent=2))
         else:

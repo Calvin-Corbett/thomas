@@ -133,11 +133,14 @@ class NotionIntegration:
             headers = self._get_headers()
             await self._enforce_rate_limit()
 
-            async with aiohttp.ClientSession() as session, session.get(
-                f"{self.base_url}/users",
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(total=self.timeout),
-            ) as resp:
+            async with (
+                aiohttp.ClientSession() as session,
+                session.get(
+                    f"{self.base_url}/users",
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=self.timeout),
+                ) as resp,
+            ):
                 if resp.status == 401:
                     raise NotionAuthError("Invalid Notion API key")
                 if resp.status >= 400:
@@ -182,11 +185,14 @@ class NotionIntegration:
             headers = self._get_headers()
             await self._enforce_rate_limit()
 
-            async with aiohttp.ClientSession() as session, session.get(
-                f"{self.base_url}/users",
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(total=self.timeout),
-            ) as resp:
+            async with (
+                aiohttp.ClientSession() as session,
+                session.get(
+                    f"{self.base_url}/users",
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=self.timeout),
+                ) as resp,
+            ):
                 return resp.status == 200
 
         except Exception as e:

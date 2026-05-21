@@ -39,9 +39,9 @@ class CMAReportGenerator:
 
         report = f"""
 COMPARATIVE MARKET ANALYSIS REPORT
-{'=' * 50}
+{"=" * 50}
 
-Report Date: {report_date.strftime('%B %d, %Y')}
+Report Date: {report_date.strftime("%B %d, %Y")}
 Subject Property: {subject_property.address}
 Property Type: {subject_property.property_type.value}
 Bedrooms: {subject_property.bedrooms}
@@ -50,7 +50,7 @@ Square Footage: {subject_property.sqft:,} sq ft
 Year Built: {subject_property.year_built}
 
 COMPARABLE PROPERTIES ANALYZED
-{'-' * 50}
+{"-" * 50}
 
 """
         for i, comp in enumerate(comparables, 1):
@@ -58,11 +58,11 @@ COMPARABLE PROPERTIES ANALYZED
 Comparable #{i}
 Address: {comp.address}
 Sale Price: ${comp.sale_price:,.0f}
-Sale Date: {comp.sale_date.strftime('%B %d, %Y')}
+Sale Date: {comp.sale_date.strftime("%B %d, %Y")}
 Square Footage: {comp.sqft:,} sq ft
 Bedrooms: {comp.bedrooms}
 Bathrooms: {comp.bathrooms}
-Days on Market: {comp.days_on_market or 'N/A'}
+Days on Market: {comp.days_on_market or "N/A"}
 Price per Sq Ft: ${comp.sale_price / comp.sqft:,.2f}
 
 """
@@ -71,7 +71,7 @@ Price per Sq Ft: ${comp.sale_price / comp.sqft:,.2f}
 
         report += f"""
 VALUATION SUMMARY
-{'-' * 50}
+{"-" * 50}
 
 Number of Comparables: {len(comparables)}
 Average Price per Sq Ft: ${avg_price_per_sqft:,.2f}
@@ -79,9 +79,9 @@ Subject Property Sq Ft: {subject_property.sqft:,}
 Estimated Value: ${cma_value:,.0f}
 
 MARKET CONDITIONS
-Market appears {'strong' if len(comparables) >= 3 else 'limited'} with sufficient comparable data.
+Market appears {"strong" if len(comparables) >= 3 else "limited"} with sufficient comparable data.
 
-Report prepared on {report_date.strftime('%B %d, %Y')}
+Report prepared on {report_date.strftime("%B %d, %Y")}
 """
         return report
 
@@ -102,18 +102,18 @@ class PropertyDetailSheet:
         """
         sheet = f"""
 PROPERTY DETAIL SHEET
-{'=' * 60}
+{"=" * 60}
 
 PROPERTY IDENTIFICATION
-{'-' * 60}
+{"-" * 60}
 Property Address: {prop.address}
-County: {prop.address.county or 'N/A'}
+County: {prop.address.county or "N/A"}
 Property Type: {prop.property_type.value}
 Zoning: {prop.zoning_type.value}
 Year Built: {prop.year_built} (Age: {prop.age_years()} years)
 
 PHYSICAL CHARACTERISTICS
-{'-' * 60}
+{"-" * 60}
 Bedrooms: {prop.bedrooms}
 Bathrooms: {prop.bathrooms}
 Total Square Footage: {prop.sqft:,} sq ft
@@ -121,7 +121,7 @@ Lot Size: {prop.lot_sqft:,} sq ft
 Building Square Feet: {prop.sqft:,}
 
 FINANCIAL INFORMATION
-{'-' * 60}
+{"-" * 60}
 Assessed Value: ${prop.assessed_value:,.0f}
 Annual Property Tax: ${prop.annual_tax:,.2f}
 HOA Fee (if applicable): ${prop.hoa_fee:,.2f}
@@ -133,7 +133,7 @@ HOA Fee (if applicable): ${prop.hoa_fee:,.2f}
 
         sheet += f"""
 FEATURES
-{'-' * 60}
+{"-" * 60}
 """
         if prop.features:
             for feature in prop.features:
@@ -144,7 +144,7 @@ FEATURES
         if listing:
             sheet += f"""
 LISTING INFORMATION
-{'-' * 60}
+{"-" * 60}
 List Price: ${listing.list_price:,.0f}
 Current Price: ${listing.current_price or listing.list_price:,.0f}
 Days on Market: {listing.days_on_market()}
@@ -173,13 +173,13 @@ class MarketSnapshotReport:
         """
         report = f"""
 MARKET SNAPSHOT REPORT
-{'=' * 60}
+{"=" * 60}
 
 Market: {market_stats.area_name}
-Report Date: {market_stats.statistic_date.strftime('%B %d, %Y')}
+Report Date: {market_stats.statistic_date.strftime("%B %d, %Y")}
 
 PRICE METRICS
-{'-' * 60}
+{"-" * 60}
 Median Price: ${market_stats.median_price:,.0f}
 Average Price: ${market_stats.average_price:,.0f}
 Price per Sq Ft: ${market_stats.price_per_sqft:,.2f}
@@ -193,7 +193,7 @@ Median Property Size: {market_stats.median_sqft:,} sq ft
 
         report += f"""
 INVENTORY & ACTIVITY
-{'-' * 60}
+{"-" * 60}
 Active Listings: {market_stats.active_listings}
 Pending Listings: {market_stats.pending_listings}
 Sold (Recent Period): {market_stats.sold_listings_count}
@@ -207,7 +207,7 @@ Median Days on Market: {market_stats.median_dom}
 
         report += f"""
 MARKET ANALYSIS
-{'-' * 60}
+{"-" * 60}
 Appreciation Rate (YoY): {market_stats.appreciation_rate * 100:.1f}%
 Absorption Rate: {market_stats.inventory_months:.1f} months
 
@@ -254,23 +254,23 @@ class InvestmentAnalysisReport:
 
         report = f"""
 INVESTMENT ANALYSIS REPORT
-{'=' * 60}
+{"=" * 60}
 
 PROPERTY INFORMATION
-{'-' * 60}
+{"-" * 60}
 Address: {prop.address}
 Property Type: {prop.property_type.value}
 Purchase Price: ${purchase_price:,.0f}
 
 INCOME & EXPENSES
-{'-' * 60}
+{"-" * 60}
 Gross Annual Income: ${annual_income:,.2f}
 Operating Expenses: ${annual_expenses:,.2f}
 Net Operating Income (NOI): ${noi:,.2f}
 NOI Margin: {(noi / annual_income * 100 if annual_income != 0 else 0):.1f}%
 
 RETURN ANALYSIS
-{'-' * 60}
+{"-" * 60}
 Capitalization Rate: {cap_rate * 100:.2f}%
 Price per Sq Ft: ${purchase_price / prop.sqft:,.2f}
 Price per Bedroom: ${purchase_price / prop.bedrooms:,.2f}
@@ -285,7 +285,7 @@ Gross Rent Multiplier: {purchase_price / annual_income:.2f}x
             cocr = cash_flow / cash_invested * 100 if cash_invested != 0 else 0
 
             report += f"""FINANCING ANALYSIS
-{'-' * 60}
+{"-" * 60}
 Loan Amount: ${mortgage_amount:,.0f}
 Down Payment: ${cash_invested:,.0f}
 LTV: {(mortgage_amount / purchase_price * 100 if purchase_price != 0 else 0):.1f}%
@@ -293,7 +293,7 @@ Annual Debt Service: ${annual_mortgage_payment:,.2f}
 DSCR: {dscr:.2f}x
 
 CASH FLOW ANALYSIS
-{'-' * 60}
+{"-" * 60}
 Annual Cash Flow: ${cash_flow:,.2f}
 Cash-on-Cash Return: {cocr:.2f}%
 
@@ -324,14 +324,14 @@ class RentRollReport:
 
         report = f"""
 RENT ROLL REPORT
-{'=' * 60}
+{"=" * 60}
 
-Report Date: {date.today().strftime('%B %d, %Y')}
+Report Date: {date.today().strftime("%B %d, %Y")}
 Total Leases: {len(leases)}
 Active Leases: {len(active_leases)}
 
 LEASE SUMMARY
-{'-' * 60}
+{"-" * 60}
 
 """
         total_monthly_rent = Decimal("0")
@@ -351,7 +351,7 @@ Status: {lease.status}
 
         report += f"""
 RENT ROLL TOTALS
-{'-' * 60}
+{"-" * 60}
 Total Monthly Rent (Active): ${total_monthly_rent:,.2f}
 Total Annual Income: ${total_monthly_rent * 12:,.2f}
 Average Rent per Unit: ${(total_monthly_rent / len(active_leases) if active_leases else 0):,.2f}
@@ -379,13 +379,13 @@ class TransactionSummary:
         """
         report = f"""
 TRANSACTION SUMMARY REPORT
-{'=' * 60}
+{"=" * 60}
 
-Report Date: {date.today().strftime('%B %d, %Y')}
+Report Date: {date.today().strftime("%B %d, %Y")}
 Total Transactions: {len(transactions)}
 
 TRANSACTION DETAILS
-{'-' * 60}
+{"-" * 60}
 
 """
         total_volume = Decimal("0")
@@ -411,7 +411,7 @@ Closing Costs: ${trans.closing_costs_total:,.2f}
 
         report += f"""
 SUMMARY TOTALS
-{'-' * 60}
+{"-" * 60}
 Total Transaction Volume: ${total_volume:,.0f}
 Average Transaction Price: ${avg_price:,.0f}
 Total Closing Costs: ${total_closing_costs:,.2f}
@@ -449,18 +449,18 @@ class PortfolioPerformanceSummary:
 
         report = f"""
 PORTFOLIO PERFORMANCE SUMMARY
-{'=' * 60}
+{"=" * 60}
 
-Report Date: {date.today().strftime('%B %d, %Y')}
+Report Date: {date.today().strftime("%B %d, %Y")}
 
 PORTFOLIO OVERVIEW
-{'-' * 60}
+{"-" * 60}
 Total Properties: {len(properties)}
 Total Portfolio Value: ${total_value:,.0f}
 Average Property Value: ${(total_value / len(properties) if properties else 0):,.0f}
 
 INCOME ANALYSIS
-{'-' * 60}
+{"-" * 60}
 Gross Annual Income: ${annual_income:,.2f}
 Annual Operating Expenses: ${annual_expenses:,.2f}
 Net Operating Income: ${noi:,.2f}
@@ -468,7 +468,7 @@ Overall Cap Rate: {overall_cap_rate * 100:.2f}%
 Income per Property: ${(annual_income / len(properties) if properties else 0):,.2f}
 
 PROPERTY BREAKDOWN
-{'-' * 60}
+{"-" * 60}
 
 """
         for prop in properties:

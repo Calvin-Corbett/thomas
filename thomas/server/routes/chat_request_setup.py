@@ -241,9 +241,7 @@ async def setup_chat_request(
         memory_auto_optimize_waste_threshold_pref = float(
             getattr(advanced_memory, "auto_optimize_waste_threshold", 0.22) or 0.22
         )
-        float(
-            getattr(advanced_memory, "auto_optimize_min_interval_hours", 12.0) or 12.0
-        )
+        float(getattr(advanced_memory, "auto_optimize_min_interval_hours", 12.0) or 12.0)
 
     async def _apply_usage_budget(used_tokens: int) -> dict[str, Any] | None:
         if advanced_cost is None:

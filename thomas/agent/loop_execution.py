@@ -908,7 +908,7 @@ async def _agent_loop_run(
             # Detect connection errors and give a helpful message
             if "connect" in error_msg.lower() or "refused" in error_msg.lower():
                 base_url = self.llm.config.base_url
-                error_msg = f"Cannot connect to LLM at {base_url}. " f"Is Ollama running? Try: ollama serve"
+                error_msg = f"Cannot connect to LLM at {base_url}. Is Ollama running? Try: ollama serve"
             yield AgentEvent.agent_error(error_msg, iteration=iteration)
             state.error = error_msg
             state.finished = True
@@ -916,7 +916,7 @@ async def _agent_loop_run(
 
         except (httpx_ConnectError, ConnectionError, OSError):
             base_url = self.llm.config.base_url
-            error_msg = f"Cannot connect to LLM at {base_url}. " f"Is Ollama running? Try: ollama serve"
+            error_msg = f"Cannot connect to LLM at {base_url}. Is Ollama running? Try: ollama serve"
             yield AgentEvent.agent_error(error_msg, iteration=iteration)
             state.error = error_msg
             state.finished = True
@@ -1037,7 +1037,7 @@ async def _agent_loop_run(
                 self._conversation.append({"role": "user", "content": user_prompt})
                 self._sync_user_message_to_intelligence(user_prompt)
                 continue
-            issue_error = "Code-output guard blocked completion: " f"{code_output_guard_last_issue}".strip()
+            issue_error = f"Code-output guard blocked completion: {code_output_guard_last_issue}".strip()
             state.error = issue_error
             yield AgentEvent.agent_error(issue_error, iteration=iteration)
             state.finished = True

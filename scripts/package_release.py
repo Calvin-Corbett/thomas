@@ -57,7 +57,7 @@ EXCLUDE_PREFIXES = (
     "demo/agentic-runs/",
     "library/entries/",
     "library/entries/research-notes/",
-    "openclaw_gap_runs/",
+    "reference_cli_gap_runs/",
     "Installed_Features/",
     "temp_swarm/",
     "_archive/",

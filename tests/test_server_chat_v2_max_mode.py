@@ -756,8 +756,9 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(generic_fail.status, 500)
         self.assertIn("Transcription failed", (await generic_fail.json())["error"])
 
-        with patch("thomas.server.routes.chat_v2._MAX_TRANSCRIBE_BYTES", 4), patch(
-            "thomas.server.routes.chat_v2._voice_bridge_for_request", AsyncMock(return_value=_FakeVoiceBridge())
+        with (
+            patch("thomas.server.routes.chat_v2._MAX_TRANSCRIBE_BYTES", 4),
+            patch("thomas.server.routes.chat_v2._voice_bridge_for_request", AsyncMock(return_value=_FakeVoiceBridge())),
         ):
             form = __import__("aiohttp").FormData()
             form.add_field("audio", b"012345", filename="sample.wav", content_type="audio/wav")

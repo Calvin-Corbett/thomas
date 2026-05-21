@@ -315,7 +315,7 @@ class DeduplicationEngine:
         """
         import hashlib
 
-        data = f"{notification.recipient.user_id}:" f"{notification.template_id}:" f"{notification.category.value}"
+        data = f"{notification.recipient.user_id}:{notification.template_id}:{notification.category.value}"
 
         return hashlib.sha256(data.encode()).hexdigest()
 

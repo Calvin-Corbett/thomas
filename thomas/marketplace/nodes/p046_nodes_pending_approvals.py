@@ -12,7 +12,7 @@ State directory resolution order
 2) ``THOMAS_STATE_DIR`` environment variable
 3) Best-effort Thomas config discovery (prefers ``thomas.cli.parity_compat``)
 
-The implementation avoids OpenClaw naming reuse.
+The implementation avoids Reference CLI naming reuse.
 """
 
 from __future__ import annotations

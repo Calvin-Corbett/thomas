@@ -31,4 +31,3 @@ def test_anthropic_profile_capabilities_disable_video_generation() -> None:
     assert caps["batch"] is True
     assert caps["video_gen"] is False
     assert caps["tts"] is False
-

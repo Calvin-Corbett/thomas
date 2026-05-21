@@ -35,7 +35,7 @@ def design_lowpass_fir(
         FilterError: If cutoff frequency is invalid.
     """
     if cutoff <= 0 or cutoff >= sample_rate / 2:
-        raise FilterError(f"Cutoff frequency must be between 0 and {sample_rate/2} Hz")
+        raise FilterError(f"Cutoff frequency must be between 0 and {sample_rate / 2} Hz")
 
     if num_taps < 1:
         raise FilterError("Number of taps must be >= 1")
@@ -120,7 +120,7 @@ def design_bandpass_fir(
         FilterError: If frequencies are invalid.
     """
     if not (0 < low_freq < high_freq < sample_rate / 2):
-        raise FilterError(f"Frequencies must satisfy 0 < f_low < f_high < {sample_rate/2} Hz")
+        raise FilterError(f"Frequencies must satisfy 0 < f_low < f_high < {sample_rate / 2} Hz")
 
     h_lp_high = design_lowpass_fir(high_freq, sample_rate, num_taps, window_type)
     h_lp_low = design_lowpass_fir(low_freq, sample_rate, num_taps, window_type)
@@ -373,7 +373,7 @@ def design_butterworth_lowpass(
         FilterError: If cutoff frequency is invalid.
     """
     if cutoff <= 0 or cutoff >= sample_rate / 2:
-        raise FilterError(f"Cutoff frequency must be between 0 and {sample_rate/2} Hz")
+        raise FilterError(f"Cutoff frequency must be between 0 and {sample_rate / 2} Hz")
 
     if order < 1:
         raise FilterError("Order must be >= 1")
@@ -437,7 +437,7 @@ def design_butterworth_highpass(
         FilterError: If cutoff frequency is invalid.
     """
     if cutoff <= 0 or cutoff >= sample_rate / 2:
-        raise FilterError(f"Cutoff frequency must be between 0 and {sample_rate/2} Hz")
+        raise FilterError(f"Cutoff frequency must be between 0 and {sample_rate / 2} Hz")
 
     # Design lowpass then apply spectral transformation
     lp_filter = design_butterworth_lowpass(cutoff, sample_rate, order)

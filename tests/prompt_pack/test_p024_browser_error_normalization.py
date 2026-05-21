@@ -73,11 +73,14 @@ def test_to_dict_is_json_serializable() -> None:
 
 def test_cli_json_output() -> None:
     runner = CliRunner()
-    res = runner.invoke(cli_app, [
-        "normalize-error",
-        '{"error": "Playwright is not installed"}',
-        "--json",
-    ])
+    res = runner.invoke(
+        cli_app,
+        [
+            "normalize-error",
+            '{"error": "Playwright is not installed"}',
+            "--json",
+        ],
+    )
 
     assert res.exit_code == 0
     payload = json.loads(res.stdout)

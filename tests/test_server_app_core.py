@@ -101,11 +101,15 @@ def patch_create_app_dependencies(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     monkeypatch.setattr(app_core, "_runtime_guard_boot_state", lambda cfg: {"status": "ok"})
     monkeypatch.setattr(app_core, "_runtime_guard_refresh", lambda app: None)
     monkeypatch.setattr(app_core, "SecretStore", lambda path: SimpleNamespace(path=path))
-    monkeypatch.setattr(app_core, "resolve_task_ledger_db_path", lambda root: Path(root) / ".thomas" / "task_ledger.sqlite3")
+    monkeypatch.setattr(
+        app_core, "resolve_task_ledger_db_path", lambda root: Path(root) / ".thomas" / "task_ledger.sqlite3"
+    )
     monkeypatch.setattr(app_core, "TaskLedgerStore", _TaskLedgerStore)
     run_store = _RunStoreModule()
     monkeypatch.setitem(sys.modules, "thomas.marketplace.observability.run_store", run_store)
-    monkeypatch.setitem(sys.modules, "thomas.server.routes.runs", SimpleNamespace(register_runs_routes=lambda app, config: None))
+    monkeypatch.setitem(
+        sys.modules, "thomas.server.routes.runs", SimpleNamespace(register_runs_routes=lambda app, config: None)
+    )
     monkeypatch.setitem(
         sys.modules,
         "thomas.marketplace.policy.redact",
@@ -147,7 +151,11 @@ def patch_create_app_dependencies(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
         "thomas.marketplace.policy.policy",
         SimpleNamespace(PolicyEngine=SimpleNamespace(from_config=lambda cfg, tool_categories=None: SimpleNamespace())),
     )
-    monkeypatch.setitem(sys.modules, "thomas.server.guardrails_api", SimpleNamespace(install_guardrails_routes=lambda app, approvals: None))
+    monkeypatch.setitem(
+        sys.modules,
+        "thomas.server.guardrails_api",
+        SimpleNamespace(install_guardrails_routes=lambda app, approvals: None),
+    )
     monkeypatch.setitem(
         sys.modules,
         "thomas.marketplace.realtime.routes",
@@ -166,7 +174,11 @@ def patch_create_app_dependencies(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     monkeypatch.setitem(
         sys.modules,
         "thomas.server.routes.health",
-        SimpleNamespace(register_health_ready_route=lambda app: app.router.add_get("/readyz", lambda req: web.json_response({"ok": True}))),
+        SimpleNamespace(
+            register_health_ready_route=lambda app: app.router.add_get(
+                "/readyz", lambda req: web.json_response({"ok": True})
+            )
+        ),
     )
     monkeypatch.setitem(
         sys.modules,
@@ -182,12 +194,18 @@ def patch_create_app_dependencies(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     monkeypatch.setitem(
         sys.modules,
         "thomas.server.app_middleware_handlers",
-        SimpleNamespace(setup_middleware_and_handlers=lambda app, config, web_dir, chat_store_dir, chat_store_lock: app.__setitem__(APP_SHUTDOWN_EVENT, asyncio.Event())),
+        SimpleNamespace(
+            setup_middleware_and_handlers=lambda app, config, web_dir, chat_store_dir, chat_store_lock: app.__setitem__(
+                APP_SHUTDOWN_EVENT, asyncio.Event()
+            )
+        ),
     )
     monkeypatch.setitem(
         sys.modules,
         "thomas.core.model_resolution",
-        SimpleNamespace(resolve_effective_model=lambda config, env_profile="", user_id="", db_path="": ("local", "resolved-model")),
+        SimpleNamespace(
+            resolve_effective_model=lambda config, env_profile="", user_id="", db_path="": ("local", "resolved-model")
+        ),
     )
     monkeypatch.setitem(
         sys.modules,
@@ -256,7 +274,10 @@ async def test_api_bootdoctor_report_and_actions_cover_success_and_failures(
                 "repairs": ["check"],
                 "probe_results": ["probe"],
             },
-            reconcile_boot_doctor_runtime_state=lambda repo_root, port=0: ({"severity": "degraded"}, {"severity": "degraded"}),
+            reconcile_boot_doctor_runtime_state=lambda repo_root, port=0: (
+                {"severity": "degraded"},
+                {"severity": "degraded"},
+            ),
             read_boot_doctor_status=lambda repo_root, consume=False: {
                 "severity": "degraded",
                 "reason": "Need repair",
@@ -326,8 +347,14 @@ async def test_api_bootdoctor_handles_missing_report_and_unavailable_rescue(
         sys.modules,
         "thomas.server.boot_recovery",
         SimpleNamespace(
-            read_boot_recovery_notice=lambda repo_root, consume=False: {"severity": "fatal", "report_path": str(missing_path)},
-            reconcile_boot_doctor_runtime_state=lambda repo_root, port=0: ({"severity": "fatal"}, {"severity": "fatal"}),
+            read_boot_recovery_notice=lambda repo_root, consume=False: {
+                "severity": "fatal",
+                "report_path": str(missing_path),
+            },
+            reconcile_boot_doctor_runtime_state=lambda repo_root, port=0: (
+                {"severity": "fatal"},
+                {"severity": "fatal"},
+            ),
             read_boot_doctor_status=lambda repo_root, consume=False: {"severity": "fatal", "report_path": ""},
             clear_boot_recovery_notice=lambda repo_root: None,
             write_boot_doctor_status=lambda repo_root, **kwargs: None,
@@ -365,7 +392,9 @@ def test_create_app_uses_fallback_secret_store_and_rejects_invalid_config(
     monkeypatch.setitem(
         sys.modules,
         "thomas.core.model_resolution",
-        SimpleNamespace(resolve_effective_model=lambda config, env_profile="", user_id="", db_path="": ("missing", None)),
+        SimpleNamespace(
+            resolve_effective_model=lambda config, env_profile="", user_id="", db_path="": ("missing", None)
+        ),
     )
     with pytest.raises(ValueError, match="Configuration validation failed"):
         app_core.create_app(bad_cfg)
@@ -384,7 +413,9 @@ async def test_create_app_health_surfaces_optional_subsystem_failures(
         "thomas.server.audit_log",
         SimpleNamespace(AuditLog=lambda path, redactor: (_ for _ in ()).throw(RuntimeError("audit"))),
     )
-    monkeypatch.setattr(app_core._file_audit, "init_audit", lambda path: (_ for _ in ()).throw(RuntimeError("file-audit")))
+    monkeypatch.setattr(
+        app_core._file_audit, "init_audit", lambda path: (_ for _ in ()).throw(RuntimeError("file-audit"))
+    )
     monkeypatch.setitem(
         sys.modules,
         "thomas.marketplace.policy.config",
@@ -393,12 +424,18 @@ async def test_create_app_health_surfaces_optional_subsystem_failures(
     monkeypatch.setitem(
         sys.modules,
         "thomas.marketplace.realtime.routes",
-        SimpleNamespace(setup_realtime_routes=lambda app, require_api_access=None: (_ for _ in ()).throw(RuntimeError("realtime"))),
+        SimpleNamespace(
+            setup_realtime_routes=lambda app, require_api_access=None: (_ for _ in ()).throw(RuntimeError("realtime"))
+        ),
     )
     monkeypatch.setitem(
         sys.modules,
         "thomas.marketplace.autonomy",
-        SimpleNamespace(install_autonomy=lambda app, config, enabled=False, api_token=None: (_ for _ in ()).throw(ValueError("autonomy"))),
+        SimpleNamespace(
+            install_autonomy=lambda app, config, enabled=False, api_token=None: (_ for _ in ()).throw(
+                ValueError("autonomy")
+            )
+        ),
     )
     monkeypatch.setitem(
         sys.modules,
@@ -414,7 +451,9 @@ async def test_create_app_health_surfaces_optional_subsystem_failures(
         payload = await response.json()
         assert payload["status"] == "degraded"
         degraded = set(payload["degraded"])
-        assert {"task_ledger", "action_audit", "file_audit", "guardrails", "realtime", "autonomy", "engines"}.issubset(degraded)
+        assert {"task_ledger", "action_audit", "file_audit", "guardrails", "realtime", "autonomy", "engines"}.issubset(
+            degraded
+        )
         assert payload["security"]["protected_mode"] is True
     finally:
         await client.close()
@@ -483,7 +522,10 @@ async def test_create_app_loads_default_config_and_uses_posix_rescue_bootdoctor(
         "thomas.server.boot_recovery",
         SimpleNamespace(
             read_boot_recovery_notice=lambda repo_root, consume=False: {"severity": "fatal", "reason": "Need rescue"},
-            reconcile_boot_doctor_runtime_state=lambda repo_root, port=0: ({"severity": "fatal"}, {"severity": "fatal"}),
+            reconcile_boot_doctor_runtime_state=lambda repo_root, port=0: (
+                {"severity": "fatal"},
+                {"severity": "fatal"},
+            ),
             read_boot_doctor_status=lambda repo_root, consume=False: {"severity": "fatal", "reason": "Need rescue"},
             clear_boot_recovery_notice=lambda repo_root: None,
             write_boot_doctor_status=lambda *args, **kwargs: None,

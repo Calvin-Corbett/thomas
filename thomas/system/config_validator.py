@@ -123,7 +123,7 @@ def evaluate_config(
                 level="warning",
                 code="webhooks.require_signatures.invalid_env",
                 message=(
-                    "Environment value `THOMAS_WEBHOOK_REQUIRE_SIGNATURES=" f"{webhook_signatures_invalid}` is invalid."
+                    f"Environment value `THOMAS_WEBHOOK_REQUIRE_SIGNATURES={webhook_signatures_invalid}` is invalid."
                 ),
                 remediation=(
                     "Use `THOMAS_WEBHOOK_REQUIRE_SIGNATURES=1` to require signatures or "

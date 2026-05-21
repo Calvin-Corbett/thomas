@@ -28,7 +28,7 @@ def test_remote_mode_without_api_token_is_error(tmp_path: Path) -> None:
 default_model = "cloud"
 
 [memory]
-root = "{(tmp_path / 'runtime').as_posix()}"
+root = "{(tmp_path / "runtime").as_posix()}"
 
 [server]
 access_mode = "remote"
@@ -52,7 +52,7 @@ def test_remote_mode_security_warnings_are_emitted(tmp_path: Path) -> None:
 default_model = "local"
 
 [memory]
-root = "{(tmp_path / 'runtime').as_posix()}"
+root = "{(tmp_path / "runtime").as_posix()}"
 
 [server]
 access_mode = "remote"
@@ -83,7 +83,7 @@ def test_default_remote_profile_missing_key_is_blocking_error(tmp_path: Path) ->
 default_model = "cloud"
 
 [memory]
-root = "{(tmp_path / 'runtime').as_posix()}"
+root = "{(tmp_path / "runtime").as_posix()}"
 
 [models.cloud]
 provider = "openai_compat"
@@ -104,7 +104,7 @@ def test_non_default_remote_profile_missing_key_is_warning(tmp_path: Path) -> No
 default_model = "local"
 
 [memory]
-root = "{(tmp_path / 'runtime').as_posix()}"
+root = "{(tmp_path / "runtime").as_posix()}"
 
 [models.local]
 provider = "ollama"
@@ -133,7 +133,7 @@ def test_remote_mode_webhook_signature_disable_is_blocking_error(
 default_model = "local"
 
 [memory]
-root = "{(tmp_path / 'runtime').as_posix()}"
+root = "{(tmp_path / "runtime").as_posix()}"
 
 [server]
 access_mode = "remote"
@@ -162,7 +162,7 @@ def test_remote_mode_webhook_signature_enforcement_warns_when_provider_secrets_m
 default_model = "local"
 
 [memory]
-root = "{(tmp_path / 'runtime').as_posix()}"
+root = "{(tmp_path / "runtime").as_posix()}"
 
 [server]
 access_mode = "remote"
@@ -192,7 +192,7 @@ def test_remote_mode_webhook_secret_warnings_clear_when_secrets_exist(
 default_model = "local"
 
 [memory]
-root = "{(tmp_path / 'runtime').as_posix()}"
+root = "{(tmp_path / "runtime").as_posix()}"
 
 [server]
 access_mode = "remote"
@@ -224,7 +224,7 @@ def test_invalid_webhook_signature_env_value_reports_warning(
 default_model = "local"
 
 [memory]
-root = "{(tmp_path / 'runtime').as_posix()}"
+root = "{(tmp_path / "runtime").as_posix()}"
 
 [server]
 access_mode = "local"

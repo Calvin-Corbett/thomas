@@ -32,7 +32,7 @@ async def handle_compact_command(runtime) -> None:
     tool_msgs = sum(1 for m in runtime._conversation if m.get("role") == "tool")
     system_msgs = sum(1 for m in runtime._conversation if m.get("role") == "system")
     runtime._console.print(
-        f"  Breakdown: {user_turns} user, {asst_turns} assistant, " f"{tool_msgs} tool, {system_msgs} system"
+        f"  Breakdown: {user_turns} user, {asst_turns} assistant, {tool_msgs} tool, {system_msgs} system"
     )
 
     if conv_tokens < int(hard_cap * 0.50):

@@ -139,7 +139,7 @@ These are empty or nearly empty:
   `gis`, `networking_deep`, `plugins_registry`
 - **Special**: `tray_agent` (GUI stub), `bootdoctor` (CLI stub)
 
-### Special Case: `openclaw_compat`
+### Special Case: `reference_cli_compat`
 
 359 lines of competitor compatibility code. Must be scrubbed or removed
 before going public. See `docs/PRE_PUBLIC_CLEANUP.md`.

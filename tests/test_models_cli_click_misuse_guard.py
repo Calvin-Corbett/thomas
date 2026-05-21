@@ -71,9 +71,9 @@ def test_models_scan_uses_shared_helper_and_avoids_models_callback_calls() -> No
     assert scan_fn is not None, "Could not find models_scan in thomas/cli/main.py."
 
     called_names = _called_symbol_names(scan_fn)
-    assert (
-        "_run_models_discover" in called_names
-    ), "models_scan must delegate to _run_models_discover(...), the shared discovery helper."
+    assert "_run_models_discover" in called_names, (
+        "models_scan must delegate to _run_models_discover(...), the shared discovery helper."
+    )
 
     disallowed_callbacks = (models_callbacks - {"models_scan"}) | {"models_discover"}
     direct_callback_calls = sorted(name for name in called_names if name in disallowed_callbacks)

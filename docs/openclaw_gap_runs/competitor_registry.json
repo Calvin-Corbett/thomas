@@ -5,8 +5,8 @@
     {
       "computed_at_utc": "2026-03-06T01:45:24Z",
       "suite_id": "thomas-full-agent-comparison-v1",
-      "result_json_path": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "result_md_path": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md",
+      "result_json_path": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "result_md_path": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md",
       "scoreboard": {
         "total_metrics": 115,
         "measured_metrics": 97,
@@ -45,7 +45,7 @@
           "dynamic_lane_score": 52.227
         },
         {
-          "agent": "openclaw",
+          "agent": "reference_cli",
           "weighted_points": 56.465471,
           "composite_score": 47.074,
           "coverage": 0.843478,
@@ -458,7 +458,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1.804965,
-              "openclaw": 5.309492,
+              "reference_cli": 5.309492,
               "aider": 0.0,
               "open_interpreter": 40.809188,
               "openhands": 4.976115,
@@ -485,7 +485,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1.379483,
-              "openclaw": 3.09666,
+              "reference_cli": 3.09666,
               "aider": 0.0,
               "open_interpreter": 30.674847,
               "openhands": 4.977376,
@@ -512,7 +512,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1,
-              "openclaw": 0,
+              "reference_cli": 0,
               "aider": 0,
               "open_interpreter": 0,
               "openhands": 0,
@@ -536,7 +536,7 @@
               "gpt_engineer",
               "langgraph",
               "open_interpreter",
-              "openclaw",
+              "reference_cli",
               "openhands",
               "roo_code",
               "swe_agent"
@@ -550,7 +550,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 0.833333,
-              "openclaw": 1.0,
+              "reference_cli": 1.0,
               "aider": 1.0,
               "open_interpreter": 1.0,
               "openhands": 1.0,
@@ -574,7 +574,7 @@
               "gpt_engineer",
               "langgraph",
               "open_interpreter",
-              "openclaw",
+              "reference_cli",
               "openhands",
               "roo_code",
               "swe_agent"
@@ -588,7 +588,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 9,
-              "openclaw": 0,
+              "reference_cli": 0,
               "aider": 0,
               "open_interpreter": 0,
               "openhands": 0,
@@ -611,7 +611,7 @@
               "gpt_engineer",
               "langgraph",
               "open_interpreter",
-              "openclaw",
+              "reference_cli",
               "openhands",
               "roo_code"
             ],
@@ -624,7 +624,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1,
-              "openclaw": 0,
+              "reference_cli": 0,
               "aider": 1,
               "open_interpreter": 0,
               "openhands": 1,
@@ -644,7 +644,7 @@
               "crewai",
               "gpt_engineer",
               "open_interpreter",
-              "openclaw",
+              "reference_cli",
               "roo_code"
             ],
             "gap_to_best": 1.0
@@ -656,7 +656,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 0.480687,
-              "openclaw": 0.007742,
+              "reference_cli": 0.007742,
               "aider": 0.254237,
               "open_interpreter": 0.030675,
               "openhands": 0.099548,
@@ -682,7 +682,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 3,
-              "openclaw": 4,
+              "reference_cli": 4,
               "aider": 0,
               "open_interpreter": 0,
               "openhands": 0,
@@ -697,7 +697,7 @@
               "langgraph": 0
             },
             "winners": [
-              "openclaw"
+              "reference_cli"
             ],
             "gap_to_best": 1.0
           },
@@ -708,7 +708,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 3979,
-              "openclaw": 4521,
+              "reference_cli": 4521,
               "aider": 89,
               "open_interpreter": 19,
               "openhands": 1068,
@@ -723,7 +723,7 @@
               "langgraph": 72
             },
             "winners": [
-              "openclaw"
+              "reference_cli"
             ],
             "gap_to_best": 542.0
           }
@@ -733,7 +733,7 @@
           "focus_agent": "thomas",
           "ranked_competitors": [
             {
-              "competitor": "openclaw",
+              "competitor": "reference_cli",
               "composite_score": 47.074,
               "composite_delta_vs_focus": -48.803,
               "metrics_beating_focus": 6,
@@ -865,7 +865,7 @@
           ],
           "top_threats": [
             {
-              "competitor": "openclaw",
+              "competitor": "reference_cli",
               "composite_score": 47.074,
               "composite_delta_vs_focus": -48.803,
               "metrics_beating_focus": 6,
@@ -998,7 +998,7 @@
         },
         "competitors_beating_focus": [
           {
-            "competitor": "openclaw",
+            "competitor": "reference_cli",
             "composite_score": 47.074,
             "composite_delta_vs_focus": -48.803,
             "metrics_beating_focus": 6,
@@ -1132,9 +1132,9 @@
       "prediction_evo_scope": {
         "focus_agent": "thomas",
         "competitors": {
-          "openclaw": {
-            "competitor": "openclaw",
-            "root": "F:\\DevHub\\_tmp_openclaw_count_1771454552",
+          "reference_cli": {
+            "competitor": "reference_cli",
+            "root": "F:\\DevHub\\_tmp_reference_cli_count_1771454552",
             "previous_head": "",
             "current_head": "cec553509659417c1914e565c84c9fdd317be100",
             "status": "no_previous_baseline",
@@ -1283,8 +1283,8 @@
     {
       "computed_at_utc": "2026-03-06T01:50:39Z",
       "suite_id": "thomas-full-agent-comparison-v1",
-      "result_json_path": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "result_md_path": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md",
+      "result_json_path": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "result_md_path": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md",
       "scoreboard": {
         "total_metrics": 115,
         "measured_metrics": 97,
@@ -1323,7 +1323,7 @@
           "dynamic_lane_score": 52.227
         },
         {
-          "agent": "openclaw",
+          "agent": "reference_cli",
           "weighted_points": 56.460987,
           "composite_score": 47.07,
           "coverage": 0.843478,
@@ -1736,7 +1736,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1.766959,
-              "openclaw": 5.309492,
+              "reference_cli": 5.309492,
               "aider": 0.0,
               "open_interpreter": 40.809188,
               "openhands": 4.976115,
@@ -1763,7 +1763,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1.378965,
-              "openclaw": 3.09666,
+              "reference_cli": 3.09666,
               "aider": 0.0,
               "open_interpreter": 30.674847,
               "openhands": 4.977376,
@@ -1790,7 +1790,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1,
-              "openclaw": 0,
+              "reference_cli": 0,
               "aider": 0,
               "open_interpreter": 0,
               "openhands": 0,
@@ -1814,7 +1814,7 @@
               "gpt_engineer",
               "langgraph",
               "open_interpreter",
-              "openclaw",
+              "reference_cli",
               "openhands",
               "roo_code",
               "swe_agent"
@@ -1828,7 +1828,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 0.833333,
-              "openclaw": 1.0,
+              "reference_cli": 1.0,
               "aider": 1.0,
               "open_interpreter": 1.0,
               "openhands": 1.0,
@@ -1852,7 +1852,7 @@
               "gpt_engineer",
               "langgraph",
               "open_interpreter",
-              "openclaw",
+              "reference_cli",
               "openhands",
               "roo_code",
               "swe_agent"
@@ -1866,7 +1866,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1,
-              "openclaw": 0,
+              "reference_cli": 0,
               "aider": 1,
               "open_interpreter": 0,
               "openhands": 1,
@@ -1886,7 +1886,7 @@
               "crewai",
               "gpt_engineer",
               "open_interpreter",
-              "openclaw",
+              "reference_cli",
               "roo_code"
             ],
             "gap_to_best": 1.0
@@ -1898,7 +1898,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1,
-              "openclaw": 0,
+              "reference_cli": 0,
               "aider": 0,
               "open_interpreter": 0,
               "openhands": 0,
@@ -1921,7 +1921,7 @@
               "gpt_engineer",
               "langgraph",
               "open_interpreter",
-              "openclaw",
+              "reference_cli",
               "openhands",
               "roo_code"
             ],
@@ -1934,7 +1934,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 0.480506,
-              "openclaw": 0.007742,
+              "reference_cli": 0.007742,
               "aider": 0.254237,
               "open_interpreter": 0.030675,
               "openhands": 0.099548,
@@ -1960,7 +1960,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 3,
-              "openclaw": 4,
+              "reference_cli": 4,
               "aider": 0,
               "open_interpreter": 0,
               "openhands": 0,
@@ -1975,7 +1975,7 @@
               "langgraph": 0
             },
             "winners": [
-              "openclaw"
+              "reference_cli"
             ],
             "gap_to_best": 1.0
           },
@@ -1986,7 +1986,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 3982,
-              "openclaw": 4521,
+              "reference_cli": 4521,
               "aider": 89,
               "open_interpreter": 19,
               "openhands": 1068,
@@ -2001,7 +2001,7 @@
               "langgraph": 72
             },
             "winners": [
-              "openclaw"
+              "reference_cli"
             ],
             "gap_to_best": 539.0
           }
@@ -2011,7 +2011,7 @@
           "focus_agent": "thomas",
           "ranked_competitors": [
             {
-              "competitor": "openclaw",
+              "competitor": "reference_cli",
               "composite_score": 47.07,
               "composite_delta_vs_focus": -49.675,
               "metrics_beating_focus": 6,
@@ -2143,7 +2143,7 @@
           ],
           "top_threats": [
             {
-              "competitor": "openclaw",
+              "competitor": "reference_cli",
               "composite_score": 47.07,
               "composite_delta_vs_focus": -49.675,
               "metrics_beating_focus": 6,
@@ -2276,7 +2276,7 @@
         },
         "competitors_beating_focus": [
           {
-            "competitor": "openclaw",
+            "competitor": "reference_cli",
             "composite_score": 47.07,
             "composite_delta_vs_focus": -49.675,
             "metrics_beating_focus": 6,
@@ -2410,9 +2410,9 @@
       "prediction_evo_scope": {
         "focus_agent": "thomas",
         "competitors": {
-          "openclaw": {
-            "competitor": "openclaw",
-            "root": "F:\\DevHub\\_tmp_openclaw_count_1771454552",
+          "reference_cli": {
+            "competitor": "reference_cli",
+            "root": "F:\\DevHub\\_tmp_reference_cli_count_1771454552",
             "previous_head": "cec553509659417c1914e565c84c9fdd317be100",
             "current_head": "cec553509659417c1914e565c84c9fdd317be100",
             "status": "no_change_since_last_run",
@@ -2584,8 +2584,8 @@
     {
       "computed_at_utc": "2026-03-06T01:50:39Z",
       "suite_id": "thomas-full-agent-comparison-v1",
-      "result_json_path": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "result_md_path": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md",
+      "result_json_path": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "result_md_path": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md",
       "scoreboard": {
         "total_metrics": 115,
         "measured_metrics": 97,
@@ -2624,7 +2624,7 @@
           "dynamic_lane_score": 52.227
         },
         {
-          "agent": "openclaw",
+          "agent": "reference_cli",
           "weighted_points": 56.460987,
           "composite_score": 47.07,
           "coverage": 0.843478,
@@ -3037,7 +3037,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1.766959,
-              "openclaw": 5.309492,
+              "reference_cli": 5.309492,
               "aider": 0.0,
               "open_interpreter": 40.809188,
               "openhands": 4.976115,
@@ -3064,7 +3064,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1.378965,
-              "openclaw": 3.09666,
+              "reference_cli": 3.09666,
               "aider": 0.0,
               "open_interpreter": 30.674847,
               "openhands": 4.977376,
@@ -3091,7 +3091,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1,
-              "openclaw": 0,
+              "reference_cli": 0,
               "aider": 0,
               "open_interpreter": 0,
               "openhands": 0,
@@ -3115,7 +3115,7 @@
               "gpt_engineer",
               "langgraph",
               "open_interpreter",
-              "openclaw",
+              "reference_cli",
               "openhands",
               "roo_code",
               "swe_agent"
@@ -3129,7 +3129,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 0.833333,
-              "openclaw": 1.0,
+              "reference_cli": 1.0,
               "aider": 1.0,
               "open_interpreter": 1.0,
               "openhands": 1.0,
@@ -3153,7 +3153,7 @@
               "gpt_engineer",
               "langgraph",
               "open_interpreter",
-              "openclaw",
+              "reference_cli",
               "openhands",
               "roo_code",
               "swe_agent"
@@ -3167,7 +3167,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1,
-              "openclaw": 0,
+              "reference_cli": 0,
               "aider": 1,
               "open_interpreter": 0,
               "openhands": 1,
@@ -3187,7 +3187,7 @@
               "crewai",
               "gpt_engineer",
               "open_interpreter",
-              "openclaw",
+              "reference_cli",
               "roo_code"
             ],
             "gap_to_best": 1.0
@@ -3199,7 +3199,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1,
-              "openclaw": 0,
+              "reference_cli": 0,
               "aider": 0,
               "open_interpreter": 0,
               "openhands": 0,
@@ -3222,7 +3222,7 @@
               "gpt_engineer",
               "langgraph",
               "open_interpreter",
-              "openclaw",
+              "reference_cli",
               "openhands",
               "roo_code"
             ],
@@ -3235,7 +3235,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 0.480506,
-              "openclaw": 0.007742,
+              "reference_cli": 0.007742,
               "aider": 0.254237,
               "open_interpreter": 0.030675,
               "openhands": 0.099548,
@@ -3261,7 +3261,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 3,
-              "openclaw": 4,
+              "reference_cli": 4,
               "aider": 0,
               "open_interpreter": 0,
               "openhands": 0,
@@ -3276,7 +3276,7 @@
               "langgraph": 0
             },
             "winners": [
-              "openclaw"
+              "reference_cli"
             ],
             "gap_to_best": 1.0
           },
@@ -3287,7 +3287,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 3982,
-              "openclaw": 4521,
+              "reference_cli": 4521,
               "aider": 89,
               "open_interpreter": 19,
               "openhands": 1068,
@@ -3302,7 +3302,7 @@
               "langgraph": 72
             },
             "winners": [
-              "openclaw"
+              "reference_cli"
             ],
             "gap_to_best": 539.0
           }
@@ -3312,7 +3312,7 @@
           "focus_agent": "thomas",
           "ranked_competitors": [
             {
-              "competitor": "openclaw",
+              "competitor": "reference_cli",
               "composite_score": 47.07,
               "composite_delta_vs_focus": -49.675,
               "metrics_beating_focus": 6,
@@ -3444,7 +3444,7 @@
           ],
           "top_threats": [
             {
-              "competitor": "openclaw",
+              "competitor": "reference_cli",
               "composite_score": 47.07,
               "composite_delta_vs_focus": -49.675,
               "metrics_beating_focus": 6,
@@ -3577,7 +3577,7 @@
         },
         "competitors_beating_focus": [
           {
-            "competitor": "openclaw",
+            "competitor": "reference_cli",
             "composite_score": 47.07,
             "composite_delta_vs_focus": -49.675,
             "metrics_beating_focus": 6,
@@ -3711,9 +3711,9 @@
       "prediction_evo_scope": {
         "focus_agent": "thomas",
         "competitors": {
-          "openclaw": {
-            "competitor": "openclaw",
-            "root": "F:\\DevHub\\_tmp_openclaw_count_1771454552",
+          "reference_cli": {
+            "competitor": "reference_cli",
+            "root": "F:\\DevHub\\_tmp_reference_cli_count_1771454552",
             "previous_head": "cec553509659417c1914e565c84c9fdd317be100",
             "current_head": "cec553509659417c1914e565c84c9fdd317be100",
             "status": "no_change_since_last_run",
@@ -3885,8 +3885,8 @@
     {
       "computed_at_utc": "2026-03-06T01:50:39Z",
       "suite_id": "thomas-full-agent-comparison-v1",
-      "result_json_path": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "result_md_path": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md",
+      "result_json_path": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "result_md_path": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md",
       "scoreboard": {
         "total_metrics": 115,
         "measured_metrics": 97,
@@ -3925,7 +3925,7 @@
           "dynamic_lane_score": 52.227
         },
         {
-          "agent": "openclaw",
+          "agent": "reference_cli",
           "weighted_points": 56.460987,
           "composite_score": 47.07,
           "coverage": 0.843478,
@@ -4338,7 +4338,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1.766959,
-              "openclaw": 5.309492,
+              "reference_cli": 5.309492,
               "aider": 0.0,
               "open_interpreter": 40.809188,
               "openhands": 4.976115,
@@ -4365,7 +4365,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1.378965,
-              "openclaw": 3.09666,
+              "reference_cli": 3.09666,
               "aider": 0.0,
               "open_interpreter": 30.674847,
               "openhands": 4.977376,
@@ -4392,7 +4392,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1,
-              "openclaw": 0,
+              "reference_cli": 0,
               "aider": 0,
               "open_interpreter": 0,
               "openhands": 0,
@@ -4416,7 +4416,7 @@
               "gpt_engineer",
               "langgraph",
               "open_interpreter",
-              "openclaw",
+              "reference_cli",
               "openhands",
               "roo_code",
               "swe_agent"
@@ -4430,7 +4430,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 0.833333,
-              "openclaw": 1.0,
+              "reference_cli": 1.0,
               "aider": 1.0,
               "open_interpreter": 1.0,
               "openhands": 1.0,
@@ -4454,7 +4454,7 @@
               "gpt_engineer",
               "langgraph",
               "open_interpreter",
-              "openclaw",
+              "reference_cli",
               "openhands",
               "roo_code",
               "swe_agent"
@@ -4468,7 +4468,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1,
-              "openclaw": 0,
+              "reference_cli": 0,
               "aider": 1,
               "open_interpreter": 0,
               "openhands": 1,
@@ -4488,7 +4488,7 @@
               "crewai",
               "gpt_engineer",
               "open_interpreter",
-              "openclaw",
+              "reference_cli",
               "roo_code"
             ],
             "gap_to_best": 1.0
@@ -4500,7 +4500,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1,
-              "openclaw": 0,
+              "reference_cli": 0,
               "aider": 0,
               "open_interpreter": 0,
               "openhands": 0,
@@ -4523,7 +4523,7 @@
               "gpt_engineer",
               "langgraph",
               "open_interpreter",
-              "openclaw",
+              "reference_cli",
               "openhands",
               "roo_code"
             ],
@@ -4536,7 +4536,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 0.480506,
-              "openclaw": 0.007742,
+              "reference_cli": 0.007742,
               "aider": 0.254237,
               "open_interpreter": 0.030675,
               "openhands": 0.099548,
@@ -4562,7 +4562,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 3,
-              "openclaw": 4,
+              "reference_cli": 4,
               "aider": 0,
               "open_interpreter": 0,
               "openhands": 0,
@@ -4577,7 +4577,7 @@
               "langgraph": 0
             },
             "winners": [
-              "openclaw"
+              "reference_cli"
             ],
             "gap_to_best": 1.0
           },
@@ -4588,7 +4588,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 3982,
-              "openclaw": 4521,
+              "reference_cli": 4521,
               "aider": 89,
               "open_interpreter": 19,
               "openhands": 1068,
@@ -4603,7 +4603,7 @@
               "langgraph": 72
             },
             "winners": [
-              "openclaw"
+              "reference_cli"
             ],
             "gap_to_best": 539.0
           }
@@ -4613,7 +4613,7 @@
           "focus_agent": "thomas",
           "ranked_competitors": [
             {
-              "competitor": "openclaw",
+              "competitor": "reference_cli",
               "composite_score": 47.07,
               "composite_delta_vs_focus": -49.675,
               "metrics_beating_focus": 6,
@@ -4745,7 +4745,7 @@
           ],
           "top_threats": [
             {
-              "competitor": "openclaw",
+              "competitor": "reference_cli",
               "composite_score": 47.07,
               "composite_delta_vs_focus": -49.675,
               "metrics_beating_focus": 6,
@@ -4878,7 +4878,7 @@
         },
         "competitors_beating_focus": [
           {
-            "competitor": "openclaw",
+            "competitor": "reference_cli",
             "composite_score": 47.07,
             "composite_delta_vs_focus": -49.675,
             "metrics_beating_focus": 6,
@@ -5012,9 +5012,9 @@
       "prediction_evo_scope": {
         "focus_agent": "thomas",
         "competitors": {
-          "openclaw": {
-            "competitor": "openclaw",
-            "root": "F:\\DevHub\\_tmp_openclaw_count_1771454552",
+          "reference_cli": {
+            "competitor": "reference_cli",
+            "root": "F:\\DevHub\\_tmp_reference_cli_count_1771454552",
             "previous_head": "cec553509659417c1914e565c84c9fdd317be100",
             "current_head": "cec553509659417c1914e565c84c9fdd317be100",
             "status": "no_change_since_last_run",
@@ -5186,8 +5186,8 @@
     {
       "computed_at_utc": "2026-03-06T01:53:45Z",
       "suite_id": "",
-      "result_json_path": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "result_md_path": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md",
+      "result_json_path": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "result_md_path": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md",
       "scoreboard": {
         "total_metrics": null,
         "measured_metrics": null,
@@ -5200,8 +5200,8 @@
     {
       "computed_at_utc": "2026-03-06T01:57:34Z",
       "suite_id": "thomas-full-agent-comparison-v1",
-      "result_json_path": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "result_md_path": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md",
+      "result_json_path": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "result_md_path": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md",
       "scoreboard": {
         "total_metrics": 115,
         "measured_metrics": 97,
@@ -5240,7 +5240,7 @@
           "dynamic_lane_score": 60.324
         },
         {
-          "agent": "openclaw",
+          "agent": "reference_cli",
           "weighted_points": 56.465535,
           "composite_score": 47.074,
           "coverage": 0.843478,
@@ -5653,7 +5653,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1.799961,
-              "openclaw": 5.309492,
+              "reference_cli": 5.309492,
               "aider": 0.0,
               "open_interpreter": 40.809188,
               "openhands": 4.976115,
@@ -5680,7 +5680,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1.378619,
-              "openclaw": 3.09666,
+              "reference_cli": 3.09666,
               "aider": 0.0,
               "open_interpreter": 30.674847,
               "openhands": 4.977376,
@@ -5707,7 +5707,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1,
-              "openclaw": 0,
+              "reference_cli": 0,
               "aider": 0,
               "open_interpreter": 0,
               "openhands": 0,
@@ -5731,7 +5731,7 @@
               "gpt_engineer",
               "langgraph",
               "open_interpreter",
-              "openclaw",
+              "reference_cli",
               "openhands",
               "roo_code",
               "swe_agent"
@@ -5745,7 +5745,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 0.833333,
-              "openclaw": 1.0,
+              "reference_cli": 1.0,
               "aider": 1.0,
               "open_interpreter": 1.0,
               "openhands": 1.0,
@@ -5769,7 +5769,7 @@
               "gpt_engineer",
               "langgraph",
               "open_interpreter",
-              "openclaw",
+              "reference_cli",
               "openhands",
               "roo_code",
               "swe_agent"
@@ -5783,7 +5783,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 0.480511,
-              "openclaw": 0.007742,
+              "reference_cli": 0.007742,
               "aider": 0.254237,
               "open_interpreter": 0.030675,
               "openhands": 0.099548,
@@ -5809,7 +5809,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 3,
-              "openclaw": 4,
+              "reference_cli": 4,
               "aider": 0,
               "open_interpreter": 0,
               "openhands": 0,
@@ -5824,7 +5824,7 @@
               "langgraph": 0
             },
             "winners": [
-              "openclaw"
+              "reference_cli"
             ],
             "gap_to_best": 1.0
           },
@@ -5835,7 +5835,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 3982,
-              "openclaw": 4521,
+              "reference_cli": 4521,
               "aider": 89,
               "open_interpreter": 19,
               "openhands": 1068,
@@ -5850,7 +5850,7 @@
               "langgraph": 72
             },
             "winners": [
-              "openclaw"
+              "reference_cli"
             ],
             "gap_to_best": 539.0
           }
@@ -5860,7 +5860,7 @@
           "focus_agent": "thomas",
           "ranked_competitors": [
             {
-              "competitor": "openclaw",
+              "competitor": "reference_cli",
               "composite_score": 47.074,
               "composite_delta_vs_focus": -50.158,
               "metrics_beating_focus": 4,
@@ -5992,7 +5992,7 @@
           ],
           "top_threats": [
             {
-              "competitor": "openclaw",
+              "competitor": "reference_cli",
               "composite_score": 47.074,
               "composite_delta_vs_focus": -50.158,
               "metrics_beating_focus": 4,
@@ -6125,7 +6125,7 @@
         },
         "competitors_beating_focus": [
           {
-            "competitor": "openclaw",
+            "competitor": "reference_cli",
             "composite_score": 47.074,
             "composite_delta_vs_focus": -50.158,
             "metrics_beating_focus": 4,
@@ -6259,9 +6259,9 @@
       "prediction_evo_scope": {
         "focus_agent": "thomas",
         "competitors": {
-          "openclaw": {
-            "competitor": "openclaw",
-            "root": "F:\\DevHub\\_tmp_openclaw_count_1771454552",
+          "reference_cli": {
+            "competitor": "reference_cli",
+            "root": "F:\\DevHub\\_tmp_reference_cli_count_1771454552",
             "previous_head": "cec553509659417c1914e565c84c9fdd317be100",
             "current_head": "cec553509659417c1914e565c84c9fdd317be100",
             "status": "no_change_since_last_run",
@@ -6410,8 +6410,8 @@
     {
       "computed_at_utc": "2026-03-06T02:02:25Z",
       "suite_id": "thomas-full-agent-comparison-v1",
-      "result_json_path": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "result_md_path": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md",
+      "result_json_path": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "result_md_path": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md",
       "scoreboard": {
         "total_metrics": 115,
         "measured_metrics": 97,
@@ -6450,7 +6450,7 @@
           "dynamic_lane_score": 81.377
         },
         {
-          "agent": "openclaw",
+          "agent": "reference_cli",
           "weighted_points": 56.460223,
           "composite_score": 47.07,
           "coverage": 0.843478,
@@ -6863,7 +6863,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1.76353,
-              "openclaw": 5.309492,
+              "reference_cli": 5.309492,
               "aider": 0.0,
               "open_interpreter": 40.809188,
               "openhands": 4.976115,
@@ -6890,7 +6890,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 1.378619,
-              "openclaw": 3.09666,
+              "reference_cli": 3.09666,
               "aider": 0.0,
               "open_interpreter": 30.674847,
               "openhands": 4.977376,
@@ -6917,7 +6917,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 0.480511,
-              "openclaw": 0.007742,
+              "reference_cli": 0.007742,
               "aider": 0.254237,
               "open_interpreter": 0.030675,
               "openhands": 0.099548,
@@ -6943,7 +6943,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 3,
-              "openclaw": 4,
+              "reference_cli": 4,
               "aider": 0,
               "open_interpreter": 0,
               "openhands": 0,
@@ -6958,7 +6958,7 @@
               "langgraph": 0
             },
             "winners": [
-              "openclaw"
+              "reference_cli"
             ],
             "gap_to_best": 1.0
           },
@@ -6969,7 +6969,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 3982,
-              "openclaw": 4521,
+              "reference_cli": 4521,
               "aider": 89,
               "open_interpreter": 19,
               "openhands": 1068,
@@ -6984,7 +6984,7 @@
               "langgraph": 72
             },
             "winners": [
-              "openclaw"
+              "reference_cli"
             ],
             "gap_to_best": 539.0
           }
@@ -6994,7 +6994,7 @@
           "focus_agent": "thomas",
           "ranked_competitors": [
             {
-              "competitor": "openclaw",
+              "competitor": "reference_cli",
               "composite_score": 47.07,
               "composite_delta_vs_focus": -52.414,
               "metrics_beating_focus": 2,
@@ -7126,7 +7126,7 @@
           ],
           "top_threats": [
             {
-              "competitor": "openclaw",
+              "competitor": "reference_cli",
               "composite_score": 47.07,
               "composite_delta_vs_focus": -52.414,
               "metrics_beating_focus": 2,
@@ -7169,7 +7169,7 @@
         },
         "competitors_beating_focus": [
           {
-            "competitor": "openclaw",
+            "competitor": "reference_cli",
             "composite_score": 47.07,
             "composite_delta_vs_focus": -52.414,
             "metrics_beating_focus": 2,
@@ -7213,9 +7213,9 @@
       "prediction_evo_scope": {
         "focus_agent": "thomas",
         "competitors": {
-          "openclaw": {
-            "competitor": "openclaw",
-            "root": "F:\\DevHub\\_tmp_openclaw_count_1771454552",
+          "reference_cli": {
+            "competitor": "reference_cli",
+            "root": "F:\\DevHub\\_tmp_reference_cli_count_1771454552",
             "previous_head": "cec553509659417c1914e565c84c9fdd317be100",
             "current_head": "cec553509659417c1914e565c84c9fdd317be100",
             "status": "no_change_since_last_run",
@@ -7364,8 +7364,8 @@
     {
       "computed_at_utc": "2026-03-06T05:29:38Z",
       "suite_id": "thomas-full-agent-comparison-v1",
-      "result_json_path": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "result_md_path": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md",
+      "result_json_path": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "result_md_path": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md",
       "scoreboard": {
         "total_metrics": 115,
         "measured_metrics": 97,
@@ -7404,7 +7404,7 @@
           "dynamic_lane_score": 81.377
         },
         {
-          "agent": "openclaw",
+          "agent": "reference_cli",
           "weighted_points": 56.228262,
           "composite_score": 46.876,
           "coverage": 0.843478,
@@ -7817,7 +7817,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 0.501128,
-              "openclaw": 3.083021,
+              "reference_cli": 3.083021,
               "aider": 0.0,
               "open_interpreter": 30.674847,
               "openhands": 4.977376,
@@ -7844,7 +7844,7 @@
             "preference": "lower_is_better",
             "values": {
               "thomas": 0.150046,
-              "openclaw": 5.251018,
+              "reference_cli": 5.251018,
               "aider": 0.0,
               "open_interpreter": 40.809188,
               "openhands": 4.976115,
@@ -7871,7 +7871,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 0.480456,
-              "openclaw": 0.007708,
+              "reference_cli": 0.007708,
               "aider": 0.254237,
               "open_interpreter": 0.030675,
               "openhands": 0.099548,
@@ -7897,7 +7897,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 3982,
-              "openclaw": 4541,
+              "reference_cli": 4541,
               "aider": 89,
               "open_interpreter": 19,
               "openhands": 1068,
@@ -7912,7 +7912,7 @@
               "langgraph": 72
             },
             "winners": [
-              "openclaw"
+              "reference_cli"
             ],
             "gap_to_best": 559.0
           }
@@ -7942,7 +7942,7 @@
               "threat_level": "medium"
             },
             {
-              "competitor": "openclaw",
+              "competitor": "reference_cli",
               "composite_score": 46.876,
               "composite_delta_vs_focus": -52.927,
               "metrics_beating_focus": 1,
@@ -8074,7 +8074,7 @@
               "threat_level": "medium"
             },
             {
-              "competitor": "openclaw",
+              "competitor": "reference_cli",
               "composite_score": 46.876,
               "composite_delta_vs_focus": -52.927,
               "metrics_beating_focus": 1,
@@ -8117,7 +8117,7 @@
             "threat_level": "medium"
           },
           {
-            "competitor": "openclaw",
+            "competitor": "reference_cli",
             "composite_score": 46.876,
             "composite_delta_vs_focus": -52.927,
             "metrics_beating_focus": 1,
@@ -8141,9 +8141,9 @@
       "prediction_evo_scope": {
         "focus_agent": "thomas",
         "competitors": {
-          "openclaw": {
-            "competitor": "openclaw",
-            "root": "F:\\DevHub\\_tmp_openclaw_count_1771454552",
+          "reference_cli": {
+            "competitor": "reference_cli",
+            "root": "F:\\DevHub\\_tmp_reference_cli_count_1771454552",
             "previous_head": "cec553509659417c1914e565c84c9fdd317be100",
             "current_head": "36e2e04a32c2a94eafc83fd7e1e82a89045e2e9f",
             "status": "updated_since_last_run",
@@ -8366,8 +8366,8 @@
     {
       "computed_at_utc": "2026-03-06T13:11:26Z",
       "suite_id": "thomas-full-agent-comparison-v1",
-      "result_json_path": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "result_md_path": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md",
+      "result_json_path": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "result_md_path": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md",
       "scoreboard": {
         "total_metrics": 115,
         "measured_metrics": 97,
@@ -8406,7 +8406,7 @@
           "dynamic_lane_score": 82.186
         },
         {
-          "agent": "openclaw",
+          "agent": "reference_cli",
           "weighted_points": 56.197549,
           "composite_score": 46.851,
           "coverage": 0.843478,
@@ -8819,7 +8819,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 0.878864,
-              "openclaw": 0.007761,
+              "reference_cli": 0.007761,
               "aider": 0.340909,
               "open_interpreter": 0.031646,
               "openhands": 0.110442,
@@ -8845,7 +8845,7 @@
             "preference": "higher_is_better",
             "values": {
               "thomas": 4202,
-              "openclaw": 4545,
+              "reference_cli": 4545,
               "aider": 89,
               "open_interpreter": 19,
               "openhands": 1070,
@@ -8860,7 +8860,7 @@
               "langgraph": 75
             },
             "winners": [
-              "openclaw"
+              "reference_cli"
             ],
             "gap_to_best": 343.0
           }
@@ -8870,7 +8870,7 @@
           "focus_agent": "thomas",
           "ranked_competitors": [
             {
-              "competitor": "openclaw",
+              "competitor": "reference_cli",
               "composite_score": 46.851,
               "composite_delta_vs_focus": -52.908,
               "metrics_beating_focus": 1,
@@ -9002,7 +9002,7 @@
           ],
           "top_threats": [
             {
-              "competitor": "openclaw",
+              "competitor": "reference_cli",
               "composite_score": 46.851,
               "composite_delta_vs_focus": -52.908,
               "metrics_beating_focus": 1,
@@ -9025,7 +9025,7 @@
         },
         "competitors_beating_focus": [
           {
-            "competitor": "openclaw",
+            "competitor": "reference_cli",
             "composite_score": 46.851,
             "composite_delta_vs_focus": -52.908,
             "metrics_beating_focus": 1,
@@ -9049,9 +9049,9 @@
       "prediction_evo_scope": {
         "focus_agent": "thomas",
         "competitors": {
-          "openclaw": {
-            "competitor": "openclaw",
-            "root": "F:\\DevHub\\_tmp_openclaw_latest_20260306",
+          "reference_cli": {
+            "competitor": "reference_cli",
+            "root": "F:\\DevHub\\_tmp_reference_cli_latest_20260306",
             "previous_head": "36e2e04a32c2a94eafc83fd7e1e82a89045e2e9f",
             "current_head": "fa6c0e1b404f094e579b5fb192c6643c7822c1b6",
             "status": "diff_failed",
@@ -9297,13 +9297,13 @@
         "context_window": 200000,
         "max_tokens": 16384
       },
-      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md"
+      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md"
     },
-    "openclaw": {
-      "id": "openclaw",
-      "label": "OpenClaw",
-      "root": "F:\\DevHub\\_tmp_openclaw_latest_20260306",
+    "reference_cli": {
+      "id": "reference_cli",
+      "label": "Reference CLI",
+      "root": "F:\\DevHub\\_tmp_reference_cli_latest_20260306",
       "last_tested_at_utc": "2026-03-06T13:11:26Z",
       "last_suite_id": "thomas-full-agent-comparison-v1",
       "last_composite_score": 46.851,
@@ -9311,7 +9311,7 @@
       "last_wins": 1,
       "version": {
         "kind": "git",
-        "root": "F:\\DevHub\\_tmp_openclaw_latest_20260306",
+        "root": "F:\\DevHub\\_tmp_reference_cli_latest_20260306",
         "enabled": true,
         "remote": "origin",
         "branch": "main",
@@ -9335,23 +9335,23 @@
         "command": [
           "node",
           "-e",
-          "const p=require('./package.json'); console.log(JSON.stringify({model:'runtime-configured', provider:'multi-provider', profile:'openclaw', version:p.version}));"
+          "const p=require('./package.json'); console.log(JSON.stringify({model:'runtime-configured', provider:'multi-provider', profile:'reference_cli', version:p.version}));"
         ],
         "returncode": 0,
         "stderr": "",
         "payload": {
           "model": "runtime-configured",
           "provider": "multi-provider",
-          "profile": "openclaw",
+          "profile": "reference_cli",
           "version": "2026.3.3"
         },
         "model": "runtime-configured",
         "provider": "multi-provider",
-        "profile": "openclaw"
+        "profile": "reference_cli"
       },
       "prediction_evo_scope": {
-        "competitor": "openclaw",
-        "root": "F:\\DevHub\\_tmp_openclaw_latest_20260306",
+        "competitor": "reference_cli",
+        "root": "F:\\DevHub\\_tmp_reference_cli_latest_20260306",
         "previous_head": "36e2e04a32c2a94eafc83fd7e1e82a89045e2e9f",
         "current_head": "fa6c0e1b404f094e579b5fb192c6643c7822c1b6",
         "status": "diff_failed",
@@ -9361,8 +9361,8 @@
         "recommended_thomas_counter_moves": [],
         "error": "fatal: Invalid revision range 36e2e04a32c2a94eafc83fd7e1e82a89045e2e9f..fa6c0e1b404f094e579b5fb192c6643c7822c1b6"
       },
-      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md"
+      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md"
     },
     "aider": {
       "id": "aider",
@@ -9409,8 +9409,8 @@
         "predicted_next_focus": [],
         "recommended_thomas_counter_moves": []
       },
-      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md"
+      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md"
     },
     "open_interpreter": {
       "id": "open_interpreter",
@@ -9457,8 +9457,8 @@
         "predicted_next_focus": [],
         "recommended_thomas_counter_moves": []
       },
-      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md"
+      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md"
     },
     "openhands": {
       "id": "openhands",
@@ -9514,8 +9514,8 @@
           "Monitor breadth growth and preemptively add targeted strict checks in the fastest-growing directories."
         ]
       },
-      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md"
+      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md"
     },
     "cline": {
       "id": "cline",
@@ -9583,8 +9583,8 @@
           "Raise test LOC and e2e breadth for touched subsystems before release gate pass."
         ]
       },
-      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md"
+      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md"
     },
     "roo_code": {
       "id": "roo_code",
@@ -9631,8 +9631,8 @@
         "predicted_next_focus": [],
         "recommended_thomas_counter_moves": []
       },
-      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md"
+      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md"
     },
     "continue": {
       "id": "continue",
@@ -9679,8 +9679,8 @@
         "predicted_next_focus": [],
         "recommended_thomas_counter_moves": []
       },
-      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md"
+      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md"
     },
     "swe_agent": {
       "id": "swe_agent",
@@ -9727,8 +9727,8 @@
         "predicted_next_focus": [],
         "recommended_thomas_counter_moves": []
       },
-      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md"
+      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md"
     },
     "gpt_engineer": {
       "id": "gpt_engineer",
@@ -9775,8 +9775,8 @@
         "predicted_next_focus": [],
         "recommended_thomas_counter_moves": []
       },
-      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md"
+      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md"
     },
     "autogpt": {
       "id": "autogpt",
@@ -9832,8 +9832,8 @@
           "Monitor breadth growth and preemptively add targeted strict checks in the fastest-growing directories."
         ]
       },
-      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md"
+      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md"
     },
     "autogen": {
       "id": "autogen",
@@ -9880,8 +9880,8 @@
         "predicted_next_focus": [],
         "recommended_thomas_counter_moves": []
       },
-      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md"
+      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md"
     },
     "crewai": {
       "id": "crewai",
@@ -9928,8 +9928,8 @@
         "predicted_next_focus": [],
         "recommended_thomas_counter_moves": []
       },
-      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md"
+      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md"
     },
     "langgraph": {
       "id": "langgraph",
@@ -9976,8 +9976,8 @@
         "predicted_next_focus": [],
         "recommended_thomas_counter_moves": []
       },
-      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
-      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md"
+      "last_result_json": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.json",
+      "last_result_markdown": "C:\\Users\\corbe\\Thomas\\docs\\reference_cli_gap_runs\\latest_full_suite_compare.md"
     }
   }
 }

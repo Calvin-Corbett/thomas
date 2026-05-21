@@ -478,7 +478,7 @@ class ExecutionResult:
 
     def __repr__(self) -> str:
         """Return string representation."""
-        return f"ExecutionResult({self.task_name}@{self.host}=" f"{self.status},changed={self.changed})"
+        return f"ExecutionResult({self.task_name}@{self.host}={self.status},changed={self.changed})"
 
 
 @dataclass

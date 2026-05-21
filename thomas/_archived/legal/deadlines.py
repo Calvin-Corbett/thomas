@@ -190,7 +190,7 @@ class DeadlineManager:
         if child_deadline_id not in parent.dependent_deadlines:
             parent.dependent_deadlines.append(child_deadline_id)
 
-        logger.info(f"Linked deadline {child_deadline_id} as dependent on " f"{parent_deadline_id}")
+        logger.info(f"Linked deadline {child_deadline_id} as dependent on {parent_deadline_id}")
 
         return parent
 
@@ -303,7 +303,7 @@ class DeadlineManager:
                     f"DTSTAMP:{datetime.now().isoformat()}",
                     f"DTSTART:{deadline.due_date.isoformat()}",
                     f"SUMMARY:{deadline.description}",
-                    f"DESCRIPTION:Deadline Type: {deadline.deadline_type}, " f"Importance: {deadline.importance}/5",
+                    f"DESCRIPTION:Deadline Type: {deadline.deadline_type}, Importance: {deadline.importance}/5",
                     "END:VEVENT",
                 ]
             )

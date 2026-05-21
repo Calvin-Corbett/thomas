@@ -84,7 +84,7 @@ class AuditLogger:
 
             # Calculate hash including previous hash for chain
             metadata_repr = repr(sorted(metadata_obj.items()))
-            entry_str = f"{entry['timestamp']}{event_type}{description}" f"{metadata_repr}{self.last_hash}"
+            entry_str = f"{entry['timestamp']}{event_type}{description}{metadata_repr}{self.last_hash}"
             entry_hash = hashlib.sha256(entry_str.encode()).hexdigest()
             entry["hash"] = entry_hash
 

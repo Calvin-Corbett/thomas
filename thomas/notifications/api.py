@@ -186,7 +186,7 @@ def build_router() -> APIRouter:
                         break
                     try:
                         msg = await asyncio.wait_for(q.get(), timeout=15.0)
-                        yield f"event: {msg.get('event','notification')}\ndata: {json.dumps(msg.get('data', {}))}\n\n"
+                        yield f"event: {msg.get('event', 'notification')}\ndata: {json.dumps(msg.get('data', {}))}\n\n"
                     except asyncio.TimeoutError:
                         # keep-alive ping
                         yield "event: ping\ndata: {}\n\n"

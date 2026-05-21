@@ -520,9 +520,7 @@ class PolicyComplianceService:
             add_violation(
                 code="commerce.store_billing_required",
                 severity="block",
-                message=(
-                    "digital_in_app modules require store_billing_enabled=true for profile " f"{profile.profile_id}"
-                ),
+                message=(f"digital_in_app modules require store_billing_enabled=true for profile {profile.profile_id}"),
                 path="commerce_model",
                 remediation="Enable store billing or classify feature as physical_or_off_app/enterprise_internal.",
             )

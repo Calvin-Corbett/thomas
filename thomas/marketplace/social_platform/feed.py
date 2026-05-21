@@ -262,8 +262,10 @@ class FeedEngine:
 
         # Sort by velocity
         trending.sort(
-            key=lambda p: (len(p.reactions) + len(p.comments) * 2 + p.share_count * 3)
-            / max(1, (datetime.utcnow() - p.created_at).total_seconds() / 3600),
+            key=lambda p: (
+                (len(p.reactions) + len(p.comments) * 2 + p.share_count * 3)
+                / max(1, (datetime.utcnow() - p.created_at).total_seconds() / 3600)
+            ),
             reverse=True,
         )
 

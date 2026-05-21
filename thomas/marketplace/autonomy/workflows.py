@@ -543,7 +543,7 @@ class WorkflowRunner:
                     "You are an orchestrator that merges worker outputs into a single answer. "
                     "Return strict JSON with final_output and rationale."
                 ),
-                user_prompt=(f"Global goal:\n{goal}\n\n" f"Worker outputs:\n{results}\n"),
+                user_prompt=(f"Global goal:\n{goal}\n\nWorker outputs:\n{results}\n"),
                 schema_hint={"final_output": "string", "rationale": "string"},
                 profile=synthesis_profile,
                 capability=synthesis_cap,
@@ -864,7 +864,7 @@ class WorkflowRunner:
                     "You are a coding fixer. Revise the code to address reviewer issues. "
                     "Return strict JSON with revised_code and change_summary."
                 ),
-                user_prompt=(f"Task:\n{goal}\n\nCurrent code:\n{current_code}\n\n" f"Reviewer issues:\n{issues}\n"),
+                user_prompt=(f"Task:\n{goal}\n\nCurrent code:\n{current_code}\n\nReviewer issues:\n{issues}\n"),
                 schema_hint={"revised_code": "string", "change_summary": "string"},
                 profile=fixer_profile,
                 capability=fixer_capability,
@@ -927,9 +927,7 @@ class WorkflowRunner:
 
         draft_prompt = _text(payload.get("draft_prompt")) or goal
         draft_exec = await self._ask_json(
-            system_prompt=(
-                "You are a generator. Produce a high-quality first draft. " "Return strict JSON with draft."
-            ),
+            system_prompt=("You are a generator. Produce a high-quality first draft. Return strict JSON with draft."),
             user_prompt=f"Goal:\n{goal}\n\nDraft instructions:\n{draft_prompt}\n",
             schema_hint={"draft": "string"},
             profile=generator_profile,

@@ -44,7 +44,7 @@ def linear_graph():
         storage.add_node(node)
 
     for i in range(1, 5):
-        edge = Edge(id=f"e{i}", source=f"n{i}", target=f"n{i+1}", type="NEXT")
+        edge = Edge(id=f"e{i}", source=f"n{i}", target=f"n{i + 1}", type="NEXT")
         storage.add_edge(edge)
 
     return storage

@@ -50,9 +50,9 @@ class WorkflowCheckpoint:
                     )
                     """
                 )
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_checkpoint_run_id " "ON workflow_checkpoints(run_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_checkpoint_run_id ON workflow_checkpoints(run_id)")
                 conn.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_checkpoint_workflow_id " "ON workflow_checkpoints(workflow_id)"
+                    "CREATE INDEX IF NOT EXISTS idx_checkpoint_workflow_id ON workflow_checkpoints(workflow_id)"
                 )
                 conn.commit()
         except Exception as e:

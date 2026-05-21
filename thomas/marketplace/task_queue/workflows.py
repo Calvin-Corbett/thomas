@@ -56,7 +56,7 @@ class WorkflowNode:
         return self.dependencies.issubset(completed_tasks)
 
     def __repr__(self) -> str:
-        return f"WorkflowNode(id={self.task_id}, status={self.status.value}, " f"dependencies={len(self.dependencies)})"
+        return f"WorkflowNode(id={self.task_id}, status={self.status.value}, dependencies={len(self.dependencies)})"
 
 
 class Workflow:
@@ -336,7 +336,4 @@ class Workflow:
         return len(self._completed_tasks) + len(self._failed_tasks) == len(self.nodes)
 
     def __repr__(self) -> str:
-        return (
-            f"Workflow(id={self.workflow_id}, name={self.name}, "
-            f"tasks={len(self.nodes)}, status={self.status.value})"
-        )
+        return f"Workflow(id={self.workflow_id}, name={self.name}, tasks={len(self.nodes)}, status={self.status.value})"

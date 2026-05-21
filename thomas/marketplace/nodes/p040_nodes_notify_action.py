@@ -5,7 +5,7 @@ This module adds a Thomas-native primitive for notifying one or more nodes that 
 
 Design goals
 ------------
-- Thomas-native naming (no OpenClaw naming reuse).
+- Thomas-native naming (no Reference CLI naming reuse).
 - Deterministic errors with stable error codes.
 - Transport-agnostic core logic: the caller may inject a notifier implementation.
 - Automation-friendly output: JSON-serialisable contracts + JSON schema.

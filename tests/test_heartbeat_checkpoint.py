@@ -75,8 +75,7 @@ def test_dirty_with_claim_commits(monkeypatch, tmp_path) -> None:
         if "scripts/crew/workboard/claim.py" in (args[1] if len(args) > 1 else ""):
             return _Proc(
                 0,
-                "Workboard claim tool: PASS\n"
-                "- agent=claude; scope=scripts/heartbeat.py; task=Crew.Brief Layer 1\n",
+                "Workboard claim tool: PASS\n- agent=claude; scope=scripts/heartbeat.py; task=Crew.Brief Layer 1\n",
             )
         if "scripts/crew/brief/commit.py" in (args[1] if len(args) > 1 else ""):
             invocations["agent_commit"] = list(args)

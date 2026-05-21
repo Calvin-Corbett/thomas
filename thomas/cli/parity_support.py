@@ -164,18 +164,17 @@ def skill_row_key(name: str, path: str) -> str:
     return f"{normalize_skill_name(name)}::{str(path or '').strip().lower()}"
 
 
-
 def read_skill_description(skill_md: Path) -> str:
-    bundle = read_skill_bundle(skill_md.parent, source_root=skill_md.parent.parent, origin='native')
+    bundle = read_skill_bundle(skill_md.parent, source_root=skill_md.parent.parent, origin="native")
     if bundle is None:
-        return ''
-    return str(bundle.description or '')
+        return ""
+    return str(bundle.description or "")
 
 
-def discover_skill_roots(config: AppConfig, *, include_root: str = '') -> list[Path]:
+def discover_skill_roots(config: AppConfig, *, include_root: str = "") -> list[Path]:
     _ = config
     roots = [path for path, _origin in discover_native_skill_roots(cwd=Path.cwd())]
-    include_root_text = str(include_root or '').strip()
+    include_root_text = str(include_root or "").strip()
     if include_root_text:
         roots.append(Path(include_root_text).expanduser())
 
@@ -195,7 +194,7 @@ def discover_skill_roots(config: AppConfig, *, include_root: str = '') -> list[P
     return unique
 
 
-def discover_skills(config: AppConfig, *, include_root: str = '') -> tuple[list[dict[str, Any]], list[str]]:
+def discover_skills(config: AppConfig, *, include_root: str = "") -> tuple[list[dict[str, Any]], list[str]]:
     _ = config
     rows: list[dict[str, Any]] = []
     seen_paths: set[str] = set()
@@ -209,16 +208,16 @@ def discover_skills(config: AppConfig, *, include_root: str = '') -> tuple[list[
         seen_paths.add(path_key)
         rows.append(
             {
-                'name': bundle.name,
-                'path': path_text,
-                'skill_file': str(bundle.skill_file),
-                'source_root': str(bundle.source_root),
-                'description': str(bundle.description or ''),
-                'origin': str(bundle.origin or ''),
+                "name": bundle.name,
+                "path": path_text,
+                "skill_file": str(bundle.skill_file),
+                "source_root": str(bundle.source_root),
+                "description": str(bundle.description or ""),
+                "origin": str(bundle.origin or ""),
             }
         )
 
-    include_root_text = str(include_root or '').strip()
+    include_root_text = str(include_root or "").strip()
     if include_root_text:
         extra_root = Path(include_root_text).expanduser()
         try:
@@ -228,11 +227,11 @@ def discover_skills(config: AppConfig, *, include_root: str = '') -> tuple[list[
         if resolved.exists() and resolved.is_dir() and str(resolved) not in roots:
             roots.append(str(resolved))
             try:
-                skill_files = list(resolved.rglob('SKILL.md'))
+                skill_files = list(resolved.rglob("SKILL.md"))
             except (OSError, FileNotFoundError):
                 skill_files = []
             for skill_md in skill_files:
-                bundle = read_skill_bundle(skill_md.parent, source_root=resolved, origin='extra')
+                bundle = read_skill_bundle(skill_md.parent, source_root=resolved, origin="extra")
                 if bundle is None:
                     continue
                 path_text = str(bundle.path)
@@ -242,16 +241,16 @@ def discover_skills(config: AppConfig, *, include_root: str = '') -> tuple[list[
                 seen_paths.add(path_key)
                 rows.append(
                     {
-                        'name': bundle.name,
-                        'path': path_text,
-                        'skill_file': str(bundle.skill_file),
-                        'source_root': str(bundle.source_root),
-                        'description': str(bundle.description or ''),
-                        'origin': str(bundle.origin or ''),
+                        "name": bundle.name,
+                        "path": path_text,
+                        "skill_file": str(bundle.skill_file),
+                        "source_root": str(bundle.source_root),
+                        "description": str(bundle.description or ""),
+                        "origin": str(bundle.origin or ""),
                     }
                 )
 
-    rows.sort(key=lambda row: str(row.get('name') or '').lower())
+    rows.sort(key=lambda row: str(row.get("name") or "").lower())
     return rows, [str(root) for root in roots]
 
 

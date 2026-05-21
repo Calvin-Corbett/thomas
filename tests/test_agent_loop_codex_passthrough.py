@@ -57,4 +57,3 @@ class TestAgentLoopCodexPassthrough(unittest.TestCase):
         self.assertEqual([m.get("role") for m in conversation], ["user", "assistant"])
         self.assertEqual(conversation[0].get("content"), "hello")
         self.assertEqual(conversation[1].get("content"), "hi")
-

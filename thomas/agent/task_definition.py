@@ -373,9 +373,7 @@ def evaluate_task_result(
 
     verdict = "passed" if not failed_checks else "failed"
     summary = (
-        "Task definition passed."
-        if verdict == "passed"
-        else "Task definition failed: " + "; ".join(failed_checks[:3])
+        "Task definition passed." if verdict == "passed" else "Task definition failed: " + "; ".join(failed_checks[:3])
     )
     return {
         "status": verdict,

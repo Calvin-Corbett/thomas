@@ -37,7 +37,8 @@ def scaffold_route(name: str) -> None:
         click.echo(f"Already exists: {route_file.relative_to(REPO_ROOT)}")
         raise SystemExit(1)
 
-    route_file.write_text(textwrap.dedent(f'''\
+    route_file.write_text(
+        textwrap.dedent(f'''\
         """Route handler for {name}."""
 
         from __future__ import annotations
@@ -53,9 +54,12 @@ def scaffold_route(name: str) -> None:
         async def handle_get_{name}(request: web.Request) -> web.Response:
             """GET /api/{name}"""
             return web.json_response({{"ok": True, "module": "{name}"}})
-    '''), encoding="utf-8")
+    '''),
+        encoding="utf-8",
+    )
 
-    test_file.write_text(textwrap.dedent(f'''\
+    test_file.write_text(
+        textwrap.dedent(f'''\
         """Tests for {name} routes."""
 
         from __future__ import annotations
@@ -64,7 +68,9 @@ def scaffold_route(name: str) -> None:
         def test_{name}_route_exists() -> None:
             from thomas.server.routes.{name}_aiohttp import setup_routes
             assert callable(setup_routes)
-    '''), encoding="utf-8")
+    '''),
+        encoding="utf-8",
+    )
 
     click.echo(f"Created: {route_file.relative_to(REPO_ROOT)}")
     click.echo(f"Created: {test_file.relative_to(REPO_ROOT)}")
@@ -92,14 +98,18 @@ def scaffold_module(name: str, tier: str, depends: str) -> None:
     mod_dir.mkdir(parents=True)
 
     init_file = mod_dir / "__init__.py"
-    init_file.write_text(textwrap.dedent(f'''\
+    init_file.write_text(
+        textwrap.dedent(f'''\
         """{name} module."""
 
         from __future__ import annotations
-    '''), encoding="utf-8")
+    '''),
+        encoding="utf-8",
+    )
 
     test_file = REPO_ROOT / "tests" / f"test_{name}.py"
-    test_file.write_text(textwrap.dedent(f'''\
+    test_file.write_text(
+        textwrap.dedent(f'''\
         """Tests for {name} module."""
 
         from __future__ import annotations
@@ -108,7 +118,9 @@ def scaffold_module(name: str, tier: str, depends: str) -> None:
         def test_{name}_importable() -> None:
             import thomas.{name}
             assert thomas.{name} is not None
-    '''), encoding="utf-8")
+    '''),
+        encoding="utf-8",
+    )
 
     # Update _architecture.py — append to MODULES
     arch_file = THOMAS_ROOT / "_architecture.py"
@@ -138,7 +150,8 @@ def scaffold_command(name: str) -> None:
         click.echo(f"Already exists: {cmd_file.relative_to(REPO_ROOT)}")
         raise SystemExit(1)
 
-    cmd_file.write_text(textwrap.dedent(f'''\
+    cmd_file.write_text(
+        textwrap.dedent(f'''\
         """thomas {name} — CLI command."""
 
         from __future__ import annotations
@@ -150,7 +163,9 @@ def scaffold_command(name: str) -> None:
         def {name}_command() -> None:
             """{name.replace("_", " ").title()} command."""
             click.echo("{name}: not yet implemented")
-    '''), encoding="utf-8")
+    '''),
+        encoding="utf-8",
+    )
 
     click.echo(f"Created: {cmd_file.relative_to(REPO_ROOT)}")
     click.echo(f"Wire it: cli.add_command({name}_command) in thomas/cli/main.py")

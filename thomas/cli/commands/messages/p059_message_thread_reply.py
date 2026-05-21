@@ -7,7 +7,7 @@ It supports:
 - human output (default)
 - machine output via --json
 
-It is intentionally Thomas-native and avoids OpenClaw naming reuse.
+It is intentionally Thomas-native and avoids Reference CLI naming reuse.
 """
 
 from __future__ import annotations

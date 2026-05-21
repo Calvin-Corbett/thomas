@@ -33,10 +33,7 @@ def _render_human(contract) -> str:
     lines.append(f"Hooks: {len(contract.hooks)}")
     lines.append("")
     for hook in contract.hooks:
-        params = ", ".join(
-            f"{p.name}: {p.annotation}" + (" = ..." if p.has_default else "")
-            for p in hook.parameters
-        )
+        params = ", ".join(f"{p.name}: {p.annotation}" + (" = ..." if p.has_default else "") for p in hook.parameters)
         async_prefix = "async " if hook.is_async else ""
         doc = f"  # {hook.doc}" if hook.doc else ""
         lines.append(f"- {async_prefix}{hook.name}({params}) -> {hook.return_annotation}{doc}")

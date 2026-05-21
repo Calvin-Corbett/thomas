@@ -16,9 +16,7 @@ def test_extract_call_source_stops_at_matching_paren() -> None:
 
 
 def test_extract_call_source_ignores_parentheses_inside_strings() -> None:
-    text = (
-        'await send({"type": "text", "text": "line with ) paren and \\"quote\\" inside"})\n' 'obj = {"type": "noise"}\n'
-    )
+    text = 'await send({"type": "text", "text": "line with ) paren and \\"quote\\" inside"})\nobj = {"type": "noise"}\n'
     call = mod._extract_call_source(text, text.index("send"))
     assert '"type": "text"' in call
     assert '"type": "noise"' not in call
@@ -400,4 +398,7 @@ def test_web_nav_chat_robot_uses_website_pixel_agent_contract() -> None:
     for name, text in runtime_sources.items():
         assert "stripNavChatRobot" in text, name
         assert "MutationObserver" in text, name
-        assert "label.querySelectorAll('.nav-chat-robot-wrap, .nav-chat-robot, .pixel-agent').forEach((node) => node.remove());" in text, name
+        assert (
+            "label.querySelectorAll('.nav-chat-robot-wrap, .nav-chat-robot, .pixel-agent').forEach((node) => node.remove());"
+            in text
+        ), name

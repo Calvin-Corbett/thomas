@@ -35,16 +35,15 @@ def _get_client() -> Any:
 
     api_key = str(os.environ.get("MOLTBOOK_API_KEY", "")).strip()
     agent_name = str(os.environ.get("MOLTBOOK_AGENT_NAME", "thomas")).strip()
-    agent_desc = str(
-        os.environ.get("MOLTBOOK_AGENT_DESCRIPTION", "")
-        or "Thomas AI workspace agent"
-    ).strip()
+    agent_desc = str(os.environ.get("MOLTBOOK_AGENT_DESCRIPTION", "") or "Thomas AI workspace agent").strip()
 
-    client = MoltbookClient(MoltbookConfig(
-        api_key=api_key,
-        agent_name=agent_name,
-        agent_description=agent_desc,
-    ))
+    client = MoltbookClient(
+        MoltbookConfig(
+            api_key=api_key,
+            agent_name=agent_name,
+            agent_description=agent_desc,
+        )
+    )
     _CLIENT_CACHE[cache_key] = client
     return client
 
@@ -60,11 +59,7 @@ def _format_post(post: Any) -> str:
 def _format_comment(comment: Any) -> str:
     """Format a MoltbookComment for display."""
     prefix = f"  └─ reply to {comment.parent_id}" if comment.parent_id else ""
-    return (
-        f"{comment.author} (+{comment.upvotes}){prefix}\n"
-        f"  {comment.content[:300]}\n"
-        f"  ID: {comment.comment_id}"
-    )
+    return f"{comment.author} (+{comment.upvotes}){prefix}\n  {comment.content[:300]}\n  ID: {comment.comment_id}"
 
 
 # ---------------------------------------------------------------------------
@@ -218,9 +213,7 @@ def handle_moltbook_get_post(
     if include_comments:
         comments = client.get_comments(post_id)
         result["comments"] = [c.raw for c in comments]
-        result["formatted_comments"] = "\n".join(
-            _format_comment(c) for c in comments
-        )
+        result["formatted_comments"] = "\n".join(_format_comment(c) for c in comments)
     return result
 
 
@@ -343,8 +336,7 @@ MOLTBOOK_TOOLS: list[dict[str, Any]] = [
     {
         "name": "moltbook_post",
         "description": (
-            "Create a new post on Moltbook. Specify a submolt (community), "
-            "title, and either text content or a URL."
+            "Create a new post on Moltbook. Specify a submolt (community), title, and either text content or a URL."
         ),
         "parameters": {
             "type": "object",
@@ -445,10 +437,7 @@ MOLTBOOK_TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "moltbook_submolt",
-        "description": (
-            "Manage Moltbook submolts (communities): list, get, create, "
-            "subscribe, or unsubscribe."
-        ),
+        "description": ("Manage Moltbook submolts (communities): list, get, create, subscribe, or unsubscribe."),
         "parameters": {
             "type": "object",
             "properties": {

@@ -7,6 +7,7 @@ from typing import Any
 
 Key = tuple[str, str]  # (run_id, tool_call_id)
 
+
 @dataclass
 class PendingApproval:
     run_id: str
@@ -17,11 +18,13 @@ class PendingApproval:
     reason: str
     created_at: float
 
+
 class ApprovalBroker:
     """Async approval broker (stdlib only).
 
     Stores pending approvals keyed by (run_id, tool_call_id).
     """
+
     def __init__(self) -> None:
         self._futs: dict[Key, asyncio.Future[bool]] = {}
         self._pending: dict[Key, PendingApproval] = {}

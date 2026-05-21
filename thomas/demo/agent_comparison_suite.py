@@ -310,9 +310,9 @@ def build_suite_result(
                 }
                 for row in ranking_rows
             ],
-            key=lambda item: int(item.get("overall_suite_rank") or 0)
-            if int(item.get("overall_suite_rank") or 0) > 0
-            else 9999,
+            key=lambda item: (
+                int(item.get("overall_suite_rank") or 0) if int(item.get("overall_suite_rank") or 0) > 0 else 9999
+            ),
         ),
     }
     return result
@@ -724,8 +724,7 @@ def _render_markdown(result: Mapping[str, Any]) -> str:
         for row in gaps:
             winners = ", ".join(list(row.get("winners") or []))
             lines.append(
-                f"- `{row.get('metric')}` ({row.get('category')}): winners `{winners}`, "
-                f"gap `{row.get('gap_to_best')}`"
+                f"- `{row.get('metric')}` ({row.get('category')}): winners `{winners}`, gap `{row.get('gap_to_best')}`"
             )
     lines.append("")
     lines.append("## Competitor Pressure")

@@ -58,13 +58,15 @@ def generate_agent_docs_command(dry_run: bool) -> None:
             if dep in MODULES:
                 graph_lines.append(f"    {name} --> {dep}")
 
-    graph_lines.extend([
-        "",
-        "    classDef core fill:#4a9eff,color:#fff",
-        "    classDef ext fill:#50c878,color:#fff",
-        "    classDef infra fill:#ff9f43,color:#fff",
-        "    classDef support fill:#a29bfe,color:#fff",
-    ])
+    graph_lines.extend(
+        [
+            "",
+            "    classDef core fill:#4a9eff,color:#fff",
+            "    classDef ext fill:#50c878,color:#fff",
+            "    classDef infra fill:#ff9f43,color:#fff",
+            "    classDef support fill:#a29bfe,color:#fff",
+        ]
+    )
 
     for tier_name in ["core", "ext", "infra", "support"]:
         members = sorted(get_all_by_tier(tier_name).keys())

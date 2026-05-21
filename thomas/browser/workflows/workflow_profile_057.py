@@ -5,18 +5,15 @@ from __future__ import annotations
 from typing import Any
 
 PROFILE: dict[str, Any] = {
-  "profile_id": "wf_profile_057",
-  "category": "support",
-  "title": "Support workflow profile 057",
-  "risk_tier": "high",
-  "required_signals": [
-    "network_idle",
-    "console_clean",
-    "trace_available"
-  ],
-  "max_retries": 2,
-  "timeout_ms": 22809
+    "profile_id": "wf_profile_057",
+    "category": "support",
+    "title": "Support workflow profile 057",
+    "risk_tier": "high",
+    "required_signals": ["network_idle", "console_clean", "trace_available"],
+    "max_retries": 2,
+    "timeout_ms": 22809,
 }
+
 
 def get_profile() -> dict[str, Any]:
     return dict(PROFILE)

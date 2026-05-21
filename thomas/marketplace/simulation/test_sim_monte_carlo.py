@@ -205,7 +205,8 @@ class TestVarianceReduction:
         vr = VarianceReduction(seed=42)
 
         # Integrate sin(x) over [0, π/2]
-        func = lambda x: math.sin(x * math.pi / 2)
+        def func(x):
+            return math.sin(x * math.pi / 2)
 
         estimate, variance = vr.antithetic_variates(func, num_pairs=1000)
 
@@ -218,8 +219,12 @@ class TestVarianceReduction:
         vr = VarianceReduction(seed=42)
 
         # Integrate x^3
-        func = lambda x: x**3
-        control_func = lambda x: x**2  # Correlated, known E[x^2] = 1/3
+        def func(x):
+            return x**3
+
+        def control_func(x):
+            return x**2  # Correlated, known E[x^2] = 1/3
+
         known_expectation = 1 / 3
 
         estimate, variance = vr.control_variates(func, control_func, known_expectation, num_samples=1000)
@@ -231,8 +236,11 @@ class TestVarianceReduction:
         """Test that variance reduction actually reduces variance."""
         vr = VarianceReduction(seed=42)
 
-        func = lambda x: x**2
-        control_func = lambda x: x
+        def func(x):
+            return x**2
+
+        def control_func(x):
+            return x
 
         # Regular sampling
         samples_raw = [func(random.random()) for _ in range(100)]

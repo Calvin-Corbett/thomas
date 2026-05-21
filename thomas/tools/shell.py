@@ -88,9 +88,7 @@ class ShellTool(Tool):
                 cwd=str(cwd),
                 env={**os.environ, "PYTHONUNBUFFERED": "1"},
             )
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                proc.communicate(), timeout=timeout
-            )
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         except asyncio.TimeoutError:
             try:
                 proc.kill()  # type: ignore[union-attr]
@@ -131,10 +129,6 @@ class ShellTool(Tool):
         )
 
 
-def register_shell_tools(
-    registry: Any, working_dir: Path, config_timeout: int = 30, allowed: bool = True
-) -> None:
+def register_shell_tools(registry: Any, working_dir: Path, config_timeout: int = 30, allowed: bool = True) -> None:
     """Register shell tools with the registry."""
-    registry.register(
-        ShellTool(working_dir, default_timeout=config_timeout, allowed=allowed)
-    )
+    registry.register(ShellTool(working_dir, default_timeout=config_timeout, allowed=allowed))

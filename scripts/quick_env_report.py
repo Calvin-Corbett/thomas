@@ -66,13 +66,8 @@ def main() -> int:
         return 0
 
     print(f"Timestamp (UTC): {report['timestamp_utc']}")
-    print(
-        f"Python: {report['python']['version']} ({report['python']['executable']})"
-    )
-    print(
-        f"Platform: {report['platform']['system']} {report['platform']['release']} "
-        f"({report['platform']['machine']})"
-    )
+    print(f"Python: {report['python']['version']} ({report['python']['executable']})")
+    print(f"Platform: {report['platform']['system']} {report['platform']['release']} ({report['platform']['machine']})")
     print(f"CWD: {report['workspace']['cwd']}")
     print(f"Git root: {report['workspace']['git_root'] or 'n/a'}")
     print(f"Git branch: {report['workspace']['git_branch'] or 'n/a'}")

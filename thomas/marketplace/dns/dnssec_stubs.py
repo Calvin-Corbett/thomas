@@ -197,7 +197,7 @@ class TrustAnchorStore:
             flags=0x0101,  # KSK
             protocol=3,
             algorithm=8,  # RSASHA256
-            public_key="AwEAAaetidBUN1AGRiCv/ImiwBl2MGC1+" "WLaHU/RS1KwnonzVmsuuhJjXWn8bCUuLBKO9O" "+yrKKAVtHMfmLJl9F",
+            public_key="AwEAAaetidBUN1AGRiCv/ImiwBl2MGC1+WLaHU/RS1KwnonzVmsuuhJjXWn8bCUuLBKO9O+yrKKAVtHMfmLJl9F",
         )
         self.anchors["."] = ChainOfTrust(".", [root_key], is_trusted=True)
 

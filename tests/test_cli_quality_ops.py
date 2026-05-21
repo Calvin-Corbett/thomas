@@ -17,6 +17,7 @@ def _build_root_cli() -> click.Group:
         _ = ctx
 
     for family in OPS_BY_FAMILY.keys():
+
         @click.group(name=family)
         @click.pass_context
         def _family(ctx: click.Context) -> None:

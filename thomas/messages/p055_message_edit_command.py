@@ -4,7 +4,7 @@ This module implements the *core* behavior for editing an existing message in an
 external messaging channel.
 
 Design goals:
-- **Thomas-native** naming and contracts (no OpenClaw naming reused).
+- **Thomas-native** naming and contracts (no Reference CLI naming reused).
 - **Clear contracts**: dataclasses for input/output.
 - **Deterministic failures**: stable error codes and messages.
 - **Adapter flexibility**: support a variety of editor/client method shapes.
@@ -254,7 +254,6 @@ def _call_editor(editor: Any, request: MessageEditCommandInput) -> Any:
     id_keys = ["message_id", "id"]
     text_keys = ["text", "new_text", "content", "body"]
     channel_keys = ["channel_id", "channel", "room_id", "conversation_id"]
-
 
     for fn, _label in candidates:
         # Try keyword conventions.

@@ -134,7 +134,9 @@ class SecretStore:
             updated_at_text = _safe_iso(meta.get("updated_at"))
             updated_at_dt = _parse_iso_utc(updated_at_text)
             rotation_days_raw = meta.get("rotation_days")
-            rotation_days = _normalize_rotation_days(rotation_days_raw if rotation_days_raw is not None else default_days)
+            rotation_days = _normalize_rotation_days(
+                rotation_days_raw if rotation_days_raw is not None else default_days
+            )
             due_at_text = ""
             due_in_days: int | None = None
             status = "unknown"

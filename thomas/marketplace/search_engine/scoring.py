@@ -104,7 +104,7 @@ class BM25(ScoringModel):
             total_score += term_score
 
             explanations.append(
-                f"  term='{term}': tf={term_freq}, df={doc_freq}, " f"idf={idf:.4f}, score={term_score:.4f}"
+                f"  term='{term}': tf={term_freq}, df={doc_freq}, idf={idf:.4f}, score={term_score:.4f}"
             )
 
         explanations.append(f"  total_score={total_score:.4f}")

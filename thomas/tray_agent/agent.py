@@ -598,7 +598,7 @@ class ThomasTrayAgent:
                     time.sleep(2)
                     if self.server._port_is_live():
                         log.info(
-                            "Port %d taken over by another instance; " "this tray agent is now stale â€” exiting.",
+                            "Port %d taken over by another instance; this tray agent is now stale â€” exiting.",
                             self.port,
                         )
                         self._stop_event.set()

@@ -278,7 +278,7 @@ def _discover_cdp_url(explicit: str | None) -> str:
 
     raise BrowserTelemetryConfigError(
         code="browser_endpoint_missing",
-        message=("No live browser endpoint configured. " "Provide --cdp-url or set THOMAS_BROWSER_CDP_URL."),
+        message=("No live browser endpoint configured. Provide --cdp-url or set THOMAS_BROWSER_CDP_URL."),
         details={"env_candidates": list(_ENV_CANDIDATES)},
     )
 

@@ -179,7 +179,7 @@ def main():
             print(error_msg)
             errors.append((part_name, str(e)))
 
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print("Extraction Complete")
     print(f"  Extracted files: {len(extracted_files)}")
     print(f"  Errors: {len(errors)}")

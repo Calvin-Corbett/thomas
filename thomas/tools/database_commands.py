@@ -337,8 +337,7 @@ class DBQueryTool(Tool):
                 if ro_reasons:
                     hint = f" Reasons: {', '.join(ro_reasons)}."
                 return _tool_err(
-                    f"READ ONLY mode blocked this statement (main statement: {kw})."
-                    f"{hint} Pass confirm=true to allow."
+                    f"READ ONLY mode blocked this statement (main statement: {kw}).{hint} Pass confirm=true to allow."
                 )
 
             data = await asyncio.to_thread(_query_sync, connection_string, sql, params_obj, max_rows, confirm, dry_run)

@@ -1,6 +1,12 @@
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.0
+    # Bumped from v0.8.0 to v0.15.1 in the 2026-05-21 pre-public cleanup
+    # so the pre-commit ruff matches the locally-installed ruff (which
+    # respects the expanded `ignore` list in pyproject.toml — see the
+    # `# Additional rules ignored after the 2026-05-21 pre-public cleanup`
+    # block). Without the bump, the older ruff applies different lint
+    # rules and triggers errors that the local ruff treats as ignored.
+    rev: v0.15.1
     hooks:
       - id: ruff
         stages: [pre-commit]

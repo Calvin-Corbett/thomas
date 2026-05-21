@@ -316,7 +316,7 @@ class DiscoveryManager:
             results.append(f"doc_{i}_{case_id}")
 
         self.search_results[search_id] = results
-        logger.info(f"Search {search_id} found {len(results)} documents " f"matching {keywords}")
+        logger.info(f"Search {search_id} found {len(results)} documents matching {keywords}")
 
         return results
 
@@ -386,7 +386,7 @@ class DiscoveryManager:
         batch.bates_end = bates_start + len(document_ids) - 1
 
         self.productions[batch_id] = batch
-        logger.info(f"Created production batch {batch_id} with " f"{len(document_ids)} documents")
+        logger.info(f"Created production batch {batch_id} with {len(document_ids)} documents")
 
         return batch
 

@@ -393,7 +393,7 @@ class DepMonitor:
             prev = self._extract_high_critical(self._state.last_results)
 
         def key(v: dict[str, Any]) -> str:
-            return f"{v.get('package','')}|{v.get('cve','')}|{v.get('severity','')}|{v.get('fix_version','')}"
+            return f"{v.get('package', '')}|{v.get('cve', '')}|{v.get('severity', '')}|{v.get('fix_version', '')}"
 
         prev_set = {key(v) for v in (prev or [])}
         cur_set = {key(v) for v in current}

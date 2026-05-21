@@ -11,7 +11,7 @@ Scope: Thomas V1 launch-readiness gate snapshot
    - `computed_at_utc`: `2026-02-25T16:31:07Z`
 2. Gate command results:
    - `python scripts/check_competitive_scope_gate.py` -> PASS
-   - `python scripts/check_openclaw_metric_parity_gate.py` -> FAIL
+   - `python scripts/check_reference_cli_metric_parity_gate.py` -> FAIL
    - `python scripts/check_model_onboarding_gate.py` -> FAIL
    - `python scripts/check_surface_parity.py` -> FAIL
    - `python scripts/check_release_update_gate.py` -> PASS
@@ -32,14 +32,14 @@ Primary blockers:
 
 | Gate | Target | Current Evidence | Status |
 |---|---|---|---|
-| Task Success Rate | >= OpenClaw +10pp | `benchmark.success_rate_mean`: Thomas `0.4` vs OpenClaw `0.2` (`+20pp`) | PASS (single-run) |
-| p95 Time-to-First-Useful-Output | >=20% faster than OpenClaw | Proxy `benchmark.raw_elapsed_seconds_p95`: Thomas `21.125` vs OpenClaw `21.06285` (`-0.295%`) | FAIL |
+| Task Success Rate | >= Reference CLI +10pp | `benchmark.success_rate_mean`: Thomas `0.4` vs Reference CLI `0.2` (`+20pp`) | PASS (single-run) |
+| p95 Time-to-First-Useful-Output | >=20% faster than Reference CLI | Proxy `benchmark.raw_elapsed_seconds_p95`: Thomas `21.125` vs Reference CLI `21.06285` (`-0.295%`) | FAIL |
 | Crash-Free Run Rate | >=99.5% | Proxy `resilience.probes.pass_rate`: Thomas `1.0` (`5/5` runs) | PASS (proxy-only) |
 | Autonomous Recovery Success <=30s | >=95% | No direct metric in current artifact | UNKNOWN |
 | Unsafe Action Block Rate | >=99% | No direct metric in current artifact | UNKNOWN |
 | False Block Rate | <=5% | No direct metric in current artifact | UNKNOWN |
 | Cross-Provider Pass Rate | >=3 provider profiles | No explicit cross-provider pass metric in current artifact | UNKNOWN |
-| Cost-per-Success | <=5% worse than OpenClaw | Token efficiency telemetry coverage: Thomas `0.0`, OpenClaw `0.0`; score is `n/a` | BLOCKED (missing telemetry) |
+| Cost-per-Success | <=5% worse than Reference CLI | Token efficiency telemetry coverage: Thomas `0.0`, Reference CLI `0.0`; score is `n/a` | BLOCKED (missing telemetry) |
 
 Durability gate:
 
@@ -67,7 +67,7 @@ Durability gate:
 | Gate | Result | Notes |
 |---|---|---|
 | `check_competitive_scope_gate.py` | PASS | Scope contract and baseline commit (`d17a1f3`) present |
-| `check_openclaw_metric_parity_gate.py` | FAIL | `cli.depth.update`: Thomas `0` vs OpenClaw `2` |
+| `check_reference_cli_metric_parity_gate.py` | FAIL | `cli.depth.update`: Thomas `0` vs Reference CLI `2` |
 | `check_model_onboarding_gate.py` | FAIL | Missing `docs/MODEL_ONBOARDING_LOG.md` for model-surface changes |
 | `check_surface_parity.py` | FAIL | Missing `thomas/server/web/js/chat.js` expected by gate |
 | `check_release_update_gate.py` | PASS | Version/changelog and surface checks passed |
@@ -84,7 +84,7 @@ Durability gate:
 
 ## Immediate Launch-Blocker Actions
 
-1. Close `p95` latency and variance gaps versus OpenClaw (`benchmark.raw_elapsed_seconds_p95`, stability stddev metrics).
+1. Close `p95` latency and variance gaps versus Reference CLI (`benchmark.raw_elapsed_seconds_p95`, stability stddev metrics).
 2. Add token telemetry capture so cost-per-success gates are measurable.
 3. Resolve parity gate failure for `cli.depth.update`.
 4. Resolve model onboarding gate (`docs/MODEL_ONBOARDING_LOG.md` + related model-surface workflow).

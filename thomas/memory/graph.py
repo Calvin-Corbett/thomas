@@ -24,6 +24,7 @@ log = logging.getLogger(__name__)
 @dataclass
 class Entity:
     """An extracted entity from text."""
+
     type_name: str
     key: str
     label: str
@@ -32,6 +33,7 @@ class Entity:
 @dataclass
 class Triple:
     """An extracted relationship triple."""
+
     subject: Entity
     relation: str
     object: Entity
@@ -41,6 +43,7 @@ class Triple:
 @dataclass
 class GraphContext:
     """Packed graph context for injection into LLM prompt."""
+
     entities: list[dict[str, Any]] = field(default_factory=list)
     relations: list[dict[str, Any]] = field(default_factory=list)
     summary: str = ""
@@ -72,12 +75,9 @@ _ENTITY_PATTERNS: dict[str, list[re.Pattern]] = {
 
 # Relation patterns: (subject_type, relation, object_type, pattern)
 _RELATION_PATTERNS: list[tuple[str, str, str, re.Pattern]] = [
-    ("Project", "uses", "Concept",
-     re.compile(r"(?:project|repo)\s+(\w+)\s+(?:uses?|with)\s+(\w[\w\s]*\w)", re.I)),
-    ("User", "prefers", "Concept",
-     re.compile(r"(?:I|user)\s+(?:prefer|like)\s+(\w[\w\s]*\w)", re.I)),
-    ("User", "works_on", "Project",
-     re.compile(r"(?:I'm|I am|user)\s+(?:working on|building)\s+(\w[\w\-/.]+)", re.I)),
+    ("Project", "uses", "Concept", re.compile(r"(?:project|repo)\s+(\w+)\s+(?:uses?|with)\s+(\w[\w\s]*\w)", re.I)),
+    ("User", "prefers", "Concept", re.compile(r"(?:I|user)\s+(?:prefer|like)\s+(\w[\w\s]*\w)", re.I)),
+    ("User", "works_on", "Project", re.compile(r"(?:I'm|I am|user)\s+(?:working on|building)\s+(\w[\w\-/.]+)", re.I)),
 ]
 
 
@@ -152,9 +152,7 @@ class GraphStore:
     def __init__(self, derived: DerivedDB):
         self._db = derived
 
-    def ingest_text(
-        self, text: str, event_ids: list[int] | None = None
-    ) -> tuple[int, int]:
+    def ingest_text(self, text: str, event_ids: list[int] | None = None) -> tuple[int, int]:
         """Extract and store entities + relations from text.
 
         Returns (entities_added, relations_added).
@@ -180,14 +178,10 @@ class GraphStore:
 
             # Ensure both nodes exist
             if src_key not in node_ids:
-                nid = self._db.node_upsert(
-                    triple.subject.type_name, triple.subject.key, triple.subject.label
-                )
+                nid = self._db.node_upsert(triple.subject.type_name, triple.subject.key, triple.subject.label)
                 node_ids[src_key] = nid
             if dst_key not in node_ids:
-                nid = self._db.node_upsert(
-                    triple.object.type_name, triple.object.key, triple.object.label
-                )
+                nid = self._db.node_upsert(triple.object.type_name, triple.object.key, triple.object.label)
                 node_ids[dst_key] = nid
 
             self._db.edge_add(
@@ -242,10 +236,7 @@ class GraphStore:
                 all_edges.extend(edges)
 
             # Batch-load all destination nodes we haven't seen
-            new_dst_ids = [
-                e["dst"] for e in all_edges
-                if e["dst"] not in seen_nodes
-            ]
+            new_dst_ids = [e["dst"] for e in all_edges if e["dst"] not in seen_nodes]
             if new_dst_ids:
                 dst_nodes = self._db.nodes_get_by_ids(new_dst_ids)
             else:

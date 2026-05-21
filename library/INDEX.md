@@ -15,16 +15,16 @@ Durable research/reference library for Thomas.
   - File: `entries/architecture/1771373446-thomas-agent-integration-backlog-2026-02-18.md`
 
 ## competitive-research
-- `1771907866-openclaw-architecture-overview`: OpenClaw Architecture Overview
-  - Summary: Complete architecture research on OpenClaw AI agent runtime. Covers skills system (markdown-first), tool policy groups, Lobster pipeline engine, model failover with exponential backoff, browser automation, security model, multi-agent routing, and session persistence.
-  - Source: https://github.com/openclaw/openclaw
-  - Tags: openclaw, ai-agent, architecture, competitive-research, skills, tool-policy, failover, workflows
-  - File: `entries/competitive-research/1771907866-openclaw-architecture-overview.md`
-- `1771907866-openclaw-patterns-applied-to-thomas`: OpenClaw Patterns Applied to Thomas
-  - Summary: Maps 5 specific OpenClaw architectural patterns to Thomas improvement opportunities: tool policy groups, exponential backoff cooldowns, workflow approval gates, message interruption, and markdown-first skills.
-  - Source: https://github.com/openclaw/openclaw
-  - Tags: openclaw, thomas, upgrades, tool-policy, failover, workflows, architecture
-  - File: `entries/competitive-research/1771907866-openclaw-patterns-applied-to-thomas.md`
+- `1771907866-reference_cli-architecture-overview`: Reference CLI Architecture Overview
+  - Summary: Complete architecture research on Reference CLI AI agent runtime. Covers skills system (markdown-first), tool policy groups, Lobster pipeline engine, model failover with exponential backoff, browser automation, security model, multi-agent routing, and session persistence.
+  - Source: https://github.com/reference_cli/reference_cli
+  - Tags: reference_cli, ai-agent, architecture, competitive-research, skills, tool-policy, failover, workflows
+  - File: `entries/competitive-research/1771907866-reference_cli-architecture-overview.md`
+- `1771907866-reference_cli-patterns-applied-to-thomas`: Reference CLI Patterns Applied to Thomas
+  - Summary: Maps 5 specific Reference CLI architectural patterns to Thomas improvement opportunities: tool policy groups, exponential backoff cooldowns, workflow approval gates, message interruption, and markdown-first skills.
+  - Source: https://github.com/reference_cli/reference_cli
+  - Tags: reference_cli, thomas, upgrades, tool-policy, failover, workflows, architecture
+  - File: `entries/competitive-research/1771907866-reference_cli-patterns-applied-to-thomas.md`
 
 ## provider-api-research
 - `1771373439-grok-xai-priority-pack-for-thomas-2026-02-18`: Grok/xAI Priority Pack for Thomas (2026-02-18)

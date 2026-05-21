@@ -264,12 +264,7 @@ class JobExecutor:
 
     def __repr__(self) -> str:
         """String representation."""
-        return (
-            f"JobExecutor("
-            f"type={self.executor_type}, "
-            f"workers={self.max_workers}, "
-            f"running={self.get_running_count()})"
-        )
+        return f"JobExecutor(type={self.executor_type}, workers={self.max_workers}, running={self.get_running_count()})"
 
 
 class PersistentExecutor:

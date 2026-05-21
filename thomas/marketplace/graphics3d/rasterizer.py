@@ -67,7 +67,7 @@ def viewport_transform(*args: object) -> tuple[float, float]:
         ndc_x = float(ndc_x)
         ndc_y = float(ndc_y)
     else:
-        raise TypeError("viewport_transform expects (Vec4, width, height) or " "(ndc_x, ndc_y, width, height)")
+        raise TypeError("viewport_transform expects (Vec4, width, height) or (ndc_x, ndc_y, width, height)")
 
     x = (ndc_x + 1) * 0.5 * viewport_width
     y = (1 - ndc_y) * 0.5 * viewport_height

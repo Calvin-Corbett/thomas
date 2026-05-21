@@ -1,7 +1,7 @@
 """
 P120 - Plugin info command (core implementation).
 
-Thomas-native: no OpenClaw naming reuse.
+Thomas-native: no Reference CLI naming reuse.
 
 Public surface:
   - run_plugin_info_command(input) -> output

@@ -76,14 +76,14 @@ class CreateDiffTool(Tool):
         if old_str not in content:
             return ToolResult(
                 ok=False,
-                error=(f"old_str not found in {rel}. " f"Make sure the text matches exactly including whitespace."),
+                error=(f"old_str not found in {rel}. Make sure the text matches exactly including whitespace."),
             )
 
         count = content.count(old_str)
         if count > 1:
             return ToolResult(
                 ok=False,
-                error=(f"old_str appears {count} times in {rel}. " f"Add more surrounding context to make it unique."),
+                error=(f"old_str appears {count} times in {rel}. Add more surrounding context to make it unique."),
             )
 
         new_content = content.replace(old_str, new_str, 1)

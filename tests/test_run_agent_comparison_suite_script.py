@@ -114,8 +114,8 @@ def test_run_normalizes_legacy_benchmark_keys_and_aliases(monkeypatch, tmp_path:
         {
             "agents": [
                 {
-                    "id": "openclaw",
-                    "benchmark_alias": "openclaw_live",
+                    "id": "reference_cli",
+                    "benchmark_alias": "reference_cli_live",
                     "benchmark_scorecard_glob": "demo/agentic-runs/*/scorecard.json",
                     "benchmark_raw_glob": "demo/agentic-runs/*/benchmark_results.raw.json",
                 }
@@ -130,7 +130,7 @@ def test_run_normalizes_legacy_benchmark_keys_and_aliases(monkeypatch, tmp_path:
         captured["argv"] = list(argv)
         payload = _read_suite_config_from_forwarded_argv(argv)
         agent = dict(payload["agents"][0])
-        assert agent["benchmark_aliases"] == ["openclaw_live", "openclaw"]
+        assert agent["benchmark_aliases"] == ["reference_cli_live", "reference_cli"]
         assert agent["benchmark_scorecard_globs"] == ["demo/agentic-runs/*/scorecard.json"]
         assert agent["benchmark_raw_globs"] == ["demo/agentic-runs/*/benchmark_results.raw.json"]
         assert agent["benchmark_evidence_globs"] == ["demo/agentic-runs/*/benchmark_results.raw.json"]

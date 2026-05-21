@@ -266,6 +266,10 @@ def _run_optional_deep_checks(repo_root: Path) -> list[str]:
         [sys.executable, "scripts/forge/gates/release_hygiene.py"],
         [sys.executable, "scripts/forge/gates/claim_integrity.py", "--json"],
         [sys.executable, "scripts/security_audit.py", "--repo-root", ".", "--json", "--strict"],
+        # Public repo leak guard: blocks pushes that contain competitor
+        # names or internal-only docs. Installed during the 2026-05-21
+        # cleanup after 538 OpenClaw references leaked to public main.
+        [sys.executable, "scripts/forge/gates/public_repo_leak_guard.py"],
     ]
     for cmd in commands:
         proc = subprocess.run(cmd, cwd=repo_root, capture_output=True, text=True)
@@ -341,6 +345,21 @@ def run(argv: Sequence[str] | None = None) -> int:
         preview = "; ".join(f"{item['file']}:{item['line']} [{item['pattern']}]" for item in sample)
         suffix = f"; ... (+{len(secret_findings) - 5} more)" if len(secret_findings) > 5 else ""
         errors.append(f"potential live secrets detected: {preview}{suffix}")
+
+    # Public repo leak guard (always runs, even without --deep). This is
+    # the 2026-05-21 cleanup tripwire: blocks any future drift that
+    # re-introduces competitor names or internal-only docs.
+    leak_proc = subprocess.run(
+        [sys.executable, str(repo_root / "scripts/forge/gates/public_repo_leak_guard.py")],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    if leak_proc.returncode != 0:
+        leak_msg = (leak_proc.stdout or leak_proc.stderr or "").strip()
+        # Trim the gate output so the preflight error stays readable
+        snippet = "\n  ".join(leak_msg.splitlines()[:12])
+        errors.append(f"public repo leak guard failed:\n  {snippet}")
 
     deep_failures: list[str] = []
     if args.deep:

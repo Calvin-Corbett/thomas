@@ -227,7 +227,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             print("GitHub release lanes: PASS")
             print(f"- repo: {repo}")
             for result in list(output.get("results") or []):
-                print(f"- branch {result['branch']}: ok={result['ok']} " f"(mismatches={result['mismatch_count']})")
+                print(f"- branch {result['branch']}: ok={result['ok']} (mismatches={result['mismatch_count']})")
             if output.get("default_branch_set_to"):
                 print(f"- default branch set to: {output['default_branch_set_to']}")
         else:

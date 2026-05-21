@@ -79,7 +79,8 @@ def test_site_visual_proof_gate_only_runs_for_site_paths() -> None:
     assert mod._gate_applies("site_visual_proof", ["apps/site/src/app/page.tsx"]) is True
     assert mod._gate_applies("site_visual_proof", ["apps/site/verification/ui-proof.json"]) is True
     assert (
-        mod._gate_applies("site_visual_proof", ["scripts/crew/brief/commit.py", "tests/test_commit_gate_split.py"]) is False
+        mod._gate_applies("site_visual_proof", ["scripts/crew/brief/commit.py", "tests/test_commit_gate_split.py"])
+        is False
     )
     assert mod._gate_applies("boot_smoke", ["scripts/crew/brief/commit.py"]) is True
 

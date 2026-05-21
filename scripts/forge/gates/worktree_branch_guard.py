@@ -139,9 +139,7 @@ def run(_argv: Sequence[str] | None = None) -> int:
                 other_tip = _branch_tip(other)
                 if not other_tip or not _is_ancestor(other_tip, current_tip):
                     continue
-                already_merged = any(
-                    base_tip and _is_ancestor(other_tip, base_tip) for base_tip in base_tips.values()
-                )
+                already_merged = any(base_tip and _is_ancestor(other_tip, base_tip) for base_tip in base_tips.values())
                 if not already_merged:
                     unmerged_ancestors.append(other)
             if unmerged_ancestors:

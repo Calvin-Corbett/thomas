@@ -271,7 +271,7 @@ class Alert:
 
     def __repr__(self) -> str:
         status = "TRIGGERED" if self.triggered else "OK"
-        return f"Alert({self.alert_id}, {self.metric_name}{self.comparison}" f"{self.threshold}, {status})"
+        return f"Alert({self.alert_id}, {self.metric_name}{self.comparison}{self.threshold}, {status})"
 
 
 class Transform(ABC):
@@ -526,4 +526,4 @@ class PipelineConfig:
         return [s.name for s in self.stages]
 
     def __repr__(self) -> str:
-        return f"PipelineConfig({self.name}, {len(self.stages)} stages, " f"parallelism={self.max_parallelism})"
+        return f"PipelineConfig({self.name}, {len(self.stages)} stages, parallelism={self.max_parallelism})"

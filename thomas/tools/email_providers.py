@@ -153,7 +153,7 @@ class _GmailProvider(_Provider):
             return []
 
         fields = (
-            "id,threadId,internalDate,snippet,labelIds," "payload(headers,name,value,parts,filename,body/attachmentId)"
+            "id,threadId,internalDate,snippet,labelIds,payload(headers,name,value,parts,filename,body/attachmentId)"
         )
 
         async def fetch(mid: str) -> dict[str, Any]:

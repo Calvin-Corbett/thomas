@@ -271,8 +271,8 @@ class TestLabelPropagation:
 
         # Strong connections within clusters
         for i in range(2):
-            e1 = Edge(id=f"c1_e{i}", source=f"c1_n{i}", target=f"c1_n{i+1}", type="CONNECTS")
-            e2 = Edge(id=f"c2_e{i}", source=f"c2_n{i}", target=f"c2_n{i+1}", type="CONNECTS")
+            e1 = Edge(id=f"c1_e{i}", source=f"c1_n{i}", target=f"c1_n{i + 1}", type="CONNECTS")
+            e2 = Edge(id=f"c2_e{i}", source=f"c2_n{i}", target=f"c2_n{i + 1}", type="CONNECTS")
             storage.add_edge(e1)
             storage.add_edge(e2)
 
@@ -412,8 +412,8 @@ class TestDiameter:
             storage.add_node(node)
 
         for i in range(4):
-            e1 = Edge(id=f"e{i}", source=f"n{i}", target=f"n{i+1}", type="CONNECTS")
-            e2 = Edge(id=f"e{i}_r", source=f"n{i+1}", target=f"n{i}", type="CONNECTS")
+            e1 = Edge(id=f"e{i}", source=f"n{i}", target=f"n{i + 1}", type="CONNECTS")
+            e2 = Edge(id=f"e{i}_r", source=f"n{i + 1}", target=f"n{i}", type="CONNECTS")
             storage.add_edge(e1)
             storage.add_edge(e2)
 

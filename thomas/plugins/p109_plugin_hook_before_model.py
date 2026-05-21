@@ -4,7 +4,7 @@ This module defines a *before-model* hook that can synchronously transform a
 model request immediately before it is sent to an LLM.
 
 Design goals
-- Thomas-native naming (no OpenClaw naming reuse)
+- Thomas-native naming (no Reference CLI naming reuse)
 - Clear input/output contracts (TypedDict + dataclasses)
 - Deterministic errors for invalid input/config/external failures
 - Automation-friendly JSON mode (schema + JSON in/out)

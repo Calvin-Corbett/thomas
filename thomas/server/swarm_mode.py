@@ -12,6 +12,7 @@ from typing import Any
 try:
     from thomas.agent.swarm import SwarmOrchestrator as SwarmOrchestrator
 except Exception:  # pragma: no cover - defensive fallback for partial installs
+
     class SwarmOrchestrator:  # type: ignore[no-redef]
         """Fallback placeholder when swarm runtime dependencies are unavailable."""
 

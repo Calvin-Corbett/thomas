@@ -481,7 +481,7 @@ class AppConfig:
         for m in self.models.values():
             errors.extend(m.validate())
         if self.default_model and self.default_model not in self.models:
-            errors.append(f"default_model '{self.default_model}' not in models: " f"{list(self.models.keys())}")
+            errors.append(f"default_model '{self.default_model}' not in models: {list(self.models.keys())}")
         if self.max_agent_iterations < 1:
             errors.append("max_agent_iterations must be >= 1")
         if self.max_agent_iterations > 100:
@@ -491,8 +491,7 @@ class AppConfig:
         for name in self.failover.profiles:
             if name not in self.models:
                 errors.append(
-                    f"failover.profiles contains unknown model profile '{name}'. "
-                    f"Available: {list(self.models.keys())}"
+                    f"failover.profiles contains unknown model profile '{name}'. Available: {list(self.models.keys())}"
                 )
         errors.extend(self.embed.validate())
         errors.extend(self.server.validate())

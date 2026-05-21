@@ -77,7 +77,7 @@ class CircuitBreaker:
                 if self._should_attempt_reset():
                     self.state = CircuitState.HALF_OPEN
                 else:
-                    raise CircuitBreakerOpenError(f"Circuit breaker is open. " f"Retry after {self.recovery_timeout}s")
+                    raise CircuitBreakerOpenError(f"Circuit breaker is open. Retry after {self.recovery_timeout}s")
 
         try:
             result = func(*args, **kwargs)

@@ -53,9 +53,7 @@ def test_cli_gateway_start_json_payload(tmp_path: Path):
         [sys.executable, "-c", "import time; time.sleep(60)"],
     )
 
-    payload = gateway_cli_mod.run_gateway_start(
-        gateway_cli_mod.GatewayStartCliOptions(config_path=str(cfg_path))
-    )
+    payload = gateway_cli_mod.run_gateway_start(gateway_cli_mod.GatewayStartCliOptions(config_path=str(cfg_path)))
     assert payload["ok"] is True
     assert payload["status"] in ("started", "already_running")
     assert isinstance(payload["pid"], int) and payload["pid"] > 0

@@ -128,7 +128,7 @@ class Catalog:
             for fk in foreign_keys:
                 if fk.target_table == table_name:
                     raise CatalogException(
-                        f"Cannot drop table {table_name}: " f"referenced by foreign key in {other_table_name}"
+                        f"Cannot drop table {table_name}: referenced by foreign key in {other_table_name}"
                     )
 
         # Drop all indexes
@@ -502,8 +502,7 @@ class Catalog:
                 for col_name in constraint.columns:
                     if table.get_column(col_name) is None:
                         errors.append(
-                            f"Constraint {constraint.name} in {table_name} "
-                            f"references non-existent column {col_name}"
+                            f"Constraint {constraint.name} in {table_name} references non-existent column {col_name}"
                         )
 
         return errors

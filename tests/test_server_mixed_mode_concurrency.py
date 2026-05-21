@@ -61,13 +61,7 @@ class _FakeBatchClientConcurrent:
             "results": [
                 {
                     "batch_request_id": "req_concurrency_1",
-                    "response": {
-                        "completion_response": {
-                            "choices": [
-                                {"message": {"content": "BATCH_CONCURRENT_OK"}}
-                            ]
-                        }
-                    },
+                    "response": {"completion_response": {"choices": [{"message": {"content": "BATCH_CONCURRENT_OK"}}]}},
                 }
             ]
         }
@@ -168,9 +162,12 @@ class TestServerMixedModeConcurrency(AioHTTPTestCase):
             )
             return resp.status, _parse_ndjson(await resp.text())
 
-        with patch("thomas.server.app.AgentLoop", _FakeFastAgentLoop), patch(
-            "thomas.server.app.OpenAICompatBatchClient",
-            _FakeBatchClientConcurrent,
+        with (
+            patch("thomas.server.app.AgentLoop", _FakeFastAgentLoop),
+            patch(
+                "thomas.server.app.OpenAICompatBatchClient",
+                _FakeBatchClientConcurrent,
+            ),
         ):
             (fast_status, fast_events), (batch_status, batch_events) = await asyncio.gather(
                 _call_fast(),

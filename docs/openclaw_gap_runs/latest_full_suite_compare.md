@@ -19,7 +19,7 @@
 - token_efficiency: separate token-only scoring block, emitted only with token telemetry evidence
 
 - #1 `thomas`: overall_suite `99.407`, capability `85.51`, quick_suite `98.333`, dynamic_suite `100.0`, human_suite `0.0`, runtime_rank `1`, head_to_head `98.684`, decisive_h2h `98.684`, token_efficiency `75.159602`, verdict `GO`, runtime_wins `54`, runtime_coverage `98.26%`
-- #2 `openclaw`: overall_suite `55.452`, capability `42.815`, quick_suite `63.333`, dynamic_suite `50.746`, human_suite `0.0`, runtime_rank `2`, head_to_head `1.316`, decisive_h2h `1.316`, token_efficiency `n/a`, verdict `NO_GO`, runtime_wins `1`, runtime_coverage `84.35%`
+- #2 `reference_cli`: overall_suite `55.452`, capability `42.815`, quick_suite `63.333`, dynamic_suite `50.746`, human_suite `0.0`, runtime_rank `2`, head_to_head `1.316`, decisive_h2h `1.316`, token_efficiency `n/a`, verdict `NO_GO`, runtime_wins `1`, runtime_coverage `84.35%`
 - #3 `gpt_engineer`: overall_suite `28.723`, capability `18.628`, quick_suite `27.778`, dynamic_suite `29.167`, human_suite `0.0`, runtime_rank `5`, head_to_head `n/a`, decisive_h2h `n/a`, token_efficiency `n/a`, verdict `NO_GO`, runtime_wins `0`, runtime_coverage `50.43%`
 - #4 `crewai`: overall_suite `13.83`, capability `8.341`, quick_suite `5.556`, dynamic_suite `17.708`, human_suite `0.0`, runtime_rank `3`, head_to_head `n/a`, decisive_h2h `n/a`, token_efficiency `n/a`, verdict `NO_GO`, runtime_wins `1`, runtime_coverage `50.43%`
 - #5 `open_interpreter`: overall_suite `13.475`, capability `8.049`, quick_suite `4.444`, dynamic_suite `17.708`, human_suite `0.0`, runtime_rank `14`, head_to_head `n/a`, decisive_h2h `n/a`, token_efficiency `n/a`, verdict `NO_GO`, runtime_wins `0`, runtime_coverage `50.43%`
@@ -35,19 +35,19 @@
 
 ## Head-to-Head (1v1)
 
-- Pair: `thomas` vs `openclaw`
-- Scores: `thomas`=`98.684`, `openclaw`=`1.316` (tie_policy `exclude`, counted_metrics `76`, ties_counted `0`, ties_observed `37`)
-- Decisive (ties excluded): `thomas`=`98.684`, `openclaw`=`1.316` (counted_metrics `76`)
-- By mode `quick`: `thomas`=`97.778`, `openclaw`=`2.222` (counted_metrics `45`, ties_counted `0`, ties_observed `15`)
-- By mode `dynamic`: `thomas`=`100.0`, `openclaw`=`0.0` (counted_metrics `31`, ties_counted `0`, ties_observed `22`)
+- Pair: `thomas` vs `reference_cli`
+- Scores: `thomas`=`98.684`, `reference_cli`=`1.316` (tie_policy `exclude`, counted_metrics `76`, ties_counted `0`, ties_observed `37`)
+- Decisive (ties excluded): `thomas`=`98.684`, `reference_cli`=`1.316` (counted_metrics `76`)
+- By mode `quick`: `thomas`=`97.778`, `reference_cli`=`2.222` (counted_metrics `45`, ties_counted `0`, ties_observed `15`)
+- By mode `dynamic`: `thomas`=`100.0`, `reference_cli`=`0.0` (counted_metrics `31`, ties_counted `0`, ties_observed `22`)
 
 ## Token Efficiency
 
 - Method: `1v1 uses token_efficiency_score, effective_tokens_per_success, and telemetry_coverage; overall ranks by token_efficiency_score`
-- Pair: `thomas` vs `openclaw`
-- Scores: `thomas`=`100.0`, `openclaw`=`0.0` (counted_metrics `3`, ties `0`)
+- Pair: `thomas` vs `reference_cli`
+- Scores: `thomas`=`100.0`, `reference_cli`=`0.0` (counted_metrics `3`, ties `0`)
 - `#1` `thomas`: score `75.159602`, tokens_per_success `52.0`, coverage `0.75`
-- `#2` `openclaw`: score `None`, tokens_per_success `None`, coverage `0.0`
+- `#2` `reference_cli`: score `None`, tokens_per_success `None`, coverage `0.0`
 - `#3` `aider`: score `None`, tokens_per_success `None`, coverage `0.0`
 - `#4` `open_interpreter`: score `None`, tokens_per_success `None`, coverage `0.0`
 - `#5` `openhands`: score `None`, tokens_per_success `None`, coverage `0.0`
@@ -62,7 +62,7 @@
 - Verdict `GO`: `1`
 - Verdict `NO_GO`: `13`
 - `#1` `thomas`: capability `85.51`, quick `98.333`, dynamic `82.186`, verdict `GO`
-- `#2` `openclaw`: capability `42.815`, quick `63.333`, dynamic `41.296`, verdict `NO_GO`
+- `#2` `reference_cli`: capability `42.815`, quick `63.333`, dynamic `41.296`, verdict `NO_GO`
 - `#3` `gpt_engineer`: capability `18.628`, quick `20.833`, dynamic `22.672`, verdict `NO_GO`
 - `#4` `crewai`: capability `8.341`, quick `4.167`, dynamic `13.765`, verdict `NO_GO`
 - `#5` `open_interpreter`: capability `8.049`, quick `3.333`, dynamic `13.765`, verdict `NO_GO`
@@ -87,8 +87,8 @@
 - Errors:
   - git remote head query failed: fatal: ambiguous argument 'origin/main': unknown revision or path not in the working tree.
 
-### openclaw
-- Root: `F:\DevHub\_tmp_openclaw_latest_20260306`
+### reference_cli
+- Root: `F:\DevHub\_tmp_reference_cli_latest_20260306`
 - Version: `fa6c0e1b404f094e579b5fb192c6643c7822c1b6` (up_to_date=yes)
 - Model snapshot: ok=True, day=`2026-03-06`, model=`runtime-configured`
 - Strict checks: 0 passed / 0 total
@@ -194,11 +194,11 @@
 ## Focus Gaps
 
 - `tests.to_code_file_ratio` (test_rigor): winners `crewai`, gap `0.189347`
-- `code.non_python_files` (code_surface): winners `openclaw`, gap `343.0`
+- `code.non_python_files` (code_surface): winners `reference_cli`, gap `343.0`
 
 ## Competitor Pressure
 
-- `openclaw`: beat_metrics `1`, focus_beats `58`, composite_delta `-52.908`
+- `reference_cli`: beat_metrics `1`, focus_beats `58`, composite_delta `-52.908`
 - `crewai`: beat_metrics `1`, focus_beats `38`, composite_delta `-72.802`
 
 ## Prediction Evo Scope

@@ -42,9 +42,7 @@ def _write_workboard(
     return path
 
 
-def test_cleanup_reports_stale_claims_without_mutating_by_default(
-    tmp_path: Path, monkeypatch, capsys
-) -> None:
+def test_cleanup_reports_stale_claims_without_mutating_by_default(tmp_path: Path, monkeypatch, capsys) -> None:
     workboard = _write_workboard(
         tmp_path,
         "- agent=Codex 2; scope=thomas/cli/main.py; task=models scan",

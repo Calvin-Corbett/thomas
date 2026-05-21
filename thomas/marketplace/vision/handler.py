@@ -176,7 +176,7 @@ def build_anthropic_payload(prompt: str, image_paths: Sequence[Path], model: str
 
 
 def _inject_ocr_text(prompt: str, ocr_texts: Sequence[str]) -> str:
-    joined = "\n\n".join(f"[image {i+1}]\n{t.strip()}" for i, t in enumerate(ocr_texts) if t and t.strip())
+    joined = "\n\n".join(f"[image {i + 1}]\n{t.strip()}" for i, t in enumerate(ocr_texts) if t and t.strip())
     if not joined:
         joined = "(No OCR text could be extracted from the attached image(s).)"
     base = (prompt or "").rstrip()

@@ -531,7 +531,7 @@ async def chat_completions_handler(request: web.Request) -> web.StreamResponse:
                 raise _RouteProblem(
                     status=502,
                     code="thomas_upstream_invalid_response",
-                    message=("Upstream returned a non-JSON response (status " f"{status}). Body: {text[:200]}"),
+                    message=(f"Upstream returned a non-JSON response (status {status}). Body: {text[:200]}"),
                     type_="upstream_error",
                 )
 

@@ -89,7 +89,7 @@ class TokenBucketRateLimiter:
 
                     if self._queue_depth > 1:
                         logger.warning(
-                            f"{self.name}: queue building up (depth={self._queue_depth}), " f"waiting {wait_time:.2f}s"
+                            f"{self.name}: queue building up (depth={self._queue_depth}), waiting {wait_time:.2f}s"
                         )
 
                     await asyncio.sleep(wait_time)

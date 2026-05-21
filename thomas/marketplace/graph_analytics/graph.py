@@ -433,4 +433,4 @@ class Graph:
 
     def __repr__(self) -> str:
         """Return string representation of graph."""
-        return f"Graph(type={self.graph_type.value}, " f"nodes={self.num_nodes()}, edges={self.num_edges()})"
+        return f"Graph(type={self.graph_type.value}, nodes={self.num_nodes()}, edges={self.num_edges()})"

@@ -49,7 +49,7 @@ async def stream_openai(
                             else ""
                         )
                         raise LLMError(
-                            f"HTTP 429 rate limited.{wait_note} " f"{error_body.decode(errors='replace')[:240]}",
+                            f"HTTP 429 rate limited.{wait_note} {error_body.decode(errors='replace')[:240]}",
                             status=429,
                             retryable=True,
                         )
@@ -336,14 +336,13 @@ async def stream_anthropic(
                             else ""
                         )
                         raise LLMError(
-                            f"Anthropic HTTP 429 rate limited.{wait_note} "
-                            f"{error_body.decode(errors='replace')[:240]}",
+                            f"Anthropic HTTP 429 rate limited.{wait_note} {error_body.decode(errors='replace')[:240]}",
                             status=429,
                             retryable=True,
                         )
                     if resp.status_code in _RETRYABLE:
                         last_error = LLMError(
-                            f"Anthropic HTTP {resp.status_code}: " f"{error_body.decode(errors='replace')[:200]}",
+                            f"Anthropic HTTP {resp.status_code}: {error_body.decode(errors='replace')[:200]}",
                             status=resp.status_code,
                             retryable=True,
                         )
@@ -359,7 +358,7 @@ async def stream_anthropic(
                             await asyncio.sleep(delay)
                         continue
                     raise LLMError(
-                        f"Anthropic HTTP {resp.status_code}: " f"{error_body.decode(errors='replace')[:500]}",
+                        f"Anthropic HTTP {resp.status_code}: {error_body.decode(errors='replace')[:500]}",
                         status=resp.status_code,
                     )
 

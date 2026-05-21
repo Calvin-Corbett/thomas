@@ -46,7 +46,7 @@ index 1111111..2222222 100644
 --- a/docs/demo.txt
 +++ b/docs/demo.txt
 @@ -0,0 +1,1 @@
-+OpenClaw naming should be blocked by strict guard.
++Reference CLI naming should be blocked by strict guard.
 """,
         encoding="utf-8",
     )
@@ -61,7 +61,7 @@ index 1111111..2222222 100644
         "ownership": {"allowed_paths": ["docs"], "forbidden_paths": []},
         "policy": {
             "strict_name_guard": True,
-            "name_guard_blocklist": ["openclaw"],
+            "name_guard_blocklist": ["reference_cli"],
         },
         "tests": {"commands": []},
         "meta": {"source": "test", "created_at": "2026-02-20T00:00:00+00:00", "notes": ""},

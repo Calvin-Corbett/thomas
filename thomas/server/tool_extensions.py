@@ -98,7 +98,7 @@ _OPTIONAL_TOOL_MODULES = [
     ("thomas.notifications.tools", "register_notifications_tools"),
     ("thomas.notify.tools", "register_notify_tools"),
     ("thomas.olap.tools", "register_olap_tools"),
-    ("thomas.openclaw_compat.tools", "register_openclaw_compat_tools"),
+    ("thomas.reference_cli_compat.tools", "register_reference_cli_compat_tools"),
     ("thomas.orchestrator.tools", "register_orchestrator_tools"),
     ("thomas.os_kernel.tools", "register_os_kernel_tools"),
     ("thomas.parsers.tools", "register_parsers_tools"),

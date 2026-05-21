@@ -113,7 +113,7 @@ class GeneralLedger:
         """
         if not entry.is_balanced():
             raise JournalEntryError(
-                f"Entry {entry.id} not balanced: " f"debits={entry.total_debits()} credits={entry.total_credits()}"
+                f"Entry {entry.id} not balanced: debits={entry.total_debits()} credits={entry.total_credits()}"
             )
 
         for line in entry.lines:

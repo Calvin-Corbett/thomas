@@ -239,7 +239,9 @@ def scan_worktrees_for_dirty(repo_root: Path) -> ScanResult:
     return result
 
 
-def should_notify(scan: ScanResult, last_notify_ts: datetime | None, cooldown_minutes: float = DEFAULT_NOTIFY_COOLDOWN_MINUTES) -> bool:
+def should_notify(
+    scan: ScanResult, last_notify_ts: datetime | None, cooldown_minutes: float = DEFAULT_NOTIFY_COOLDOWN_MINUTES
+) -> bool:
     if scan.dirty_worktree_count == 0:
         return False
     if last_notify_ts is None:

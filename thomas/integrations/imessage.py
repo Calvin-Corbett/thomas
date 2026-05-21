@@ -168,5 +168,9 @@ def _cli_send(cli_path: str, target: str, body_text: str, timeout_seconds: float
     return {
         "delivered": result.returncode == 0,
         "message_id": "imsg-delivered" if result.returncode == 0 else "",
-        "provider_response": {"stdout": result.stdout.strip(), "stderr": result.stderr.strip(), "status": result.returncode},
+        "provider_response": {
+            "stdout": result.stdout.strip(),
+            "stderr": result.stderr.strip(),
+            "status": result.returncode,
+        },
     }

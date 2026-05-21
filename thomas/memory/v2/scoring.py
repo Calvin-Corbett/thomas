@@ -29,4 +29,3 @@ def score(inputs: SalienceInputs) -> float:
 
     value = (base * decay * novelty * pin_boost) + (0.9 * relevance)
     return round(max(0.0, value), 6)
-

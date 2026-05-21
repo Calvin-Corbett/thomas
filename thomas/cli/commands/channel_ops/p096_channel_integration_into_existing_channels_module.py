@@ -82,12 +82,20 @@ def _register_typer(app: typer.Typer) -> None:
     def integrate(  # noqa: WPS430 - Typer command function
         provider: str = typer.Argument(..., help="Provider name (e.g. telegram)."),
         config: Path | None = typer.Option(None, "--config", help="Path to Thomas JSON config."),
-        token: str | None = typer.Option(None, "--token", envvar="THOMAS_TELEGRAM_BOT_TOKEN", help="Telegram bot token."),
-        chat_id: str | None = typer.Option(None, "--chat-id", envvar="THOMAS_TELEGRAM_CHAT_ID", help="Telegram chat id."),
+        token: str | None = typer.Option(
+            None, "--token", envvar="THOMAS_TELEGRAM_BOT_TOKEN", help="Telegram bot token."
+        ),
+        chat_id: str | None = typer.Option(
+            None, "--chat-id", envvar="THOMAS_TELEGRAM_CHAT_ID", help="Telegram chat id."
+        ),
         persist: bool = typer.Option(True, "--persist/--no-persist", help="Persist enablement into the config file."),
         dry_run: bool = typer.Option(False, "--dry-run", help="Validate without writing changes."),
-        test_message: str | None = typer.Option(None, "--test-message", help="Send a test message to validate the provider."),
-        validate_external: bool = typer.Option(False, "--validate", help="Perform a lightweight provider validation (may call integration module)."),
+        test_message: str | None = typer.Option(
+            None, "--test-message", help="Send a test message to validate the provider."
+        ),
+        validate_external: bool = typer.Option(
+            False, "--validate", help="Perform a lightweight provider validation (may call integration module)."
+        ),
         json_output: bool = typer.Option(False, "--json", help="Machine readable output."),
     ) -> None:
         try:

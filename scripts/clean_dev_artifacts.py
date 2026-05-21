@@ -182,7 +182,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             verification_ok = False
             # Keep historical wording for compatibility with existing test
             # contracts while documenting the newer preset option.
-            failure_message = "--apply requires at least one --verify-command " "(or --verify-preset)"
+            failure_message = "--apply requires at least one --verify-command (or --verify-preset)"
         else:
             verification_results = _run_verification_commands(verification_commands, ROOT)
             verification_ok = all(bool(item.get("ok", False)) for item in verification_results)

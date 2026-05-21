@@ -56,34 +56,31 @@ class RuntimeProfile:
     run_mode: str
 
     # ── Autonomy layer (outer — permissions) ─────────────────
-    tools_policy: str | None          # "never" | "auto" | "always" | None
-    needs_approval: bool              # True for L2
+    tools_policy: str | None  # "never" | "auto" | "always" | None
+    needs_approval: bool  # True for L2
     prefers_extended_iterations: bool  # True for L4
-    system_directive: str             # injected autonomy prompt
+    system_directive: str  # injected autonomy prompt
 
     # ── Economy layer (inner — effort) ───────────────────────
-    pass_range: tuple[int, int]       # (min_passes, max_passes)
+    pass_range: tuple[int, int]  # (min_passes, max_passes)
     pass_multiplier: float
     overhead: RuntimeOverheadPolicy
-    context_budget: int               # mode budget (tokens)
-    hard_budget: int | None           # hard ceiling (None = unlimited)
+    context_budget: int  # mode budget (tokens)
+    hard_budget: int | None  # hard ceiling (None = unlimited)
     tool_count_cap: int
     tool_spec_token_cap: int
     prompt_warn_cap: int
     prompt_hard_cap: int | None
 
     # ── Composed behaviors ───────────────────────────────────
-    effective_max_iterations: int      # final iteration count
-    skills_mode: str                   # "off" | "explicit" | "auto"
-    include_autonomy_in_prompt: bool   # whether economy allows the directive
-    clarification_bias: str            # "ask" | "minimal" | "none"
+    effective_max_iterations: int  # final iteration count
+    skills_mode: str  # "off" | "explicit" | "auto"
+    include_autonomy_in_prompt: bool  # whether economy allows the directive
+    clarification_bias: str  # "ask" | "minimal" | "none"
 
     def summary_line(self) -> str:
         """One-line human summary, e.g. 'L3 Agent · Optimal · auto'."""
-        return (
-            f"L{self.autonomy_level} {self.autonomy_name} · "
-            f"{self.economy_level.capitalize()} · {self.run_mode}"
-        )
+        return f"L{self.autonomy_level} {self.autonomy_name} · {self.economy_level.capitalize()} · {self.run_mode}"
 
     def to_dict(self) -> dict[str, Any]:
         """Serializable dict for API responses and logging."""
@@ -191,6 +188,7 @@ def resolve_runtime_profile(
 
 
 # ── Convenience: full matrix for debugging / UI ──────────────
+
 
 def all_profiles(base_iterations: int = 10) -> list[dict[str, Any]]:
     """Return every autonomy × economy combination as dicts.

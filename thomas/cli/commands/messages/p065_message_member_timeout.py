@@ -107,9 +107,7 @@ def main(
         if json_output:
             typer.echo(json.dumps(payload, sort_keys=True))
         else:
-            typer.echo(
-                f"Timed out user {result.user_id} in guild {result.guild_id} until {result.timed_out_until}."
-            )
+            typer.echo(f"Timed out user {result.user_id} in guild {result.guild_id} until {result.timed_out_until}.")
         return
 
     except MessageMemberTimeoutError as exc:

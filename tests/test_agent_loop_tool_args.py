@@ -55,7 +55,7 @@ def _run_with_args(args_text: str):
 
 
 def test_agent_loop_accepts_code_fenced_tool_json_args() -> None:
-    events = _run_with_args("```json\n{\"message\":\"ok\"}\n```")
+    events = _run_with_args('```json\n{"message":"ok"}\n```')
     results = [e for e in events if e.type == EventType.TOOL_RESULT]
     assert len(results) == 1
     assert results[0].data.get("ok") is True

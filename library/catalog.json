@@ -430,7 +430,7 @@
       "created_ts_utc": 1771634972,
       "updated_ts_utc": 1771634972,
       "fingerprint": "8fb672e7e0e9cf600d0bf1b134457b9f916435b88fcc4396023da9cb93e9e564",
-      "query": "[VOICE] my last prompt was telling you to go do research and be better at being an assistant like you're right now you're really smart and you have all this stuff set up but you don't have person skills like there needs to be a lot more put into how you how you decide how to talk to us like a way more complicated stuff that utilizes my computer on my computer or whatever because you know like a robot like read this chat like you're not if you're going to read this like normally and they'll have no balance and instructions you'd be like oh I sound really stupid right now you know so you need to take some pointers from open claw and animal claw whatever thing is out there you need to research and see how to bet anything that you might have to add like a lot of stuff like a lot of keywords like oh he says this that means that like maybe you need that I don't know I don't want you to like make it just token hell but like open clock and talk a lot better like an assistant and you're talking like a robot who's like I say one thing you tweak out you know you need to review all this Behavior stuff and make sure that it's fine tuned and then test it you need to test it at the end of this you need to open up another Thomas browser and when you do these tests I want them to be Live Test default and to doing Live Test when you're testing yourself that way I can see what you're doing only do Shadow test when it's something else or otherwise stated you know like there's an option I want live test by default okay that means life means I can actually see the browser open and see you do it",
+      "query": "[VOICE] my last prompt was telling you to go do research and be better at being an assistant like you're right now you're really smart and you have all this stuff set up but you don't have person skills like there needs to be a lot more put into how you how you decide how to talk to us like a way more complicated stuff that utilizes my computer on my computer or whatever because you know like a robot like read this chat like you're not if you're going to read this like normally and they'll have no balance and instructions you'd be like oh I sound really stupid right now you know so you need to take some pointers from another assistant and animal claw whatever thing is out there you need to research and see how to bet anything that you might have to add like a lot of stuff like a lot of keywords like oh he says this that means that like maybe you need that I don't know I don't want you to like make it just token hell but like open clock and talk a lot better like an assistant and you're talking like a robot who's like I say one thing you tweak out you know you need to review all this Behavior stuff and make sure that it's fine tuned and then test it you need to test it at the end of this you need to open up another Thomas browser and when you do these tests I want them to be Live Test default and to doing Live Test when you're testing yourself that way I can see what you're doing only do Shadow test when it's something else or otherwise stated you know like there's an option I want live test by default okay that means life means I can actually see the browser open and see you do it",
       "auto_captured": true
     },
     {
@@ -560,13 +560,13 @@
       "auto_captured": true
     },
     {
-      "id": "1771907866-openclaw-architecture-overview",
-      "title": "OpenClaw Architecture Overview",
+      "id": "1771907866-reference_cli-architecture-overview",
+      "title": "Reference CLI Architecture Overview",
       "category": "competitive-research",
-      "summary": "Complete architecture research on OpenClaw AI agent runtime. Covers skills system (markdown-first), tool policy groups, Lobster pipeline engine, model failover with exponential backoff, browser automation, security model, multi-agent routing, and session persistence.",
-      "source": "https://github.com/openclaw/openclaw",
+      "summary": "Complete architecture research on Reference CLI AI agent runtime. Covers skills system (markdown-first), tool policy groups, Lobster pipeline engine, model failover with exponential backoff, browser automation, security model, multi-agent routing, and session persistence.",
+      "source": "https://github.com/reference_cli/reference_cli",
       "tags": [
-        "openclaw",
+        "reference_cli",
         "ai-agent",
         "architecture",
         "competitive-research",
@@ -575,7 +575,7 @@
         "failover",
         "workflows"
       ],
-      "path": "entries/competitive-research/1771907866-openclaw-architecture-overview.md",
+      "path": "entries/competitive-research/1771907866-reference_cli-architecture-overview.md",
       "created_ts_utc": 1771907866,
       "updated_ts_utc": 1771907866,
       "fingerprint": "32eb36ff4c1c4688b98e99eb105e0d9d22197e803315a00c7432e16c329982fa",
@@ -583,13 +583,13 @@
       "auto_captured": false
     },
     {
-      "id": "1771907866-openclaw-patterns-applied-to-thomas",
-      "title": "OpenClaw Patterns Applied to Thomas",
+      "id": "1771907866-reference_cli-patterns-applied-to-thomas",
+      "title": "Reference CLI Patterns Applied to Thomas",
       "category": "competitive-research",
-      "summary": "Maps 5 specific OpenClaw architectural patterns to Thomas improvement opportunities: tool policy groups, exponential backoff cooldowns, workflow approval gates, message interruption, and markdown-first skills.",
-      "source": "https://github.com/openclaw/openclaw",
+      "summary": "Maps 5 specific Reference CLI architectural patterns to Thomas improvement opportunities: tool policy groups, exponential backoff cooldowns, workflow approval gates, message interruption, and markdown-first skills.",
+      "source": "https://github.com/reference_cli/reference_cli",
       "tags": [
-        "openclaw",
+        "reference_cli",
         "thomas",
         "upgrades",
         "tool-policy",
@@ -597,7 +597,7 @@
         "workflows",
         "architecture"
       ],
-      "path": "entries/competitive-research/1771907866-openclaw-patterns-applied-to-thomas.md",
+      "path": "entries/competitive-research/1771907866-reference_cli-patterns-applied-to-thomas.md",
       "created_ts_utc": 1771907866,
       "updated_ts_utc": 1771907866,
       "fingerprint": "5c0da88e9397289070f87b089677a00335971dacc3f2f69a2e8cbbeadcc47c28",

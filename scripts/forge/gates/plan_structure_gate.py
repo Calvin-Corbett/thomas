@@ -23,7 +23,8 @@ REQUIRED_FILES: Sequence[str] = (
 )
 
 LEGACY_POINTER_FILES: Sequence[str] = (
-    "PLAN-UI-UPGRADE.md",
+    # PLAN-UI-UPGRADE.md was removed in the 2026-05-21 pre-public cleanup
+    # (internal-only doc, blocked by public_repo_leak_guard).
     "docs/WEEKLY_DEEP_DIVE_PLAN.md",
     "docs/LAUNCH_V1.md",
     "docs/COMPANION_STORE_COMPLIANCE_PLAN.md",

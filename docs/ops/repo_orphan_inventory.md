@@ -91,10 +91,10 @@
 | `plans/thomas/tasks/gap-coverage-metric-governance-split-1/` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
 | `plans/thomas/tasks/gap-crewai-multi-agent-orchestration-bench-split-1/` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
 | `plans/thomas/tasks/gap-crewai-workflow-memory-evals-split-1/` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
-| `plans/thomas/tasks/gap-openclaw-crewai-weekly-refresh-split-1/` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
-| `plans/thomas/tasks/gap-openclaw-dynamic-lane-score-split-1/` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
-| `plans/thomas/tasks/gap-openclaw-gateway-compat-probes-split-1/` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
-| `plans/thomas/tasks/gap-openclaw-reliability-soak-probes-split-1/` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
+| `plans/thomas/tasks/gap-reference_cli-crewai-weekly-refresh-split-1/` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
+| `plans/thomas/tasks/gap-reference_cli-dynamic-lane-score-split-1/` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
+| `plans/thomas/tasks/gap-reference_cli-gateway-compat-probes-split-1/` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
+| `plans/thomas/tasks/gap-reference_cli-reliability-soak-probes-split-1/` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
 | `plans/thomas/tasks/gap-operator-mission-smoke-tests-split-1/` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
 | `plans/thomas/worker_command_catalog.json` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
 | `scripts/a.py` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |

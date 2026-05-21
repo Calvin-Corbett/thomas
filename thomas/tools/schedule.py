@@ -8,11 +8,13 @@ from thomas.core.scheduler import get_scheduler
 # Table formatting (monospace-friendly)
 # ============================================================
 
+
 def _truncate(s: str, max_len: int) -> str:
     s = s or ""
     if len(s) <= max_len:
         return s
     return s[: max(0, max_len - 1)] + "…"
+
 
 def _format_table(rows: list[dict[str, str]], columns: list[str]) -> str:
     if not rows:
@@ -57,6 +59,7 @@ def _tasks_table() -> str:
 # REQUIRED tools
 # ============================================================
 
+
 def schedule_add(params: dict[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     params = params or {}
     task_id = str(params.get("id", "")).strip()
@@ -97,12 +100,14 @@ def schedule_run_now(params: dict[str, Any] | None = None, **_: Any) -> dict[str
 # OPTIONAL "consumer delight" tools (won't break required set)
 # ============================================================
 
+
 def schedule_pause(params: dict[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     params = params or {}
     task_id = str(params.get("id", "")).strip()
     sched = get_scheduler()
     sched.pause_task(task_id)
     return {"ok": True, "message": f"Paused '{task_id}'.", "table": _tasks_table()}
+
 
 def schedule_resume(params: dict[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     params = params or {}
@@ -111,12 +116,14 @@ def schedule_resume(params: dict[str, Any] | None = None, **_: Any) -> dict[str,
     sched.resume_task(task_id)
     return {"ok": True, "message": f"Resumed '{task_id}'.", "table": _tasks_table()}
 
+
 def schedule_preview(params: dict[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     params = params or {}
     task_id = str(params.get("id", "")).strip()
     count = int(params.get("count", 5) or 5)
     sched = get_scheduler()
     return {"ok": True, "id": task_id, "next": sched.preview_next(task_id, count=count)}
+
 
 def schedule_update(params: dict[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     params = params or {}

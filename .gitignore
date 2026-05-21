@@ -140,3 +140,9 @@ server_startup_log.txt
 indices/ACTIVE.json
 indices/ACTIVE.lock
 thomas/server/plugins_registry/.plugin-signing-secret
+# Pre-public cleanup tripwires (2026-05-21).
+# Internal-only agent docs live here; public_repo_leak_guard blocks them.
+docs/internal/
+.tmp_*
+thomas_vs_*.json
+thomas_vs_*.docx

@@ -117,9 +117,7 @@ def test_freshness_gate_json_reports_stale_claims(tmp_path: Path, monkeypatch, c
     assert payload["stale_claims"][0]["agent"] == "Codex 2"
 
 
-def test_freshness_gate_fails_when_blame_timestamp_missing(
-    tmp_path: Path, monkeypatch, capsys
-) -> None:
+def test_freshness_gate_fails_when_blame_timestamp_missing(tmp_path: Path, monkeypatch, capsys) -> None:
     workboard = _write_workboard(
         tmp_path,
         "- agent=Codex 2; scope=thomas/cli/main.py; task=models scan",

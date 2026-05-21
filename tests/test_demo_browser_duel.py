@@ -18,11 +18,11 @@ class TestDemoBrowserDuel(unittest.TestCase):
         out = parse_target_args(
             [
                 "thomas=http://127.0.0.1:8899",
-                "openclaw=http://127.0.0.1:3000",
+                "reference_cli=http://127.0.0.1:3000",
             ]
         )
         self.assertEqual(out["thomas"], "http://127.0.0.1:8899")
-        self.assertEqual(out["openclaw"], "http://127.0.0.1:3000")
+        self.assertEqual(out["reference_cli"], "http://127.0.0.1:3000")
 
     def test_build_results_from_browser_uses_min_quality(self):
         browser = [
@@ -41,10 +41,10 @@ class TestDemoBrowserDuel(unittest.TestCase):
         self.assertEqual(rows[0]["evidence"], "browser_transcripts/a.txt")
 
     def test_load_adapters_defaults_for_missing_file(self):
-        adapters = load_adapters(None, ["thomas", "openclaw"])
+        adapters = load_adapters(None, ["thomas", "reference_cli"])
         base = default_adapter()
         self.assertEqual(adapters["thomas"].composer_selector, base.composer_selector)
-        self.assertEqual(adapters["openclaw"].send_selector, base.send_selector)
+        self.assertEqual(adapters["reference_cli"].send_selector, base.send_selector)
 
     def test_build_execution_plan_randomized_seed_stable(self):
         pack = {
@@ -53,11 +53,10 @@ class TestDemoBrowserDuel(unittest.TestCase):
                 {"id": "t2", "title": "B", "prompt": "Q"},
             ]
         }
-        a = build_execution_plan(task_pack=pack, competitors=["thomas", "openclaw"], randomize=True, seed=9)
-        b = build_execution_plan(task_pack=pack, competitors=["thomas", "openclaw"], randomize=True, seed=9)
+        a = build_execution_plan(task_pack=pack, competitors=["thomas", "reference_cli"], randomize=True, seed=9)
+        b = build_execution_plan(task_pack=pack, competitors=["thomas", "reference_cli"], randomize=True, seed=9)
         self.assertEqual(a, b)
 
 
 if __name__ == "__main__":
     unittest.main()
-

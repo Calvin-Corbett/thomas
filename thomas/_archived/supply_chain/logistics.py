@@ -483,7 +483,7 @@ class LogisticsOptimizer:
 
         # Initialize bays
         for i in range(docking_bay_count):
-            schedule["bays"][f"BAY_{i+1}"] = {"shipments": [], "total_time": 0}
+            schedule["bays"][f"BAY_{i + 1}"] = {"shipments": [], "total_time": 0}
 
         # Assign inbound shipments to bays
         for idx, shipment in enumerate(inbound_shipments):

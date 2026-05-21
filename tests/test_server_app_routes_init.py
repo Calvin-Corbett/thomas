@@ -364,7 +364,9 @@ async def test_run_store_janitor_reconciles_stale_runs(tmp_path: Path, monkeypat
 
 
 @pytest.mark.asyncio
-async def test_static_compat_rejects_traversal_and_page_aliases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_static_compat_rejects_traversal_and_page_aliases(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     app, _ = _build_test_app(tmp_path, monkeypatch)
     client = await _start_client(app)
     try:
@@ -383,7 +385,9 @@ async def test_static_compat_rejects_traversal_and_page_aliases(tmp_path: Path, 
         await client.close()
 
 
-def test_optional_route_registration_wires_runtime_dependencies(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_optional_route_registration_wires_runtime_dependencies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     async def _fake_runtime_guard_loop(app_ref: web.Application) -> None:
         _ = app_ref
         try:
@@ -419,7 +423,9 @@ def test_optional_route_registration_wires_runtime_dependencies(tmp_path: Path, 
         def __init__(self, **kwargs):  # noqa: ANN003
             chat_deps.update(kwargs)
 
-    monkeypatch.setitem(sys.modules, "thomas.server.routes.gateway", SimpleNamespace(register_gateway_routes=_record("gateway")))
+    monkeypatch.setitem(
+        sys.modules, "thomas.server.routes.gateway", SimpleNamespace(register_gateway_routes=_record("gateway"))
+    )
     monkeypatch.setitem(
         sys.modules,
         "thomas.server.routes.chat_aiohttp",
@@ -989,7 +995,10 @@ def test_route_registration_logs_module_failures(tmp_path: Path, monkeypatch: py
                 "_begin_session_run": lambda session_id: None,
                 "_end_session_run": lambda session_id: None,
                 "_task_ledger_update": lambda session_id, goal=None, status="in_progress": None,
-                "_model_cfg_with_secrets": lambda cfg_ref, profile, model_cfg: {"profile": profile, "model": model_cfg.model},
+                "_model_cfg_with_secrets": lambda cfg_ref, profile, model_cfg: {
+                    "profile": profile,
+                    "model": model_cfg.model,
+                },
                 "_failover_cfgs_with_secrets": lambda cfg_ref, profile: [{"profile": "backup"}],
                 "_resolve_natural_model_switch_request": _resolve_model_switch_request,
                 "_chat_file_for": lambda chat_id: tmp_path / f"{chat_id}.json",

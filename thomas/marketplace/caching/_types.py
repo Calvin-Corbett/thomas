@@ -182,4 +182,4 @@ class CacheConfig:
         if self.max_entries <= 0:
             raise ValueError("max_entries must be positive")
         if self.compression_format not in ("zlib", "lz4", "none"):
-            raise ValueError(f"compression_format must be 'zlib', 'lz4', or 'none', " f"got {self.compression_format}")
+            raise ValueError(f"compression_format must be 'zlib', 'lz4', or 'none', got {self.compression_format}")

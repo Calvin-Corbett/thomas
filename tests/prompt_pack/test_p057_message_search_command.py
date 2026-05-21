@@ -54,7 +54,9 @@ def test_local_store_success(tmp_path: Path) -> None:
     store.write_text(
         "\n".join(
             [
-                json.dumps({"id": "1", "channel_id": "c1", "author_id": "u1", "content": "hello world", "timestamp": "t"}),
+                json.dumps(
+                    {"id": "1", "channel_id": "c1", "author_id": "u1", "content": "hello world", "timestamp": "t"}
+                ),
                 json.dumps({"id": "2", "channel_id": "c2", "author_id": "u2", "content": "nothing here"}),
                 json.dumps({"id": "3", "channel_id": "c1", "author_id": "u2", "content": "world domination"}),
             ]

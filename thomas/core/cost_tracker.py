@@ -35,6 +35,7 @@ FALLBACK_UNKNOWN: dict[str, float] = {"input_per_1k": 0.002, "output_per_1k": 0.
 # Best-effort file locking (cross-platform)
 # ----------------------------
 
+
 class _FileLock:
     def __init__(self, f, exclusive: bool = True) -> None:
         self._f = f
@@ -44,10 +45,12 @@ class _FileLock:
         try:
             if os.name == "nt":
                 import msvcrt  # type: ignore
+
                 # Windows locking doesn't have true shared locks; use exclusive.
                 msvcrt.locking(self._f.fileno(), msvcrt.LK_LOCK, 1)
             else:
                 import fcntl  # type: ignore
+
                 flag = fcntl.LOCK_EX if self._exclusive else fcntl.LOCK_SH
                 fcntl.flock(self._f.fileno(), flag)
         except Exception:
@@ -58,9 +61,11 @@ class _FileLock:
         try:
             if os.name == "nt":
                 import msvcrt  # type: ignore
+
                 msvcrt.locking(self._f.fileno(), msvcrt.LK_UNLCK, 1)
             else:
                 import fcntl  # type: ignore
+
                 fcntl.flock(self._f.fileno(), fcntl.LOCK_UN)
         except Exception:
             pass
@@ -70,6 +75,7 @@ class _FileLock:
 # ----------------------------
 # Token usage normalization
 # ----------------------------
+
 
 def _get(obj: Any, dotted: str) -> Any:
     cur = obj
@@ -161,6 +167,7 @@ def extract_token_usage(any_obj: Any) -> tuple[int, int]:
 # Records + pubsub for SSE
 # ----------------------------
 
+
 @dataclass(frozen=True)
 class SpendRecord:
     ts: str
@@ -230,6 +237,7 @@ class SpendSubscriber:
 # CostTracker
 # ----------------------------
 
+
 class CostTracker:
     """Token/cost tracker with JSONL persistence + fast aggregates.
 
@@ -248,7 +256,9 @@ class CostTracker:
         self._lock = threading.Lock()
 
         repo_root = Path(__file__).resolve().parents[2]
-        self._spend_path = spend_path or Path(os.environ.get("THOMAS_SPEND_PATH", str(repo_root / "thomas_spend.jsonl")))
+        self._spend_path = spend_path or Path(
+            os.environ.get("THOMAS_SPEND_PATH", str(repo_root / "thomas_spend.jsonl"))
+        )
         self._toml_path = toml_path or Path(os.environ.get("THOMAS_TOML_PATH", str(repo_root / "thomas.toml")))
 
         self._pricing: dict[str, dict[str, float]] = {}
@@ -453,7 +463,13 @@ class CostTracker:
         out: dict[str, dict[str, float]] = {}
         for k, v in self._pricing.items():
             out[k] = {"input_per_1k": float(v["input_per_1k"]), "output_per_1k": float(v["output_per_1k"])}
-        out.setdefault("defaults", {"input_per_1k": float(self._fallback_unknown["input_per_1k"]), "output_per_1k": float(self._fallback_unknown["output_per_1k"])})
+        out.setdefault(
+            "defaults",
+            {
+                "input_per_1k": float(self._fallback_unknown["input_per_1k"]),
+                "output_per_1k": float(self._fallback_unknown["output_per_1k"]),
+            },
+        )
         return out
 
     # ---- SSE pubsub ----

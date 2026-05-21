@@ -12,7 +12,7 @@ Design goals
     Body: {"tool_call_id": "...", "result": <any-json>, "is_error": false, ...}
 
 Notes
-- No OpenClaw naming reuse.
+- No Reference CLI naming reuse.
 - The mapping shape is intentionally "compat-friendly": it includes both a structured
   `content` array and an `output` convenience field (some downstream code prefers one).
 """
@@ -65,9 +65,7 @@ def _ensure_optional_nonempty_str(field: str, v: Any) -> str | None:
     if v is None:
         return None
     if not isinstance(v, str) or not v.strip():
-        raise DeterministicMappingError(
-            "invalid_input", f"{field} must be a non-empty string when provided"
-        )
+        raise DeterministicMappingError("invalid_input", f"{field} must be a non-empty string when provided")
     return v.strip()
 
 

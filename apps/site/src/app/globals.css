@@ -1687,7 +1687,7 @@ h1 {
   background: linear-gradient(90deg, rgba(71, 215, 172, 0.42), rgba(98, 236, 190, 0.75));
 }
 
-.depth-meter-openclaw {
+.depth-meter-reference_cli {
   background: linear-gradient(90deg, rgba(255, 191, 71, 0.42), rgba(255, 218, 125, 0.78));
 }
 
@@ -1727,7 +1727,7 @@ h1 {
   border-left: 3px solid rgba(71, 215, 172, 0.95);
 }
 
-.feature-result-openclaw {
+.feature-result-reference_cli {
   color: #ffd67d;
   border-left: 3px solid rgba(255, 191, 71, 0.95);
 }
@@ -1784,7 +1784,7 @@ h1 {
   background: rgba(71, 215, 172, 0.13);
 }
 
-.winner-chip-openclaw {
+.winner-chip-reference_cli {
   color: #ffe2b3;
   border-color: rgba(255, 191, 71, 0.62);
   background: rgba(255, 191, 71, 0.12);
@@ -1891,7 +1891,7 @@ h1 {
   color: #8ef7ce;
 }
 
-.feature-id.openclaw {
+.feature-id.reference_cli {
   color: #ffcc67;
 }
 

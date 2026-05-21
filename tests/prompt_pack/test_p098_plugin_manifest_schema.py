@@ -31,9 +31,7 @@ def test_build_plugin_manifest_schema_success_minimal_contract() -> None:
 
 
 def test_build_plugin_manifest_schema_include_examples() -> None:
-    result = build_plugin_manifest_schema(
-        PluginManifestSchemaRequest(include_examples=True)
-    )
+    result = build_plugin_manifest_schema(PluginManifestSchemaRequest(include_examples=True))
     schema = result.schema
 
     assert "examples" in schema
@@ -53,9 +51,7 @@ def test_build_plugin_manifest_schema_invalid_draft_is_deterministic() -> None:
 
 def test_build_plugin_manifest_schema_unsupported_version_is_deterministic() -> None:
     with pytest.raises(PluginManifestSchemaError) as exc:
-        build_plugin_manifest_schema(
-            PluginManifestSchemaRequest(schema_version="v999")
-        )
+        build_plugin_manifest_schema(PluginManifestSchemaRequest(schema_version="v999"))
 
     assert exc.value.code == "unsupported_schema_version"
     assert "Supported values" in exc.value.message

@@ -407,7 +407,7 @@ def run(argv: list[str] | None = None) -> int:
     print("\n[stepup] Summary: PASS" if ok else "\n[stepup] Summary: FAILED")
     if failures:
         for failure in failures:
-            print(f"[stepup] - {failure['stage']} -> {failure['label']}: " f"exit {failure['returncode']}")
+            print(f"[stepup] - {failure['stage']} -> {failure['label']}: exit {failure['returncode']}")
     return 0 if ok else 1
 
 

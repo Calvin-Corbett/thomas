@@ -220,7 +220,10 @@ def test_run_applies_manual_overrides_when_file_provided(tmp_path: Path) -> None
                 "task_id": "artifact_probe",
                 "track": "thomas_os",
                 "success": False,
-                "run": {"elapsed_seconds": 2.0, "usage": {"prompt_tokens": 10, "completion_tokens": 0, "total_tokens": 10}},
+                "run": {
+                    "elapsed_seconds": 2.0,
+                    "usage": {"prompt_tokens": 10, "completion_tokens": 0, "total_tokens": 10},
+                },
             }
         ],
     )

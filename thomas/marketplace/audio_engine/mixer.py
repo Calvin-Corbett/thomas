@@ -34,7 +34,7 @@ class Mixer:
         self.num_channels = num_channels
         self.sample_rate = sample_rate
         self.pan_law = pan_law
-        self.channels: list[MixerChannel] = [MixerChannel(f"Channel {i+1}") for i in range(num_channels)]
+        self.channels: list[MixerChannel] = [MixerChannel(f"Channel {i + 1}") for i in range(num_channels)]
         self.master_bus = AudioBus("Master", 2)
         self.input_buffer: dict[int, list[NDArray[np.float32]]] = {i: [] for i in range(num_channels)}
         self.automation_enabled = False

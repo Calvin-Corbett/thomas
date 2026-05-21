@@ -13,7 +13,7 @@ from typing import Any
 def _make_placeholder_exception(name: str, module_name: str) -> type[Exception]:
     cls = type(name, (Exception,), {})
     cls.__module__ = module_name
-    cls.__doc__ = f"SKELETON: `{module_name}.{name}` is a planned domain exception and is " "not fully implemented yet."
+    cls.__doc__ = f"SKELETON: `{module_name}.{name}` is a planned domain exception and is not fully implemented yet."
     return cls
 
 
@@ -26,7 +26,7 @@ def _make_placeholder_class(name: str, module_name: str) -> type[Any]:
 
     cls = type(name, (object,), {"__init__": _init})
     cls.__module__ = module_name
-    cls.__doc__ = f"SKELETON: `{module_name}.{name}` is a planned domain type and is " "not fully implemented yet."
+    cls.__doc__ = f"SKELETON: `{module_name}.{name}` is a planned domain type and is not fully implemented yet."
     return cls
 
 
@@ -36,9 +36,7 @@ def _make_placeholder_function(name: str, module_name: str) -> Callable[..., Any
 
     _placeholder.__name__ = name
     _placeholder.__module__ = module_name
-    _placeholder.__doc__ = (
-        f"SKELETON: `{module_name}.{name}` is a planned callable and is not " "fully implemented yet."
-    )
+    _placeholder.__doc__ = f"SKELETON: `{module_name}.{name}` is a planned callable and is not fully implemented yet."
     return _placeholder
 
 

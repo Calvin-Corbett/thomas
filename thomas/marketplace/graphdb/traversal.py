@@ -141,7 +141,9 @@ class GraphTraversal:
             raise NodeNotFoundError(start_node_id)
 
         if weight_fn is None:
-            weight_fn = lambda _: 1.0
+
+            def weight_fn(_):
+                return 1.0
 
         distances: dict[str, float] = {start_node_id: 0.0}
         predecessors: dict[str, str | None] = {start_node_id: None}

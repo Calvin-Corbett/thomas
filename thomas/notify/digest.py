@@ -352,7 +352,7 @@ class DigestRenderer:
         if not notifications:
             return ""
 
-        lines = [f"--- {category.value.upper()} " f"({len(notifications)} items) ---"]
+        lines = [f"--- {category.value.upper()} ({len(notifications)} items) ---"]
 
         for i, notif in enumerate(notifications[:10], 1):
             lines.append(f"{i}. {notif.template_id}")
@@ -376,7 +376,7 @@ class DigestRenderer:
             return ""
 
         html = []
-        html.append(f"<section><h2>{category.value.upper()} " f"({len(notifications)} items)</h2>")
+        html.append(f"<section><h2>{category.value.upper()} ({len(notifications)} items)</h2>")
         html.append("<ul>")
 
         for notif in notifications[:10]:

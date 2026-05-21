@@ -466,7 +466,9 @@ async def put_gateway_state(request: web.Request) -> web.Response:
 
     if not isinstance(body, dict) or "state" not in body:
         return _json_error(
-            GatewayStatePersistenceError("invalid_request", "Request body must be a JSON object with a 'state' field", 400)
+            GatewayStatePersistenceError(
+                "invalid_request", "Request body must be a JSON object with a 'state' field", 400
+            )
         )
 
     state = body.get("state")

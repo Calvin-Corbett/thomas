@@ -77,7 +77,7 @@ class Chunk:
         """
         if not (self.start_time <= point.timestamp < self.end_time):
             raise ValueError(
-                f"Point timestamp {point.timestamp} outside chunk range " f"[{self.start_time}, {self.end_time})"
+                f"Point timestamp {point.timestamp} outside chunk range [{self.start_time}, {self.end_time})"
             )
 
         self.timestamps.append(point.timestamp)

@@ -26,7 +26,7 @@ class RuleParseException(WAFException):
         self.message = message
         self.rule_line = rule_line
         self.line_number = line_number
-        super().__init__(f"Rule parse error at line {line_number}: {message}\n" f"Line: {rule_line}")
+        super().__init__(f"Rule parse error at line {line_number}: {message}\nLine: {rule_line}")
 
 
 class ConfigurationException(WAFException):
@@ -72,5 +72,5 @@ class RateLimitException(WAFException):
         self.limit_type = limit_type
         self.retry_after = retry_after
         super().__init__(
-            f"Rate limit exceeded: {message} " f"(IP: {ip_address}, Type: {limit_type}, Retry after: {retry_after}s)"
+            f"Rate limit exceeded: {message} (IP: {ip_address}, Type: {limit_type}, Retry after: {retry_after}s)"
         )

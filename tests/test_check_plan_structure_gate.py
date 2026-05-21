@@ -17,7 +17,7 @@ def _seed_required_structure(root: Path) -> None:
     _write(root / "plans" / "thomas" / "README.md", "# thomas plans\n")
     _write(root / "plans" / "thomas" / "WORKBOARD.md", "# workboard\n")
     for rel in mod.LEGACY_POINTER_FILES:
-        pointer = "# Pointer\n\n" "Canonical location:\n" "- `plans/thomas/README.md`\n"
+        pointer = "# Pointer\n\nCanonical location:\n- `plans/thomas/README.md`\n"
         _write(root / rel, pointer)
 
 

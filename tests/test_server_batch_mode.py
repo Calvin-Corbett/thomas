@@ -60,13 +60,7 @@ class _FakeBatchClient:
             "results": [
                 {
                     "batch_request_id": "req_test_123",
-                    "response": {
-                        "completion_response": {
-                            "choices": [
-                                {"message": {"content": "BATCH_MODE_OK"}}
-                            ]
-                        }
-                    },
+                    "response": {"completion_response": {"choices": [{"message": {"content": "BATCH_MODE_OK"}}]}},
                 }
             ]
         }
@@ -336,7 +330,7 @@ class TestServerBatchMode(AioHTTPTestCase):
         events = _parse_ndjson(await resp.text())
         done_events = [e for e in events if e.get("type") == "done"]
         self.assertEqual(len(done_events), 1)
-        budget = ((done_events[0].get("token_report") or {}).get("budget") or {})
+        budget = (done_events[0].get("token_report") or {}).get("budget") or {}
         self.assertEqual((budget.get("session") or {}).get("budget_tokens"), 1000)
         self.assertEqual((budget.get("daily") or {}).get("budget_tokens"), 10000)
 

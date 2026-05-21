@@ -427,5 +427,5 @@ class BillingManager:
                 for level, limit in self.OCG_LIMITS.items():
                     if rate > limit:
                         logger.warning(
-                            f"Invoice {invoice.invoice_id} rate ${rate} " f"exceeds OCG limit ${limit} for {level}"
+                            f"Invoice {invoice.invoice_id} rate ${rate} exceeds OCG limit ${limit} for {level}"
                         )
