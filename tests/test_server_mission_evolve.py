@@ -37,7 +37,18 @@ class TestServerMissionEvolve(unittest.IsolatedAsyncioTestCase):
         def wake_engine():
             woke["called"] = True
 
-        _, create_handler, *_ = build_mission_task_handlers(app, require_store, wake_engine)
+        # build_mission_task_handlers now requires `require_api_access`
+        # (the access closure that gates all server routes). In this unit
+        # test we don't go through the aiohttp router, so a no-op is fine.
+        def _allow(_request):
+            return None
+
+        _, create_handler, *_ = build_mission_task_handlers(
+            app,
+            require_store,
+            wake_engine,
+            require_api_access=_allow,
+        )
         resp = await create_handler(
             _CreateRequest(
                 {

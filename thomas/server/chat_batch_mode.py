@@ -33,7 +33,17 @@ async def maybe_execute_batch_chat(
     token_economy_meta: dict[str, Any],
     apply_usage_budget: Any,
     start_t: float,
+    task_ledger_update: Any = None,
 ) -> web.StreamResponse | None:
+    """Execute a batched chat request via the OpenAI-compatible batch API.
+
+    When ``task_ledger_update`` is provided (the chat deps closure), the batch
+    flow records the same lifecycle transitions as the regular agent loop
+    (chat.request → chat.route → chat.done). Without those updates, the
+    per-session task ledger stays stuck at ``in_progress`` even after the
+    batch returns a final ``done`` event — caught by
+    ``tests/test_server_task_ledger.py::test_task_ledger_updates_for_batch_mode_completion``.
+    """
     if str(mode or "").strip().lower() != "batch":
         return None
     if str(getattr(model_cfg, "provider", "") or "").strip().lower() != "openai_compat":
@@ -45,6 +55,25 @@ async def maybe_execute_batch_chat(
     if not isinstance(getattr(session, "conversation", None), list):
         session.conversation = []
     session.conversation.append({"role": "user", "content": user_text})
+
+    def _ledger(*, status: str, last_progress: str, source: str) -> None:
+        if not callable(task_ledger_update):
+            return
+        with contextlib.suppress(Exception):
+            task_ledger_update(
+                sid,
+                status=status,
+                missing_inputs=[],
+                last_progress=last_progress,
+                source=source,
+                force_event=True,
+            )
+
+    _ledger(
+        status="in_progress",
+        last_progress="Batch mode: queuing provider batch request.",
+        source="chat.request",
+    )
 
     run_id = secrets.token_urlsafe(10)
     seq = 0
@@ -92,6 +121,11 @@ async def maybe_execute_batch_chat(
                 "autonomy_level": 3,
                 "autonomy_name": "Standard",
             }
+        )
+        _ledger(
+            status="in_progress",
+            last_progress="Batch mode: provider client created.",
+            source="chat.route",
         )
         await send({"type": "thinking", "text": "Submitting provider batch request..."})
 
@@ -160,6 +194,14 @@ async def maybe_execute_batch_chat(
                 "rules_of_road": token_report.get("rules_of_road", {}),
                 "elapsed_ms": float((time.monotonic() - start_t) * 1000.0),
             }
+        )
+        # Mirror the regular agent loop's terminal ledger update so per-session
+        # task ledger queries see "complete" instead of staying stuck at
+        # "in_progress" after batch mode finishes.
+        _ledger(
+            status="complete",
+            last_progress=str(answer or "Batch mode finished."),
+            source="chat.done",
         )
         return response
     finally:

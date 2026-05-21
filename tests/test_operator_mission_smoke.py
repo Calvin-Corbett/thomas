@@ -14,15 +14,39 @@ def _read(path: Path) -> str:
 
 
 def test_mission_page_contains_operator_controls() -> None:
+    # mission.html was rebuilt around the new operator vocabulary: missions,
+    # agents, approvals, and activity. The legacy "Open Office" / "Show Idle"
+    # buttons were retired with the surface refresh — the test now asserts
+    # the still-present labels that gate the same operator workflows.
     text = _read(MISSION_HTML_PATH)
     assert "Mission Control" in text
-    assert "Open Office" in text
-    assert "Show Idle" in text
-    assert "Agent Activity" in text
+    assert "Active Agents" in text
+    assert "Approvals Queue" in text
+    assert "Activity Feed" in text
 
 
 def test_mission_routes_register_core_control_and_autopilot_endpoints() -> None:
-    text = _read(MISSION_ROUTE_PATH)
+    # After the modular refactor (mission.py is now a facade over
+    # mission_tasks/mission_cron/mission_approvals/mission_workflows/
+    # mission_benchmark_routes/mission_control_routes), the route literals are
+    # spread across the sibling files. Concatenate them all so the contract
+    # still asserts every required path is registered *somewhere* in the
+    # mission stack.
+    mission_dir = MISSION_ROUTE_PATH.parent
+    text_chunks: list[str] = []
+    for module_name in (
+        "mission.py",
+        "mission_tasks.py",
+        "mission_cron.py",
+        "mission_approvals.py",
+        "mission_workflows.py",
+        "mission_control_routes.py",
+        "mission_benchmark_routes.py",
+    ):
+        candidate = mission_dir / module_name
+        if candidate.is_file():
+            text_chunks.append(candidate.read_text(encoding="utf-8"))
+    text = "\n".join(text_chunks)
 
     required_paths = (
         "/mission",
@@ -34,9 +58,10 @@ def test_mission_routes_register_core_control_and_autopilot_endpoints() -> None:
         "/api/mission/benchmarks/run",
     )
     for path in required_paths:
-        assert f'"{path}"' in text
+        assert f'"{path}"' in text, f"Missing route: {path}"
 
-    assert "register_mission_routes(" in text
+    # The facade still owns `register_mission_routes` (the public entry).
+    assert "register_mission_routes(" in _read(MISSION_ROUTE_PATH)
 
 
 def test_runtime_includes_mission_refresh_and_stream_wiring() -> None:

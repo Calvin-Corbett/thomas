@@ -176,6 +176,26 @@ class TestServerMarketplaceRoutes(AioHTTPTestCase):
         )
         return create_app(cfg)
 
+    async def _materialize_hosted_bundles(self, plugin_ids: list[str]) -> dict[str, Path]:
+        """
+        Download each plugin bundle via the marketplace download route and
+        write the bytes into ``self._tmpdir``. Returns a {plugin_id: path}
+        map suitable for :func:`_hosted_plugin_store`.
+
+        Registry directories like ``thomas/server/plugins_registry/plugins/
+        life-manager/`` ship only ``manifest.json`` — bundles are generated
+        at runtime, so we can't rely on a pre-existing ``bundle.zip`` file.
+        """
+        out: dict[str, Path] = {}
+        for plugin_id in plugin_ids:
+            download_resp = await self.client.get(f"/api/marketplace/plugins/{plugin_id}/download")
+            self.assertEqual(download_resp.status, 200, f"download failed for {plugin_id}")
+            bundle_bytes = await download_resp.read()
+            bundle_path = Path(self._tmpdir.name) / f"{plugin_id}.bundle.zip"
+            bundle_path.write_bytes(bundle_bytes)
+            out[plugin_id] = bundle_path
+        return out
+
     async def test_marketplace_plugin_catalog_route_returns_real_extension_packs(self):
         resp = await self.client.get("/api/marketplace/plugins?limit=25")
         self.assertEqual(resp.status, 200)
@@ -317,11 +337,7 @@ class TestServerMarketplaceRoutes(AioHTTPTestCase):
         self.assertEqual({row.get("plugin_id") for row in installed}, {"life-manager", "life-manager-foundation"})
 
     async def test_marketplace_installs_hosted_plugin_from_deep_link_without_duplicates(self):
-        bundle_paths = {
-            "life-manager": ROOT / "thomas/server/plugins_registry/plugins/life-manager/bundle.zip",
-            "life-manager-foundation": ROOT
-            / "thomas/server/plugins_registry/plugins/life-manager-foundation/bundle.zip",
-        }
+        bundle_paths = await self._materialize_hosted_bundles(["life-manager", "life-manager-foundation"])
         with _hosted_plugin_store(bundle_paths) as store:
             deep_link = build_plugin_install_deep_link("life-manager", store, channel="stable")
 
@@ -349,11 +365,7 @@ class TestServerMarketplaceRoutes(AioHTTPTestCase):
             self.assertEqual({row.get("plugin_id") for row in installed}, {"life-manager", "life-manager-foundation"})
 
     async def test_marketplace_install_accepts_store_url_payload_for_hosted_plugins(self):
-        bundle_paths = {
-            "life-manager": ROOT / "thomas/server/plugins_registry/plugins/life-manager/bundle.zip",
-            "life-manager-foundation": ROOT
-            / "thomas/server/plugins_registry/plugins/life-manager-foundation/bundle.zip",
-        }
+        bundle_paths = await self._materialize_hosted_bundles(["life-manager", "life-manager-foundation"])
         with _hosted_plugin_store(bundle_paths) as store:
             install_resp = await self.client.post(
                 "/api/marketplace/plugins/life-manager/install",
@@ -718,15 +730,25 @@ def test_marketplace_has_single_backend_source_of_truth() -> None:
 
 def test_public_site_marketplace_routes_and_page_exist() -> None:
     site_config = _read_text("apps/site/src/lib/site-config.ts")
+    # The marketplace route file (`page.tsx`) is now a thin server-component
+    # wrapper that delegates to `SiteMarketplacePage`. The canonical marker
+    # strings (`Website-canonical Thomas Marketplace`, `catalog_only`) live
+    # in the imported client component. Read both files so the contract
+    # check covers the route file PLUS its rendered content — and so the
+    # test does not require touching `page.tsx` (which would force a fresh
+    # site visual-proof refresh on every commit).
     marketplace_page = _read_text("apps/site/src/app/marketplace/page.tsx")
+    marketplace_component = _read_text("apps/site/src/components/site-marketplace-page.tsx")
+    marketplace_surface = marketplace_page + "\n" + marketplace_component
     catalog_route = _read_text("apps/site/src/app/api/marketplace/catalog/route.ts")
     versioned_catalog_route = _read_text("apps/site/src/app/api/v1/plugins/catalog/route.ts")
     download_token_route = _read_text("apps/site/src/app/api/v1/plugins/download-token/route.ts")
     detail_route = _read_text("apps/site/src/app/api/v1/plugins/[pluginId]/route.ts")
 
     assert 'href: "/marketplace"' in site_config
-    assert "Website-canonical Thomas Marketplace" in marketplace_page
-    assert "catalog_only" in marketplace_page
+    assert "SiteMarketplacePage" in marketplace_page
+    assert "Website-canonical Thomas Marketplace" in marketplace_surface
+    assert "catalog_only" in marketplace_surface
     assert "buildMarketplaceCatalog" in catalog_route
     assert "buildMarketplaceCatalog" in versioned_catalog_route
     assert "getMarketplaceInstallablePlugin" in detail_route

@@ -193,10 +193,38 @@ class TestServerTaskLedger(AioHTTPTestCase):
     async def test_task_ledger_updates_for_batch_mode_completion(self):
         sid = await self._new_session_id()
 
+        # Batch mode bypasses AgentLoop entirely and talks to the provider
+        # batch endpoint, so the AgentLoop patch alone is not enough — the
+        # real OpenAICompatBatchClient would do a live HTTP POST to xAI and
+        # fail with "Incorrect API key" against the test-only credentials.
+        # We patch the batch client with a fake whose result body matches
+        # the per-test assertion (`BATCH_LEDGER_DONE`), so the chat.done
+        # ledger event records the right `last_progress`.
+        from tests.test_server_batch_mode import _FakeBatchClient
+
+        class _BatchClientWithLedgerMarker(_FakeBatchClient):
+            async def list_batch_results(self, *, batch_id, limit=200, pagination_token=""):
+                _ = batch_id
+                _ = limit
+                _ = pagination_token
+                return {
+                    "results": [
+                        {
+                            "batch_request_id": "req_test_123",
+                            "response": {
+                                "completion_response": {"choices": [{"message": {"content": "BATCH_LEDGER_DONE"}}]}
+                            },
+                        }
+                    ]
+                }
+
         _FakeAgentLoopTaskLedger.route_path = "batch_task"
         _FakeAgentLoopTaskLedger.done_text = "BATCH_LEDGER_DONE"
         _FakeAgentLoopTaskLedger.done_token_report = {"rules_of_road": {"passed": True}}
-        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopTaskLedger):
+        with (
+            patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopTaskLedger),
+            patch("thomas.server.app.OpenAICompatBatchClient", _BatchClientWithLedgerMarker),
+        ):
             chat_resp = await self.client.post(
                 "/api/chat",
                 json={

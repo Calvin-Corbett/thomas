@@ -54,7 +54,9 @@ class TestServerSettingsPage(AioHTTPTestCase):
     async def test_settings_page_scroll_layout_guards_present(self):
         root = Path(__file__).resolve().parents[1]
         settings_css = (root / "thomas" / "server" / "web" / "settings.style01.css").read_text(encoding="utf-8")
-        layout_css = (root / "thomas" / "server" / "web" / "css" / "layout_parts" / "part-001a.css").read_text(
+        # `part-001a.css` was renamed to `layout-app-shell.css` during the
+        # CSS module reorganization. The selectors below moved with it.
+        layout_css = (root / "thomas" / "server" / "web" / "css" / "layout_parts" / "layout-app-shell.css").read_text(
             encoding="utf-8"
         )
 
@@ -82,10 +84,12 @@ class TestServerSettingsPage(AioHTTPTestCase):
             ".app-layout.settings-active .main-content > :not(#settingsModal) {\n    pointer-events: none !important;\n}",
             layout_css,
         )
-        self.assertIn(
-            ".app-layout.settings-active #settingsModal,\n.app-layout.settings-active #settingsModal * {\n    pointer-events: auto;\n}",
-            layout_css,
-        )
+        # The grouped selector was split into two rules during the layout-shell
+        # refactor. Both blocks must still set pointer-events: auto so the
+        # settings modal and its children remain interactive while the rest
+        # of the page is locked out.
+        self.assertIn(".app-layout.settings-active #settingsModal {", layout_css)
+        self.assertIn(".app-layout.settings-active #settingsModal * {\n    pointer-events: auto;\n}", layout_css)
 
     async def test_settings_script_uses_preferences_api_contract(self):
         root = Path(__file__).resolve().parents[1]

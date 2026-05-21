@@ -310,6 +310,37 @@ async def execute_chat_request(
                 ),
             )
 
+    # Discord channel commands (e.g. "show discord status", "/discord recent")
+    # are dispatched WITHOUT spinning up the agent loop. The handler lives in
+    # discord_channels_support but was orphaned during the chat refactor —
+    # match_discord_chat_command + maybe_handle_discord_chat_command existed
+    # but nothing in the chat pipeline called them. Reconnect it here so
+    # ``tests/test_discord_channels.py::test_local_chat_can_report_discord_status_without_agent_loop``
+    # gets its expected "Discord bridge status:" reply.
+    try:
+        from thomas.server.routes.discord_channels_support import (
+            build_discord_request_context,
+            maybe_handle_discord_chat_command,
+        )
+
+        discord_request_context = build_discord_request_context(payload, sid)
+        discord_response = await maybe_handle_discord_chat_command(
+            request=request,
+            session=session,
+            sid=sid,
+            text=text,
+            cfg=cfg,
+            token_economy_meta=token_economy_meta,
+            start_t=start_t,
+            request_context=discord_request_context,
+        )
+        if discord_response is not None:
+            return discord_response
+    except Exception as discord_dispatch_err:
+        # Never let Discord short-circuit failures bubble up — fall through
+        # to the regular chat pipeline.
+        log.debug("Discord chat command dispatch skipped: %s", discord_dispatch_err)
+
     quick_reply = await maybe_handle_quick_casual_reply(
         request=request,
         session_lock=session_lock,
@@ -460,6 +491,7 @@ async def execute_chat_request(
             token_economy_meta=token_economy_meta,
             apply_usage_budget=apply_usage_budget,
             start_t=start_t,
+            task_ledger_update=deps.task_ledger_update,
         )
         if batch_response is not None:
             return batch_response

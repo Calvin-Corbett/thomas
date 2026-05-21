@@ -135,10 +135,27 @@ def _build_tools(config: AppConfig) -> ToolRegistry:
 
 
 def _build_memory(config: AppConfig):
-    if AutonomyMemoryEngine is None:
+    # Resolve via sys.modules so tests that
+    # `monkeypatch.setattr(thomas.server.app, "AutonomyMemoryEngine", ...)`
+    # actually intercept this lookup. The bare module-level alias above is
+    # only the fallback when the patched attribute is absent. See
+    # ``tests/test_memory_runtime_bootstrap.py``.
+    import sys
+
+    engine_cls = None
+    for module_name in ("thomas.server.app", "thomas.server.app_helpers"):
+        module = sys.modules.get(module_name)
+        if module is not None:
+            candidate = getattr(module, "AutonomyMemoryEngine", None)
+            if candidate is not None:
+                engine_cls = candidate
+                break
+    if engine_cls is None:
+        engine_cls = AutonomyMemoryEngine
+    if engine_cls is None:
         return None
     try:
-        engine = AutonomyMemoryEngine(
+        engine = engine_cls(
             config,
             enable_v2=_env_flag("THOMAS_MEMORY_V2_ENABLED", True),
             enable_legacy=_env_flag("THOMAS_MEMORY_LEGACY_ENABLED", False),
