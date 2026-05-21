@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.5] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 4): `scripts/forge/gates/monolith_filename_guard.py` now operates in diff-mode when `BASE_SHA`/`HEAD_SHA` are present (env vars or `--base`/`--head` args), only scanning files changed in that range. The CI workflow `robustness-gates.yml::Monolith split filename gate` step runs without args but the gate now picks up the env-set range automatically. Previously the gate scanned all 100k+ tracked files and flagged 32 pre-existing legacy `_partNN.{py,js,css}` files in `thomas/server/` (historical monolith-split era), blocking every CI push that touched `thomas/server/`. This change keeps the gate strict against new violations without churning on legacy debt.
+
 ## [0.15.4] - 2026-05-20
 
 ### Fixed
