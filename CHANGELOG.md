@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.34] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 33): re-export `_resolve_repl_profile_from_prefs`, `_resolve_model_profile_name`, `_repl_needs_codex_event_loop` through `thomas/cli/main.py`. The functions live in `_commands_models.py` and `_commands_base.py` post-refactor; `tests/test_cli_repl_profile_resolution.py` patches them through `thomas.cli.main`. All 6 tests now pass. Refreshed `cli` module audit hash.
+
 ## [0.15.33] - 2026-05-20
 
 ### Fixed
