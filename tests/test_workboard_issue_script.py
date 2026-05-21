@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import scripts.crew.workboard.issue as mod
 import scripts.forge.gates.workboard_claims as gate
-import scripts.workboard_issue as mod
 
 
 def _write_workboard(

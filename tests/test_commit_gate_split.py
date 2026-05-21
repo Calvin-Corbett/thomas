@@ -15,7 +15,7 @@ def _load_module(name: str, path: Path):
 
 
 ROOT = Path(__file__).resolve().parent.parent
-agent_commit = _load_module('agent_commit', ROOT / 'scripts' / 'agent_commit.py')
+agent_commit = _load_module('agent_commit', ROOT / 'scripts' / 'crew' / 'brief' / 'commit.py')
 merge_readiness = _load_module('check_merge_readiness', ROOT / 'scripts' / 'forge' / 'gates' / 'merge_readiness.py')
 
 
