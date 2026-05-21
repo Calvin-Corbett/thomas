@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.35] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 34): `thomas/cli/commands/messages/p062_message_reactions_add_remove_list.py` `list_cmd` (and add/remove cmds) was catching `(OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError)` but NOT `MessageReactionsError` — the custom exception raised when backend config is missing. The exception escaped past the except clause, leaving stdout empty, and the test's `json.loads(result.output)` blew up with `JSONDecodeError: Expecting value`. Added module-level import of `MessageReactionsError` and a dedicated except clause that routes through `_handle_error`. All 5 tests in `tests/prompt_pack/test_p062_message_reactions_add_remove_list.py` now pass.
+
 ## [0.15.34] - 2026-05-20
 
 ### Fixed

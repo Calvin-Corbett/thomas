@@ -14,6 +14,8 @@ import json
 
 import typer
 
+from thomas.messages.p062_message_reactions_add_remove_list import MessageReactionsError
+
 app = typer.Typer(help="Add, remove, or list reactions on a message.")
 
 
@@ -111,6 +113,9 @@ def add(
     except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as e:
         _handle_error(e, json_mode=json_mode)
         return
+    except MessageReactionsError as e:
+        _handle_error(e, json_mode=json_mode)
+        return
     _emit(result, json_mode=json_mode)
 
 
@@ -145,6 +150,9 @@ def remove(
     except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as e:
         _handle_error(e, json_mode=json_mode)
         return
+    except MessageReactionsError as e:
+        _handle_error(e, json_mode=json_mode)
+        return
     _emit(result, json_mode=json_mode)
 
 
@@ -169,6 +177,9 @@ def list_cmd(
             timeout_seconds=timeout_seconds,
         )
     except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as e:
+        _handle_error(e, json_mode=json_mode)
+        return
+    except MessageReactionsError as e:
         _handle_error(e, json_mode=json_mode)
         return
     _emit(result, json_mode=json_mode)
