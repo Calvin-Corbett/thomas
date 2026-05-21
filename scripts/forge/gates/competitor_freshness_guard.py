@@ -221,15 +221,21 @@ def run(argv: Sequence[str] | None = None) -> int:
     # explicit artifact paths are supplied (tests pass --result-json etc.), skip
     # with a clear hint when no snapshot path is set. This preserves the unit-test
     # contract while unblocking CI.
-    explicit_artifact = bool(
+    # Any explicit user-supplied data path (artifact paths or a custom suite-config)
+    # signals deliberate invocation (tests + local dev), so don't bypass.
+    explicit_input = bool(
         str(args.result_json or "").strip()
         or str(args.registry_json or "").strip()
         or str(args.legacy_result_json or "").strip()
+        or (
+            str(args.suite_config or "").strip()
+            and str(args.suite_config) != str(DEFAULT_SUITE_CONFIG)
+        )
     )
     if (
         os.environ.get("GITHUB_ACTIONS") == "true"
         and not os.environ.get("OPENCLAW_SNAPSHOT_PATH")
-        and not explicit_artifact
+        and not explicit_input
     ):
         print(
             "Competitor freshness guard: SKIPPED "
