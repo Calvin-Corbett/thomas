@@ -659,6 +659,20 @@ def _setup_routes_and_handlers(
 
     _register_goals_routes(app)
 
+    def _register_spend_routes(app_ref: web.Application) -> None:
+        """Register /api/spend/* routes."""
+        if not callable(_require_api_access):
+            log.warning("Spend route registration skipped: missing API access guard")
+            return
+        try:
+            from thomas.server.routes.spend import register_spend_routes
+
+            register_spend_routes(app_ref, require_api_access=_require_api_access)
+        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError, ValueError) as e:
+            log.warning("Spend routes unavailable: %s", e)
+
+    _register_spend_routes(app)
+
     def _register_workspace_routes(app_ref: web.Application, cfg_ref: AppConfig) -> None:
         """Register multi-tenant workspace APIs."""
         if not callable(_require_api_access):
