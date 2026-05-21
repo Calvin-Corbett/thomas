@@ -8,10 +8,10 @@ Last updated: 2026-03-01
 ## Problem Traceability
 
 ## Agent Claims
-- none
+- agent=claude; name=CI gate recovery sprint; role=solo; parent=none; scope=thomas,scripts,docs,plans,CHANGELOG.md,pyproject.toml,.gitignore,apps,tests; task=ci-recovery-2026-05-20
 
 ## Active Tasks
-- none
+- task_id=ci-recovery-2026-05-20; agent=claude; scope=thomas,scripts,docs,plans,CHANGELOG.md,pyproject.toml,.gitignore,apps,tests; summary=ci-recovery-2026-05-20; status=active
 
 ## Up For Grabs
 
@@ -22,6 +22,7 @@ Last updated: 2026-03-01
 
 ## Task Problems
 - task_id=audit-24h-backstop; problem=plans/thomas/problems/audit-24h-backstop/PROBLEM.md; owner=unassigned; status=up_for_grabs; updated_at=2026-03-06T00:01:49+00:00; summary=ensure every major module is audited in last 24h and fix findings
+- task_id=ci-recovery-2026-05-20; problem=plans/thomas/problems/ci-recovery-2026-05-20/PROBLEM.md; owner=claude; status=active; updated_at=2026-05-20T00:00:00+00:00; summary=clear all CI gate failures on dev (Praxis-arc accumulated debt)
 
 ## Canonical Plan Pointers (Historical/Reference)
 - `plans/thomas/companion/STORE_COMPLIANCE_PLAN.md`
@@ -37,3 +38,4 @@ Last updated: 2026-03-01
 
 ## Task Plans
 - task_id=audit-24h-backstop; plan=plans/thomas/tasks/audit-24h-backstop/PLAN.md; owner=unassigned; status=up_for_grabs; updated_at=2026-03-06T00:01:49+00:00; summary=ensure every major module is audited in last 24h and fix findings
+- task_id=ci-recovery-2026-05-20; plan=plans/thomas/tasks/ci-recovery-2026-05-20/PLAN.md; owner=claude; status=active; updated_at=2026-05-20T00:00:00+00:00; summary=clear all CI gate failures on dev (Praxis-arc accumulated debt)
