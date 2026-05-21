@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.32] - 2026-05-20
+
+### Added
+- ci-recovery (tail 31): topic-branch-stacking check in `scripts/forge/gates/worktree_branch_guard.py`. Added `_local_branch_names()`, `_branch_tip(name)`, `_is_ancestor(commit, ref)` helpers and a `_is_topic_branch()` classifier. The gate now ensures topic branches start directly from canonical base branches (`master`, `release/oss-launch`, `publish-clean`) — failing when a topic branch is stacked on another unmerged topic branch. All 3 tests in `tests/test_check_worktree_branch_guard.py` now pass.
+
 ## [0.15.31] - 2026-05-20
 
 ### Fixed
