@@ -72,6 +72,16 @@ def _evaluate_claim_paths(*, refs: Sequence[str], repo_root: Path, tracked: set[
         if not full_path.exists():
             issues.append({"path": ref, "issue": "missing"})
             continue
+        # Directory refs (paths ending in '/') are tracked as long as at least one
+        # file under them is tracked. `git ls-files` returns files, not directories.
+        if ref.endswith("/") or full_path.is_dir():
+            prefix = ref if ref.endswith("/") else ref + "/"
+            if any(path.startswith(prefix) for path in tracked):
+                if _is_placeholder_backed(full_path):
+                    issues.append({"path": ref, "issue": "placeholder_backed"})
+                continue
+            issues.append({"path": ref, "issue": "untracked"})
+            continue
         if ref not in tracked:
             issues.append({"path": ref, "issue": "untracked"})
             continue

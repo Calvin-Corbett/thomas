@@ -51,6 +51,7 @@ APP_RUNTIME_GUARD_TASK = web.AppKey("runtime_guard_task", object)
 APP_BOOT_DOCTOR_ROOT = web.AppKey("boot_doctor_root", Path)
 APP_LOCAL_STEP_UP_AUTH_PROVIDER = web.AppKey("local_step_up_auth_provider", object)
 APP_PROTECTED_INTERNALS_GATE = web.AppKey("protected_internals_gate", object)
+APP_REQUIRE_API_ACCESS = web.AppKey("require_api_access", object)
 
 
 @dataclass

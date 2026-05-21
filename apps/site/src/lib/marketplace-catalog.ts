@@ -214,10 +214,15 @@ export function verifyDownloadToken(token: string): { pluginId: string; clientKe
 
 export function loadHostedPlugins(): Map<string, HostedPluginRecord> {
   const out = new Map<string, HostedPluginRecord>();
-  const hostedPlugins = Array.isArray(marketplaceSnapshot.hostedPlugins) ? marketplaceSnapshot.hostedPlugins : [];
+  const hostedPluginsRaw = (marketplaceSnapshot as JsonRecord).hostedPlugins;
+  const hostedPlugins = Array.isArray(hostedPluginsRaw) ? hostedPluginsRaw : [];
 
-  for (const entry of hostedPlugins) {
-    const manifest = entry && typeof entry.manifest === "object" ? (entry.manifest as JsonRecord) : {};
+  for (const rawEntry of hostedPlugins) {
+    const entry = rawEntry && typeof rawEntry === "object" ? (rawEntry as JsonRecord) : null;
+    if (!entry) {
+      continue;
+    }
+    const manifest = entry.manifest && typeof entry.manifest === "object" ? (entry.manifest as JsonRecord) : {};
     const publisherId = safeString(manifest.publisher_id).trim();
     const signature = safeString(manifest.signature).trim();
     if (!TRUSTED_PUBLISHER_IDS.has(publisherId) || !signature) {
