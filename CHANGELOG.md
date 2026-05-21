@@ -9,6 +9,16 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.44] - 2026-05-21
+
+### Fixed
+- ci-recovery (tail 43): two more workboard tests that were marked "pre-existing failures" in 0.15.42 now have functional fixes:
+  - **`tests/test_workboard_swarm_script.py::test_launch_missing_only_targets_agents_without_online_status`** — `_online_agents_for_swarm` queried `list_messages(recipient=coordinator)` where coordinator defaults to `"thomas"`, but the test convention (and the rest of the workboard) sends "terminal online" status messages to `"task-manager-agent"`. Both names are already aliased via `_is_task_manager_agent` in `message.py`, but `list_messages` did a literal `_norm(row.get("to")) != recipient_key` comparison. Made the comparison alias-aware: when the requested recipient is any of `{thomas, task-manager-agent, task-manager}`, any row addressed to any of those names matches. Same alias logic applied to the sender filter.
+  - **`tests/test_workboard_worker_script.py::test_worker_success_triggers_immediate_redispatch`** — `dispatch_idle_agents_once` in `scripts/crew/tasks/messages.py` was a no-op stub returning `(True, {})`. Worker called it after every successful completion to assign the next up-for-grabs task, but `assigned_count` was never set, so the immediate-redispatch loop never actually re-dispatched anything. Implemented the function: reads recent "assign next available task" messages, picks the requesting agent, finds an up-for-grabs candidate, inserts a new active claim + active task line via `claim_ops.claim()` + `_format_active_task()`, then removes the up-for-grabs row.
+
+### Architecture
+- `dispatch_idle_agents_once` now correctly threads through ``apply``, ``max_dispatch_per_cycle``, and ``online_lookback_minutes`` — matching the call-site contract in `scripts/crew/workboard/worker.py::_request_immediate_dispatch`. The historic stub probably dated to the Tier 5 rename split where the original implementation lived in `scripts.task_manager_messages` and got placeholder-ed during the relocation.
+
 ## [0.15.43] - 2026-05-21
 
 ### Fixed

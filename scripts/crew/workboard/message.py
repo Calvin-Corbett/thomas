@@ -15,14 +15,12 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-try:
-    from scripts.crew.workboard import issue as workboard_issue
-    from scripts.forge.gates import workboard_claims as claims_gate
-except Exception:  # pragma: no cover
-    from forge.gates import workboard_claims as claims_gate  # type: ignore
-
-    from scripts.crew.workboard import issue as workboard_issue  # type: ignore
-
+# The `_REPO_ROOT` sys.path insert above this block guarantees `scripts.*` is
+# importable in both Windows local and Linux CI environments, so a fallback
+# branch with the truncated `crew.*` / `forge.*` paths is no longer needed
+# (see scripts/crew/tasks/messages.py for the same simplification).
+from scripts.crew.workboard import issue as workboard_issue
+from scripts.forge.gates import workboard_claims as claims_gate
 
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
@@ -316,12 +314,25 @@ def list_messages(
     recipient_key = _norm(recipient)
     state_key = _norm(state)
     task_key = _norm(task_id)
+    # Treat the task-manager aliases (thomas / task-manager-agent /
+    # task-manager) as interchangeable for sender + recipient filters so
+    # callers like swarm.cli::_online_agents_for_swarm (which queries with
+    # coordinator="thomas") still see messages addressed to
+    # "task-manager-agent" — and vice versa.
+    sender_is_tm = _is_task_manager_agent(sender)
+    recipient_is_tm = _is_task_manager_agent(recipient)
     out: list[dict[str, str]] = []
     for row in rows:
-        if sender_key and _norm(row.get("from", "")) != sender_key:
-            continue
-        if recipient_key and _norm(row.get("to", "")) != recipient_key:
-            continue
+        row_from = _norm(row.get("from", ""))
+        row_to = _norm(row.get("to", ""))
+        if sender_key:
+            sender_match = (sender_is_tm and _is_task_manager_agent(row.get("from", ""))) or row_from == sender_key
+            if not sender_match:
+                continue
+        if recipient_key:
+            recipient_match = (recipient_is_tm and _is_task_manager_agent(row.get("to", ""))) or row_to == recipient_key
+            if not recipient_match:
+                continue
         if state_key and _norm(row.get("state", "")) != state_key:
             continue
         if task_key and _norm(row.get("task_id", "")) != task_key:
