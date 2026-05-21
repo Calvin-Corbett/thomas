@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.6] - 2026-05-20
+
+### Changed
+- workboard: register an active claim for the ci-recovery sprint covering `thomas,scripts,docs,plans,CHANGELOG.md,pyproject.toml,.gitignore,apps,tests`. The 6 prior commits in this arc (0.15.0–0.15.5) used `--allow-scope-fallback` on the local commit tool, which only authorizes the LOCAL gate; the CI-side `workboard_changed_files.py` gate doesn't honor that fallback and requires changed files to map to an active claim. Created via `scripts/crew/workboard/claim.py --claim --agent claude --task ci-recovery-2026-05-20`. Released for future agents once main is updated.
+
 ## [0.15.5] - 2026-05-20
 
 ### Fixed
