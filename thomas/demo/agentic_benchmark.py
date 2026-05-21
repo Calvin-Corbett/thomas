@@ -11,6 +11,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+# Import helpers for re-export
+# Re-export `_run_single_agent_lane` + `httpx` so test files that
+# `monkeypatch.setattr(agentic_benchmark, "_run_single_agent_lane", ...)`
+# or `monkeypatch.setattr(agentic_benchmark, "httpx", ...)` actually
+# intercept the implementation. The same sys.modules-lookup pattern used
+# in thomas.cli.main (see Pattern 16 in the bible).
+import httpx  # noqa: F401  -- re-export for tests
+
 from thomas.core.config import load_config
 from thomas.demo.agentic_benchmark_core import (
     _ensure_usage_telemetry,
@@ -26,16 +34,21 @@ from thomas.demo.agentic_benchmark_core import (
     load_agentic_task_pack,
     render_task,
 )
+
+# Re-export `_chat_json_lane` so tests that
+# `patch("thomas.demo.agentic_benchmark._chat_json_lane", ...)` can patch
+# the symbol on this module path. The helpers module owns the real
+# implementation; this re-export is purely for monkeypatch reachability.
+from thomas.demo.agentic_benchmark_helpers import _chat_json_lane as _chat_json_lane  # noqa: F401
 from thomas.demo.agentic_benchmark_helpers import (
     _pass_budget_for_mode,
     _pipeline_topology,
     _review_decision_for_candidate,
     _should_use_coding_pipeline,
 )
-
-# Import helpers for re-export
 from thomas.demo.agentic_benchmark_runners import (
     _run_raw_task,
+    _run_single_agent_lane,  # noqa: F401  -- re-export for tests
     _run_thomas_api_task,
     _run_thomas_embedded_task,
 )

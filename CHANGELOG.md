@@ -9,6 +9,13 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.45] - 2026-05-21
+
+### Fixed
+- ci-recovery (tail 44): cleared 5 Linux-CI failures unmasked by the 0.15.43 path-normalize fix:
+  - **`tests/test_active_folders.py::test_claim_requires_explicit_agent_for_coordinated_claims`** — `_explicit_agent_from_env` reads `AGENT_ENV_KEYS` (AGENT_ID, THOMAS_AGENT_ID, etc.) at every call. GitHub Actions sets `AGENT_ID="runner"` (and Claude/Codex/Gemini surfaces set their own `*_AGENT_ID` vars), which leaked into the test and bypassed the explicit-agent check. Added an autouse `_clear_agent_env` fixture that `delenv`s all five env keys.
+  - **`tests/test_agentic_benchmark.py` (4 tests)** — tests `patch("thomas.demo.agentic_benchmark.X")` but the call sites are in `agentic_benchmark_runners.py`, so the patches missed. Two fixes: (a) re-exported `_run_single_agent_lane`, `_chat_json_lane`, and `httpx` from `agentic_benchmark.py` for monkeypatch reachability; (b) added `_resolve_via_modules(symbol, default)` in `agentic_benchmark_runners.py` and routed the call sites through `_resolve_single_agent_lane()` / `_resolve_chat_json_lane()`, which look up the symbol via `sys.modules` at call time. Same Pattern 16 (test-patch reachability) generalization noted in the bible.
+
 ## [0.15.44] - 2026-05-21
 
 ### Fixed

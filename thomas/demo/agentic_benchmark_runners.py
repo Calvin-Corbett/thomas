@@ -114,6 +114,34 @@ async def _run_raw_task(
     }
 
 
+def _resolve_via_modules(symbol: str, default):
+    """Look up ``symbol`` via sys.modules so test monkeypatches intercept it.
+
+    The public ``thomas.demo.agentic_benchmark`` module re-exports several
+    helpers — tests patch them on that public surface. The implementation
+    runners need to call through the re-export so the patched version wins.
+    """
+    import sys
+
+    for mod_name in ("thomas.demo.agentic_benchmark", "thomas.demo.agentic_benchmark_runners"):
+        module = sys.modules.get(mod_name)
+        if module is not None:
+            candidate = getattr(module, symbol, None)
+            if candidate is not None and candidate is not _resolve_via_modules:
+                return candidate
+    return default
+
+
+def _resolve_single_agent_lane():
+    return _resolve_via_modules("_run_single_agent_lane", _run_single_agent_lane)
+
+
+def _resolve_chat_json_lane():
+    from thomas.demo.agentic_benchmark_helpers import _chat_json_lane
+
+    return _resolve_via_modules("_chat_json_lane", _chat_json_lane)
+
+
 async def _run_single_agent_lane(
     config: AppConfig,
     *,
@@ -236,7 +264,7 @@ async def _run_thomas_embedded_task(
         prompt=str(prompt or ""),
     )
     if not coding_pipeline_enabled:
-        coder_only = await _run_single_agent_lane(
+        coder_only = await _resolve_single_agent_lane()(
             config,
             profile=profile,
             prompt=prompt,
@@ -293,7 +321,7 @@ async def _run_thomas_embedded_task(
 
         text_hook = _enqueue_chunk
 
-    coder = await _run_single_agent_lane(
+    coder = await _resolve_single_agent_lane()(
         config,
         profile=profile,
         prompt=prompt,
@@ -378,7 +406,7 @@ async def _run_thomas_embedded_task(
                 "Be strict about edge cases and wrong complexity.\n\n"
                 f"Task:\n{prompt}\n\nCandidate code:\n{current_text}\n"
             )
-            reviewer_lane = await _chat_json_lane(
+            reviewer_lane = await _resolve_chat_json_lane()(
                 config,
                 profile=profile,
                 system_prompt=(

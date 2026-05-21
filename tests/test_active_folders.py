@@ -12,6 +12,18 @@ def _presence_gate_ok(monkeypatch) -> None:
     monkeypatch.setattr(mod, "_presence_gate", lambda **_: (True, ""))
 
 
+@pytest.fixture(autouse=True)
+def _clear_agent_env(monkeypatch) -> None:
+    # GitHub Actions sets AGENT_ID at runner boot (and Claude/Codex/Gemini
+    # surfaces set their own *_AGENT_ID vars). The tests assert behavior
+    # when the caller does NOT have an explicit agent set — so unset every
+    # env key `_explicit_agent_from_env` looks at. Otherwise the runner's
+    # AGENT_ID leaks into the test and the explicit-agent-required branch
+    # never triggers (only fails on Linux CI, never locally on Windows).
+    for env_key in mod.AGENT_ENV_KEYS:
+        monkeypatch.delenv(env_key, raising=False)
+
+
 def _guard_args(**overrides) -> argparse.Namespace:
     base: dict[str, object] = {
         "agent": None,
