@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-05-21T21:11:48+00:00",
+  "updated_at": "2026-05-21T21:31:57+00:00",
   "latest_by_module": {
     "agent": {
       "id": "59cef78e32df4a84bc0f0933b1f6ee73",
@@ -215,32 +215,26 @@
       "signature": "565aeeea4b99a17e0f249e3183a0e24faf509a87baa566922abc9bddb35cacbb"
     },
     "server": {
-      "id": "9c482ac9ecab466f92e19a30ad4e9b00",
+      "id": "918b1760ee194d88855d559262a6515c",
       "module": "server",
-      "audited_at": "2026-05-21T19:57:12+00:00",
+      "audited_at": "2026-05-21T21:31:57+00:00",
       "auditor": "claude",
       "status": "pass",
-      "summary": "0.15.42: ci recovery batch — autopilot shim, batch ledger updates, discord chat dispatch wired, memory engine sys.modules lookup",
+      "summary": "0.15.46: wire asset studio routes + use marketplace import path",
       "run_id": "",
       "files_touched": [
-        "thomas/server/app.py",
-        "thomas/server/app_helpers.py",
-        "thomas/server/chat_batch_mode.py",
-        "thomas/server/routes/autopilot.py",
-        "thomas/server/routes/chat_aiohttp_streaming.py"
+        "thomas/server/app_routes_init.py",
+        "thomas/server/routes/asset_studio_aiohttp.py"
       ],
       "file_hashes": {
-        "thomas/server/app.py": "6dfd9f0c15d17757171e39958608bae50e7af24c5334e6473162eb06a8301dd7",
-        "thomas/server/app_helpers.py": "d3830bec4c534163a1d931a58a339f7c15e92388ebbba01ba09e1e4458dd84ea",
-        "thomas/server/chat_batch_mode.py": "24e6ade1030c42834d04b308c1eafc935cb97ea9528c16582e148804d01d679d",
-        "thomas/server/routes/autopilot.py": "1948ad79edf64b8a25570eb0b1d5bf336e486cef265d21be5c5076f7fcb3e943",
-        "thomas/server/routes/chat_aiohttp_streaming.py": "7bc5b5990550185c71ab973349b39a0d93f210eae4864fdb121b7b045db21b02"
+        "thomas/server/app_routes_init.py": "99085fc7b4579ce282a3a665fef30bdf78febd1b1af3ce12ef8cfac1a3e708e6",
+        "thomas/server/routes/asset_studio_aiohttp.py": "cdc361ebd3449eda6ea832a6c99c8ec2ac31bb01f5fa4a6f02d7a989a8949bcc"
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "66867916f34a3f2a912d20c7d5ba0c7281af85c77c8107b7f82e98fb03675adf",
+      "prev_signature": "51b18e7f8d2a6c0e39d5cd12f04b06dd70a60c567ccdfe7d935bb71632e1c83c",
       "signature_scheme": "sha256",
-      "signature": "51b18e7f8d2a6c0e39d5cd12f04b06dd70a60c567ccdfe7d935bb71632e1c83c"
+      "signature": "d5cbc55415352af0b0a82de04e7c4577a496c559bcfc6afdac16aca8a027751d"
     },
     "tools": {
       "id": "6baf6ae9bb2242c2825e72fd9c76ad31",
@@ -1612,6 +1606,28 @@
       "prev_signature": "95ed236186e147e40d86ed56e0f5a466a07405a8500438787de34f79138df03c",
       "signature_scheme": "sha256",
       "signature": "ba5108a61f1118155e70dff5762ecfbaa89a667775dfbeb97375c19a215934bf"
+    },
+    {
+      "id": "918b1760ee194d88855d559262a6515c",
+      "module": "server",
+      "audited_at": "2026-05-21T21:31:57+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "0.15.46: wire asset studio routes + use marketplace import path",
+      "run_id": "",
+      "files_touched": [
+        "thomas/server/app_routes_init.py",
+        "thomas/server/routes/asset_studio_aiohttp.py"
+      ],
+      "file_hashes": {
+        "thomas/server/app_routes_init.py": "99085fc7b4579ce282a3a665fef30bdf78febd1b1af3ce12ef8cfac1a3e708e6",
+        "thomas/server/routes/asset_studio_aiohttp.py": "cdc361ebd3449eda6ea832a6c99c8ec2ac31bb01f5fa4a6f02d7a989a8949bcc"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "51b18e7f8d2a6c0e39d5cd12f04b06dd70a60c567ccdfe7d935bb71632e1c83c",
+      "signature_scheme": "sha256",
+      "signature": "d5cbc55415352af0b0a82de04e7c4577a496c559bcfc6afdac16aca8a027751d"
     }
   ]
 }

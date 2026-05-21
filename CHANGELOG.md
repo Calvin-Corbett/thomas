@@ -9,6 +9,13 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.46] - 2026-05-21
+
+### Fixed
+- ci-recovery (tail 45): cleared **36** Asset Studio test failures with two functional wirings, not test scaffolding:
+  - **Asset Studio routes were never wired into the app.** `thomas/server/routes/asset_studio_aiohttp.py::register_asset_studio_routes` existed but nothing in `app_routes_init.py` invoked it, so every `/api/asset-studio/v1/*` endpoint returned 404. This is the same Pattern 1 (designed but not wired) that hit goals/spend/companion earlier in the recovery arc. Added `_register_asset_studio_routes(app)` next to the existing route-registration block.
+  - **Stale import path.** `asset_studio_aiohttp.py` did `from thomas.asset_studio.comfy_service import ComfyStudioService`. The `thomas.asset_studio` package is now a re-export shim of `thomas.marketplace.asset_studio` (renamed during the marketplace cleanup arc), and `from thomas.marketplace.asset_studio import *` only re-exports the package — not submodules. So `thomas.asset_studio.comfy_service` raised `ModuleNotFoundError` on Linux CI. Routed the imports directly to the new marketplace path.
+
 ## [0.15.45] - 2026-05-21
 
 ### Fixed

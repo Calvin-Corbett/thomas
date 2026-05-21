@@ -11,8 +11,12 @@ from typing import Any
 
 from aiohttp import web
 
-from thomas.asset_studio.comfy_service import ComfyStudioService
-from thomas.asset_studio.runtime import TERMINAL_STATES, AssetStudioJobStore, AssetStudioRuntime
+# `thomas.asset_studio` is now a re-export shim of `thomas.marketplace.asset_studio`
+# (the package moved during the marketplace cleanup arc). The shim only re-exports
+# the package, not submodules, so `from thomas.asset_studio.comfy_service import ...`
+# raises `ModuleNotFoundError` on Linux CI. Use the new marketplace path directly.
+from thomas.marketplace.asset_studio.comfy_service import ComfyStudioService
+from thomas.marketplace.asset_studio.runtime import TERMINAL_STATES, AssetStudioJobStore, AssetStudioRuntime
 from thomas.preferences.store import get_db_path
 
 RequireAccessFn = Callable[[web.Request], None]
@@ -76,7 +80,7 @@ def _parse_tags(value: Any) -> list[str]:
         return []
     if isinstance(value, str):
         raw_items = [part.strip() for part in value.split(",")]
-    elif isinstance(value, (list, tuple, set)):
+    elif isinstance(value, list | tuple | set):
         raw_items = list(value)
     else:
         raise ValueError("tags must be a list or comma-separated string")
