@@ -9,6 +9,13 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.26] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 24): two more pre-existing Linux-CI false positives:
+  - `tests/test_agent_presence_more.py::test_agent_presence_env_and_parse_helpers` failed on CI because the runner sets `AGENT_ID="runner"` at the runner level. `AGENT_ENV_KEYS = ("THOMAS_AGENT_ID", "AGENT_ID", "CODEX_AGENT_ID", ...)` — so without explicitly clearing `AGENT_ID`, the test's `CODEX_AGENT_ID="Codex Env"` was being overridden. Added `monkeypatch.delenv("AGENT_ID", raising=False)`.
+  - `tests/test_agent_safety.py::test_pyc_files_not_in_tree` was failing in CI with "Found 2842 .pyc files in thomas/" — these are generated at IMPORT time during the test session (Python compiles bytecode on every interpreter invocation). The test was checking `Path("thomas").rglob("*.pyc")` which catches them. Switched to `git ls-files thomas` filtered to `.pyc` extension, so only actually-tracked .pyc files trigger the failure.
+
 ## [0.15.25] - 2026-05-20
 
 ### Fixed

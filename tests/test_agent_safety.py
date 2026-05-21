@@ -251,14 +251,26 @@ class TestAgentSafety:
 
     def test_pyc_files_not_in_tree(self):
         """
-        Test that .pyc files are not being committed.
+        Test that .pyc files are not being COMMITTED (tracked in git).
 
-        Compiled Python files should never be in version control.
+        Compiled Python files should never be in version control. The previous
+        rglob check also caught .pyc files generated at import time during the
+        test run itself — a false positive, since Python regenerates these
+        from .py sources on every interpreter invocation. Check `git ls-files`
+        instead so we only fail when a .pyc has actually been committed.
         """
-        pyc_files = list(Path("thomas").rglob("*.pyc"))
-        assert not pyc_files, (
-            f"Found {len(pyc_files)} .pyc files in thomas/:\n"
-            + "\n".join([str(f) for f in pyc_files[:5]])
+        import subprocess
+
+        result = subprocess.run(
+            ["git", "ls-files", "thomas"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        tracked_pyc = [line for line in result.stdout.splitlines() if line.strip().endswith(".pyc")]
+        assert not tracked_pyc, (
+            f"Found {len(tracked_pyc)} tracked .pyc files in thomas/:\n"
+            + "\n".join(tracked_pyc[:5])
             + "\n\nCompiled Python files should not be committed.\n"
             "Ensure .gitignore includes *.pyc and __pycache__/"
         )
