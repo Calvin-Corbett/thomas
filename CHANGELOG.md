@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.7] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 5): `docs/FEATURE_MASTER_LIST.md` was stale relative to the detected-code + inbox state (`Feature master sync gate FAILED: docs/FEATURE_MASTER_LIST.md is stale`). Re-synced via `python scripts/sync_feature_master_list.py` (26 done, 0 inbox, 4 missing).
+
 ## [0.15.6] - 2026-05-20
 
 ### Changed
