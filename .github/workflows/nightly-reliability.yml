@@ -67,7 +67,7 @@ jobs:
           python scripts/crew/workboard/claim_cleanup.py --max-age-hours 72 --json > artifacts/nightly_reliability/workboard_claim_cleanup.json
           python scripts/forge/gates/competitor_freshness_guard.py --max-age-days 7 --json > artifacts/nightly_reliability/competitor_freshness_guard.json
           set +e
-          python scripts/competitors/check_weekly_delta_alert.py --json > artifacts/nightly_reliability/competitor_delta_alerting.json
+          python scripts/competitors/check_weekly_delta_alert.py --json --strict > artifacts/nightly_reliability/competitor_delta_alerting.json
           competitor_delta_exit_code=$?
           set -e
           printf "%s\n" "${competitor_delta_exit_code}" > artifacts/nightly_reliability/competitor_delta_alerting.exit_code

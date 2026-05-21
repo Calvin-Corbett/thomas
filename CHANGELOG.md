@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.18] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 16): reconcile two contradictory CI-workflow contract tests. `tests/test_ci_workflow_guards.py::test_nightly_reliability_uses_strict_competitor_and_security_checks` asserts `--json --strict` MUST be in the nightly workflow; `scripts/competitors/tests/test_check_weekly_delta_alert.py::test_workflows_wire_weekly_delta_alerting_guards` was asserting `--strict` MUST NOT be in any line with `check_weekly_delta_alert.py`. Both checks were added together (2026-04-24) but point opposite directions. Design intent (per the `set +e` / `competitor_delta_exit_code=$?` wrapping) is: nightly DOES run in `--strict` (so the script's exit code reflects the delta state) AND the workflow wraps it to keep the workflow itself green. Resolution: restored `--strict` to `nightly-reliability.yml`; rewrote the weekly_delta test to assert presence of `--json` + redirect target + exit-code capture without forbidding `--strict`. The dedicated strict-mode assertion lives in `tests/test_ci_workflow_guards.py`. 16 tests across both files now pass locally.
+
 ## [0.15.17] - 2026-05-20
 
 ### Fixed
