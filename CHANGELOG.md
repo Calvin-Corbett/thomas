@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.15.24] - 2026-05-20
+
+### Fixed
+- ci-recovery (tail 22): re-export 9 helper functions from the split `agent_comparison_suite_*` modules through `thomas/demo/agent_comparison_suite.py`. The suite was refactored into `_metrics`, `_scoring`, `_shared`, `_strict_checks` files but `tests/test_agent_comparison_suite.py` imports `suite._function_name` for ~12 internal helpers. Added re-exports for `MetricSpec`, `_assertion_ok`, `_collect_git_version_info`, `_collect_model_snapshot`, `_resolve_path_value`, `_collect_benchmark_evidence`, `_collect_benchmark_summary`, `_compute_token_efficiency`, `_count_regex_hits`, `_run_probe_suite`. All 29 tests now pass.
+
 ## [0.15.23] - 2026-05-20
 
 ### Fixed
