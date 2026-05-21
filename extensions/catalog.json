@@ -7742,6 +7742,40 @@
         "healthcheck"
       ],
       "description": "Operational extension pack for fraud workflows via jira with prevent mode policies."
+    },
+    {
+      "id": "desktop-operator",
+      "name": "Desktop Operator",
+      "version": "3.1.0",
+      "category": "operations",
+      "categories": [
+        "operations",
+        "desktop",
+        "automation"
+      ],
+      "target": "desktop",
+      "mode": "desktop_operator",
+      "entrypoint": "hooks.py",
+      "capabilities": [
+        "desktop.operator",
+        "desktop.capture",
+        "desktop.accessibility",
+        "desktop.input",
+        "desktop.verify"
+      ],
+      "description": "Secure desktop sessions for allowlisted apps with local-VM isolation, quiet guardrails, verification, and recovery.",
+      "marketplace_type": "command_center",
+      "tags": [
+        "desktop",
+        "automation",
+        "command_center",
+        "workspace",
+        "official"
+      ],
+      "requires": [],
+      "left_nav_behavior": "workspace",
+      "default_nav_section": "command_centers",
+      "default_nav_order": 560
     }
   ]
 }
