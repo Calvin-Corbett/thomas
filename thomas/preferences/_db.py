@@ -181,13 +181,28 @@ class PreferencesStore:
         return b.decode("utf-8")
 
     def _default_prefs_dict(self) -> dict[str, Any]:
+        # Environment-aware security seed: when THOMAS_ENV=production, the
+        # default for allow_third_party_agent_access must be False (and the
+        # enforcement mode "protected"). Production installs ship safe by
+        # default; development installs can still flip these on demand.
+        # Logic mirrored from thomas/marketplace/security/third_party_access.py
+        # but inlined here because preferences/ cannot import from
+        # marketplace/ (architecture rule, enforced by test_architecture).
+        advanced_dump = AdvancedPrefs().model_dump()
+        thomas_env = str(os.environ.get("THOMAS_ENV") or "development").strip().lower()
+        allow = thomas_env != "production"
+        security = dict(advanced_dump.get("security") or {})
+        security["allow_third_party_agent_access"] = allow
+        security["enforcement_mode"] = "development" if allow else "protected"
+        advanced_dump["security"] = security
+
         return {
             "appearance": AppearancePrefs().model_dump(),
             "voice": VoicePrefs().model_dump(),
             "memory": {"enabled_global": True},
             "notifications": NotificationPrefs().model_dump(),
             "autonomy": AutonomyPrefs().model_dump(),
-            "advanced": AdvancedPrefs().model_dump(),
+            "advanced": advanced_dump,
             "onboarding": OnboardingPrefs().model_dump(),
             "profile": ProfilePrefs().model_dump(),
             "thomads": {},

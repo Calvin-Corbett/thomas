@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-05-22T01:36:49+00:00",
+  "updated_at": "2026-05-22T14:13:54+00:00",
   "latest_by_module": {
     "agent": {
       "id": "4ad944b3250a40bc9be9ce63dc1a0d4b",
@@ -183,22 +183,24 @@
       "signature": "ec14b0943a8ec36390701f155e22e7cb0aeec16083ae0f65c66c5445a0555361"
     },
     "preferences": {
-      "id": "3090d8f4db8a4608bcc66e5c674b4656",
+      "id": "7115681f370e4d1c8d02c0233180e583",
       "module": "preferences",
-      "audited_at": "2026-02-25T16:44:00+00:00",
-      "auditor": "Codex Main",
-      "status": "warn",
-      "summary": "Preferences module still carries file-size debt; threshold text normalized to 800-line architecture gate",
-      "run_id": "hsk-cm-audit2",
-      "files_touched": [],
-      "file_hashes": {},
-      "issues": [
-        "store.py exceeds 800 lines"
+      "audited_at": "2026-05-22T14:13:54+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "0.16.10: env-aware allow_third_party_agent_access default for production",
+      "run_id": "",
+      "files_touched": [
+        "thomas/preferences/_db.py"
       ],
-      "issue_count": 1,
-      "prev_signature": "23aee1a3842b9c5ef899e2ea3777fee0a08b4a074742de6a27b6f08277a10ba7",
+      "file_hashes": {
+        "thomas/preferences/_db.py": "cf9c0d1f77fe244036e7dfe61b1927bb3b1f7a6326fc2a063dc1194e4abf87e4"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "7b558f2457d1c223b4e5f033677e45e2545f9029b114ad8b3f23bfb0bc37e85f",
       "signature_scheme": "sha256",
-      "signature": "7b558f2457d1c223b4e5f033677e45e2545f9029b114ad8b3f23bfb0bc37e85f"
+      "signature": "1e96bf3329fb1d6ac3be7ad5b424ee54142f747328d4a2ed0a74ee071642f1fc"
     },
     "realtime": {
       "id": "6932faa0381742e6b423206b9aacf14d",
@@ -1878,6 +1880,26 @@
       "prev_signature": "9afe049e4234959c497b6cb31ba382e413490e04eb369b5e7fc7bae82d1efca7",
       "signature_scheme": "sha256",
       "signature": "d8f56085fd64c0b1bf920eb922e3dc438376a643934a67db3f26096749ef25d4"
+    },
+    {
+      "id": "7115681f370e4d1c8d02c0233180e583",
+      "module": "preferences",
+      "audited_at": "2026-05-22T14:13:54+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "0.16.10: env-aware allow_third_party_agent_access default for production",
+      "run_id": "",
+      "files_touched": [
+        "thomas/preferences/_db.py"
+      ],
+      "file_hashes": {
+        "thomas/preferences/_db.py": "cf9c0d1f77fe244036e7dfe61b1927bb3b1f7a6326fc2a063dc1194e4abf87e4"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "7b558f2457d1c223b4e5f033677e45e2545f9029b114ad8b3f23bfb0bc37e85f",
+      "signature_scheme": "sha256",
+      "signature": "1e96bf3329fb1d6ac3be7ad5b424ee54142f747328d4a2ed0a74ee071642f1fc"
     }
   ]
 }
