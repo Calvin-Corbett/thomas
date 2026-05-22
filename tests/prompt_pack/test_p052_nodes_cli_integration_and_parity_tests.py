@@ -159,14 +159,35 @@ def test_cli_failure_json_mode_is_machine_readable(monkeypatch: pytest.MonkeyPat
 def test_wiring_registers_under_thomas_cli_main() -> None:
     # Ensure our import-time hook does not explode and the main app can see nodes/devices.
     # We use the stub main.py in this prompt pack test environment.
+    #
+    # Bible Pattern 16 follow-on: this test forces a re-import of
+    # ``thomas.cli.main`` to exercise the wiring path. Other tests
+    # (e.g. ``tests/test_models_cli_scan_alias.py``) capture a module-level
+    # reference to ``thomas.cli.main`` at collection time and then
+    # ``monkeypatch.setattr`` on it during their test bodies. If we leave a
+    # *different* module object in ``sys.modules["thomas.cli.main"]`` after
+    # this test, the click callbacks (which resolve helpers via
+    # ``sys.modules["thomas.cli.main"]`` per Pattern 16) read from the new
+    # module while the test's stale reference holds the old one, and the
+    # monkeypatch silently misses. Save and restore the original to keep
+    # sys.modules state consistent for downstream tests. See companion
+    # ``tests/prompt_pack/test_p001_browser_command_registry_scaffold.py``
+    # for the same save/restore pattern done correctly.
+    original = sys.modules.get("thomas.cli.main")
     if "thomas.cli.main" in sys.modules:
         del sys.modules["thomas.cli.main"]
 
-    import thomas.cli.main as main_mod  # noqa: F401
+    try:
+        import thomas.cli.main as main_mod  # noqa: F401
 
-    runner_cli = CliRunner()
-    r = runner_cli.invoke(main_mod.app, ["--help"])
-    assert r.exit_code == 0
-    # Typer help output should mention the commands if registered.
-    assert "nodes" in r.output
-    assert "devices" in r.output
+        runner_cli = CliRunner()
+        r = runner_cli.invoke(main_mod.app, ["--help"])
+        assert r.exit_code == 0
+        # Typer help output should mention the commands if registered.
+        assert "nodes" in r.output
+        assert "devices" in r.output
+    finally:
+        if original is not None:
+            sys.modules["thomas.cli.main"] = original
+        else:
+            sys.modules.pop("thomas.cli.main", None)
