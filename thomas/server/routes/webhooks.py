@@ -663,12 +663,27 @@ def _emit_event(event_type: str, payload: dict[str, Any] | None = None) -> None:
         pass
 
 
-from thomas.server.routes import webhooks_routes  # noqa: F401,E402
-
 # Re-export the FastAPI handler functions + request models so the aiohttp shim
 # in webhooks_aiohttp.py can call them as attributes of this module
 # (e.g. webhook_mod.receive_github_webhook). Without these, the shim raises
 # AttributeError on app boot and routes (cancel, webhook receive) fail to register.
+#
+# Reload safety: tests that do `importlib.reload(thomas.server.routes.webhooks)`
+# to pick up new env vars create a FRESH `webhook_router` instance. The
+# `@webhook_router.post(...)` decorators in webhooks_routes.py were attached
+# to the OLD router, so the new one has zero routes (404 on every endpoint).
+# Explicitly reload webhooks_routes when our own module is reloaded so the
+# decorators re-attach to the new router instance. Pattern 24 in bible.
+import importlib as _importlib  # noqa: E402
+
+from thomas.server.routes import webhooks_routes  # noqa: F401,E402
+from thomas.server.routes import webhooks_routes as _webhooks_routes  # noqa: E402
+
+if _importlib.util.find_spec("thomas.server.routes.webhooks_routes") is not None:
+    # If webhooks.py itself was reloaded, reload webhooks_routes too so
+    # its `@webhook_router.*` decorators re-attach to the current router.
+    _importlib.reload(_webhooks_routes)
+
 from thomas.server.routes.webhooks_routes import (  # noqa: E402,F401
     PatchWebhookRequest,
     RegisterWebhookRequest,
