@@ -46,7 +46,7 @@ index 1111111..2222222 100644
 --- a/docs/demo.txt
 +++ b/docs/demo.txt
 @@ -0,0 +1,1 @@
-+Reference CLI naming should be blocked by strict guard.
++The reference_cli string should be blocked by strict guard.
 """,
         encoding="utf-8",
     )
