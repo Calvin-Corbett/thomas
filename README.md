@@ -1,47 +1,33 @@
 # Thomas
 
-Thomas is an AI workspace that starts simple, then grows into memory, tools, and automation without forcing normal users to learn the whole system on day one.
+**Thomas is an AI workspace platform.** You install it once, give it your model API key, and from then on it runs locally — chat, memory, tool calls, browser automation, planning, swarms, marketplace plugins — all gated by your machine and your providers.
 
 Fresh install: run `run-ui.cmd`, open `http://127.0.0.1:8899`, and finish Easy Setup.
 
-## Everyday Use
-
-The normal-user contract is simple:
-
-- Chat: ask Thomas questions, plan work, and keep the main surface calm.
-- Tasks: turn requests into checklists, follow-ups, and next actions.
-- Memory: keep context between sessions only when you want it.
-- Integrations: connect providers and tools gradually instead of all at once.
-- Repair: use `status`, `quickstart`, `setup`, or `repair.cmd` when something drifts.
-
-## Grow Into Advanced Thomas Safely
-
-The deeper orchestration, workboards, swarms, and builder/operator surfaces are intentional. They exist so Thomas can expand without becoming fragile. Normal use should not require understanding those systems on day one.
-
-## For AI Agents & Contributors
-
-Start with the router, not the long doc chain:
-
-1. **Run** `python scripts/crew/brief/startup_router.py --summary "<task summary>" [--path <repo/path>]...`
-2. **Read** the returned lane card and only the docs it points to
-3. **Escalate** into the heavier lane only when the router says the task is risky, broad, shared, or multi-agent
-
-Canonical router doc: **[docs/ai/AGENT_ROUTER.md](docs/ai/AGENT_ROUTER.md)**.
-Long-form docs remain reference material, not default first-pass reading.
-
-Do NOT start building without checking the Inbox and existing code first. See [PROJECT_MANAGEMENT_RULES.md](PROJECT_MANAGEMENT_RULES.md).
-
-## Product-Release Warning (Important)
-
-This repo is an early product release and is still in active stabilization.
-Core behavior is intended to work, but the codebase is fast-built and still has UI polish risk.
-Expect transient layout or interaction artifacts (especially in dense composer / overlay screens) and plan for an incremental hardening pass.
+> **Status (2026-05-21):** Early product release, actively stabilizing. Core flows (Easy Setup → chat → memory → task dispatch → tool calls → mission control) are wired and exercised by CI. Edges (mobile companion, swarm wiring in `/api/chat`, desktop operator runtime helpers, some marketplace domain packages) are still mid-build. See [`CHANGELOG.md`](CHANGELOG.md) for what shipped recently.
 
 ---
 
-## Start Here (Fresh Download)
+## What Thomas actually is
 
-If this is your first time running Thomas on this machine, do this first:
+Thomas is **one local server + one web UI + one CLI**. The server hosts everything: chat, memory, plugins, tools, mission control, marketplace, autonomy engine. The UI is a static web app served from the same process. The CLI is a separate entry that drives the same code paths.
+
+The architecture in 30 seconds:
+
+- `thomas/core/` — config, persistence, token economy, LLM clients (bottom of the dependency tree; never imports server or tools)
+- `thomas/agent/` — chat dispatch and the agent loop. Casual messages get fast replies, actionable messages get dispatched to the task manager
+- `thomas/server/` — aiohttp web app, routes, the web UI assets
+- `thomas/cli/` — CLI and REPL
+- `thomas/tools/` — tool definitions and registry
+- `thomas/memory/` — conversation and context stores
+- `thomas/marketplace/` — domain modules (asset studio, companion, observability, autonomy engine, cv, vision, etc.) that the agent can call into
+- `extensions/` + `thomas/plugins/` — installable plugins and the manifest catalog
+
+Domain modules under `thomas/` are intentionally broad. The repo is a kitchen-sink platform on purpose — Thomas's value is that one workspace covers tasks that today require a half-dozen separate tools.
+
+---
+
+## Fresh install (the normal path)
 
 1. Run `run-ui.cmd`
 2. Wait for first-launch bootstrap to finish (dependencies + starter profile)
@@ -49,144 +35,151 @@ If this is your first time running Thomas on this machine, do this first:
 4. Complete Easy Setup. Thomas verifies the connection before it unlocks chat, memory, and automation.
 
 Optional advanced/manual setup: run `setup.cmd`.
-If setup breaks, run `repair.cmd` (or use `Auto Repair` in the onboarding wizard).
-Installer build docs: `docs/WINDOWS_INSTALLER_GUIDE.md`.
-Troubleshooting and model setup details are in `ONBOARDING.md`.
-Security policy: `SECURITY.md`.
-GitHub publishing safety workflow: `docs/GITHUB_PUBLISH_SAFETY_WORKFLOW.md`.
-Gateway security runbook: `docs/ops/GATEWAY_SECURITY_RUNBOOK.md`.
-Retry guidance: `docs/ops/RETRY_POLICY.md`.
-Docker deploy: `docs/ops/DOCKER_DEPLOY.md`.
-Production release checklist: copy `.env.thomas.production.example` -> `.env.thomas.production` (or inline env), then:
+If setup breaks, run `repair.cmd` (or use **Auto Repair** in the onboarding wizard).
 
-1. Set a strong `THOMAS_SERVER_API_TOKEN`.
-2. Set `THOMAS_MUTATING_CSRF_TOKEN` if you want request-level protection for all mutating `/api` and `/gateway` routes.
-3. Start with `THOMAS_ENV=production`.
-4. Verify `/api/health` returns before opening external traffic.
-5. Keep logs rotating via `THOMAS_LOG_FILE`, `THOMAS_LOG_MAX_BYTES`, and `THOMAS_LOG_BACKUP_COUNT`.
-6. Keep `THOMAS_ALLOW_REMOTE_PRODUCTION=1` only for explicitly approved remote deployments.
+Troubleshooting and model setup details: [`ONBOARDING.md`](ONBOARDING.md).
+Security policy: [`SECURITY.md`](SECURITY.md).
 
-## Documentation Index (Authoritative)
+---
 
-- Canonical active-doc index: `PROJECT_INDEX.md`
-- Root doc archive map: `docs/ops/ROOT_DOC_ARCHIVE_INDEX.md`
+## Production / remote deploy
+
+Thomas defaults to **local-only**. To run remote/production, you copy `.env.thomas.production.example` → `.env.thomas.production` (or set the env inline) and:
+
+1. Set a strong `THOMAS_SERVER_API_TOKEN`
+2. Set `THOMAS_MUTATING_CSRF_TOKEN` for request-level protection on mutating `/api` and `/gateway` routes
+3. Start with `THOMAS_ENV=production`
+4. Verify `/api/health` returns before opening external traffic
+5. Keep logs rotating via `THOMAS_LOG_FILE`, `THOMAS_LOG_MAX_BYTES`, `THOMAS_LOG_BACKUP_COUNT`
+6. Set `THOMAS_ALLOW_REMOTE_PRODUCTION=1` only for explicitly approved remote deployments
+
+Gateway security runbook: [`docs/ops/GATEWAY_SECURITY_RUNBOOK.md`](docs/ops/GATEWAY_SECURITY_RUNBOOK.md).
+Docker deploy: [`docs/ops/DOCKER_DEPLOY.md`](docs/ops/DOCKER_DEPLOY.md).
+Retry guidance: [`docs/ops/RETRY_POLICY.md`](docs/ops/RETRY_POLICY.md).
+Installer build docs: [`docs/WINDOWS_INSTALLER_GUIDE.md`](docs/WINDOWS_INSTALLER_GUIDE.md).
+
+---
+
+## Everyday use
+
+The normal-user contract is intentionally simple:
+
+- **Chat** — ask Thomas questions, plan work, keep the main surface calm
+- **Tasks** — turn requests into checklists, follow-ups, and next actions
+- **Memory** — keeps context between sessions only when you want it
+- **Integrations** — connect providers and tools gradually instead of all at once
+- **Repair** — `status`, `quickstart`, `setup`, or `repair.cmd` when something drifts
+
+The deeper systems (mission control, workboards, swarms, autonomy engine, marketplace builder, companion mobile) are intentional but not required for day-one use.
+
+---
+
+## What works today vs. what's still rough
+
+**Works:**
+
+- Easy Setup → first chat (Sections 1–5 of the design spec are wired end-to-end)
+- Memory store + retrieval across sessions
+- Task ledger (`/api/task-ledger`) tracking chat → in-progress → complete transitions
+- Asset Studio routes (`/api/asset-studio/v1/*`)
+- Marketplace catalog + plugin install/uninstall (`/api/marketplace/*`)
+- Discord bridge for chat (`channel=discord`)
+- Codex bridge for ChatGPT-account-based model use
+- Mission control (`/api/mission/*`) including autopilot intent detection
+- 90+ CI gates (linting, type safety, secret scanning, repo hygiene, audit trails)
+
+**Rough or partial (don't be surprised):**
+
+- Mobile companion (`thomas/companion/`) — scaffold + API contracts exist, app handoff still in flight
+- Desktop operator (`thomas/desktop_operator/`) — runtime helpers have signature mismatches under refactor (xfailed in CI)
+- Swarm in `/api/chat` — `thomas/agent/swarm.py` is fully tested but not called from the chat route (planned: see CHANGELOG)
+- Some marketplace domain packages — STATUS.md says one thing, code says another (gradual cleanup in progress)
+- UI polish — expect transient layout artifacts in dense composer / overlay screens
+
+If you find a layer that's misrepresented, please open an issue rather than assuming it's broken everywhere.
+
+---
+
+## For contributors
+
+**Start here:** the agent router. It tells you which docs to read for your specific task.
+
+```
+python scripts/crew/brief/startup_router.py --summary "<task summary>"
+```
+
+Canonical router doc: [`docs/ai/AGENT_ROUTER.md`](docs/ai/AGENT_ROUTER.md). The router replaces "read every doc in the repo first" — the long docs are reference, not first-pass reading.
+
+**Before you build:**
+
+1. Read [`AGENTS.md`](AGENTS.md) (full rules + router startup)
+2. Read [`GUARDRAILS.md`](GUARDRAILS.md) (immutable project rules)
+3. Read the module-level `GUARDRAILS.md` in whatever directory you're modifying (if one exists)
+4. Check `agent_safety.toml` for protected files, forbidden patterns, circular-import rules
+5. Check the planning board: [`plans/thomas/WORKBOARD.md`](plans/thomas/WORKBOARD.md)
+
+**Planning & coordination:**
+
 - Active planning board: `plans/thomas/WORKBOARD.md`
 - Planning hub: `plans/thomas/README.md`
 - Repo structure source of truth: `docs/REPO_STRUCTURE_PROTOCOL.md`
 - Task ecosystem protocol: `docs/ops/TASK_ECOSYSTEM_PROTOCOL.md`
 
-## Repo Orientation
+Active plans go in `plans/thomas/` (`tasks/`, `problems/`, canonical plan files), NOT randomly in `docs/` or repo root. Enforced by `scripts/forge/gates/plan_structure_gate.py` + `scripts/forge/gates/release_update_gate.py`.
 
-For agent coordination and planning:
-- `docs/REPO_STRUCTURE_PROTOCOL.md` is the repository organization source of truth.
-- `plans/thomas/WORKBOARD.md` is the active execution board.
-- `docs/ops/TASK_ECOSYSTEM_PROTOCOL.md` defines the required task-manager, messaging, and session workflow.
-- `plans/thomas/README.md` links current Thomas plans.
-- Active plans should be created in `plans/thomas/` (`tasks/`, `problems/`, and canonical plan files), not randomly in `docs/` or repo root.
-- Enforced checks: `scripts/forge/gates/plan_structure_gate.py` and `scripts/forge/gates/release_update_gate.py`.
-- Local auto-enforcement available via `.pre-commit-config.yaml`.
+**Branch awareness (required — prevents duplicate work):**
 
-Required ecosystem commands:
-- `python scripts/crew/tasks/manager.py --sync-plans --apply`
-- `python scripts/crew/tasks/manager.py --sync-sessions --apply`
-- `python scripts/crew/tasks/manager.py --sync-specialists --apply`
-- `python scripts/crew/tasks/manager.py --specialist-for-task --task-id "<task_id>"`
-- `python scripts/crew/tasks/manager.py --monitor --apply --cycles 0 --interval-seconds 30 --task-manager-agent "task-manager-agent"`
-- `python scripts/crew/workboard/message.py --send --from-agent "<agent>" --to-agent "<agent|task-manager-agent>" --summary "<text>" --task-id "<task_id>"`
-- `python scripts/crew/workboard/worker.py --agent "Codex 2" --cycles 0 --poll-seconds 15 --catalog "plans/thomas/worker_command_catalog.json" --max-completions 0`
-- `python scripts/crew/workboard/brainstorm.py --start --task-id "<task_id>" --summary "<brief>" --objective "<outcome>" --facilitator "task-manager-agent" --all-hands`
-- `python scripts/crew/workboard/brainstorm.py --contribute --session-id "<session_id>" --agent "<agent>" --kind proposal --summary "<idea>"`
-- `python scripts/crew/workboard/brainstorm.py --resolve-session --session-id "<session_id>" --summary "<decision>" --dispatch-item "task_id|scope|summary"`
-- `python scripts/crew/swarm/cli.py --create --task-id "<task_id>" --size 8 --agent-prefix "Codex" --agent-start 1 --spawn-command "codex"`
-- `python scripts/crew/swarm/cli.py --launch --swarm-id "<swarm_id>"`
-- `python scripts/crew/swarm/cli.py --status --swarm-id "<swarm_id>"`
+Before creating any new file or feature, check for existing work on other branches:
 
-## Companion App Scope (Read Before Building Companion)
+```bash
+git branch -a --list '*<keyword>*'          # branches named after the feature
+git log --all --oneline --grep='<keyword>'  # commits mentioning it anywhere
+```
 
-Thomas companion is now scoped as an immutable-kernel + module platform.
+If you find matching branches or commits, READ the diff before building anything new.
 
-Source of truth:
-- `docs/COMPANION_PLATFORM_SCOPE.md`
-- `docs/COMPANION_APP_INTEGRATION.md`
-- `docs/COMPANION_BUILDER_RELEASE_GUIDE.md`
-- `plans/thomas/companion/STORE_COMPLIANCE_PLAN.md`
+---
 
-Minimum requirements (frozen for v0 handoff):
-1. Immutable host kernel boundary (modules cannot overwrite kernel paths).
-2. Versioned module contract (id/version/entrypoint/permissions/slots/ui schema).
-3. Signed update verification + rollback backups before module replacement.
-4. Tailscale-only remote control/update identity (localhost dev allowed).
-5. Permission allowlist enforcement for modules.
-6. Audit trail for verify/apply/update events and module provenance.
+## Common contributor commands
 
-Companion scaffold in repo:
-- `thomas/companion/`
-- `thomas companion init|status|module-list|verify-bundle|apply-bundle|write-template`
-- API scaffold for companion app integration:
-  - `GET /api/companion/v1/status`
-  - `GET /api/companion/v1/contract`
-  - `GET /api/companion/v1/studio/capabilities`
-  - `GET /api/companion/v1/policy/profiles`
-  - `GET /api/companion/v1/policy/profile/{profile_id}`
-  - `POST /api/companion/v1/compliance/check`
-  - `GET /api/companion/v1/bootstrap`
-  - `GET /api/companion/v1/modules`
-  - `GET /api/companion/v1/slots`
-  - `GET /api/companion/v1/slots/{slot}`
-  - `POST /api/companion/v1/modules/{module_id}/enable`
-  - `POST /api/companion/v1/modules/{module_id}/disable`
-  - `POST /api/companion/v1/studio/build-bundle`
-  - `POST /api/companion/v1/bundles/preview`
-  - `POST /api/companion/v1/bundles/verify`
-  - `POST /api/companion/v1/bundles/apply`
-  - `POST /api/companion/v1/ship`
-  - `GET /api/companion/v1/devices`
-  - `POST /api/companion/v1/devices/register`
-  - `POST /api/companion/v1/devices/{device_id}/heartbeat`
-  - `POST /api/companion/v1/devices/{device_id}/updates/check`
-  - `POST /api/companion/v1/devices/{device_id}/pin-release`
-  - `POST /api/companion/v1/devices/{device_id}/unpin-release`
-  - `GET /api/companion/v1/releases`
-  - `GET /api/companion/v1/releases/{release_id}`
-  - `GET /api/companion/v1/releases/{release_id}/manifest`
-  - `GET /api/companion/v1/releases/{release_id}/download`
-  - `POST /api/companion/v1/releases/publish`
-  - `POST /api/companion/v1/releases/{release_id}/rollout`
-  - `POST /api/companion/v1/releases/{release_id}/promote`
-  - `POST /api/companion/v1/releases/{release_id}/rollback`
-  - `GET /api/companion/v1/audit/events`
-- Companion Builder screen:
-  - `GET /companion`
-- App handoff contract doc:
-  - `docs/COMPANION_APP_INTEGRATION.md`
-- TypeScript SDK for companion app:
-  - `thomas/companion/sdk/typescript/`
+```bash
+# Pre-commit + pre-push hooks (run these once per checkout)
+pre-commit install
+pre-commit install --hook-type pre-push
 
-This zip adds:
+# Fast static checks
+python scripts/auto_checks.py --quick
 
-- `thomas/core/rag_index.py`
-- `thomas/tools/search_code.py`
+# Full auto checks (lint + gates + step-up test protocol)
+python scripts/auto_checks.py
 
-## Dependencies
+# Full pytest ladder
+python scripts/test_stepup_protocol.py
 
-Semantic vector search:
+# Repo-wide tests including the monolithic suite (slow)
+python scripts/test_stepup_protocol.py --max-stage full
+
+# Clean junk artifacts + report worktree cleanliness
+thomas repo-clean --apply --strict
+
+# Status check (gate-ready)
+thomas status --json --strict-worktree
+```
+
+---
+
+## Code intelligence (built-in)
+
+Thomas indexes its own source so the agent can answer questions about the codebase using hybrid (semantic + lexical) search.
+
 ```bash
 pip install chromadb sentence-transformers
 ```
 
-Lexical search:
-- Uses SQLite FTS5 (built into many Python sqlite builds)
-- If FTS5 isn't available, lexical search auto-disables.
+Lexical search uses SQLite FTS5 (built into many Python sqlite builds). If FTS5 isn't available, lexical auto-disables.
 
-## Whatâ€™s meaningfully better (why users will love it)
+Query operators inside the search string (no schema changes):
 
-### Hybrid search (semantic + lexical)
-- Semantic search finds â€œmeaningâ€
-- Lexical search finds exact identifiers/strings
-- Results are fused via Reciprocal Rank Fusion (RRF) for best-of-both.
-
-### Query operators (inside the query string)
-No schema changes. Just write:
 - `path:thomas/tools ToolRegistry`
 - `file:rag_index.py build`
 - `ext:.py registry register`
@@ -194,134 +187,32 @@ No schema changes. Just write:
 - `phrase:"ToolRegistry class"`
 - `regex:/rag\.search/`
 
-### Line-numbered previews
-search() returns snippets formatted with line numbers when it can read the file from disk,
-so results are immediately actionable.
+Results come with line-numbered previews when the file is on disk.
 
-### Smarter chunking
-- Python: AST blocks (functions/classes) with symbol metadata
-- Markdown: heading blocks
-- Fallback: 400-token overlap chunks
+---
 
-### Safe indexing
-- One background worker thread
-- Debounced updates
-- Incremental builds + deleted file pruning
+## How Thomas is documented
 
-## Usage
+Every Thomas instance has its own **private bible** (`docs/THOMAS_BIBLE.md`) — a per-user, accurate record of what's actually true about that workspace's code. The bible is intentionally not committed to the public repo; it captures internal honesty (what works, what doesn't, what STATUS.md files lied about) for the operator who maintains that copy.
 
-### Build (non-blocking)
-```python
-from thomas.core.rag_index import get_rag_index
-get_rag_index().build(r"<repo_root>")
-```
+This README is the public-facing summary. If something here disagrees with reality, file an issue — the bible was almost certainly right.
 
-### Update after file write (non-blocking)
-```python
-from thomas.core.rag_index import get_rag_index
-get_rag_index().update(path_to_written_file)
-```
+---
 
-### Tool
-```python
-from thomas.tools.search_code import TOOL
-registry.register(TOOL)
-```
+## Release safety
 
-Example calls:
-```json
-{"tool":"rag.search","args":{"query":"path:thomas/tools ToolRegistry register", "k":5}}
-```
+The public repo enforces:
 
-```json
-{"tool":"rag.search","args":{"query":"regex:/rag\\.search/", "k":5}}
-```
+- `scripts/forge/gates/public_repo_leak_guard.py` — blocks any push that re-introduces competitor names or internal-only doc patterns (installed 2026-05-21 after a manual cleanup arc)
+- `scripts/forge/publish/preflight.py` — secret scan + blocked-file check before push to public main
+- `.github/workflows/github-publish-safety.yml` — same gates run server-side in CI
+- `.github/workflows/robustness-gates.yml` — full test ladder, module audits, repo hygiene
+- `.github/workflows/site-release.yml` — `apps/site/` deploy guard with visual proof
 
-## Doc Reliability Runner
+If you fork the repo and want to extend any of these, the gates' configuration is intentionally readable — `FORBIDDEN_SUBSTRINGS` / `FORBIDDEN_PATHS` / `ALLOWLIST_PATHS` lists at the top of each gate file.
 
-Run the "Doc" quality sweep (gates + critical protocol tests):
+---
 
-```bash
-python scripts/doc.py
-```
+## License
 
-Run with a full repository pytest pass after quick checks:
-
-```bash
-python scripts/doc.py --full
-```
-
-## Auto Checks
-
-Run one command for syntax/lint + gates + the step-up test protocol:
-
-```bash
-python scripts/auto_checks.py
-```
-
-Run the repo-wide pytest ladder directly:
-
-```bash
-python scripts/test_stepup_protocol.py
-```
-
-Add the final monolithic suite only after those stages are green:
-
-```bash
-python scripts/test_stepup_protocol.py --max-stage full
-```
-
-Run only fast static checks locally:
-
-```bash
-python scripts/auto_checks.py --quick
-```
-
-Clean junk artifacts and report worktree cleanliness:
-
-```bash
-thomas repo-clean --apply --strict
-```
-
-## GitHub User Release Bundle
-
-Use this command to build a deployable product release bundle for GitHub from the current checkout:
-
-```bash
-python scripts/package_release.py --version 0.14.30
-```
-
-For default safety the release excludes untracked files, plans, tasks, and runtime artifacts.
-Use `--include-untracked` only for intentional local-only snapshots.
-
-Output:
-- `dist/github-release/thomas-user-release-<version>/` (staged source)
-- `dist/github-release/thomas-user-release-<version>.zip` (default archive)
-
-The generated bundle:
-- Excludes plans/tasks/conversations/runtime/state artifacts and local secrets.
-- Includes a generated `THIRD_PARTY_NOTICES.md`.
-- Includes `LICENSE` and release metadata (`RELEASE_SUMMARY.md`, `RELEASE_MANIFEST.json`) so users can audit included files.
-
-Quick gate-ready status check:
-
-```bash
-thomas status --json --strict-worktree
-```
-
-Install local git hooks (commit + push guards):
-
-```bash
-pre-commit install
-pre-commit install --hook-type pre-push
-```
-## Rules Of The Road Quality Gate
-
-Thomas now enforces per-job completion checks before finalizing tasks:
-
-- `coding`, `config`, `planning`, `research`, `video_design`, `general`
-- attaches a rules report in run output: `token_report.rules_of_road`
-- when `[quality].enforce = true`, Thomas auto-retries failed required checks
-  up to `[quality].max_auto_retries`
-
-See `docs/RULES_OF_THE_ROAD_PROTOCOL.md`.
+MIT. See [`LICENSE`](LICENSE).
