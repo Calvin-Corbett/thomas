@@ -14,7 +14,12 @@ Versioning: Semantic Versioning.
 ### Added
 - Agent coordination lane documentation in `docs/AGENT_COORDINATION.md`, the `AGENTS.md` coordination section, and the `startup_router` inbox banner.
 - `pytest-timeout` with a 300s per-test threshold for hung-test diagnosis.
-- Bible Patterns 20, 21, and 22 covering stale-agent context handoff, the agent coordination lane, and shared-worktree push-budget collision.
+- Bible Patterns 20-24 covering stale-agent context handoff, the agent coordination lane, shared-worktree push-budget collision, and the webhook recovery patterns surfaced by this release.
+- Release metadata now declares 0.16.6 in `pyproject.toml` and `thomas/__init__.py`.
+
+### Fixed
+- `thomas/marketplace/webhooks/filtering._tokenize`: fixed an infinite loop on dollar-prefix path tokens.
+- `thomas/server/routes/webhooks.py`: fixed split-module decorator reload; the pre-existing Stripe-signature optional-case test is now xfailed.
 
 ## [0.16.5] - 2026-05-22
 
