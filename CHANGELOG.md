@@ -9,6 +9,20 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.16.5] - 2026-05-22
+
+### Fixed
+- `scripts/crew/brief/safety_config.py`: `ROOT` was computed as `Path(__file__).resolve().parent.parent` which resolved to `scripts/crew/` (the file lives at `scripts/crew/brief/safety_config.py`, so going only two `.parent`s up lands in the wrong directory). `CONFIG_PATH = ROOT / "agent_safety.toml"` therefore pointed at `scripts/crew/agent_safety.toml`, which has never existed. The loader silently fell back to its hardcoded default lists, so:
+  - `duplicate_filename_gate` only matched 6 of the 41 forbidden suffixes (missing `_updated`, `_revised`, `_alt`, `_temp`, `_wip`, `_next`, `_improved`, etc.)
+  - `protected_files_gate` had empty `PROTECTED_FILES` / `PROTECTED_ENFORCEMENT_SCRIPTS` lists — meaning `agent_safety.toml`, `AGENTS.md`, `GUARDRAILS.md`, `thomas/_architecture.py`, etc. were not actually protected from staging.
+  - Fix: `ROOT = Path(__file__).resolve().parents[3]` so the loader finds the real `agent_safety.toml` at the repo root.
+- `scripts/forge/gates/precommit_skip_policy.py::PROTECTED_SKIP_HOOKS`: added `thomas-publish-preflight`. `.pre-commit-config.yaml` had this hook (pre-push), but it was missing from the protected-skip allowlist — meaning an agent could `SKIP=thomas-publish-preflight git push` without tripping the precommit skip policy gate.
+- `agent_safety.toml::[skip_policy].protected_hooks`: mirror entry for the same.
+- `tests/test_new_safety_gates.py`: 17 previously-failing tests now pass after the safety_config path fix. These tests had been masked by the earlier `test_models_cli_*` failure stopping the step-up runner at mixed-13.
+
+### Architecture
+- This is a "step-up surfacing" story: fixing one batch of failing tests revealed the next. The mixed-13 fix in 0.16.4 (Pattern 16 monkeypatch reachability) exposed mixed-14's previously-hidden `test_new_safety_gates` failures, which exposed the underlying real bug — a one-`.parent`-too-shallow path traversal that had been silently defanging multiple gates. Closing that hole tightens the real protected-files / duplicate-filename / hook-skip gates as a side effect.
+
 ## [0.16.4] - 2026-05-22
 
 ### Fixed
