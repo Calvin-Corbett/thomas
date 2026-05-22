@@ -9,6 +9,18 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.16.1] - 2026-05-22
+
+### Fixed
+- Restored the `no_human_mode=allow` → native_auth path in `GuardedToolRunner` (had been removed in 0.15.53). `tests/test_guarded_tools_native_auth.py` was the canonical contract: "allow" routes through the OS authentication gate, NOT bypassing approval entirely. The simpler `tests/test_guarded_tool_runner.py` was failing on CI because there's no GUI to bind; updated that file to monkeypatch `request_native_authorization` to return True instead of asking the runner to skip the OS call. Both test suites now pass on the same code path.
+- `tests/test_code_intake_pipeline.py::test_validate_blocks_name_guard`: the scrub renamed both the search term and the diff content to "Reference CLI" / "reference_cli". The blocklist matcher is case-sensitive — fixed the diff text to use the matchable lowercase token.
+- `tests/test_code_intake_seed_batch.py::test_load_rows_has_batch_b01`: underlying CSV fixture was deleted in 0.16.0 (carried 168 competitor-name rows). Skipped until a non-competitor batch index lands.
+- Repo README rewritten to reflect bible-truth: dropped stale references to deleted internal docs (PROJECT_INDEX.md etc.); added an honest "What works today vs. what's still rough" section; documented the per-user bible system.
+- `plans/thomas/WORKBOARD.md`: claim scope extended to include `README.md`, `.pre-commit-config.yaml`, `.dockerignore` (avoids Workboard changed-files gate failures on cleanup commits).
+- `docs/FEATURE_MASTER_LIST.md`: re-synced after the 0.16.0 deletions.
+- `docs/deletions/2026-05-21-pre-public-cleanup.json`: added the 94-file deletion audit record (required by the Protected deletion guard).
+- `scripts/forge/gates/public_repo_leak_guard.py`: added the deletion record to `ALLOWLIST_PATHS` (the record itself names competitor files, which is the intended audit trail).
+
 ## [0.16.0] - 2026-05-21
 
 ### Removed (pre-public cleanup)

@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-05-22T00:47:24+00:00",
+  "updated_at": "2026-05-22T00:52:15+00:00",
   "latest_by_module": {
     "agent": {
-      "id": "6cbea160f1a840b9bb0018a37b495fde",
+      "id": "bcb0b3fcf7114bf1bb5acc5bb1fc6e76",
       "module": "agent",
-      "audited_at": "2026-05-22T00:47:24+00:00",
+      "audited_at": "2026-05-22T00:52:15+00:00",
       "auditor": "claude",
       "status": "pass",
-      "summary": "0.16.1: revert no_human_mode=allow to call native_auth; tests monkeypatch instead",
+      "summary": "0.16.1: restore native_auth in no_human_mode=allow branch",
       "run_id": "",
       "files_touched": [
         "thomas/agent/guarded_tools.py"
@@ -18,9 +18,9 @@
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "bee8512424e5f8625c27e04c6e6a5cf7a85e46f2f8c109552afe487f11acaab0",
+      "prev_signature": "a9cd6017bbfdec61db4400b3218006fbdfdd317eedcb64b05c238b25b34b38ce",
       "signature_scheme": "sha256",
-      "signature": "a9cd6017bbfdec61db4400b3218006fbdfdd317eedcb64b05c238b25b34b38ce"
+      "signature": "d211cc44687f50b6270511231c622727e7f743649e09e47d475fb2a3875e91d0"
     },
     "autonomy": {
       "id": "403f260c96524847a295b589d40c1780",
@@ -1710,6 +1710,26 @@
       "prev_signature": "bee8512424e5f8625c27e04c6e6a5cf7a85e46f2f8c109552afe487f11acaab0",
       "signature_scheme": "sha256",
       "signature": "a9cd6017bbfdec61db4400b3218006fbdfdd317eedcb64b05c238b25b34b38ce"
+    },
+    {
+      "id": "bcb0b3fcf7114bf1bb5acc5bb1fc6e76",
+      "module": "agent",
+      "audited_at": "2026-05-22T00:52:15+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "0.16.1: restore native_auth in no_human_mode=allow branch",
+      "run_id": "",
+      "files_touched": [
+        "thomas/agent/guarded_tools.py"
+      ],
+      "file_hashes": {
+        "thomas/agent/guarded_tools.py": "0fcaa09c149fae00296c05f2bf5352998a50f30a8c79608050fb1c5df93c7e2f"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "a9cd6017bbfdec61db4400b3218006fbdfdd317eedcb64b05c238b25b34b38ce",
+      "signature_scheme": "sha256",
+      "signature": "d211cc44687f50b6270511231c622727e7f743649e09e47d475fb2a3875e91d0"
     }
   ]
 }
