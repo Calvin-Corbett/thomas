@@ -50,13 +50,28 @@ def models_list(ctx: click.Context) -> None:
             click.echo(f"    models_path: {m.models_path}")
 
 
+def _via_main(name: str):
+    """Resolve a symbol through ``thomas.cli.main`` so test monkeypatches reach.
+
+    After the monolith split, helper symbols (like ``_run_models_discover``)
+    live in this file but tests still monkeypatch them on ``thomas.cli.main``.
+    Routing the lookup through ``sys.modules`` at call time makes the
+    monkeypatch reach the click callbacks in this module. See bible
+    Pattern 16 (test-patch reachability).
+    """
+    main_mod = sys.modules.get("thomas.cli.main")
+    if main_mod is not None and hasattr(main_mod, name):
+        return getattr(main_mod, name)
+    return globals()[name]
+
+
 @models.command("discover")
 @click.option("-m", "--model", "model_name", help="Model profile to query (default: current default)")
 @click.option("--timeout", "timeout_s", type=float, default=2.0, show_default=True)
 @click.pass_context
 def models_discover(ctx: click.Context, model_name: str | None, timeout_s: float) -> None:
     """Discover model ids available at an endpoint (best effort)."""
-    _run_models_discover(ctx, model_name=model_name, timeout_s=timeout_s)
+    _via_main("_run_models_discover")(ctx, model_name=model_name, timeout_s=timeout_s)
 
 
 def _run_models_discover(ctx: click.Context, model_name: str | None, timeout_s: float) -> None:
@@ -369,7 +384,7 @@ def models_status(ctx: click.Context, as_json: bool) -> None:
 @click.pass_context
 def models_scan(ctx: click.Context, timeout_s: float) -> None:
     """Compatibility alias for model discovery scans."""
-    _run_models_discover(ctx, model_name=None, timeout_s=timeout_s)
+    _via_main("_run_models_discover")(ctx, model_name=None, timeout_s=timeout_s)
 
 
 @models.command("set")

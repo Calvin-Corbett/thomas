@@ -3,7 +3,11 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-CLI_MAIN_PATH = Path(__file__).resolve().parents[1] / "thomas" / "cli" / "main.py"
+# After the cli/main.py monolith split, the @models.command callbacks live
+# in cli/_commands_models.py. This guard scans wherever ``models_scan`` is
+# actually defined so it still catches "scan delegates to the shared helper
+# rather than calling another callback directly" regressions.
+CLI_MAIN_PATH = Path(__file__).resolve().parents[1] / "thomas" / "cli" / "_commands_models.py"
 
 
 def _load_cli_main_tree() -> ast.Module:
@@ -47,15 +51,36 @@ def _find_function(tree: ast.Module, fn_name: str) -> ast.FunctionDef | ast.Asyn
 
 
 def _called_symbol_names(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
+    """Names of helpers a function delegates to.
+
+    Recognizes both direct calls (``helper(...)``) and the Pattern 16
+    ``_via_main("helper")(...)`` indirection introduced when click
+    callbacks need to route their helper lookup through ``thomas.cli.main``
+    so tests can monkeypatch the helper there. See bible Pattern 16.
+    """
     called: set[str] = set()
     for stmt in fn.body:
         for node in ast.walk(stmt):
             if not isinstance(node, ast.Call):
                 continue
             if isinstance(node.func, ast.Name):
+                # Direct call: helper(...)
                 called.add(node.func.id)
             elif isinstance(node.func, ast.Attribute):
+                # Attribute call: obj.helper(...)
                 called.add(node.func.attr)
+            elif isinstance(node.func, ast.Call):
+                # Indirection: _via_main("helper")(...) — record the
+                # string-literal argument as the delegated helper name.
+                inner = node.func
+                if (
+                    isinstance(inner.func, ast.Name)
+                    and inner.func.id == "_via_main"
+                    and inner.args
+                    and isinstance(inner.args[0], ast.Constant)
+                    and isinstance(inner.args[0].value, str)
+                ):
+                    called.add(inner.args[0].value)
     return called
 
 
@@ -68,7 +93,7 @@ def test_models_scan_uses_shared_helper_and_avoids_models_callback_calls() -> No
     )
 
     scan_fn = _find_function(tree, "models_scan")
-    assert scan_fn is not None, "Could not find models_scan in thomas/cli/main.py."
+    assert scan_fn is not None, "Could not find models_scan in thomas/cli/_commands_models.py."
 
     called_names = _called_symbol_names(scan_fn)
     assert "_run_models_discover" in called_names, (

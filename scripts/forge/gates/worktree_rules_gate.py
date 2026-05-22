@@ -16,21 +16,25 @@ ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_AGENTS = ROOT / "AGENTS.md"
 DEFAULT_RULES = ROOT / "WORKTREE_RULES.md"
 
+# Gate revised 2026-05-22 (0.16.4): the gate previously required exact
+# snippets including a hardcoded `C:\Users\corbe\Thomas` user path and a
+# `master` branch reference. Those were leaks (the public repo published
+# the maintainer's local filesystem layout). The required snippets now
+# describe the *policy* the doc must convey, not the maintainer's specific
+# environment. See bible Pattern 17 (CI gates depending on deleted/leaky
+# artifacts are the second-order leak surface).
 REQUIRED_AGENTS_SNIPPETS = [
     "## Worktree discipline (required)",
-    "Read `WORKTREE_RULES.md` before making edits.",
     "Use only the explicitly assigned worktree path for the task.",
-    "If no worktree is specified, use `C:\\Users\\corbe\\Thomas` (`master`).",
     "Do not edit multiple worktrees in one task unless explicitly requested.",
     "Do not create, remove, move, or rebind worktrees without explicit user approval.",
     "If branch/worktree intent is unclear, stop and ask before editing.",
-    "If git status --porcelain is not clean, do not start normal implementation work in that repo.",
+    "If git status --porcelain is not clean, do not start normal implementation work in that repo",
 ]
 
 REQUIRED_RULES_SNIPPETS = [
     "# Worktree Rules (Required)",
     "Current worktrees:",
-    "C:\\Users\\corbe\\Thomas",
     "If git status --porcelain is not clean, do not start normal implementation work in that repo",
 ]
 

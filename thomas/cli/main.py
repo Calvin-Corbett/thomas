@@ -20,6 +20,7 @@ from thomas.cli._commands_base import (  # noqa: F401  -- re-exports for tests
 )
 from thomas.cli._commands_models import (  # noqa: F401  -- re-exports for tests
     _resolve_repl_profile_from_prefs,
+    _run_models_discover,
 )
 
 # Re-export ``LLMClient`` so tests that

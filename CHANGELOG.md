@@ -9,6 +9,15 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.16.4] - 2026-05-22
+
+### Fixed
+- `tests/test_models_cli_scan_alias.py` + `tests/test_models_cli_click_misuse_guard.py`: the three previously-failing tests in the codebase-auto-checks Robustness Gates job. After the cli/main.py monolith split moved `_run_models_discover` + `models_scan` + `models_discover` to `thomas/cli/_commands_models.py`, two things broke: (a) `monkeypatch.setattr(thomas.cli.main, "_run_models_discover", …)` no longer reached the click callbacks because they resolved the helper via local-name lookup in the new sub-file; (b) the AST guard test scanned `cli/main.py` for the `@models.command` callbacks, but they had moved to `_commands_models.py`.
+- **Pattern 16 fix**: added a `_via_main()` indirection helper in `_commands_models.py` that resolves helpers through `sys.modules["thomas.cli.main"]` at call time. The click callbacks now invoke `_via_main("_run_models_discover")(...)` instead of calling the helper directly. `monkeypatch.setattr(cli_main, "_run_models_discover", fake)` now reaches the callbacks. Bible Pattern 16 documents this pattern.
+- Re-exported `_run_models_discover` from `thomas.cli.main` (added to the existing F401 re-export block) so monkeypatch targets resolve at import time.
+- Updated `test_models_cli_click_misuse_guard.py` to (i) point at `cli/_commands_models.py` where the callbacks now live, and (ii) recognize the `_via_main("helper")(…)` delegation pattern as "calls helper" so the AST guard still catches direct-callback-call regressions.
+- `AGENTS.md`: removed hardcoded `C:\Users\corbe\Thomas` user-path leak (was line 79) and `master` branch references (lines 69, 73, 79) that conflict with the actual `dev` (private) / `main` (public) canonical model. Added a new "Branch model (canonical — 2026-05-22)" section documenting the actual model.
+
 ## [0.16.3] - 2026-05-22
 
 ### Fixed

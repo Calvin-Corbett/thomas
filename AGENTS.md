@@ -66,21 +66,28 @@ git log --all --oneline --grep='<keyword>'  # commits mentioning it anywhere
 Replace `<keyword>` with the core noun of your task (e.g., `channel`, `discord`, `voice`, `marketplace`).
 
 **If you find matching branches or commits:**
-1. Read the diff: `git log --oneline master..<branch>` to see what was done.
+1. Read the diff: `git log --oneline dev..<branch>` to see what was done (substitute the canonical branch name your session is running against — usually `dev` privately or `main` publicly).
 2. Ask the user before building anything new — the work may just need a merge.
 3. If the branch has real, working code, merge or cherry-pick it instead of rewriting.
 
-**Why this exists:** Multiple agents (Codex, Claude, Gemini) work on this repo in separate sessions. Agent A may build a feature on a branch and not merge it. Agent B starts a new session on `master`, sees no files, and rebuilds from scratch — wasting hours and losing Agent A's work. This rule prevents that.
+**Why this exists:** Multiple agents (Codex, Claude, Gemini) work on this repo in separate sessions. Agent A may build a feature on a branch and not merge it. Agent B starts a new session, sees no files in the working tree, and rebuilds from scratch — wasting hours and losing Agent A's work. This rule prevents that.
+
+## Branch model (canonical — 2026-05-22)
+
+The active model is:
+
+- `main` — public canonical branch on `origin` (https://github.com/Calvin-Corbett/thomas)
+- `dev` — private development branch on `dev-origin` (https://github.com/Calvin-Corbett/thomas-dev). This is where agents live day-to-day.
+- `publish-clean`, `release/*` — release-prep / sanitized branches kept as needed but not the daily work surface.
+- Older `master` references in legacy docs/commits are historical; the canonical names are `main` (public) and `dev` (private).
 
 ## Worktree discipline (required)
 
-- Read `WORKTREE_RULES.md` before making edits.
-- Use only the explicitly assigned worktree path for the task.
-- If no worktree is specified, use `C:\Users\corbe\Thomas` (`master`).
+- Use only the explicitly assigned worktree path for the task. The session-issued path comes from your agent runtime — do not hardcode an operator's local user path here.
 - Do not edit multiple worktrees in one task unless explicitly requested.
 - Do not create, remove, move, or rebind worktrees without explicit user approval.
 - If branch/worktree intent is unclear, stop and ask before editing.
-- If git status --porcelain is not clean, do not start normal implementation work in that repo. Clean it first, or use only an explicit audited dirty-worktree override for cleanup/remediation lanes.
+- If `git status --porcelain` is not clean, do not start normal implementation work in that repo. Clean it first, or use only an explicit audited dirty-worktree override for cleanup/remediation lanes.
 
 ## Guardrails — Read Before Writing Code
 
