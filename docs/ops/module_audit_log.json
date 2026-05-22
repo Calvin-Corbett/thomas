@@ -1,26 +1,26 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-05-22T01:24:55+00:00",
+  "updated_at": "2026-05-22T01:36:49+00:00",
   "latest_by_module": {
     "agent": {
-      "id": "bcb0b3fcf7114bf1bb5acc5bb1fc6e76",
+      "id": "4ad944b3250a40bc9be9ce63dc1a0d4b",
       "module": "agent",
-      "audited_at": "2026-05-22T00:52:15+00:00",
+      "audited_at": "2026-05-22T01:35:24+00:00",
       "auditor": "claude",
       "status": "pass",
-      "summary": "0.16.1: restore native_auth in no_human_mode=allow branch",
+      "summary": "0.16.3: re-record with line-ending agnostic hash (CRLF/LF fix)",
       "run_id": "",
       "files_touched": [
         "thomas/agent/guarded_tools.py"
       ],
       "file_hashes": {
-        "thomas/agent/guarded_tools.py": "0fcaa09c149fae00296c05f2bf5352998a50f30a8c79608050fb1c5df93c7e2f"
+        "thomas/agent/guarded_tools.py": "700323529af13c467e1c1eb1649a648be86f9a53fdf8e0b7e822cb1d36596278"
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "a9cd6017bbfdec61db4400b3218006fbdfdd317eedcb64b05c238b25b34b38ce",
+      "prev_signature": "d211cc44687f50b6270511231c622727e7f743649e09e47d475fb2a3875e91d0",
       "signature_scheme": "sha256",
-      "signature": "d211cc44687f50b6270511231c622727e7f743649e09e47d475fb2a3875e91d0"
+      "signature": "7c739ea9a52ef6ef455251cb5e50975a37ca9de9b4e05d3cd30870f027ddac6d"
     },
     "autonomy": {
       "id": "403f260c96524847a295b589d40c1780",
@@ -59,26 +59,26 @@
       "signature": "f6839a58329bc796536c671911bd5f75b1c27e9c7873659cc36cc1522baa4df1"
     },
     "demo": {
-      "id": "b353fb2ee2304d20a475402833055c40",
+      "id": "b82c7ea449d54d0d88d21107598c2f1b",
       "module": "demo",
-      "audited_at": "2026-05-21T21:11:48+00:00",
+      "audited_at": "2026-05-22T01:35:25+00:00",
       "auditor": "claude",
       "status": "pass",
-      "summary": "0.15.45: re-exports + sys.modules lookup helpers for test patch reachability",
+      "summary": "0.16.3: re-record with line-ending agnostic hash (CRLF/LF fix)",
       "run_id": "",
       "files_touched": [
         "thomas/demo/agentic_benchmark.py",
         "thomas/demo/agentic_benchmark_runners.py"
       ],
       "file_hashes": {
-        "thomas/demo/agentic_benchmark.py": "a4e9301beb267145454a7992e5ed52aa2704ad6cf5b9f9c3df84b6522743db6d",
-        "thomas/demo/agentic_benchmark_runners.py": "a1ddfa23157e31575a541ed25df92d5e33fecae65b38cc1dffc0b8c56a46c133"
+        "thomas/demo/agentic_benchmark.py": "809b252f266bd50f475085faf659efdafa2a73076c489ed92a241f7c047cc61c",
+        "thomas/demo/agentic_benchmark_runners.py": "2a4d8dac03c9ccc85ec7e9a0545fc4cf163e1c3237dd3b32497fef83a04a4bc5"
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "95ed236186e147e40d86ed56e0f5a466a07405a8500438787de34f79138df03c",
+      "prev_signature": "ba5108a61f1118155e70dff5762ecfbaa89a667775dfbeb97375c19a215934bf",
       "signature_scheme": "sha256",
-      "signature": "ba5108a61f1118155e70dff5762ecfbaa89a667775dfbeb97375c19a215934bf"
+      "signature": "e12d92cbbf64f5016b66245b6027307fbaf1dcd0d3d846e5e6cdb68514366997"
     },
     "intake": {
       "id": "0bfc7266929948808a34c023cf049d1b",
@@ -97,26 +97,26 @@
       "signature": "13177ef9c8cdcd1542e784f66a6084a561b25eaa5179bd5756d32ada7fdf6917"
     },
     "memory": {
-      "id": "3a4c22bc3df04592b2aac3e7b9072c9f",
+      "id": "b826c40263ec460f99e682fda291be62",
       "module": "memory",
-      "audited_at": "2026-05-22T01:24:55+00:00",
+      "audited_at": "2026-05-22T01:34:36+00:00",
       "auditor": "claude",
       "status": "pass",
-      "summary": "0.16.2: upsert_fact accepts provenance_episode_id; curator drops stale ts_ms kwarg",
+      "summary": "0.16.3: line-ending agnostic audit hashes (CRLF/LF fix)",
       "run_id": "",
       "files_touched": [
         "thomas/memory/curator.py",
         "thomas/memory/v2/fabric_core.py"
       ],
       "file_hashes": {
-        "thomas/memory/curator.py": "8365ecbdc78b8f916186eff90ff163118b8536b8f4ad47ce4b402db5bca447a3",
-        "thomas/memory/v2/fabric_core.py": "5ff40abd2c31053b820f9ead65011a0480109544f03ebd6072345f0461b0c13b"
+        "thomas/memory/curator.py": "c97a9e88b629c228313d71b370d58e734e005a17a488abf275e0efd259ab6c23",
+        "thomas/memory/v2/fabric_core.py": "92008a258fdfa99a7387dd92c2bfb1b265ebc458feb712fb55478cb2bf303dcd"
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "8ccc4ba09950cecd18fdcede8de8ab007349a5e786edad2c89e4808a5edd2224",
+      "prev_signature": "f12f7a9f9e06fa78bf3bc10d1c59df70690e742f84c74c1396be7021c4a4045e",
       "signature_scheme": "sha256",
-      "signature": "0c2d2f8b43a5cb7699ce1c89b2f2231f000ebe374d3c55089e8fe18b1160753b"
+      "signature": "a9273e0dda8c92c0fff2c56e459974cd2bc936a391ad170903ffd3647168dae9"
     },
     "models": {
       "id": "792fc26f23824f4da56d5f35fffcfc04",
@@ -151,20 +151,20 @@
       "signature": "df89e6860f25dd2e20166027f1800d83a96d714ba954d970f6bc38d4b053aff4"
     },
     "observability": {
-      "id": "e961b157b62a4aff82e3203c8bf51c7f",
+      "id": "053e57ead2b2460689f2cd69caf7f0e9",
       "module": "observability",
-      "audited_at": "2026-02-25T02:15:32+00:00",
-      "auditor": "Codex 2",
+      "audited_at": "2026-05-22T01:36:49+00:00",
+      "auditor": "claude",
       "status": "pass",
-      "summary": "24h module audit sweep from architecture debt map",
-      "run_id": "timing-check",
+      "summary": "0.16.3: sha256_file normalizes line endings for text source suffixes",
+      "run_id": "",
       "files_touched": [],
       "file_hashes": {},
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "43a069a21ab2b2969ba700ec94517cdf4d60a359a68381c1fddc2460336c56dc",
+      "prev_signature": "9afe049e4234959c497b6cb31ba382e413490e04eb369b5e7fc7bae82d1efca7",
       "signature_scheme": "sha256",
-      "signature": "9afe049e4234959c497b6cb31ba382e413490e04eb369b5e7fc7bae82d1efca7"
+      "signature": "d8f56085fd64c0b1bf920eb922e3dc438376a643934a67db3f26096749ef25d4"
     },
     "policy": {
       "id": "416c268acc8b4a048ae6f6f25664d66f",
@@ -217,26 +217,26 @@
       "signature": "565aeeea4b99a17e0f249e3183a0e24faf509a87baa566922abc9bddb35cacbb"
     },
     "server": {
-      "id": "6b2e8c245a2f4b7089c44fa48c59697b",
+      "id": "151a5fd2c6d644e584623a57944280bd",
       "module": "server",
-      "audited_at": "2026-05-21T21:38:18+00:00",
+      "audited_at": "2026-05-22T01:35:27+00:00",
       "auditor": "claude",
       "status": "pass",
-      "summary": "0.15.46+csrf: wire asset studio routes + bump rate limit in test",
+      "summary": "0.16.3: re-record with line-ending agnostic hash (CRLF/LF fix)",
       "run_id": "",
       "files_touched": [
         "thomas/server/app_routes_init.py",
         "thomas/server/routes/asset_studio_aiohttp.py"
       ],
       "file_hashes": {
-        "thomas/server/app_routes_init.py": "99085fc7b4579ce282a3a665fef30bdf78febd1b1af3ce12ef8cfac1a3e708e6",
-        "thomas/server/routes/asset_studio_aiohttp.py": "1d9ac9cd7636090112a714c80ccc95e0ab3be279d95fb32fad730661aa224461"
+        "thomas/server/app_routes_init.py": "deca0e001bfb7c1e619ea941ca6fd816793b57abc51a138036828335d066b2ad",
+        "thomas/server/routes/asset_studio_aiohttp.py": "cd05b1a0294b3fd6047e0db7007899398cb76fb7681c61f3c40e2326ca0f2a85"
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "d5cbc55415352af0b0a82de04e7c4577a496c559bcfc6afdac16aca8a027751d",
+      "prev_signature": "413d6f8634145dc9e6ccd4db15f3b8d12c590f17d36ddf78e82c8d87e553b5d4",
       "signature_scheme": "sha256",
-      "signature": "413d6f8634145dc9e6ccd4db15f3b8d12c590f17d36ddf78e82c8d87e553b5d4"
+      "signature": "4bff6765c0b4998e83ff47189b21e62536e63e4934a655d748b80cdedb3526ed"
     },
     "tools": {
       "id": "6baf6ae9bb2242c2825e72fd9c76ad31",
@@ -1754,6 +1754,130 @@
       "prev_signature": "8ccc4ba09950cecd18fdcede8de8ab007349a5e786edad2c89e4808a5edd2224",
       "signature_scheme": "sha256",
       "signature": "0c2d2f8b43a5cb7699ce1c89b2f2231f000ebe374d3c55089e8fe18b1160753b"
+    },
+    {
+      "id": "e3e1230e98bf43d8826d8df5e5ee198f",
+      "module": "memory",
+      "audited_at": "2026-05-22T01:33:21+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "0.16.2: upsert_fact accepts provenance_episode_id (re-recorded after format)",
+      "run_id": "",
+      "files_touched": [
+        "thomas/memory/curator.py",
+        "thomas/memory/v2/fabric_core.py"
+      ],
+      "file_hashes": {
+        "thomas/memory/curator.py": "8365ecbdc78b8f916186eff90ff163118b8536b8f4ad47ce4b402db5bca447a3",
+        "thomas/memory/v2/fabric_core.py": "3425463c1baeaebcc140c8c6c534d65f98193d542dec2287953c03e0645cab4c"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "0c2d2f8b43a5cb7699ce1c89b2f2231f000ebe374d3c55089e8fe18b1160753b",
+      "signature_scheme": "sha256",
+      "signature": "f12f7a9f9e06fa78bf3bc10d1c59df70690e742f84c74c1396be7021c4a4045e"
+    },
+    {
+      "id": "b826c40263ec460f99e682fda291be62",
+      "module": "memory",
+      "audited_at": "2026-05-22T01:34:36+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "0.16.3: line-ending agnostic audit hashes (CRLF/LF fix)",
+      "run_id": "",
+      "files_touched": [
+        "thomas/memory/curator.py",
+        "thomas/memory/v2/fabric_core.py"
+      ],
+      "file_hashes": {
+        "thomas/memory/curator.py": "c97a9e88b629c228313d71b370d58e734e005a17a488abf275e0efd259ab6c23",
+        "thomas/memory/v2/fabric_core.py": "92008a258fdfa99a7387dd92c2bfb1b265ebc458feb712fb55478cb2bf303dcd"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "f12f7a9f9e06fa78bf3bc10d1c59df70690e742f84c74c1396be7021c4a4045e",
+      "signature_scheme": "sha256",
+      "signature": "a9273e0dda8c92c0fff2c56e459974cd2bc936a391ad170903ffd3647168dae9"
+    },
+    {
+      "id": "4ad944b3250a40bc9be9ce63dc1a0d4b",
+      "module": "agent",
+      "audited_at": "2026-05-22T01:35:24+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "0.16.3: re-record with line-ending agnostic hash (CRLF/LF fix)",
+      "run_id": "",
+      "files_touched": [
+        "thomas/agent/guarded_tools.py"
+      ],
+      "file_hashes": {
+        "thomas/agent/guarded_tools.py": "700323529af13c467e1c1eb1649a648be86f9a53fdf8e0b7e822cb1d36596278"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "d211cc44687f50b6270511231c622727e7f743649e09e47d475fb2a3875e91d0",
+      "signature_scheme": "sha256",
+      "signature": "7c739ea9a52ef6ef455251cb5e50975a37ca9de9b4e05d3cd30870f027ddac6d"
+    },
+    {
+      "id": "b82c7ea449d54d0d88d21107598c2f1b",
+      "module": "demo",
+      "audited_at": "2026-05-22T01:35:25+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "0.16.3: re-record with line-ending agnostic hash (CRLF/LF fix)",
+      "run_id": "",
+      "files_touched": [
+        "thomas/demo/agentic_benchmark.py",
+        "thomas/demo/agentic_benchmark_runners.py"
+      ],
+      "file_hashes": {
+        "thomas/demo/agentic_benchmark.py": "809b252f266bd50f475085faf659efdafa2a73076c489ed92a241f7c047cc61c",
+        "thomas/demo/agentic_benchmark_runners.py": "2a4d8dac03c9ccc85ec7e9a0545fc4cf163e1c3237dd3b32497fef83a04a4bc5"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "ba5108a61f1118155e70dff5762ecfbaa89a667775dfbeb97375c19a215934bf",
+      "signature_scheme": "sha256",
+      "signature": "e12d92cbbf64f5016b66245b6027307fbaf1dcd0d3d846e5e6cdb68514366997"
+    },
+    {
+      "id": "151a5fd2c6d644e584623a57944280bd",
+      "module": "server",
+      "audited_at": "2026-05-22T01:35:27+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "0.16.3: re-record with line-ending agnostic hash (CRLF/LF fix)",
+      "run_id": "",
+      "files_touched": [
+        "thomas/server/app_routes_init.py",
+        "thomas/server/routes/asset_studio_aiohttp.py"
+      ],
+      "file_hashes": {
+        "thomas/server/app_routes_init.py": "deca0e001bfb7c1e619ea941ca6fd816793b57abc51a138036828335d066b2ad",
+        "thomas/server/routes/asset_studio_aiohttp.py": "cd05b1a0294b3fd6047e0db7007899398cb76fb7681c61f3c40e2326ca0f2a85"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "413d6f8634145dc9e6ccd4db15f3b8d12c590f17d36ddf78e82c8d87e553b5d4",
+      "signature_scheme": "sha256",
+      "signature": "4bff6765c0b4998e83ff47189b21e62536e63e4934a655d748b80cdedb3526ed"
+    },
+    {
+      "id": "053e57ead2b2460689f2cd69caf7f0e9",
+      "module": "observability",
+      "audited_at": "2026-05-22T01:36:49+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "0.16.3: sha256_file normalizes line endings for text source suffixes",
+      "run_id": "",
+      "files_touched": [],
+      "file_hashes": {},
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "9afe049e4234959c497b6cb31ba382e413490e04eb369b5e7fc7bae82d1efca7",
+      "signature_scheme": "sha256",
+      "signature": "d8f56085fd64c0b1bf920eb922e3dc438376a643934a67db3f26096749ef25d4"
     }
   ]
 }
