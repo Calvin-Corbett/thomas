@@ -1,5 +1,6 @@
 """Tests for thomas.server.routes.models_aiohttp (model/profile listing, version)."""
 
+import os
 import tempfile
 import unittest
 
@@ -10,17 +11,55 @@ from thomas.server.app import create_app
 from thomas.server.app_keys import APP_RUNTIME_GUARD_STATE
 
 
+def _set_isolated_prefs_db() -> tuple[str | None, str]:
+    """Pin ``THOMAS_DB_PATH`` to a fresh per-test SQLite file.
+
+    The ``/api/models`` route consults the user preferences store via
+    ``resolve_effective_model``. When tests share the global user DB
+    (``~/.thomas/thomas.db`` or platform-equivalent), any earlier test
+    that writes ``default_model_profile`` pollutes the read for tests
+    that follow. Bible Pattern 25 family — global state leak across
+    tests. Each test class needs its own DB path.
+
+    The DB lives OUTSIDE the test's app tmpdir because the preferences
+    store keeps the SQLite connection open for the test lifetime, and
+    Windows refuses to remove a file that is being held open by
+    another handle. Cleanup uses ``try/except`` to tolerate that case.
+    Returns ``(previous_env, db_path)`` for restoration in tearDown.
+    """
+    previous = os.environ.get("THOMAS_DB_PATH")
+    fd, db_path = tempfile.mkstemp(suffix="-thomas-test.db", prefix="thomas-prefs-isolated-")
+    os.close(fd)
+    os.environ["THOMAS_DB_PATH"] = db_path
+    return previous, db_path
+
+
+def _restore_prefs_db(previous: str | None, db_path: str) -> None:
+    if previous is None:
+        os.environ.pop("THOMAS_DB_PATH", None)
+    else:
+        os.environ["THOMAS_DB_PATH"] = previous
+    try:
+        os.unlink(db_path)
+    except OSError:
+        # SQLite may still hold the connection (especially on Windows).
+        # Leaking a small DB file is acceptable; the OS cleans /tmp later.
+        pass
+
+
 class TestModelsRoutesLocal(AioHTTPTestCase):
     """Test model/profile routes under local access mode."""
 
     def setUp(self) -> None:
         super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory()
+        self._prev_db_path, self._isolated_db_path = _set_isolated_prefs_db()
 
     def tearDown(self) -> None:
         try:
             super().tearDown()
         finally:
+            _restore_prefs_db(self._prev_db_path, self._isolated_db_path)
             self._tmpdir.cleanup()
 
     async def get_application(self):
@@ -139,11 +178,13 @@ class TestModelsRoutesRemoteAuth(AioHTTPTestCase):
     def setUp(self) -> None:
         super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory()
+        self._prev_db_path, self._isolated_db_path = _set_isolated_prefs_db()
 
     def tearDown(self) -> None:
         try:
             super().tearDown()
         finally:
+            _restore_prefs_db(self._prev_db_path, self._isolated_db_path)
             self._tmpdir.cleanup()
 
     async def get_application(self):

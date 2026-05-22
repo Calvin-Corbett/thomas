@@ -163,8 +163,10 @@ class TestVerification:
     def test_non_write_tool_no_issues(self):
         from thomas.agent.verification import verify_after_tool
 
-        loop = asyncio.get_event_loop()
-        issues = loop.run_until_complete(verify_after_tool("eng.system_info", {}, True))
+        # ``asyncio.get_event_loop()`` is deprecated in 3.10 and raises
+        # ``RuntimeError: There is no current event loop in thread 'MainThread'``
+        # on Python 3.12+ when no loop is running. Use ``asyncio.run()`` instead.
+        issues = asyncio.run(verify_after_tool("eng.system_info", {}, True))
         assert issues == []
 
     def test_format_empty_issues(self):
@@ -189,8 +191,9 @@ class TestVerification:
 
         f = tmp_path / "good.py"
         f.write_text("x = 1\n")
-        loop = asyncio.get_event_loop()
-        issues = loop.run_until_complete(verify_after_tool("fs.write", {"path": str(f)}, True))
+        # See test_non_write_tool_no_issues — asyncio.run() replaces the
+        # deprecated/removed get_event_loop() pattern under Python 3.12+.
+        issues = asyncio.run(verify_after_tool("fs.write", {"path": str(f)}, True))
         syntax_errors = [i for i in issues if i["check"] == "syntax"]
         assert len(syntax_errors) == 0
 
@@ -199,8 +202,7 @@ class TestVerification:
 
         f = tmp_path / "bad.py"
         f.write_text("def broken(\n")
-        loop = asyncio.get_event_loop()
-        issues = loop.run_until_complete(verify_after_tool("fs.write", {"path": str(f)}, True))
+        issues = asyncio.run(verify_after_tool("fs.write", {"path": str(f)}, True))
         syntax_errors = [i for i in issues if i["check"] == "syntax"]
         assert len(syntax_errors) >= 1
 
