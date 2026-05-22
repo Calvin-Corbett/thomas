@@ -294,6 +294,14 @@ def test_load_config_defaults_profile_runtime_env_and_production_overrides(
     )
     monkeypatch.setenv("THOMAS_ENV", "production")
     monkeypatch.delenv("THOMAS_ALLOW_REMOTE_PRODUCTION", raising=False)
+    # Bible Pattern 26 family: tests that assert on env-var side effects of
+    # load_config() must start from a clean THOMAS_HOME / THOMAS_RUNTIME_DIR.
+    # Otherwise any earlier test (or developer-machine state) that already
+    # set these vars will keep them in place — load_config() does not
+    # overwrite unconditionally — and the assertion picks up the stale
+    # value (e.g. ``/home/runner/.../share/thomas`` on CI runners).
+    monkeypatch.delenv("THOMAS_HOME", raising=False)
+    monkeypatch.delenv("THOMAS_RUNTIME_DIR", raising=False)
 
     cfg = load_config(cfg_path, data_dir=tmp_path / "data-root", profile="demo")
 
