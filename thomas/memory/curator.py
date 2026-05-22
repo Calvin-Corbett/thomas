@@ -518,6 +518,11 @@ class MemoryCurator:
                 provenance_episode_id = int(payload.get("source_episode_id") or 0)
             except (ValueError, TypeError):
                 provenance_episode_id = 0
+            # `ts_ms` was dropped from upsert_fact's signature in v2 (the
+            # function always uses `_now_ms()` internally for the
+            # insert/update timestamp). Drop it from the call site rather
+            # than re-adding it to the signature; tests don't care about
+            # the exact ts.
             self._fabric.upsert_fact(
                 thread_id=thread,
                 subject=subject,
@@ -525,7 +530,6 @@ class MemoryCurator:
                 obj=obj,
                 confidence=float(payload.get("confidence", 0.5) or 0.5),
                 provenance_episode_id=provenance_episode_id if provenance_episode_id > 0 else None,
-                ts_ms=int(payload.get("ts_ms") or _now_ms()),
                 base_salience=float(payload.get("base_salience", 1.0) or 1.0),
             )
             return True
