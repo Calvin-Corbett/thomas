@@ -27,8 +27,14 @@ class TestSystemPromptPersonality(unittest.TestCase):
     def test_system_prompt_has_identity(self):
         self.assertIn("<identity>", self._built())
         self.assertIn("Thomas", self._built())
-        self.assertIn("human assistant", self._built().lower())
-        self.assertIn("can do anything on this computer", self._built().lower())
+        # The system prompt phrasing was updated 2026-05 from "human assistant"
+        # to "human teammate", and "can do anything on this computer" was
+        # replaced with "full control of this workspace and its available
+        # computer capabilities". Both phrasings encode the same intent (Thomas
+        # has agent-level authority on the machine), so assert on the new
+        # phrasing.
+        self.assertIn("human teammate", self._built().lower())
+        self.assertIn("full control of this workspace", self._built().lower())
 
     def test_system_prompt_has_conversation_intelligence(self):
         self.assertIn("<conversational_intelligence>", self._built())
