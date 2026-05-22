@@ -143,15 +143,12 @@ class GuardedToolRunner:
             approval_resolution: dict[str, Any] = {}
 
             if effective_no_human_mode == "allow":
-                # `no_human_mode=allow` is an explicit caller-override that
-                # says "auto-approve sensitive actions without prompting a
-                # human or OS auth dialog". The previous implementation
-                # called `request_native_authorization` here, which always
-                # failed on Linux CI (no GUI) and on Windows CI when the
-                # credential dialog couldn't bind. Tests expect "allow"
-                # to bypass approval entirely. The native-auth path is
-                # still reachable via the default `no_human_mode="human"`
-                # branch with `THOMAS_REQUIRE_NATIVE_AUTH=1` set.
+                # `no_human_mode=allow` keeps the human out of the loop by
+                # routing to the native OS authentication gate instead of
+                # the approval broker. Tests that don't have a GUI must
+                # monkeypatch `thomas.agent.guarded_tools.request_native_authorization`
+                # to return True/False — see `tests/test_guarded_tools_native_auth.py`
+                # for the canonical pattern.
                 await emit_event(
                     "TOOL_APPROVAL_REQUIRED",
                     {
@@ -162,20 +159,23 @@ class GuardedToolRunner:
                         "args": self.redactor.redact_obj(args),
                         "args_pretty": _pretty_args(self.redactor.redact_obj(args)),
                         "reason": self.redactor.redact_text(
-                            f"Auto-approved by no_human_mode=allow override: {tool_name}"
+                            f"Native OS authentication required for sensitive tool: {tool_name}"
                         ),
                         "iteration": iteration,
-                        "decision": "AUTO_APPROVED",
+                        "decision": "NATIVE_AUTH_REQUIRED",
                         "no_human_mode": effective_no_human_mode,
-                        "source": "no_human_override",
+                        "source": "native_auth",
                     },
                 )
-                approved = True
+                approved = request_native_authorization(
+                    _native_auth_action_description(tool_name, self.redactor.redact_obj(args)),
+                    _native_auth_reason(tool_name, decision.reason),
+                )
                 approval_resolution = {
                     "auto": True,
                     "no_human_mode": effective_no_human_mode,
-                    "decision": "AUTO_APPROVED",
-                    "source": "no_human_override",
+                    "decision": "NATIVE_AUTH_APPROVED" if approved else "NATIVE_AUTH_DENIED",
+                    "source": "native_auth",
                 }
             elif effective_no_human_mode == "deny":
                 approval_resolution = {
