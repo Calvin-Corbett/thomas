@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-05-22T00:52:15+00:00",
+  "updated_at": "2026-05-22T01:24:55+00:00",
   "latest_by_module": {
     "agent": {
       "id": "bcb0b3fcf7114bf1bb5acc5bb1fc6e76",
@@ -97,24 +97,26 @@
       "signature": "13177ef9c8cdcd1542e784f66a6084a561b25eaa5179bd5756d32ada7fdf6917"
     },
     "memory": {
-      "id": "8f6a0eb5fefe4005b6c1c8224ad9a271",
+      "id": "3a4c22bc3df04592b2aac3e7b9072c9f",
       "module": "memory",
-      "audited_at": "2026-05-21T16:47:47+00:00",
+      "audited_at": "2026-05-22T01:24:55+00:00",
       "auditor": "claude",
       "status": "pass",
-      "summary": "ci-recovery 0.15.31: refresh memory audit (file modified post-record)",
-      "run_id": "ci-recovery-2026-05-20-memory-refresh",
+      "summary": "0.16.2: upsert_fact accepts provenance_episode_id; curator drops stale ts_ms kwarg",
+      "run_id": "",
       "files_touched": [
-        "thomas/memory/autonomy.py"
+        "thomas/memory/curator.py",
+        "thomas/memory/v2/fabric_core.py"
       ],
       "file_hashes": {
-        "thomas/memory/autonomy.py": "e6a24480869755413fce9ec6f5f8ab7672593892384494e11a581a34c560636f"
+        "thomas/memory/curator.py": "8365ecbdc78b8f916186eff90ff163118b8536b8f4ad47ce4b402db5bca447a3",
+        "thomas/memory/v2/fabric_core.py": "5ff40abd2c31053b820f9ead65011a0480109544f03ebd6072345f0461b0c13b"
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "05b633bb4c1112779b70374361e3cd8a3240541da34c955009f22c1c124d35a4",
+      "prev_signature": "8ccc4ba09950cecd18fdcede8de8ab007349a5e786edad2c89e4808a5edd2224",
       "signature_scheme": "sha256",
-      "signature": "8ccc4ba09950cecd18fdcede8de8ab007349a5e786edad2c89e4808a5edd2224"
+      "signature": "0c2d2f8b43a5cb7699ce1c89b2f2231f000ebe374d3c55089e8fe18b1160753b"
     },
     "models": {
       "id": "792fc26f23824f4da56d5f35fffcfc04",
@@ -1730,6 +1732,28 @@
       "prev_signature": "a9cd6017bbfdec61db4400b3218006fbdfdd317eedcb64b05c238b25b34b38ce",
       "signature_scheme": "sha256",
       "signature": "d211cc44687f50b6270511231c622727e7f743649e09e47d475fb2a3875e91d0"
+    },
+    {
+      "id": "3a4c22bc3df04592b2aac3e7b9072c9f",
+      "module": "memory",
+      "audited_at": "2026-05-22T01:24:55+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "0.16.2: upsert_fact accepts provenance_episode_id; curator drops stale ts_ms kwarg",
+      "run_id": "",
+      "files_touched": [
+        "thomas/memory/curator.py",
+        "thomas/memory/v2/fabric_core.py"
+      ],
+      "file_hashes": {
+        "thomas/memory/curator.py": "8365ecbdc78b8f916186eff90ff163118b8536b8f4ad47ce4b402db5bca447a3",
+        "thomas/memory/v2/fabric_core.py": "5ff40abd2c31053b820f9ead65011a0480109544f03ebd6072345f0461b0c13b"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "8ccc4ba09950cecd18fdcede8de8ab007349a5e786edad2c89e4808a5edd2224",
+      "signature_scheme": "sha256",
+      "signature": "0c2d2f8b43a5cb7699ce1c89b2f2231f000ebe374d3c55089e8fe18b1160753b"
     }
   ]
 }

@@ -220,8 +220,17 @@ class MemoryFabricV2(MemoryFabricV2Retrieval):
         polarity: int = 1,
         thread_id: str | None = None,
         base_salience: float = 0.8,
+        provenance_episode_id: int | None = None,
     ) -> dict[str, Any]:
-        """Insert or update a semantic fact (globally or thread-scoped)."""
+        """Insert or update a semantic fact (globally or thread-scoped).
+
+        ``provenance_episode_id`` is the episode that produced this fact.
+        Used by ``thomas.memory.curator`` to attribute promoted library
+        entries back to their source. The DB schema has had the column
+        since v2 launched; this kwarg was added to the signature in
+        0.16.1 after `test_memory_curator` revealed the call site was
+        passing it.
+        """
         now = _now_ms()
 
         existing = self.db.execute(
@@ -250,7 +259,18 @@ class MemoryFabricV2(MemoryFabricV2Retrieval):
                     confidence, provenance_episode_id, base_salience, created_at_ms
                 ) VALUES(?,?,?,?,?,?,?,?,?,?)
                 """,
-                (thread_id, now, subject, predicate, obj, polarity, confidence, None, base_salience, now),
+                (
+                    thread_id,
+                    now,
+                    subject,
+                    predicate,
+                    obj,
+                    polarity,
+                    confidence,
+                    provenance_episode_id,
+                    base_salience,
+                    now,
+                ),
             )
             fact_id_new = int(cur.lastrowid)
 
