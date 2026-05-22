@@ -226,8 +226,12 @@ class TestAutonomy:
     def test_parse_name_format(self):
         from thomas.core.autonomy import parse_autonomy_level
 
+        # Reconciled to current AutonomyLevelSpec table (Chat=1, Assist=2,
+        # Agent=3, Full Autonomy=4). The test originally asserted Agent==4
+        # from a 3-level era before "Full Autonomy" was added as L4.
         assert parse_autonomy_level("chat") == 1
-        assert parse_autonomy_level("Agent") == 4
+        assert parse_autonomy_level("Agent") == 3
+        assert parse_autonomy_level("Full Autonomy") == 4
 
     def test_parse_clamps(self):
         from thomas.core.autonomy import parse_autonomy_level
