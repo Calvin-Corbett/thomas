@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-05-22T14:22:26+00:00",
+  "updated_at": "2026-05-22T18:28:56+00:00",
   "latest_by_module": {
     "agent": {
       "id": "4ad944b3250a40bc9be9ce63dc1a0d4b",
@@ -219,26 +219,24 @@
       "signature": "565aeeea4b99a17e0f249e3183a0e24faf509a87baa566922abc9bddb35cacbb"
     },
     "server": {
-      "id": "151a5fd2c6d644e584623a57944280bd",
+      "id": "d9b0d36ffdef4c0ba122e88a25572444",
       "module": "server",
-      "audited_at": "2026-05-22T01:35:27+00:00",
+      "audited_at": "2026-05-22T18:28:56+00:00",
       "auditor": "claude",
       "status": "pass",
-      "summary": "0.16.3: re-record with line-ending agnostic hash (CRLF/LF fix)",
+      "summary": "0.16.7: webhooks_routes reload chain so decorators re-attach to fresh router (Pattern 24)",
       "run_id": "",
       "files_touched": [
-        "thomas/server/app_routes_init.py",
-        "thomas/server/routes/asset_studio_aiohttp.py"
+        "thomas/server/routes/webhooks.py"
       ],
       "file_hashes": {
-        "thomas/server/app_routes_init.py": "deca0e001bfb7c1e619ea941ca6fd816793b57abc51a138036828335d066b2ad",
-        "thomas/server/routes/asset_studio_aiohttp.py": "cd05b1a0294b3fd6047e0db7007899398cb76fb7681c61f3c40e2326ca0f2a85"
+        "thomas/server/routes/webhooks.py": "c52068c20a11e44163e0db24657785b87701a462068214cd9acd0223395546a3"
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "413d6f8634145dc9e6ccd4db15f3b8d12c590f17d36ddf78e82c8d87e553b5d4",
+      "prev_signature": "4bff6765c0b4998e83ff47189b21e62536e63e4934a655d748b80cdedb3526ed",
       "signature_scheme": "sha256",
-      "signature": "4bff6765c0b4998e83ff47189b21e62536e63e4934a655d748b80cdedb3526ed"
+      "signature": "d299e35d4288be44b10f6bb39f8bf7059a9c58660e1c2f7377cf150fe303943a"
     },
     "tools": {
       "id": "6baf6ae9bb2242c2825e72fd9c76ad31",
@@ -1920,6 +1918,26 @@
       "prev_signature": "1e96bf3329fb1d6ac3be7ad5b424ee54142f747328d4a2ed0a74ee071642f1fc",
       "signature_scheme": "sha256",
       "signature": "b62fc0d16fe8fea0522f52f861a44e29734cfdc54bb690a994187e771956972a"
+    },
+    {
+      "id": "d9b0d36ffdef4c0ba122e88a25572444",
+      "module": "server",
+      "audited_at": "2026-05-22T18:28:56+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "0.16.7: webhooks_routes reload chain so decorators re-attach to fresh router (Pattern 24)",
+      "run_id": "",
+      "files_touched": [
+        "thomas/server/routes/webhooks.py"
+      ],
+      "file_hashes": {
+        "thomas/server/routes/webhooks.py": "c52068c20a11e44163e0db24657785b87701a462068214cd9acd0223395546a3"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "4bff6765c0b4998e83ff47189b21e62536e63e4934a655d748b80cdedb3526ed",
+      "signature_scheme": "sha256",
+      "signature": "d299e35d4288be44b10f6bb39f8bf7059a9c58660e1c2f7377cf150fe303943a"
     }
   ]
 }
