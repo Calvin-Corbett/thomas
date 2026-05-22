@@ -28,7 +28,6 @@ cffi==2.0.0
 chardet==5.2.0
 charset-normalizer==3.4.4
 click==8.3.1
-cloud-init==25.2
 colorama==0.4.4
 coloredlogs==15.0.1
 command-not-found==0.3
