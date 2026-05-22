@@ -76,6 +76,7 @@ PROTECTED_SKIP_HOOKS: tuple[str, ...] = (
     "thomas-auto-checks-quick",
     "thomas-workboard-audit-backstop-gate",
     "thomas-monolith-filename-pattern-gate",
+    "thomas-publish-preflight",
 )
 
 

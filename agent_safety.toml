@@ -287,6 +287,7 @@ protected_hooks = [
     "thomas-auto-checks-quick",
     "thomas-workboard-audit-backstop-gate",
     "thomas-monolith-filename-pattern-gate",
+    "thomas-publish-preflight",
 ]
 max_skip_hooks = 4
 max_staged_files_with_skip = 200

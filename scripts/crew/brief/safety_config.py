@@ -22,8 +22,12 @@ import os
 from pathlib import Path
 from typing import Any
 
-# Locate repo root (parent of scripts/)
-ROOT = Path(__file__).resolve().parent.parent
+# Locate repo root: file is at scripts/crew/brief/safety_config.py, so the
+# repo root is three levels up from the file's directory.
+# (Was previously .parent.parent which resolved to scripts/crew/ — meaning
+# the default-only fallback was always being used because the real
+# agent_safety.toml lives at the repo root.)
+ROOT = Path(__file__).resolve().parents[3]
 CONFIG_PATH = ROOT / "agent_safety.toml"
 CONFIG_ENV = "THOMAS_AGENT_SAFETY_CONFIG"
 DEFAULT_WORKTREE_MAX_UNCOMMITTED_CHANGED_LINES = 800
