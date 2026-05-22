@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-05-22T14:13:54+00:00",
+  "updated_at": "2026-05-22T14:22:26+00:00",
   "latest_by_module": {
     "agent": {
       "id": "4ad944b3250a40bc9be9ce63dc1a0d4b",
@@ -183,24 +183,24 @@
       "signature": "ec14b0943a8ec36390701f155e22e7cb0aeec16083ae0f65c66c5445a0555361"
     },
     "preferences": {
-      "id": "7115681f370e4d1c8d02c0233180e583",
+      "id": "5feb4d9f44a24a7ca24fa8745d62d824",
       "module": "preferences",
-      "audited_at": "2026-05-22T14:13:54+00:00",
+      "audited_at": "2026-05-22T14:22:26+00:00",
       "auditor": "claude",
       "status": "pass",
-      "summary": "0.16.10: env-aware allow_third_party_agent_access default for production",
+      "summary": "0.16.10: env-aware allow_third_party_agent_access default (inlined, no marketplace import)",
       "run_id": "",
       "files_touched": [
         "thomas/preferences/_db.py"
       ],
       "file_hashes": {
-        "thomas/preferences/_db.py": "cf9c0d1f77fe244036e7dfe61b1927bb3b1f7a6326fc2a063dc1194e4abf87e4"
+        "thomas/preferences/_db.py": "d381f4733796df31b6dc0deb9af5d54c0d34bd82eaf870be5ab99d174ae399d9"
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "7b558f2457d1c223b4e5f033677e45e2545f9029b114ad8b3f23bfb0bc37e85f",
+      "prev_signature": "1e96bf3329fb1d6ac3be7ad5b424ee54142f747328d4a2ed0a74ee071642f1fc",
       "signature_scheme": "sha256",
-      "signature": "1e96bf3329fb1d6ac3be7ad5b424ee54142f747328d4a2ed0a74ee071642f1fc"
+      "signature": "b62fc0d16fe8fea0522f52f861a44e29734cfdc54bb690a994187e771956972a"
     },
     "realtime": {
       "id": "6932faa0381742e6b423206b9aacf14d",
@@ -1900,6 +1900,26 @@
       "prev_signature": "7b558f2457d1c223b4e5f033677e45e2545f9029b114ad8b3f23bfb0bc37e85f",
       "signature_scheme": "sha256",
       "signature": "1e96bf3329fb1d6ac3be7ad5b424ee54142f747328d4a2ed0a74ee071642f1fc"
+    },
+    {
+      "id": "5feb4d9f44a24a7ca24fa8745d62d824",
+      "module": "preferences",
+      "audited_at": "2026-05-22T14:22:26+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "0.16.10: env-aware allow_third_party_agent_access default (inlined, no marketplace import)",
+      "run_id": "",
+      "files_touched": [
+        "thomas/preferences/_db.py"
+      ],
+      "file_hashes": {
+        "thomas/preferences/_db.py": "d381f4733796df31b6dc0deb9af5d54c0d34bd82eaf870be5ab99d174ae399d9"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "1e96bf3329fb1d6ac3be7ad5b424ee54142f747328d4a2ed0a74ee071642f1fc",
+      "signature_scheme": "sha256",
+      "signature": "b62fc0d16fe8fea0522f52f861a44e29734cfdc54bb690a994187e771956972a"
     }
   ]
 }
