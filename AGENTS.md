@@ -42,6 +42,12 @@ If Claude needs help, Claude can spawn additional workers and assign them units 
 
 See [docs/AGENT_COORDINATION.md](docs/AGENT_COORDINATION.md) for the full protocol.
 
+## Workbench Operator Protocol
+
+Workbench behavior is documented in `docs/WORKBENCH_OPERATOR_PROTOCOL.md`.
+
+Contract phrase: tabs are AI-first operator control surfaces.
+
 ## Rule: UI Code — Delete Old Before Adding New (CRITICAL)
 
 **When you create new UI rendering code, you MUST remove or disable the old version it replaces.**

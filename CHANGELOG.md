@@ -16,6 +16,7 @@ Versioning: Semantic Versioning.
 - `pytest-timeout` with a 300s per-test threshold for hung-test diagnosis.
 - Bible Patterns 20-24 covering stale-agent context handoff, the agent coordination lane, shared-worktree push-budget collision, and the webhook recovery patterns surfaced by this release.
 - Release metadata now declares 0.16.6 in `pyproject.toml` and `thomas/__init__.py`.
+- Restored the `AGENTS.md` Workbench operator reference to `docs/WORKBENCH_OPERATOR_PROTOCOL.md`, including the contract wording that tabs are AI-first operator control surfaces.
 
 ### Fixed
 - `thomas/marketplace/webhooks/filtering._tokenize`: fixed an infinite loop on dollar-prefix path tokens.
