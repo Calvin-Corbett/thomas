@@ -8,6 +8,14 @@ ENV THOMAS_ENV=${ENVIRONMENT}
 
 WORKDIR /app
 
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        gcc \
+        libcairo2-dev \
+        libgirepository1.0-dev \
+        pkg-config && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy dependency files first for layer caching
 COPY pyproject.toml README.md ./
 
