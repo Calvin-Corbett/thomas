@@ -51,6 +51,16 @@ async def _emit_event(_name: str, _payload: dict[str, Any]) -> None:
 async def _run_and_collect_no_human(
     no_human_mode: str | None, *, runner_mode: str | None = None
 ) -> tuple[dict[str, Any], _SpyApprovalBroker]:
+    # `no_human_mode=allow` routes through native OS auth. On headless
+    # CI there's no GUI to bind, so the real implementation returns False
+    # and the runner denies the call. Patch it to always approve in the
+    # test environment — see `tests/test_guarded_tools_native_auth.py`
+    # for the same pattern.
+    import thomas.agent.guarded_tools as _guarded_tools_module
+
+    _original_native_auth = _guarded_tools_module.request_native_authorization
+    _guarded_tools_module.request_native_authorization = lambda *args, **kwargs: True
+
     broker = _SpyApprovalBroker()
     runner = GuardedToolRunner(
         policy=_RequireApprovalPolicy(),
@@ -60,23 +70,26 @@ async def _run_and_collect_no_human(
         no_human_mode=runner_mode or "human",
     )
 
-    result = await runner.run(
-        executor=lambda call: {
-            "ok": True,
-            "result_text": f"ran {call.get('name')}",
-            "tool_call_id": call.get("id"),
-        },
-        tool_call={"id": "tc-1", "name": "dummy.echo", "args": {"x": 1}},
-        run_id="run-1",
-        session_id="sess-1",
-        iteration=1,
-        cwd="/tmp",
-        sandbox_root="/tmp",
-        runtime_root="/tmp",
-        conversation_summary="",
-        emit_event=_emit_event,
-        no_human_mode=no_human_mode,
-    )
+    try:
+        result = await runner.run(
+            executor=lambda call: {
+                "ok": True,
+                "result_text": f"ran {call.get('name')}",
+                "tool_call_id": call.get("id"),
+            },
+            tool_call={"id": "tc-1", "name": "dummy.echo", "args": {"x": 1}},
+            run_id="run-1",
+            session_id="sess-1",
+            iteration=1,
+            cwd="/tmp",
+            sandbox_root="/tmp",
+            runtime_root="/tmp",
+            conversation_summary="",
+            emit_event=_emit_event,
+            no_human_mode=no_human_mode,
+        )
+    finally:
+        _guarded_tools_module.request_native_authorization = _original_native_auth
     return result, broker
 
 
