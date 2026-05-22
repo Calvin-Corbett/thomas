@@ -57,6 +57,7 @@ test = [
     "pytest-asyncio>=0.23",
     "pytest-aiohttp>=1.0",
     "pytest-cov>=5.0",
+    "pytest-timeout>=2.3",
     "pip-audit>=2.8",
     "bandit[toml]>=1.7.10",
     "ruff>=0.8",
@@ -106,6 +107,11 @@ norecursedirs = [
     "agent_memory",
     "*.egg-info",
 ]
+# Prevent silent runner hangs from hiding the culprit test.
+# GitHub Actions can cancel long batches without naming the stuck test.
+# pytest-timeout kills any test over 300s with a clear timeout error.
+timeout = 300
+timeout_method = "thread"
 
 [tool.coverage.run]
 branch = true
