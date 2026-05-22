@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -15,7 +14,12 @@ def _write_module_file(tmp_path: Path, rel_path: str, content: str) -> str:
     full = tmp_path / rel_path
     full.parent.mkdir(parents=True, exist_ok=True)
     full.write_text(content, encoding="utf-8")
-    return hashlib.sha256(full.read_bytes()).hexdigest()
+    # Use the canonical sha256_file so the test mirrors gate behavior:
+    # text-source files are hashed after LF normalization (Pattern 17b)
+    # so Windows-local CRLF writers and Linux-CI LF checkouts agree.
+    from thomas.marketplace.observability.module_audit import sha256_file
+
+    return sha256_file(full)
 
 
 def _set_repo_root(monkeypatch, tmp_path: Path) -> None:
