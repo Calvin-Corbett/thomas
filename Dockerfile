@@ -13,7 +13,10 @@ RUN apt-get update && \
         gcc \
         libcairo2-dev \
         libgirepository1.0-dev \
-        pkg-config && \
+        meson \
+        ninja-build \
+        pkg-config \
+        python3-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy dependency files first for layer caching
