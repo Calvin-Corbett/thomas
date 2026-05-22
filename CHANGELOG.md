@@ -9,6 +9,13 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.16.6] - 2026-05-22
+
+### Added
+- Agent coordination lane documentation in `docs/AGENT_COORDINATION.md`, the `AGENTS.md` coordination section, and the `startup_router` inbox banner.
+- `pytest-timeout` with a 300s per-test threshold for hung-test diagnosis.
+- Bible Patterns 20, 21, and 22 covering stale-agent context handoff, the agent coordination lane, and shared-worktree push-budget collision.
+
 ## [0.16.5] - 2026-05-22
 
 ### Fixed
