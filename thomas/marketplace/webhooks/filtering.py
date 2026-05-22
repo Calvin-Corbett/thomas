@@ -110,7 +110,12 @@ class FilterParser:
                 tokens.append(FilterToken("operator", expression[i]))
                 i += 1
             elif expression[i:].startswith("$"):
-                j = i
+                # Skip the `$` before scanning continuation chars,
+                # otherwise `j` never advances past `$` (since `$` is not
+                # in the continuation set) and the outer while loops
+                # forever. Caught by pytest-timeout 2026-05-22 in CI run
+                # 26302627013 against tests/test_webhooks_filtering.py.
+                j = i + 1
                 while j < len(expression) and (expression[j].isalnum() or expression[j] in (".", "_", "[", "]")):
                     j += 1
                 tokens.append(FilterToken("path", expression[i:j]))
@@ -119,6 +124,18 @@ class FilterParser:
                 j = i
                 while j < len(expression) and (expression[j].isalnum() or expression[j] in ("_", ".")):
                     j += 1
+                if j == i:
+                    # Unrecognized character (e.g. lone `!` not followed by `=`).
+                    # Without this guard the loop would never advance — the
+                    # while on line above doesn't move `j`, `word` is empty,
+                    # and none of the type branches advance `i`. The CI run
+                    # 26302627013 hit this via pytest-timeout after 5 min
+                    # on tests/test_webhooks_filtering.py — the canonical
+                    # symptom of this bug class.
+                    raise FilterExpressionError(
+                        expression,
+                        f"Unrecognized character at position {i}: {expression[i]!r}",
+                    )
                 word = expression[i:j]
                 if word.upper() in self.LOGICAL_OPS:
                     tokens.append(FilterToken("logical", word.upper()))
@@ -130,6 +147,7 @@ class FilterParser:
                         tokens.append(FilterToken("number", word))
                     except ValueError:
                         tokens.append(FilterToken("identifier", word))
+                i = j
                 i = j
 
         return tokens
