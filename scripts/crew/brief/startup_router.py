@@ -718,7 +718,10 @@ def _build_parser() -> argparse.ArgumentParser:
 def _text_output(payload: dict[str, Any]) -> str:
     preflight = dict(payload.get("preflight") or {})
     policy = dict(preflight.get("policy") or {})
-    lines = ["Thomas agent startup router"]
+    lines = [
+        "Thomas agent startup router",
+        "CHECK YOUR INBOX -- python scripts/crew/workboard/message.py --list --",
+    ]
     if preflight:
         lines.extend(
             [

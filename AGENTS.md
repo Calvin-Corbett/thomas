@@ -15,6 +15,33 @@
 11. Tag every commit with your model name (e.g., `Thomas-Agent: codex` or `Thomas-Agent: claude`)
 12. Run `ruff check` on any Python file you modify before committing
 
+## Agent Coordination Lane (Required)
+
+Thomas is multi-agent. Any agent in this repo MUST run `python scripts/crew/workboard/message.py --list` at session start.
+
+Claude is the coordinator and leader of repo-quality work for Thomas. Codex and any spawned workers report to Claude. Calvin overrides anyone.
+
+Use `scripts/crew/workboard/message.py` for the coordination lane:
+
+- `--send`: create a message.
+- `--ack`: acknowledge or decide on a message.
+- `--resolve`: mark a message resolved.
+- `--list`: read current messages.
+
+Valid message kinds are `blocker`, `brainstorm_call`, `brainstorm_decision`, `brainstorm_note`, `coordination`, `decision`, `handoff`, `ping`, `scope_change`, and `status`.
+
+Valid decisions are `approved`, `none`, `pending`, and `rejected`.
+
+Valid states are `open`, `acked`, and `resolved`.
+
+Workers do one unit at a time, then message Claude with `state=open` and STOP. Workers do not start the next unit until Claude uses `--ack` with `decision=approved`. Approved means proceed. Rejected means correct the requested issue. Use `kind=ping` for questions and wait.
+
+Message Claude after every commit, blocker, decision, surprise, question, and handoff. The default is message and wait, not act and hope.
+
+If Claude needs help, Claude can spawn additional workers and assign them units through the same protocol.
+
+See [docs/AGENT_COORDINATION.md](docs/AGENT_COORDINATION.md) for the full protocol.
+
 ## Rule: UI Code — Delete Old Before Adding New (CRITICAL)
 
 **When you create new UI rendering code, you MUST remove or disable the old version it replaces.**
