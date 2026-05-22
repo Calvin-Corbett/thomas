@@ -132,8 +132,48 @@ def sign_entry(entry: dict[str, Any], *, prev_signature: str, signing_key: str |
     return hashlib.sha256(payload).hexdigest()
 
 
+# Source-text extensions whose hashes should ignore line-ending style.
+# Cross-platform agents (Windows local, Linux CI) otherwise hash CRLF vs LF
+# to different digests for the same logical content. See bible Pattern 17b.
+_TEXT_HASH_SUFFIXES = frozenset(
+    {
+        ".py",
+        ".pyi",
+        ".md",
+        ".txt",
+        ".rst",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".cfg",
+        ".ini",
+        ".sh",
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".html",
+        ".css",
+        ".scss",
+    }
+)
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
+    # Text source files: normalize CRLF/CR to LF so Windows-local and
+    # Linux-CI checkouts hash identically. Binary files: read raw.
+    if path.suffix.lower() in _TEXT_HASH_SUFFIXES:
+        try:
+            raw = path.read_bytes()
+        except OSError:
+            raise
+        # Normalize all line-ending styles (CRLF, CR) down to LF.
+        normalized = raw.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+        digest.update(normalized)
+        return digest.hexdigest()
+
     with path.open("rb") as handle:
         while True:
             chunk = handle.read(1024 * 1024)

@@ -9,6 +9,20 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.16.3] - 2026-05-22
+
+### Fixed
+- `thomas/marketplace/observability/module_audit.py::sha256_file` now normalizes line endings (CRLF → LF, CR → LF) for known text source suffixes (`.py`, `.md`, `.json`, `.yaml`, `.toml`, etc.) before hashing. The audit registry previously stored byte-exact SHA256 of the working-tree file, which differed between Windows (CRLF, `core.autocrlf=true`) and Linux CI (LF after checkout). The result was a recurring "stale audit hash" failure in the module-audit gate every time the audit was recorded on Windows and verified on Linux. Binary files (suffixes not in the allowlist) still hash raw bytes.
+- Re-recorded `agent`, `demo`, `memory`, and `server` module audits so their stored hashes now match the LF-normalized values Linux CI computes. Verified locally: `python scripts/forge/gates/module_audit_gate.py` is clean for line-ending divergence.
+
+### Architecture
+- This closes the CRLF/LF audit-hash class of CI failures that has been re-appearing since cross-platform agents (Windows local + Linux CI) started recording audits. New text-file suffixes can be added to `_TEXT_HASH_SUFFIXES` if a future audit covers a source-extension that's not in the list yet.
+
+## [0.16.2] - 2026-05-22
+
+### Fixed
+- `thomas/memory/v2/fabric_core.py::CompactFactsFabric.upsert_fact` now accepts an optional `provenance_episode_id: int | None = None` parameter. The curator was calling it with a `ts_ms` kwarg that didn't exist; that path is now gone and replaced with the explicit provenance plumbing. Fixes `tests/test_memory_curator.py::test_curator_persists_fact`.
+
 ## [0.16.1] - 2026-05-22
 
 ### Fixed
