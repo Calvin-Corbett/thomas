@@ -48,6 +48,10 @@ ALLOWLIST_PATHS = frozenset(
         "scripts/forge/gates/public_repo_leak_guard.py",
         "scripts/forge/publish/preflight.py",
         "CHANGELOG.md",
+        # Historical deletion records list paths that contained competitor
+        # names. They're the AUDIT TRAIL for the cleanup, so the substrings
+        # are necessary and intentional.
+        "docs/deletions/2026-05-21-pre-public-cleanup.json",
     }
 )
 
