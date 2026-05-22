@@ -60,7 +60,7 @@ Installer build docs: [`docs/WINDOWS_INSTALLER_GUIDE.md`](docs/WINDOWS_INSTALLER
 
 ---
 
-## Everyday use
+## Everyday Use
 
 The normal-user contract is intentionally simple:
 
@@ -70,7 +70,9 @@ The normal-user contract is intentionally simple:
 - **Integrations** — connect providers and tools gradually instead of all at once
 - **Repair** — `status`, `quickstart`, `setup`, or `repair.cmd` when something drifts
 
-The deeper systems (mission control, workboards, swarms, autonomy engine, marketplace builder, companion mobile) are intentional but not required for day-one use.
+## Grow Into Advanced Thomas Safely
+
+The deeper systems (mission control, workboards, swarms, autonomy engine, marketplace builder, companion mobile) are intentional. They exist so Thomas can expand without becoming fragile. Normal use should not require understanding those systems on day one.
 
 ---
 
