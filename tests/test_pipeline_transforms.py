@@ -2,10 +2,6 @@
 Tests for data transformations.
 """
 
-import sys
-
-sys.path.insert(0, "/sessions/zen-pensive-cannon/mnt/Thomas")
-
 from datetime import datetime
 
 import pytest
