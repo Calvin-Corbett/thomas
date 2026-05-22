@@ -8,10 +8,10 @@ Last updated: 2026-03-01
 ## Problem Traceability
 
 ## Agent Claims
-- agent=claude; name=CI gate recovery sprint; role=solo; parent=none; scope=thomas,scripts,docs,plans,.github,CHANGELOG.md,pyproject.toml,.gitignore,apps,tests,extensions,README.md,.pre-commit-config.yaml,.dockerignore,AGENTS.md; task=ci-recovery-2026-05-20
+- agent=claude; name=CI gate recovery sprint; role=solo; parent=none; scope=thomas,scripts,docs,plans,.github,CHANGELOG.md,pyproject.toml,.gitignore,apps,tests,extensions,README.md,.pre-commit-config.yaml,.dockerignore,AGENTS.md,agent_safety.toml; task=ci-recovery-2026-05-20
 
 ## Active Tasks
-- task_id=ci-recovery-2026-05-20; agent=claude; scope=thomas,scripts,docs,plans,.github,CHANGELOG.md,pyproject.toml,.gitignore,apps,tests,extensions,README.md,.pre-commit-config.yaml,.dockerignore,AGENTS.md; summary=ci-recovery-2026-05-20; status=active
+- task_id=ci-recovery-2026-05-20; agent=claude; scope=thomas,scripts,docs,plans,.github,CHANGELOG.md,pyproject.toml,.gitignore,apps,tests,extensions,README.md,.pre-commit-config.yaml,.dockerignore,AGENTS.md,agent_safety.toml; summary=ci-recovery-2026-05-20; status=active
 
 ## Up For Grabs
 
