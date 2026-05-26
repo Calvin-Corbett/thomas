@@ -56,7 +56,17 @@ jobs:
             echo "BASE_SHA=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
             echo "HEAD_SHA=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
           else
-            echo "BASE_SHA=${{ github.event.before }}" >> "$GITHUB_ENV"
+            # Push events populate github.event.before; workflow_dispatch (manual
+            # rerun, added 2026-05-26 as Pattern 19 layer-10 fallback) doesn't.
+            # For dispatch, fall back to HEAD~1 so the deletion guard has a real
+            # base to diff against. If HEAD~1 doesn't exist (initial commit) the
+            # rev-parse will fail and we leave BASE_SHA empty; downstream gates
+            # then use --staged-only mode.
+            BEFORE="${{ github.event.before }}"
+            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              BEFORE="$(git rev-parse HEAD~1 2>/dev/null || echo '')"
+            fi
+            echo "BASE_SHA=$BEFORE" >> "$GITHUB_ENV"
             echo "HEAD_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
           fi
 
