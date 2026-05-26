@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
-"""Fail when active WORKBOARD claims have not been refreshed recently."""
+"""Fail when active WORKBOARD claims have not been refreshed recently.
+
+Implementation note (2026-05-26, Pattern 19 layer 11 fix-up):
+The gate uses git-blame on the claim's literal line to determine its
+last-touched timestamp. Agents that do active work in their claimed
+scope but never edit the claim line itself appear stale here. To
+refresh, modify the claim line in-place (e.g. append
+``; last_active=YYYY-MM-DD``) and commit; git-blame re-anchors to that
+commit and the gate sees the claim as fresh again.
+
+Default threshold is 72h (passed via --max-age-hours from CI).
+"""
 
 from __future__ import annotations
 
