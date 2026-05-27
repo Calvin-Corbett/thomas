@@ -1,0 +1,555 @@
+name: Gates (server-side safety enforcement)
+
+# Server-side mirror of the local pre-commit gate stack. Every gate here is
+# also runnable locally via the .pre-commit-config.yaml hook chain, but those
+# local hooks are bypassable by `git commit --no-verify`. This workflow is
+# NOT bypassable: it runs on every PR to dev/main and every push to those
+# branches, and the `gates-required` aggregator job is what Calvin marks as
+# a "required status check" in branch protection. A commit that bypassed
+# local hooks cannot reach dev/main if any gate here fails.
+#
+# Design notes:
+#   - One job per gate so individual failures are visible in PR check list.
+#   - Aggregator job `gates-required` depends on all of them — that's the
+#     single check name Calvin marks as required in branch protection.
+#   - BASE_SHA/HEAD_SHA resolution mirrors .github/workflows/robustness-gates.yml
+#     for consistency.
+#   - Worktree-local gates (worktree_branch_guard, worktree_rules_gate,
+#     active_folders.py guard-staged, presence-related) are intentionally
+#     NOT mirrored — they check process/worktree state that doesn't apply
+#     on CI runners. Their server-side equivalent is the branch-protection
+#     rule itself (PR review + signed commits).
+#
+# See docs/SAFETY_ARCHITECTURE.md for the full architecture.
+# Refs: plans/thomas/problems/gate-architecture-2026-05-26/PROBLEM.md
+# Task: gate-architecture-2026-05-26
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────
+  # PROTECTED-FILES + DELETION GATES (the choke point for safety files)
+  # ────────────────────────────────────────────────────────────────────────
+
+  protected-files-gate:
+    name: protected-files-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install tomli pyyaml
+      - name: Resolve diff range
+        id: range
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "BASE_SHA=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+          else
+            base="${{ github.event.before }}"
+            if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+              base="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+            fi
+            echo "BASE_SHA=$base" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
+          fi
+      - name: Protected files gate
+        run: python scripts/forge/gates/protected_files_gate.py --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  protected-deletions-gate:
+    name: protected-deletions-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Resolve diff range
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "BASE_SHA=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+          else
+            base="${{ github.event.before }}"
+            if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+              base="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+            fi
+            echo "BASE_SHA=$base" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
+          fi
+      - name: Protected deletion / rename guard
+        run: python scripts/forge/gates/deletions.py --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  # ────────────────────────────────────────────────────────────────────────
+  # COMMIT-SHAPE GATES (bypass-targeted: these are the ones agents game)
+  # ────────────────────────────────────────────────────────────────────────
+
+  bulk-commit-guard:
+    name: bulk-commit-guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Resolve diff range
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "BASE_SHA=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+          else
+            base="${{ github.event.before }}"
+            if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+              base="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+            fi
+            echo "BASE_SHA=$base" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
+          fi
+      - name: Bulk commit guard
+        env:
+          # The env-var bypass exists for now but PROBLEM.md flags it for removal.
+          # Server-side this var is set to empty so the gate's full check runs.
+          THOMAS_BULK_COMMIT_GUARD_DISABLE: ""
+        run: python scripts/forge/gates/bulk_commit_guard.py --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  commit-growth-guard:
+    name: commit-growth-guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Resolve diff range
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "BASE_SHA=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+          else
+            base="${{ github.event.before }}"
+            if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+              base="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+            fi
+            echo "BASE_SHA=$base" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
+          fi
+      - name: Commit growth guard
+        run: python scripts/forge/gates/commit_growth_guard.py --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  # ────────────────────────────────────────────────────────────────────────
+  # SECRET / LEAK GUARDS (highest-priority for public-facing branches)
+  # ────────────────────────────────────────────────────────────────────────
+
+  public-repo-leak-guard:
+    name: public-repo-leak-guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Resolve diff range
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "BASE_SHA=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+          else
+            base="${{ github.event.before }}"
+            if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+              base="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+            fi
+            echo "BASE_SHA=$base" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
+          fi
+      - name: Public repo leak guard
+        run: python scripts/forge/gates/public_repo_leak_guard.py --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  # ────────────────────────────────────────────────────────────────────────
+  # CODE-SHAPE GATES
+  # ────────────────────────────────────────────────────────────────────────
+
+  monolith-guard:
+    name: monolith-guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install tomli
+      - name: Resolve diff range
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "BASE_SHA=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+          else
+            base="${{ github.event.before }}"
+            if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+              base="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+            fi
+            echo "BASE_SHA=$base" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
+          fi
+      - name: Monolith guard
+        run: python scripts/forge/gates/monolith_guard.py --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  monolith-filename-guard:
+    name: monolith-filename-guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: python scripts/forge/gates/monolith_filename_guard.py
+
+  duplicate-filename-gate:
+    name: duplicate-filename-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: python scripts/forge/gates/duplicate_filename_gate.py
+
+  circular-imports-gate:
+    name: circular-imports-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install tomli
+      - run: python scripts/forge/gates/circular_imports_gate.py
+
+  exception-handler-gate:
+    name: exception-handler-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install tomli
+      - name: Resolve diff range
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "BASE_SHA=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+          else
+            base="${{ github.event.before }}"
+            if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+              base="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+            fi
+            echo "BASE_SHA=$base" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
+          fi
+      - run: python scripts/forge/gates/exception_handler_gate.py --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  # ────────────────────────────────────────────────────────────────────────
+  # WORKBOARD COORDINATION GATES
+  # ────────────────────────────────────────────────────────────────────────
+
+  workboard-claims-gate:
+    name: workboard-claims-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: python scripts/forge/gates/workboard_claims.py --require-identity-metadata
+
+  workboard-task-problems-gate:
+    name: workboard-task-problems-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: python scripts/forge/gates/workboard_task_problems.py
+
+  workboard-changed-files-gate:
+    name: workboard-changed-files-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Resolve diff range
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "BASE_SHA=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+          else
+            base="${{ github.event.before }}"
+            if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+              base="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+            fi
+            echo "BASE_SHA=$base" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
+          fi
+      - run: python scripts/forge/gates/workboard_changed_files.py --base "$BASE_SHA" --head "$HEAD_SHA" --require-identity-metadata
+
+  # ────────────────────────────────────────────────────────────────────────
+  # ARTIFACT / DOC INTEGRITY
+  # ────────────────────────────────────────────────────────────────────────
+
+  changelog-gate:
+    name: changelog-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install tomli
+      - name: Resolve diff range
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "BASE_SHA=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+          else
+            base="${{ github.event.before }}"
+            if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+              base="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+            fi
+            echo "BASE_SHA=$base" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
+          fi
+      - run: python scripts/forge/gates/changelog_gate.py --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  plan-structure-gate:
+    name: plan-structure-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: python scripts/forge/gates/plan_structure_gate.py
+
+  repo-hygiene-gate:
+    name: repo-hygiene-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: python scripts/forge/gates/repo_hygiene.py
+
+  repo-identity-gate:
+    name: repo-identity-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: python scripts/forge/gates/repo_identity.py
+
+  # ────────────────────────────────────────────────────────────────────────
+  # SIGNED-COMMIT VERIFICATION (architecture layer 1 + 2 + 3 check)
+  # ────────────────────────────────────────────────────────────────────────
+  # This job verifies that commits on the head of a PR are signed. Without
+  # this, a `--no-verify` commit (which produces an unsigned commit when
+  # signing is configured) would slip past branch protection's "require
+  # signed commits" rule by simply not signing. Branch protection's check
+  # is a UI-level toggle; this job is the workflow-level enforcement.
+  #
+  # Calvin should ALSO enable "Require signed commits" in branch protection
+  # for defense-in-depth — see docs/BRANCH_PROTECTION_SETUP.md.
+
+  signed-commits-check:
+    name: signed-commits-check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Verify all PR commits are signed
+        shell: bash
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          unsigned=""
+          for sha in $(git rev-list "$BASE..$HEAD"); do
+            # %G? returns: G=good, U=good-untrusted, X=expired, Y=expired-key,
+            #              R=revoked-key, E=missing-key, B=bad, N=no-signature
+            status=$(git log -1 --format='%G?' "$sha")
+            if [ "$status" = "N" ] || [ "$status" = "B" ]; then
+              unsigned="$unsigned $sha"
+            fi
+          done
+          if [ -n "$unsigned" ]; then
+            echo "::error::Unsigned or bad-signature commits detected on this PR:"
+            for sha in $unsigned; do
+              echo "  - $sha $(git log -1 --format='%s' "$sha")"
+            done
+            echo ""
+            echo "All commits to dev/main must be signed. See docs/SIGNING_KEY_SETUP.md."
+            echo "If you used 'git commit --no-verify', that flag does NOT skip signing —"
+            echo "but if you ALSO didn't have signing configured, the commit is unsigned."
+            echo "Configure signing per docs/SIGNING_KEY_SETUP.md and re-commit."
+            exit 1
+          fi
+          echo "All PR commits are signed."
+
+  # ────────────────────────────────────────────────────────────────────────
+  # XFAIL DEBT ENFORCEMENT (P0-1 from 2026-05-27 senior review)
+  # ────────────────────────────────────────────────────────────────────────
+  # Fails if xfail count grows BASE..HEAD without a commit message trailer
+  # `xfail-justified: <reason>`. The trailer is the agent's audit ledger:
+  # one well-written line covers any number of new xfails in that commit.
+  # See docs/XFAIL_POLICY.md for the full policy and triage guidance.
+
+  xfail-growth-gate:
+    name: xfail-growth-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Resolve diff range
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "BASE_SHA=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+          else
+            base="${{ github.event.before }}"
+            if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+              base="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+            fi
+            echo "BASE_SHA=$base" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
+          fi
+      - name: Xfail growth gate
+        run: python scripts/forge/gates/xfail_growth_gate.py --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  # ────────────────────────────────────────────────────────────────────────
+  # AGGREGATOR — single required-status-check name for branch protection
+  # ────────────────────────────────────────────────────────────────────────
+  # Mark this job (`gates-required`) as a required status check in
+  # GitHub branch protection settings for both `dev` and `main`. It depends
+  # on every gate above, so any one failing causes this aggregator to fail
+  # too. Calvin only needs to mark ONE check as required.
+  #
+  # Per docs/BRANCH_PROTECTION_SETUP.md, navigate to:
+  #   Settings → Branches → Branch protection rules → Edit (for dev/main)
+  #   → "Require status checks to pass before merging"
+  #   → search "gates-required" → check it
+  # The signed-commits-check is also required but only fires on
+  # pull_request events; for push-to-dev/main flows that bypass PR,
+  # branch protection's "Require signed commits" toggle covers signing.
+
+  gates-required:
+    name: gates-required
+    runs-on: ubuntu-latest
+    needs:
+      - protected-files-gate
+      - protected-deletions-gate
+      - bulk-commit-guard
+      - commit-growth-guard
+      - public-repo-leak-guard
+      - monolith-guard
+      - monolith-filename-guard
+      - duplicate-filename-gate
+      - circular-imports-gate
+      - exception-handler-gate
+      - workboard-claims-gate
+      - workboard-task-problems-gate
+      - workboard-changed-files-gate
+      - changelog-gate
+      - plan-structure-gate
+      - repo-hygiene-gate
+      - repo-identity-gate
+      - xfail-growth-gate
+    if: always()
+    steps:
+      - name: Report aggregate result
+        shell: bash
+        run: |
+          # Fail if any needed job failed or was cancelled.
+          results='${{ toJSON(needs) }}'
+          echo "Per-gate results:"
+          echo "$results" | python3 -c "
+          import json, sys
+          data = json.loads(sys.stdin.read())
+          failed = []
+          for name, info in data.items():
+              status = info.get('result', 'unknown')
+              print(f'  {name}: {status}')
+              if status not in ('success', 'skipped'):
+                  failed.append(name)
+          if failed:
+              print()
+              print(f'FAIL: {len(failed)} gate(s) did not pass: {\", \".join(failed)}')
+              sys.exit(1)
+          print()
+          print('All required gates passed.')
+          "
