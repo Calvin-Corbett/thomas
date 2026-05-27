@@ -1,0 +1,114 @@
+# Auto-labeler rules for PRs.
+#
+# Each label maps to one or more glob patterns. If a PR touches a file
+# matching the pattern, the label is applied automatically. Labels make
+# triage faster — Calvin can filter PRs by area at a glance.
+#
+# Used by .github/workflows/labeler.yml (actions/labeler@v5).
+# Pattern format: https://github.com/actions/labeler#changed-files
+
+"area:chat-task-lane":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "thomas/server/routes/chat_v2*.py"
+          - "thomas/server/routes/chat_aiohttp*.py"
+          - "thomas/agent/chat_dispatcher.py"
+          - "thomas/agent/dispatch.py"
+          - "thomas/server/web/js/runtime/0**chat**.js"
+          - "tests/test_server_chat_*.py"
+
+"area:memory":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "thomas/memory/**/*"
+          - "tests/test_memory*.py"
+          - "tests/test_*memory*.py"
+
+"area:preferences":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "thomas/preferences/**/*"
+          - "tests/test_preferences*.py"
+          - "tests/test_*preferences*.py"
+
+"area:marketplace":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "thomas/marketplace/**/*"
+
+"area:orchestrator":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "thomas/marketplace/orchestrator/**/*"
+          - "thomas/orchestrator/**/*"
+
+"area:specialists":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "thomas/marketplace/specialists/**/*"
+          - "thomas/specialists/**/*"
+
+"area:bible":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/THOMAS_BIBLE.md"
+          - "scripts/bible_*.py"
+          - "docs/BIBLE_VERIFICATION_LEVELS.md"
+
+"area:gates":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "scripts/forge/gates/**/*"
+          - "agent_safety.toml"
+          - ".pre-commit-config.yaml"
+
+"area:apps/site":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "apps/site/**/*"
+
+"area:discord-bridge":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "thomas/integrations/discord_bridge_service/**/*"
+
+"area:extensions":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "extensions/**/*"
+
+"area:ci":
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/**/*"
+          - ".github/dependabot.yml"
+          - ".github/labeler.yml"
+          - ".github/CODEOWNERS"
+
+"area:tests":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "tests/**/*"
+          - "thomas/tests/**/*"
+
+"area:docs":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**/*"
+          - "README.md"
+          - "*.md"
+
+"deps":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "requirements*.txt"
+          - "pyproject.toml"
+          - "**/package.json"
+          - "**/package-lock.json"
+
+"area:workboard":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "plans/thomas/WORKBOARD.md"
+          - "plans/thomas/tasks/**/*"
+          - "plans/thomas/problems/**/*"
