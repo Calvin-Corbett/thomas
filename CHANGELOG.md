@@ -9,6 +9,29 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+### Configuration
+- **agent_safety.local.toml overlay** (2026-05-27): per-install overrides for `agent_safety.toml` without modifying the upstream config. Loaded by `scripts/crew/brief/safety_config.py::_load_toml_with_overlay()` (new). Nested dicts merge; scalars/lists in the overlay replace the upstream value. Mirrors the existing `docs/THOMAS_BIBLE.md` ↔ `docs/THOMAS_BIBLE.local.md` pattern. Gitignore the file so it stays per-install.
+- **`breakglass_max_per_agent_24h = 0` semantics**: `scripts/forge/gates/precommit_skip_policy.py` now treats 0 (or any non-positive value) as "no per-agent quota." Public default remains 3; local installs can opt out via the overlay if they accept the tradeoff (the other safety layers — protected-files, signed-commits, server-side gates — still apply). 13 new tests in `tests/test_agent_safety_local_overlay.py` cover the deep-merge semantics, overlay-present/absent paths, and the gate's 0-means-unlimited logic.
+
+### Quality
+- **xfail-debt-2026-05-27**: P0-1 from the 2026-05-27 senior review. The xfail count was climbing silently (60 markers across 59 test files at audit time, mostly added in batches via "step-up" runs). New enforcement infrastructure:
+  - `scripts/xfail_inventory.py` — AST-based scanner (not grep — grep counted xfail-in-docstrings as real). Classifies by category (domain-stub / step-up / flake / tracked / platform-specific / other) and tags each by introducing commit's arc-id (`mixed-19`, `pathfinding`, etc.).
+  - `scripts/forge/gates/xfail_growth_gate.py` — STRICT growth gate. Fails any commit that grows the count unless a commit message in BASE..HEAD has an `xfail-justified: <reason>` trailer. Mirrors the existing `Closes-Task:` / `Thomas-Agent:` trailer convention.
+  - `.github/workflows/gates.yml` — `xfail-growth-gate` job added; `gates-required` aggregator updated.
+  - `docs/XFAIL_POLICY.md` — policy doc + triage guidance + current 60-xfail inventory snapshot for the first cleanup pass.
+  - `scripts/bible_status.py` — now reports xfail debt count, making it visible at every health check.
+  - `tests/test_xfail_growth_gate.py` — 27 new tests covering AST scanner, classification heuristics, arc-id extraction, trailer detection (case-insensitive, empty rejected, mid-line rejected).
+
+### Security
+- **gate-architecture-2026-05-26**: server-side safety enforcement is now the source of truth, not local pre-commit hooks. PROBLEM.md ([plans/thomas/problems/gate-architecture-2026-05-26/PROBLEM.md](plans/thomas/problems/gate-architecture-2026-05-26/PROBLEM.md)) captured the 2026-05-26 bypass — Claude ran `git commit --no-verify` and the 50+ local gates were skipped entirely. The fix:
+  - New `.github/workflows/gates.yml`: per-gate workflow jobs mirroring `scripts/forge/gates/*` as required status checks. Includes a `gates-required` aggregator so Calvin marks one thing in branch protection. Adds `signed-commits-check` that fails PRs with unsigned commits.
+  - New `.github/CODEOWNERS`: routes reviews of safety-critical paths (`agent_safety.toml`, `.pre-commit-config.yaml`, `scripts/forge/gates/`, `thomas/core/agent_presence.py`, `thomas/tools/native_auth.py`, `thomas/tools/filesystem.py`, gates.yml itself, etc.) to @Calvin-Corbett.
+  - New `docs/SAFETY_ARCHITECTURE.md`: mental-model doc explaining the 4-layer architecture (GitHub branch protection + OS keychain + OS-native auth + workflow gate mirror) and what `--no-verify` does now (nothing, once Calvin lands the runbooks).
+  - New `docs/SIGNING_KEY_SETUP.md` + `docs/BRANCH_PROTECTION_SETUP.md`: Calvin's runbooks for the OS-side (signed-commit SSH key with Windows Hello binding) and GitHub-side (branch protection clickpath).
+  - Extended `thomas/tools/filesystem.py::_is_protected_runtime_path` with opt-in `allow_native_auth_override` kwarg. When set AND `request_native_authorization` approves, a single protected-path write is allowed. Default behavior unchanged for existing callers. New tests in `tests/test_native_auth_filesystem_guard.py` cover all paths.
+  - New `tests/test_gate_architecture_e2e.py`: contract tests asserting gates.yml has every required per-gate job, the aggregator depends on each, CODEOWNERS routes safety-critical paths, and docs reference each other consistently.
+  - Local gates remain as developer convenience. The env-var/CLI-flag bypasses called out in PROBLEM.md are no longer the safety hole they were — they only disable local feedback. Follow-up task to clean them up is now safe (the bootstrap constraint is resolved by server-side enforcement going live).
+
 ## [0.16.6] - 2026-05-22
 
 ### Added

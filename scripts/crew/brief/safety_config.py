@@ -54,6 +54,43 @@ def _load_toml(path: Path) -> dict[str, Any]:
         ) from exc
 
 
+def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> None:
+    """Recursively merge `overlay` into `base` in-place.
+
+    Nested dicts merge; lists/scalars from `overlay` REPLACE the base value
+    (no list-append semantics — that would surprise users who expect their
+    local list to override, not concatenate).
+    """
+    for key, value in overlay.items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            _deep_merge(base[key], value)
+        else:
+            base[key] = value
+
+
+def _load_toml_with_overlay(path: Path) -> dict[str, Any]:
+    """Load `agent_safety.toml` then merge optional `agent_safety.local.toml`.
+
+    The .local.toml file is for per-install customizations that should
+    NOT ship upstream (e.g. relaxing the breakglass quota on a developer's
+    own machine while keeping the public default conservative). It lives
+    next to the main config and is gitignored.
+
+    Mirrors the existing public/local overlay pattern in this repo:
+        docs/THOMAS_BIBLE.md           ↔  docs/THOMAS_BIBLE.local.md
+        agent_safety.toml              ↔  agent_safety.local.toml  (this)
+    """
+    base = _load_toml(path)
+    if not base:
+        return base
+    local_path = path.with_name(path.stem + ".local.toml")
+    if local_path.exists():
+        overlay = _load_toml(local_path)
+        if overlay:
+            _deep_merge(base, overlay)
+    return base
+
+
 class AgentSafetyConfig:
     """Typed access to agent_safety.toml settings."""
 
@@ -281,7 +318,7 @@ def load_config(path: Path | None = None) -> AgentSafetyConfig:
     config_path = _resolve_config_path(path)
     if _cached_config is not None and _cached_config_path == config_path:
         return _cached_config
-    data = _load_toml(config_path)
+    data = _load_toml_with_overlay(config_path)
     cfg = AgentSafetyConfig(data)
     _cached_config = cfg
     _cached_config_path = config_path
