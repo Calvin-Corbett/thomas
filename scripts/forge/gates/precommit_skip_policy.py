@@ -551,10 +551,21 @@ def run(argv: Sequence[str] | None = None) -> int:
                     print("Pre-commit skip policy gate: FAIL")
                     print(f"- {message}")
                 return 1
-        max_breakglass_per_agent = max(1, int(args.breakglass_max_per_agent_24h))
+        # `breakglass_max_per_agent_24h = 0` (or any non-positive value) means
+        # "no per-agent quota" — local installs may opt out via the
+        # agent_safety.local.toml overlay. The other safety layers (protected-
+        # files-gate, signed-commits, server-side workflow mirror) still apply,
+        # so opting out of this one quota doesn't disable safety, just removes
+        # the per-agent rate-limit on breakglass events. The public default
+        # remains 3.
+        raw_quota = int(args.breakglass_max_per_agent_24h)
+        if raw_quota <= 0:
+            max_breakglass_per_agent = 0  # 0 == unlimited (sentinel)
+        else:
+            max_breakglass_per_agent = raw_quota
         window_start = now - timedelta(hours=24)
         recent_24h = [stamp for stamp in history if stamp >= window_start]
-        if len(recent_24h) >= max_breakglass_per_agent:
+        if max_breakglass_per_agent > 0 and len(recent_24h) >= max_breakglass_per_agent:
             message = (
                 f"breakglass quota exceeded for `{agent}`: "
                 f"{len(recent_24h)} uses in last 24h (max {max_breakglass_per_agent})"
