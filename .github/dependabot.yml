@@ -1,0 +1,151 @@
+# Dependabot configuration for Thomas.
+#
+# Strategy:
+#   - Group security + minor + patch updates into single weekly PRs per
+#     ecosystem to reduce PR noise.
+#   - Run on Mondays at 6am UTC (off-hours for Calvin).
+#   - Open at most 5 PRs per ecosystem at a time.
+#   - Skip generated/cache directories (.next, node_modules, runtime/benchmarks).
+#
+# To enable: this file is auto-detected by GitHub when committed to default branch.
+# Verify via repo Settings → Code security & analysis.
+#
+# Docs: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+
+updates:
+  # ── Python (root project) ─────────────────────────────────────────────
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    groups:
+      python-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      python-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "deps"
+      - "deps:python"
+    commit-message:
+      prefix: "deps(python)"
+      include: "scope"
+
+  # ── Next.js marketing/docs site ───────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/apps/site"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    groups:
+      site-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      site-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "deps"
+      - "deps:npm"
+      - "area:apps/site"
+    commit-message:
+      prefix: "deps(site)"
+      include: "scope"
+    ignore:
+      # Skip major version bumps for these — they need manual review.
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+
+  # ── Discord bridge service ────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/thomas/integrations/discord_bridge_service"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    groups:
+      discord-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      discord-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "deps"
+      - "deps:npm"
+      - "area:discord-bridge"
+    commit-message:
+      prefix: "deps(discord-bridge)"
+      include: "scope"
+
+  # ── Vault Fortress extension ──────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/extensions/vault-fortress"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    groups:
+      vault-all:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+      vault-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+    labels:
+      - "deps"
+      - "deps:npm"
+      - "area:extensions/vault-fortress"
+    commit-message:
+      prefix: "deps(vault-fortress)"
+      include: "scope"
+
+  # ── GitHub Actions themselves ─────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    groups:
+      actions-all:
+        patterns:
+          - "*"
+    labels:
+      - "deps"
+      - "deps:actions"
+    commit-message:
+      prefix: "deps(actions)"
+      include: "scope"
