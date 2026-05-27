@@ -1,0 +1,71 @@
+# CODEOWNERS — review routing for safety-critical paths
+#
+# GitHub uses this file to auto-request reviews when a PR touches a path.
+# When combined with the "Require review from Code Owners" branch protection
+# rule on dev/main, no PR touching these paths can merge without the listed
+# owner's approval. That's the second half of layer 4 enforcement in the
+# safety architecture (the first half is the gates.yml workflow).
+#
+# Format:  <pattern>  @user1 @user2 (or @org/team)
+# Patterns are gitignore-style. Later matches override earlier ones.
+#
+# See docs/SAFETY_ARCHITECTURE.md for the full architecture.
+# Task: gate-architecture-2026-05-26
+
+# ── Default fallback: nothing required ─────────────────────────────────────
+# (Listed paths below require Calvin specifically.)
+
+# ── Safety configuration files ─────────────────────────────────────────────
+# These define what agents can do; modifications need human review.
+/agent_safety.toml                @Calvin-Corbett
+/.pre-commit-config.yaml          @Calvin-Corbett
+
+# ── Enforcement scripts ────────────────────────────────────────────────────
+# The scripts that enforce safety rules — modifications need review since
+# weakening one could disable that safety check silently.
+/scripts/forge/gates/             @Calvin-Corbett
+/scripts/active_folders.py        @Calvin-Corbett
+/scripts/breakglass_auth.py       @Calvin-Corbett
+/scripts/validate_agent_changes.py @Calvin-Corbett
+/scripts/post_commit_audit.py     @Calvin-Corbett
+/scripts/crew/brief/safety_config.py @Calvin-Corbett
+
+# ── Runtime presence / native-auth primitives ──────────────────────────────
+# Changes here change how Thomas confirms human presence.
+/thomas/core/agent_presence.py    @Calvin-Corbett
+/thomas/tools/native_auth.py      @Calvin-Corbett
+/thomas/tools/windows_auth.py     @Calvin-Corbett
+
+# ── Filesystem write-path guard ────────────────────────────────────────────
+# The choke point for agent-spawned file writes; protects runtime dirs.
+/thomas/tools/filesystem.py       @Calvin-Corbett
+
+# ── Architecture fitness ───────────────────────────────────────────────────
+/tests/test_architecture.py       @Calvin-Corbett
+/thomas/_architecture.py          @Calvin-Corbett
+
+# ── GitHub configuration (workflows + this file + branch policy docs) ──────
+# The server-side enforcement surface itself; changing any of these changes
+# how the safety architecture works.
+/.github/workflows/gates.yml      @Calvin-Corbett
+/.github/workflows/robustness-gates.yml @Calvin-Corbett
+/.github/workflows/github-publish-safety.yml @Calvin-Corbett
+/.github/CODEOWNERS               @Calvin-Corbett
+
+# ── Safety architecture documentation ──────────────────────────────────────
+# Docs describing how safety works — keep aligned with the actual mechanisms.
+/docs/SAFETY_ARCHITECTURE.md      @Calvin-Corbett
+/docs/SIGNING_KEY_SETUP.md        @Calvin-Corbett
+/docs/BRANCH_PROTECTION_SETUP.md  @Calvin-Corbett
+/AGENTS.md                        @Calvin-Corbett
+/CLAUDE.md                        @Calvin-Corbett
+/GUARDRAILS.md                    @Calvin-Corbett
+
+# ── Monolith baseline (file-size-cap exemption ledger) ─────────────────────
+# Adding to this ledger weakens the monolith guard for specific files —
+# needs review.
+/docs/monolith_guard_baseline.json @Calvin-Corbett
+
+# ── Approved deletion records ──────────────────────────────────────────────
+# These are committed approval artifacts; new ones need review.
+/docs/deletions/                  @Calvin-Corbett

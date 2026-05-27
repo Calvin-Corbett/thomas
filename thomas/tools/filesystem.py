@@ -48,7 +48,13 @@ def _is_runtime_protection_disabled(sandbox_root: Path) -> bool:
     return flag.is_file()
 
 
-def _is_protected_runtime_path(sandbox_root: Path, target: Path) -> str | None:
+def _is_protected_runtime_path(
+    sandbox_root: Path,
+    target: Path,
+    *,
+    allow_native_auth_override: bool = False,
+    action_description: str = "",
+) -> str | None:
     """Check if *target* falls inside a protected runtime directory or matches
     a protected file.
 
@@ -59,11 +65,20 @@ def _is_protected_runtime_path(sandbox_root: Path, target: Path) -> str | None:
     cannot neutralise it by editing ``agent_safety.toml`` — that file is
     itself inside the protected set.
 
-    A human can temporarily disable this by running::
+    Two bypass mechanisms (both require physical human presence at the OS):
 
-        python scripts/runtime_protection_toggle.py off
+    1. *Persistent* — a human runs ``python scripts/runtime_protection_toggle.py off``
+       which requires Windows credential authentication and creates a flag
+       file that disables runtime protection until toggled back on.
 
-    which requires Windows credential authentication and creates a flag file.
+    2. *Per-operation* — set ``allow_native_auth_override=True`` to make this
+       call attempt a one-shot native OS auth prompt (Win Hello / Touch ID /
+       polkit) when the path would otherwise be refused. If the prompt is
+       approved, this single call returns ``None`` (the operation is allowed).
+       If denied/cancelled/unavailable, the refusal reason is returned as
+       before.  This is the architecture extension landed in
+       gate-architecture-2026-05-26 (see docs/SAFETY_ARCHITECTURE.md).
+       Existing callers that don't pass the kwarg get unchanged behavior.
     """
     # Allow bypass when a human has explicitly disabled protection.
     if _is_runtime_protection_disabled(sandbox_root):
@@ -78,25 +93,78 @@ def _is_protected_runtime_path(sandbox_root: Path, target: Path) -> str | None:
     # Normalise to forward-slash for consistent matching on all platforms.
     rel_posix = PurePosixPath(rel)
 
+    reason: str | None = None
+
     # Check protected directories (any file *inside* these).
     for pdir in _HARDCODED_PROTECTED_DIRS:
         protected = PurePosixPath(pdir)
         try:
             rel_posix.relative_to(protected)
-            return (
+            reason = (
                 f"BLOCKED: '{rel_posix}' is inside protected runtime "
                 f"directory '{pdir}/'. Agent-spawned tools cannot modify "
                 f"Thomas's own runtime code."
             )
+            break
         except ValueError:
             continue
 
-    # Check individual protected files at the repo root.
-    for pfile in _HARDCODED_PROTECTED_FILES:
-        if rel_posix == PurePosixPath(pfile):
-            return f"BLOCKED: '{rel_posix}' is a protected policy file. Agent-spawned tools cannot modify it."
+    if reason is None:
+        # Check individual protected files at the repo root.
+        for pfile in _HARDCODED_PROTECTED_FILES:
+            if rel_posix == PurePosixPath(pfile):
+                reason = f"BLOCKED: '{rel_posix}' is a protected policy file. Agent-spawned tools cannot modify it."
+                break
 
-    return None
+    if reason is None:
+        return None
+
+    if not allow_native_auth_override:
+        return reason
+
+    # Per-operation override: pop OS-native auth prompt. Import lazily so
+    # this function doesn't drag the GUI/credential-dialog dependency into
+    # every filesystem.py import path.
+    try:
+        from thomas.tools.native_auth import request_native_authorization
+    except Exception as exc:  # noqa: BLE001 - degrade gracefully if missing
+        log.warning(
+            "Protected path '%s': native-auth module unavailable (%s); honoring refusal",
+            rel_posix,
+            exc,
+        )
+        return reason
+
+    action_text = action_description or f"Modify protected runtime path: {rel_posix}"
+    auth_reason = (
+        "An agent-spawned tool is attempting to modify a protected Thomas "
+        "runtime path. Approve only if you initiated this operation.\n\n"
+        f"{reason}"
+    )
+
+    try:
+        approved = request_native_authorization(action_text, auth_reason)
+    except Exception as exc:  # noqa: BLE001 - never crash through on auth error
+        log.warning(
+            "Protected path '%s': native-auth raised (%s); honoring refusal",
+            rel_posix,
+            exc,
+        )
+        return reason
+
+    if approved:
+        log.warning(
+            "Protected path '%s' APPROVED via native OS auth override (%s)",
+            rel_posix,
+            action_text,
+        )
+        return None
+
+    log.info(
+        "Protected path '%s' REFUSED — native OS auth not granted",
+        rel_posix,
+    )
+    return reason
 
 
 def _safe_path(root: Path, rel: str) -> Path:
