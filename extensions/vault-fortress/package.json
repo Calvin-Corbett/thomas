@@ -21,7 +21,7 @@
     "express": "^4.22.2",
     "libsodium-wrappers-sumo": "^0.7.15",
     "nanoid": "^5.1.11",
-    "zod": "^3.23.8"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
