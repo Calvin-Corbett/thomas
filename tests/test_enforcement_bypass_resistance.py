@@ -223,6 +223,37 @@ def test_commit_growth_guard_supports_diff_range(monkeypatch, capsys) -> None:
     assert rc == 1
     assert payload["ok"] is False
     assert payload["violations"][0]["path"] == "thomas/new.py"
+    assert payload["approved_growth"] is False
+
+
+def test_commit_growth_guard_diff_range_allows_approval_trailer(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(commit_growth_guard, "_runtime_protection_disabled", lambda: False)
+    monkeypatch.delenv("THOMAS_COMMIT_GROWTH_GUARD_DISABLE", raising=False)
+    monkeypatch.setattr(
+        commit_growth_guard,
+        "_changed_files",
+        lambda repo_root, *, base=None, head=None: ["thomas/large.py"],
+    )
+    monkeypatch.setattr(
+        commit_growth_guard,
+        "_rev_lines",
+        lambda repo_root, rev, rel: 10 if rev == "base" else 400,
+    )
+    monkeypatch.setattr(
+        commit_growth_guard,
+        "_commit_messages",
+        lambda repo_root, base, head: [
+            "fix: takeover\n\nThomas-Commit-Growth-Approved: Calvin-approved public safety-arc replay\n"
+        ],
+    )
+
+    rc = commit_growth_guard.run(Path("."), max_growth=300, json_output=True, base="base", head="head")
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["ok"] is True
+    assert payload["approved_growth"] is True
+    assert "Calvin-approved" in payload["approval_reason"]
 
 
 def test_exception_handler_gate_supports_diff_range(monkeypatch, capsys) -> None:
