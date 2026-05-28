@@ -38,6 +38,8 @@ ROOT = Path(__file__).resolve().parents[3]
 # If you genuinely need to commit 50+ files (e.g. a migration), you
 # must set THOMAS_BULK_COMMIT_GUARD_DISABLE=1 and document why.
 DEFAULT_MAX_FILES = 50
+APPROVAL_TRAILERS = ("thomas-bulk-change-approved:", "thomas-bulk-approved:", "thomas-breakglass:")
+COMMIT_MESSAGE_ENV = "THOMAS_COMMIT_MESSAGE"
 
 
 def _changed_files(repo_root: Path, *, base: str | None = None, head: str | None = None) -> list[str]:
@@ -63,6 +65,38 @@ def _staged_file_count(repo_root: Path) -> tuple[int, list[str]]:
     return len(files), files
 
 
+def _commit_messages(repo_root: Path, base: str, head: str) -> list[str]:
+    if base == head:
+        return []
+    try:
+        proc = subprocess.run(
+            ["git", "log", "--format=%B%n---END---", f"{base}..{head}"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if proc.returncode != 0:
+        return []
+    return [chunk.strip() for chunk in str(proc.stdout or "").split("---END---") if chunk.strip()]
+
+
+def _bulk_approval(messages: list[str]) -> tuple[bool, str, str]:
+    for msg in messages:
+        for line in msg.splitlines():
+            stripped = line.strip()
+            lowered = stripped.lower()
+            for trailer in APPROVAL_TRAILERS:
+                if not lowered.startswith(trailer):
+                    continue
+                reason = stripped.split(":", 1)[1].strip()
+                if reason:
+                    return True, trailer.rstrip(":"), reason
+    return False, "", ""
+
+
 def run(
     repo_root: Path,
     *,
@@ -78,24 +112,46 @@ def run(
 
     files = _changed_files(repo_root, base=base, head=head) if base and head else _staged_file_count(repo_root)[1]
     count = len(files)
-    ok = count <= max_files
+    approved = False
+    approval_trailer = ""
+    approval_reason = ""
+    if count > max_files and base and head:
+        approved, approval_trailer, approval_reason = _bulk_approval(_commit_messages(repo_root, base, head))
+    elif count > max_files:
+        message = str(os.getenv(COMMIT_MESSAGE_ENV, "") or "")
+        if message:
+            approved, approval_trailer, approval_reason = _bulk_approval([message])
+    ok = count <= max_files or approved
 
     if json_output:
         print(
             json.dumps(
-                {"ok": ok, "staged_count": count, "max_files": max_files},
+                {
+                    "ok": ok,
+                    "staged_count": count,
+                    "max_files": max_files,
+                    "approved_bulk_change": approved,
+                    "approval_trailer": approval_trailer,
+                    "approval_reason": approval_reason,
+                },
                 indent=2,
             )
         )
     elif ok:
-        print(f"Bulk commit guard: PASS ({count} staged file(s), limit {max_files})")
+        if approved:
+            print(
+                "Bulk commit guard: PASS "
+                f"({count} files, limit {max_files}; approved via {approval_trailer}: {approval_reason[:120]})"
+            )
+        else:
+            print(f"Bulk commit guard: PASS ({count} staged file(s), limit {max_files})")
     else:
         print(f"Bulk commit guard: FAIL — {count} files staged (limit is {max_files}).")
         print(
             "  Bulk dump commits are banned.  Break your work into "
             "smaller, focused commits.  If this is a genuine migration "
-            "or refactor, set THOMAS_BULK_COMMIT_GUARD_DISABLE=1 "
-            "and document the reason in your commit message."
+            "or refactor, use a non-empty Thomas-Bulk-Change-Approved "
+            "commit trailer with the review/approval reason."
         )
         sample = files[:15]
         for f in sample:

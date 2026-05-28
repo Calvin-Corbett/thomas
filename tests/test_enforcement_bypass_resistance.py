@@ -177,6 +177,30 @@ def test_bulk_commit_guard_supports_diff_range(monkeypatch, capsys) -> None:
     assert rc == 1
     assert payload["ok"] is False
     assert payload["staged_count"] == 2
+    assert payload["approved_bulk_change"] is False
+
+
+def test_bulk_commit_guard_diff_range_allows_approval_trailer(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        bulk_commit_guard,
+        "_changed_files",
+        lambda repo_root, *, base=None, head=None: ["a.py", "b.py"],
+    )
+    monkeypatch.setattr(
+        bulk_commit_guard,
+        "_commit_messages",
+        lambda repo_root, base, head: [
+            "fix: takeover\n\nThomas-Bulk-Change-Approved: Calvin-approved dirty-tree publish\n"
+        ],
+    )
+
+    rc = bulk_commit_guard.run(Path("."), max_files=1, json_output=True, base="base", head="head")
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["ok"] is True
+    assert payload["approved_bulk_change"] is True
+    assert "Calvin-approved" in payload["approval_reason"]
 
 
 def test_commit_growth_guard_supports_diff_range(monkeypatch, capsys) -> None:
