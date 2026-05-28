@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -188,3 +189,15 @@ def test_models_scan_and_discover_empty_discovery_parity(tmp_path: Path, monkeyp
 
     assert scan.exit_code == discover.exit_code
     assert scan.output == discover.output
+
+
+def test_models_catalog_command_surfaces_latest_gpt_alias(tmp_path: Path) -> None:
+    cfg = _write_min_config(tmp_path)
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["-c", str(cfg), "models", "catalog", "--cached", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["aliases"]["latest.openai.frontier"] == "gpt-5.5"
+    assert any(row["id"] == "gpt-5.5" for row in payload["models"])

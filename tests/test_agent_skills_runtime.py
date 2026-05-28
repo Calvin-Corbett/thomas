@@ -195,6 +195,124 @@ def test_runtime_skills_trust_project_local_skills_by_default(tmp_path: Path, mo
     assert not selection.blocked
 
 
+def test_runtime_skills_loads_explicit_env_roots_for_external_harnesses(tmp_path: Path, monkeypatch) -> None:
+    cfg = _build_cfg(tmp_path)
+    home_root = tmp_path / "home"
+    harness_repo = tmp_path / "harness-repo"
+    thomas_root = tmp_path / "thomas-root"
+    monkeypatch.setenv("HOME", str(home_root))
+    monkeypatch.setenv("USERPROFILE", str(home_root))
+    monkeypatch.setenv("THOMAS_RUNTIME_SKILL_ROOTS", str(thomas_root / "skills"))
+    harness_repo.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(harness_repo)
+
+    _write_skill(thomas_root, "serializer-matrix", "Use serializer feature matrices.", "- Cross feature axes.")
+    selection = resolve_runtime_skills(
+        cfg,
+        prompt_text="fix serializer aliases and flattening",
+        relevance_text="serializer flatten alias matrix",
+        route_path="coding_task",
+        cwd=harness_repo,
+        max_selected=2,
+    )
+
+    assert str(thomas_root / "skills") in selection.roots
+    assert "serializer-matrix" in [s.name for s in selection.selected]
+
+
+def test_runtime_skills_routes_partial_structuring_over_spreadsheet(tmp_path: Path, monkeypatch) -> None:
+    cfg = _build_cfg(tmp_path)
+    home_root = tmp_path / "home"
+    harness_repo = tmp_path / "harness-repo"
+    thomas_root = tmp_path / "thomas-root"
+    monkeypatch.setenv("HOME", str(home_root))
+    monkeypatch.setenv("USERPROFILE", str(home_root))
+    monkeypatch.setenv("THOMAS_RUNTIME_SKILL_ROOTS", str(thomas_root / "skills"))
+    harness_repo.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(harness_repo)
+
+    _write_skill(
+        thomas_root,
+        "spreadsheet",
+        "Create, edit, analyze, and validate spreadsheet files while preserving formulas, structure, and formatting expectations.",
+        "- Inspect the workbook or table shape and understand what must be preserved.",
+    )
+    _write_skill(
+        thomas_root,
+        "partial-structuring-recovery",
+        "Implement partial_structure APIs, PartialResult value/is_complete, structured_fields, failed_fields, errors, error_map, refine, attrs/dataclasses/TypedDict, forbid_extra_keys, detailed_validation, defaults, nested fields, collections, and init=False recovery behavior.",
+        "- Recurse through nested attrs classes, dataclasses, and TypedDicts.",
+        "- Preserve forbid_extra_keys, detailed_validation, defaults, error_map, and refine semantics.",
+    )
+
+    prompt = """
+    Add partial_structure to BaseConverter and export PartialResult.
+    Return value, is_complete, structured_fields, failed_fields, errors, error_map.
+    Nested attrs/dataclass fields should be partially structured recursively.
+    Collection fields are atomic. Respect forbid_extra_keys and detailed_validation.
+    PartialResult.refine(data) fixes failed fields with new data.
+    Exclude init=False fields from structured_fields and failed_fields.
+    Handle attrs classes, dataclasses, and TypedDicts.
+    """
+    selection = resolve_runtime_skills(
+        cfg,
+        prompt_text=prompt,
+        relevance_text=prompt,
+        route_path="coding_task",
+        cwd=harness_repo,
+        max_selected=1,
+    )
+
+    assert [skill.name for skill in selection.selected] == ["partial-structuring-recovery"]
+    assert selection.selected_reasons[selection.selected[0].key].startswith("relevance:")
+
+
+def test_runtime_skills_routes_multipart_response_parsing_over_spreadsheet(tmp_path: Path, monkeypatch) -> None:
+    cfg = _build_cfg(tmp_path)
+    home_root = tmp_path / "home"
+    harness_repo = tmp_path / "harness-repo"
+    thomas_root = tmp_path / "thomas-root"
+    monkeypatch.setenv("HOME", str(home_root))
+    monkeypatch.setenv("USERPROFILE", str(home_root))
+    monkeypatch.setenv("THOMAS_RUNTIME_SKILL_ROOTS", str(thomas_root / "skills"))
+    harness_repo.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(harness_repo)
+
+    _write_skill(
+        thomas_root,
+        "spreadsheet",
+        "Create, edit, analyze, and validate spreadsheet files while preserving formulas, structure, and formatting expectations.",
+        "- Inspect the workbook or table shape and understand what must be preserved.",
+    )
+    _write_skill(
+        thomas_root,
+        "multipart-http-response-parser",
+        "Implement multipart HTTP response parsing APIs with Content-Type boundary validation, MIME delimiter framing, CRLF/LF/CR streaming chunks, part headers, continuations, duplicate headers, DecodingError, StreamConsumed, sync iter_multipart, async aiter_multipart, and raw response stream closure.",
+        "- Parse Content-Type boundary params case-insensitively and reject malformed boundaries.",
+        "- Preserve duplicate headers and make sync iter_multipart match async aiter_multipart.",
+    )
+
+    prompt = """
+    Add Response.iter_multipart() and Response.aiter_multipart() for multipart/* response bodies.
+    Parse the Content-Type boundary parameter case-insensitively; multiple boundary params use the last.
+    Reject CR/LF, empty boundary, non-ASCII, NUL, leading equals, malformed delimiters, malformed headers,
+    leading whitespace on first header line, bad continuations, and raise httpx.DecodingError.
+    Support LF, CRLF, CR, chunk splits, duplicate headers, preamble, epilogue, StreamConsumed,
+    raw streaming response closure, and repeatable in-memory response iteration.
+    """
+    selection = resolve_runtime_skills(
+        cfg,
+        prompt_text=prompt,
+        relevance_text=prompt,
+        route_path="coding_task",
+        cwd=harness_repo,
+        max_selected=1,
+    )
+
+    assert [skill.name for skill in selection.selected] == ["multipart-http-response-parser"]
+    assert selection.selected_reasons[selection.selected[0].key].startswith("relevance:")
+
+
 def test_runtime_skills_require_explicit_for_risky_pinned_skills(tmp_path: Path, monkeypatch) -> None:
     cfg = _build_cfg(tmp_path)
     home_root = tmp_path / "home"
@@ -291,6 +409,29 @@ def test_runtime_skills_allows_unlimited_count_when_configured(tmp_path: Path, m
     selected_names = [s.name for s in selection.selected]
     assert len(selected_names) == 5
     assert set(selected_names) == {f"big-skill-{i}" for i in range(1, 6)}
+
+
+def test_runtime_skills_auto_mode_defaults_to_bounded_selection(tmp_path: Path, monkeypatch) -> None:
+    cfg = _build_cfg(tmp_path)
+    home_root = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home_root))
+    monkeypatch.setenv("USERPROFILE", str(home_root))
+    monkeypatch.delenv("THOMAS_RUNTIME_MAX_SKILLS", raising=False)
+    monkeypatch.delenv("THOMAS_RUNTIME_LOAD_ALL_SKILLS", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    for i in range(1, 8):
+        _write_skill(home_root / ".thomas", f"serializer-skill-{i}", f"Serializer skill {i}.", "- Serializer.")
+
+    selection = resolve_runtime_skills(
+        cfg,
+        prompt_text="fix serializer flattening",
+        relevance_text="serializer flattening",
+        route_path="coding_task",
+        cwd=tmp_path,
+    )
+
+    assert len(selection.selected) == 4
 
 
 def test_runtime_skills_all_mode_and_unbounded_chars_env(tmp_path: Path, monkeypatch) -> None:

@@ -11,6 +11,7 @@ from __future__ import annotations
 import contextlib
 import inspect
 import logging
+import os
 import tempfile
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -87,6 +88,9 @@ class CodexProvider:
         can persist across turns, and a prior no-tools turn may have started
         the thread in the isolated temp workspace.
         """
+        override = str(os.environ.get("THOMAS_CODEX_TOOLS_CWD") or "").strip()
+        if override:
+            return str(Path(override).expanduser().resolve())
         return str(Path.cwd().resolve())
 
     async def stream_chat(

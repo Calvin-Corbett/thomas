@@ -774,11 +774,11 @@ def load_config(
         models["codex"] = ModelConfig(
             name="codex",
             provider="codex",
-            model="gpt-5.3-codex",
+            model="gpt-5.5",
             max_tokens=16384,
             context_window=200000,
             temperature=0.1,
-            reasoning_effort="medium",
+            reasoning_effort="xhigh",
         )
         models["local"] = ModelConfig(
             name="local",

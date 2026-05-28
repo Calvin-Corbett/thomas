@@ -36,9 +36,14 @@ except ImportError:
 CODE_EXTENSIONS = {".py", ".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx", ".css", ".html"}
 
 
-def _staged_files() -> list[str]:
+def _changed_files(*, base: str | None = None, head: str | None = None) -> list[str]:
+    diff_args = ["git", "diff", "--name-only"]
+    if base and head:
+        diff_args.extend([base, head])
+    else:
+        diff_args.append("--cached")
     proc = subprocess.run(
-        ["git", "diff", "--cached", "--name-only"],
+        diff_args,
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -48,10 +53,20 @@ def _staged_files() -> list[str]:
     return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
 
 
-def _changelog_diff_content() -> str:
+def _staged_files() -> list[str]:
+    return _changed_files()
+
+
+def _changelog_diff_content(base: str | None = None, head: str | None = None) -> str:
     """Get the meaningful content added to CHANGELOG.md in the staged diff."""
+    diff_args = ["git", "diff"]
+    if base and head:
+        diff_args.extend([base, head])
+    else:
+        diff_args.append("--cached")
+    diff_args.extend(["--", CHANGELOG_PATH])
     proc = subprocess.run(
-        ["git", "diff", "--cached", "--", CHANGELOG_PATH],
+        diff_args,
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -84,10 +99,14 @@ def run(argv: list[str] | None = None) -> int:
         default=DEFAULT_THRESHOLD,
         help=f"Minimum staged code files to require CHANGELOG (default: {DEFAULT_THRESHOLD}).",
     )
+    parser.add_argument("--base", default=None, help="Optional git base ref/SHA for diff-range mode.")
+    parser.add_argument("--head", default=None, help="Optional git head ref/SHA for diff-range mode.")
     parser.add_argument("--json", action="store_true", help="Emit JSON output.")
     args = parser.parse_args(argv)
+    if bool(args.base) != bool(args.head):
+        parser.error("--base and --head must be provided together")
 
-    staged = _staged_files()
+    staged = _changed_files(base=args.base, head=args.head) if args.base else _staged_files()
     code_files = [f for f in staged if _is_code_file(f)]
     changelog_staged = CHANGELOG_PATH in staged
     threshold = max(1, args.threshold)
@@ -100,7 +119,9 @@ def run(argv: list[str] | None = None) -> int:
         reason = f"You staged {len(code_files)} code file(s) (threshold: {threshold}) but CHANGELOG.md is not staged."
     elif len(code_files) >= threshold and changelog_staged:
         # Verify the CHANGELOG diff has real content, not just whitespace
-        changelog_diff = _changelog_diff_content()
+        changelog_diff = (
+            _changelog_diff_content(args.base, args.head) if args.base and args.head else _changelog_diff_content()
+        )
         if not changelog_diff:
             ok = False
             reason = (

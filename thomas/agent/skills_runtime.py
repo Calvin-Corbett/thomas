@@ -355,7 +355,13 @@ def discover_runtime_skills(
 
     extra_roots: list[str] = []
     root_keys = {str(root).lower() for root in roots}
-    for extra in include_roots or []:
+    configured_roots: list[str | Path] = []
+    configured_roots.extend(include_roots or [])
+    env_roots = str(os.environ.get("THOMAS_RUNTIME_SKILL_ROOTS") or "").strip()
+    if env_roots:
+        configured_roots.extend(part for part in env_roots.split(os.pathsep) if part.strip())
+
+    for extra in configured_roots:
         path_text = str(extra or "").strip()
         if not path_text:
             continue
@@ -444,7 +450,7 @@ def resolve_runtime_skills(
         if max_selected is not None
         else _int_env(
             "THOMAS_RUNTIME_MAX_SKILLS",
-            0,
+            4,
             allow_non_positive=True,
         )
     )

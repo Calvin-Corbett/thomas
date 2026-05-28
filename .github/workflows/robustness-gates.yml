@@ -100,7 +100,7 @@ jobs:
 
       - name: Monolith split filename gate
         run: |
-          python scripts/forge/gates/monolith_filename_guard.py
+          python scripts/forge/gates/monolith_filename_guard.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
 
       - name: Monolith baseline approval gate
         run: |

@@ -172,3 +172,13 @@ async def test_chat_wrapper_collects_text_and_tool_calls() -> None:
 
     assert payload["text"] == "done"
     assert payload["tool_calls"] == [{"id": "tool-1", "name": "ls", "arguments": ""}]
+
+
+def test_tools_cwd_uses_explicit_environment_override(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:  # noqa: ANN001
+    target = tmp_path / "workspace"
+    target.mkdir()
+    monkeypatch.setenv("THOMAS_CODEX_TOOLS_CWD", str(target))
+
+    provider = CodexProvider(ModelConfig(name="codex", provider="codex", model="gpt-5.4"))
+
+    assert provider._tools_cwd() == str(target.resolve())

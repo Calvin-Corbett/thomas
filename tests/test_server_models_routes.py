@@ -119,6 +119,21 @@ class TestModelsRoutesLocal(AioHTTPTestCase):
         self.assertIn("local", profiles)
         self.assertIn("thomas", profiles["cloud"])
 
+    async def test_models_catalog_endpoint_returns_latest_aliases(self):
+        resp = await self.client.get("/api/models/catalog?cached=1")
+        self.assertEqual(resp.status, 200)
+        body = await resp.json()
+        self.assertIn("models", body)
+        self.assertEqual(body["aliases"]["latest.openai.frontier"], "gpt-5.5")
+
+    async def test_models_can_embed_catalog_payload(self):
+        resp = await self.client.get("/api/models?catalog=1&cached=1")
+        self.assertEqual(resp.status, 200)
+        body = await resp.json()
+        self.assertIn("profiles", body)
+        self.assertIn("catalog", body)
+        self.assertEqual(body["catalog"]["aliases"]["latest.openai.frontier"], "gpt-5.5")
+
     async def test_profile_unknown_returns_404(self):
         resp = await self.client.get("/api/models/nonexistent/handshake")
         self.assertEqual(resp.status, 404)

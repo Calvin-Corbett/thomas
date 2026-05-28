@@ -79,9 +79,14 @@ def _is_skipped(rel: str) -> bool:
     return any(p in SKIP_DIR_NAMES for p in parts)
 
 
-def _staged_files(repo_root: Path) -> list[str]:
+def _changed_files(repo_root: Path, *, base: str | None = None, head: str | None = None) -> list[str]:
+    diff_args = ["git", "diff", "--name-only", "--diff-filter=ACMR"]
+    if base and head:
+        diff_args.extend([base, head])
+    else:
+        diff_args.append("--cached")
     proc = subprocess.run(
-        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR"],
+        diff_args,
         cwd=repo_root,
         capture_output=True,
         text=True,
@@ -89,6 +94,10 @@ def _staged_files(repo_root: Path) -> list[str]:
     if proc.returncode != 0:
         return []
     return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+
+
+def _staged_files(repo_root: Path) -> list[str]:
+    return _changed_files(repo_root)
 
 
 def _working_tree_lines(repo_root: Path, rel: str) -> int:
@@ -107,6 +116,8 @@ def _head_lines(repo_root: Path, rel: str) -> int:
         cwd=repo_root,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="ignore",
     )
     if proc.returncode != 0:
         return 0  # new file
@@ -116,11 +127,27 @@ def _head_lines(repo_root: Path, rel: str) -> int:
     return len(text.splitlines())
 
 
+def _rev_lines(repo_root: Path, rev: str, rel: str) -> int:
+    proc = subprocess.run(
+        ["git", "show", f"{rev}:{rel}"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="ignore",
+    )
+    if proc.returncode != 0 or not proc.stdout:
+        return 0
+    return len(proc.stdout.splitlines())
+
+
 def run(
     repo_root: Path,
     *,
     max_growth: int = DEFAULT_MAX_GROWTH,
     json_output: bool = False,
+    base: str | None = None,
+    head: str | None = None,
 ) -> int:
     if _runtime_protection_disabled():
         if not json_output:
@@ -132,7 +159,7 @@ def run(
             print("Commit growth guard: SKIP (THOMAS_COMMIT_GROWTH_GUARD_DISABLE=1)")
         return 0
 
-    staged = _staged_files(repo_root)
+    staged = _changed_files(repo_root, base=base, head=head) if base and head else _staged_files(repo_root)
     violations: list[dict] = []
 
     for rel in staged:
@@ -142,8 +169,12 @@ def run(
         if ext not in MONITORED_EXTENSIONS:
             continue
 
-        current = _working_tree_lines(repo_root, rel)
-        prior = _head_lines(repo_root, rel)
+        if base and head:
+            current = _rev_lines(repo_root, head, rel)
+            prior = _rev_lines(repo_root, base, rel)
+        else:
+            current = _working_tree_lines(repo_root, rel)
+            prior = _head_lines(repo_root, rel)
         growth = current - prior
 
         if growth > max_growth:
@@ -205,10 +236,14 @@ def main() -> int:
         default=None,
         help="Repository root (default: inferred).",
     )
+    parser.add_argument("--base", default=None, help="Optional git base ref/SHA for diff-range mode.")
+    parser.add_argument("--head", default=None, help="Optional git head ref/SHA for diff-range mode.")
     args = parser.parse_args()
+    if bool(args.base) != bool(args.head):
+        parser.error("--base and --head must be provided together")
 
     repo_root = Path(args.repo_root).resolve() if args.repo_root else ROOT
-    return run(repo_root, max_growth=args.max_growth, json_output=args.json)
+    return run(repo_root, max_growth=args.max_growth, json_output=args.json, base=args.base, head=args.head)
 
 
 if __name__ == "__main__":

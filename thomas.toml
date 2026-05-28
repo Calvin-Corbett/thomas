@@ -62,8 +62,8 @@ timeout_s = 120.0
 
 [models.codex]
 provider = "codex"
-model = "gpt-5.3-codex"
-reasoning_effort = "medium"
+model = "gpt-5.5"
+reasoning_effort = "xhigh"
 max_tokens = 16384
 context_window = 200000
 temperature = 0.1

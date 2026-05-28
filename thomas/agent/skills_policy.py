@@ -133,6 +133,15 @@ def load_runtime_skill_trust_policy(config: Any, *, cwd: Path | None = None) -> 
         mode = "enforce"
     require_hash = _is_enabled_env("THOMAS_RUNTIME_SKILLS_REQUIRE_HASH", default=False)
     trusted_roots = list(_default_trusted_skill_roots(config, cwd=cwd))
+    env_roots = str(os.environ.get("THOMAS_RUNTIME_SKILL_ROOTS") or "").strip()
+    if env_roots:
+        for item in env_roots.split(os.pathsep):
+            path_text = str(item or "").strip()
+            if not path_text:
+                continue
+            p = Path(path_text).expanduser()
+            if p.exists() and p.is_dir():
+                trusted_roots.append(p)
     allow_skill_names: list[str] = []
     deny_skill_names: list[str] = []
     sha256_by_name: dict[str, str] = {}

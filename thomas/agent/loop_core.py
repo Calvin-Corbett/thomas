@@ -567,6 +567,8 @@ class AgentLoop:
             return False
         if "tool" not in src:
             return False
+        if not ("?" in src or re.match(r"^(what|which|did you|tell me|list|show)\b", src)):
+            return False
         if not any(k in src for k in ("use", "used", "using", "call", "called", "try", "tried")):
             return False
         return any(k in src for k in ("what", "which", "did you", "tell me", "list", "show"))

@@ -95,6 +95,8 @@ def _is_write_tool(name: str) -> bool:
     n = str(name or "").strip().lower()
     return (
         n.startswith("diff.")
+        or n.startswith("edit:")
+        or n.startswith("filechange")
         or n in {"fs.write_file", "fs.delete_file"}
         or "write" in n
         or "delete" in n
@@ -119,11 +121,35 @@ def _is_verification_tool(name: str) -> bool:
 
 
 def _shell_command_from_event(evt: dict[str, Any]) -> str:
-    return str(evt.get("command") or "").strip()
+    command = str(evt.get("command") or "").strip()
+    if command:
+        return command
+    name = str(evt.get("name") or "").strip()
+    if not name:
+        return ""
+    lowered = name.lower()
+    if lowered.startswith(("diff.", "fs.", "code.", "git.diff", "edit:")):
+        return ""
+    if re.search(
+        r"\b(python|pytest|unittest|npm|pnpm|yarn|go|cargo|dotnet|mvn|gradle|ruff|mypy|node|git|rg|powershell|pwsh|cmd|bash|sh)\b",
+        lowered,
+    ):
+        return name
+    if " -command " in lowered or " /c " in lowered:
+        return name
+    return ""
 
 
 def _config_path_from_event(evt: dict[str, Any]) -> str:
-    return str(evt.get("path") or "").strip()
+    path = str(evt.get("path") or "").strip()
+    if path:
+        return path
+    name = str(evt.get("name") or "").strip()
+    if name.lower().startswith("edit:"):
+        candidate = name.split(":", 1)[1].strip()
+        if candidate and candidate != "?":
+            return candidate
+    return ""
 
 
 def _response_has_unresolved_issue_language(response_text: str) -> bool:
@@ -185,6 +211,7 @@ def evaluate_rules(
     placeholder_reports: list[dict[str, Any]] = []
     placeholder_incomplete_paths: list[str] = []
     placeholder_repo_root = Path(repo_root).resolve() if repo_root else Path(__file__).resolve().parents[2]
+    monolith_guard_available = (placeholder_repo_root / "scripts" / "forge" / "gates" / "monolith_guard.py").exists()
 
     for evt in tool_events:
         name = str(evt.get("name") or "")
@@ -199,12 +226,12 @@ def evaluate_rules(
         if is_write:
             writes_detected = True
             write_seen = True
-        if name == "shell.exec" and _SHELL_VERIFY_RE.search(cmd or ""):
+        if cmd and _SHELL_VERIFY_RE.search(cmd):
             is_verification = True
-        if name == "shell.exec" and _SHELL_TEST_RE.search(cmd or ""):
+        if cmd and _SHELL_TEST_RE.search(cmd):
             tests_detected = True
             is_verification = True
-        if name == "shell.exec" and _MONOLITH_GUARD_RE.search(cmd or ""):
+        if cmd and _MONOLITH_GUARD_RE.search(cmd):
             monolith_guard_ran = True
         if is_verification:
             verification_detected = True
@@ -290,7 +317,7 @@ def evaluate_rules(
                 passed=tests_detected,
                 detail="Expected at least one explicit test command execution.",
             )
-        if writes_detected and require_monolith_guard_for_coding:
+        if writes_detected and require_monolith_guard_for_coding and monolith_guard_available:
             add_check(
                 "coding_monolith_guard",
                 "Monolith guard ran after code edits",
@@ -393,6 +420,7 @@ def evaluate_rules(
             "verification_after_write_detected": verification_after_write_detected,
             "tests_detected": tests_detected,
             "monolith_guard_ran": monolith_guard_ran,
+            "monolith_guard_available": monolith_guard_available,
             "tool_calls": len(tool_events),
             "tool_failures": failed_tools,
             "config_change_detected": config_change_detected,

@@ -11,7 +11,11 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 changelog_gate = importlib.import_module("forge.gates.changelog_gate")
+bulk_commit_guard = importlib.import_module("forge.gates.bulk_commit_guard")
+commit_growth_guard = importlib.import_module("forge.gates.commit_growth_guard")
+exception_handler_gate = importlib.import_module("forge.gates.exception_handler_gate")
 post_commit_audit = importlib.import_module("post_commit_audit")
+protected_files_gate = importlib.import_module("forge.gates.protected_files_gate")
 
 
 def _clear_agent_context(monkeypatch) -> None:
@@ -74,6 +78,167 @@ def test_changelog_gate_allows_meaningful_changelog_entry(monkeypatch, capsys) -
     assert rc == 0
     assert payload["ok"] is True
     assert payload["changelog_staged"] is True
+
+
+def test_protected_files_gate_supports_diff_range(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(protected_files_gate, "_runtime_protection_disabled", lambda: False)
+    monkeypatch.setattr(
+        protected_files_gate,
+        "_changed_files",
+        lambda *, base=None, head=None: ["agent_safety.toml"],
+    )
+
+    rc = protected_files_gate.run(["--base", "base", "--head", "head", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["violations"] == ["agent_safety.toml"]
+    assert payload["approved_protected_files"] is False
+
+
+def test_protected_files_gate_diff_range_requires_non_empty_approval(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(protected_files_gate, "_runtime_protection_disabled", lambda: False)
+    monkeypatch.setattr(
+        protected_files_gate,
+        "_changed_files",
+        lambda *, base=None, head=None: ["scripts/forge/gates/protected_files_gate.py"],
+    )
+    monkeypatch.setattr(
+        protected_files_gate,
+        "_commit_messages",
+        lambda base, head: ["fix: gate\n\nThomas-Protected-Files-Approved:   \n"],
+    )
+
+    rc = protected_files_gate.run(["--base", "base", "--head", "head", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["approved_protected_files"] is False
+
+
+def test_protected_files_gate_diff_range_allows_approval_trailer(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(protected_files_gate, "_runtime_protection_disabled", lambda: False)
+    monkeypatch.setattr(
+        protected_files_gate,
+        "_changed_files",
+        lambda *, base=None, head=None: ["agent_safety.toml", "thomas/server/app.py"],
+    )
+    monkeypatch.setattr(
+        protected_files_gate,
+        "_commit_messages",
+        lambda base, head: [
+            "fix: protected gate recovery\n\n"
+            "Thomas-Protected-Files-Approved: Calvin-approved hardening gate recovery 2026-05-28\n"
+        ],
+    )
+
+    rc = protected_files_gate.run(["--base", "base", "--head", "head", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["ok"] is True
+    assert payload["violations"] == ["agent_safety.toml"]
+    assert payload["approved_protected_files"] is True
+    assert "Calvin-approved" in payload["approval_reason"]
+
+
+def test_protected_files_gate_staged_mode_allows_commit_message_env_trailer(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(protected_files_gate, "_runtime_protection_disabled", lambda: False)
+    monkeypatch.setattr(
+        protected_files_gate,
+        "_staged_files",
+        lambda: ["scripts/forge/gates/protected_files_gate.py"],
+    )
+    monkeypatch.setenv(
+        "THOMAS_COMMIT_MESSAGE",
+        "fix: protected files\n\nThomas-Protected-Files-Approved: Calvin-approved local scoped commit\n",
+    )
+
+    rc = protected_files_gate.run(["--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["ok"] is True
+    assert payload["approved_protected_files"] is True
+
+
+def test_bulk_commit_guard_supports_diff_range(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        bulk_commit_guard,
+        "_changed_files",
+        lambda repo_root, *, base=None, head=None: ["a.py", "b.py"],
+    )
+
+    rc = bulk_commit_guard.run(Path("."), max_files=1, json_output=True, base="base", head="head")
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["staged_count"] == 2
+
+
+def test_commit_growth_guard_supports_diff_range(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(commit_growth_guard, "_runtime_protection_disabled", lambda: False)
+    monkeypatch.delenv("THOMAS_COMMIT_GROWTH_GUARD_DISABLE", raising=False)
+    monkeypatch.setattr(
+        commit_growth_guard,
+        "_changed_files",
+        lambda repo_root, *, base=None, head=None: ["thomas/new.py"],
+    )
+    monkeypatch.setattr(
+        commit_growth_guard,
+        "_rev_lines",
+        lambda repo_root, rev, rel: 0 if rev == "base" else 400,
+    )
+
+    rc = commit_growth_guard.run(Path("."), max_growth=300, json_output=True, base="base", head="head")
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["violations"][0]["path"] == "thomas/new.py"
+
+
+def test_exception_handler_gate_supports_diff_range(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(exception_handler_gate, "_changed_files", lambda *, base=None, head=None: ["thomas/a.py"])
+    monkeypatch.setattr(
+        exception_handler_gate,
+        "_content_at_rev",
+        lambda rev, rel: "def f():\n    try:\n        work()\n    except Exception:\n        pass\n",
+    )
+    monkeypatch.setattr(exception_handler_gate, "_exception_ratchet", lambda: False)
+    monkeypatch.setattr(exception_handler_gate, "_require_specific_exceptions", lambda: True)
+    monkeypatch.setattr(exception_handler_gate, "_broad_catch_requires", lambda: {"logging"})
+
+    rc = exception_handler_gate.run(["--base", "base", "--head", "head", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["violations"] == [{"path": "thomas/a.py", "line": 4}]
+
+
+def test_changelog_gate_supports_diff_range(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(changelog_gate, "CODE_PREFIXES", ("thomas/",))
+    monkeypatch.setattr(
+        changelog_gate,
+        "_changed_files",
+        lambda *, base=None, head=None: ["thomas/a.py", "thomas/b.py", "thomas/c.py", "CHANGELOG.md"],
+    )
+    monkeypatch.setattr(
+        changelog_gate,
+        "_changelog_diff_content",
+        lambda base=None, head=None: "### Fixed\n- gates: support CI diff range mode",
+    )
+
+    rc = changelog_gate.run(["--base", "base", "--head", "head", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["ok"] is True
+    assert payload["code_files_staged"] == 3
 
 
 def test_post_commit_audit_ignores_normal_commit_when_breadcrumb_exists(tmp_path: Path, monkeypatch) -> None:

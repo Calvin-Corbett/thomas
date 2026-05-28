@@ -345,6 +345,7 @@ async def _agent_loop_run(
             require_monolith_guard_for_coding=bool(getattr(quality_cfg, "require_monolith_guard_for_coding", True)),
             strict_issue_ownership=bool(strict_issue_ownership),
             attempt=int(_quality_retry_count),
+            repo_root=Path.cwd(),
         )
         token_report["rules_of_road"] = rules_report
 
@@ -859,14 +860,25 @@ async def _agent_loop_run(
                             },
                             iteration=iteration,
                         )
+                        quality_command = ""
+                        quality_path = ""
+                        if not tc_name.lower().startswith("edit:"):
+                            quality_command = tc_name
+                        else:
+                            quality_path = tc_name.split(":", 1)[1].strip()
+                        if (not quality_path or quality_path == "?") and output.startswith("File changed:"):
+                            quality_path = output.split(":", 1)[1].strip()
+                        if quality_path == "?":
+                            quality_path = ""
                         quality_tool_events.append(
                             {
                                 "name": tc_name,
                                 "ok": ok,
-                                "command": "",
-                                "path": "",
+                                "command": quality_command,
+                                "path": quality_path,
                             }
                         )
+                        state.total_tool_calls += 1
                         continue
 
                     tc_data = {

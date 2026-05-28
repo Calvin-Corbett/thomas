@@ -54,9 +54,14 @@ def _exception_ratchet() -> bool:
     return bool(_config().exception_ratchet())
 
 
-def _staged_files() -> list[str]:
+def _changed_files(*, base: str | None = None, head: str | None = None) -> list[str]:
+    diff_args = ["git", "diff", "--name-only", "--diff-filter=ACMR"]
+    if base and head:
+        diff_args.extend([base, head])
+    else:
+        diff_args.append("--cached")
     proc = subprocess.run(
-        ["git", "diff", "--cached", "--name-only"],
+        diff_args,
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -68,26 +73,36 @@ def _staged_files() -> list[str]:
     return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
 
 
-_HUNKS_CACHE: dict[str, set[int]] | None = None
+def _staged_files() -> list[str]:
+    return _changed_files()
 
 
-def _added_lines_per_file() -> dict[str, set[int]]:
-    """Parse one unfiltered staged diff into ``{dest_path: added_lines}``.
+_HUNKS_CACHE: dict[tuple[str | None, str | None], dict[str, set[int]]] = {}
+
+
+def _added_lines_per_file(base: str | None = None, head: str | None = None) -> dict[str, set[int]]:
+    """Parse one unfiltered diff into ``{dest_path: added_lines}``.
 
     Rename detection requires the diff to include both ends of the move,
     which a path-filtered ``-- <new_path>`` invocation would hide. We run
-    one ``git diff --cached -U0 -M`` and split the output by ``+++ b/``
+    one ``git diff -U0 -M`` and split the output by ``+++ b/``
     boundaries so each destination's hunks are attributed correctly. The
     result is cached for the lifetime of the gate run.
     """
-    global _HUNKS_CACHE
-    if _HUNKS_CACHE is not None:
-        return _HUNKS_CACHE
+    cache_key = (base, head)
+    if cache_key in _HUNKS_CACHE:
+        return _HUNKS_CACHE[cache_key]
 
     import re
 
+    diff_args = ["git", "diff"]
+    if base and head:
+        diff_args.extend([base, head])
+    else:
+        diff_args.append("--cached")
+    diff_args.extend(["-U0", "-M"])
     proc = subprocess.run(
-        ["git", "diff", "--cached", "-U0", "-M"],
+        diff_args,
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -96,7 +111,7 @@ def _added_lines_per_file() -> dict[str, set[int]]:
     )
     result: dict[str, set[int]] = {}
     if proc.returncode != 0:
-        _HUNKS_CACHE = result
+        _HUNKS_CACHE[cache_key] = result
         return result
 
     current_path: str | None = None
@@ -115,31 +130,37 @@ def _added_lines_per_file() -> dict[str, set[int]]:
                     continue
                 for i in range(start, start + count):
                     result[current_path].add(i)
-    _HUNKS_CACHE = result
+    _HUNKS_CACHE[cache_key] = result
     return result
 
 
-def _added_line_ranges(rel_path: str) -> set[int]:
+def _added_line_ranges(rel_path: str, base: str | None = None, head: str | None = None) -> set[int]:
     """Return line numbers that are genuinely new in ``rel_path``."""
-    return _added_lines_per_file().get(rel_path, set())
+    return _added_lines_per_file(base, head).get(rel_path, set())
 
 
-_RENAME_CACHE: dict[str, set[str]] | None = None
+_RENAME_CACHE: dict[tuple[str | None, str | None], set[str]] = {}
 
 
-def _pure_rename_destinations() -> set[str]:
-    """Return paths that are pure-rename destinations (R100) in the staged diff.
+def _pure_rename_destinations(base: str | None = None, head: str | None = None) -> set[str]:
+    """Return paths that are pure-rename destinations (R100) in the diff.
 
     Rename detection requires the diff to include both ends of the move, so
     we run one unfiltered ``git diff`` per gate invocation and cache the
     result. A path-filtered diff would hide the deleted source and prevent
     git from pairing the entries.
     """
-    global _RENAME_CACHE
-    if _RENAME_CACHE is not None:
-        return _RENAME_CACHE.get("pure", set())
+    cache_key = (base, head)
+    if cache_key in _RENAME_CACHE:
+        return _RENAME_CACHE[cache_key]
+    diff_args = ["git", "diff"]
+    if base and head:
+        diff_args.extend([base, head])
+    else:
+        diff_args.append("--cached")
+    diff_args.extend(["--name-status", "-M"])
     proc = subprocess.run(
-        ["git", "diff", "--cached", "--name-status", "-M"],
+        diff_args,
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -160,13 +181,13 @@ def _pure_rename_destinations() -> set[str]:
                     continue
                 if similarity == 100:
                     pure.add(parts[2])
-    _RENAME_CACHE = {"pure": pure}
+    _RENAME_CACHE[cache_key] = pure
     return pure
 
 
-def _is_pure_rename(rel_path: str) -> bool:
+def _is_pure_rename(rel_path: str, base: str | None = None, head: str | None = None) -> bool:
     """True if rel_path is the destination of a pure rename (R100)."""
-    return rel_path in _pure_rename_destinations()
+    return rel_path in _pure_rename_destinations(base, head)
 
 
 def _git_show_head(rel_path: str) -> str | None:
@@ -188,6 +209,20 @@ def _staged_content(rel_path: str) -> str | None:
     """Get the staged version of a file."""
     proc = subprocess.run(
         ["git", "show", f":{rel_path}"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if proc.returncode != 0:
+        return None
+    return proc.stdout
+
+
+def _content_at_rev(rev: str, rel_path: str) -> str | None:
+    proc = subprocess.run(
+        ["git", "show", f"{rev}:{rel_path}"],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -259,17 +294,21 @@ def _find_broad_handlers(source: str) -> list[int]:
 
 def run(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--base", default=None, help="Optional git base ref/SHA for diff-range mode.")
+    parser.add_argument("--head", default=None, help="Optional git head ref/SHA for diff-range mode.")
     parser.add_argument("--json", action="store_true", help="Emit JSON output.")
     args = parser.parse_args(argv)
+    if bool(args.base) != bool(args.head):
+        parser.error("--base and --head must be provided together")
 
-    staged = _staged_files()
+    staged = _changed_files(base=args.base, head=args.head) if args.base else _staged_files()
     python_files = [f for f in staged if f.endswith(".py")]
 
     all_violations: list[dict[str, object]] = []
     ratchet_enabled = _exception_ratchet()
 
     for rel_path in python_files:
-        staged_source = _staged_content(rel_path)
+        staged_source = _content_at_rev(args.head, rel_path) if args.base and args.head else _staged_content(rel_path)
         if staged_source is None:
             continue
 
@@ -280,13 +319,13 @@ def run(argv: list[str] | None = None) -> int:
         if ratchet_enabled:
             # Pure renames (R100) carry pre-existing violations forward by
             # definition -- nothing was introduced in this commit. Skip.
-            if _is_pure_rename(rel_path):
+            if _is_pure_rename(rel_path, args.base, args.head):
                 continue
             # Use diff hunks to determine which violations are truly new.
             # Only flag handlers whose line numbers fall within added hunks.
             # This eliminates false positives from handlers that merely
             # shifted position due to code inserted above them.
-            added_lines = _added_line_ranges(rel_path)
+            added_lines = _added_line_ranges(rel_path, args.base, args.head)
             if added_lines:
                 new_violations = {ln for ln in staged_violations if ln in added_lines}
             else:

@@ -40,16 +40,26 @@ ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_MAX_FILES = 50
 
 
-def _staged_file_count(repo_root: Path) -> tuple[int, list[str]]:
+def _changed_files(repo_root: Path, *, base: str | None = None, head: str | None = None) -> list[str]:
+    diff_args = ["git", "diff", "--name-only"]
+    if base and head:
+        diff_args.extend([base, head])
+    else:
+        diff_args.append("--cached")
     proc = subprocess.run(
-        ["git", "diff", "--cached", "--name-only"],
+        diff_args,
         cwd=repo_root,
         capture_output=True,
         text=True,
     )
     if proc.returncode != 0:
-        return 0, []
+        return []
     files = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    return files
+
+
+def _staged_file_count(repo_root: Path) -> tuple[int, list[str]]:
+    files = _changed_files(repo_root)
     return len(files), files
 
 
@@ -58,13 +68,16 @@ def run(
     *,
     max_files: int = DEFAULT_MAX_FILES,
     json_output: bool = False,
+    base: str | None = None,
+    head: str | None = None,
 ) -> int:
     if os.environ.get("THOMAS_BULK_COMMIT_GUARD_DISABLE") == "1":
         if not json_output:
             print("Bulk commit guard: SKIP (THOMAS_BULK_COMMIT_GUARD_DISABLE=1)")
         return 0
 
-    count, files = _staged_file_count(repo_root)
+    files = _changed_files(repo_root, base=base, head=head) if base and head else _staged_file_count(repo_root)[1]
+    count = len(files)
     ok = count <= max_files
 
     if json_output:
@@ -107,10 +120,14 @@ def main() -> int:
         default=None,
         help="Repository root (default: inferred).",
     )
+    parser.add_argument("--base", default=None, help="Optional git base ref/SHA for diff-range mode.")
+    parser.add_argument("--head", default=None, help="Optional git head ref/SHA for diff-range mode.")
     args = parser.parse_args()
+    if bool(args.base) != bool(args.head):
+        parser.error("--base and --head must be provided together")
 
     repo_root = Path(args.repo_root).resolve() if args.repo_root else ROOT
-    return run(repo_root, max_files=args.max_files, json_output=args.json)
+    return run(repo_root, max_files=args.max_files, json_output=args.json, base=args.base, head=args.head)
 
 
 if __name__ == "__main__":

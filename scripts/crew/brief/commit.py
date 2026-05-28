@@ -422,9 +422,11 @@ def _run_local_gates(
     index_path: Path,
     selected_paths: Sequence[str],
     scope_selection: ScopeSelection,
+    commit_message: str,
     local_gate_commands: Sequence[tuple[str, Sequence[str]]],
 ) -> tuple[bool, str | None, str]:
     env = _temp_index_env(agent, index_path, scope_selection=scope_selection)
+    env["THOMAS_COMMIT_MESSAGE"] = str(commit_message or "")
     for gate_name, command in local_gate_commands:
         if not _gate_applies(gate_name, selected_paths):
             continue
@@ -649,6 +651,7 @@ def commit_scoped_changes(
             index_path=index_path,
             selected_paths=selected_paths,
             scope_selection=scope_selection,
+            commit_message=full_message,
             local_gate_commands=local_gate_commands,
         )
         if not gates_ok:

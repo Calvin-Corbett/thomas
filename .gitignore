@@ -79,6 +79,8 @@ tasks/
 !scripts/crew/
 !scripts/crew/tasks/
 !scripts/crew/tasks/**
+scripts/crew/tasks/**/__pycache__/
+scripts/crew/tasks/**/*.pyc
 archives/
 _archive/
 
@@ -110,6 +112,7 @@ thomas.asset_studio.db-wal
 
 # Secrets and credentials
 secrets.json
+agent_safety.local.toml
 .env
 .env.local
 .env.*.local
