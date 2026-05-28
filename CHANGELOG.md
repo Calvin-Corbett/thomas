@@ -15,7 +15,7 @@ Versioning: Semantic Versioning.
 
 ### Security
 - Hardened safety gate CI parity: diff-range mode now works for protected-files, bulk, commit-growth, exception-handler, and changelog gates; monolith filename checks run on the PR diff instead of the full legacy tree.
-- Added auditable protected-file approval trailers for server-side protected-file checks, plus local scoped-commit propagation of the same commit message.
+- Added auditable protected-file and bulk-change approval trailers for server-side checks, plus local scoped-commit propagation of the same commit message.
 - Split runtime-protection adversarial coverage into smaller focused files while preserving the control-file, native-auth, signed-flag, and read-side key protections.
 
 ## [0.16.7] - 2026-05-27
