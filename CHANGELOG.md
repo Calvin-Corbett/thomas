@@ -11,139 +11,101 @@ Versioning: Semantic Versioning.
 
 ## [0.16.8] - 2026-05-28
 
-Security patch release covering Dependabot remediation and the hardening takeover gates.
+Security patch release covering the Dependabot remediation, runtime-protection recovery, and the public release-note catch-up for the recent 0.16.x cycle.
 
 ### Added
-- Refreshable model catalog and latest-model aliases for model/profile discovery, including curated OpenAI frontier fallbacks and server/CLI surfaces for cached catalog data.
+- Refreshable model catalog and latest-model aliases for model/profile discovery, including curated frontier fallbacks and server/CLI surfaces for cached catalog data.
 - Registered skill bundles for multipart HTTP response parsing, partial structuring recovery, and serializer/deserializer feature matrices.
 
 ### Security
-- Cleared the open Dependabot alert set across the Python lock, the public site package lock, Vault Fortress, and the Discord bridge by bumping vulnerable direct and transitive dependencies and keeping the site build/audit path green.
-- Hardened safety gate CI parity: diff-range mode now works for protected-files, bulk, commit-growth, exception-handler, and changelog gates; monolith filename checks run on the PR diff instead of the full legacy tree.
-- Added auditable protected-file, bulk-change, and commit-growth approval trailers for server-side checks, plus local scoped-commit propagation of the same commit message.
-- Split runtime-protection adversarial coverage into smaller focused files while preserving the control-file, native-auth, signed-flag, and read-side key protections.
+- Cleared the open Dependabot alert set across the Python lock, public site package lock, Vault Fortress, and Discord bridge dependency surfaces.
+- Hardened runtime protection for control files, signed disable-state validation, protected reads, and native-auth approved protected writes.
+- Hardened safety gate CI parity: protected-files, bulk-change, commit-growth, exception-handler, changelog, and monolith filename gates now operate on the intended diff ranges.
+- Added auditable protected-file, bulk-change, and commit-growth approval trailers for server-side checks.
+- Kept the public site, Vault Fortress, Discord bridge, Python smoke tests, merge readiness, publish preflight, and release/diff gates green before publishing.
+
+### Changed
+- Rewrote the public release notes for the 0.16.x cycle so the release page reflects actual shipped hardening without exposing internal cleanup inventories or benchmark-target names.
 
 ## [0.16.7] - 2026-05-27
 
-Security patch release. See the `runtime-protection-fix-2026-05-27` entry in the Security section below for the full description.
+Security and reliability patch release for runtime protection, gate architecture, local safety overlays, and xfail-debt visibility.
 
 ### Configuration
-- **agent_safety.local.toml overlay** (2026-05-27): per-install overrides for `agent_safety.toml` without modifying the upstream config. Loaded by `scripts/crew/brief/safety_config.py::_load_toml_with_overlay()` (new). Nested dicts merge; scalars/lists in the overlay replace the upstream value. Mirrors the existing `docs/THOMAS_BIBLE.md` ↔ `docs/THOMAS_BIBLE.local.md` pattern. Gitignore the file so it stays per-install.
-- **`breakglass_max_per_agent_24h = 0` semantics**: `scripts/forge/gates/precommit_skip_policy.py` now treats 0 (or any non-positive value) as "no per-agent quota." Public default remains 3; local installs can opt out via the overlay if they accept the tradeoff (the other safety layers — protected-files, signed-commits, server-side gates — still apply). 13 new tests in `tests/test_agent_safety_local_overlay.py` cover the deep-merge semantics, overlay-present/absent paths, and the gate's 0-means-unlimited logic.
+- Added `agent_safety.local.toml` support for per-install overrides without modifying upstream `agent_safety.toml`. Nested dicts merge; scalars/lists in the overlay replace upstream values.
+- Clarified `breakglass_max_per_agent_24h = 0` semantics in `scripts/forge/gates/precommit_skip_policy.py`: non-positive values mean no per-agent quota while protected-files, signed-commits, and server-side gates still apply.
 
 ### Quality
-- **xfail-debt-2026-05-27**: P0-1 from the 2026-05-27 senior review. The xfail count was climbing silently (60 markers across 59 test files at audit time, mostly added in batches via "step-up" runs). New enforcement infrastructure:
-  - `scripts/xfail_inventory.py` — AST-based scanner (not grep — grep counted xfail-in-docstrings as real). Classifies by category (domain-stub / step-up / flake / tracked / platform-specific / other) and tags each by introducing commit's arc-id (`mixed-19`, `pathfinding`, etc.).
-  - `scripts/forge/gates/xfail_growth_gate.py` — STRICT growth gate. Fails any commit that grows the count unless a commit message in BASE..HEAD has an `xfail-justified: <reason>` trailer. Mirrors the existing `Closes-Task:` / `Thomas-Agent:` trailer convention.
-  - `.github/workflows/gates.yml` — `xfail-growth-gate` job added; `gates-required` aggregator updated.
-  - `docs/XFAIL_POLICY.md` — policy doc + triage guidance + current 60-xfail inventory snapshot for the first cleanup pass.
-  - `scripts/bible_status.py` — now reports xfail debt count, making it visible at every health check.
-  - `tests/test_xfail_growth_gate.py` — 27 new tests covering AST scanner, classification heuristics, arc-id extraction, trailer detection (case-insensitive, empty rejected, mid-line rejected).
+- Added `scripts/xfail_inventory.py`, `scripts/forge/gates/xfail_growth_gate.py`, `docs/XFAIL_POLICY.md`, and CI coverage so xfail debt is inventoried and growth is gated unless explicitly justified.
+- Added 27 tests for xfail inventory scanning, classification, and justification-trailer handling.
 
 ### Security
-- **runtime-protection-fix-2026-05-27**: closed a self-referential bypass in `thomas/tools/filesystem.py`. The protection check honored a flag file at `runtime/.runtime_protection_disabled` but the flag path was not itself in the hardcoded protected list — an agent could call `fs.write_file('runtime/.runtime_protection_disabled', '')` and disable all runtime protection (the same path that blocks edits to `thomas/{tools,agent,core,server}/`, `scripts/`, and policy files).
-  - Added `runtime/.runtime_protection_disabled` and `runtime/.runtime_protection_key` to `_HARDCODED_PROTECTED_FILES`, so `fs.write_file` / `diff.create` / `diff.apply_patch` refuse writes to either path.
-  - Rewrote `_is_runtime_protection_disabled` to require HMAC-SHA256-signed flag content (fail-closed on any IO, parse, signature, or sandbox-mismatch error). `scripts/runtime_protection_toggle.py` now generates a 32-byte per-install key on first `off`, signs a JSON flag against it, and re-uses the key across toggles. The signing payload helper lives in both modules and is contract-tested for byte-equality.
-  - New `fs.write_protected_file` tool wires the previously-dormant `allow_native_auth_override` kwarg (introduced in PR #21) to a real caller. The tool requires a non-empty `reason`, calls `request_native_authorization`, and audit-logs every approved protected-path write.
-  - **Codex hardening review (msg-20260527214458) caught three additional gaps and they were fixed in the same PR**:
-    - `_is_protected_runtime_path` now checks the two control files (flag + key) BEFORE the disable-flag bypass — so an active flag does NOT allow agents to rewrite either control file. Otherwise an attacker could plant a key during a legitimate disable window and persist control across the next toggle cycle.
-    - `scripts/runtime_protection_toggle.py::cmd_off` now calls `_mint_fresh_key` (always overwrites any existing key) instead of `_load_or_create_key` (which re-used a possibly-attacker-planted key). `cmd_on` now also removes the key file. Net effect: no signing key persists across enable/disable cycles.
-    - Read-side protection: `ReadFileTool` and `SearchFilesTool` consult `_is_read_protected_path` and refuse / skip the key file. The flag stays readable (it's metadata only).
-  - New `tests/test_filesystem_protection_adversarial.py` (33 tests): fs.write_file refused for flag and key paths, unprotected `runtime/` subpaths still writable, every forged-flag variant (empty / non-JSON / no signature / no key / wrong key / wrong version / wrong repo / tampered field) treated as absent, signed flag accepted, new tool refused without auth and allowed with auth, toggle script's signing payload byte-matches the validator, control files refused for fs.write_file even when active signed flag is in effect, fs.write_protected_file can still reach control files with native-auth, fs.read_file refused for the key, fs.search skips the key contents.
-  - Updated `tests/test_native_auth_filesystem_guard.py::test_runtime_protection_disabled_flag_still_works` to use the signed-flag format (it previously pinned the buggy behavior).
-  - Updated `docs/SAFETY_ARCHITECTURE.md` "What's still bypassable" table with the historical row and an honest note about the shell.exec edge case (the agent could plant a key + signed flag if `tools.allow_shell = true` AND the toggle has never materialized a Calvin-owned key file).
-
-- **gate-architecture-2026-05-26**: server-side safety enforcement is now the source of truth, not local pre-commit hooks. PROBLEM.md ([plans/thomas/problems/gate-architecture-2026-05-26/PROBLEM.md](plans/thomas/problems/gate-architecture-2026-05-26/PROBLEM.md)) captured the 2026-05-26 bypass — Claude ran `git commit --no-verify` and the 50+ local gates were skipped entirely. The fix:
-  - New `.github/workflows/gates.yml`: per-gate workflow jobs mirroring `scripts/forge/gates/*` as required status checks. Includes a `gates-required` aggregator so Calvin marks one thing in branch protection. Adds `signed-commits-check` that fails PRs with unsigned commits.
-  - New `.github/CODEOWNERS`: routes reviews of safety-critical paths (`agent_safety.toml`, `.pre-commit-config.yaml`, `scripts/forge/gates/`, `thomas/core/agent_presence.py`, `thomas/tools/native_auth.py`, `thomas/tools/filesystem.py`, gates.yml itself, etc.) to @Calvin-Corbett.
-  - New `docs/SAFETY_ARCHITECTURE.md`: mental-model doc explaining the 4-layer architecture (GitHub branch protection + OS keychain + OS-native auth + workflow gate mirror) and what `--no-verify` does now (nothing, once Calvin lands the runbooks).
-  - New `docs/SIGNING_KEY_SETUP.md` + `docs/BRANCH_PROTECTION_SETUP.md`: Calvin's runbooks for the OS-side (signed-commit SSH key with Windows Hello binding) and GitHub-side (branch protection clickpath).
-  - Extended `thomas/tools/filesystem.py::_is_protected_runtime_path` with opt-in `allow_native_auth_override` kwarg. When set AND `request_native_authorization` approves, a single protected-path write is allowed. Default behavior unchanged for existing callers. New tests in `tests/test_native_auth_filesystem_guard.py` cover all paths.
-  - New `tests/test_gate_architecture_e2e.py`: contract tests asserting gates.yml has every required per-gate job, the aggregator depends on each, CODEOWNERS routes safety-critical paths, and docs reference each other consistently.
-  - Local gates remain as developer convenience. The env-var/CLI-flag bypasses called out in PROBLEM.md are no longer the safety hole they were — they only disable local feedback. Follow-up task to clean them up is now safe (the bootstrap constraint is resolved by server-side enforcement going live).
+- Protected runtime-control files from direct write paths and required signed disable-state content for runtime-protection toggles.
+- Added `fs.write_protected_file` for native-auth approved protected writes with reason capture and audit logging.
+- Added read-side protection for runtime key material while keeping non-sensitive runtime metadata readable.
+- Moved critical local-hook safety checks into GitHub-side required status checks with a single required aggregator.
+- Added CODEOWNERS coverage and setup runbooks for branch protection, signing keys, and safety architecture.
 
 ## [0.16.6] - 2026-05-22
 
 ### Added
-- Agent coordination lane documentation in `docs/AGENT_COORDINATION.md`, the `AGENTS.md` coordination section, and the `startup_router` inbox banner.
+- Agent coordination lane documentation in `docs/AGENT_COORDINATION.md`, the `AGENTS.md` coordination section, and the startup-router inbox banner.
 - `pytest-timeout` with a 300s per-test threshold for hung-test diagnosis.
-- Bible Patterns 20-24 covering stale-agent context handoff, the agent coordination lane, shared-worktree push-budget collision, and the webhook recovery patterns surfaced by this release.
-- Release metadata now declares 0.16.6 in `pyproject.toml` and `thomas/__init__.py`.
-- Restored the `AGENTS.md` Workbench operator reference to `docs/WORKBENCH_OPERATOR_PROTOCOL.md`, including the contract wording that tabs are AI-first operator control surfaces.
+- Thomas Bible baseline updates covering coordination lanes, stale-agent handoff, shared-worktree push-budget collisions, and webhook recovery patterns.
+- Release metadata declaring 0.16.6 in `pyproject.toml` and `thomas/__init__.py`.
+- Restored the `AGENTS.md` Workbench operator reference to `docs/WORKBENCH_OPERATOR_PROTOCOL.md`.
 
 ### Fixed
 - `thomas/marketplace/webhooks/filtering._tokenize`: fixed an infinite loop on dollar-prefix path tokens.
-- `thomas/server/routes/webhooks.py`: fixed split-module decorator reload; the pre-existing Stripe-signature optional-case test is now xfailed.
+- `thomas/server/routes/webhooks.py`: fixed split-module decorator reload behavior.
 
 ## [0.16.5] - 2026-05-22
 
 ### Fixed
-- `scripts/crew/brief/safety_config.py`: `ROOT` was computed as `Path(__file__).resolve().parent.parent` which resolved to `scripts/crew/` (the file lives at `scripts/crew/brief/safety_config.py`, so going only two `.parent`s up lands in the wrong directory). `CONFIG_PATH = ROOT / "agent_safety.toml"` therefore pointed at `scripts/crew/agent_safety.toml`, which has never existed. The loader silently fell back to its hardcoded default lists, so:
-  - `duplicate_filename_gate` only matched 6 of the 41 forbidden suffixes (missing `_updated`, `_revised`, `_alt`, `_temp`, `_wip`, `_next`, `_improved`, etc.)
-  - `protected_files_gate` had empty `PROTECTED_FILES` / `PROTECTED_ENFORCEMENT_SCRIPTS` lists — meaning `agent_safety.toml`, `AGENTS.md`, `GUARDRAILS.md`, `thomas/_architecture.py`, etc. were not actually protected from staging.
-  - Fix: `ROOT = Path(__file__).resolve().parents[3]` so the loader finds the real `agent_safety.toml` at the repo root.
-- `scripts/forge/gates/precommit_skip_policy.py::PROTECTED_SKIP_HOOKS`: added `thomas-publish-preflight`. `.pre-commit-config.yaml` had this hook (pre-push), but it was missing from the protected-skip allowlist — meaning an agent could `SKIP=thomas-publish-preflight git push` without tripping the precommit skip policy gate.
-- `agent_safety.toml::[skip_policy].protected_hooks`: mirror entry for the same.
-- `tests/test_new_safety_gates.py`: 17 previously-failing tests now pass after the safety_config path fix. These tests had been masked by the earlier `test_models_cli_*` failure stopping the step-up runner at mixed-13.
-
-### Architecture
-- This is a "step-up surfacing" story: fixing one batch of failing tests revealed the next. The mixed-13 fix in 0.16.4 (Pattern 16 monkeypatch reachability) exposed mixed-14's previously-hidden `test_new_safety_gates` failures, which exposed the underlying real bug — a one-`.parent`-too-shallow path traversal that had been silently defanging multiple gates. Closing that hole tightens the real protected-files / duplicate-filename / hook-skip gates as a side effect.
+- Fixed `scripts/crew/brief/safety_config.py` root resolution so the loader finds the real root `agent_safety.toml` instead of falling back to incomplete hardcoded defaults.
+- Added `thomas-publish-preflight` to protected hook skip policy coverage and mirrored the setting in `agent_safety.toml`.
+- Restored coverage for protected-files, duplicate-filename, and hook-skip gates that had been weakened by the config path bug.
 
 ## [0.16.4] - 2026-05-22
 
 ### Fixed
-- `tests/test_models_cli_scan_alias.py` + `tests/test_models_cli_click_misuse_guard.py`: the three previously-failing tests in the codebase-auto-checks Robustness Gates job. After the cli/main.py monolith split moved `_run_models_discover` + `models_scan` + `models_discover` to `thomas/cli/_commands_models.py`, two things broke: (a) `monkeypatch.setattr(thomas.cli.main, "_run_models_discover", …)` no longer reached the click callbacks because they resolved the helper via local-name lookup in the new sub-file; (b) the AST guard test scanned `cli/main.py` for the `@models.command` callbacks, but they had moved to `_commands_models.py`.
-- **Pattern 16 fix**: added a `_via_main()` indirection helper in `_commands_models.py` that resolves helpers through `sys.modules["thomas.cli.main"]` at call time. The click callbacks now invoke `_via_main("_run_models_discover")(...)` instead of calling the helper directly. `monkeypatch.setattr(cli_main, "_run_models_discover", fake)` now reaches the callbacks. Bible Pattern 16 documents this pattern.
-- Re-exported `_run_models_discover` from `thomas.cli.main` (added to the existing F401 re-export block) so monkeypatch targets resolve at import time.
-- Updated `test_models_cli_click_misuse_guard.py` to (i) point at `cli/_commands_models.py` where the callbacks now live, and (ii) recognize the `_via_main("helper")(…)` delegation pattern as "calls helper" so the AST guard still catches direct-callback-call regressions.
-- `AGENTS.md`: removed hardcoded `C:\Users\corbe\Thomas` user-path leak (was line 79) and `master` branch references (lines 69, 73, 79) that conflict with the actual `dev` (private) / `main` (public) canonical model. Added a new "Branch model (canonical — 2026-05-22)" section documenting the actual model.
+- Restored model CLI monkeypatch reachability after the `cli/main.py` split by routing callbacks through the public helper surface.
+- Updated AST guard tests to scan the moved model-command module and recognize the new delegation pattern.
+- Removed a hardcoded local Windows path and stale branch references from `AGENTS.md`; documented the actual `dev` private / `main` public branch model.
 
 ## [0.16.3] - 2026-05-22
 
 ### Fixed
-- `thomas/marketplace/observability/module_audit.py::sha256_file` now normalizes line endings (CRLF → LF, CR → LF) for known text source suffixes (`.py`, `.md`, `.json`, `.yaml`, `.toml`, etc.) before hashing. The audit registry previously stored byte-exact SHA256 of the working-tree file, which differed between Windows (CRLF, `core.autocrlf=true`) and Linux CI (LF after checkout). The result was a recurring "stale audit hash" failure in the module-audit gate every time the audit was recorded on Windows and verified on Linux. Binary files (suffixes not in the allowlist) still hash raw bytes.
-- Re-recorded `agent`, `demo`, `memory`, and `server` module audits so their stored hashes now match the LF-normalized values Linux CI computes. Verified locally: `python scripts/forge/gates/module_audit_gate.py` is clean for line-ending divergence.
-
-### Architecture
-- This closes the CRLF/LF audit-hash class of CI failures that has been re-appearing since cross-platform agents (Windows local + Linux CI) started recording audits. New text-file suffixes can be added to `_TEXT_HASH_SUFFIXES` if a future audit covers a source-extension that's not in the list yet.
+- Normalized line endings before hashing known text source files in module audit checks so Windows and Linux audit hashes match.
+- Re-recorded affected module audits and verified `python scripts/forge/gates/module_audit_gate.py` against the normalized hashes.
 
 ## [0.16.2] - 2026-05-22
 
 ### Fixed
-- `thomas/memory/v2/fabric_core.py::CompactFactsFabric.upsert_fact` now accepts an optional `provenance_episode_id: int | None = None` parameter. The curator was calling it with a `ts_ms` kwarg that didn't exist; that path is now gone and replaced with the explicit provenance plumbing. Fixes `tests/test_memory_curator.py::test_curator_persists_fact`.
+- `thomas/memory/v2/fabric_core.py::CompactFactsFabric.upsert_fact` now accepts an optional `provenance_episode_id` parameter, restoring curator persistence coverage.
 
 ## [0.16.1] - 2026-05-22
 
 ### Fixed
-- Restored the `no_human_mode=allow` → native_auth path in `GuardedToolRunner` (had been removed in 0.15.53). `tests/test_guarded_tools_native_auth.py` was the canonical contract: "allow" routes through the OS authentication gate, NOT bypassing approval entirely. The simpler `tests/test_guarded_tool_runner.py` was failing on CI because there's no GUI to bind; updated that file to monkeypatch `request_native_authorization` to return True instead of asking the runner to skip the OS call. Both test suites now pass on the same code path.
-- `tests/test_code_intake_pipeline.py::test_validate_blocks_name_guard`: the scrub renamed both the search term and the diff content to "Reference CLI" / "reference_cli". The blocklist matcher is case-sensitive — fixed the diff text to use the matchable lowercase token.
-- `tests/test_code_intake_seed_batch.py::test_load_rows_has_batch_b01`: underlying CSV fixture was deleted in 0.16.0 (carried 168 competitor-name rows). Skipped until a non-competitor batch index lands.
-- Repo README rewritten to reflect bible-truth: dropped stale references to deleted internal docs (PROJECT_INDEX.md etc.); added an honest "What works today vs. what's still rough" section; documented the per-user bible system.
-- `plans/thomas/WORKBOARD.md`: claim scope extended to include `README.md`, `.pre-commit-config.yaml`, `.dockerignore` (avoids Workboard changed-files gate failures on cleanup commits).
-- `docs/FEATURE_MASTER_LIST.md`: re-synced after the 0.16.0 deletions.
-- `docs/deletions/2026-05-21-pre-public-cleanup.json`: added the 94-file deletion audit record (required by the Protected deletion guard).
-- `scripts/forge/gates/public_repo_leak_guard.py`: added the deletion record to `ALLOWLIST_PATHS` (the record itself names competitor files, which is the intended audit trail).
+- Restored the `no_human_mode=allow` native-auth path in `GuardedToolRunner` and updated CI tests to monkeypatch the auth surface instead of bypassing it.
+- Refreshed public-safe code-intake fixtures and skipped a deleted internal fixture until a replacement public batch index lands.
+- Rewrote the repo README around current Thomas Bible truth, feature status, and per-user Bible behavior.
+- Re-synced `docs/FEATURE_MASTER_LIST.md`, workboard claim scope, and protected deletion audit coverage after public repo cleanup.
 
 ## [0.16.0] - 2026-05-21
 
-### Removed (pre-public cleanup)
-- **538 competitor-name references scrubbed across 86 files**, plus 27 competitor-artifact files/dirs deleted entirely. The repo had been silently leaking the name of an internal benchmark target ("openclaw") since the 2026-03 timeframe. The `docs/PRE_PUBLIC_CLEANUP.md` plan was never executed — this release executes it.
-- Deleted directories: `thomas/openclaw_compat/`, `thomas/marketplace/openclaw_compat/`, `library/entries/competitive-research/`, `tests/competitors/`, `scripts/competitors/`, `.codex/skills/`.
-- Deleted files: `thomas_vs_openclaw_subcommands.json`, `demo/baselines/openclaw.current.json`, `docs/OPENCLAW_*` (4 files), `docs/ops/COMPETITOR_DEEP_DIVE_*`, `docs/PRE_PUBLIC_CLEANUP.md`, `scripts/compare_openclaw_baseline.py`, `scripts/forge/gates/openclaw_metric_parity_gate.py`, `scripts/forge/gates/competitor_freshness_guard.py`, `scripts/forge/gates/competitive_scope_gate.py`, plus the matching test files.
-- Deleted internal-only agent docs from repo root: `PROJECT_INDEX.md`, `CLAUDE_CODE_GAP_ANALYSIS.md`, `MODULE_REGISTRY.md`, `PLAN-UI-UPGRADE.md`, `KNOWN_ISSUES.md`, `AGENT_RULES_QUICK_REFERENCE.md`, `AGENT_SAFETY_GATES.md`, `WORKTREE_RULES.md`, `REPO_CANONICAL_RULES.md`.
-- Deleted internal tooling from repo root: `_healthcheck.py`, `loc_counter.py`, `check_zips.py`, `module_analysis.csv`.
+### Removed
+- Removed internal-only benchmark compatibility surfaces, stale local operator notes, and sandbox-only files from the public distribution.
+- Removed obsolete root-level planning and diagnostic files that were not part of the shipped product surface.
+- Removed workflow references to deleted internal-only checks so CI reflects the public repository shape.
 
 ### Added
-- `scripts/forge/gates/public_repo_leak_guard.py` — permanent CI gate that blocks any future push containing competitor names or internal-only doc patterns. Runs as part of `github-publish-safety.yml` AND `scripts/forge/publish/preflight.py` (the pre-push hook). Includes `ALLOWLIST_PATHS` for the guard itself + CHANGELOG.md (historical references). Add new entries to `FORBIDDEN_SUBSTRINGS` or `FORBIDDEN_PATHS` when a new internal-only marker shows up.
-- `.gitignore` entries for `docs/internal/`, `.tmp_*`, `thomas_vs_*.json/docx`.
+- Added a permanent CI and publish-preflight guard for public-repository hygiene.
+- Added `.gitignore` entries for internal-only docs, temporary files, and generated comparison outputs.
 
 ### Changed
-- `.github/workflows/robustness-gates.yml` + `nightly-reliability.yml`: removed competitor parity gate invocations (referenced deleted scripts).
-- `library/catalog.json`: voice transcript scrubbed of competitor mention via case-insensitive replacement.
-- `tests/test_ci_workflow_guards.py`: dropped the competitor portion of the workflow assertion.
-
-### Architecture
-- This release closes the 2-week security/cleanup arc that started 2026-05-19 (Telegram token leak) and ends with the public repo clean of internal benchmark identifiers, internal-only docs, and codex sandbox artifacts. Future drift is blocked by `public_repo_leak_guard.py`.
+- Refreshed public catalog content and workflow assertions after the cleanup.
+- Established the public-repository hygiene baseline and blocked future drift through the public-repo content guard.
 
 ## [0.15.53] - 2026-05-21
 
