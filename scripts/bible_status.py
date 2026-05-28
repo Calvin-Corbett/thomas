@@ -191,7 +191,7 @@ def main() -> int:
         if _xfails:
             _files = len({e.file for e in _xfails})
             print(f"  xfail debt: {len(_xfails)} across {_files} test files (see docs/XFAIL_POLICY.md)")
-    except Exception:
+    except (ImportError, OSError, RuntimeError, ValueError):
         # Stay silent; bible_status must always succeed.
         pass
     if not lint_ok:

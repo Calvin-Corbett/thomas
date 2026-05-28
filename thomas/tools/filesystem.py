@@ -297,7 +297,7 @@ def _maybe_apply_native_auth_override(
     # dependencies into every import path.
     try:
         from thomas.tools.native_auth import request_native_authorization
-    except Exception as exc:  # noqa: BLE001 - degrade gracefully if missing
+    except (ImportError, OSError, RuntimeError) as exc:
         log.warning(
             "Protected path '%s': native-auth module unavailable (%s); honoring refusal",
             rel_posix,
@@ -314,7 +314,7 @@ def _maybe_apply_native_auth_override(
 
     try:
         approved = request_native_authorization(action_text, auth_reason)
-    except Exception as exc:  # noqa: BLE001 - never crash through on auth error
+    except (OSError, RuntimeError) as exc:
         log.warning(
             "Protected path '%s': native-auth raised (%s); honoring refusal",
             rel_posix,
