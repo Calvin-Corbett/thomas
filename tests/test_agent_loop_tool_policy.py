@@ -148,3 +148,26 @@ def test_tool_usage_questions_are_answered_from_recorded_context() -> None:
     assert done is not None
     assert int(done.data.get("tool_calls") or 0) == 0
     assert "recorded tool calls" in str(done.data.get("text") or "").lower()
+
+
+def test_tool_usage_detector_does_not_disable_tools_for_long_coding_prompt() -> None:
+    cfg = AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
+    tools = ToolRegistry()
+    tools.register(_DummyTool())
+    agent = AgentLoop(cfg, _DummyLocalLLM(), tools, conversation=[])
+    prompt = (
+        "You are running inside a benchmark. Your Codex tools execute on the Windows host checkout, "
+        "which is bind-mounted into the verifier. Use Windows PowerShell-compatible commands. "
+        "Fix this repo bug in app.py and run tests."
+    )
+
+    async def run_once():
+        events = []
+        async for ev in agent.run(prompt, tools_policy="always"):
+            events.append(ev)
+        return events
+
+    events = asyncio.run(run_once())
+    start = next((e for e in events if e.type == EventType.AGENT_START), None)
+    assert start is not None
+    assert start.data.get("tools_policy") == "always"

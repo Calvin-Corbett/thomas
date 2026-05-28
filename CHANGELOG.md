@@ -9,6 +9,15 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+### Added
+- Refreshable model catalog and latest-model aliases for model/profile discovery, including curated OpenAI frontier fallbacks and server/CLI surfaces for cached catalog data.
+- Registered skill bundles for multipart HTTP response parsing, partial structuring recovery, and serializer/deserializer feature matrices.
+
+### Security
+- Hardened safety gate CI parity: diff-range mode now works for protected-files, bulk, commit-growth, exception-handler, and changelog gates; monolith filename checks run on the PR diff instead of the full legacy tree.
+- Added auditable protected-file approval trailers for server-side protected-file checks, plus local scoped-commit propagation of the same commit message.
+- Split runtime-protection adversarial coverage into smaller focused files while preserving the control-file, native-auth, signed-flag, and read-side key protections.
+
 ## [0.16.7] - 2026-05-27
 
 Security patch release. See the `runtime-protection-fix-2026-05-27` entry in the Security section below for the full description.

@@ -78,6 +78,30 @@ class CodexBridgeError(Exception):
         self.code = code
 
 
+def _command_display_name(command: Any) -> str:
+    if isinstance(command, (list, tuple)):
+        return " ".join(str(part) for part in command if str(part).strip()).strip() or "?"
+    text = str(command or "").strip()
+    return text or "?"
+
+
+def _file_change_path(item: dict[str, Any]) -> str:
+    for key in ("filePath", "path", "relativePath", "file_path"):
+        value = str(item.get(key) or "").strip()
+        if value:
+            return value
+    for key in ("change", "changes", "edits", "diffs"):
+        value = item.get(key)
+        rows = value if isinstance(value, list) else [value]
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            nested = _file_change_path(row)
+            if nested != "?":
+                return nested
+    return "?"
+
+
 class CodexBridge:
     """Manages a codex app-server subprocess and speaks its protocol.
 
@@ -382,15 +406,16 @@ class CodexBridge:
                 events_queue.put_nowait(
                     {
                         "type": "tool_start",
-                        "name": " ".join(item.get("command", ["?"])),
+                        "name": _command_display_name(item.get("command")),
                         "id": item.get("id", ""),
                     }
                 )
             elif itype == "fileChange":
+                path = _file_change_path(item)
                 events_queue.put_nowait(
                     {
                         "type": "tool_start",
-                        "name": f"edit:{item.get('filePath', '?')}",
+                        "name": f"edit:{path}",
                         "id": item.get("id", ""),
                     }
                 )
@@ -418,11 +443,12 @@ class CodexBridge:
                     }
                 )
             elif itype == "fileChange":
+                path = _file_change_path(item)
                 events_queue.put_nowait(
                     {
                         "type": "tool_output",
                         "id": item.get("id", ""),
-                        "output": f"File changed: {item.get('filePath', '?')}",
+                        "output": f"File changed: {path}",
                     }
                 )
 

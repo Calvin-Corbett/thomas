@@ -20,11 +20,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[3]
 PRECOMMIT_BREADCRUMB = ROOT / ".git" / "thomas_precommit_ran"
+APPROVAL_TRAILERS = ("thomas-protected-files-approved:", "thomas-breakglass:")
+COMMIT_MESSAGE_ENV = "THOMAS_COMMIT_MESSAGE"
 
 # Load protected file lists from config (agent_safety.toml).
 # Falls back to empty lists if config doesn't exist.
@@ -79,9 +82,14 @@ except ImportError:
     )
 
 
-def _staged_files() -> list[str]:
+def _changed_files(*, base: str | None = None, head: str | None = None) -> list[str]:
+    diff_args = ["git", "diff", "--name-only"]
+    if base and head:
+        diff_args.extend([base, head])
+    else:
+        diff_args.append("--cached")
     proc = subprocess.run(
-        ["git", "diff", "--cached", "--name-only"],
+        diff_args,
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -89,6 +97,49 @@ def _staged_files() -> list[str]:
     if proc.returncode != 0:
         return []
     return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+
+
+def _staged_files() -> list[str]:
+    return _changed_files()
+
+
+def _commit_messages(base: str, head: str) -> list[str]:
+    """Return commit messages for a CI/server-side diff range."""
+    if base == head:
+        return []
+    try:
+        proc = subprocess.run(
+            ["git", "log", "--format=%B%n---END---", f"{base}..{head}"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if proc.returncode != 0:
+        return []
+    return [chunk.strip() for chunk in str(proc.stdout or "").split("---END---") if chunk.strip()]
+
+
+def _protected_files_approval(messages: list[str]) -> tuple[bool, str, str]:
+    """Find an explicit protected-file approval trailer in commit messages.
+
+    Local staged commits still fail closed. This trailer path is only for
+    server-side diff-range checks, where OS-native approval is unavailable but
+    the authorization reason can be preserved in immutable commit history.
+    """
+    for msg in messages:
+        for line in msg.splitlines():
+            stripped = line.strip()
+            lowered = stripped.lower()
+            for trailer in APPROVAL_TRAILERS:
+                if not lowered.startswith(trailer):
+                    continue
+                reason = stripped.split(":", 1)[1].strip()
+                if reason:
+                    return True, trailer.rstrip(":"), reason
+    return False, "", ""
 
 
 def _normalize_repo_path(path: str) -> str:
@@ -134,8 +185,12 @@ def _runtime_protection_disabled() -> bool:
 
 def run(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--base", default=None, help="Optional git base ref/SHA for diff-range mode.")
+    parser.add_argument("--head", default=None, help="Optional git head ref/SHA for diff-range mode.")
     parser.add_argument("--json", action="store_true", help="Emit JSON output.")
     args = parser.parse_args(argv)
+    if bool(args.base) != bool(args.head):
+        parser.error("--base and --head must be provided together")
 
     _drop_precommit_breadcrumb()
 
@@ -147,10 +202,19 @@ def run(argv: list[str] | None = None) -> int:
             print("Protected files gate: PASS (runtime protection disabled by human)")
         return 0
 
-    staged = _staged_files()
+    staged = _changed_files(base=args.base, head=args.head) if args.base else _staged_files()
     all_protected = set(PROTECTED_FILES) | set(PROTECTED_ENFORCEMENT_SCRIPTS)
     violations = [path for path in staged if _is_protected_path(path, all_protected)]
-    ok = len(violations) == 0
+    approved = False
+    approval_trailer = ""
+    approval_reason = ""
+    if violations and args.base and args.head:
+        approved, approval_trailer, approval_reason = _protected_files_approval(_commit_messages(args.base, args.head))
+    elif violations:
+        message = str(os.getenv(COMMIT_MESSAGE_ENV, "") or "")
+        if message:
+            approved, approval_trailer, approval_reason = _protected_files_approval([message])
+    ok = len(violations) == 0 or approved
 
     if args.json:
         print(
@@ -159,6 +223,9 @@ def run(argv: list[str] | None = None) -> int:
                     "gate": "protected_files_gate",
                     "ok": ok,
                     "violations": violations,
+                    "approved_protected_files": approved,
+                    "approval_trailer": approval_trailer,
+                    "approval_reason": approval_reason,
                     "protected_file_count": len(all_protected),
                 },
                 sort_keys=True,
@@ -166,7 +233,13 @@ def run(argv: list[str] | None = None) -> int:
         )
     else:
         if ok:
-            print("Protected files gate: PASS")
+            if approved:
+                print(
+                    "Protected files gate: PASS "
+                    f"(protected-file approval via {approval_trailer}: {approval_reason[:120]})"
+                )
+            else:
+                print("Protected files gate: PASS")
         else:
             print("SAFETY GATE FAILED: Protected Policy Files Modified")
             print("=" * 70)
@@ -190,6 +263,11 @@ def run(argv: list[str] | None = None) -> int:
             print("2. If you believe a rule needs changing:")
             print("   STOP and ask the user. Do not proceed.")
             print("   Explain what rule you want to change and why.")
+            if args.base and args.head:
+                print()
+                print("   For CI/server-side review after explicit human approval,")
+                print("   include a non-empty commit trailer such as:")
+                print("   Thomas-Protected-Files-Approved: <ticket or approval reason>")
             print()
             print("3. If a test in test_architecture.py fails:")
             print("   Fix your code to comply with the architecture.")

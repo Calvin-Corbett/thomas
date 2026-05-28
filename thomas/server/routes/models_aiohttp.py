@@ -193,8 +193,21 @@ def register_models_routes(
             if m.reasoning_effort:
                 profile_info["reasoning_effort"] = m.reasoning_effort
             profiles.append(profile_info)
+        payload: dict[str, Any] = {"default": resolved_default or cfg.default_model, "profiles": profiles}
+        if str(request.query.get("catalog", "")).strip().lower() in {"1", "true", "yes"}:
+            from thomas.models.catalog import get_model_catalog_async
+
+            refresh_raw = str(request.query.get("refresh", "")).strip().lower()
+            cached_raw = str(request.query.get("cached", "")).strip().lower()
+            if refresh_raw in {"1", "true", "yes"}:
+                catalog_refresh: bool | None = True
+            elif cached_raw in {"1", "true", "yes"}:
+                catalog_refresh = False
+            else:
+                catalog_refresh = None
+            payload["catalog"] = await get_model_catalog_async(cfg, refresh=catalog_refresh, timeout_s=1.5)
         return web.json_response(
-            {"default": resolved_default or cfg.default_model, "profiles": profiles},
+            payload,
             dumps=lambda x: json.dumps(x, ensure_ascii=False),
         )
 
@@ -280,6 +293,23 @@ def register_models_routes(
         }
         return web.json_response(payload, dumps=lambda x: json.dumps(x, ensure_ascii=False))
 
+    async def api_models_catalog(request: web.Request) -> web.Response:
+        """GET /api/models/catalog - return cached or refreshed model catalog."""
+        require_api_access(request)
+        cfg: AppConfig = _resolve_runtime_config(request.app)
+        from thomas.models.catalog import get_model_catalog_async
+
+        refresh_raw = str(request.query.get("refresh", "")).strip().lower()
+        cached_raw = str(request.query.get("cached", "")).strip().lower()
+        if refresh_raw in {"1", "true", "yes"}:
+            refresh: bool | None = True
+        elif cached_raw in {"1", "true", "yes"}:
+            refresh = False
+        else:
+            refresh = None
+        payload = await get_model_catalog_async(cfg, refresh=refresh, timeout_s=1.5)
+        return web.json_response(payload, dumps=lambda x: json.dumps(x, ensure_ascii=False))
+
     async def api_version(request: web.Request) -> web.Response:
         cfg: AppConfig = _resolve_runtime_config(request.app)
         if not bool(getattr(getattr(cfg, "server", None), "allow_unauthenticated_version", True)):
@@ -293,6 +323,7 @@ def register_models_routes(
         )
 
     app.router.add_get("/api/models", api_models)
+    app.router.add_get("/api/models/catalog", api_models_catalog)
     app.router.add_get("/api/models/capabilities", api_models_capabilities)
     app.router.add_get("/api/models/{profile}/ids", api_profile_models)
     app.router.add_get("/api/models/{profile}/handshake", api_profile_handshake)

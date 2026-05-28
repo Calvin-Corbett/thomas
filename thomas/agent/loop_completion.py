@@ -217,6 +217,7 @@ async def handle_post_loop_completion(
         require_monolith_guard_for_coding=bool(getattr(quality_cfg, "require_monolith_guard_for_coding", True)),
         strict_issue_ownership=bool(strict_issue_ownership),
         attempt=int(_quality_retry_count),
+        repo_root=Path.cwd(),
     )
     token_report["rules_of_road"] = rules_report
 

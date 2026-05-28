@@ -32,8 +32,9 @@ def models(ctx: click.Context) -> None:
 
 
 @models.command("list")
+@click.option("--catalog", "show_catalog", is_flag=True, help="Also show refreshed/cached catalog aliases.")
 @click.pass_context
-def models_list(ctx: click.Context) -> None:
+def models_list(ctx: click.Context, show_catalog: bool) -> None:
     """List configured model profiles."""
     config: AppConfig = ctx.obj["config"]
     click.echo("Model profiles:")
@@ -48,6 +49,17 @@ def models_list(ctx: click.Context) -> None:
             click.echo(f"    chat_path: {m.chat_path}")
         if getattr(m, "models_path", "/models") != "/models":
             click.echo(f"    models_path: {m.models_path}")
+    if show_catalog:
+        from thomas.models.catalog import get_model_catalog
+
+        catalog = get_model_catalog(config, refresh=None, timeout_s=2.0)
+        aliases = dict(catalog.get("aliases") or {})
+        click.echo("")
+        click.echo(f"Catalog updated: {catalog.get('updated_at') or '(not cached)'}")
+        if aliases:
+            click.echo("Catalog aliases:")
+            for alias, target in sorted(aliases.items()):
+                click.echo(f"  {alias}: {target}")
 
 
 def _via_main(name: str):
@@ -377,6 +389,76 @@ def models_status(ctx: click.Context, as_json: bool) -> None:
     click.echo(f"default_model: {payload['default_model']}")
     click.echo(f"profiles: {', '.join(payload['profiles'])}")
     click.echo(f"profile_count: {payload['profile_count']}")
+
+
+@models.command("catalog")
+@click.option("--refresh", "force_refresh", is_flag=True, help="Force live provider refresh before printing.")
+@click.option("--cached", "cached_only", is_flag=True, help="Use cached catalog only; do not auto-refresh stale data.")
+@click.option("--timeout", "timeout_s", type=float, default=2.0, show_default=True)
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def models_catalog(
+    ctx: click.Context,
+    force_refresh: bool,
+    cached_only: bool,
+    timeout_s: float,
+    as_json: bool,
+) -> None:
+    """Show the refreshable model catalog and aliases."""
+    if force_refresh and cached_only:
+        raise click.UsageError("--refresh and --cached are mutually exclusive")
+    if float(timeout_s) <= 0:
+        raise click.UsageError("Invalid value for --timeout: must be greater than 0")
+
+    from thomas.models.catalog import get_model_catalog
+
+    config: AppConfig = ctx.obj["config"]
+    refresh = True if force_refresh else (False if cached_only else None)
+    payload = get_model_catalog(config, refresh=refresh, timeout_s=timeout_s)
+    if as_json:
+        _emit_json(payload, ensure_ascii=False, indent=2)
+        return
+
+    models_rows = list(payload.get("models") or [])
+    aliases = dict(payload.get("aliases") or {})
+    live_count = sum(1 for row in models_rows if str(row.get("source") or "") == "live")
+    click.echo(f"catalog_updated_at: {payload.get('updated_at')}")
+    click.echo(f"cache_path: {payload.get('cache_path')}")
+    click.echo(f"models: {len(models_rows)} (live: {live_count})")
+    if aliases:
+        click.echo("aliases:")
+        for alias, target in sorted(aliases.items()):
+            click.echo(f"  {alias}: {target}")
+    click.echo("top models:")
+    for row in models_rows[:12]:
+        available = "live/config" if bool(row.get("available")) else "curated"
+        click.echo(f"  {row.get('id')} [{row.get('family')}, {available}]")
+
+
+@models.command("refresh")
+@click.option("--timeout", "timeout_s", type=float, default=2.0, show_default=True)
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def models_refresh(ctx: click.Context, timeout_s: float, as_json: bool) -> None:
+    """Refresh and cache provider model inventory."""
+    if float(timeout_s) <= 0:
+        raise click.UsageError("Invalid value for --timeout: must be greater than 0")
+    from thomas.models.catalog import get_model_catalog
+
+    config: AppConfig = ctx.obj["config"]
+    payload = get_model_catalog(config, refresh=True, timeout_s=timeout_s)
+    summary = {
+        "ok": True,
+        "updated_at": payload.get("updated_at"),
+        "cache_path": payload.get("cache_path"),
+        "model_count": len(list(payload.get("models") or [])),
+        "aliases": dict(payload.get("aliases") or {}),
+    }
+    if as_json:
+        _emit_json(summary, ensure_ascii=False, indent=2)
+        return
+    click.echo(f"refreshed model catalog: {summary['model_count']} models")
+    click.echo(f"cache: {summary['cache_path']}")
 
 
 @models.command("scan")

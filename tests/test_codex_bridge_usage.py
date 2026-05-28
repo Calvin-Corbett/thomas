@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from thomas.marketplace.codex.bridge import _extract_usage_payload
+from thomas.marketplace.codex.bridge import _command_display_name, _extract_usage_payload, _file_change_path
 
 
 def test_extract_usage_payload_supports_thread_token_usage_updated_shape() -> None:
@@ -54,3 +54,16 @@ def test_extract_usage_payload_prefers_last_usage_when_available() -> None:
         "completion_tokens": 20,
         "total_tokens": 120,
     }
+
+
+def test_command_display_name_accepts_string_or_argv_shapes() -> None:
+    assert _command_display_name("python -m pytest -q") == "python -m pytest -q"
+    assert _command_display_name(["python", "-m", "pytest", "-q"]) == "python -m pytest -q"
+    assert _command_display_name("") == "?"
+
+
+def test_file_change_path_accepts_known_codex_item_shapes() -> None:
+    assert _file_change_path({"filePath": "a.py"}) == "a.py"
+    assert _file_change_path({"path": "b.py"}) == "b.py"
+    assert _file_change_path({"changes": [{"relativePath": "c.py"}]}) == "c.py"
+    assert _file_change_path({}) == "?"

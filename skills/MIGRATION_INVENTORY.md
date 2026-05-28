@@ -15,6 +15,7 @@ First-party Thomas-native skills currently shipped:
 - imagegen
 - jupyter-notebook
 - linear
+- multipart-http-response-parser
 - netlify-deploy
 - notion-knowledge-capture
 - notion-meeting-intelligence
@@ -22,12 +23,14 @@ First-party Thomas-native skills currently shipped:
 - notion-spec-to-implementation
 - openai-docs
 - pdf
+- partial-structuring-recovery
 - playwright
 - render-deploy
 - screenshot
 - security-best-practices
 - security-ownership-map
 - security-threat-model
+- serializer-deserializer-feature-matrix
 - sentry
 - skill-authoring
 - skill-distillation

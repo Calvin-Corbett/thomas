@@ -53,6 +53,11 @@ class TestAgentLoopCodexPassthrough(unittest.TestCase):
         events = asyncio.run(run_once())
 
         self.assertTrue(any(e.type == EventType.TOOL_RESULT for e in events))
+        done = [e for e in events if e.type == EventType.AGENT_DONE]
+        self.assertTrue(done)
+        self.assertEqual(done[-1].data.get("tool_calls"), 1)
+        rules = done[-1].data.get("token_report", {}).get("rules_of_road", {})
+        self.assertEqual(rules.get("signals", {}).get("tool_calls"), 1)
         # Codex tools are executed by Codex; Thomas should not inject tool-role messages.
         self.assertEqual([m.get("role") for m in conversation], ["user", "assistant"])
         self.assertEqual(conversation[0].get("content"), "hello")
