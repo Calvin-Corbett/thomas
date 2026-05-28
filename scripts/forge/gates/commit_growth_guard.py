@@ -37,6 +37,12 @@ ROOT = Path(__file__).resolve().parents[3]
 # ── Configurable limits ──────────────────────────────────────────────────
 # Maximum net lines a single file may grow in one commit.
 DEFAULT_MAX_GROWTH = 300
+APPROVAL_TRAILERS = (
+    "thomas-commit-growth-approved:",
+    "thomas-growth-approved:",
+    "thomas-breakglass:",
+)
+COMMIT_MESSAGE_ENV = "THOMAS_COMMIT_MESSAGE"
 
 # File extensions to monitor.  Only these are checked.
 MONITORED_EXTENSIONS: set[str] = {
@@ -100,6 +106,38 @@ def _staged_files(repo_root: Path) -> list[str]:
     return _changed_files(repo_root)
 
 
+def _commit_messages(repo_root: Path, base: str, head: str) -> list[str]:
+    if base == head:
+        return []
+    try:
+        proc = subprocess.run(
+            ["git", "log", "--format=%B%n---END---", f"{base}..{head}"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if proc.returncode != 0:
+        return []
+    return [chunk.strip() for chunk in str(proc.stdout or "").split("---END---") if chunk.strip()]
+
+
+def _growth_approval(messages: list[str]) -> tuple[bool, str, str]:
+    for msg in messages:
+        for line in msg.splitlines():
+            stripped = line.strip()
+            lowered = stripped.lower()
+            for trailer in APPROVAL_TRAILERS:
+                if not lowered.startswith(trailer):
+                    continue
+                reason = stripped.split(":", 1)[1].strip()
+                if reason:
+                    return True, trailer.rstrip(":"), reason
+    return False, "", ""
+
+
 def _working_tree_lines(repo_root: Path, rel: str) -> int:
     path = repo_root / rel
     try:
@@ -161,6 +199,9 @@ def run(
 
     staged = _changed_files(repo_root, base=base, head=head) if base and head else _staged_files(repo_root)
     violations: list[dict] = []
+    approved = False
+    approval_trailer = ""
+    approval_reason = ""
 
     for rel in staged:
         if _is_skipped(rel):
@@ -189,7 +230,13 @@ def run(
                 }
             )
 
-    ok = len(violations) == 0
+    if violations and base and head:
+        approved, approval_trailer, approval_reason = _growth_approval(_commit_messages(repo_root, base, head))
+    elif violations:
+        message = str(os.getenv(COMMIT_MESSAGE_ENV, "") or "")
+        if message:
+            approved, approval_trailer, approval_reason = _growth_approval([message])
+    ok = len(violations) == 0 or approved
 
     if json_output:
         print(
@@ -199,12 +246,21 @@ def run(
                     "max_growth": max_growth,
                     "staged_count": len(staged),
                     "violations": violations,
+                    "approved_growth": approved,
+                    "approval_trailer": approval_trailer,
+                    "approval_reason": approval_reason,
                 },
                 indent=2,
             )
         )
     elif ok:
-        print(f"Commit growth guard: PASS (no file grew by more than {max_growth} lines)")
+        if approved:
+            print(
+                "Commit growth guard: PASS "
+                f"({len(violations)} approved violation(s) via {approval_trailer}: {approval_reason[:120]})"
+            )
+        else:
+            print(f"Commit growth guard: PASS (no file grew by more than {max_growth} lines)")
     else:
         print(
             f"Commit growth guard: FAIL — {len(violations)} file(s) "
