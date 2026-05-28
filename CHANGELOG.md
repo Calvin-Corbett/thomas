@@ -9,6 +9,10 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.16.7] - 2026-05-27
+
+Security patch release. See the `runtime-protection-fix-2026-05-27` entry in the Security section below for the full description.
+
 ### Configuration
 - **agent_safety.local.toml overlay** (2026-05-27): per-install overrides for `agent_safety.toml` without modifying the upstream config. Loaded by `scripts/crew/brief/safety_config.py::_load_toml_with_overlay()` (new). Nested dicts merge; scalars/lists in the overlay replace the upstream value. Mirrors the existing `docs/THOMAS_BIBLE.md` ↔ `docs/THOMAS_BIBLE.local.md` pattern. Gitignore the file so it stays per-install.
 - **`breakglass_max_per_agent_24h = 0` semantics**: `scripts/forge/gates/precommit_skip_policy.py` now treats 0 (or any non-positive value) as "no per-agent quota." Public default remains 3; local installs can opt out via the overlay if they accept the tradeoff (the other safety layers — protected-files, signed-commits, server-side gates — still apply). 13 new tests in `tests/test_agent_safety_local_overlay.py` cover the deep-merge semantics, overlay-present/absent paths, and the gate's 0-means-unlimited logic.
@@ -23,6 +27,18 @@ Versioning: Semantic Versioning.
   - `tests/test_xfail_growth_gate.py` — 27 new tests covering AST scanner, classification heuristics, arc-id extraction, trailer detection (case-insensitive, empty rejected, mid-line rejected).
 
 ### Security
+- **runtime-protection-fix-2026-05-27**: closed a self-referential bypass in `thomas/tools/filesystem.py`. The protection check honored a flag file at `runtime/.runtime_protection_disabled` but the flag path was not itself in the hardcoded protected list — an agent could call `fs.write_file('runtime/.runtime_protection_disabled', '')` and disable all runtime protection (the same path that blocks edits to `thomas/{tools,agent,core,server}/`, `scripts/`, and policy files).
+  - Added `runtime/.runtime_protection_disabled` and `runtime/.runtime_protection_key` to `_HARDCODED_PROTECTED_FILES`, so `fs.write_file` / `diff.create` / `diff.apply_patch` refuse writes to either path.
+  - Rewrote `_is_runtime_protection_disabled` to require HMAC-SHA256-signed flag content (fail-closed on any IO, parse, signature, or sandbox-mismatch error). `scripts/runtime_protection_toggle.py` now generates a 32-byte per-install key on first `off`, signs a JSON flag against it, and re-uses the key across toggles. The signing payload helper lives in both modules and is contract-tested for byte-equality.
+  - New `fs.write_protected_file` tool wires the previously-dormant `allow_native_auth_override` kwarg (introduced in PR #21) to a real caller. The tool requires a non-empty `reason`, calls `request_native_authorization`, and audit-logs every approved protected-path write.
+  - **Codex hardening review (msg-20260527214458) caught three additional gaps and they were fixed in the same PR**:
+    - `_is_protected_runtime_path` now checks the two control files (flag + key) BEFORE the disable-flag bypass — so an active flag does NOT allow agents to rewrite either control file. Otherwise an attacker could plant a key during a legitimate disable window and persist control across the next toggle cycle.
+    - `scripts/runtime_protection_toggle.py::cmd_off` now calls `_mint_fresh_key` (always overwrites any existing key) instead of `_load_or_create_key` (which re-used a possibly-attacker-planted key). `cmd_on` now also removes the key file. Net effect: no signing key persists across enable/disable cycles.
+    - Read-side protection: `ReadFileTool` and `SearchFilesTool` consult `_is_read_protected_path` and refuse / skip the key file. The flag stays readable (it's metadata only).
+  - New `tests/test_filesystem_protection_adversarial.py` (33 tests): fs.write_file refused for flag and key paths, unprotected `runtime/` subpaths still writable, every forged-flag variant (empty / non-JSON / no signature / no key / wrong key / wrong version / wrong repo / tampered field) treated as absent, signed flag accepted, new tool refused without auth and allowed with auth, toggle script's signing payload byte-matches the validator, control files refused for fs.write_file even when active signed flag is in effect, fs.write_protected_file can still reach control files with native-auth, fs.read_file refused for the key, fs.search skips the key contents.
+  - Updated `tests/test_native_auth_filesystem_guard.py::test_runtime_protection_disabled_flag_still_works` to use the signed-flag format (it previously pinned the buggy behavior).
+  - Updated `docs/SAFETY_ARCHITECTURE.md` "What's still bypassable" table with the historical row and an honest note about the shell.exec edge case (the agent could plant a key + signed flag if `tools.allow_shell = true` AND the toggle has never materialized a Calvin-owned key file).
+
 - **gate-architecture-2026-05-26**: server-side safety enforcement is now the source of truth, not local pre-commit hooks. PROBLEM.md ([plans/thomas/problems/gate-architecture-2026-05-26/PROBLEM.md](plans/thomas/problems/gate-architecture-2026-05-26/PROBLEM.md)) captured the 2026-05-26 bypass — Claude ran `git commit --no-verify` and the 50+ local gates were skipped entirely. The fix:
   - New `.github/workflows/gates.yml`: per-gate workflow jobs mirroring `scripts/forge/gates/*` as required status checks. Includes a `gates-required` aggregator so Calvin marks one thing in branch protection. Adds `signed-commits-check` that fails PRs with unsigned commits.
   - New `.github/CODEOWNERS`: routes reviews of safety-critical paths (`agent_safety.toml`, `.pre-commit-config.yaml`, `scripts/forge/gates/`, `thomas/core/agent_presence.py`, `thomas/tools/native_auth.py`, `thomas/tools/filesystem.py`, gates.yml itself, etc.) to @Calvin-Corbett.

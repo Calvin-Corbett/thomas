@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import fnmatch
+import hmac
+import json
 import logging
 import os
+from hashlib import sha256
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -27,6 +30,14 @@ _HARDCODED_PROTECTED_DIRS: tuple[str, ...] = (
     "scripts",
 )
 
+# Protected file paths (relative to sandbox root, forward-slash).
+# Two categories:
+#  - Top-level policy files an agent must not modify.
+#  - The runtime-protection toggle flag + its signing key.  These live
+#    inside the otherwise-writable runtime/ tree, but they are the
+#    *bypass mechanism* — if an agent could write them via fs.write_file
+#    they could disable all runtime protection.  See PR runtime-protection-
+#    fix-2026-05-27 for the historical bug this closes.
 _HARDCODED_PROTECTED_FILES: tuple[str, ...] = (
     "agent_safety.toml",
     "AGENTS.md",
@@ -35,17 +46,136 @@ _HARDCODED_PROTECTED_FILES: tuple[str, ...] = (
     "pyproject.toml",
     "thomas.toml",
     "thomas.prod.toml",
+    "runtime/.runtime_protection_disabled",
+    "runtime/.runtime_protection_key",
 )
+
+# ---------------------------------------------------------------------------
+# Runtime-protection toggle flag — signed-content validation.
+#
+# The flag file is created by ``scripts/runtime_protection_toggle.py`` after
+# a successful Windows credential prompt.  The toggle script writes a JSON
+# document signed with HMAC-SHA256 using a per-install key that lives in
+# ``runtime/.runtime_protection_key`` (also a protected file).  Validation
+# is fail-closed: any parse, IO, or signature error means the flag is
+# treated as absent and runtime protection stays on.
+#
+# This is defense-in-depth on top of the path protection above.  Path
+# protection alone blocks ``fs.write_file`` / ``diff.create`` /
+# ``diff.apply_patch`` from writing either file.  Signature validation
+# additionally rejects forged flags that might slip through some other
+# future write path (e.g. an enabled ``shell.exec``).
+# ---------------------------------------------------------------------------
+_RUNTIME_FLAG_REL = "runtime/.runtime_protection_disabled"
+_RUNTIME_KEY_REL = "runtime/.runtime_protection_key"
+_RUNTIME_FLAG_VERSION = 1
+
+
+def _runtime_signing_payload(version: int, issued_at: str, issued_by: str, repo: str) -> bytes:
+    """Canonical byte string signed by the toggle script.  Order matters."""
+    return f"{int(version)}|{issued_at}|{issued_by}|{repo}".encode()
+
+
+def _load_runtime_protection_key(sandbox_root: Path) -> bytes | None:
+    key_file = sandbox_root / _RUNTIME_KEY_REL
+    try:
+        raw = key_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if not raw:
+        return None
+    try:
+        key = bytes.fromhex(raw)
+    except ValueError:
+        return None
+    return key or None
 
 
 def _is_runtime_protection_disabled(sandbox_root: Path) -> bool:
-    """Return True if a human has temporarily disabled runtime protection.
+    """Return True iff a *validly signed* disable-flag is present.
 
-    The flag file is created by ``scripts/runtime_protection_toggle.py``
-    which requires Windows credential authentication before writing it.
+    The flag is signed by ``scripts/runtime_protection_toggle.py`` after a
+    successful Windows credential prompt.  This function never prompts —
+    it only verifies the signature against the per-install HMAC key.
+
+    Fail-closed: any IO error, parse error, missing key, missing/invalid
+    signature, or sandbox-root mismatch returns False (protection stays on).
     """
-    flag = sandbox_root.resolve() / "runtime" / ".runtime_protection_disabled"
-    return flag.is_file()
+    resolved_root = sandbox_root.resolve()
+    flag_file = resolved_root / _RUNTIME_FLAG_REL
+    if not flag_file.is_file():
+        return False
+
+    try:
+        raw = flag_file.read_text(encoding="utf-8")
+    except OSError as exc:
+        log.warning("runtime-protection flag unreadable; treating as absent: %s", exc)
+        return False
+
+    try:
+        doc = json.loads(raw)
+    except (json.JSONDecodeError, ValueError) as exc:
+        log.warning("runtime-protection flag is not valid JSON; ignoring: %s", exc)
+        return False
+    if not isinstance(doc, dict):
+        log.warning("runtime-protection flag root is not an object; ignoring")
+        return False
+
+    try:
+        version = int(doc.get("version", 0))
+    except (TypeError, ValueError):
+        version = 0
+    if version != _RUNTIME_FLAG_VERSION:
+        log.warning("runtime-protection flag version %r unsupported; ignoring", doc.get("version"))
+        return False
+
+    issued_at = str(doc.get("issued_at") or "")
+    issued_by = str(doc.get("issued_by") or "")
+    repo = str(doc.get("repo") or "")
+    signature_hex = str(doc.get("signature") or "")
+    if not issued_at or not issued_by or not repo or not signature_hex:
+        log.warning("runtime-protection flag missing required fields; ignoring")
+        return False
+
+    expected_repo = str(resolved_root)
+    # Compare resolved paths case-insensitively on Windows.
+    if os.name == "nt":
+        if repo.lower() != expected_repo.lower():
+            log.warning(
+                "runtime-protection flag repo mismatch (flag=%r, sandbox=%r); ignoring",
+                repo,
+                expected_repo,
+            )
+            return False
+    elif repo != expected_repo:
+        log.warning(
+            "runtime-protection flag repo mismatch (flag=%r, sandbox=%r); ignoring",
+            repo,
+            expected_repo,
+        )
+        return False
+
+    key = _load_runtime_protection_key(resolved_root)
+    if key is None:
+        log.warning("runtime-protection signing key missing/invalid; ignoring flag")
+        return False
+
+    try:
+        signature = bytes.fromhex(signature_hex)
+    except ValueError:
+        log.warning("runtime-protection flag signature is not hex; ignoring")
+        return False
+
+    expected = hmac.new(
+        key,
+        _runtime_signing_payload(version, issued_at, issued_by, repo),
+        sha256,
+    ).digest()
+    if not hmac.compare_digest(expected, signature):
+        log.warning("runtime-protection flag signature mismatch; ignoring")
+        return False
+
+    return True
 
 
 def _is_protected_runtime_path(
@@ -79,11 +209,14 @@ def _is_protected_runtime_path(
        before.  This is the architecture extension landed in
        gate-architecture-2026-05-26 (see docs/SAFETY_ARCHITECTURE.md).
        Existing callers that don't pass the kwarg get unchanged behavior.
-    """
-    # Allow bypass when a human has explicitly disabled protection.
-    if _is_runtime_protection_disabled(sandbox_root):
-        return None
 
+    The two *runtime-protection control files* (the disable flag and the HMAC
+    key) are **absolutely protected**: the persistent-disable bypass does NOT
+    apply to them.  Otherwise an active disable state could be used to
+    overwrite the key with attacker-controlled bytes and persist a bypass
+    across the next toggle cycle (Codex hardening review, msg-20260527214458).
+    Calvin can still write them via the per-operation native-auth override.
+    """
     try:
         rel = target.resolve().relative_to(sandbox_root.resolve())
     except ValueError:
@@ -92,6 +225,28 @@ def _is_protected_runtime_path(
 
     # Normalise to forward-slash for consistent matching on all platforms.
     rel_posix = PurePosixPath(rel)
+    rel_posix_str = str(rel_posix)
+
+    # ── Always-protected: runtime-protection control files ────────────────
+    # These must never be bypassed by the disable flag itself.  Calvin can
+    # still reach them through the per-operation native-auth override below.
+    if rel_posix_str in {_RUNTIME_FLAG_REL, _RUNTIME_KEY_REL}:
+        reason = (
+            f"BLOCKED: '{rel_posix_str}' is a runtime-protection control file. "
+            "Only scripts/runtime_protection_toggle.py (Windows-auth required) "
+            "may write here, regardless of the persistent disable flag."
+        )
+        return _maybe_apply_native_auth_override(
+            reason=reason,
+            rel_posix=rel_posix,
+            allow_native_auth_override=allow_native_auth_override,
+            action_description=action_description,
+        )
+
+    # Allow bypass when a human has explicitly disabled protection
+    # (control files above are exempt from this bypass).
+    if _is_runtime_protection_disabled(sandbox_root):
+        return None
 
     reason: str | None = None
 
@@ -119,12 +274,27 @@ def _is_protected_runtime_path(
     if reason is None:
         return None
 
+    return _maybe_apply_native_auth_override(
+        reason=reason,
+        rel_posix=rel_posix,
+        allow_native_auth_override=allow_native_auth_override,
+        action_description=action_description,
+    )
+
+
+def _maybe_apply_native_auth_override(
+    *,
+    reason: str,
+    rel_posix: PurePosixPath,
+    allow_native_auth_override: bool,
+    action_description: str,
+) -> str | None:
+    """Per-operation native-auth gate: if approved, return None (allow)."""
     if not allow_native_auth_override:
         return reason
 
-    # Per-operation override: pop OS-native auth prompt. Import lazily so
-    # this function doesn't drag the GUI/credential-dialog dependency into
-    # every filesystem.py import path.
+    # Import lazily so filesystem.py doesn't drag GUI/credential-dialog
+    # dependencies into every import path.
     try:
         from thomas.tools.native_auth import request_native_authorization
     except Exception as exc:  # noqa: BLE001 - degrade gracefully if missing
@@ -165,6 +335,29 @@ def _is_protected_runtime_path(
         rel_posix,
     )
     return reason
+
+
+def _is_read_protected_path(sandbox_root: Path, target: Path) -> str | None:
+    """Return a refusal reason if *target* must not be readable by agent tools.
+
+    Currently scoped to the HMAC signing key.  The disable-flag file is
+    metadata only (timestamp + user + signature) and is harmless to read —
+    forging it requires the key.  Protecting the key's read path is
+    defense-in-depth alongside the write-side path protection (Codex
+    hardening review msg-20260527214458).
+    """
+    try:
+        rel = target.resolve().relative_to(sandbox_root.resolve())
+    except ValueError:
+        return None
+    rel_posix_str = str(PurePosixPath(rel))
+    if rel_posix_str == _RUNTIME_KEY_REL:
+        return (
+            f"BLOCKED: '{rel_posix_str}' is the runtime-protection signing key. "
+            "Agent tools cannot read it; doing so would let an attacker mint "
+            "valid disable flags."
+        )
+    return None
 
 
 def _safe_path(root: Path, rel: str) -> Path:
@@ -226,6 +419,12 @@ class ReadFileTool(Tool):
             path = _safe_path(self._root, rel)
         except ValueError as e:
             return ToolResult(ok=False, error=str(e))
+
+        # ── Read protection: refuse the runtime-protection signing key ──
+        read_blocked = _is_read_protected_path(self._root, path)
+        if read_blocked:
+            log.warning("Read refused: %s", read_blocked)
+            return ToolResult(ok=False, error=read_blocked)
 
         if not path.exists():
             return ToolResult(ok=False, error=f"File not found: {rel}")
@@ -302,6 +501,99 @@ class WriteFileTool(Tool):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(args["content"], encoding="utf-8")
         return ToolResult(ok=True, data=f"Wrote {len(args['content'])} chars to {rel}")
+
+
+class WriteProtectedFileTool(Tool):
+    """Write a file at a runtime-protected path with native OS authorization.
+
+    Standard ``fs.write_file`` refuses writes inside protected paths
+    (``thomas/tools/``, ``thomas/agent/``, ``thomas/core/``, ``thomas/server/``,
+    ``scripts/``, top-level policy files, the runtime-protection flag).
+
+    This tool wraps the *same* write logic but flips the
+    ``allow_native_auth_override`` kwarg on the protection check.  When the
+    target path is protected, the call attempts a one-shot native OS auth
+    prompt (Windows Hello / Touch ID / polkit).  If a human at the physical
+    device approves, this single write is allowed and audit-logged.  If
+    denied/cancelled/unavailable, the standard refusal is returned.
+
+    Headless sessions (no interactive desktop) cannot satisfy the prompt,
+    so this tool is effectively unusable for protected paths in that
+    context — which is the point.
+    """
+
+    name = "fs.write_protected_file"
+    category = "filesystem"
+    description = (
+        "Write a file at a runtime-protected path. Requires a native OS "
+        "authorization prompt (Windows Hello/PIN, Touch ID, or polkit) for "
+        "any path inside thomas/tools/, thomas/agent/, thomas/core/, "
+        "thomas/server/, scripts/, or any top-level policy file. Use only "
+        "when an interactive human is present at the device. For unprotected "
+        "paths this tool behaves like fs.write_file."
+    )
+    parameters = {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Relative or absolute path for the file",
+            },
+            "content": {
+                "type": "string",
+                "description": "The text content to write",
+            },
+            "reason": {
+                "type": "string",
+                "description": (
+                    "Short human-readable reason shown in the OS auth prompt "
+                    "(e.g. 'Apply emergency fix to thomas/tools/filesystem.py')."
+                ),
+            },
+        },
+        "required": ["path", "content", "reason"],
+    }
+
+    def __init__(self, sandbox_root: Path):
+        self._root = sandbox_root.resolve()
+
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
+        rel = args["path"]
+        reason = str(args.get("reason") or "").strip()
+        if not reason:
+            return ToolResult(
+                ok=False,
+                error="fs.write_protected_file requires a non-empty 'reason' for the OS auth prompt.",
+            )
+
+        try:
+            path = _safe_path(self._root, rel)
+        except ValueError as e:
+            return ToolResult(ok=False, error=str(e))
+
+        action_description = f"Write protected runtime path: {rel} — {reason}"
+        blocked = _is_protected_runtime_path(
+            self._root,
+            path,
+            allow_native_auth_override=True,
+            action_description=action_description,
+        )
+        if blocked:
+            log.warning("Runtime protection refused (even with OS auth override): %s", blocked)
+            return ToolResult(ok=False, error=blocked)
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(args["content"], encoding="utf-8")
+        log.warning(
+            "fs.write_protected_file: wrote %d chars to '%s' (reason=%r)",
+            len(args["content"]),
+            rel,
+            reason,
+        )
+        return ToolResult(
+            ok=True,
+            data=f"Wrote {len(args['content'])} chars to {rel} (via OS-auth override)",
+        )
 
 
 class ListDirTool(Tool):
@@ -426,6 +718,10 @@ class SearchFilesTool(Tool):
                 if not fnmatch.fnmatch(fname, file_glob):
                     continue
                 fpath = Path(dirpath) / fname
+                # Never search the contents of read-protected files
+                # (would leak the HMAC key).
+                if _is_read_protected_path(self._root, fpath):
+                    continue
                 files_searched += 1
 
                 try:
@@ -457,5 +753,6 @@ def register_filesystem_tools(registry: Any, sandbox_root: Path, max_file_size: 
     """Register all filesystem tools with the registry."""
     registry.register(ReadFileTool(sandbox_root, max_file_size))
     registry.register(WriteFileTool(sandbox_root))
+    registry.register(WriteProtectedFileTool(sandbox_root))
     registry.register(ListDirTool(sandbox_root))
     registry.register(SearchFilesTool(sandbox_root))

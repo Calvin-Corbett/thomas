@@ -11,21 +11,33 @@ Usage (from the Thomas repo root):
     python scripts/runtime_protection_toggle.py on    # Re-enable protection
     python scripts/runtime_protection_toggle.py status # Check current state
 
-The toggle writes/removes a flag file at runtime/.runtime_protection_disabled.
-The guard in thomas/tools/filesystem.py checks for this file.
+Files this script manages (both gitignored, both in the hardcoded protected
+file list — fs.write_file refuses to touch either):
+    - runtime/.runtime_protection_disabled   the signed JSON flag
+    - runtime/.runtime_protection_key        the per-install HMAC key
+
+The flag is a JSON document signed with HMAC-SHA256 using the key.  The
+validator in thomas/tools/filesystem.py recomputes the signature and rejects
+flags it can't verify, so a forged or empty flag file is harmless.
 
 Security model:
     - This script requires an interactive Windows session
     - It prompts for the PC's password via the Windows credential dialog
     - Agents running in background/headless mode cannot produce the dialog
-    - The flag file location (runtime/) is outside the protected directories
-      so it CAN be written, but only this script creates it after auth
+    - Both managed files are protected paths: fs.write_file refuses agent
+      writes, so an agent cannot mint a valid flag through Thomas's tool
+      layer.  Even if a future write path slips past path protection, the
+      signature check still rejects unsigned forgeries.
 """
 
 from __future__ import annotations
 
+import hmac
+import json
 import os
+import secrets
 import time
+from hashlib import sha256
 from pathlib import Path
 
 
@@ -44,13 +56,58 @@ def _find_repo_root() -> Path:
 
 
 FLAG_FILENAME = ".runtime_protection_disabled"
+KEY_FILENAME = ".runtime_protection_key"
+FLAG_VERSION = 1
 
 
 def _flag_path(repo: Path) -> Path:
     return repo / "runtime" / FLAG_FILENAME
 
 
+def _key_path(repo: Path) -> Path:
+    return repo / "runtime" / KEY_FILENAME
+
+
+def _signing_payload(version: int, issued_at: str, issued_by: str, repo_str: str) -> bytes:
+    """Must match thomas.tools.filesystem._runtime_signing_payload byte-for-byte."""
+    return f"{int(version)}|{issued_at}|{issued_by}|{repo_str}".encode()
+
+
+def _mint_fresh_key(repo: Path) -> bytes:
+    """Generate a brand-new HMAC key, overwriting any prior key file.
+
+    We deliberately do NOT re-use an existing key file across toggle
+    sessions.  Persisting the key across sessions would mean that if an
+    attacker ever planted a key (e.g. via some other write path before
+    runtime/.runtime_protection_key was added to the protected list, or
+    via shell.exec if Calvin ever enabled it), the planted key would
+    silently keep working forever after.  Minting fresh on every ``off``
+    means: any attacker-planted key is overwritten the next time Calvin
+    legitimately toggles, and any flag signed against the old key
+    becomes invalid the moment the new key lands.  (Codex hardening
+    review, msg-20260527214458.)
+    """
+    key_file = _key_path(repo)
+    key_file.parent.mkdir(parents=True, exist_ok=True)
+    new_key = secrets.token_bytes(32)
+    key_file.write_text(new_key.hex() + "\n", encoding="utf-8")
+    # Restrictive permissions where supported (no-op on Windows but
+    # documents intent; Windows ACLs are inherited from runtime/).
+    try:
+        os.chmod(key_file, 0o600)
+    except OSError:
+        pass
+    return new_key
+
+
 def _is_disabled(repo: Path) -> bool:
+    """Quick presence check (does NOT validate signature).
+
+    This is intentionally lenient — used only by ``status`` and ``off``
+    to short-circuit redundant work.  The real signature validation
+    lives in ``thomas.tools.filesystem._is_runtime_protection_disabled``;
+    that is what actually gates agent writes.
+    """
     return _flag_path(repo).exists()
 
 
@@ -137,36 +194,63 @@ def cmd_off(repo: Path) -> int:
     if not _authenticate_windows():
         return 1
 
+    key = _mint_fresh_key(repo)
+
+    issued_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    issued_by = os.environ.get("USERNAME") or os.environ.get("USER") or "unknown"
+    repo_str = str(repo.resolve())
+    signature = hmac.new(
+        key,
+        _signing_payload(FLAG_VERSION, issued_at, issued_by, repo_str),
+        sha256,
+    ).hexdigest()
+
+    document = {
+        "version": FLAG_VERSION,
+        "issued_at": issued_at,
+        "issued_by": issued_by,
+        "repo": repo_str,
+        "signature": signature,
+        "note": "Re-enable with: python scripts/runtime_protection_toggle.py on",
+    }
+
     flag = _flag_path(repo)
     flag.parent.mkdir(parents=True, exist_ok=True)
-    flag.write_text(
-        f"# Runtime protection disabled at {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
-        f"# by {os.environ.get('USERNAME', 'unknown')}\n"
-        f"# Re-enable with: python scripts/runtime_protection_toggle.py on\n",
-        encoding="utf-8",
-    )
+    flag.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 
     print("\n  Runtime protection is now DISABLED.")
+    print(f"  Issued at: {issued_at}  by: {issued_by}")
     print("  Agent tools can write to thomas/tools/, thomas/agent/, etc.")
     print("  Re-enable with: python scripts/runtime_protection_toggle.py on")
     return 0
 
 
 def cmd_on(repo: Path) -> int:
-    """Re-enable runtime protection."""
+    """Re-enable runtime protection.
+
+    Removes both the flag and the signing key.  The next ``off`` will
+    mint a fresh key — this prevents any attacker-planted key from
+    surviving an enable/disable cycle.
+    """
     flag = _flag_path(repo)
-    if not flag.exists():
+    key = _key_path(repo)
+
+    if not flag.exists() and not key.exists():
         print("  Runtime protection is already ENABLED.")
         return 0
 
-    try:
-        flag.unlink()
-    except OSError as e:
-        print(f"  ERROR: Could not remove flag file: {e}")
-        return 1
+    for path, label in ((flag, "flag file"), (key, "signing key")):
+        if not path.exists():
+            continue
+        try:
+            path.unlink()
+        except OSError as e:
+            print(f"  ERROR: Could not remove {label} at {path}: {e}")
+            return 1
 
     print("  Runtime protection is now ENABLED.")
     print("  Agent tools are blocked from writing to Thomas's runtime code.")
+    print("  (Signing key removed; next 'off' will mint a fresh one.)")
     return 0
 
 

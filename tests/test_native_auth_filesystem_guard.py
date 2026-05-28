@@ -174,12 +174,41 @@ def test_native_auth_raises_honors_refusal(sandbox: Path, monkeypatch: pytest.Mo
 
 
 def test_runtime_protection_disabled_flag_still_works(sandbox: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The pre-existing flag-file bypass still wins over per-call check."""
-    flag = sandbox / "runtime" / ".runtime_protection_disabled"
-    flag.parent.mkdir(parents=True, exist_ok=True)
-    flag.write_text("disabled")
+    """The flag-file bypass still wins over per-call check — but only if the
+    flag is properly signed (post-2026-05-27 fix).  An unsigned/empty flag
+    is treated as absent (see test_filesystem_protection_adversarial.py)."""
+    import hmac as _hmac
+    import json as _json
+    from hashlib import sha256 as _sha256
 
-    # Even WITHOUT the kwarg, the flag bypass returns None.
+    from thomas.tools.filesystem import _runtime_signing_payload
+
+    # Plant a valid signing key and a flag signed against it.
+    key = bytes(range(32))
+    (sandbox / "runtime").mkdir(parents=True, exist_ok=True)
+    (sandbox / "runtime" / ".runtime_protection_key").write_text(key.hex() + "\n")
+
+    issued_at = "2026-05-27T12:00:00Z"
+    issued_by = "calvin"
+    repo = str(sandbox.resolve())
+    sig = _hmac.new(
+        key,
+        _runtime_signing_payload(1, issued_at, issued_by, repo),
+        _sha256,
+    ).hexdigest()
+    (sandbox / "runtime" / ".runtime_protection_disabled").write_text(
+        _json.dumps(
+            {
+                "version": 1,
+                "issued_at": issued_at,
+                "issued_by": issued_by,
+                "repo": repo,
+                "signature": sig,
+            }
+        )
+    )
+
+    # Even WITHOUT the kwarg, the signed-flag bypass returns None.
     assert _is_protected_runtime_path(sandbox, _protected_dir_target(sandbox)) is None
     # And WITH the kwarg (no auth needed since flag wins first).
     assert (
