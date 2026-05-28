@@ -18,9 +18,9 @@
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {
-    "@opennextjs/cloudflare": "^1.7.0",
+    "@opennextjs/cloudflare": "^1.19.11",
     "gsap": "^3.14.2",
-    "next": "^16.1.6",
+    "next": "^16.2.6",
     "postgres": "^3.4.5",
     "react": "19.0.0",
     "react-dom": "19.0.0"
@@ -32,5 +32,8 @@
     "playwright": "^1.58.2",
     "typescript": "^5.8.2",
     "wrangler": "^4.67.0"
+  },
+  "overrides": {
+    "postcss": "8.5.15"
   }
 }

@@ -9,11 +9,16 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.16.8] - 2026-05-28
+
+Security patch release covering Dependabot remediation and the hardening takeover gates.
+
 ### Added
 - Refreshable model catalog and latest-model aliases for model/profile discovery, including curated OpenAI frontier fallbacks and server/CLI surfaces for cached catalog data.
 - Registered skill bundles for multipart HTTP response parsing, partial structuring recovery, and serializer/deserializer feature matrices.
 
 ### Security
+- Cleared the open Dependabot alert set across the Python lock, the public site package lock, Vault Fortress, and the Discord bridge by bumping vulnerable direct and transitive dependencies and keeping the site build/audit path green.
 - Hardened safety gate CI parity: diff-range mode now works for protected-files, bulk, commit-growth, exception-handler, and changelog gates; monolith filename checks run on the PR diff instead of the full legacy tree.
 - Added auditable protected-file, bulk-change, and commit-growth approval trailers for server-side checks, plus local scoped-commit propagation of the same commit message.
 - Split runtime-protection adversarial coverage into smaller focused files while preserving the control-file, native-auth, signed-flag, and read-side key protections.
