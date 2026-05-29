@@ -44,7 +44,7 @@ webchat, and CLI. 10,000 lines across 37 files.
 channels that actually connect to anything.** The pipes are built. Nothing
 flows through them.
 
-## Product Vision (from Calvin, 2026-03-18)
+## Product Vision (from the product owner, 2026-03-18)
 
 Channels are things you add through the marketplace. If you want Discord
 support, you go to the marketplace (or tell Thomas) and add it. Each

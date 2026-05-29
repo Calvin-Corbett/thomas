@@ -10,7 +10,7 @@ Covers:
 - AgentSafetyConfig: skip_policy_breakglass_max_per_agent_24h reflects overlay
 - precommit_skip_policy gate: 0 in the resolved config means unlimited
 
-Why this matters: Calvin opted his dev machine out of the per-agent
+Why this matters: the product owner opted his dev machine out of the per-agent
 breakglass quota (he accepts the tradeoff because the OTHER layers of
 the safety architecture — protected-files, signed-commits, server-side
 gates — still apply). Public installs keep the default cap of 3.

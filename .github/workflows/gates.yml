@@ -4,14 +4,14 @@ name: Gates (server-side safety enforcement)
 # also runnable locally via the .pre-commit-config.yaml hook chain, but those
 # local hooks are bypassable by `git commit --no-verify`. This workflow is
 # NOT bypassable: it runs on every PR to dev/main and every push to those
-# branches, and the `gates-required` aggregator job is what Calvin marks as
+# branches, and the `gates-required` aggregator job is what the product owner marks as
 # a "required status check" in branch protection. A commit that bypassed
 # local hooks cannot reach dev/main if any gate here fails.
 #
 # Design notes:
 #   - One job per gate so individual failures are visible in PR check list.
 #   - Aggregator job `gates-required` depends on all of them — that's the
-#     single check name Calvin marks as required in branch protection.
+#     single check name the product owner marks as required in branch protection.
 #   - BASE_SHA/HEAD_SHA resolution mirrors .github/workflows/robustness-gates.yml
 #     for consistency.
 #   - Worktree-local gates (worktree_branch_guard, worktree_rules_gate,
@@ -432,7 +432,7 @@ jobs:
   # signed commits" rule by simply not signing. Branch protection's check
   # is a UI-level toggle; this job is the workflow-level enforcement.
   #
-  # Calvin should ALSO enable "Require signed commits" in branch protection
+  # the product owner should ALSO enable "Require signed commits" in branch protection
   # for defense-in-depth — see docs/BRANCH_PROTECTION_SETUP.md.
 
   signed-commits-check:
@@ -513,7 +513,7 @@ jobs:
   # Mark this job (`gates-required`) as a required status check in
   # GitHub branch protection settings for both `dev` and `main`. It depends
   # on every gate above, so any one failing causes this aggregator to fail
-  # too. Calvin only needs to mark ONE check as required.
+  # too. the product owner only needs to mark ONE check as required.
   #
   # Per docs/BRANCH_PROTECTION_SETUP.md, navigate to:
   #   Settings → Branches → Branch protection rules → Edit (for dev/main)

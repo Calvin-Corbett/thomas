@@ -21,7 +21,7 @@ Minimal boilerplate structure. May have class definitions but little to no real 
 
 ## Marketplace Destination
 
-Per Calvin (2026-03-18), all domain modules will become marketplace extensions.
+Per the product owner (2026-03-18), all domain modules will become marketplace extensions.
 Would need significant work to become a marketplace extension.
 
 See `docs/DOMAIN_MODULES_AUDIT.md` for the full audit findings.

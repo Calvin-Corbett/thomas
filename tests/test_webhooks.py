@@ -123,12 +123,12 @@ def test_template_dotpath_and_test_endpoint(app):
         json={"id": "abc", "secret": "s3cr3t", "goal_template": "Lead {payload.name} email {payload.customer.email}"},
     )
 
-    payload = {"name": "Calvin", "customer": {"email": "c@example.com"}}
+    payload = {"name": "the product owner", "customer": {"email": "c@example.com"}}
     r = c.post("/webhooks/test/abc", headers={"X-Admin-Token": "adm"}, json=payload)
     assert r.status_code == 200
     assert r.json()["signature"].startswith("sha256=")
     assert len(fake_p.goals) == 1
-    assert "Lead Calvin email c@example.com" in fake_p.goals[0]["text"]
+    assert "Lead the product owner email c@example.com" in fake_p.goals[0]["text"]
 
 
 def test_receive_generic_signature_and_dedupe_and_inbox(app):
