@@ -214,8 +214,8 @@ def _is_protected_runtime_path(
     key) are **absolutely protected**: the persistent-disable bypass does NOT
     apply to them.  Otherwise an active disable state could be used to
     overwrite the key with attacker-controlled bytes and persist a bypass
-    across the next toggle cycle (Codex hardening review, msg-20260527214458).
-    Calvin can still write them via the per-operation native-auth override.
+    across the next toggle cycle (security hardening review).
+    The product owner can still write them via the per-operation native-auth override.
     """
     try:
         rel = target.resolve().relative_to(sandbox_root.resolve())
@@ -228,7 +228,7 @@ def _is_protected_runtime_path(
     rel_posix_str = str(rel_posix)
 
     # ── Always-protected: runtime-protection control files ────────────────
-    # These must never be bypassed by the disable flag itself.  Calvin can
+    # These must never be bypassed by the disable flag itself.  The product owner can
     # still reach them through the per-operation native-auth override below.
     if rel_posix_str in {_RUNTIME_FLAG_REL, _RUNTIME_KEY_REL}:
         reason = (
@@ -343,8 +343,8 @@ def _is_read_protected_path(sandbox_root: Path, target: Path) -> str | None:
     Currently scoped to the HMAC signing key.  The disable-flag file is
     metadata only (timestamp + user + signature) and is harmless to read —
     forging it requires the key.  Protecting the key's read path is
-    defense-in-depth alongside the write-side path protection (Codex
-    hardening review msg-20260527214458).
+    defense-in-depth alongside the write-side path protection (security
+    hardening review).
     """
     try:
         rel = target.resolve().relative_to(sandbox_root.resolve())

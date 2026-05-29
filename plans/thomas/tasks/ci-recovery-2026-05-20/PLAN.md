@@ -11,7 +11,7 @@ carrying gate debt forward.
 
 ## Approach
 
-Fix each failure in-session rather than deferring. Per Calvin's directive on
+Fix each failure in-session rather than deferring. Per the product owner's directive on
 2026-05-20: "idk what prompt your reading that says defer but that stops here."
 
 ## Versions delivered
@@ -27,5 +27,5 @@ Fix each failure in-session rather than deferring. Per Calvin's directive on
 ## Exit criteria
 
 - [x] All 3 dev-origin workflows green (Robustness Gates, Publish Safety, Site Release Safety).
-- [ ] Publish dev → public main (deliberate — requires Calvin to toggle branch protection).
+- [ ] Publish dev → public main (deliberate — requires the product owner to toggle branch protection).
 - [ ] Release the claim.

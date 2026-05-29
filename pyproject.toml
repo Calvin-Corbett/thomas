@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "thomas-ai"
-version = "0.16.8"
+version = "0.16.9"
 description = "Autonomous AI execution platform for local and remote deployments"
 readme = "README.md"
 license = {text = "MIT"}
@@ -215,6 +215,7 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.setuptools.data-files]
+"skills/async-lifecycle-initialization" = ["skills/async-lifecycle-initialization/SKILL.md"]
 "skills/auto-skillify" = ["skills/auto-skillify/SKILL.md"]
 "skills/capcut-video-editor" = ["skills/capcut-video-editor/SKILL.md"]
 "skills/cloudflare-deploy" = ["skills/cloudflare-deploy/SKILL.md"]
@@ -226,8 +227,10 @@ indent-style = "space"
 "skills/gh-address-comments" = ["skills/gh-address-comments/SKILL.md"]
 "skills/gh-fix-ci" = ["skills/gh-fix-ci/SKILL.md"]
 "skills/higgsfield-video-director" = ["skills/higgsfield-video-director/SKILL.md"]
+"skills/incremental-cache-cli-modes" = ["skills/incremental-cache-cli-modes/SKILL.md"]
 "skills/imagegen" = ["skills/imagegen/SKILL.md"]
 "skills/jupyter-notebook" = ["skills/jupyter-notebook/SKILL.md"]
+"skills/line-suppression-directives" = ["skills/line-suppression-directives/SKILL.md"]
 "skills/linear" = ["skills/linear/SKILL.md"]
 "skills/multipart-http-response-parser" = ["skills/multipart-http-response-parser/SKILL.md"]
 "skills/netlify-deploy" = ["skills/netlify-deploy/SKILL.md"]
@@ -240,11 +243,13 @@ indent-style = "space"
 "skills/partial-structuring-recovery" = ["skills/partial-structuring-recovery/SKILL.md"]
 "skills/playwright" = ["skills/playwright/SKILL.md"]
 "skills/render-deploy" = ["skills/render-deploy/SKILL.md"]
+"skills/recursive-json-schema-validation" = ["skills/recursive-json-schema-validation/SKILL.md"]
 "skills/screenshot" = ["skills/screenshot/SKILL.md"]
 "skills/security-best-practices" = ["skills/security-best-practices/SKILL.md"]
 "skills/security-ownership-map" = ["skills/security-ownership-map/SKILL.md"]
 "skills/security-threat-model" = ["skills/security-threat-model/SKILL.md"]
 "skills/serializer-deserializer-feature-matrix" = ["skills/serializer-deserializer-feature-matrix/SKILL.md"]
+"skills/static-taint-analysis" = ["skills/static-taint-analysis/SKILL.md"]
 "skills/sentry" = ["skills/sentry/SKILL.md"]
 "skills/skill-authoring" = ["skills/skill-authoring/SKILL.md"]
 "skills/skill-distillation" = ["skills/skill-distillation/SKILL.md"]

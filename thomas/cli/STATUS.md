@@ -4,7 +4,7 @@
 |------------------|---------------------------------------------------------|
 | Status           | functional (REPL works, many commands exist, gaps below)|
 | Last assessed    | 2026-03-18                                              |
-| Assessed by      | claude-opus-4-6 (Cowork session) + Calvin (product owner)|
+| Assessed by      | claude-opus-4-6 (Cowork session) + the product owner|
 | Used in prod     | yes — REPL and CLI commands are the terminal interface   |
 | Has real tests   | partial                                                  |
 | Blocking issues  | repl.py over 800-line limit (1806 lines)                 |
@@ -17,7 +17,7 @@ talk to Thomas in a terminal. 49,000 lines across 232 files.
 **Important: this module is secondary to the web UI**, but it was intentionally
 developed to have personality and polish. It's not a throwaway dev tool.
 
-## Product Vision (from Calvin, 2026-03-18)
+## Product Vision (from the product owner, 2026-03-18)
 
 - The CLI is **secondary to the web UI** but should still be good
 - **Feature parity with Claude Code and Codex is the target.** Thomas's CLI

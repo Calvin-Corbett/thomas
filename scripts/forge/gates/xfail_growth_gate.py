@@ -2,7 +2,7 @@
 """Block commits that add xfails without a justifying commit-message trailer.
 
 Part of the xfail-debt enforcement arc (P0-1 from the 2026-05-27 senior
-review). Implements the "strict" policy Calvin chose: no new xfails may
+review). Implements the "strict" policy the product owner chose: no new xfails may
 be added unless the commit message contains an `xfail-justified: <reason>`
 trailer.
 

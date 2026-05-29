@@ -6,7 +6,7 @@
 - problem_record: `plans/thomas/problems/gate-architecture-2026-05-26/PROBLEM.md`
 - scope: `.github/workflows/, .github/CODEOWNERS, docs/SAFETY_ARCHITECTURE.md, docs/SIGNING_KEY_SETUP.md, docs/BRANCH_PROTECTION_SETUP.md, tests/test_native_auth_filesystem_guard.py, tests/test_gate_architecture_e2e.py, thomas/tools/filesystem.py (additive — extending existing _is_protected_runtime_path callers), CHANGELOG.md`
 - created_at_utc: `2026-05-26T22:00:00+00:00`
-- approved_by_human: Calvin (2026-05-26, this session — explicit directive in /goal)
+- approved_by_human: the product owner (2026-05-26, this session — explicit directive in /goal)
 
 ## Objective
 
@@ -24,8 +24,8 @@ in `docs/SAFETY_ARCHITECTURE.md`.
 
 | Layer | What | Where it lives | Who can touch |
 |---|---|---|---|
-| 1 | Branch protection requires signed commits | GitHub repo Settings → Branches | Calvin (UI clickpath) |
-| 2 | Signing key in OS keychain | Windows Credential Manager (Win Hello-protected) | Calvin (runbook) |
+| 1 | Branch protection requires signed commits | GitHub repo Settings → Branches | the product owner (UI clickpath) |
+| 2 | Signing key in OS keychain | Windows Credential Manager (Win Hello-protected) | the product owner (runbook) |
 | 3 | Keychain access requires native OS auth | Windows Hello PIN/biometric prompt | OS-native (no software path) |
 | 4 | GitHub Actions mirror of gates as required status checks | `.github/workflows/gates.yml` | claude (in scope) |
 
@@ -33,7 +33,7 @@ Plus 2 supporting pieces:
 
 | Piece | What | Where | Who |
 |---|---|---|---|
-| CODEOWNERS | Route reviews of safety-critical paths to Calvin | `.github/CODEOWNERS` | claude (in scope) |
+| CODEOWNERS | Route reviews of safety-critical paths to the product owner | `.github/CODEOWNERS` | claude (in scope) |
 | Native-auth extension | Wrap protected-file write attempts with OS auth | `thomas/tools/filesystem.py` + new test | claude (additive only — won't modify existing `_is_protected_runtime_path` return semantics) |
 
 ## Scope boundaries
@@ -43,15 +43,15 @@ Plus 2 supporting pieces:
 - `.github/workflows/gates.yml` — new file, mirror of `scripts/forge/gates/*` as
   per-gate jobs (separate jobs so each is a markable required status check)
 - `.github/CODEOWNERS` — new file
-- `docs/SIGNING_KEY_SETUP.md` — Calvin's runbook for layer 2 (commands he runs)
-- `docs/BRANCH_PROTECTION_SETUP.md` — Calvin's runbook for layer 1 + step 4 (UI clickpath)
+- `docs/SIGNING_KEY_SETUP.md` — the product owner's runbook for layer 2 (commands he runs)
+- `docs/BRANCH_PROTECTION_SETUP.md` — the product owner's runbook for layer 1 + step 4 (UI clickpath)
 - `docs/SAFETY_ARCHITECTURE.md` — mental-model doc (the *why* for future agents)
 - `tests/test_native_auth_filesystem_guard.py` — coverage for the extended native-auth
 - `tests/test_gate_architecture_e2e.py` — proof artifact for the `--no-verify` scenario
 - `thomas/tools/filesystem.py` — additive extension of `_is_protected_runtime_path` callers to optionally consult `request_native_authorization` (gated by an explicit kwarg; default behavior unchanged)
 - `CHANGELOG.md` — entry under `[Unreleased]`
 
-### What Calvin does (out of band, gated by his hand)
+### What the product owner does (out of band, gated by his hand)
 
 - Run the signing-key setup commands from `docs/SIGNING_KEY_SETUP.md`
 - Click through GitHub branch protection per `docs/BRANCH_PROTECTION_SETUP.md`
@@ -61,8 +61,8 @@ Plus 2 supporting pieces:
 
 ### What claude does NOT touch (protected)
 
-- `agent_safety.toml` — only Calvin/breakglass; we'll note the architecture
-  shift in a follow-up by Calvin (see "Post-merge follow-ups" below)
+- `agent_safety.toml` — only the product owner/breakglass; we'll note the architecture
+  shift in a follow-up by the product owner (see "Post-merge follow-ups" below)
 - `.pre-commit-config.yaml` — same; local hooks stay as developer convenience
 - `scripts/forge/gates/*` — enforcement scripts themselves stay untouched in
   this PR (the local-gate bypass cleanup is a *separate* task per PROBLEM.md
@@ -88,10 +88,10 @@ Plus 2 supporting pieces:
    - Each job: checkout, setup Python 3.12, install deps, run the single gate.
    - Use a `gate-deps` reusable step or matrix where shape allows (DRY without sacrificing per-gate visibility).
    - Triggers: `pull_request` to `dev`/`main`, `push` to `dev`/`main`.
-   - Final aggregator job `gates-all-passed` with `needs: [<every gate job>]` for a single required-status-check name if Calvin prefers that over marking each individually.
+   - Final aggregator job `gates-all-passed` with `needs: [<every gate job>]` for a single required-status-check name if the product owner prefers that over marking each individually.
 5. Write `.github/CODEOWNERS`:
    ```
-   # Safety-critical paths — Calvin must review changes
+   # Safety-critical paths — the product owner must review changes
    /agent_safety.toml                @Calvin-Corbett
    /.pre-commit-config.yaml          @Calvin-Corbett
    /scripts/forge/gates/             @Calvin-Corbett
@@ -107,13 +107,13 @@ Plus 2 supporting pieces:
    ```
 6. Smoke-test the workflow locally where possible: `gh workflow view gates.yml`, lint with `actionlint` if installed, `python -c "import yaml; yaml.safe_load(open('.github/workflows/gates.yml'))"`.
 
-### Phase 2 — Calvin's runbooks (Layers 1, 2, 3)
+### Phase 2 — the product owner's runbooks (Layers 1, 2, 3)
 
 7. Write `docs/SIGNING_KEY_SETUP.md`:
    - Two options: SSH-based (modern, simpler, fewer moving parts) vs GPG (broader compat).
    - Recommend SSH signing (Git 2.34+) because the key can be `ssh-keygen -t ed25519` and stored as a normal SSH key, with `git config commit.gpgsign true` + `gpg.format ssh` + `user.signingkey ~/.ssh/id_ed25519.pub` + `gpg.ssh.allowedSignersFile` for verification.
    - Windows Credential Manager + Windows Hello path: enable Win Hello for the key passphrase via Windows-managed PKCS#11 token or `git-credential-manager` integration.
-   - Explicit PowerShell snippets Calvin runs.
+   - Explicit PowerShell snippets the product owner runs.
    - Verification step: `git commit --allow-empty -m "signing test"` should pop Win Hello PIN; `git log --show-signature -1` should show "Good signature".
 8. Write `docs/BRANCH_PROTECTION_SETUP.md`:
    - Step-by-step UI clickpath for `dev` and `main` on `thomas-dev` and `thomas` repos.
@@ -122,7 +122,7 @@ Plus 2 supporting pieces:
    - Check: "Require status checks to pass before merging" → search for `gates-all-passed` (or the individual gate job names — pick one approach).
    - Check: "Require signed commits".
    - Check: "Require linear history".
-   - Check: "Do not allow bypassing the above settings" (including admins — Calvin can still bypass via direct repo settings but not via casual commits).
+   - Check: "Do not allow bypassing the above settings" (including admins — the product owner can still bypass via direct repo settings but not via casual commits).
    - Uncheck: "Allow force pushes" and "Allow deletions".
    - Verification: try pushing an unsigned commit to a new branch and opening a PR; merge button should be disabled.
 
@@ -158,7 +158,7 @@ Plus 2 supporting pieces:
     - The 2026-05-26 incident reference (the proven bypass that motivated this).
     - The "what `--no-verify` does now" walkthrough.
     - The "what's still bypassable and why we accept it" honest section
-      (e.g., Calvin's own machine compromise, GitHub itself compromised).
+      (e.g., the product owner's own machine compromise, GitHub itself compromised).
     - Post-merge follow-ups list (the local-gate env-var bypass cleanup,
       now safe to do because server-side is live).
 
@@ -168,7 +168,7 @@ Plus 2 supporting pieces:
 14. Push branch to `dev-origin`, open PR titled
     `safety: server-side gate enforcement + signed commits architecture`
     targeting `dev`.
-15. PR body explains: what changed, what Calvin needs to do post-merge
+15. PR body explains: what changed, what the product owner needs to do post-merge
     (the runbook steps), test plan, and a link to PROBLEM.md.
 16. Trailer: `Thomas-Agent: claude`.
 
@@ -186,13 +186,13 @@ Plus 2 supporting pieces:
 - [ ] CHANGELOG entry under `[Unreleased]` describes the security change
 - [ ] All pre-commit gates pass without `--no-verify` (zero breakglass usage)
 
-### Must pass post-merge (Calvin's work, not in this PR)
+### Must pass post-merge (the product owner's work, not in this PR)
 
 - [ ] `dev` and `main` branch protection rules enabled with: signed commits,
       required status checks (the gates.yml jobs), CODEOWNERS review required,
       no force-push, linear history
-- [ ] Calvin's local git configured with signing key + Win Hello-protected access
-- [ ] Test commit from Calvin's machine pops Win Hello PIN dialog
+- [ ] the product owner's local git configured with signing key + Win Hello-protected access
+- [ ] Test commit from the product owner's machine pops Win Hello PIN dialog
 - [ ] An unsigned commit pushed to a test branch → merge button disabled on PR
 
 ## Test plan
@@ -205,10 +205,10 @@ Local (in this PR, must pass before PR opens):
 - `python scripts/bible_status.py` — must stay green
 - pre-commit run on staged files — all gates pass, zero `--no-verify`
 
-Post-merge (Calvin's verification, documented in SAFETY_ARCHITECTURE.md):
-- Pick any safe test branch; `git commit --no-verify -m "test"` on Calvin's machine.
-- If Calvin has the new git config: commit fails locally because signing requires Win Hello and the `--no-verify` skipped the hook that would have prompted.
-- If signing succeeds (Calvin approves the prompt): push to test branch on dev-origin, open PR → GitHub workflow re-runs the gates → if gates pass it would merge, if gates fail merge blocked. Either way, the `--no-verify` is no longer a free pass.
+Post-merge (the product owner's verification, documented in SAFETY_ARCHITECTURE.md):
+- Pick any safe test branch; `git commit --no-verify -m "test"` on the product owner's machine.
+- If the product owner has the new git config: commit fails locally because signing requires Win Hello and the `--no-verify` skipped the hook that would have prompted.
+- If signing succeeds (the product owner approves the prompt): push to test branch on dev-origin, open PR → GitHub workflow re-runs the gates → if gates pass it would merge, if gates fail merge blocked. Either way, the `--no-verify` is no longer a free pass.
 
 ## Risks + mitigations
 
@@ -218,7 +218,7 @@ Post-merge (Calvin's verification, documented in SAFETY_ARCHITECTURE.md):
    (e.g., `boot_smoke_gate.py`), they go in a separate slower-tier job that's
    still required but doesn't block per-gate fail-fast.
 
-2. **Risk**: SSH signing setup is finicky on Windows. Calvin loses an hour
+2. **Risk**: SSH signing setup is finicky on Windows. the product owner loses an hour
    debugging Win Hello + PKCS#11 + git config interactions.
    **Mitigation**: SIGNING_KEY_SETUP.md includes a tested fallback to
    git-credential-manager-based SSH signing without Win Hello (still
@@ -226,10 +226,10 @@ Post-merge (Calvin's verification, documented in SAFETY_ARCHITECTURE.md):
    noted: passphrase-typed is software-recoverable while Win Hello is
    hardware-bound.
 
-3. **Risk**: branch protection lockout — Calvin sets it up too strict, can't
+3. **Risk**: branch protection lockout — the product owner sets it up too strict, can't
    push hotfixes to dev. **Mitigation**: BRANCH_PROTECTION_SETUP.md explicitly
-   leaves admin-bypass enabled (Calvin as repo owner can override in
-   emergencies). The rule is for agents and casual flow, not for Calvin's
+   leaves admin-bypass enabled (the product owner as repo owner can override in
+   emergencies). The rule is for agents and casual flow, not for the product owner's
    own breakglass on dev.
 
 4. **Risk**: existing `claude/checkpoint-2026-05-26` branch carries
@@ -242,7 +242,7 @@ Post-merge (Calvin's verification, documented in SAFETY_ARCHITECTURE.md):
    surprise developers who depended on it as escape hatch.
    **Mitigation**: SAFETY_ARCHITECTURE.md documents the new model
    explicitly; agent_safety.toml gets a header comment (in a follow-up by
-   Calvin) noting "server-side enforcement is the safety; local hooks are
+   the product owner) noting "server-side enforcement is the safety; local hooks are
    convenience". The intent is clear from the start.
 
 ## Post-merge follow-ups (separate tasks)
@@ -252,7 +252,7 @@ Post-merge (Calvin's verification, documented in SAFETY_ARCHITECTURE.md):
   is live).
 - Update `agent_safety.toml` header comment to reflect the new mental model
   ("local gates are developer convenience; server-side enforcement is the
-  source of truth"). Calvin's work since `agent_safety.toml` is in his
+  source of truth"). the product owner's work since `agent_safety.toml` is in his
   protected-files list.
 - Audit any other agent-reachable bypass paths (Python `os.remove` on
   protected files, `shutil.rmtree` on protected dirs, etc.) and wrap them
@@ -268,4 +268,4 @@ Post-merge (Calvin's verification, documented in SAFETY_ARCHITECTURE.md):
 - `thomas/agent/guarded_tools.py:170` — the existing native-auth call site (tool-level)
 - `.github/workflows/robustness-gates.yml` — existing partial mirror (we keep this; gates.yml is the per-gate split that's branch-protection-compatible)
 - `agent_safety.toml [runtime_protection]` — the hardcoded protected-paths list this layer extends with native-auth
-- [Calvin's 2026-05-26 chat] — origin of "what if the user has to input a password?" framing
+- [the product owner's 2026-05-26 chat] — origin of "what if the user has to input a password?" framing

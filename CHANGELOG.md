@@ -9,6 +9,10 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.16.9] - 2026-05-29
+
+Launch-prep hardening: de-personalized tracked files (owner name/email, private dev-repo URL, agent chain-of-command); consolidated planning/coordination/historical sprawl docs (README + CHANGELOG + THOMAS_BIBLE remain canonical); added cross-platform ONBOARDING.md; corrected README install + bible claims; removed the self-comparison benchmark; fixed the bible post-commit hook; added forced multi-agent coordination (auto-message on overlapping claims).
+
 ## [0.16.8] - 2026-05-28
 
 Security patch release covering the Dependabot remediation, runtime-protection recovery, and the public release-note catch-up for the recent 0.16.x cycle.

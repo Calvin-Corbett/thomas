@@ -1,10 +1,10 @@
 # Thomas — Easiest & Fastest Improvement Opportunities
 
 **Generated:** 2026-05-21 (after 0.15.42 CI recovery sprint)
-**For:** Calvin
+**For:** the product owner
 **Effort budget per item:** 30 minutes to 4 hours
 
-This list captures the cheapest, highest-leverage cleanups discovered while clearing CI debt across 0.15.0 → 0.15.42. Items are ordered by **payoff per minute of effort**. None require Calvin's approval; an agent can pick any item and ship it in one focused session.
+This list captures the cheapest, highest-leverage cleanups discovered while clearing CI debt across 0.15.0 → 0.15.42. Items are ordered by **payoff per minute of effort**. None require the product owner's approval; an agent can pick any item and ship it in one focused session.
 
 ---
 
@@ -124,7 +124,7 @@ Then call sites become one-liners. Closes Pattern 9 + Pattern 16 from the bible.
 2. **Retire it** (delete ~1,500 lines + tests; workboard variant stays).
 3. **Document as planned-but-not-wired** (cheapest; just update the docstring).
 
-**Recommended:** Option 3 first (5 minutes), then Option 1 if Calvin wants to invest a focused day on the chat-V2 path.
+**Recommended:** Option 3 first (5 minutes), then Option 1 if the product owner wants to invest a focused day on the chat-V2 path.
 
 ---
 
