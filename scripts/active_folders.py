@@ -38,14 +38,17 @@ except ModuleNotFoundError:
 
 try:
     from scripts.crew.workboard import claim as workboard_claim_tool
+    from scripts.crew.workboard import message as workboard_message_tool
     from scripts.forge.gates import workboard_claims as workboard_claims_gate
 except Exception:  # pragma: no cover
     try:
         from crew.workboard import claim as workboard_claim_tool  # type: ignore
+        from crew.workboard import message as workboard_message_tool  # type: ignore
         from forge.gates import workboard_claims as workboard_claims_gate  # type: ignore
     except Exception:
         workboard_claims_gate = None  # type: ignore[assignment]
         workboard_claim_tool = None  # type: ignore[assignment]
+        workboard_message_tool = None  # type: ignore[assignment]
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
@@ -298,6 +301,87 @@ def _paths_overlap(a: str, b: str) -> bool:
     return a.startswith(f"{b}/") or b.startswith(f"{a}/")
 
 
+def _notify_overlap_coordination(
+    agent: str,
+    paths: Sequence[str],
+    *,
+    presence_warnings: Sequence[dict[str, Any]] | None = None,
+    workboard_path: Path = DEFAULT_WORKBOARD,
+) -> list[str]:
+    """Forced multi-agent coordination.
+
+    When an agent's scope intertwines with another agent's active claim or live
+    presence, automatically open a coordination message to that agent so BOTH see a
+    shared thread in the workboard. Idempotent: a pair that already has an open
+    coordination message is skipped, so repeated claims/commits never spam. This is
+    an assist, never a hard blocker -- every failure is swallowed.
+
+    Returns the list of agent ids newly notified.
+    """
+    if workboard_message_tool is None or not Path(workboard_path).exists():
+        return []
+
+    # 1. Gather other active agents: folder-claim overlaps + live presence warnings.
+    others: dict[str, str] = {}
+    try:
+        for conflict in _find_conflicts(list(paths), ignore_agent=agent):
+            other = str(conflict.get("agent_id") or "").strip()
+            if other and other != agent:
+                sample = ", ".join(sorted({str(o.get("active", "")) for o in conflict.get("overlaps", [])}))[:160]
+                others.setdefault(other, f"overlapping claim ({sample})" if sample else "overlapping claim")
+    except (OSError, ValueError, KeyError, AttributeError, TypeError):
+        pass
+    for warn in presence_warnings or []:
+        other = str(warn.get("agent_id") or "").strip()
+        if other and other != agent:
+            others.setdefault(other, str(warn.get("message") or "active in this repo"))
+
+    if not others:
+        return []
+
+    # 2. Dedup against pairs that already have an open coordination thread.
+    open_pairs: set[frozenset[str]] = set()
+    try:
+        ok, payload = workboard_message_tool.list_messages(workboard_path, state="open")
+        if ok:
+            for msg in payload.get("messages") or []:
+                if str(msg.get("kind", "")).strip().lower() == "coordination":
+                    open_pairs.add(
+                        frozenset({str(msg.get("from", "")).strip().lower(), str(msg.get("to", "")).strip().lower()})
+                    )
+    except (OSError, ValueError, KeyError, AttributeError, TypeError):
+        open_pairs = set()
+
+    # 3. Open one coordination thread per new overlapping pair.
+    scope_sample = ", ".join(list(paths)[:6])[:160] or "(unspecified scope)"
+    notified: list[str] = []
+    for other, reason in others.items():
+        if frozenset({agent.strip().lower(), other.strip().lower()}) in open_pairs:
+            continue
+        try:
+            ok, _payload = workboard_message_tool.send_message(
+                workboard_path,
+                sender=agent,
+                recipient=other,
+                summary=f"Coordinate - {agent} and {other} are working in a common area",
+                kind="coordination",
+                priority="p1",
+                requested_action=(
+                    f"Automatic coordination notice: {agent} is working on [{scope_sample}] and {other} is also "
+                    f"active here ({reason}). You are both in a common place and need to coordinate. Use THIS thread "
+                    f"to agree who edits what BEFORE touching shared paths, then reply with --ack "
+                    f"(decision=approved to proceed). Do not edit overlapping files until you have agreed."
+                ),
+                task_id="none",
+                require_claims_to_have_active_task=False,
+            )
+            if ok:
+                notified.append(other)
+        except (OSError, ValueError, KeyError, AttributeError, TypeError):
+            continue
+    return notified
+
+
 def _presence_gate(
     *,
     purpose: str,
@@ -319,6 +403,18 @@ def _presence_gate(
         return False, str(exc)
     except Exception as exc:
         return False, f"presence gate failed: {exc}"
+    # Forced multi-agent coordination: whenever other agents are active/overlapping
+    # with this scope, auto-open a coordination thread to each (idempotent). Runs
+    # regardless of override so an authorized commit still leaves a coordination
+    # trail. Best-effort: never affects the gate's pass/fail decision.
+    _warnings = result.get("warnings") or []
+    if _warnings:
+        try:
+            notified = _notify_overlap_coordination(agent, paths, presence_warnings=_warnings)
+            if notified:
+                print(f"  [auto-coordination] opened a coordination thread with: {', '.join(notified)}")
+        except (OSError, ValueError, KeyError, AttributeError, TypeError):
+            pass
     if bool(result.get("ok", False)):
         return True, ""
     return False, str(result.get("message") or "presence gate requires override")
