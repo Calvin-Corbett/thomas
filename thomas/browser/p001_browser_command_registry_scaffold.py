@@ -22,6 +22,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, get_args, get_origin
 
+from thomas.browser.runtime_bridge import import_browser_runtime
+
 JsonValue = Any
 JsonDict = dict[str, JsonValue]
 
@@ -813,9 +815,8 @@ def discover_browser_command_specs() -> list[BrowserCommandSpec]:
     Discovery is *best-effort* and must never crash Thomas when optional browser
     dependencies are missing.
     """
-    try:
-        from thomas.tools import browser as browser_tool_mod  # type: ignore
-    except (ImportError, ModuleNotFoundError):
+    browser_tool_mod, _meta = import_browser_runtime()
+    if browser_tool_mod is None:
         return []
 
     candidate_attr_names = [

@@ -6,6 +6,16 @@ import pytest
 
 pytest.importorskip("aiohttp.pytest_plugin")
 
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+
+async def _drain_response(resp) -> None:
+    try:
+        await resp.read()
+    except Exception:
+        resp.release()
+
 
 async def test_gateway_restart_success(aiohttp_client):
     from thomas.server.app import create_app  # type: ignore
@@ -205,6 +215,7 @@ async def test_gateway_restart_rate_limited(aiohttp_client):
 
     first = await client.post("/gateway/restart", json={}, headers=headers)
     assert first.status == 200
+    await _drain_response(first)
 
     second = await client.post("/gateway/restart", json={}, headers=headers)
     assert second.status == 429
@@ -240,6 +251,7 @@ async def test_gateway_restart_rejects_parallel_restart_requests(aiohttp_client)
     gate.set()
     first = await first_task
     assert first.status == 200
+    await _drain_response(first)
 
 
 async def test_gateway_restart_defers_until_pending_drains(aiohttp_client):
@@ -335,3 +347,5 @@ async def test_gateway_restart_concurrency_soak_rejects_parallel_burst(aiohttp_c
         if resp.status == 409:
             body = await resp.json()
             assert body["error"]["code"] == "restart_in_progress"
+        else:
+            await _drain_response(resp)

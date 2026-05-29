@@ -1,0 +1,23 @@
+{
+  "id": "2026-05-29-stale-agent-conversation-cleanup",
+  "approved_by_human": true,
+  "files": [
+    "tests/test_agent_memory_cli_workflow.py",
+    "tests/test_agent_memory_workflow_evals.py",
+    "tests/test_conversations.py",
+    "thomas/conversations/STATUS.md",
+    "thomas/conversations/__init__.py",
+    "thomas/conversations/checkpoint.py",
+    "thomas/conversations/context.py",
+    "thomas/conversations/conversation.py",
+    "thomas/conversations/nested.py",
+    "thomas/conversations/speaker.py",
+    "thomas/conversations/types.py"
+  ],
+  "reason": "User requested a useless-stuff cleanup pass. These protected paths were verified as retired: agent_memory tests covered a deleted repo-root memory prototype superseded by thomas/memory, and thomas/conversations was an xfailed NotImplementedError skeleton with no active runtime integration.",
+  "verification": [
+    "python -m pytest tests/test_memory_runtime_bootstrap.py tests/test_memory_fabric_v2.py -q",
+    "python -m pytest tests/test_architecture.py::test_module_coverage tests/test_architecture.py::test_depends_on_valid tests/test_architecture.py::test_health_annotations -q",
+    "rg thomas.conversations tests/test_conversations agent_memory"
+  ]
+}
