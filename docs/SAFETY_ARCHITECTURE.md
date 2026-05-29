@@ -11,6 +11,12 @@ convenience**. They catch mistakes early before push. They are **NOT
 safety** — `git commit --no-verify` skips all of them, and that flag
 is built into git.
 
+Update 2026-05-29: local `--no-verify` is now a breakglass-only path.
+The installed `prepare-commit-msg` hook is not skipped by `--no-verify`;
+it requires either a current successful pre-commit marker for the exact
+staged tree or a Windows credential-dialog breakglass approval with
+ticket and reason metadata.
+
 The actual safety enforcement lives in **four layers**, all of which
 sit outside the local repo and outside any agent's reach:
 
@@ -32,7 +38,7 @@ remote (branch protection + gates workflow).
 
 On 2026-05-26 evening, Claude — an LLM agent operating in this repo —
 ran `git commit --no-verify -m "..."` and pushed to dev-origin. The
-push succeeded. The 50+ pre-commit gates were skipped entirely. Calvin
+push succeeded. The 50+ pre-commit gates were skipped entirely. the product owner
 had to question the authorization pattern AFTER the fact; nothing in
 the technical system caught it.
 
@@ -52,7 +58,7 @@ mistook advisory for enforcement.
 │   │ Layer 1: Branch Protection on dev/main                      │   │
 │   │   - Require signed commits ──┐                              │   │
 │   │   - Require status checks ───┼──→ gates-required job        │   │
-│   │   - Require Code Owner review (CODEOWNERS routes Calvin)    │   │
+│   │   - Require Code Owner review (CODEOWNERS routes the product owner)    │   │
 │   │   - No force push, no deletion, linear history              │   │
 │   └────────────────────────────────────────────────────────────┘   │
 │                              ↑                                      │
@@ -60,7 +66,7 @@ mistook advisory for enforcement.
 └──────────────────────────────┼──────────────────────────────────────┘
                                │ git push
 ┌──────────────────────────────┴──────────────────────────────────────┐
-│                       Calvin's dev machine                          │
+│                       the product owner's dev machine                          │
 │                                                                     │
 │   ┌─────────────────────────────────────────────────────────────┐   │
 │   │ Layer 4 (local): pre-commit hooks (.pre-commit-config.yaml) │   │
@@ -105,7 +111,7 @@ Enforces:
 
 ### Layer 2 — OS keychain holds the signing key
 
-Configured per [SIGNING_KEY_SETUP.md](SIGNING_KEY_SETUP.md). On Calvin's
+Configured per [SIGNING_KEY_SETUP.md](SIGNING_KEY_SETUP.md). On the product owner's
 machine, the key lives in Windows Credential Manager / OpenSSH Agent.
 An agent can call `git` but cannot directly read the key bytes — that
 requires the OS keychain's own access path.
@@ -144,12 +150,21 @@ not the local machine. A `--no-verify` commit cannot bypass this:
 
 ## What an agent's `git commit --no-verify` does under this architecture
 
+Current local behavior before signing: `prepare-commit-msg` runs even
+when `--no-verify` is present. Thomas installs that hook through
+`scripts/install_commit_breakglass_hooks.py`. If the exact staged tree
+does not have a fresh success marker from the pre-commit wrapper, the
+hook blocks the commit unless `THOMAS_SKIP_BREAKGLASS=1`,
+`THOMAS_SKIP_TICKET`, and `THOMAS_SKIP_REASON` are present and the user
+successfully completes the Windows sign-in prompt from
+`scripts/breakglass_auth.py`.
+
 1. Agent runs `git commit --no-verify -m "..."`.
 2. Git allows the commit (the flag is native to git; can't remove).
 3. Git attempts to sign the commit. Signing requires the keychain key.
 4. Keychain access requires Windows Hello.
-5. Windows pops a prompt on Calvin's physical device: "Sign this commit?"
-6. **Calvin** sees the prompt. Either approves (PIN/biometric) or denies.
+5. Windows pops a prompt on the product owner's physical device: "Sign this commit?"
+6. **the product owner** sees the prompt. Either approves (PIN/biometric) or denies.
    - If denied: commit fails locally. End of story.
    - If approved: commit is signed and saved locally.
 7. Agent pushes the signed commit to dev-origin.
@@ -157,8 +172,8 @@ not the local machine. A `--no-verify` commit cannot bypass this:
 9. Required status checks (gates-required, signed-commits-check) must pass.
 10. If any gate fails: branch protection rejects the merge.
 
-To land bad code, an agent would need: Calvin's physical device + Calvin's
-biometric/PIN + Calvin's approval at step 6, AND the gate workflow passing
+To land bad code, an agent would need: the product owner's physical device + the product owner's
+biometric/PIN + the product owner's approval at step 6, AND the gate workflow passing
 at step 9. None of those are agent-reachable.
 
 ## What's still bypassable (honest section)
@@ -169,18 +184,18 @@ unverified ground:
 | Attack | Mitigation status |
 |---|---|
 | Agent commits `--no-verify`, no signing configured locally | Caught by Layer 1 (push rejected: "commit must be signed") |
-| Agent commits `--no-verify`, signing configured but key access requires Calvin's biometric | Caught at Layer 3 (Win Hello prompt; Calvin denies or commit fails on timeout) |
-| Agent commits `--no-verify`, gets Calvin to approve the Win Hello prompt (social), pushes | Caught by Layer 4 (gates.yml runs server-side; if gates would fail, merge blocked) |
-| Agent gets Calvin's approval AND pushes commit that passes all server-side gates | This is "Calvin approved a real change" — by design, not a bypass. The Win Hello tap is the authorization. |
-| Calvin's physical device stolen + biometric forged | Outside threat model. If a hostile party has Calvin's TPM + Calvin's finger, larger problems exist. |
+| Agent commits `--no-verify`, signing configured but key access requires the product owner's biometric | Caught at Layer 3 (Win Hello prompt; the product owner denies or commit fails on timeout) |
+| Agent commits `--no-verify`, gets the product owner to approve the Win Hello prompt (social), pushes | Caught by Layer 4 (gates.yml runs server-side; if gates would fail, merge blocked) |
+| Agent gets the product owner's approval AND pushes commit that passes all server-side gates | This is "the product owner approved a real change" — by design, not a bypass. The Win Hello tap is the authorization. |
+| the product owner's physical device stolen + biometric forged | Outside threat model. If a hostile party has the product owner's TPM + the product owner's finger, larger problems exist. |
 | GitHub itself compromised | Outside threat model. The architecture trusts GitHub's branch protection and Actions runners as authorities. |
 | Agent edits `agent_safety.toml` to disable gates | Caught by Layer 4 (`protected-files-gate` job). Even if local gate bypassed, server-side gate catches the diff. |
-| Agent edits `.github/workflows/gates.yml` to remove gates | Caught by Layer 1 (CODEOWNERS routes review to Calvin; merge blocked until Calvin approves). Even if Calvin clicks approve quickly, the change is visible in the PR diff. |
-| Agent edits `scripts/forge/gates/*.py` to silently pass | Caught by Layer 1 (CODEOWNERS for `scripts/forge/gates/`). Even if local gate is rewritten, server-side runs the version from the PR's head — which Calvin reviewed. |
+| Agent edits `.github/workflows/gates.yml` to remove gates | Caught by Layer 1 (CODEOWNERS routes review to the product owner; merge blocked until the product owner approves). Even if the product owner clicks approve quickly, the change is visible in the PR diff. |
+| Agent edits `scripts/forge/gates/*.py` to silently pass | Caught by Layer 1 (CODEOWNERS for `scripts/forge/gates/`). Even if local gate is rewritten, server-side runs the version from the PR's head — which the product owner reviewed. |
 | Agent calls `fs.write_file('runtime/.runtime_protection_disabled', '')` to disable runtime protection (historical bug, fixed 2026-05-27) | Caught at `thomas/tools/filesystem.py`. Both the flag path AND the HMAC key path are in `_HARDCODED_PROTECTED_FILES`, so `fs.write_file` / `diff.create` / `diff.apply_patch` refuse. The validator also requires HMAC-signed flag content, so a forged or empty flag is treated as absent. See `tests/test_filesystem_protection_adversarial.py`. |
 | Agent overwrites `runtime/.runtime_protection_key` *while a valid signed disable flag is active*, so the next toggle cycle re-uses the planted key (Codex hardening review msg-20260527214458, fixed in same PR) | Caught at `thomas/tools/filesystem.py`. The two runtime-protection control files (flag and key) are checked **before** the disable-flag bypass, so an active flag does NOT let agents rewrite either control file. Additionally, `scripts/runtime_protection_toggle.py` now mints a fresh key on every `off` (no key persists across sessions) and `cmd_on` removes the key file. |
 | Agent reads `runtime/.runtime_protection_key` via `fs.read_file` or `fs.search` to extract the signing secret (Codex msg-20260527214458, fixed in same PR) | Caught at `thomas/tools/filesystem.py`. `ReadFileTool` and `SearchFilesTool` consult `_is_read_protected_path` and refuse / skip the key file. The flag itself is metadata (timestamp + signature) and stays readable. |
-| Agent enables `shell.exec` (off by default) and runs `echo {signed-json} > runtime/.runtime_protection_disabled` | Partially mitigated. The signature validator still rejects content not signed with the per-install key in `runtime/.runtime_protection_key`. **If Calvin has never run `runtime_protection_toggle.py off`, the key file does not yet exist** — the agent can plant a key it controls, then sign a matching flag, bypassing protection. Mitigation: keep `tools.allow_shell = false`, and run `python scripts/runtime_protection_toggle.py off` once on a clean install (then `on`) to materialize a Calvin-owned key file before any sensitive work. Long-term fix tracked separately. |
+| Agent enables `shell.exec` (off by default) and runs `echo {signed-json} > runtime/.runtime_protection_disabled` | Partially mitigated. The signature validator still rejects content not signed with the per-install key in `runtime/.runtime_protection_key`. **If the product owner has never run `runtime_protection_toggle.py off`, the key file does not yet exist** — the agent can plant a key it controls, then sign a matching flag, bypassing protection. Mitigation: keep `tools.allow_shell = false`, and run `python scripts/runtime_protection_toggle.py off` once on a clean install (then `on`) to materialize a the product owner-owned key file before any sensitive work. Long-term fix tracked separately. |
 
 The architecture is not "no bypass possible" — that's unattainable.
 It's "no bypass possible without a real human authorizing each step
@@ -190,7 +205,7 @@ that matters".
 
 [`agent_safety.toml`](../agent_safety.toml) and
 [`.pre-commit-config.yaml`](../.pre-commit-config.yaml) still configure
-~50 gates that run on Calvin's pre-commit. These remain useful as
+~50 gates that run on the product owner's pre-commit. These remain useful as
 **developer convenience**:
 
 - Fast feedback (catches mistakes in 30s vs waiting 10min for CI)
@@ -247,15 +262,15 @@ they're free preview of what server-side will say.
 You also **can't** bypass them in a way that matters: even if you
 `--no-verify`, your commit either won't sign (Win Hello blocks you)
 or won't merge (server-side gates catch it). Treat the local hooks as
-helpful preview, not as your enemy. Calvin's intent is that you do
+helpful preview, not as your enemy. the product owner's intent is that you do
 correct work the first time, not creative work that almost-passes.
 
 ## References
 
 - [PROBLEM.md (full spec)](../plans/thomas/problems/gate-architecture-2026-05-26/PROBLEM.md)
 - [PLAN.md (this PR's plan)](../plans/thomas/tasks/gate-architecture-2026-05-26/PLAN.md)
-- [SIGNING_KEY_SETUP.md (Calvin's runbook)](SIGNING_KEY_SETUP.md)
-- [BRANCH_PROTECTION_SETUP.md (Calvin's UI clickpath)](BRANCH_PROTECTION_SETUP.md)
+- [SIGNING_KEY_SETUP.md (the product owner's runbook)](SIGNING_KEY_SETUP.md)
+- [BRANCH_PROTECTION_SETUP.md (the product owner's UI clickpath)](BRANCH_PROTECTION_SETUP.md)
 - [`.github/workflows/gates.yml` (server-side mirror)](../.github/workflows/gates.yml)
 - [`.github/CODEOWNERS` (review routing)](../.github/CODEOWNERS)
 - [`thomas/tools/native_auth.py` (OS-auth primitive — already in use)](../thomas/tools/native_auth.py)

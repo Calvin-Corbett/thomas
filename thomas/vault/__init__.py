@@ -20,7 +20,7 @@ Planned subsystems (per goal text "thomas/vault/ (Policy/ToolRunner/Breakglass)"
 Migration is NOT YET PERFORMED. This package is a scaffold that establishes
 the target shape; the actual move (with cascading import updates across
 the codebase and atomic `agent_safety.toml` updates via breakglass) is
-deferred to a dedicated session because Calvin's goal estimated 5-8h
+deferred to a dedicated session because the product owner's goal estimated 5-8h
 for the work and the import cascade is the largest in the rename arc to
 date.
 

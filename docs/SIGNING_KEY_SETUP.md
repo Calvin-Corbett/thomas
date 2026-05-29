@@ -1,6 +1,6 @@
-# Signing-Key Setup (Calvin's runbook)
+# Signing-Key Setup (the product owner's runbook)
 
-This is the runbook Calvin runs on his dev machine to enable signed
+This is the runbook the product owner runs on his dev machine to enable signed
 commits — layers 2 and 3 of the safety architecture
 (see [SAFETY_ARCHITECTURE.md](SAFETY_ARCHITECTURE.md)).
 
@@ -20,6 +20,12 @@ GitHub branch protection rejects unsigned commits to `dev` and `main`,
 so the agent's commit cannot land. See
 [BRANCH_PROTECTION_SETUP.md](BRANCH_PROTECTION_SETUP.md) for the
 GitHub-side configuration that completes the loop.
+
+Local note: Thomas also installs a `prepare-commit-msg` guard through
+`scripts/install_commit_breakglass_hooks.py`. Because Git does not skip
+that hook with `--no-verify`, a local no-verify commit now requires the
+Windows credential-dialog breakglass flow unless pre-commit already
+passed for the exact staged tree.
 
 ---
 
@@ -90,7 +96,7 @@ $signingKey = "$env:USERPROFILE\.ssh\id_ed25519_signing"
 # -t ed25519: modern, fast, short keys
 # -C: comment (shows in commit signature; use your email)
 # -N "": no passphrase — Windows Hello will gate access instead
-ssh-keygen -t ed25519 -f "$signingKey" -C "calvinandaustin31@gmail.com" -N '""'
+ssh-keygen -t ed25519 -f "$signingKey" -C "your-email@example.com" -N '""'
 # Expected: creates id_ed25519_signing (private) + id_ed25519_signing.pub (public)
 ```
 
@@ -142,7 +148,7 @@ git config --global --get-regexp '^(commit|tag|gpg|user)\.' | Sort-Object
 # Tells `git log --show-signature` who to trust.
 $allowedSigners = "$env:USERPROFILE\.ssh\allowed_signers"
 $pubKey = Get-Content "$env:USERPROFILE\.ssh\id_ed25519_signing.pub"
-"calvinandaustin31@gmail.com $pubKey" | Out-File -Encoding utf8 -NoNewline $allowedSigners
+"your-email@example.com $pubKey" | Out-File -Encoding utf8 -NoNewline $allowedSigners
 git config --global gpg.ssh.allowedSignersFile "$allowedSigners"
 ```
 
@@ -184,7 +190,7 @@ git log --show-signature -1
 **Expected**:
 ```
 commit <sha>
-Good "ssh-ed25519:..." signature for calvinandaustin31@gmail.com
+Good "ssh-ed25519:..." signature for your-email@example.com
 ...
 ```
 
@@ -209,7 +215,7 @@ Step 2's `-N '""'` with a passphrase:
 
 ```powershell
 $signingKey = "$env:USERPROFILE\.ssh\id_ed25519_signing"
-ssh-keygen -t ed25519 -f "$signingKey" -C "calvinandaustin31@gmail.com"
+ssh-keygen -t ed25519 -f "$signingKey" -C "your-email@example.com"
 # It will prompt for a passphrase. Use something memorable but long
 # (12+ chars). You'll type it each commit unless you `ssh-add` it
 # into the agent for the session.
@@ -260,7 +266,7 @@ Agent" service that integrates with WCM. If it's not firing:
 Branch protection is working — GitHub is rejecting your unsigned
 commit. Either configure signing per this doc, or for legitimate
 unsigned commits (e.g., merge commits from upstream), branch
-protection has to be updated by Calvin.
+protection has to be updated by the product owner.
 
 ### Test commit pushed to remote by accident
 
@@ -276,11 +282,11 @@ git push
 
 ## What this enables
 
-After this runs successfully on Calvin's machine:
+After this runs successfully on the product owner's machine:
 
-- Every `git commit` Calvin makes is signed.
+- Every `git commit` the product owner makes is signed.
 - `git commit --no-verify` from any agent or compromised credential
-  on Calvin's machine that doesn't have signing configured produces
+  on the product owner's machine that doesn't have signing configured produces
   an unsigned commit.
 - Unsigned commits to `dev` or `main` (after branch protection is
   enabled per BRANCH_PROTECTION_SETUP.md) get rejected at push time

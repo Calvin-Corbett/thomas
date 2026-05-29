@@ -24,7 +24,7 @@ class TestServerMemoryContradictionsAPI(AioHTTPTestCase):
 
     async def test_list_and_resolve_contradictions(self):
         # Create a contradiction through profile-hint updates.
-        pin1 = await self.client.post("/api/memory/pins", json={"key": "user.name", "text": "Calvin"})
+        pin1 = await self.client.post("/api/memory/pins", json={"key": "user.name", "text": "the product owner"})
         self.assertEqual(pin1.status, 200)
         pin2 = await self.client.post("/api/memory/pins", json={"key": "user.name", "text": "Kevin"})
         self.assertEqual(pin2.status, 200)
@@ -83,7 +83,7 @@ class TestServerMemoryContradictionsAPI(AioHTTPTestCase):
         self.assertNotIn(cid, open_ids)
 
     async def test_contradiction_resolve_rejects_non_object_json_without_mutating(self):
-        pin1 = await self.client.post("/api/memory/pins", json={"key": "user.name", "text": "Calvin"})
+        pin1 = await self.client.post("/api/memory/pins", json={"key": "user.name", "text": "the product owner"})
         self.assertEqual(pin1.status, 200)
         pin2 = await self.client.post("/api/memory/pins", json={"key": "user.name", "text": "Kevin"})
         self.assertEqual(pin2.status, 200)
@@ -170,7 +170,7 @@ class TestServerMemoryContradictionsAPI(AioHTTPTestCase):
     async def test_json_routes_require_application_json_content_type(self):
         resp = await self.client.post(
             "/api/memory/pins",
-            data='{"key":"user.name","text":"Calvin"}',
+            data='{"key":"user.name","text":"the product owner"}',
             headers={"Content-Type": "text/plain"},
         )
         self.assertEqual(resp.status, 415)

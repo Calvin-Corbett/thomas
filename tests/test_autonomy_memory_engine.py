@@ -54,15 +54,15 @@ def test_profile_memory_can_be_enabled_or_disabled_per_thread(tmp_path) -> None:
     mem = AutonomyMemoryEngine(_cfg(tmp_path), enable_legacy=False, enable_v2=True)
     mem.start()
     try:
-        mem.pin("user.name", "Calvin")
+        mem.pin("user.name", "the product owner")
 
         mem.set_thread_memory_policy("telegram:1", include_profile=True)
         with_profile = mem.retrieve("what is my name", thread="telegram:1", budget=900, mode="auto")
-        assert "calvin" in with_profile.text.lower()
+        assert "the product owner" in with_profile.text.lower()
 
         mem.set_thread_memory_policy("telegram:1", include_profile=False)
         without_profile = mem.retrieve("what is my name", thread="telegram:1", budget=900, mode="auto")
-        assert "calvin" not in without_profile.text.lower()
+        assert "the product owner" not in without_profile.text.lower()
     finally:
         mem.close()
 
@@ -97,7 +97,7 @@ def test_contradictions_list_and_resolve(tmp_path) -> None:  # noqa: ANN001
     mem = AutonomyMemoryEngine(_cfg(tmp_path), enable_legacy=False, enable_v2=True)
     mem.start()
     try:
-        mem.pin("user.name", "Calvin")
+        mem.pin("user.name", "the product owner")
         mem.pin("user.name", "Kevin")
 
         rows = mem.list_contradictions(only_open=True, limit=20)

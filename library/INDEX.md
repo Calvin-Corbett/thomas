@@ -205,7 +205,7 @@ Durable research/reference library for Thomas.
   - Tags: research, auto, route-research
   - File: `entries/research-notes/1772323309-all-right-can-you-can-you-spawn-up-a-local-agent-and-make-him-research-on-a-rele.md`
 - `1772314139-okay-i-just-want-to-see-if-your-agents-work-can-you-make-agents-make-like-can-yo`: okay I just want to see if your agents work can you make agents make like can you spawn an agent and make it research wh
-  - Summary: Running a second autonomous proof now: I’m spawning another sub-agent to independently research “Calvin Corbett,” then I’ll return its result and lifecycle actions.Sub-agent is running; I’m waiting for completion and will report exactly what it returned.1) Cle
+  - Summary: Running a second autonomous proof now: I’m spawning another sub-agent to independently research “the product owner Corbett,” then I’ll return its result and lifecycle actions.Sub-agent is running; I’m waiting for completion and will report exactly what it returned.1) Cle
   - Source: thomas:codex
   - Tags: research, auto, route-research
   - File: `entries/research-notes/1772314139-okay-i-just-want-to-see-if-your-agents-work-can-you-make-agents-make-like-can-yo.md`

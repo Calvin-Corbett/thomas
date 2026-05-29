@@ -4,7 +4,7 @@
 |------------------|--------------------------------------------------------|
 | Status           | functional (audit/policy tools work, auth gate works)  |
 | Last assessed    | 2026-03-18                                             |
-| Assessed by      | claude-opus-4-6 (Cowork session) + Calvin (product owner)|
+| Assessed by      | claude-opus-4-6 (Cowork session) + the product owner|
 | Used in prod     | yes — imported by production code                      |
 | Has real tests   | partial                                                |
 | Blocking issues  | reasoning_audit.py is placeholder, vision much bigger  |
@@ -15,7 +15,7 @@ Security auditing, threat modeling, dependency policy, incident drills, and
 tools for Thomas. 1,100 lines across 8 files. This module is PART of the
 security story — the full security picture spans multiple modules (see below).
 
-## Product Vision (from Calvin, 2026-03-18)
+## Product Vision (from the product owner, 2026-03-18)
 
 **Security is PRIORITY #1 for the entire project.** Above memory, above
 everything else. The vision:
@@ -80,7 +80,7 @@ Security is NOT just this module. It's spread across:
 ## Known Gaps (vs. the vision)
 
 - **No internet access gating.** Thomas does not currently require password
-  to access the internet. This is the biggest missing piece per Calvin.
+  to access the internet. This is the biggest missing piece per the product owner.
 - **No multi-stage security levels.** No UI for users to choose their
   security posture.
 - **Windows-only OS auth.** `windows_auth.py` only works on Windows. Needs
@@ -95,7 +95,7 @@ Security is NOT just this module. It's spread across:
 
 ## Priority Implementation Order
 
-Per Calvin (2026-03-18), security is the **#1 priority for the entire project:**
+Per the product owner (2026-03-18), security is the **#1 priority for the entire project:**
 
 1. Internet access gating (password required for any outbound request)
 2. Multi-stage security level configuration (user chooses their posture)
