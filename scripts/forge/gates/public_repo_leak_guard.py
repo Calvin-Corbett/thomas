@@ -95,6 +95,8 @@ FORBIDDEN_PREFIXES = (
     "docs/internal/",  # explicit internal docs — should be gitignored
     "docs/OPENCLAW_",
     "docs/ops/COMPETITOR_",
+    "docs/openclaw_gap_runs/",  # self-comparison benchmark results — not for public repo
+    "docs/reference_cli_gap_runs/",  # generated competitor-comparison output — local only
 )
 
 # Patterns matching tmp/debugging files that shouldn't reach public main.
