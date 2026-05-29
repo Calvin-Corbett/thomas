@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from thomas.browser.runtime_bridge import import_browser_runtime
+
 ErrorKind = Literal["invalid_input", "missing_config", "external_failure", "internal_error"]
 BackendKind = Literal["thomas_tool", "webbrowser", "noop"]
 
@@ -223,10 +225,9 @@ def _call_open_callable(fn: Any, url: str, config: dict[str, Any], timeout_s: fl
 def _try_open_with_thomas_tool(
     url: str, config: dict[str, Any], timeout_s: float | None
 ) -> tuple[bool | None, dict[str, Any]]:
-    try:
-        import thomas.tools.browser as tb  # type: ignore
-    except Exception as e:
-        return None, {"tool_import_error": type(e).__name__}
+    tb, meta = import_browser_runtime()
+    if tb is None:
+        return None, {"tool_import_error": str(meta.get("error") or "import_error")}
 
     candidates = ("open_url", "open", "launch", "browse", "open_in_browser")
     callables = [name for name in candidates if callable(getattr(tb, name, None))]

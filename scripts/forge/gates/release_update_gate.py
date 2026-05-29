@@ -56,8 +56,6 @@ IGNORE_PREFIXES: Sequence[str] = (
     "patches/",
     "runtime/",
     "output/",
-    "agent_vf/",
-    "agent_memory/",
     ".inbox_extract_",
 )
 

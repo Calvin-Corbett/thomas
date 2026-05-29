@@ -19,6 +19,15 @@ files have been wrong before. Module names have been misleading. This doc
 traces what actually runs when a user does things — step by step through the
 real user journey.
 
+> **Cleanup note, 2026-05-29:** Historical sections that mention repo-root
+> `agents/`, `agent_memory/`, `agent_vf/`, repo-root `plugins/`, repo-root
+> `cli/commands/`, repo-root `prompt_pack/`, `thomas/conversations/`, or
+> `extensions/vault-fortress/` now describe retired artifacts. The active agent
+> runtime is `thomas/agent/`; active memory is `thomas/memory/`; active plugin
+> code is `thomas/plugins/` plus `thomas/cli/commands/plugins/`; active browser
+> runtime is `thomas/tools/browser.py` with contracts under `thomas/browser/`;
+> active vault/secrets work is `thomas/vault/` and `thomas/marketplace/secrets/`.
+
 ---
 
 ## Public Bible contract
@@ -48,7 +57,7 @@ Use this lightweight block immediately under a section heading when the section 
 
 > Reviewed: 2026-05-22 by Codex. Scope: public Bible metadata contract and agent workflow guidance.
 
-Calvin is non-technical and explicitly delegates Thomas implementation to
+the product owner is non-technical and explicitly delegates Thomas implementation to
 agents. Most of the time, an agent (you) is reading this bible to figure out
 what's true before changing something. Here are the rules.
 
@@ -88,7 +97,7 @@ what's true before changing something. Here are the rules.
 
 ### When you encounter a PLANNED feature or future idea
 
-Calvin's directive: ideas evaporate. If you are talking with Calvin and a
+the product owner's directive: ideas evaporate. If you are talking with the product owner and a
 future-feature idea comes up — or you encounter aspirational code or notes
 during verification — **write it down in the "Planned features and open
 ideas" section at the bottom of this bible.** Do not trust yourself to
@@ -97,7 +106,7 @@ in the bible = catchable next session. Not logged = lost.
 
 Format:
 - **Title** (one short line)
-- **Why** (one paragraph — what problem this solves or what Calvin asked for)
+- **Why** (one paragraph — what problem this solves or what the product owner asked for)
 - **Status** (`idea` / `planned` / `in-progress` / `blocked-on-X` / `done-YYYY-MM-DD`)
 - **Source** (what conversation, session, or finding triggered this)
 
@@ -112,7 +121,7 @@ delete-after date, document the retirement in the relevant section's
 
 See Pattern 6 below. Document the lie in the relevant section. If the
 GUARDRAILS file is on the protected list (most are), request breakglass
-from Calvin to fix it; do not work around it silently.
+from the product owner to fix it; do not work around it silently.
 
 ---
 
@@ -136,7 +145,7 @@ If a section can't answer (1)–(5), it's still `⏳ STUB`, not verified. Shallo
 
 > Reviewed: 2026-05-22 by Codex. Scope: metadata contract only; legacy Verified markers remain accepted by tooling.
 
-When a section's coverage falls short of full per-item Q1–Q5, **annotate the gap honestly** rather than claim verification. Every section's `Reviewed:` line or legacy `Verified:` stamp must include a level marker so future agents and Calvin can tell at a glance how much trust the section carries.
+When a section's coverage falls short of full per-item Q1–Q5, **annotate the gap honestly** rather than claim verification. Every section's `Reviewed:` line or legacy `Verified:` stamp must include a level marker so future agents and the product owner can tell at a glance how much trust the section carries.
 
 ### Levels
 
@@ -469,7 +478,7 @@ Mostly yes, with one issue:
 - ⚠️ **Version drift** (above): pyproject says `0.14.59`, README says `v0.14.60`, git tags include both. Single source of truth needed.
 - ✅ Only one Inno Setup script (`installer/ThomasSetup.iss`). No `_v2`, `_old`, `_legacy` siblings.
 - ✅ Only one build script (`scripts/build_windows_installer.ps1`).
-- ⚠️ The README's download URL uses `Calvin-Corbett/thomas`; local git remote is `corbe/thomas`. **Unresolved** — pending Calvin's confirmation whether these are the same repo (after rename) or two separate repos.
+- ⚠️ The README's download URL uses `Calvin-Corbett/thomas`; local git remote is `corbe/thomas`. **Unresolved** — pending the product owner's confirmation whether these are the same repo (after rename) or two separate repos.
 
 ### Files involved
 
@@ -874,7 +883,7 @@ Mostly yes, with three real issues.
 >   `thomas quickstart` (CLI) or `thomas serve` (web) instead of the dead
 >   `thomas setup`.
 > - **Easy Setup wizard trimmed from 5 steps to 3.** Step 4 (animation
->   fidelity) and step 5 (review) retired per Calvin's setup-flow vision.
+>   fidelity) and step 5 (review) retired per the product owner's setup-flow vision.
 >   Today: 1=path, 2=verify, 3=deps. After step 3, modal closes and
 >   `beginOnboardingInterview()` fires (scripted Q&A handoff in chat).
 >   Edits in `thomas/server/web/js/runtime/001_preamble.js` (TOTAL_STEPS=3)
@@ -911,7 +920,7 @@ Yes. **Web Easy Setup** is a modal SPA with steps:
    cost-vs-quality, memory behavior, workflow) that persists to
    `PreferencesStore`. **Note:** this is "scripted Q&A masquerading as
    AI conversation" — questions are hardcoded, not actually generated
-   by the AI. Calvin's vision (see `thomas_setup_vision.md` memory)
+   by the AI. the product owner's vision (see `thomas_setup_vision.md` memory)
    wants real AI-driven setup; that's pending Section 7/8 work to
    verify the AI has tools to mutate settings on the user's behalf.
 
@@ -1314,7 +1323,7 @@ Mostly **no.** Several genuine cargo-cult / nonsense surfaces:
   something the user can actually toggle (Settings UI).
 - **21 chat files for one user-visible behavior** ("send a message,
   get a response") is itself Q5-flagged. The right number is probably
-  3–6. Cleanup direction: retire V1 fully (Calvin's vision: the AI is
+  3–6. Cleanup direction: retire V1 fully (the product owner's vision: the AI is
   the canonical handler; V1 was an early lashup), collapse helpers
   into the V2 namespace, delete the placeholder.
 
@@ -1538,11 +1547,11 @@ Mostly yes.
 - ⚠️ **`_make_task_id` uses 24 bits of entropy.** `secrets.token_hex(3)`
   is 6 hex chars = 16,777,216 possible IDs. With many concurrent
   sessions, birthday-paradox collisions become non-negligible.
-  Probably fine in practice for a personal Thomas (Calvin) but a Q5
+  Probably fine in practice for a personal Thomas (the product owner) but a Q5
   flag for the swarm-of-25 future (Section 18).
 - ⚠️ **Two decision paths** (`task_manager_model_decision_enabled`):
   production uses model-led, tests/temp roots use regex-rule fallback.
-  Different code paths get different test coverage. Calvin: this is
+  Different code paths get different test coverage. the product owner: this is
   the kind of split that turns into Pattern 3 if the regex path stays
   alive forever. Plan retirement for the regex path once production
   is stable.
@@ -1759,7 +1768,7 @@ codebase.
 - The right response is one of:
   1. **Wire it up** — make chat_v2's "chat" path go through the brain
      so the AI actually uses specialists with their tool surfaces.
-     This is the closest match to Calvin's setup-flow vision (the AI
+     This is the closest match to the product owner's setup-flow vision (the AI
      uses tools to do things, not just answer text). Substantial work.
   2. **Retire it** — `THOMAS_TRASH` the brain + specialists tree if
      direct LLM calls + the workboard worker pool are sufficient.
@@ -1767,7 +1776,7 @@ codebase.
   3. **Document it as planned-but-not-wired** explicitly, in the
      bible's Planned section, and stop having the READMEs claim
      it's the architecture.
-- Calvin's authorization (2026-05-06): "kill the bullshit." This is
+- the product owner's authorization (2026-05-06): "kill the bullshit." This is
   the bullshit. Decision: **option 1 (wire it up) is the path most
   aligned with the agent-first vision**, but it's a non-trivial
   feature build — adding to Planned for future work.
@@ -1813,7 +1822,7 @@ codebase.
 - **Don't extend `brain_v3.py`.** It's twice-dead. If you want to
   build a v4 brain, finish the wiring in the same session that
   introduces it (Pattern 1 mitigation).
-- **If you are working on Calvin's "AI mutates settings"
+- **If you are working on the product owner's "AI mutates settings"
   vision** (per `thomas_setup_vision.md` memory), this is the layer
   to wire up. The specialists have tool runtimes; making them
   reachable from chat_v2 is the missing link.
@@ -2008,7 +2017,7 @@ The same registry feeds both AgentLoop and ToolSpecialist, so the
 - The legacy JSON-tool-plan branch (`tools.py:260-311`) is harder to
   defend. It's a worse version of what AgentLoop does. The right
   Q5 answer is probably to retire it.
-- Calvin's vision (AI mutates settings via tools) is mostly served
+- the product owner's vision (AI mutates settings via tools) is mostly served
   by AgentLoop today: it has full tool surface, guardrails, and
   iteration. The Section 7 wire-up gap (no orchestrator-mediated
   routing across multiple specialists) is the remaining blocker —
@@ -2416,7 +2425,7 @@ enabled.**
   on the episodic store quartet (delete-after when the legacy
   toggle has been verified unused for two release cycles), and
   decide whether the chat-layer "three-layer memory system" wrapper
-  is still load-bearing. Open question for Calvin: is V1's
+  is still load-bearing. Open question for the product owner: is V1's
   `MemoryEngine` ever turned on intentionally, or is the env var
   vestigial?
 
@@ -2644,7 +2653,7 @@ display. No second source of truth.
 
 **Yes, with one note about the bundling.**
 
-- A unified ops dashboard is the right shape for Thomas. Calvin is
+- A unified ops dashboard is the right shape for Thomas. the product owner is
   non-technical and benefits from a single page that shows what's
   running, what's blocked, what needs approval, and what's done.
   Six sub-features bundled in one page beats six separate pages
@@ -2816,7 +2825,7 @@ Every step that can fail or surface to the user goes through
   (line 281) and passed into `AgentLoop` at line 498. Every tool
   call AgentLoop makes flows through `run()`.
 - `_OPTIONAL_TOOL_MODULES` graceful-fallback works as designed —
-  tested by Calvin's installs working even when individual domain
+  tested by the product owner's installs working even when individual domain
   modules are absent (the per-module DEBUG log line is the trace).
 - The approval broker (`thomas/agent/approval.py:ApprovalBroker`) is
   the same instance Mission Control reads from in Section 11
@@ -2824,7 +2833,7 @@ Every step that can fail or surface to the user goes through
   surfaces (the in-chat tool prompt, and Mission Control's
   approvals tab).
 - Native OS auth (`thomas.tools.native_auth:request_native_authorization`)
-  is platform-specific (Windows credential dialog). Calvin is a
+  is platform-specific (Windows credential dialog). the product owner is a
   Windows user; this works.
 - **`ToolSpecialist._run_tool` (`base.py:242-313`) does NOT use
   `GuardedToolRunner`.** It checks `token.permits_tool(tool_name)`
@@ -2935,7 +2944,7 @@ Every step that can fail or surface to the user goes through
   allow / deny) plus native-OS auth for destructive tools matches
   the threat model — autonomous Thomas defaults to interactive
   approval for sensitive ops, and only ever grants destructive
-  ops with a Windows credential prompt the user (Calvin) must
+  ops with a Windows credential prompt the user (the product owner) must
   satisfy.
 - The Pattern 2 shim at `thomas.policy` is mild slop in isolation
   but compounds with the orchestrator/specialists shims — three
@@ -3121,7 +3130,7 @@ are implemented in `thomas/cli/commands/research.py`.
 | `scripts/worker_make_note.py:12` | Workers can write durable notes |
 
 The 3 categories on disk (`architecture`, `provider-api-research`,
-`research-notes`) confirm Calvin's installation has actively-used
+`research-notes`) confirm the product owner's installation has actively-used
 entries — this isn't dormant infrastructure.
 
 ### Q3. Does the naming and folder placement make sense?
@@ -3484,7 +3493,7 @@ the orchestrator stack (Section 7).**
      what the package actually is (with the scaffold docstring
      gone) or `THOMAS_TRASH` the intermediate `thomas/browser/`
      entirely if the agent-facing `thomas.tools.browser` covers
-     the same surface. Open question for Calvin.
+     the same surface. Open question for the product owner.
 
 ### Files involved
 
@@ -3734,13 +3743,13 @@ half-shipped.**
   An "are companion routes still functional?" smoke test would
   catch silent regressions.
 - **Recommendation**: surface companion's real status in
-  Calvin-facing summaries. "Server complete; mobile clients not
+  the product owner-facing summaries. "Server complete; mobile clients not
   started" is the truth, not "Partial." If the mobile clients
   aren't on the near-term roadmap, document the dormancy in
   `STATUS.md` and the bible. If they ARE on the roadmap,
   someone needs to start a mobile workstream before the
   server-side code rots.
-- **Open question for Calvin**: are mobile companion clients
+- **Open question for the product owner**: are mobile companion clients
   on the roadmap, or is the companion feature dormant? Affects
   whether the server-side code should keep evolving.
 
@@ -3820,7 +3829,7 @@ half-shipped.**
   the README scaffolds.
 - **Server-side companion code may have rotted silently.**
   Without integration tests against a real client, the routes
-  and kernel have only their unit tests. Calvin should consider
+  and kernel have only their unit tests. the product owner should consider
   a "is this still load-bearing?" pass if mobile workstream
   isn't restarting soon.
 - **CLI `thomas companion *` is a real surface today.** Some
@@ -3971,7 +3980,7 @@ blue/green operations conversationally.
 - ⚠️ **No regression-test gating in evolve charter** —
   `EvolveCharter` defines goals + objectives + principles +
   verify-commands. The verify-commands are user-editable. If
-  Calvin's charter doesn't include "all tests pass," evolve
+  the product owner's charter doesn't include "all tests pass," evolve
   could promote a session that breaks tests. Worth verifying
   the default charter includes a test-suite gate.
 
@@ -4072,7 +4081,7 @@ blocklists, required `.gitignore` snippets, `thomas.prod.toml` safety
 asserts, secret regex scans, and a public-snapshot generator that
 strips private content. **The only open question is the remote URL
 mismatch** between the local git remote (`corbe/thomas`) and the
-README installer URL (`Calvin-Corbett/thomas`). Calvin to verify
+README installer URL (`Calvin-Corbett/thomas`). the product owner to verify
 whether they're the same repo (after rename) or two distinct repos.
 
 ### Q1. Does it really do what its name says?
@@ -4169,7 +4178,7 @@ documents, or private library entries.
   Either the repo was renamed (`corbe/thomas` → `Calvin-Corbett/thomas`)
   and the local remote is stale — in which case `git remote
   set-url origin` is needed — or two distinct repos exist and the
-  publish flow hasn't been updated. **Calvin to verify by visiting
+  publish flow hasn't been updated. **the product owner to verify by visiting
   both URLs in a browser**; finding belongs in the open-questions
   list.
 - ✅ **Public-snapshot exclusions match the architectural privacy
@@ -4183,7 +4192,7 @@ documents, or private library entries.
   the prior bible memory).** Until resolved, agents pushing
   to `origin` are pushing somewhere different from where users
   download from. Either harmless (renamed repo) or production
-  drift (two repos). Calvin to confirm.
+  drift (two repos). the product owner to confirm.
 - ⚠️ **`scripts/check_site_visual_proof.py`,
   `scripts/refresh_site_visual_proof.py`,
   `scripts/verify_site_visual_runtime.mjs`** all appear in BOTH
@@ -4218,7 +4227,7 @@ documents, or private library entries.
 - ⚠️ **No published changelog mechanism documented.** The
   preflight blocks unsafe configs, but doesn't verify a
   human-readable changelog is updated for `public-release` commit
-  class. If Calvin wants the public release to include
+  class. If the product owner wants the public release to include
   release notes, that's another preflight gate.
 
 ### Q5. Does it actually make sense?
@@ -4240,7 +4249,7 @@ unambiguously good.**
 - The blocklist's 38 exact paths is a reasonable maintenance burden.
   Easier than trying to encode a positive allowlist for what
   *should* be public.
-- **Recommendation**: when Calvin confirms the remote URL question,
+- **Recommendation**: when the product owner confirms the remote URL question,
   fix `git remote set-url` (if appropriate) and add a one-line
   preflight check that warns if origin URL doesn't match an
   expected pattern (e.g. `Calvin-Corbett/thomas` only). Catches
@@ -4322,7 +4331,7 @@ orchestrator with a planner + reviewer + concurrent-task graph —
 (761 ln) is the terminal-process variant — it spawns N subprocesses
 each running its own Thomas agent against shared workboard state, and
 this IS the live path. About **1,486 of ~2,574 swarm-related lines
-(~58%) are dead in the live chat path**. Calvin's "25 agents" vision
+(~58%) are dead in the live chat path**. the product owner's "25 agents" vision
 is partially implemented (workboard side, real) and partially
 planned-but-not-wired (in-process side, dead).
 
@@ -4404,7 +4413,7 @@ that the source code labels "swarm" is dead.
   this symbol in tests")`. So if any code path tried to call it,
   it would fail loudly. Defensive failure-mode design (better
   than silent noop).
-- Calvin's "25 agents" vision: achievable today via
+- the product owner's "25 agents" vision: achievable today via
   `workboard_swarm.py` invocation. Not achievable via the
   in-process orchestrator because nothing calls it.
 
@@ -4489,7 +4498,7 @@ brain.py + brain_v3.py combined.
 - The honest source-level docstring ("NOT currently called
   from /api/chat") is good — the bible's job is to surface
   this state to a wider audience and force a decision.
-- For Calvin's "25 agents" vision: achievable now via
+- For the product owner's "25 agents" vision: achievable now via
   workboard. The in-process variant might one day enable
   faster swarms (no process-spawn overhead), but that's a
   future-tense argument and the code rots in the meantime.
@@ -4559,7 +4568,7 @@ brain.py + brain_v3.py combined.
   Pattern 7** for this codebase — tests patch the symbols at
   this import path. If you retire the file, also rewrite the
   tests that monkeypatch it.
-- **Calvin's "25 agents" vision is achievable today** via
+- **the product owner's "25 agents" vision is achievable today** via
   `scripts/workboard_swarm.py`. Don't wait for the in-process
   swarm to ship — the workboard variant runs.
 - **`docs/CHAT_EXECUTION_MODEL.md` is the authoritative chat
@@ -4572,7 +4581,7 @@ brain.py + brain_v3.py combined.
   the in-process variant easier to wire up later.
 
 ---
-> Calvin's vision: spawn 25 agents to work on a project in parallel with
+> the product owner's vision: spawn 25 agents to work on a project in parallel with
 > their own workboard. Currently described as "kinda works, kinda doesn't."
 >
 > This is the load-bearing future of Thomas if scale-to-25 is real. Needs
@@ -4582,7 +4591,7 @@ brain.py + brain_v3.py combined.
 
 # Part II — Repo coverage beyond the user journey
 
-Sections 1–18 trace the user-journey spine. Calvin's intent for the
+Sections 1–18 trace the user-journey spine. the product owner's intent for the
 bible is **complete coverage of the Thomas repo**, not just the spine.
 The repo has **184 subpackages under `thomas/`** and **36 directories at
 the repo root**. Sections 1–18 cover ~15 of those subpackages in any
@@ -4943,7 +4952,7 @@ are Q5 failures.**
   list before extending — don't build on top of a stub.
 - **`prompt_templates.py` vs `thomas/prompts/`** — verify which
   is canonical before adding new templates.
-- **Don't add new specialists or new swarms** without Calvin's
+- **Don't add new specialists or new swarms** without the product owner's
   Section 7/18 wire-up decisions (both dead today).
 
 ---
@@ -5452,7 +5461,7 @@ redirect code.
   navigational surface dramatically.
 - **Some marketplace packages are genuinely OK there** if
   you accept "marketplace = always-installed feature module."
-  Calvin's call.
+  the product owner's call.
 
 ---
 
@@ -5593,7 +5602,7 @@ skipped and a DEBUG log line records the skip. The aggregate
 
 ### Q5. Does it make sense?
 
-**The breadth is intentional product positioning.** Calvin's
+**The breadth is intentional product positioning.** the product owner's
 Thomas pitch is "an AI with 132+ domain modules." That's a
 real differentiator vs single-purpose agents. The Q5 problem is
 not the breadth itself, it's:
@@ -6355,7 +6364,7 @@ placement.**
   `workflow_v2` if its design is better). Migrate the others
   to it. Retire the duplicates.
 - **Recommendation**:
-  1. **Calvin/agent decision**: which workflow primitive is
+  1. **the product owner/agent decision**: which workflow primitive is
      canonical? Read each package's design intent and pick.
   2. **Migrate `workflow_v2` finished**: either bring its 3
      files up to feature parity with `workflows` (10 files) and
@@ -7098,7 +7107,7 @@ duplicates.**
   navigate consistently.
 - BUT the pack pattern collides with the Thomas-native pattern
   (aiohttp + thomas/cli + thomas/server). **Two parallel app
-  architectures** in the repo. Calvin should decide whether
+  architectures** in the repo. the product owner should decide whether
   feature packs are the future (and migrate Thomas-native
   features into the pack model) or whether they're legacy
   (and migrate packs into Thomas-native).
@@ -7109,7 +7118,7 @@ duplicates.**
 
 **Recommendation**: this is the **biggest open architectural
 question in the repo** that the bible hadn't surfaced before.
-Resolution requires Calvin's decision on FastAPI vs aiohttp and
+Resolution requires the product owner's decision on FastAPI vs aiohttp and
 the future of the drop-in feature pack pattern.
 
 ### Files involved
@@ -7155,7 +7164,7 @@ the future of the drop-in feature pack pattern.
 
 ### 31.1 Follow-up examination — all remaining root dirs opened (2026-05-06)
 
-Per Calvin's annotation directive, every previously-unopened repo-root
+Per the product owner's annotation directive, every previously-unopened repo-root
 directory was `ls`-checked and classified. Findings:
 
 #### Newly discovered substantial subsystems
@@ -7214,7 +7223,7 @@ Neither is imported by the live Thomas runtime. They appear to be:
 
 ### 31.2 Deep dive on agent_vf, agent_memory, code_intake (2026-05-06)
 
-Per Calvin's annotation directive, the major findings from 31.1 were
+Per the product owner's annotation directive, the major findings from 31.1 were
 opened deeper. Findings:
 
 #### `agent_memory/` — the port source for `thomas/memory/`
@@ -7289,7 +7298,7 @@ tool dispatch, memory retrieval with reranking, and HTTP server.
 For comparison, `thomas/agent/` alone is ~14,200 lines.
 
 This looks like the **original Thomas prototype** before the
-codebase grew large. Calvin probably built `agent_vf` first as a
+codebase grew large. the product owner probably built `agent_vf` first as a
 minimal viable agent, then `agent_memory` as its memory backend,
 then forked into the larger Thomas codebase. The `thomas/memory/store.py:3`
 "Ported from agent_memory/ with improvements" comment supports this.
@@ -7322,7 +7331,7 @@ CLI structure (`scripts/code_intake.py`, 751 ln) has 7 commands:
 
 So no active drops in flight at the moment of bible writing.
 
-**Workflow per the README**: external generation flows (per Calvin:
+**Workflow per the README**: external generation flows (per the product owner:
 "many parallel ChatGPT tabs") produce code drops in one of the 3
 artifact formats, dropped into `incoming/`. The CLI validates
 (path-ownership enforcement, blocklist check, git apply check),
@@ -7330,7 +7339,7 @@ moves to `staged/`, then `apply --execute` writes them to the
 working tree. Results land in `applied/` or `rejected/`.
 
 This is **a sophisticated multi-source code-ingestion pipeline**
-that's a major Calvin workflow — and was completely undocumented
+that's a major the product owner workflow — and was completely undocumented
 in the bible until this pass.
 
 **Companion script**: `scripts/code_intake_seed_batch.py` (220 ln)
@@ -7674,7 +7683,7 @@ V2 lives nested at `thomas/memory/v2/` with 14 files:
 #### The migration story in one paragraph
 
 `agent_memory/` was the original prototype — co-located with
-`agent_vf/` (the prototype agent) — and Calvin/early Thomas built
+`agent_vf/` (the prototype agent) — and the product owner/early Thomas built
 it as a small, self-contained memory engine with Tier1+Tier2
 rerankers. When Thomas grew into a larger codebase, the memory
 engine was **ported in** to `thomas/memory/` as V1 (the
@@ -7703,7 +7712,7 @@ The bible's "Hoist `thomas.memory.v2` to a non-version-numbered
 name" planned item (in Planned features) is the proposed Stage 4:
 move V2 out of its nested position to the top level (e.g.
 `thomas/memory_fabric/`), demote V1 to legacy, and continue
-deprecating `agent_memory/`. That stage is in Calvin's idea
+deprecating `agent_memory/`. That stage is in the product owner's idea
 backlog, not currently being executed.
 
 ---
@@ -7994,7 +8003,7 @@ deletes — but the **followups** revealed a generalizable lesson:
 
 **Lesson for agents:** when running a content-scrubbing cleanup,
 ALSO inventory the CI gates that reference the deleted content. The
-gates are the second-order leak surface. Calvin found this in real
+gates are the second-order leak surface. the product owner found this in real
 time: the public repo had been releasing v0.14.64 for weeks because
 no one had cut a new release, even though source had advanced to
 v0.15.x — the gates couldn't catch "release version vs source version"
@@ -8286,7 +8295,7 @@ hid that failure behind the older one. Don't blame the recent fix;
 read the failure on its own terms. The work pattern is: fix-or-xfail
 in batches of related failures, push, watch CI, repeat. Expect 3–6
 iterations before mixed-NN reaches `mixed-30` and CI goes green
-end-to-end. Calvin's directive "no more deferring" applies — but
+end-to-end. the product owner's directive "no more deferring" applies — but
 xfailing a domain-module bug with a tracking note is NOT deferring,
 it's classifying. The kernel is what must stay clean; marketplace
 inventory can carry tracked debt because that's its design.
@@ -8307,7 +8316,7 @@ python -m pytest <failing_test> -x --tb=short
 
 ### Public baseline Bible plus per-install review state (clarification - 2026-05-22)
 
-Calvin clarified that the Bible is not a private side note; it is part
+the product owner clarified that the Bible is not a private side note; it is part
 of the Thomas system. The checked-in `docs/THOMAS_BIBLE.md` is the
 public baseline truth document every user and agent receives. Each
 operator can still accumulate local review state for their own install,
@@ -8435,7 +8444,7 @@ focused follow-up session per area.
 fixes — Dependabot PRs on public main continue to fail the pre-recovery
 gates until a publish flow promotes the cleaned dev to main. That step
 is intentionally deliberate (per the push-vs-publish workflow) and
-requires Calvin to disable branch protection in the GitHub UI.
+requires the product owner to disable branch protection in the GitHub UI.
 
 ---
 
@@ -8742,7 +8751,7 @@ cleanup pass. Bible does not prescribe action; just notes the state.
 | Pattern 1 (half-built migration) | ~5 | brain_v3, workflow_v2, agent placeholders, memory v1 dormancy, others |
 | **Pattern 2 (re-export shim)** | **~140** | All marketplace shadow shims + ~120 domain shims + ~10 cross-cutting shims |
 | Pattern 3 (parallel pipelines) | ~10 | Chat V1/V2, AgentLoop/ToolSpecialist, in-process/workboard swarm, FastAPI/aiohttp servers, workflow family (5+), plugin family (4+), cv/vision overlap, monitoring/tracing/observability |
-| Pattern 4 (version/patch numbering) | **~353 files / 6 patch trees** | browser/ p001-p026 (25) + cli/commands/browser/ p001-p035 mirror (34) + plugins/ p097-p123 (26) + marketplace/nodes/ p027-p052 (26) + server/routes/gateway/ p125-p150 (25) + cli/commands/gateway/ p### mirror (25) + workflow_profile_NNN (192). Plus singletons: brain_v3, memory.v2, secrets_v2, workflow_v2, sessions_v2. **The p### numbering is roughly chronological project-wide** — each tree marks a feature pack Calvin developed in patches. |
+| Pattern 4 (version/patch numbering) | **~353 files / 6 patch trees** | browser/ p001-p026 (25) + cli/commands/browser/ p001-p035 mirror (34) + plugins/ p097-p123 (26) + marketplace/nodes/ p027-p052 (26) + server/routes/gateway/ p125-p150 (25) + cli/commands/gateway/ p### mirror (25) + workflow_profile_NNN (192). Plus singletons: brain_v3, memory.v2, secrets_v2, workflow_v2, sessions_v2. **The p### numbering is roughly chronological project-wide** — each tree marks a feature pack the product owner developed in patches. |
 | Pattern 5 (aspirational STATUS / placeholder source) | 7 self-admitted + 4 lying STATUS.md | Mostly honest STATUS surface; concentrated lies in orchestrator/specialists/skills/tray_agent |
 | Pattern 6 (lying GUARDRAILS) | 1 active + 1 fixed | app_parts/GUARDRAILS.md still active; server/GUARDRAILS.md fixed in Section 4 |
 | Pattern 7 (string-inspection tests) | 2 confirmed; 99 candidates | Sections 5, 7, 18 |
@@ -8810,9 +8819,9 @@ moment two agents are live.
    `--ack`, `--resolve`, `--list` verbs. Storage in
    `plans/thomas/WORKBOARD.md::## Agent Message Traffic` with
    auto-generated `msg_id` + ISO timestamps + audit trail.
-2. **Roles** — one agent is designated coordinator (Claude on
-   Thomas, locked 2026-05-22 by Calvin). Workers (Codex, spawned
-   sub-agents) report up. Calvin overrides anyone.
+2. **Roles** — one agent is designated coordinator. Workers (other
+   agents and spawned sub-agents) report up. The repo owner has final
+   authority.
 3. **Supervisor protocol** — worker completes ONE unit, sends
    `state=open` message, STOPS. Coordinator reviews,
    `--ack --decision approved` to continue with next-unit
@@ -8893,10 +8902,10 @@ correct architecturally. Both are open work.
 
 > Reviewed: 2026-05-22 by Codex. Scope: format and public-Bible role checked; item contents not re-prioritized.
 
-This section is the catch-all for ideas Calvin has surfaced (in conversation
+This section is the catch-all for ideas the product owner has surfaced (in conversation
 or while reviewing) and findings agents have flagged that aren't yet
 implemented. It is **not** a roadmap with deadlines — it's a memory
-system. Calvin's stated motivation: "as I'm talking to you, my ideas are
+system. the product owner's stated motivation: "as I'm talking to you, my ideas are
 gonna go away. I might forget I had that idea. So I'd like it written
 down."
 
@@ -8904,18 +8913,18 @@ Format per item: title, why, status, source. Update statuses honestly. Move
 items to the corresponding section's verified body when they ship and bump
 that section's date.
 
-### Active ideas (Calvin-stated or agent-flagged)
+### Active ideas (the product owner-stated or agent-flagged)
 
 - **Real AI-driven first-run setup**
   - **Why:** After the Easy Setup wizard closes, the AI itself should walk
     the user through any remaining configuration (preferences, model swap,
     advanced settings) by talking. Today's `beginOnboardingInterview()` is
     scripted Q&A masquerading as AI conversation — 6 hardcoded questions in
-    `runtime/002_virtual_office_data.js:670`. Calvin: "the AI he'll change
+    `runtime/002_virtual_office_data.js:670`. the product owner: "the AI he'll change
     all the settings and stuff because he has access to change settings just
     by you telling him to."
   - **Status:** idea (blocked-on-Section-7/8 verification of AI tool surface)
-  - **Source:** Calvin, 2026-05-06 setup-flow vision conversation; see
+  - **Source:** the product owner, 2026-05-06 setup-flow vision conversation; see
     `thomas_setup_vision.md` memory.
 
 - **`THOMAS_MODELS_<X>_API_KEY` env var: fix or remove**
@@ -8923,8 +8932,8 @@ that section's date.
     the env var to suppress missing-key warnings; the runtime's
     `_model_cfg_with_secrets` ignores it. So setting only the env var is a
     trap — launcher says "configured," chat fails.
-  - **Status:** awaiting Calvin's decision (he leans remove, hasn't
-    confirmed). Recommendation: remove (Calvin is a desktop user; CI/headless
+  - **Status:** awaiting the product owner's decision (he leans remove, hasn't
+    confirmed). Recommendation: remove (the product owner is a desktop user; CI/headless
     env-var key path isn't on the roadmap).
   - **Source:** Section 4 verification finding, 2026-05-06.
 
@@ -8938,7 +8947,7 @@ that section's date.
     to dead code).
   - **Status:** planned (one-by-one as each section verification reaches
     a GUARDRAILS file).
-  - **Source:** Calvin, 2026-05-06 ("guardrails apparently has a bunch of
+  - **Source:** the product owner, 2026-05-06 ("guardrails apparently has a bunch of
     stupid bullshit in it"); Section 3 + 4 findings.
 
 - **Fully remove dead Easy Setup step 4/5 DOM elements + animation-fidelity machinery**
@@ -8972,16 +8981,16 @@ that section's date.
 
 - **Resolve install.cmd vs setup.cmd**
   - **Why:** Two parallel install paths at root. One is presumably legacy;
-    the other canonical. Calvin to decide which.
-  - **Status:** awaiting Calvin's decision.
+    the other canonical. the product owner to decide which.
+  - **Status:** awaiting the product owner's decision.
   - **Source:** Section 2 verification, 2026-05-06.
 
 - **Resolve GitHub remote situation (Calvin-Corbett/thomas vs corbe/thomas)**
   - **Why:** README installer URL points at `Calvin-Corbett/thomas`; local
-    git remote is `corbe/thomas`. Calvin to confirm whether they're the same
+    git remote is `corbe/thomas`. the product owner to confirm whether they're the same
     repo (after rename) or two distinct repos. Affects publish-flow design
     in Section 17.
-  - **Status:** awaiting Calvin's confirmation.
+  - **Status:** awaiting the product owner's confirmation.
   - **Source:** Section 1 verification, 2026-05-06.
 
 - **Bump pyproject.toml to match latest released version**
@@ -9142,14 +9151,14 @@ that section's date.
     `thomas/marketplace/orchestrator/` and `thomas/marketplace/specialists/`
     is registered at boot but **never invoked on the live chat path**.
     The architecture exists; the wiring doesn't. Most aligned path
-    forward with Calvin's setup-flow vision (the AI uses tools to do
+    forward with the product owner's setup-flow vision (the AI uses tools to do
     things conversationally) is to make the chat-V2 "chat"
     `dispatch_action` go through the brain instead of a raw LLM call,
     so specialists' tool surfaces become reachable. This is the
     closest match to "AI configures by chatting" from
     `thomas_setup_vision.md`.
   - **Status:** planned (large feature build — multi-session work).
-    Marked ⭐ as the highest-impact open item for Calvin's vision.
+    Marked ⭐ as the highest-impact open item for the product owner's vision.
   - **Source:** Section 7 verification, 2026-05-06.
 
 - **Decide brain_v3.py fate (Section 7)**
@@ -9283,8 +9292,8 @@ that section's date.
   - **Why:** Default off. If no production deployment ever sets it to
     on, the V1 facade and its dependencies are dead code. If some
     edge case still requires it (e.g. migrating an old install's
-    memory store), document the use case. Open question for Calvin.
-  - **Status:** awaiting Calvin's decision.
+    memory store), document the use case. Open question for the product owner.
+  - **Status:** awaiting the product owner's decision.
   - **Source:** Section 10 verification, 2026-05-06.
 
 - **Audit `thomas/chat/memory_layers.py` (Section 10)**
@@ -9400,7 +9409,7 @@ that section's date.
     origin matches an expected pattern (e.g. `Calvin-Corbett/thomas`
     or `corbe/thomas` after the URL question is resolved) would
     catch silent remote drift. One regex line.
-  - **Status:** blocked-on Calvin's resolution of remote URL question.
+  - **Status:** blocked-on the product owner's resolution of remote URL question.
   - **Source:** Section 17 verification, 2026-05-06.
 
 - **Consolidate publish-blocklist + snapshot-exclude lists (Section 17)**
@@ -9417,12 +9426,12 @@ that section's date.
 
 - **Add release-notes preflight gate (Section 17)**
   - **Why:** `public-release` commit class has no documented
-    requirement for a release notes file. If Calvin wants public
+    requirement for a release notes file. If the product owner wants public
     releases to ship with a `CHANGELOG.md` (or similar) update, a
     preflight gate that asserts the changelog has been touched in
     the same commit class would prevent silent missing-notes
     releases.
-  - **Status:** idea (open whether Calvin wants this).
+  - **Status:** idea (open whether the product owner wants this).
   - **Source:** Section 17 verification, 2026-05-06.
 
 - **Audit deep-check scripts: `check_repo_hygiene.py`, `check_release_hygiene.py`, `check_claim_integrity.py`, `security_audit.py` (Section 17)**
@@ -9482,11 +9491,11 @@ that section's date.
   - **Why:** All four `apps/{android,ios,macos,shared}/` are placeholder
     READMEs. Server-side companion infrastructure (~2,240 lines under
     `thomas/marketplace/companion/`) is mature but has no client to
-    pair with. Calvin: are mobile clients on the roadmap or is the
+    pair with. the product owner: are mobile clients on the roadmap or is the
     feature dormant? If dormant, document explicitly (server code
     will rot without integration testing). If on roadmap, start a
     mobile workstream before further server-side accretion.
-  - **Status:** awaiting Calvin's decision.
+  - **Status:** awaiting the product owner's decision.
   - **Source:** Section 15 verification, 2026-05-06.
 
 - **Audit `thomas/server/routes/companion_aiohttp.py` for rot (Section 15)**
@@ -9525,7 +9534,7 @@ that section's date.
        removed. Workboard variant remains as canonical swarm.
     3. **Document as planned-but-not-wired** in the bible and
        stop maintaining it as if it were live.
-  - **Status:** planned (Calvin to decide; ⭐ for size of dead-code
+  - **Status:** planned (the product owner to decide; ⭐ for size of dead-code
     surface and pairing with Section 7 ⭐).
   - **Source:** Section 18 verification, 2026-05-06.
 
@@ -9579,7 +9588,7 @@ When you encounter a new idea or open finding:
    the trail is visible, then prune.
 4. **Do not** put in-flight TODOs that you intend to finish this session —
    those go in your todo list. This section is for things that span
-   sessions or wait on Calvin.
+   sessions or wait on the product owner.
 
 ---
 
@@ -9606,8 +9615,7 @@ When you encounter a new idea or open finding:
 
 ## See also
 
-> Reviewed: 2026-05-22 by Codex. Scope: linked active docs checked for deleted root-doc replacements.
+> Reviewed: 2026-05-22. Scope: linked active docs checked for deleted root-doc replacements.
 
 - [`AGENTS.md`](../AGENTS.md) — agent rules and conventions
 - [`docs/trash_marker.md`](trash_marker.md) — how to retire code without leaving slop
-- [`DOCUMENTATION_INDEX.md`](../DOCUMENTATION_INDEX.md) — stable docs hub

@@ -24,6 +24,17 @@ else:
     if plugin_spec is not None:
         pytest_plugins.append("pytest_asyncio")
 
+# Load pytest-timeout when the optional test dependency is installed.  Local
+# lightweight environments may omit it, so pytest_addoption below registers the
+# ini keys as a warning-free fallback.
+try:
+    plugin_spec = importlib.util.find_spec("pytest_timeout")
+except Exception:
+    pass
+else:
+    if plugin_spec is not None:
+        pytest_plugins.append("pytest_timeout")
+
 # Load aiohttp plugin if available
 try:
     plugin_spec = importlib.util.find_spec("aiohttp.pytest_plugin")
@@ -32,3 +43,23 @@ except Exception:
 else:
     if plugin_spec is not None:
         pytest_plugins.append("aiohttp.pytest_plugin")
+
+
+def _add_ini_if_missing(parser, name: str, help_text: str) -> None:
+    registered = getattr(parser, "_inidict", {})
+    if name in registered:
+        return
+    try:
+        parser.addini(name, help_text)
+    except ValueError as exc:
+        if "already added" not in str(exc):
+            raise
+
+
+def pytest_addoption(parser) -> None:
+    _add_ini_if_missing(parser, "timeout", "Fallback registration for pytest-timeout's timeout setting.")
+    _add_ini_if_missing(
+        parser,
+        "timeout_method",
+        "Fallback registration for pytest-timeout's timeout_method setting.",
+    )

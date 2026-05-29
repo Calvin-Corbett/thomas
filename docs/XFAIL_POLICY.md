@@ -108,7 +108,7 @@ investigated.
 ### Bypass
 The gate's only bypass is the `breakglass` mechanism (see
 `docs/SAFETY_ARCHITECTURE.md`). That requires Windows credential auth
-on Calvin's device, leaves an audit trail in `.git/thomas_skip_audit.jsonl`,
+on the product owner's device, leaves an audit trail in `.git/thomas_skip_audit.jsonl`,
 and is rate-limited to 3 uses per agent per 24h. Use only when the
 xfail-growth-gate misfires (e.g. the gate itself has a bug, or
 infrastructure changes legitimately add xfails to tests-of-tests).
@@ -124,7 +124,6 @@ infrastructure changes legitimately add xfails to tests-of-tests).
 | `mixed-17` | 3 | tracked | Already documented; just needs follow-through |
 | `mixed-21` | 2 | step-up | Medium — telecom |
 | `pathfinding` | 1 | flake | Low — known RNG flake |
-| `8b4c97a9` | 1 | domain-stub | Low — conversations skeleton |
 
 **Recommended first cleanup pass:** the `mixed-19` arc (16 xfails). All
 share a common reason string ("Pre-existing search/serialization/setup_wizard/siem
