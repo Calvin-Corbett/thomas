@@ -4,7 +4,7 @@
 |------------------|----------------------------------------------------------|
 | Status           | functional (actively developed, some scaffold subsystems)|
 | Last assessed    | 2026-03-18                                               |
-| Assessed by      | claude-opus-4-6 (Cowork session) + Calvin (product owner)|
+| Assessed by      | claude-opus-4-6 (Cowork session) + the product owner|
 | Used in prod     | yes — this IS the production runtime                     |
 | Has real tests   | partial (route tests exist, coverage varies widely)      |
 | Blocking issues  | 2 files over hard size limit, gateway is scaffold        |
@@ -16,7 +16,7 @@ companion (mobile PWA), mission control, plugin marketplace, local project
 launcher, webhooks, observability endpoints, and an OpenAI-compatible gateway.
 This is 39,000+ lines across 113 Python files plus a full HTML/JS/CSS frontend.
 
-## Product Vision (from Calvin, 2026-03-18)
+## Product Vision (from the product owner, 2026-03-18)
 
 Thomas is **the everything assistant.** Key identity points:
 

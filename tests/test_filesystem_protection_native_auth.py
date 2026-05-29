@@ -48,12 +48,12 @@ def test_write_protected_file_allowed_with_auth(sandbox: Path, monkeypatch: pyte
         {
             "path": target,
             "content": "x = 1\n",
-            "reason": "Calvin-approved emergency fix",
+            "reason": "the product owner-approved emergency fix",
         },
     )
     assert result.ok is True
     assert (sandbox / target).read_text() == "x = 1\n"
-    assert "Calvin-approved emergency fix" in captured["action"]
+    assert "the product owner-approved emergency fix" in captured["action"]
     assert "thomas/tools/evil.py" in captured["action"]
 
 
@@ -109,7 +109,7 @@ def test_toggle_script_signing_payload_matches_validator(sandbox: Path) -> None:
     finally:
         sys.path.pop(0)
 
-    args = (1, "2026-05-27T12:00:00Z", "calvin", str(sandbox.resolve()))
+    args = (1, "2026-05-27T12:00:00Z", "owner", str(sandbox.resolve()))
     assert script_payload(*args) == _runtime_signing_payload(*args)
 
 
@@ -126,7 +126,7 @@ def test_toggle_script_writes_validator_acceptable_flag(sandbox: Path) -> None:
     key = _mint_fresh_key(sandbox)
     assert len(key) >= 32
     issued_at = _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime())
-    issued_by = "calvin"
+    issued_by = "owner"
     repo_str = str(sandbox.resolve())
     sig = hmac.new(
         key,

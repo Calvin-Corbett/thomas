@@ -1,6 +1,6 @@
-# Branch Protection Setup (Calvin's UI clickpath)
+# Branch Protection Setup (the product owner's UI clickpath)
 
-This is the runbook for Calvin to enable GitHub branch protection on
+This is the runbook for the product owner to enable GitHub branch protection on
 `dev` and `main` — **layer 1** of the safety architecture (see
 [SAFETY_ARCHITECTURE.md](SAFETY_ARCHITECTURE.md)).
 
@@ -17,7 +17,7 @@ This is the runbook for Calvin to enable GitHub branch protection on
 - Force-pushes are rejected.
 - Unsigned commits are rejected.
 - The `gates-required` workflow must pass to merge.
-- A Code Owner (Calvin, per [CODEOWNERS](../.github/CODEOWNERS)) must
+- A Code Owner (the product owner, per [CODEOWNERS](../.github/CODEOWNERS)) must
   approve changes to safety-critical paths.
 
 After this runs, the path "agent uses `git commit --no-verify` then pushes
@@ -25,11 +25,11 @@ to dev" is closed end-to-end.
 
 ---
 
-## Repo 1: `Calvin-Corbett/thomas-dev` (private dev repo)
+## Repo 1: `<your-account>/<private-dev-repo>` (private dev repo)
 
 ### Step 1. Open branch protection settings
 
-1. Open https://github.com/Calvin-Corbett/thomas-dev/settings/branches
+1. Open https://github.com/<your-account>/<private-dev-repo>/settings/branches
 2. Click **Add branch protection rule** (or **Edit** if a rule for `dev`
    already exists).
 
@@ -75,9 +75,9 @@ to dev" is closed end-to-end.
 
 - [x] **Do not allow bypassing the above settings**
   - **IMPORTANT**: This is the rule that makes the protection actually
-    enforce. Without it, repo admins (Calvin) can bypass via "Admin"
-    button. With it, even Calvin uses the PR flow.
-  - Calvin can still toggle this off in an emergency by editing this
+    enforce. Without it, repo admins (the product owner) can bypass via "Admin"
+    button. With it, even the product owner uses the PR flow.
+  - the product owner can still toggle this off in an emergency by editing this
     rule. That edit is logged in the repo audit log.
 
 - [ ] **Restrict pushes that create matching branches** — leave unchecked.
@@ -162,7 +162,7 @@ After both repos are configured:
 | PR touching `agent_safety.toml` without Code Owner approval | Rejected (Code Owner review required) |
 
 The `--no-verify` path that Claude exploited on 2026-05-26 is closed:
-even if an agent signs with Calvin's key (which requires Windows Hello),
+even if an agent signs with the product owner's key (which requires Windows Hello),
 the gate check still runs server-side via `gates-required`. Both must
 pass for the merge to be allowed.
 
@@ -185,7 +185,7 @@ re-check it. Or use the PR flow.
 ### "An agent created a PR that bypassed CODEOWNERS"
 
 Verify in branch protection: "Require review from Code Owners" must
-be checked. If it is, GitHub blocks merge until Calvin (the listed
+be checked. If it is, GitHub blocks merge until the product owner (the listed
 owner for those paths) approves. If you see merges happening without
 your review on safety-critical paths, the CODEOWNERS path patterns
 might not be matching — check `.github/CODEOWNERS` syntax.
@@ -199,7 +199,7 @@ wait for it to finish, then re-open branch protection settings.
 ### Repo audit log
 
 To see all branch protection changes:
-https://github.com/Calvin-Corbett/thomas-dev/settings/audit-log
+https://github.com/<your-account>/<private-dev-repo>/settings/audit-log
 
 Filter by `branch.protection` to see who edited the rules and when.
 

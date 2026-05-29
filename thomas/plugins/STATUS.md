@@ -4,7 +4,7 @@
 |------------------|-----------------------------------------------------------|
 | Status           | functional (core install/hook system works, extras scaffold)|
 | Last assessed    | 2026-03-18                                                |
-| Assessed by      | claude-opus-4-6 (Cowork session) + Calvin (product owner) |
+| Assessed by      | claude-opus-4-6 (Cowork session) + the product owner |
 | Used in prod     | yes — desktop plugin install/enable/disable/uninstall works|
 | Has real tests   | partial (test_suite_contract.py exists)                   |
 | Blocking issues  | 3 files are placeholder, 2 files have competitor refs     |
@@ -20,7 +20,7 @@ tool injection, config validation, diagnostics, and CLI commands.
 (`marketplace_catalog_aiohttp.py`, `plugin_hosting.py`, `desktop_plugins*.py`).
 This module is the underlying plugin runtime. The server module is the storefront.
 
-## Product Vision (from Calvin, 2026-03-18)
+## Product Vision (from the product owner, 2026-03-18)
 
 The marketplace is WAY bigger than just plugins. The full vision:
 
@@ -31,7 +31,7 @@ The marketplace is WAY bigger than just plugins. The full vision:
   memory, etc.), search, filter. Not a flat list.
 - **You don't have to go to the marketplace.** Tell Thomas "add Discord support"
   and Thomas finds it and installs it. Conversational install.
-- **Auto-syncs from the website.** Calvin pushes marketplace content to the
+- **Auto-syncs from the website.** the product owner pushes marketplace content to the
   Thomas website, and Thomas pulls the latest catalog automatically. Always
   fresh.
 - **Mix of official and third-party.** Official Thomas-made modules (quality

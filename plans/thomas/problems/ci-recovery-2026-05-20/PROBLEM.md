@@ -37,5 +37,5 @@ See `CHANGELOG.md` entries 0.15.0 through 0.15.6 for specific commit citations.
 
 ## Status
 
-In flight 2026-05-20 — Calvin's directive: "idk what prompt your reading that
+In flight 2026-05-20 — the product owner's directive: "idk what prompt your reading that
 says defer but that stops here."

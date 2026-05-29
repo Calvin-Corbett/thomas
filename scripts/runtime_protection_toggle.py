@@ -80,9 +80,9 @@ def _mint_fresh_key(repo: Path) -> bytes:
     sessions.  Persisting the key across sessions would mean that if an
     attacker ever planted a key (e.g. via some other write path before
     runtime/.runtime_protection_key was added to the protected list, or
-    via shell.exec if Calvin ever enabled it), the planted key would
+    via shell.exec if the product owner ever enabled it), the planted key would
     silently keep working forever after.  Minting fresh on every ``off``
-    means: any attacker-planted key is overwritten the next time Calvin
+    means: any attacker-planted key is overwritten the next time the product owner
     legitimately toggles, and any flag signed against the old key
     becomes invalid the moment the new key lands.  (Codex hardening
     review, msg-20260527214458.)

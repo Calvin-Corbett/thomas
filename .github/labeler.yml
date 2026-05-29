@@ -2,7 +2,7 @@
 #
 # Each label maps to one or more glob patterns. If a PR touches a file
 # matching the pattern, the label is applied automatically. Labels make
-# triage faster — Calvin can filter PRs by area at a glance.
+# triage faster — the product owner can filter PRs by area at a glance.
 #
 # Used by .github/workflows/labeler.yml (actions/labeler@v5).
 # Pattern format: https://github.com/actions/labeler#changed-files

@@ -9,13 +9,13 @@ artifacts checked here are what makes that scenario work:
 - .github/workflows/gates.yml has all required jobs
 - gates-required aggregator depends on every per-gate job
 - signed-commits-check exists for PR signature verification
-- .github/CODEOWNERS routes safety-critical paths to Calvin
+- .github/CODEOWNERS routes safety-critical paths to the product owner
 - docs/SAFETY_ARCHITECTURE.md exists and references companion docs
 - docs/SIGNING_KEY_SETUP.md and BRANCH_PROTECTION_SETUP.md exist
 - agent_safety.toml [protected] list is unchanged (regression guard)
 
 If these pass, the LOCAL artifacts that enable server-side enforcement
-are in place. The Calvin-side verification (per BRANCH_PROTECTION_SETUP.md)
+are in place. The the product owner-side verification (per BRANCH_PROTECTION_SETUP.md)
 is the other half — see docs/SAFETY_ARCHITECTURE.md § Verification.
 """
 
@@ -120,7 +120,7 @@ def test_gates_yaml_has_required_per_gate_jobs(gates_yaml: dict) -> None:
 
 
 def test_gates_yaml_has_aggregator(gates_yaml: dict) -> None:
-    """The gates-required aggregator must exist; this is what Calvin marks
+    """The gates-required aggregator must exist; this is what the product owner marks
     as a required status check in branch protection."""
     assert "gates-required" in gates_yaml["jobs"], (
         "gates-required aggregator missing — branch protection has no "
@@ -164,6 +164,8 @@ SAFETY_CRITICAL_PATHS_THAT_MUST_REQUIRE_OWNER = (
     "/scripts/forge/gates/",
     "/scripts/active_folders.py",
     "/scripts/breakglass_auth.py",
+    "/scripts/commit_breakglass_guard.py",
+    "/scripts/install_commit_breakglass_hooks.py",
     "/thomas/core/agent_presence.py",
     "/thomas/tools/native_auth.py",
     "/thomas/tools/windows_auth.py",
@@ -179,7 +181,7 @@ def codeowners_content() -> str:
     return CODEOWNERS.read_text(encoding="utf-8")
 
 
-def test_codeowners_lists_calvin_as_owner(codeowners_content: str) -> None:
+def test_codeowners_lists_owner(codeowners_content: str) -> None:
     assert "@Calvin-Corbett" in codeowners_content, "CODEOWNERS must route reviews to @Calvin-Corbett at minimum"
 
 
@@ -203,7 +205,7 @@ def test_codeowners_routes_safety_critical_path(codeowners_content: str, path: s
 
 
 def test_safety_doc_references_companion_runbooks() -> None:
-    """SAFETY_ARCHITECTURE.md must link to the Calvin-runbooks so future
+    """SAFETY_ARCHITECTURE.md must link to the the product owner-runbooks so future
     readers can find them."""
     content = SAFETY_DOC.read_text(encoding="utf-8")
     assert "SIGNING_KEY_SETUP.md" in content, "SAFETY doc must reference SIGNING_KEY_SETUP"

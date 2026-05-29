@@ -4,7 +4,7 @@
 |------------------|--------------------------------------------------------|
 | Status           | functional (store and API work, vision goes much further)|
 | Last assessed    | 2026-03-18                                             |
-| Assessed by      | claude-opus-4-6 (Cowork session) + Calvin (product owner)|
+| Assessed by      | claude-opus-4-6 (Cowork session) + the product owner|
 | Used in prod     | yes — imported by production code                      |
 | Has real tests   | not fully assessed                                     |
 | Blocking issues  | none for current scope; vision is much bigger          |
@@ -15,7 +15,7 @@ User preferences storage and API. 1,600 lines across 6 files. Handles
 settings persistence, API key encryption at rest, per-thread memory overrides,
 and preference tool wrappers.
 
-## Product Vision (from Calvin, 2026-03-18)
+## Product Vision (from the product owner, 2026-03-18)
 
 Preferences is supposed to be **deeply tied to memory.** The full vision:
 
