@@ -14,7 +14,6 @@ maturity.
 | Real Estate | `thomas/real_estate` | skeleton | `thomas.real_estate` | Leasing, market, valuation, investment |
 | Supply Chain | `thomas/supply_chain` | skeleton | `thomas.supply_chain` | Demand, inventory, logistics, transport |
 | Travel | `thomas/travel` | skeleton | `thomas.travel` | Flights, hotels, itinerary, loyalty |
-| Conversations | `thomas/conversations` | skeleton | `thomas.conversations` | Nested conversation and speaker control |
 
 ## Status Legend
 

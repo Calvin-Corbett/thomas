@@ -1,6 +1,6 @@
 """Storage layer for Thomas memory: SQLite log, blob store, meta DB, derived DB.
 
-Ported from agent_memory/ with improvements:
+Originally ported from the retired repo-root memory prototype, with improvements:
 - Added get_events_batch() to fix N+1 queries
 - Added vec_dense BLOB column for sentence-transformer embeddings
 - Added compound index on g_edges(src_node, rel, tombstoned)

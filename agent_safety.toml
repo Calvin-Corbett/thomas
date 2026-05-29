@@ -18,9 +18,6 @@ source_dirs = [
     "thomas/",
     "scripts/",
     "extensions/",
-    "agents/",
-    "cli/",
-    "plugins/",
 ]
 test_dirs = ["tests/"]
 

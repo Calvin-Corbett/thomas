@@ -258,12 +258,6 @@ MODULES = {
         "health": "yellow",
         "description": "Climate domain algorithms and utilities",
     },
-    "conversations": {
-        "tier": "support",
-        "depends_on": ["core"],
-        "health": "green",
-        "description": "Conversation orchestration primitives",
-    },
     "codex": {
         "tier": "support",
         "depends_on": ["core", "tools", "marketplace"],

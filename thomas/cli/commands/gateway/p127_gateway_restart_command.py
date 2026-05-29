@@ -97,17 +97,14 @@ def _normalize_and_validate_server_url(raw: str) -> str:
 
 
 def _resolve_server_url(args: argparse.Namespace) -> str:
-    def _pick(raw: str) -> str:
-        return _normalize_and_validate_server_url(raw.strip())
-
     server_url = getattr(args, "server_url", None)
     if isinstance(server_url, str) and server_url.strip():
-        return _pick(server_url)
+        return _normalize_and_validate_server_url(server_url.strip())
 
     for env_key in ("THOMAS_SERVER_URL", "THOMAS_BASE_URL", "THOMAS_URL"):
         val = os.environ.get(env_key)
         if val and val.strip():
-            return _pick(val)
+            return _normalize_and_validate_server_url(val.strip())
 
     raise GatewayRestartCliError("missing_config", "Missing server URL. Provide --server-url or set THOMAS_SERVER_URL.")
 
@@ -115,12 +112,12 @@ def _resolve_server_url(args: argparse.Namespace) -> str:
 async def _default_requester(server_url: str, payload: dict[str, Any]) -> dict[str, Any]:
     import aiohttp  # type: ignore
 
-    url = f"{server_url}{DEFAULT_ROUTE_PATH}"
+    target = f"{server_url.rstrip('/')}{DEFAULT_ROUTE_PATH}"
     timeout = aiohttp.ClientTimeout(total=30)
-    async with aiohttp.ClientSession(timeout=timeout) as session, session.post(url, json=payload) as resp:
+    async with aiohttp.ClientSession(timeout=timeout) as session, session.post(target, json=payload) as resp:
         try:
             return await resp.json()
-        except ImportError:  # noqa: BLE001
+        except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
             text = await resp.text()
             return {
                 "ok": False,
