@@ -3,7 +3,7 @@
 # Strategy:
 #   - Group security + minor + patch updates into single weekly PRs per
 #     ecosystem to reduce PR noise.
-#   - Run on Mondays at 6am UTC (off-hours for Calvin).
+#   - Run on Mondays at 6am UTC (off-hours for the product owner).
 #   - Open at most 5 PRs per ecosystem at a time.
 #   - Skip generated/cache directories (.next, node_modules, runtime/benchmarks).
 #
@@ -101,33 +101,6 @@ updates:
       - "area:discord-bridge"
     commit-message:
       prefix: "deps(discord-bridge)"
-      include: "scope"
-
-  # ── Vault Fortress extension ──────────────────────────────────────────
-  - package-ecosystem: "npm"
-    directory: "/extensions/vault-fortress"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "UTC"
-    open-pull-requests-limit: 3
-    groups:
-      vault-all:
-        applies-to: version-updates
-        update-types:
-          - "minor"
-          - "patch"
-      vault-security:
-        applies-to: security-updates
-        patterns:
-          - "*"
-    labels:
-      - "deps"
-      - "deps:npm"
-      - "area:extensions/vault-fortress"
-    commit-message:
-      prefix: "deps(vault-fortress)"
       include: "scope"
 
   # ── GitHub Actions themselves ─────────────────────────────────────────

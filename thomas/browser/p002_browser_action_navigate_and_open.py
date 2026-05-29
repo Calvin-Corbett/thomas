@@ -29,6 +29,8 @@ from dataclasses import dataclass
 from typing import Any, Literal
 from urllib.parse import urlparse
 
+from thomas.browser.runtime_bridge import import_browser_runtime
+
 NavigateOpenAction = Literal["navigate", "open"]
 
 
@@ -323,12 +325,11 @@ def _resolve_browser_tool() -> Any:
     Failures are surfaced deterministically via :class:`MissingBrowserConfiguration`.
     """
 
-    try:
-        from thomas.tools import browser as browser_mod  # type: ignore
-    except Exception as exc:  # pragma: no cover
+    browser_mod, meta = import_browser_runtime()
+    if browser_mod is None:
         raise MissingBrowserConfiguration(
             "Browser tool is not available (failed to import thomas.tools.browser).",
-            details={"cause": type(exc).__name__},
+            details={"cause": str(meta.get("error") or "import_error")},
         ) from None
 
     for fn_name in (

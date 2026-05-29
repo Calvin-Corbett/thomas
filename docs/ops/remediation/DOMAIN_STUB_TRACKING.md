@@ -11,7 +11,6 @@ Policy:
 Tracking scope:
 - Agriculture: `tests/test_ag_*.py`
 - Supply Chain: `tests/test_supply_chain_*.py`
-- Conversations: `tests/test_conversations.py`
 - Group Chat: `tests/test_groupchat.py`
 - Human Loop: `tests/test_human_loop.py`
 - Learning: `tests/test_learning.py`

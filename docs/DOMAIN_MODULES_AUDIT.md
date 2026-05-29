@@ -18,13 +18,13 @@ modules. Across all 128, the estimate is 20,000+ real methods.
 production code. They are standalone libraries that happen to live in the
 Thomas repo.
 
-**Calvin's decision (2026-03-18):** These will become the basis for the
+**the product owner's decision (2026-03-18):** These will become the basis for the
 Thomas Marketplace. Each module is a potential marketplace extension that
 users can install to give Thomas new capabilities.
 
 ## How This Happened
 
-Calvin asked AI agents to build Thomas as "the everything assistant" with
+the product owner asked AI agents to build Thomas as "the everything assistant" with
 intentionally broad scope. The AI interpreted this literally and built
 standalone domain libraries for every field it could think of. The code
 is real and well-structured, but it was never integrated into the Thomas
@@ -128,11 +128,10 @@ These have real code but are smaller. Examples:
 `prompts`, `crews`, `formal_verify`, `tracing`, `parsers`, `ecs`,
 `chain`, `chatbot`, `etl_monitor`, `graph_engine`, `units`, etc.
 
-### Tier 3: Skeletons & Placeholders (16 modules)
+### Tier 3: Skeletons & Placeholders (15 modules)
 
 These are empty or nearly empty:
-- **Skeletons** (import-safe stubs): `conversations`, `groupchat`,
-  `human_loop`, `sandbox`
+- **Skeletons** (import-safe stubs): `groupchat`, `human_loop`, `sandbox`
 - **Placeholders** (padded comment files): `cost`, `eval`, `orchestration`,
   `skills`, `telemetry`
 - **Boilerplate** (minimal structure): `approvals`, `crypto`, `geospatial`,
@@ -146,7 +145,7 @@ before going public. See `docs/PRE_PUBLIC_CLEANUP.md`.
 
 ## Marketplace Integration Plan
 
-Calvin's vision (2026-03-18): All domain modules become marketplace extensions.
+the product owner's vision (2026-03-18): All domain modules become marketplace extensions.
 
 ### What needs to happen to make a domain module marketplace-ready:
 
