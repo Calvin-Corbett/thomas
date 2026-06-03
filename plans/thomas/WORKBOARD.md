@@ -40,6 +40,7 @@ Last updated: 2026-03-01
 - `plans/thomas/onboarding/THOMAS_ONBOARDING_UX_PLAN.md`
 - `plans/thomas/V3_CHAT_SPEC.md`
 - `plans/thomas/verification/AGENT_VERIFICATION_PROTOCOL_PLAN.md`
+- `plans/thomas/HARDENING_REPORT_2026-06-02.md`
 
 ## Agent Message Traffic
 

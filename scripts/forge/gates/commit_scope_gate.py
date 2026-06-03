@@ -43,7 +43,10 @@ def _staged_files() -> list[str]:
         text=True,
     )
     if proc.returncode != 0:
-        return []
+        # Fail closed: a git error must not masquerade as an empty (clean)
+        # change set -- that would silently PASS the gate. Surface it so run()
+        # can FAIL instead of treating "0 files" and "git broke" the same.
+        raise RuntimeError(proc.stderr.strip() or "git diff --cached --name-only failed")
     return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
 
 
@@ -76,7 +79,14 @@ def run(argv: list[str] | None = None) -> int:
     parser.add_argument("--hard-limit", type=int, default=HARD_LIMIT)
     args = parser.parse_args(argv)
 
-    staged = _staged_files()
+    try:
+        staged = _staged_files()
+    except RuntimeError as exc:
+        if args.json:
+            print(json.dumps({"gate": "commit_scope", "ok": False, "error": str(exc)}, sort_keys=True))
+        else:
+            print(f"Commit scope gate: FAIL ({exc})")
+        return 1
     code_files = [f for f in staged if Path(f).suffix.lower() in CODE_EXTENSIONS and f not in VERSION_BUMP_FILES]
 
     rename_count = _staged_renames()

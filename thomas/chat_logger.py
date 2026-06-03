@@ -195,10 +195,20 @@ class ChatLogger:
         if not self._log_dir:
             return
         try:
+            # Defense-in-depth: run the event through the secret/PII Redactor
+            # before it lands on disk. Chat events can carry tool args, headers,
+            # or pasted credentials; the JSONL is for offline review, so mask
+            # likely-secret values rather than persisting them verbatim.
+            from thomas.core.redaction import Redactor
+
+            redactor = getattr(self, "_redactor", None)
+            if redactor is None:
+                redactor = self._redactor = Redactor()
+            payload = redactor.redact_obj(evt.to_dict())
             date_str = datetime.now().strftime("%Y-%m-%d")
             log_file = self._log_dir / f"chat_{date_str}.jsonl"
             with open(log_file, "a", encoding="utf-8") as f:
-                f.write(evt.to_json() + "\n")
+                f.write(json.dumps(payload, ensure_ascii=False, default=str) + "\n")
         except Exception as e:
             log.debug("Chat log file write failed: %s", e)
 

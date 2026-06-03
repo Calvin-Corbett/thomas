@@ -92,6 +92,13 @@ plans/thomas/problems/*
 !plans/thomas/problems/audit-24h-backstop/**
 !plans/thomas/problems/ci-recovery-2026-05-20/
 !plans/thomas/problems/ci-recovery-2026-05-20/**
+# Canonical task problem records (reviewed public-safe; no private content).
+!plans/thomas/problems/runtime-protection-fix-2026-05-27/
+!plans/thomas/problems/runtime-protection-fix-2026-05-27/**
+!plans/thomas/problems/agent-coordination-hardening-2026-05-28/
+!plans/thomas/problems/agent-coordination-hardening-2026-05-28/**
+!plans/thomas/problems/bible-public-system-2026-05-22/
+!plans/thomas/problems/bible-public-system-2026-05-22/**
 
 # Auto-indexed research notes from chat transcripts (private user content).
 # Security: prior incident (2026-05-19) leaked a Telegram token via library/entries/research-notes/.

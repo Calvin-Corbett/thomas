@@ -4,10 +4,10 @@ Provides secret storage, encryption, rotation policies,
 access control, and audit logging.
 """
 
-import base64
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from functools import lru_cache
 from typing import Any
 
 
@@ -89,20 +89,34 @@ class AuditEntry:
     details: str = ""
 
 
+@lru_cache(maxsize=1)
+def _vault_cipher() -> Any:
+    """Process-wide authenticated cipher for the in-memory secret vault.
+
+    Uses a fresh, ephemeral Fernet key (AES-128-CBC + HMAC authentication). The
+    vault is in-memory, so a per-process key is both the strongest and simplest
+    choice: ciphertext is only ever decrypted within the same process and is
+    never persisted, so there is nothing to migrate and no key to manage. This
+    replaces the previous base64 "encryption", which was reversible by anyone
+    and a trap for callers who imported it expecting real confidentiality.
+    """
+    from cryptography.fernet import Fernet
+
+    return Fernet(Fernet.generate_key())
+
+
 class SecretEncryption:
-    """Secret encryption."""
+    """Secret encryption (authenticated, via Fernet)."""
 
     @staticmethod
     def encrypt(value: str) -> str:
-        """Encrypt secret value."""
-        # Simplified - use base64 for demo
-        return base64.b64encode(value.encode()).decode()
+        """Encrypt a secret value with authenticated encryption."""
+        return _vault_cipher().encrypt(value.encode()).decode()
 
     @staticmethod
     def decrypt(encrypted: str) -> str:
-        """Decrypt secret value."""
-        # Simplified - decode from base64
-        return base64.b64decode(encrypted.encode()).decode()
+        """Decrypt a secret value; raises on tampered/forged ciphertext."""
+        return _vault_cipher().decrypt(encrypted.encode()).decode()
 
 
 class SecretVault:

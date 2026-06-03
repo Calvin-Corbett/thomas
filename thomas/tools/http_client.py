@@ -18,6 +18,7 @@ except ImportError:  # pragma: no cover
     aiohttp = None  # type: ignore
 
 from thomas.tools.base import Tool, ToolResult
+from thomas.tools.url_safety import check_url
 
 
 class HttpClientError(RuntimeError):
@@ -170,6 +171,13 @@ class HttpClientTool(Tool):
         Returns:
             ToolResult with status_code, headers, body, elapsed_ms, size_bytes
         """
+        # SSRF guard -- url_safety is the single source of tool fetch policy.
+        # Refuse internal / link-local / cloud-metadata targets before opening
+        # any connection. This tool is currently unregistered; the guard makes
+        # it safe-by-default if it is ever wired into the live tool registry.
+        url_error = check_url(url, allow_private=False)
+        if url_error:
+            return ToolResult(ok=False, error=f"Refused by SSRF guard: {url_error}")
         try:
             session = await self._ensure_session()
 
@@ -218,6 +226,10 @@ class HttpClientTool(Tool):
                 headers=req_headers,
                 timeout=aiohttp.ClientTimeout(total=timeout),
                 ssl=ssl_context,
+                # Don't auto-follow redirects: a public URL could 3xx into an
+                # internal target that bypasses the initial SSRF check. Following
+                # redirects safely requires re-validating each hop via check_url.
+                allow_redirects=False,
             ) as resp:
                 resp_body = await resp.text()
                 elapsed_ms = (time.monotonic() - start) * 1000

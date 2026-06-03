@@ -161,6 +161,18 @@ enforcement_scripts = [
     # ── Agent commit path (not in hooks but critical) ──
     "scripts/crew/brief/commit.py",
     "scripts/forge/gates/monolith_baseline_approval_gate.py",
+    # ── Publish / pre-push secret-scan + leak hooks ──
+    # Active pre-push hooks (.pre-commit-config.yaml / GitHub Publish Safety CI)
+    # that block secret/credential leaks and competitor-name drift before a push.
+    # Integrity-checked so they cannot be silently neutered.
+    "scripts/forge/publish/preflight.py",
+    "scripts/forge/gates/public_repo_leak_guard.py",
+    # ── QuickBuilder mode (human-activated build-fast mode) ──
+    # The signed-flag verifier defines which gates are suppressible, and the
+    # toggle mints the activation signature. Integrity-protect both so an agent
+    # can't widen the suppressible set or forge an activation.
+    "scripts/forge/gates/_quickbuilder_guard.py",
+    "scripts/quickbuilder_toggle.py",
 ]
 
 # ── Placeholder / Stub Files ────────────────────────────────────────────────
