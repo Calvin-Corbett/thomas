@@ -83,10 +83,13 @@ _ENV_DENY_EXACT = frozenset(
         "THOMAS_AGENT",
         "THOMAS_AGENT_ID",
         "THOMAS_PRAXIS_MARKER_KEY_FILE",  # B1: point marker HMAC key at attacker file
+        "THOMAS_LEAK_BLOCKLIST_FILE",  # redirect leak-guard blocklist to drop competitor rules
         "THOMAS_SKIP_BREAKGLASS",  # B4: self-authorize a SKIP
         "THOMAS_SKIP_TICKET",
         "THOMAS_SKIP_REASON",
         "THOMAS_RUNTIME_PROTECTION_DISABLED",
+        "THOMAS_AGENT_ROLE",  # core_overhead_guard SKIPs on role=orchestrator (unsigned bare env)
+        "THOMAS_CORE_OVERHEAD_UNLOCK",  # core_overhead_guard full unlock via bare env
     }
 )
 # Any env var matching one of these prefixes/suffixes is stripped too — covers

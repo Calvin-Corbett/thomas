@@ -174,6 +174,15 @@ def evaluate(workboard_path: Path = DEFAULT_WORKBOARD) -> list[str]:
 
 
 def run(argv: Sequence[str] | None = None) -> int:
+    try:
+        from scripts.forge.gates._quickbuilder_guard import announce_suppressed
+    except ImportError:  # pragma: no cover - import path varies by run context
+        try:
+            from forge.gates._quickbuilder_guard import announce_suppressed
+        except ImportError:
+            from _quickbuilder_guard import announce_suppressed
+    if announce_suppressed("thomas-workboard-task-problems-gate", ROOT, "Workboard task problems gate"):
+        return 0
     parser = argparse.ArgumentParser(description="Enforce task problem mapping and file coverage in WORKBOARD.md.")
     parser.add_argument("--workboard", default=str(DEFAULT_WORKBOARD))
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output.")

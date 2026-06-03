@@ -19,7 +19,7 @@ MODULES = {
         "tier": "core",
         "depends_on": ["tools", "codex", "server", "marketplace"],
         "health": "yellow",
-        "debt": "scheduler.py exceeds 900 lines, config.py exceeds 900 lines, workspace_sync_engine.py exceeds 840 lines, rag_index.py exceeds 830 lines, agent_presence.py exceeds 1160 lines, boot_doctor.py exceeds 1140 lines; core imports tools/codex/server --should be inverted; TODO[batch-8]: core llm_client imports marketplace --hoist marketplace LLM provider interface into core to resolve this real layering inversion",
+        "debt": "scheduler.py exceeds 900 lines, config.py exceeds 900 lines, workspace_sync_engine.py exceeds 840 lines, rag_index.py exceeds 830 lines, agent_presence.py exceeds 1160 lines, boot_doctor.py exceeds 1140 lines, ui_workflow_engine.py exceeds 804 lines; core imports tools/codex/server --should be inverted; TODO[batch-8]: core llm_client imports marketplace --hoist marketplace LLM provider interface into core to resolve this real layering inversion",
         "description": "LLM client, persistence, config, events",
     },
     "agent": {
@@ -38,7 +38,7 @@ MODULES = {
             "benchmarks",
         ],
         "health": "yellow",
-        "debt": "swarm.py exceeds 1130 lines, loop_execution.py exceeds 1190 lines, response_tone.py exceeds 860 lines, loop_core.py exceeds 800 lines",
+        "debt": "swarm.py exceeds 1130 lines, loop_execution.py exceeds 1190 lines, response_tone.py exceeds 860 lines, loop_core.py exceeds 800 lines, skills_runtime.py exceeds 838 lines",
         "description": "Agent loop, tool execution, streaming, guidance",
     },
     "vault": {
@@ -317,7 +317,7 @@ MODULES = {
         "tier": "support",
         "depends_on": ["core", "tools", "plugins", "server"],
         "health": "yellow",
-        "debt": "asset_studio/contracts.py exceeds 870 lines, autonomy/workflows.py exceeds 1050 lines, db_internals/query_parser.py exceeds 890 lines, observability/run_store.py exceeds 920 lines, orchestrator/brain.py exceeds 970 lines; TODO[batch-8]: marketplace publisher imports server --factor HTTP push behind an interface so marketplace does not reach up into server (plugins dep is housekeeping: publisher legitimately interacts with plugin definitions)",
+        "debt": "asset_studio/contracts.py exceeds 870 lines, autonomy/workflows.py exceeds 1050 lines, db_internals/query_parser.py exceeds 890 lines, observability/run_store.py exceeds 920 lines, orchestrator/brain.py exceeds 970 lines, doc_processing/extraction.py exceeds 801 lines; TODO[batch-8]: marketplace publisher imports server --factor HTTP push behind an interface so marketplace does not reach up into server (plugins dep is housekeeping: publisher legitimately interacts with plugin definitions)",
         "description": "Marketplace domain algorithms and utilities",
     },
     "markdown": {

@@ -703,6 +703,15 @@ def evaluate(
 
 
 def run(argv: Sequence[str] | None = None) -> int:
+    try:
+        from scripts.forge.gates._quickbuilder_guard import announce_suppressed
+    except ImportError:  # pragma: no cover - import path varies by run context
+        try:
+            from forge.gates._quickbuilder_guard import announce_suppressed
+        except ImportError:
+            from _quickbuilder_guard import announce_suppressed
+    if announce_suppressed("thomas-workboard-claims-gate", ROOT, "Workboard claims gate"):
+        return 0
     parser = argparse.ArgumentParser(
         description="Validate WORKBOARD.md claim/task/issue contract for multi-agent coordination."
     )

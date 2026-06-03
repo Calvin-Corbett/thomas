@@ -95,7 +95,10 @@ def _changed_files(*, base: str | None = None, head: str | None = None) -> list[
         text=True,
     )
     if proc.returncode != 0:
-        return []
+        # Fail closed: a git error must not present as an empty change set --
+        # for THIS gate that would let protected-file edits slip through as a
+        # clean PASS. Surface it so run() FAILs instead.
+        raise RuntimeError(proc.stderr.strip() or "git diff --name-only failed")
     return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
 
 
@@ -210,7 +213,14 @@ def run(argv: list[str] | None = None) -> int:
             print("Protected files gate: PASS (runtime protection disabled by human)")
         return 0
 
-    staged = _changed_files(base=args.base, head=args.head) if args.base else _staged_files()
+    try:
+        staged = _changed_files(base=args.base, head=args.head) if args.base else _staged_files()
+    except RuntimeError as exc:
+        if args.json:
+            print(json.dumps({"gate": "protected_files_gate", "ok": False, "error": str(exc)}, sort_keys=True))
+        else:
+            print(f"Protected files gate: FAIL ({exc})")
+        return 1
     all_protected = set(PROTECTED_FILES) | set(PROTECTED_ENFORCEMENT_SCRIPTS)
     violations = [path for path in staged if _is_protected_path(path, all_protected)]
     approved = False
