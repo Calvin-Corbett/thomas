@@ -144,7 +144,11 @@ def test_protected_files_gate_diff_range_allows_approval_trailer(monkeypatch, ca
     assert "Calvin-approved" in payload["approval_reason"]
 
 
-def test_protected_files_gate_staged_mode_allows_commit_message_env_trailer(monkeypatch, capsys) -> None:
+def test_protected_files_gate_staged_mode_rejects_commit_message_env_trailer(monkeypatch, capsys) -> None:
+    # R4 (praxis-unbypassable-2026-05-29): a local staged commit must NOT be
+    # self-approvable by setting THOMAS_COMMIT_MESSAGE with an approval trailer.
+    # That env is agent-settable, so honoring it locally was a bypass. Local
+    # protected-file edits must go through native-auth breakglass instead.
     monkeypatch.setattr(protected_files_gate, "_runtime_protection_disabled", lambda: False)
     monkeypatch.setattr(
         protected_files_gate,
@@ -153,15 +157,15 @@ def test_protected_files_gate_staged_mode_allows_commit_message_env_trailer(monk
     )
     monkeypatch.setenv(
         "THOMAS_COMMIT_MESSAGE",
-        "fix: protected files\n\nThomas-Protected-Files-Approved: Calvin-approved local scoped commit\n",
+        "fix: protected files\n\nThomas-Protected-Files-Approved: self-approved by attacker\n",
     )
 
     rc = protected_files_gate.run(["--json"])
     payload = json.loads(capsys.readouterr().out)
 
-    assert rc == 0
-    assert payload["ok"] is True
-    assert payload["approved_protected_files"] is True
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["approved_protected_files"] is False
 
 
 def test_bulk_commit_guard_supports_diff_range(monkeypatch, capsys) -> None:
@@ -404,3 +408,41 @@ def test_post_commit_audit_human_bypass_warns_but_does_not_reset(
     assert len(rows) == 1
     assert rows[0]["bypass_detected"] is True
     assert rows[0]["missing_changelog"] is False
+
+
+# ---------------------------------------------------------------------------
+# R4 (praxis-unbypassable-2026-05-29): the unauthenticated guard-disable envs
+# must no longer skip the guard. The sanctioned skip path is breakglass SKIP.
+# ---------------------------------------------------------------------------
+
+
+def test_bulk_commit_guard_ignores_disable_env_R4(monkeypatch, capsys) -> None:
+    monkeypatch.setenv("THOMAS_BULK_COMMIT_GUARD_DISABLE", "1")
+    monkeypatch.setattr(
+        bulk_commit_guard,
+        "_changed_files",
+        lambda repo_root, *, base=None, head=None: ["a.py", "b.py", "c.py"],
+    )
+    rc = bulk_commit_guard.run(Path("."), max_files=1, json_output=True, base="base", head="head")
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert payload["ok"] is False
+
+
+def test_commit_growth_guard_ignores_disable_env_R4(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(commit_growth_guard, "_runtime_protection_disabled", lambda: False)
+    monkeypatch.setenv("THOMAS_COMMIT_GROWTH_GUARD_DISABLE", "1")
+    monkeypatch.setattr(
+        commit_growth_guard,
+        "_changed_files",
+        lambda repo_root, *, base=None, head=None: ["thomas/new.py"],
+    )
+    monkeypatch.setattr(
+        commit_growth_guard,
+        "_rev_lines",
+        lambda repo_root, rev, rel: 0 if rev == "base" else 400,
+    )
+    rc = commit_growth_guard.run(Path("."), max_growth=300, json_output=True, base="base", head="head")
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert payload["ok"] is False

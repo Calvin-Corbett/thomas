@@ -138,7 +138,8 @@ async def _handle_plan_mode_request(
         await resp.write_eof()
         return resp
     except Exception as e:
-        return await finish_error(f"{type(e).__name__}: {e}")
+        log.exception("Plan mode request failed (session=%s)", sid[:12])
+        return await finish_error("Plan mode request failed")
 
 
 def _normalize_usage_payload(usage: dict[str, Any] | None) -> dict[str, Any]:
@@ -382,6 +383,13 @@ async def execute_chat_request(
                 async def dispatch_send(obj: dict[str, Any]) -> None:
                     out = dict(obj)
                     out.setdefault("run_id", dispatch_run_id)
+                    # Never stream raw exception text/tracebacks to the client.
+                    # Error events from the dispatcher/task watcher may carry
+                    # internal detail; log it server-side and emit a generic
+                    # client-facing message instead.
+                    if str(out.get("type") or "").strip().lower() == "error" and out.get("error"):
+                        log.warning("Dispatch error event (session=%s): %s", sid[:12], out.get("error"))
+                        out["error"] = "Background task reported an error."
                     line = json.dumps(out, ensure_ascii=False)
                     with contextlib.suppress(ConnectionResetError, BrokenPipeError, OSError):
                         await dispatch_resp.write(line.encode("utf-8") + b"\n")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,8 @@ from thomas.companion.policy import (
 )
 from thomas.companion.releases import ReleaseRegistry
 from thomas.companion.update import BundleVerifier, UpdateApplier
+
+log = logging.getLogger(__name__)
 
 
 def _boolish(value: Any, *, default: bool) -> bool:
@@ -322,8 +325,9 @@ def _module_payload_from_bundle(bundle_dir: Path, *, module_id: str, entrypoint:
         raise web.HTTPBadRequest(text=f"bundle entrypoint payload missing: payload/{rel}")
     try:
         return json.loads(payload_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        raise web.HTTPBadRequest(text=f"invalid bundle entrypoint payload json: {exc}")
+    except (OSError, ValueError) as exc:
+        log.warning("Invalid bundle entrypoint payload json (payload/%s): %s", rel, exc)
+        raise web.HTTPBadRequest(text="invalid bundle entrypoint payload json") from exc
 
 
 def _release_bundle_dir(release_row: dict[str, Any]) -> Path:
@@ -346,8 +350,9 @@ def _release_manifest(release_row: dict[str, Any]) -> dict[str, Any]:
         raise web.HTTPNotFound(text="release manifest not found")
     try:
         payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        raise web.HTTPInternalServerError(text=f"invalid release manifest json: {exc}")
+    except (OSError, ValueError) as exc:
+        log.error("Invalid release manifest json (%s): %s", manifest_path, exc)
+        raise web.HTTPInternalServerError(text="invalid release manifest json") from exc
     if not isinstance(payload, dict):
         raise web.HTTPInternalServerError(text="invalid release manifest payload")
     return payload

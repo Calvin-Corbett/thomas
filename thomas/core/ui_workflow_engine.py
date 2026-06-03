@@ -760,15 +760,20 @@ class UIWorkflowEngine:
         }
         request_headers.update(headers or {})
         req = urllib.request.Request(url=url, headers=request_headers, method="GET")
+        # These are small JSON metadata responses; cap the read so a hostile or
+        # spoofed endpoint can't OOM the process with an unbounded body.
+        max_bytes = 8 * 1024 * 1024
         try:
             with urllib.request.urlopen(req, timeout=self._http_timeout_s) as response:
-                payload = response.read()
+                payload = response.read(max_bytes + 1)
         except urllib.error.HTTPError as exc:
             return {}, f"http {exc.code}"
         except urllib.error.URLError as exc:
             return {}, f"network error: {exc.reason}"
         except Exception as exc:
             return {}, f"request failed: {type(exc).__name__}: {exc}"
+        if len(payload) > max_bytes:
+            return {}, "response too large"
         try:
             data = json.loads(payload.decode("utf-8"))
         except Exception:

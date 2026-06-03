@@ -20,7 +20,7 @@ Thomas is an AI-first workspace platform with a marketplace of domain modules. T
 ## Architecture in 30 seconds
 
 - `thomas/agent/` — Chat dispatch and agent loop. Casual messages get fast replies, actionable messages get dispatched to the task manager.
-- `thomas/core/` — Config, persistence, token economy, LLM clients. This is the bottom of the dependency tree. It MUST NOT import from `thomas/server/` or `thomas/tools/`.
+- `thomas/core/` — Config, persistence, token economy, LLM clients. This is the bottom of the dependency tree. Do NOT add new imports from `thomas/server/` or `thomas/tools/` — a few legacy ones remain and are tracked as debt in `thomas/_architecture.py` (the goal is to invert them, not add more).
 - `thomas/server/` — aiohttp web app, routes, web UI.
 - `thomas/cli/` — CLI and REPL.
 - `thomas/tools/` — Tool definitions and registry.

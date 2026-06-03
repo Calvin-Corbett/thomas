@@ -159,7 +159,24 @@ class SSHConnectionPool:
 
         def _connect():
             ssh = paramiko.SSHClient()
-            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            # Validate host keys against the system/user known_hosts by default and
+            # reject unknown hosts. Auto-add (TOFU) is only enabled behind an
+            # explicit opt-in env var, since AutoAddPolicy is vulnerable to MITM.
+            try:
+                ssh.load_system_host_keys()
+            except OSError:
+                pass
+            known_hosts = os.path.expanduser("~/.ssh/known_hosts")
+            if os.path.exists(known_hosts):
+                ssh.load_host_keys(known_hosts)
+            auto_add = os.environ.get("THOMAS_SSH_AUTO_ADD_HOST_KEYS", "").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+            policy = paramiko.AutoAddPolicy() if auto_add else paramiko.RejectPolicy()
+            ssh.set_missing_host_key_policy(policy)
             try:
                 ssh.connect(
                     host,

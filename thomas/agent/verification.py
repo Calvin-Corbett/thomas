@@ -25,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import py_compile
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,6 +34,11 @@ from typing import Any
 from thomas.core.py_compile_safe import compile_no_repo_pyc
 
 log = logging.getLogger(__name__)
+
+# A valid dotted Python module name. Used to gate the post-write import probe so
+# a model-controlled filename that is not a real module (containing ';', spaces,
+# quotes, ...) is never handed to the interpreter.
+_MODULE_NAME_RE = re.compile(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*")
 
 # File size limits from GUARDRAILS.md
 _SIZE_LIMITS = {
@@ -663,13 +669,19 @@ async def verify_after_tool(
                 module_parts.insert(0, parent.name)
             else:
                 break
-        if module_parts:
-            module_name = ".".join(module_parts + [path.stem])
+        module_name = ".".join(module_parts + [path.stem]) if module_parts else ""
+        # Only probe a genuinely valid dotted module name. A path component or
+        # stem with non-identifier characters (';', spaces, ...) is never a real
+        # importable module -- and must not reach the interpreter, since the name
+        # is passed to `python` as DATA (sys.argv[1]) below rather than spliced
+        # into the source, but the regex is a defense-in-depth second layer.
+        if module_parts and _MODULE_NAME_RE.fullmatch(module_name):
             try:
                 proc = await asyncio.create_subprocess_exec(
                     "python",
                     "-c",
-                    f"import {module_name}",
+                    "import importlib, sys; importlib.import_module(sys.argv[1])",
+                    module_name,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     cwd=sandbox_root or ".",

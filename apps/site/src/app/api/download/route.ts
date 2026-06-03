@@ -5,6 +5,7 @@ import { logDownloadEvent } from "@/lib/db";
 import { normalizeArch, normalizePlatform, pickAssetForPlatform } from "@/lib/download-routing";
 import { fetchReleases, selectReleaseByChannel } from "@/lib/github";
 import { getDownloadMode, resolveManualDownload } from "@/lib/manual-downloads";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import type { ReleaseChannel } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -14,11 +15,39 @@ function normalizeChannel(raw: string): ReleaseChannel {
 }
 
 function hashIp(ip: string): string {
-  const salt = process.env.EVENT_HASH_SALT ?? "thomas-site";
+  const salt = process.env.EVENT_HASH_SALT ?? (process.env.NODE_ENV === "production" ? "" : "thomas-site");
+  if (!salt || !ip || ip === "unknown") {
+    return "";
+  }
   return createHash("sha256").update(`${salt}:${ip}`).digest("hex");
 }
 
+function isLocalHttpDownload(parsed: URL): boolean {
+  return parsed.protocol === "http:" && ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname);
+}
+
+function safeExternalDownloadUrl(rawUrl: string, origin: string): string | null {
+  try {
+    const parsed = new URL(rawUrl, origin);
+    if (parsed.protocol === "https:" || isLocalHttpDownload(parsed)) {
+      return parsed.toString();
+    }
+  } catch {
+    // Invalid download URLs are handled by falling back to the download page.
+  }
+  return null;
+}
+
 export async function GET(req: NextRequest) {
+  const rateLimit = checkRateLimit(req, {
+    keyPrefix: "site-download",
+    limit: 90,
+    windowMs: 5 * 60 * 1000,
+  });
+  if (!rateLimit.allowed) {
+    return rateLimitResponse(rateLimit);
+  }
+
   const params = req.nextUrl.searchParams;
   const platform = normalizePlatform(params.get("platform") ?? "windows");
   const channel = normalizeChannel(params.get("channel") ?? "stable");
@@ -34,7 +63,10 @@ export async function GET(req: NextRequest) {
   const ipHash = hashIp(ip);
 
   const redirectWithTracking = async (url: string, releaseTag: string, assetName: string) => {
-    const redirectUrl = new URL(url, req.nextUrl.origin).toString();
+    const redirectUrl = safeExternalDownloadUrl(url, req.nextUrl.origin);
+    if (!redirectUrl) {
+      return redirectToDownload("invalid-download-url");
+    }
     await logDownloadEvent({
       eventId,
       platform,
@@ -51,7 +83,7 @@ export async function GET(req: NextRequest) {
     });
 
     await captureDownloadIntent({
-      distinctId: ipHash.slice(0, 24),
+      distinctId: ipHash ? ipHash.slice(0, 24) : eventId,
       platform,
       channel,
       releaseTag,

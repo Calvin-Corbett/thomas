@@ -88,7 +88,10 @@ const TYPE_LABELS: Record<string, string> = {
   integration: "Integration",
 };
 const TRUSTED_PUBLISHER_IDS = new Set(["thomas-official", "approved-partner"]);
-const DEFAULT_STORE_API_KEY = process.env.THOMAS_PLUGIN_STORE_API_KEY || "local-dev-install-key";
+const LOCAL_DEV_STORE_API_KEY = "local-dev-install-key";
+const LOCAL_DEV_TOKEN_SECRET = crypto.randomBytes(32).toString("hex");
+const MAX_DOWNLOAD_TOKEN_LENGTH = 2048;
+const MAX_DOWNLOAD_TOKEN_PAYLOAD_LENGTH = 1024;
 
 function safeString(value: unknown): string {
   return typeof value === "string" ? value : value == null ? "" : String(value);
@@ -179,37 +182,90 @@ function buildOpenInThomasUrl(pluginId: string, storeUrl: string, channel: strin
   return `thomas://install-plugin?plugin_id=${encodeURIComponent(pluginId)}&store=${encodeURIComponent(storeUrl)}&channel=${encodeURIComponent(channel)}`;
 }
 
+function isProductionRuntime(): boolean {
+  return process.env.NODE_ENV === "production" || process.env.THOMAS_ENV === "production";
+}
+
 function getTokenSecret(): string {
-  return safeString(process.env.THOMAS_SITE_PLUGIN_SIGN_SECRET || process.env.THOMAS_PLUGIN_SIGN_SECRET).trim() || "thomas-site-dev-secret";
+  const configuredSecret = safeString(process.env.THOMAS_SITE_PLUGIN_SIGN_SECRET || process.env.THOMAS_PLUGIN_SIGN_SECRET).trim();
+  if (configuredSecret) {
+    return configuredSecret;
+  }
+  if (isProductionRuntime()) {
+    throw new Error(
+      "THOMAS_SITE_PLUGIN_SIGN_SECRET or THOMAS_PLUGIN_SIGN_SECRET must be set in production before plugin downloads are enabled",
+    );
+  }
+  return LOCAL_DEV_TOKEN_SECRET;
 }
 
 export function getStoreApiKey(): string {
-  return DEFAULT_STORE_API_KEY;
+  const configuredKey = safeString(process.env.THOMAS_PLUGIN_STORE_API_KEY).trim();
+  if (configuredKey) {
+    return configuredKey;
+  }
+  if (isProductionRuntime()) {
+    throw new Error("THOMAS_PLUGIN_STORE_API_KEY must be set in production before plugin downloads are enabled");
+  }
+  return LOCAL_DEV_STORE_API_KEY;
 }
 
-export function buildDownloadToken(pluginId: string, clientKey: string, expires: number): string {
-  const payload = `${pluginId}:${clientKey}:${expires}`;
-  const signature = crypto.createHmac("sha256", getTokenSecret()).update(payload).digest("hex").slice(0, 32);
-  return `${payload}:${signature}`;
+export function storeApiKeysMatch(candidate: string, expected: string): boolean {
+  const candidateBuffer = Buffer.from(safeString(candidate), "utf-8");
+  const expectedBuffer = Buffer.from(safeString(expected), "utf-8");
+  if (!candidateBuffer.length || candidateBuffer.length !== expectedBuffer.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(candidateBuffer, expectedBuffer);
 }
 
-export function verifyDownloadToken(token: string): { pluginId: string; clientKey: string; expires: number } | null {
-  const parts = safeString(token).split(":");
-  if (parts.length !== 4) return null;
-  const [pluginId, clientKey, expiresRaw, signature] = parts;
-  const expires = Number.parseInt(expiresRaw, 10);
-  if (!pluginId || !clientKey || !Number.isFinite(expires) || Date.now() / 1000 > expires) {
+export function buildDownloadToken(pluginId: string, expires: number): string {
+  const normalizedPluginId = safeString(pluginId).trim();
+  if (!normalizedPluginId || !Number.isFinite(expires)) {
+    throw new Error("Plugin download token requires a plugin id and finite expiry");
+  }
+  const encodedPayload = Buffer.from(
+    JSON.stringify({
+      plugin_id: normalizedPluginId,
+      exp: Math.floor(expires),
+    }),
+    "utf-8",
+  ).toString("base64url");
+  const signature = crypto.createHmac("sha256", getTokenSecret()).update(encodedPayload).digest("hex");
+  return `${encodedPayload}.${signature}`;
+}
+
+export function verifyDownloadToken(token: string): { pluginId: string; expires: number } | null {
+  const normalizedToken = safeString(token);
+  if (normalizedToken.length > MAX_DOWNLOAD_TOKEN_LENGTH) {
     return null;
   }
-  const payload = `${pluginId}:${clientKey}:${expires}`;
-  const expected = crypto.createHmac("sha256", getTokenSecret()).update(payload).digest("hex").slice(0, 32);
-  if (signature.length !== expected.length) {
+
+  const [encodedPayload, signature, extra] = normalizedToken.split(".");
+  if (encodedPayload.length > MAX_DOWNLOAD_TOKEN_PAYLOAD_LENGTH) {
     return null;
   }
+  if (!encodedPayload || !signature || extra || !/^[a-f0-9]{64}$/.test(signature)) {
+    return null;
+  }
+  const expected = crypto.createHmac("sha256", getTokenSecret()).update(encodedPayload).digest("hex");
   if (!crypto.timingSafeEqual(Buffer.from(signature, "utf-8"), Buffer.from(expected, "utf-8"))) {
     return null;
   }
-  return { pluginId, clientKey, expires };
+
+  let payload: JsonRecord;
+  try {
+    payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf-8")) as JsonRecord;
+  } catch {
+    return null;
+  }
+
+  const pluginId = safeString(payload.plugin_id).trim();
+  const expires = Number.parseInt(safeString(payload.exp), 10);
+  if (!pluginId || !Number.isFinite(expires) || Date.now() / 1000 > expires) {
+    return null;
+  }
+  return { pluginId, expires };
 }
 
 export function loadHostedPlugins(): Map<string, HostedPluginRecord> {

@@ -28,9 +28,21 @@ repos:
         language: system
         pass_filenames: false
 
+      - id: thomas-workboard-inbox-gate
+        name: Thomas Workboard Inbox Gate
+        entry: python scripts/forge/gates/workboard_inbox.py
+        language: system
+        pass_filenames: false
+
       - id: thomas-precommit-skip-policy-gate
         name: Thomas Pre-commit Skip Policy Gate
         entry: python scripts/forge/gates/precommit_skip_policy.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-enforcement-integrity
+        name: Thomas Enforcement Integrity (anti-tamper for gate scripts)
+        entry: python scripts/forge/gates/enforcement_integrity.py --check-staged
         language: system
         pass_filenames: false
 
@@ -154,6 +166,19 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-push]
+
+      - id: thomas-workboard-inbox-final-gate
+        name: Thomas Workboard Inbox Final Gate
+        entry: python scripts/forge/gates/workboard_inbox.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-workboard-inbox-commit-msg-gate
+        name: Thomas Workboard Inbox Commit Message Gate
+        entry: python scripts/forge/gates/workboard_inbox.py
+        language: system
+        pass_filenames: false
+        stages: [commit-msg]
 
       - id: thomas-publish-preflight
         name: Thomas Publish Preflight (secret scan + blocked-file check)

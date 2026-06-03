@@ -18,6 +18,7 @@ NOTE: In-memory limiting is per-process. That is typically fine for local-first 
 from __future__ import annotations
 
 import asyncio
+import hmac
 import os
 import time
 from collections.abc import Awaitable, Callable
@@ -287,7 +288,9 @@ def build_compat_middlewares(
         if not token:
             return _json_error(401, "missing_bearer_token", "Missing Authorization: Bearer <token> header.")
 
-        if token not in auth.tokens:
+        # Constant-time compare against each configured token; `in`/`==` leaks
+        # the token byte-by-byte via timing.
+        if not any(hmac.compare_digest(token, t) for t in auth.tokens):
             return _json_error(401, "invalid_bearer_token", "Invalid bearer token.")
 
         return await handler(request)

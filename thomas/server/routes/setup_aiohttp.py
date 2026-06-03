@@ -653,12 +653,14 @@ def register_setup_routes(
                             await send({"type": "progress", "data": {"raw": line}})
 
             await send({"type": "done", "ok": ok})
-        except Exception as e:
+        except (httpx.HTTPError, OSError, RuntimeError, ValueError) as exc:
+            # Log the real failure server-side; send a generic message to the client stream.
+            log.exception("Local model pull failed for %s: %r", model_id, exc)
             try:
                 ok = False
-                await send({"type": "error", "error": f"{type(e).__name__}: {e}"})
+                await send({"type": "error", "error": "local model pull failed"})
                 await send({"type": "done", "ok": ok})
-            except Exception as send_err:
+            except (OSError, RuntimeError) as send_err:
                 log.debug("Failed to stream local pull error payload: %s", send_err)
         finally:
             try:

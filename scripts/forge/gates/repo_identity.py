@@ -122,6 +122,9 @@ def evaluate_identity(
     canonical_slug: str,
     canonical_roots: Sequence[str],
     enforce_local_root: bool,
+    all_remote_urls: dict[str, str] | None = None,
+    allowed_repo_slugs: Sequence[str] = (),
+    forbid_unlisted_remotes: bool = False,
 ) -> dict[str, Any]:
     violations: list[str] = []
     expected_slug = _norm_slug(canonical_slug)
@@ -141,6 +144,25 @@ def evaluate_identity(
             f"(set by policy {DEFAULT_POLICY_PATH})"
         )
 
+    # Anti-clone hard-stop: every configured remote must point at an
+    # allow-listed repo. Blocks agents from quietly adding a remote that
+    # pushes a clone to a different repo/owner. Remote NAMES can be faked,
+    # so we match on the resolved owner/repo slug.
+    unlisted_remotes: dict[str, str] = {}
+    if forbid_unlisted_remotes and allowed_repo_slugs:
+        allowed_set = {_norm_slug(item) for item in allowed_repo_slugs if str(item or "").strip()}
+        for name, url in (all_remote_urls or {}).items():
+            parsed = _extract_slug_from_remote(url)
+            if parsed and _norm_slug(parsed) not in allowed_set:
+                unlisted_remotes[name] = parsed
+        for name in sorted(unlisted_remotes):
+            violations.append(
+                f"unlisted remote `{name}` -> `{unlisted_remotes[name]}` is not an approved "
+                f"Thomas repo [{', '.join(sorted(allowed_set))}]. Agents must not add clone "
+                f"remotes; remove it with `git remote remove {name}` or add it to "
+                f"`allowed_repo_slugs` in {DEFAULT_POLICY_PATH} if it is legitimate."
+            )
+
     normalized_repo_root = _norm_path(repo_root)
     normalized_roots = sorted({_norm_path(item) for item in canonical_roots if _norm_path(item)})
     if enforce_local_root and normalized_roots and normalized_repo_root not in normalized_roots:
@@ -154,6 +176,7 @@ def evaluate_identity(
         "expected_slug": expected_slug,
         "remote_urls": remote_urls,
         "remote_slugs": remote_slugs,
+        "unlisted_remotes": unlisted_remotes,
         "repo_root": str(repo_root),
         "canonical_roots": normalized_roots,
         "enforce_local_root": bool(enforce_local_root),
@@ -220,12 +243,18 @@ def run(argv: Sequence[str] | None = None) -> int:
 
         allowed_remote_names = [str(item) for item in list(policy.get("allowed_remote_names") or []) if str(item)]
         remote_urls = _git_remote_urls(repo_root, allowed_remote_names=allowed_remote_names)
+        all_remote_urls = _git_remote_urls(repo_root, allowed_remote_names=[])
+        allowed_repo_slugs = [str(item) for item in list(policy.get("allowed_repo_slugs") or []) if str(item)]
+        forbid_unlisted_remotes = bool(policy.get("forbid_unlisted_remotes", False))
         result = evaluate_identity(
             repo_root=repo_root,
             remote_urls=remote_urls,
             canonical_slug=expected_slug,
             canonical_roots=canonical_roots,
             enforce_local_root=enforce_local_root,
+            all_remote_urls=all_remote_urls,
+            allowed_repo_slugs=allowed_repo_slugs,
+            forbid_unlisted_remotes=forbid_unlisted_remotes,
         )
     except Exception as exc:
         payload = {

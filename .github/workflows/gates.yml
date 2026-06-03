@@ -451,12 +451,17 @@ jobs:
           HEAD="${{ github.event.pull_request.head.sha }}"
           unsigned=""
           for sha in $(git rev-list "$BASE..$HEAD"); do
-            # %G? returns: G=good, U=good-untrusted, X=expired, Y=expired-key,
-            #              R=revoked-key, E=missing-key, B=bad, N=no-signature
+            # %G? returns: G=good, U=good-untrusted, X=expired-signature,
+            #              Y=expired-key, R=revoked-key, E=missing-key, B=bad,
+            #              N=no-signature.
+            # B18 (praxis-unbypassable-2026-05-29): accept ONLY G/U. The old
+            # check rejected only N and B, so a commit with an expired (X/Y),
+            # revoked (R), or missing-key (E) signature slipped through.
             status=$(git log -1 --format='%G?' "$sha")
-            if [ "$status" = "N" ] || [ "$status" = "B" ]; then
-              unsigned="$unsigned $sha"
-            fi
+            case "$status" in
+              G|U) : ;;
+              *) unsigned="$unsigned $sha[$status]" ;;
+            esac
           done
           if [ -n "$unsigned" ]; then
             echo "::error::Unsigned or bad-signature commits detected on this PR:"
@@ -508,6 +513,30 @@ jobs:
         run: python scripts/forge/gates/xfail_growth_gate.py --base "$BASE_SHA" --head "$HEAD_SHA"
 
   # ────────────────────────────────────────────────────────────────────────
+  # ENFORCEMENT INTEGRITY (anti-tamper for the gate scripts themselves)
+  # ────────────────────────────────────────────────────────────────────────
+  # Verifies every protected enforcement script hashes to the value in the
+  # committed manifest (scripts/forge/gates/enforcement_manifest.json). If an
+  # agent rewrote a gate to always-pass, the hash mismatch fails this job — and
+  # because the manifest is a committed artifact, re-blessing it is a visible
+  # diff that branch protection routes to CODEOWNERS review.
+
+  enforcement-integrity:
+    name: enforcement-integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install tomli
+      - name: Verify enforcement scripts match the committed manifest
+        run: python scripts/forge/gates/enforcement_integrity.py
+
+  # ────────────────────────────────────────────────────────────────────────
   # AGGREGATOR — single required-status-check name for branch protection
   # ────────────────────────────────────────────────────────────────────────
   # Mark this job (`gates-required`) as a required status check in
@@ -545,6 +574,8 @@ jobs:
       - repo-hygiene-gate
       - repo-identity-gate
       - xfail-growth-gate
+      - enforcement-integrity
+      - signed-commits-check
     if: always()
     steps:
       - name: Report aggregate result

@@ -700,10 +700,13 @@ class ApiImporter:
             return json.loads(p.read_text(encoding="utf-8"))
         except Exception:
             backup = p.with_suffix(".json.bak")
-            try:
-                backup.write_text(p.read_text(encoding="utf-8"), encoding="utf-8")
-            except Exception:
-                pass
+            # Preserve an existing (possibly-good) backup instead of overwriting
+            # it with the corrupt content -- otherwise the only good copy is lost.
+            if not backup.exists():
+                try:
+                    backup.write_text(p.read_text(encoding="utf-8"), encoding="utf-8")
+                except (OSError, UnicodeDecodeError):
+                    pass
             return {}
 
     def _write_storage(self, data: dict[str, dict]) -> None:

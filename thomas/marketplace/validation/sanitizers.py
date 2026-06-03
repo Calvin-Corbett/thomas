@@ -9,6 +9,20 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+# Complete, case-insensitive patterns for stripping <script>/<style> blocks.
+# The tag body uses an unambiguous alternation (quoted attribute value | single
+# non-">" char) so attribute values containing ">" are consumed without
+# catastrophic backtracking, and the closing tag tolerates attributes/whitespace.
+_TAG_BODY = r'(?:"[^"]*"|\'[^\']*\'|[^>])*'
+_SCRIPT_BLOCK_RE = re.compile(
+    rf"<script{_TAG_BODY}>[\s\S]*?</script{_TAG_BODY}>",
+    re.IGNORECASE,
+)
+_STYLE_BLOCK_RE = re.compile(
+    rf"<style{_TAG_BODY}>[\s\S]*?</style{_TAG_BODY}>",
+    re.IGNORECASE,
+)
+
 
 @dataclass
 class SanitizerConfig:
@@ -179,12 +193,15 @@ class InputSanitizer:
 
     def _strip_html(self, value: str) -> str:
         """Remove HTML tags."""
-        # Remove script and style tags with content
-        value = re.sub(r"<script[^>]*>.*?</script>", "", value, flags=re.DOTALL | re.IGNORECASE)
-        value = re.sub(r"<style[^>]*>.*?</style>", "", value, flags=re.DOTALL | re.IGNORECASE)
+        # Remove script and style tags with content. Use complete, case-insensitive
+        # patterns that consume attribute values containing ">" and tolerate
+        # attributes/whitespace in the closing tag, so variants like <SCRIPT> or
+        # </script > cannot bypass the filter.
+        value = re.sub(_SCRIPT_BLOCK_RE, "", value)
+        value = re.sub(_STYLE_BLOCK_RE, "", value)
 
-        # Remove HTML comments
-        value = re.sub(r"<!--.*?-->", "", value, flags=re.DOTALL)
+        # Remove HTML comments (also matching the "--!>" terminator variant)
+        value = re.sub(r"<!--[\s\S]*?--!?>", "", value)
 
         # Remove remaining tags
         value = re.sub(r"<[^>]+>", "", value)

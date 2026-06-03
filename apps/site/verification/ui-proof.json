@@ -1,73 +1,41 @@
 {
   "rule_version": 2,
-  "captured_at_utc": "2026-05-21T23:35:21.166181Z",
+  "captured_at_utc": "2026-06-03T00:36:00.159Z",
   "target_url": "http://127.0.0.1:3108",
   "generator": {
     "script": "scripts/refresh_site_visual_proof.py",
     "runtime_verifier": "scripts/verify_site_visual_runtime.mjs",
-    "generated_at_utc": "2026-05-21T23:35:21.166181+00:00"
+    "generated_at_utc": "2026-06-03T00:36:01.941628+00:00"
   },
   "git": {
-    "head_sha": "c06c82199ba88cfd721d6083f3520021aaa6de3a",
+    "head_sha": "83b472bde30b3af90b500b8d261b0483424dbf26",
     "ui_changed_paths": [
-      "apps/site/src/app/[locale]/deep-dive/page.tsx",
-      "apps/site/src/app/[locale]/docs/[[...slug]]/page.tsx",
-      "apps/site/src/app/[locale]/download/page.tsx",
-      "apps/site/src/app/[locale]/infinite/page.tsx",
-      "apps/site/src/app/[locale]/journey/page.tsx",
-      "apps/site/src/app/[locale]/layout.tsx",
-      "apps/site/src/app/[locale]/marketplace/page.tsx",
-      "apps/site/src/app/[locale]/page.tsx",
-      "apps/site/src/app/[locale]/roadmap/page.tsx",
-      "apps/site/src/app/[locale]/support/page.tsx",
-      "apps/site/src/app/[locale]/updates/page.tsx",
+      "apps/site/src/app/api/download/route.ts",
+      "apps/site/src/app/api/marketplace/catalog/route.ts",
+      "apps/site/src/app/api/metrics/overview/route.ts",
+      "apps/site/src/app/api/releases/route.ts",
+      "apps/site/src/app/api/v1/plugins/[pluginId]/manual-download/route.ts",
+      "apps/site/src/app/api/v1/plugins/[pluginId]/route.ts",
+      "apps/site/src/app/api/v1/plugins/catalog/route.ts",
+      "apps/site/src/app/api/v1/plugins/download-token/route.ts",
       "apps/site/src/app/api/v1/plugins/download/[token]/route.ts",
-      "apps/site/src/app/deep-dive/page.tsx",
-      "apps/site/src/app/docs.css",
-      "apps/site/src/app/docs/[[...slug]]/page.tsx",
-      "apps/site/src/app/download/page.tsx",
-      "apps/site/src/app/globals.css",
-      "apps/site/src/app/globals_part02.css",
-      "apps/site/src/app/journey/page.tsx",
-      "apps/site/src/app/layout.tsx",
-      "apps/site/src/app/marketplace/page.tsx",
-      "apps/site/src/app/page.tsx",
-      "apps/site/src/app/roadmap/page.tsx",
-      "apps/site/src/app/sitemap.ts",
-      "apps/site/src/app/support/page.tsx",
-      "apps/site/src/app/updates/page.tsx",
-      "apps/site/src/components/command-matrix.tsx",
-      "apps/site/src/components/docs-page.tsx",
-      "apps/site/src/components/download-button.tsx",
-      "apps/site/src/components/footer.tsx",
-      "apps/site/src/components/locale-html-sync.tsx",
-      "apps/site/src/components/metrics-strip.tsx",
-      "apps/site/src/components/navbar.tsx",
-      "apps/site/src/components/release-feed.tsx",
-      "apps/site/src/components/roadmap-shell.tsx",
-      "apps/site/src/components/site-deep-dive-page.tsx",
-      "apps/site/src/components/site-download-page.tsx",
+      "apps/site/src/app/api/v1/plugins/verify/route.ts",
       "apps/site/src/components/site-home-page.tsx",
-      "apps/site/src/components/site-journey-page.tsx",
-      "apps/site/src/components/site-marketplace-page.tsx",
-      "apps/site/src/components/site-roadmap-page.tsx",
-      "apps/site/src/components/site-support-page.tsx",
-      "apps/site/src/components/site-updates-page.tsx",
-      "apps/site/src/components/updates-page-feed.tsx"
+      "apps/site/src/components/spline-viewer-loader.tsx"
     ]
   },
   "runtime_report": {
     "path": "apps/site/verification/runtime-report.json",
-    "sha256": "2c66d91f81feda45ed1bce334e33483ef109bde06052318fff75710498b95eaf"
+    "sha256": "ccf26cc2e62c9e0d13b905a78a9a37c2b8ae3f7ca858ab5245a11fa83b96a2c1"
   },
   "screenshots": {
     "full_page": {
       "path": "apps/site/verification/screenshots/full-page.png",
-      "sha256": "fa473cfa23e673910b43da2d4e3d4e6ec96d304dddb7641b8a2661ace465fd5a"
+      "sha256": "73918ce93d9bc12845593268a990f237f9754b085e756021295bf132210d1424"
     },
     "footer_focus": {
       "path": "apps/site/verification/screenshots/footer-focus.png",
-      "sha256": "c517ecacccd512959182bbcb8831568f2f0c0c8735f25aa39ad4fdba1ca8a286"
+      "sha256": "4ac5e75f2a57acf28f28e2c4b928ee8bf142506b87e9f8667744dfb44ebfce3f"
     }
   },
   "metrics": {

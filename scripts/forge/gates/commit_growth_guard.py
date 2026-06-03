@@ -75,9 +75,17 @@ SKIP_DIR_NAMES = {
 
 
 def _runtime_protection_disabled() -> bool:
-    """Check if a human has temporarily disabled runtime protection."""
-    flag = ROOT / "runtime" / ".runtime_protection_disabled"
-    return flag.is_file()
+    """B9 (praxis-unbypassable-2026-05-29): only a validly SIGNED disable flag
+    counts. Presence alone is not enough — an unsigned planted flag must not
+    disable this gate. Mirrors thomas.tools.filesystem signed-flag validation."""
+    try:
+        from scripts.forge.gates._runtime_guard import runtime_protection_disabled
+    except ImportError:  # pragma: no cover - import path varies by run context
+        try:
+            from forge.gates._runtime_guard import runtime_protection_disabled
+        except ImportError:
+            from _runtime_guard import runtime_protection_disabled
+    return runtime_protection_disabled(ROOT)
 
 
 def _is_skipped(rel: str) -> bool:
@@ -192,10 +200,11 @@ def run(
             print("Commit growth guard: PASS (runtime protection disabled by human)")
         return 0
 
-    if os.environ.get("THOMAS_COMMIT_GROWTH_GUARD_DISABLE") == "1":
-        if not json_output:
-            print("Commit growth guard: SKIP (THOMAS_COMMIT_GROWTH_GUARD_DISABLE=1)")
-        return 0
+    # NOTE (R4, praxis-unbypassable-2026-05-29): the unauthenticated
+    # THOMAS_COMMIT_GROWTH_GUARD_DISABLE escape valve was removed — any agent
+    # could set it to skip the guard. Use the native-auth breakglass SKIP path
+    # (Windows sign-in, audited) to skip `thomas-commit-growth-guard`, or split
+    # the change.
 
     staged = _changed_files(repo_root, base=base, head=head) if base and head else _staged_files(repo_root)
     violations: list[dict] = []
@@ -231,11 +240,10 @@ def run(
             )
 
     if violations and base and head:
+        # Server-side (diff-range) approval = reviewed, immutable commit history.
         approved, approval_trailer, approval_reason = _growth_approval(_commit_messages(repo_root, base, head))
-    elif violations:
-        message = str(os.getenv(COMMIT_MESSAGE_ENV, "") or "")
-        if message:
-            approved, approval_trailer, approval_reason = _growth_approval([message])
+    # Local staged mode: no env-based self-approval (THOMAS_COMMIT_MESSAGE was a
+    # self-approval bypass, R4). Use the breakglass SKIP path locally.
     ok = len(violations) == 0 or approved
 
     if json_output:

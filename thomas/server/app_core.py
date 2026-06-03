@@ -242,16 +242,26 @@ def create_app(config: AppConfig | None = None):
         audit_db_path = config.memory.root_path / ".thomas" / "file_audit.db"
         _file_audit.init_audit(audit_db_path)
 
+        def _safe_error_body(body: bytes, status: int) -> bytes:
+            # Avoid leaking exception text / stack traces to clients. On server
+            # errors the underlying handler embeds str(exc) in the body; replace
+            # it with a generic message (the real detail is logged server-side by
+            # the handler via log.exception). Keep the original status code.
+            if status >= 500:
+                log.error("audit handler returned server error (status=%s); body suppressed", status)
+                return json.dumps({"error": "internal server error"}).encode()
+            return body
+
         async def _audit_files_handler(request: web.Request) -> web.Response:
             _require_api_access(request)
             body, status, headers = await handle_audit_files(request)
-            return web.Response(body=body, status=status, headers=headers)
+            return web.Response(body=_safe_error_body(body, status), status=status, headers=headers)
 
         async def _audit_run_files_handler(request: web.Request) -> web.Response:
             _require_api_access(request)
             run_id = request.match_info.get("run_id", "")
             body, status, headers = await handle_audit_run_files(request, run_id)
-            return web.Response(body=body, status=status, headers=headers)
+            return web.Response(body=_safe_error_body(body, status), status=status, headers=headers)
 
         app.router.add_get("/api/audit/files", _audit_files_handler)
         app.router.add_get("/api/audit/runs/{run_id}/files", _audit_run_files_handler)

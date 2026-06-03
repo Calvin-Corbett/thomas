@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from aiohttp import web
@@ -22,6 +23,8 @@ from .mission_support import (
     _send_alert_email,
     _utc_iso_now,
 )
+
+_log = logging.getLogger(__name__)
 
 
 def build_mission_workflow_handlers(
@@ -50,7 +53,8 @@ def build_mission_workflow_handlers(
             try:
                 jobs = list(store.list_jobs(limit=420, offset=0) or [])
             except KeyError as exc:
-                raise web.HTTPInternalServerError(text=f"unable to list content jobs: {exc}") from exc
+                _log.exception("mission content hub: unable to list content jobs")
+                raise web.HTTPInternalServerError(text="unable to list content jobs") from exc
             job_rows = [_mission_job_payload(job) for job in jobs]
 
         run_store_mod = app.get(run_store_module_key)

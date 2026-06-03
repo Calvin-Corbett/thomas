@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
@@ -10,6 +11,8 @@ from typing import Any
 from aiohttp import web
 
 from thomas.autonomy.scheduler import compute_next_run
+
+log = logging.getLogger(__name__)
 
 from .mission_support import (
     _MISSION_ALLOWED_JOB_KINDS,
@@ -88,9 +91,11 @@ def build_mission_task_handlers(
                 or []
             )
         except KeyError as exc:
-            raise web.HTTPNotFound(text=f"job query failed: {exc}") from exc
+            log.warning("mission jobs list: query failed: %s", exc)
+            raise web.HTTPNotFound(text="job query failed") from exc
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=f"invalid filter parameters: {exc}") from exc
+            log.warning("mission jobs list: invalid filter parameters: %s", exc)
+            raise web.HTTPBadRequest(text="invalid filter parameters") from exc
 
         rows = [_mission_job_payload(job) for job in jobs]
         return web.json_response(
@@ -108,8 +113,9 @@ def build_mission_task_handlers(
         """Create a new task/job with specified name, kind, and payload."""
         try:
             payload = await request.json()
-        except Exception as exc:
-            raise web.HTTPBadRequest(text=f"invalid json: {type(exc).__name__}: {exc}") from exc
+        except (ValueError, json.JSONDecodeError) as exc:
+            log.warning("mission job create: invalid json body: %s", exc)
+            raise web.HTTPBadRequest(text="invalid json body") from exc
         if not isinstance(payload, dict):
             raise web.HTTPBadRequest(text="json body must be an object")
 
@@ -204,7 +210,8 @@ def build_mission_task_handlers(
             try:
                 next_run_at = compute_next_run(schedule, now)
             except ValueError as exc:
-                raise web.HTTPBadRequest(text=f"invalid schedule: {exc}") from exc
+                log.warning("mission job create: invalid schedule: %s", exc)
+                raise web.HTTPBadRequest(text="invalid schedule") from exc
             if next_run_at is None:
                 raise web.HTTPBadRequest(text="schedule does not produce a future run time")
             if next_run_at.tzinfo is None:
@@ -234,7 +241,8 @@ def build_mission_task_handlers(
                 session_id=session_id,
             )
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=f"invalid job parameters: {exc}") from exc
+            log.warning("mission job create: invalid job parameters: %s", exc)
+            raise web.HTTPBadRequest(text="invalid job parameters") from exc
 
         _mission_wakeup_engine()
         return web.json_response(

@@ -14,7 +14,7 @@ Thomas is **one local server + one web UI + one CLI**. The server hosts everythi
 
 The architecture in 30 seconds:
 
-- `thomas/core/` — config, persistence, token economy, LLM clients (bottom of the dependency tree; never imports server or tools)
+- `thomas/core/` — config, persistence, token economy, LLM clients (bottom of the dependency tree; a few legacy `core`→`tools`/`server` imports remain and are tracked as debt in `thomas/_architecture.py`)
 - `thomas/agent/` — chat dispatch and the agent loop. Casual messages get fast replies, actionable messages get dispatched to the task manager
 - `thomas/server/` — aiohttp web app, routes, the web UI assets
 - `thomas/cli/` — CLI and REPL

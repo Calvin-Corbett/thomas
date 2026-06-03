@@ -1,4 +1,5 @@
 import json
+from urllib.parse import urlparse
 
 import pytest
 from click.testing import CliRunner
@@ -19,7 +20,7 @@ def test_success_telegram_http(monkeypatch):
     from thomas.marketplace.channels import p087_channel_auth_validation_helper as mod
 
     def fake_http_get_json(*, url: str, timeout_s: float):
-        assert "api.telegram.org" in url
+        assert urlparse(url).hostname == "api.telegram.org"
         assert timeout_s == 5.0
         return {"ok": True, "result": {"id": 42, "username": "thomas_bot", "first_name": "Thomas"}}
 

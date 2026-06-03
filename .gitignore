@@ -108,6 +108,9 @@ thomas.db-wal
 thomas.asset_studio.db
 thomas.asset_studio.db-shm
 thomas.asset_studio.db-wal
+thomas.marketplace.asset_studio.db
+thomas.marketplace.asset_studio.db-shm
+thomas.marketplace.asset_studio.db-wal
 *.sqlite3
 
 # Secrets and credentials
@@ -134,6 +137,42 @@ Thumbs.db
 *.cache
 runtime/
 !thomas/server/web/js/runtime/
+
+# =====================================================================
+# TIER MODEL  (added 2026-06-02 public-production pass)
+# ---------------------------------------------------------------------
+# Three layers decide where a file is allowed to live:
+#   LOCAL  : this machine only — NEVER committed to dev or public.
+#            secrets, tokens, personal paths, per-install overrides.
+#   DEV    : committed to Calvin-Corbett/thomas-dev (private dev repo).
+#            in-progress / dev-stage work lives here.
+#   PUBLIC : reaches Calvin-Corbett/thomas (public). The dev->public
+#            filter is scripts/forge/publish/preflight.py + the leak
+#            guard, NOT this file.
+#
+# Convention: any file named *.local.* is LOCAL-tier and never tracked.
+# Keep sensitive/per-install DATA in a .local.* file and load it from
+# generic committed CODE (see public_repo_leak_guard.py for the pattern).
+# =====================================================================
+*.local.*
+!*.local.example
+
+# Sensitive leak blocklist (competitor names) — LOCAL only. The leak
+# guard loads it at runtime; it must never reach dev or public.
+scripts/forge/gates/leak_blocklist.local.json
+
+# Internal-only artifacts removed from the public tree (never re-track):
+Thomas-Pitch-Deck.pptx
+docs/deletions/
+plans/thomas/swarm/
+thomas/demo/snake_h2h_benchmark.py
+tests/test_snake_h2h_benchmark.py
+
+# Visual-regression OUTPUT (regenerated every run; baselines stay tracked).
+apps/site/verification/diffs/
+apps/site/verification/screenshots/
+apps/site/verification/runtime-report.json
+apps/site/verification/ui-proof.json
 .runtime/
 .state/
 secrets.env

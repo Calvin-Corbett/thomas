@@ -39,7 +39,7 @@ def test_load_nodes_registry_from_json_file_success(tmp_path: Path) -> None:
     assert reg.source.startswith("file:")
     assert [n.node_id for n in reg.nodes] == ["alpha", "beta"]  # deterministic ordering
     assert reg.nodes[0].endpoint == "http://alpha.local:8080"
-    assert reg.nodes[1].endpoint.startswith("http://beta.local:9090")
+    assert reg.nodes[1].endpoint == "http://beta.local:9090"
     assert reg.nodes[1].labels == ["eu", "edge"]
 
 

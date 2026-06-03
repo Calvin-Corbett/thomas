@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
@@ -11,6 +12,8 @@ from typing import Any
 from aiohttp import web
 
 from thomas.autonomy.scheduler import compute_next_run
+
+log = logging.getLogger(__name__)
 
 from .mission_support import (
     _AUTOPILOT_OBJECTIVE_ID_RE,
@@ -74,8 +77,9 @@ def build_mission_cron_handlers(
         """Create a new autopilot objective (recurring/scheduled task)."""
         try:
             payload = await request.json()
-        except Exception as exc:
-            raise web.HTTPBadRequest(text=f"invalid json: {type(exc).__name__}: {exc}") from exc
+        except (ValueError, json.JSONDecodeError) as exc:
+            log.warning("autopilot objective create: invalid json body: %s", exc)
+            raise web.HTTPBadRequest(text="invalid json body") from exc
         if not isinstance(payload, dict):
             raise web.HTTPBadRequest(text="json body must be an object")
 
@@ -103,7 +107,8 @@ def build_mission_cron_handlers(
             try:
                 next_run_at = compute_next_run(schedule, now)
             except ValueError as exc:
-                raise web.HTTPBadRequest(text=f"invalid schedule: {exc}") from exc
+                log.warning("autopilot objective create: invalid schedule: %s", exc)
+                raise web.HTTPBadRequest(text="invalid schedule") from exc
             if next_run_at is None:
                 raise web.HTTPBadRequest(text="schedule does not produce a future run time")
             if next_run_at.tzinfo is None:
@@ -166,7 +171,8 @@ def build_mission_cron_handlers(
                 session_id=session_id,
             )
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=f"invalid autopilot parameters: {exc}") from exc
+            log.warning("autopilot objective create: invalid parameters: %s", exc)
+            raise web.HTTPBadRequest(text="invalid autopilot parameters") from exc
 
         _mission_wakeup_engine()
         return web.json_response(
@@ -202,7 +208,8 @@ def build_mission_cron_handlers(
         try:
             jobs = list(store.list_jobs(limit=max(limit * 3, 180), offset=0) or [])
         except KeyError as exc:
-            raise web.HTTPInternalServerError(text=f"unable to list autopilot objectives: {exc}") from exc
+            log.exception("autopilot objectives list: store query failed")
+            raise web.HTTPInternalServerError(text="unable to list autopilot objectives") from exc
 
         rows: list[dict[str, Any]] = []
         for job in jobs:
@@ -266,7 +273,8 @@ def build_mission_cron_handlers(
         try:
             jobs = list(store.list_jobs(limit=2000, offset=0) or [])
         except KeyError as exc:
-            raise web.HTTPInternalServerError(text=f"unable to read objectives: {exc}") from exc
+            log.exception("autopilot objective stop: store query failed")
+            raise web.HTTPInternalServerError(text="unable to read objectives") from exc
 
         matched = 0
         cancelled = 0

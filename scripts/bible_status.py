@@ -116,6 +116,16 @@ def main() -> int:
     lint_ok = bool(lint and lint.get("ok"))
     lint_warns = len(lint.get("warnings", [])) if lint else 0
 
+    # B8 (praxis-unbypassable-2026-05-29): surface which subchecks failed to
+    # return parseable JSON so a machine consumer gets actionable drift detail
+    # instead of a silent zero. A None subcheck means bible_lint/freshness/
+    # coverage errored or emitted no JSON.
+    subcheck_errors = [
+        f"{name}: no parseable JSON output"
+        for name, result in (("bible_lint", lint), ("bible_freshness", freshness), ("bible_coverage", coverage))
+        if result is None
+    ]
+
     uncovered_count = len(coverage.get("uncovered", [])) if coverage else 0
     transitive_count = len(coverage.get("transitive_only", [])) if coverage else 0
     total_units = coverage.get("total_units", 0) if coverage else 0
@@ -149,6 +159,7 @@ def main() -> int:
                     "uncovered_units": uncovered_count,
                     "transitive_units": transitive_count,
                     "coverage_pct": round(cov_pct, 1),
+                    "subcheck_errors": subcheck_errors,
                     "top_drifted": [
                         {"title": s["title"], "drift_days": s["drift_days"]}
                         for s in sorted(drifted, key=lambda x: -(x.get("drift_days") or 0))[:10]
@@ -195,9 +206,17 @@ def main() -> int:
         # Stay silent; bible_status must always succeed.
         pass
     if not lint_ok:
-        print(f"  lint errors: {len(lint.get('errors', []))}")
-        for e in lint.get("errors", [])[:5]:
-            print(f"    - {e}")
+        # B8 (praxis-unbypassable-2026-05-29): `lint` is None when bible_lint.py
+        # errored or produced no JSON. The old code called lint.get(...)
+        # unconditionally and crashed (AttributeError), so the watchdog gave no
+        # actionable detail. Guard for None and report the subcheck failure.
+        if lint is None:
+            print("  lint check did not return parseable output (bible_lint.py errored or produced no JSON)")
+        else:
+            errors = lint.get("errors", [])
+            print(f"  lint errors: {len(errors)}")
+            for e in errors[:5]:
+                print(f"    - {e}")
 
     if args.detail or rc != 0:
         if drifted:

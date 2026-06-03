@@ -99,7 +99,7 @@ _RUNTIME_OVERHEAD_POLICIES: dict[str, RuntimeOverheadPolicy] = {
         include_test_visibility_hint=True,
         include_library_context=True,
         include_memory_profile=True,
-        runtime_skills_mode="auto",
+        runtime_skills_mode="explicit",
     ),
 }
 

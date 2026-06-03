@@ -197,7 +197,8 @@ class TestHeaderBuilder:
         assert "Message-ID" in headers
         assert headers["Message-ID"].startswith("<")
         assert headers["Message-ID"].endswith(">")
-        assert "example.com" in headers["Message-ID"]
+        # Message-ID format is <localpart@domain>; check the domain exactly.
+        assert headers["Message-ID"].rstrip(">").rsplit("@", 1)[-1] == "example.com"
 
     def test_set_in_reply_to(self):
         """Test setting In-Reply-To header."""
@@ -303,8 +304,9 @@ class TestMessageIDGeneration:
 
         assert msg_id.startswith("<")
         assert msg_id.endswith(">")
-        assert "example.com" in msg_id
         assert "@" in msg_id
+        # Message-ID format is <localpart@domain>; check the domain exactly.
+        assert msg_id.rstrip(">").rsplit("@", 1)[-1] == "example.com"
 
     def test_generate_unique_message_ids(self):
         """Test generating unique IDs."""

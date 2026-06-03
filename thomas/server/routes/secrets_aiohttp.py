@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -10,6 +11,8 @@ from aiohttp import web
 from thomas.core.config import AppConfig
 from thomas.server.app_keys import APP_CONFIG, APP_SECRETS
 from thomas.server.secrets import SecretStore
+
+log = logging.getLogger(__name__)
 
 RequireAccessFn = Callable[[web.Request], None]
 ReadJsonFn = Callable[[web.Request], Awaitable[Any]]
@@ -100,8 +103,10 @@ def register_secrets_routes(
                 default_rotation_days=default_rotation_days,
                 warning_days=warning_days,
             )
-        except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
+        except ValueError:
+            # Log the real validation detail server-side; return a generic client message.
+            log.warning("Invalid rotation reminder parameters", exc_info=True)
+            raise web.HTTPBadRequest(text="invalid rotation reminder parameters")
 
         summary = {
             "expired": 0,
@@ -152,8 +157,10 @@ def register_secrets_routes(
 
         try:
             secrets.set(profile, api_key, persist=persist, rotation_days=rotation_days)
-        except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
+        except ValueError:
+            # Log the real validation detail server-side; return a generic client message.
+            log.warning("Failed to set secret for profile %s", profile, exc_info=True)
+            raise web.HTTPBadRequest(text="invalid secret payload")
         meta = secrets.metadata(profile)
         return web.json_response(
             {
