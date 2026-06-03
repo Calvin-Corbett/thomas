@@ -1,9 +1,9 @@
 import Link from "next/link";
-import Script from "next/script";
 import { DownloadButton } from "@/components/download-button";
 import { MetricsStrip } from "@/components/metrics-strip";
 import { PixelAgents } from "@/components/pixel-agents";
 import { ReleaseFeed } from "@/components/release-feed";
+import { SplineViewerLoader } from "@/components/spline-viewer-loader";
 import { getSiteCopy } from "@/lib/site-copy";
 import { withSiteLocale, type SiteLocale } from "@/lib/site-locale";
 
@@ -25,11 +25,7 @@ export function SiteHomePage({ locale = "en" }: { locale?: SiteLocale }) {
 
   return (
     <>
-      <Script
-        src="https://unpkg.com/@splinetool/viewer@1.10.10/build/spline-viewer.js"
-        type="module"
-        strategy="afterInteractive"
-      />
+      <SplineViewerLoader />
 
       <section className="home-hero">
         <div className="home-ambient home-ambient-a" />

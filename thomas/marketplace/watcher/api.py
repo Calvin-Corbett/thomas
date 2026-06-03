@@ -174,8 +174,18 @@ def watcher_paths(req: PathsRequest, request: Request):
     for p in req.paths:
         if not p:
             continue
-        ap = str(Path(p).expanduser().resolve())
-        if not Path(ap).exists() or not Path(ap).is_dir():
+        # Reject path-injection vectors in the request-supplied value before it
+        # reaches the filesystem: NUL bytes and ".." traversal components. The
+        # watcher legitimately monitors arbitrary user directories, so we accept
+        # absolute paths but require them to be fully normalized (no traversal).
+        if "\x00" in p:
+            raise HTTPException(status_code=400, detail="Invalid path")
+        candidate = Path(p).expanduser()
+        if ".." in candidate.parts:
+            raise HTTPException(status_code=400, detail=f"Path traversal not allowed: {p}")
+        resolved = candidate.resolve()
+        ap = str(resolved)
+        if not resolved.exists() or not resolved.is_dir():
             raise HTTPException(status_code=400, detail=f"Not a directory: {p}")
         normalized.append(ap)
 

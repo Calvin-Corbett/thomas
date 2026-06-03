@@ -9,6 +9,12 @@ concurrency:
   group: nightly-reliability-${{ github.ref }}
   cancel-in-progress: true
 
+# Least-privilege default: this workflow only checks out the repo, runs
+# soak/perf/security reliability scripts, and uploads artifacts. No job writes
+# to the repo, makes releases, comments on PRs, or deploys.
+permissions:
+  contents: read
+
 jobs:
   nightly-reliability:
     runs-on: ubuntu-latest

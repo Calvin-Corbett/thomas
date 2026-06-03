@@ -169,8 +169,32 @@ class GatewayStatePersistence:
                     message=f"state_dir is required for file mode (or set {DEFAULT_STATE_DIR_ENV})",
                     http_status=400,
                 )
-            base_dir = Path(base_dir_str).expanduser().resolve()
+            # Reject path-injection vectors in the caller-supplied value before it
+            # touches the filesystem: NUL bytes and parent-directory ("..")
+            # traversal. Absolute/relative base dirs otherwise remain the operator's
+            # choice, and the persisted state stays confined to base_dir/<subdir>.
+            if "\x00" in base_dir_str:
+                raise GatewayStatePersistenceError(
+                    code="invalid_request",
+                    message="state_dir must not contain a NUL byte",
+                    http_status=400,
+                )
+            base_dir = Path(base_dir_str).expanduser()
+            if ".." in base_dir.parts:
+                raise GatewayStatePersistenceError(
+                    code="invalid_request",
+                    message="state_dir must not contain parent-directory ('..') components",
+                    http_status=400,
+                )
+            base_dir = base_dir.resolve()
             effective_state_dir = (base_dir / DEFAULT_STATE_SUBDIR).resolve()
+            # Defense in depth: the effective dir must stay within the base dir.
+            if not effective_state_dir.is_relative_to(base_dir):
+                raise GatewayStatePersistenceError(
+                    code="invalid_request",
+                    message="resolved state_dir escapes the configured base directory",
+                    http_status=400,
+                )
 
         async with self._lock:
             self._config = PersistenceConfig(

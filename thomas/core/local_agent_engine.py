@@ -440,7 +440,8 @@ class LocalAgentEngine:
             with urllib.request.urlopen(url, timeout=2.5) as resp:
                 if int(getattr(resp, "status", 0) or 0) != 200:
                     return []
-                payload = json.loads(resp.read().decode("utf-8", errors="replace"))
+                # Cap the read so a local MITM / misbehaving endpoint can't OOM us.
+                payload = json.loads(resp.read(4 * 1024 * 1024).decode("utf-8", errors="replace"))
         except (urllib.error.URLError, TimeoutError, ValueError):
             return []
         except Exception:

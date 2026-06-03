@@ -6,8 +6,10 @@ and gets the user chatting in seconds.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
+import os
 import urllib.request
 from pathlib import Path
 
@@ -54,6 +56,13 @@ style = "balanced"
 """
     path = Path("thomas.toml")
     path.write_text(content, encoding="utf-8")
+    # The provider API key is stored locally in this config so Thomas can
+    # authenticate. It cannot be hashed (it must be sent verbatim), so restrict
+    # the file to the owner to limit clear-text exposure on disk
+    # (py/clear-text-storage-sensitive-data).
+    if api_key:
+        with contextlib.suppress(OSError):
+            os.chmod(path, 0o600)
     return path
 
 

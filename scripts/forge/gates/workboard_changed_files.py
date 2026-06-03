@@ -28,8 +28,16 @@ DEFAULT_IGNORE_PATTERNS = ("plans/thomas/WORKBOARD.md",)
 
 
 def _runtime_protection_disabled() -> bool:
-    """Check if a human has temporarily disabled runtime protection."""
-    return (ROOT / "runtime" / ".runtime_protection_disabled").is_file()
+    """B9 (praxis-unbypassable-2026-05-29): only a validly SIGNED disable flag
+    counts (presence alone does not). Mirrors filesystem signed-flag validation."""
+    try:
+        from scripts.forge.gates._runtime_guard import runtime_protection_disabled
+    except ImportError:  # pragma: no cover - import path varies by run context
+        try:
+            from forge.gates._runtime_guard import runtime_protection_disabled
+        except ImportError:
+            from _runtime_guard import runtime_protection_disabled
+    return runtime_protection_disabled(ROOT)
 
 
 DEFAULT_MAX_CHANGED_FILES = 200

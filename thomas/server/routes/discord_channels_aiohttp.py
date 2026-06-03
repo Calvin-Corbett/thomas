@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -10,6 +11,8 @@ from aiohttp import web
 
 from thomas.core.config import AppConfig
 from thomas.integrations.discord_bridge_runtime import DiscordBridgeRuntime
+
+log = logging.getLogger(__name__)
 
 RequireAccessFn = Callable[[web.Request], None]
 ReadJsonFn = Callable[[web.Request], Any]
@@ -51,7 +54,8 @@ def register_discord_channels_routes(
                 restart_if_running=restart_if_running,
             )
         except RuntimeError as exc:
-            raise web.HTTPBadRequest(text=str(exc)) from exc
+            log.warning("discord runtime settings update failed", exc_info=True)
+            raise web.HTTPBadRequest(text="failed to update Discord runtime settings") from exc
         status = await asyncio.to_thread(runtime.status)
         return web.json_response({"ok": True, **result, "discord": status})
 
@@ -70,7 +74,8 @@ def register_discord_channels_routes(
         try:
             payload = await asyncio.to_thread(runtime.start)
         except RuntimeError as exc:
-            raise web.HTTPBadRequest(text=str(exc)) from exc
+            log.warning("discord bridge start failed", exc_info=True)
+            raise web.HTTPBadRequest(text="failed to start Discord bridge") from exc
         return web.json_response({"ok": True, "discord": payload})
 
     async def api_discord_stop(request: web.Request) -> web.Response:
@@ -78,7 +83,8 @@ def register_discord_channels_routes(
         try:
             payload = await asyncio.to_thread(runtime.stop)
         except RuntimeError as exc:
-            raise web.HTTPBadRequest(text=str(exc)) from exc
+            log.warning("discord bridge stop failed", exc_info=True)
+            raise web.HTTPBadRequest(text="failed to stop Discord bridge") from exc
         return web.json_response({"ok": True, "discord": payload})
 
     async def api_discord_restart(request: web.Request) -> web.Response:
@@ -86,7 +92,8 @@ def register_discord_channels_routes(
         try:
             payload = await asyncio.to_thread(runtime.restart)
         except RuntimeError as exc:
-            raise web.HTTPBadRequest(text=str(exc)) from exc
+            log.warning("discord bridge restart failed", exc_info=True)
+            raise web.HTTPBadRequest(text="failed to restart Discord bridge") from exc
         return web.json_response({"ok": True, "discord": payload})
 
     async def api_discord_voice_probe(request: web.Request) -> web.Response:
@@ -109,7 +116,8 @@ def register_discord_channels_routes(
                 probe_backend=str(payload.get("probe_backend") or "windows"),
             )
         except RuntimeError as exc:
-            raise web.HTTPBadRequest(text=str(exc)) from exc
+            log.warning("discord voice probe failed", exc_info=True)
+            raise web.HTTPBadRequest(text="voice probe failed") from exc
         return web.json_response({"ok": True, **result, "discord": runtime.status()})
 
     async def api_discord_history(request: web.Request) -> web.Response:

@@ -22,6 +22,8 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import re
 import subprocess
 import sys
@@ -30,39 +32,33 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 
-# Forbidden substrings (case-insensitive). Add to this list when a new
-# competitor or internal-only marker shows up. Each entry should be a
-# substring that NEVER belongs on public main.
-FORBIDDEN_SUBSTRINGS = (
-    "openclaw",
-    "open claw",
-    "open-claw",
-    "open_claw",
-)
+# The sensitive blocklist — competitor names and self-comparison artifact
+# paths — is NOT hardcoded in this public source. It lives in a local,
+# gitignored file (`leak_blocklist.local.json`) that is merged on top of the
+# generic defaults below at import time. So the public gate code reveals no
+# competitor name, while protection stays full on any machine that has the
+# file. To extend protection, edit the LOCAL file, not this source.
 
-# Files that are ALLOWED to mention the forbidden substrings — typically
-# the guard itself (which lists them as banned terms) and the changelog
-# (historical record). Keep this list tiny.
+# Generic public defaults — safe to ship; they name no competitor.
+_DEFAULT_FORBIDDEN_SUBSTRINGS: tuple[str, ...] = ()
+
+# Files allowed to mention blocklisted substrings (e.g. the changelog's
+# historical record). The local blocklist file is gitignored, so it is
+# never part of the tracked tree the gate scans.
 ALLOWLIST_PATHS = frozenset(
     {
         "scripts/forge/gates/public_repo_leak_guard.py",
         "scripts/forge/publish/preflight.py",
         "CHANGELOG.md",
-        # Historical deletion records list paths that contained competitor
-        # names. They're the AUDIT TRAIL for the cleanup, so the substrings
-        # are necessary and intentional.
-        "docs/deletions/2026-05-21-pre-public-cleanup.json",
     }
 )
 
-# Forbidden file paths (exact relative paths under repo root). These
-# files are by-policy internal-only; if they're tracked by git, the gate
-# trips. Add new entries as the internal docs surface grows.
-FORBIDDEN_PATHS = frozenset(
+# Generic internal-only docs/tooling that must not ship at root. Competitor-
+# named paths are supplied by the local blocklist file.
+_DEFAULT_FORBIDDEN_PATHS: frozenset[str] = frozenset(
     {
-        # Agent-facing internal docs that landed at root pre-2026-05-21
-        # cleanup. If you need these back, move them into a private repo
-        # or under `docs/internal/` (which is gitignored).
+        # Agent-facing internal docs. If you need these back, move them
+        # under `docs/internal/` (which is gitignored).
         "PROJECT_INDEX.md",
         "CLAUDE_CODE_GAP_ANALYSIS.md",
         "MODULE_REGISTRY.md",
@@ -76,35 +72,59 @@ FORBIDDEN_PATHS = frozenset(
         "loc_counter.py",
         "check_zips.py",
         "module_analysis.csv",
-        # Competitor artifacts
-        "thomas_vs_openclaw_subcommands.json",
-        "demo/baselines/openclaw.current.json",
         "docs/PRE_PUBLIC_CLEANUP.md",
-        "docs/OPENCLAW_PARITY.md",
     }
 )
 
-# Forbidden path prefixes (any tracked file starting with these is blocked).
-FORBIDDEN_PREFIXES = (
-    "thomas/openclaw_compat/",
-    "thomas/marketplace/openclaw_compat/",
-    "library/entries/competitive-research/",
-    "tests/competitors/",
-    "scripts/competitors/",
+# Generic forbidden prefixes (no competitor naming).
+_DEFAULT_FORBIDDEN_PREFIXES: tuple[str, ...] = (
     ".codex/skills/",  # codex sandbox artifacts
     "docs/internal/",  # explicit internal docs — should be gitignored
-    "docs/OPENCLAW_",
-    "docs/ops/COMPETITOR_",
-    "docs/openclaw_gap_runs/",  # self-comparison benchmark results — not for public repo
-    "docs/reference_cli_gap_runs/",  # generated competitor-comparison output — local only
 )
 
-# Patterns matching tmp/debugging files that shouldn't reach public main.
-# Stay strict — `.tmp_*` is a debugging convention in this repo.
-FORBIDDEN_REGEX = (
-    re.compile(r"^\.tmp_"),
-    re.compile(r"^thomas_vs_"),
-)
+# Generic tmp/debugging filename patterns.
+_DEFAULT_FORBIDDEN_REGEX: tuple[re.Pattern[str], ...] = (re.compile(r"^\.tmp_"),)
+
+# Local, gitignored blocklist (competitor names + comparison artifact paths).
+LOCAL_BLOCKLIST_PATH = ROOT / "scripts" / "forge" / "gates" / "leak_blocklist.local.json"
+
+
+def _load_local_blocklist() -> tuple[tuple[str, ...], frozenset[str], tuple[str, ...], tuple[re.Pattern[str], ...]]:
+    """Merge the local (gitignored) sensitive blocklist if present.
+
+    Absent file (e.g. a fresh public clone) -> empty extras, so the gate
+    still runs and enforces the generic defaults; it simply has no
+    competitor-specific terms to check. Set ``THOMAS_LEAK_BLOCKLIST_FILE``
+    to point at an alternate location.
+    """
+    path = LOCAL_BLOCKLIST_PATH
+    env_override = os.getenv("THOMAS_LEAK_BLOCKLIST_FILE", "").strip()
+    if env_override:
+        path = Path(env_override)
+    if not path.is_file():
+        return (), frozenset(), (), ()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return (), frozenset(), (), ()
+    subs = tuple(str(s).lower() for s in data.get("forbidden_substrings", []) if str(s).strip())
+    paths = frozenset(str(s) for s in data.get("forbidden_paths", []) if str(s).strip())
+    prefixes = tuple(str(s) for s in data.get("forbidden_prefixes", []) if str(s).strip())
+    regexes: list[re.Pattern[str]] = []
+    for pat in data.get("forbidden_regex", []):
+        try:
+            regexes.append(re.compile(str(pat)))
+        except re.error:
+            continue
+    return subs, paths, prefixes, tuple(regexes)
+
+
+_local_subs, _local_paths, _local_prefixes, _local_regex = _load_local_blocklist()
+
+FORBIDDEN_SUBSTRINGS = _DEFAULT_FORBIDDEN_SUBSTRINGS + _local_subs
+FORBIDDEN_PATHS = frozenset(_DEFAULT_FORBIDDEN_PATHS | _local_paths)
+FORBIDDEN_PREFIXES = _DEFAULT_FORBIDDEN_PREFIXES + _local_prefixes
+FORBIDDEN_REGEX = _DEFAULT_FORBIDDEN_REGEX + _local_regex
 
 
 def _tracked_files() -> list[str]:

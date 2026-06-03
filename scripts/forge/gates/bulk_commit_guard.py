@@ -105,22 +105,23 @@ def run(
     base: str | None = None,
     head: str | None = None,
 ) -> int:
-    if os.environ.get("THOMAS_BULK_COMMIT_GUARD_DISABLE") == "1":
-        if not json_output:
-            print("Bulk commit guard: SKIP (THOMAS_BULK_COMMIT_GUARD_DISABLE=1)")
-        return 0
-
+    # NOTE (R4, praxis-unbypassable-2026-05-29): the unauthenticated
+    # THOMAS_BULK_COMMIT_GUARD_DISABLE escape valve was removed — any agent
+    # could set it to skip the guard. To land a genuinely large commit, use the
+    # native-auth breakglass SKIP path (Windows sign-in, audited) which can skip
+    # `thomas-bulk-commit-guard`, or split the change. Server-side this var was
+    # already neutralized (set to "") in .github/workflows/gates.yml.
     files = _changed_files(repo_root, base=base, head=head) if base and head else _staged_file_count(repo_root)[1]
     count = len(files)
     approved = False
     approval_trailer = ""
     approval_reason = ""
     if count > max_files and base and head:
+        # Server-side (diff-range) approval = reviewed, immutable commit history.
         approved, approval_trailer, approval_reason = _bulk_approval(_commit_messages(repo_root, base, head))
-    elif count > max_files:
-        message = str(os.getenv(COMMIT_MESSAGE_ENV, "") or "")
-        if message:
-            approved, approval_trailer, approval_reason = _bulk_approval([message])
+    # Local staged mode: no env-based self-approval (THOMAS_COMMIT_MESSAGE was a
+    # self-approval bypass). Use the breakglass SKIP path for a legitimate local
+    # large commit.
     ok = count <= max_files or approved
 
     if json_output:

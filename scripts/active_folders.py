@@ -23,14 +23,27 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 try:
     from thomas.core import agent_presence
 except ModuleNotFoundError:
     # When running in environments where thomas isn't installed (e.g. Cowork
     # sandbox), check for the runtime-protection-disabled flag and exit early
     # if set, otherwise re-raise so the original error surfaces.
-    _flag = Path(__file__).resolve().parent.parent / "runtime" / ".runtime_protection_disabled"
-    if _flag.is_file():
+    # B9 (praxis-unbypassable-2026-05-29): only a validly SIGNED disable flag
+    # counts — an unsigned planted flag must not fail-open.
+    _root = Path(__file__).resolve().parent.parent
+    try:
+        from scripts.forge.gates._runtime_guard import runtime_protection_disabled as _rp_disabled
+    except ImportError:
+        try:
+            from forge.gates._runtime_guard import runtime_protection_disabled as _rp_disabled
+        except ImportError:
+            _rp_disabled = None
+    if _rp_disabled is not None and _rp_disabled(_root):
         # Will be caught by __main__ guard — main() prints pass and exits 0.
         agent_presence = None  # type: ignore[assignment]
     else:
@@ -40,17 +53,19 @@ try:
     from scripts.crew.workboard import claim as workboard_claim_tool
     from scripts.crew.workboard import message as workboard_message_tool
     from scripts.forge.gates import workboard_claims as workboard_claims_gate
+    from scripts.forge.gates import workboard_inbox as workboard_inbox_gate
 except Exception:  # pragma: no cover
     try:
         from crew.workboard import claim as workboard_claim_tool  # type: ignore
         from crew.workboard import message as workboard_message_tool  # type: ignore
         from forge.gates import workboard_claims as workboard_claims_gate  # type: ignore
+        from forge.gates import workboard_inbox as workboard_inbox_gate  # type: ignore
     except Exception:
         workboard_claims_gate = None  # type: ignore[assignment]
         workboard_claim_tool = None  # type: ignore[assignment]
         workboard_message_tool = None  # type: ignore[assignment]
+        workboard_inbox_gate = None  # type: ignore[assignment]
 
-ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 STATE_DIR = ROOT / "runtime" / "coordination"
 STATE_FILE = STATE_DIR / "active_folders.json"
@@ -382,6 +397,25 @@ def _notify_overlap_coordination(
     return notified
 
 
+def _workboard_inbox_gate(agent: str, *, workboard_path: Path = DEFAULT_WORKBOARD) -> tuple[bool, str]:
+    if workboard_inbox_gate is None:
+        return False, "workboard inbox gate is unavailable; cannot verify unread coordination messages"
+    try:
+        ok, payload = workboard_inbox_gate.evaluate(workboard_path=workboard_path, agent=agent)
+    except (OSError, ValueError, KeyError, AttributeError, TypeError) as exc:
+        return False, f"workboard inbox gate failed: {exc}"
+    if ok:
+        return True, ""
+    unread = list(payload.get("unread_messages") or [])
+    ids = ", ".join(str(row.get("msg_id") or "") for row in unread[:5] if isinstance(row, dict))
+    suffix = f" ({ids})" if ids else ""
+    return (
+        False,
+        f"unread workboard messages for `{payload.get('agent', agent)}` must be acked before coordinated action{suffix}; "
+        f"run: python scripts/crew/workboard/message.py --list --agent {payload.get('agent', agent)}",
+    )
+
+
 def _presence_gate(
     *,
     purpose: str,
@@ -416,7 +450,7 @@ def _presence_gate(
         except (OSError, ValueError, KeyError, AttributeError, TypeError):
             pass
     if bool(result.get("ok", False)):
-        return True, ""
+        return _workboard_inbox_gate(agent)
     return False, str(result.get("message") or "presence gate requires override")
 
 
@@ -1353,9 +1387,16 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    # Honour the runtime protection toggle.
-    _flag = ROOT / "runtime" / ".runtime_protection_disabled"
-    if _flag.is_file():
+    # Honour the runtime protection toggle. B9: require a validly SIGNED flag —
+    # presence alone (an unsigned planted file) must not disable the guard.
+    try:
+        from scripts.forge.gates._runtime_guard import runtime_protection_disabled as _rp_disabled
+    except ImportError:
+        try:
+            from forge.gates._runtime_guard import runtime_protection_disabled as _rp_disabled
+        except ImportError:
+            _rp_disabled = None
+    if _rp_disabled is not None and _rp_disabled(ROOT):
         print("Active folder guard: PASS (runtime protection disabled by human)")
         return 0
 

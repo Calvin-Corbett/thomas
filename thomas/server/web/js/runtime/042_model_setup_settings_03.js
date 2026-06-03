@@ -26,6 +26,10 @@ async function moduleUiEditorProjectFromFiles(filesRaw) {
     if (!entryFile) return { ok: false, reason: 'Could not read entry HTML file.' };
 
     const htmlText = await entryFile.text();
+    // Parsing is inert (DOMParser does not execute scripts). The serialized result is
+    // only ever rendered in an iframe sandbox WITHOUT allow-same-origin (see
+    // frameSandboxValue), so the imported HTML runs in an opaque origin and cannot
+    // reach the host app's DOM, cookies, or storage.
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmlText, 'text/html');
     const baseDir = preferred.includes('/') ? preferred.slice(0, preferred.lastIndexOf('/')) : '';

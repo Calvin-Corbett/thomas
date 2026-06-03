@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
@@ -10,6 +11,8 @@ from typing import Any
 from aiohttp import web
 
 from thomas.server.app_keys import APP_APPROVALS_BROKER
+
+log = logging.getLogger(__name__)
 
 
 def _resolve_approvals_broker(app: web.Application):
@@ -74,7 +77,8 @@ async def _read_json_object(request: web.Request) -> dict[str, Any]:
     try:
         payload = await request.json()
     except Exception as exc:
-        raise web.HTTPBadRequest(text=f"invalid json: {type(exc).__name__}: {exc}") from exc
+        log.warning("Failed to parse JSON request body", exc_info=True)
+        raise web.HTTPBadRequest(text="invalid json") from exc
     if not isinstance(payload, dict):
         raise web.HTTPBadRequest(text="json body must be an object")
     return payload

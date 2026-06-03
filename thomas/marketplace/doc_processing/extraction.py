@@ -25,6 +25,21 @@ from thomas.marketplace.doc_processing._types import (
     Token,
 )
 
+# Complete, case-insensitive patterns for stripping <script>/<style> blocks.
+# The tag body uses an unambiguous alternation (quoted attribute value | single
+# non-">" char) so attribute values containing ">" are consumed without
+# catastrophic backtracking, and the closing tag tolerates attributes/whitespace
+# (e.g. "</script >"). re.IGNORECASE handles <SCRIPT>/<Style> variants.
+_TAG_BODY = r'(?:"[^"]*"|\'[^\']*\'|[^>])*'
+_SCRIPT_BLOCK_RE = re.compile(
+    rf"<script{_TAG_BODY}>[\s\S]*?</script{_TAG_BODY}>",
+    re.IGNORECASE,
+)
+_STYLE_BLOCK_RE = re.compile(
+    rf"<style{_TAG_BODY}>[\s\S]*?</style{_TAG_BODY}>",
+    re.IGNORECASE,
+)
+
 
 class TextExtractor:
     """Base class for text extraction from documents."""
@@ -105,9 +120,12 @@ class TextExtractor:
                 try:
                     text = path.read_text(encoding="utf-8")
 
-                    # Remove script and style tags
-                    text = re.sub(r"<script[^>]*>.*?</script>", "", text, flags=re.DOTALL)
-                    text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL)
+                    # Remove script and style tags. Match the full tag (including
+                    # attribute values that may contain ">") and the closing tag
+                    # with optional attributes/whitespace, case-insensitively, so
+                    # variants like <SCRIPT> or </script > cannot bypass the filter.
+                    text = re.sub(_SCRIPT_BLOCK_RE, "", text)
+                    text = re.sub(_STYLE_BLOCK_RE, "", text)
 
                     # Remove HTML tags
                     text = re.sub(r"<[^>]+>", " ", text)
@@ -406,9 +424,12 @@ class HTMLTextExtractor(TextExtractor):
             ExtractionError: If extraction fails.
         """
         try:
-            # Remove script and style tags
-            text = re.sub(r"<script[^>]*>.*?</script>", "", source, flags=re.DOTALL)
-            text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL)
+            # Remove script and style tags. Match the full tag (including
+            # attribute values that may contain ">") and the closing tag with
+            # optional attributes/whitespace, case-insensitively, so variants
+            # like <SCRIPT> or </script > cannot bypass the filter.
+            text = re.sub(_SCRIPT_BLOCK_RE, "", source)
+            text = re.sub(_STYLE_BLOCK_RE, "", text)
 
             # Remove HTML tags
             text = re.sub(r"<[^>]+>", " ", text)

@@ -90,7 +90,10 @@ def register_chat_routes(
                 try:
                     q.put_nowait(msg_text)
                 except asyncio.QueueFull as queue_err:
-                    raise web.HTTPConflict(text=f"active run interrupt queue is full: {queue_err}") from queue_err
+                    log.warning("Interrupt queue full for session %s: %s", request_sid[:12], queue_err)
+                    raise web.HTTPConflict(
+                        text="session is already processing another request (interrupt queue is full)"
+                    ) from queue_err
 
                 deps.task_ledger_update(
                     request_sid,
@@ -121,7 +124,8 @@ def register_chat_routes(
             except web.HTTPException:
                 raise
             except Exception as fork_err:
-                raise web.HTTPConflict(text=f"parallel chat fork failed: {fork_err}") from fork_err
+                log.exception("Parallel chat fork failed (session=%s)", request_sid[:12])
+                raise web.HTTPConflict(text="parallel chat fork failed") from fork_err
             start_seed_events = [
                 {
                     "type": "parallel_fork",
@@ -164,7 +168,7 @@ def register_chat_routes(
                 source="chat.setup_error",
                 force_event=True,
             )
-            raise web.HTTPInternalServerError(text=f"chat setup failed: {type(exc).__name__}: {exc}") from exc
+            raise web.HTTPInternalServerError(text="chat setup failed") from exc
         finally:
             if session_run_guard_active:
                 try:

@@ -76,7 +76,34 @@ def get_db_path() -> str:
         return str((Path.home() / ".thomas" / "thomas.db").resolve())
 
 
-def _derive_fernet_key_from_secret(secret: str) -> bytes:
+# Iteration count for the passphrase KDF. High enough to make brute-forcing a
+# weak THOMAS_SECRET_KEY expensive, while staying well under a noticeable delay
+# for the once-per-process key derivation.
+_KDF_ITERATIONS = 200_000
+
+
+def _derive_fernet_key_from_secret(secret: str, salt: bytes) -> bytes:
+    """Derive a Fernet key from a passphrase with a salted, slow KDF.
+
+    Uses PBKDF2-HMAC-SHA256 so a low-entropy THOMAS_SECRET_KEY can't be brute
+    forced cheaply, and a per-install ``salt`` so the same passphrase yields a
+    different key on every install (defeating precomputed-table attacks). The
+    salt is persisted by the caller; see ``_legacy_derive_fernet_key_from_secret``
+    for the old unsalted scheme that is still accepted on decrypt for migration.
+    """
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=_KDF_ITERATIONS)
+    return base64.urlsafe_b64encode(kdf.derive(secret.encode("utf-8")))
+
+
+def _legacy_derive_fernet_key_from_secret(secret: str) -> bytes:
+    """Old unsalted single-SHA256 derivation.
+
+    Retained ONLY so data written before the PBKDF2 upgrade can still be
+    decrypted (via MultiFernet). Never used to encrypt new data.
+    """
     digest = hashlib.sha256(secret.encode("utf-8")).digest()
     return base64.urlsafe_b64encode(digest)
 

@@ -605,15 +605,43 @@ class WebExtractTool(Tool):
     }
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
+        from urllib.parse import urljoin
+
+        from thomas.tools.web_search_providers import check_outbound_url
+
+        url = (args.get("url") or "").strip()
+        if not url:
+            return ToolResult(ok=False, error="Missing required param: url")
+        # SSRF guard before any network access or heavy imports.
+        policy_err = check_outbound_url(url)
+        if policy_err:
+            return ToolResult(ok=False, error=policy_err)
         try:
             import httpx
             from bs4 import BeautifulSoup
         except ImportError:
             return ToolResult(ok=False, error="httpx and beautifulsoup4 required")
-        url = args["url"]
         try:
-            async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-                resp = await client.get(url, headers={"User-Agent": "Thomas-AI/0.14"})
+            # Follow redirects manually so each hop is re-validated *before* the
+            # request -- with follow_redirects=True a 302 to
+            # http://169.254.169.254/ would be fetched before any final-URL check.
+            async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
+                current = url
+                resp = None
+                for _hop in range(6):
+                    hop_err = check_outbound_url(current)
+                    if hop_err:
+                        return ToolResult(ok=False, error=hop_err)
+                    resp = await client.get(current, headers={"User-Agent": "Thomas-AI/0.14"})
+                    if resp.is_redirect:
+                        location = resp.headers.get("location")
+                        if not location:
+                            break
+                        current = urljoin(current, location)
+                        continue
+                    break
+                else:
+                    return ToolResult(ok=False, error="Too many redirects")
                 resp.raise_for_status()
             soup = BeautifulSoup(resp.text, "html.parser")
             # Remove scripts and styles

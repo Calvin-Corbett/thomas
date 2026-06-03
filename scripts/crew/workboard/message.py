@@ -5,9 +5,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
+import time
 from collections.abc import Sequence
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -24,11 +27,24 @@ from scripts.forge.gates import workboard_claims as claims_gate
 
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
+COORDINATION_DIR = ROOT / "runtime" / "coordination"
+LOCK_FILE = COORDINATION_DIR / "workboard_message.lock"
+LOCK_TIMEOUT_SECONDS = 10.0
+LOCK_STALE_SECONDS = 60.0
 MESSAGE_HEADING = "Agent Message Traffic"
 NONE_ENTRY = "- none"
 
 MESSAGE_STATES = {"open", "acked", "resolved"}
 MESSAGE_PRIORITIES = {"p0", "p1", "p2"}
+ESCALATION_MINUTES = {"p0": 15, "p1": 60}
+PRIORITY_SORT = {"p0": 0, "p1": 1, "p2": 2}
+AGENT_ENV_KEYS = (
+    "THOMAS_AGENT_ID",
+    "AGENT_ID",
+    "CODEX_AGENT_ID",
+    "CLAUDE_AGENT_ID",
+    "GEMINI_AGENT_ID",
+)
 MESSAGE_KINDS = {
     "coordination",
     "scope_change",
@@ -57,6 +73,54 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+@contextmanager
+def _file_lock(lock_file: Path = LOCK_FILE, timeout: float = LOCK_TIMEOUT_SECONDS):
+    COORDINATION_DIR.mkdir(parents=True, exist_ok=True)
+    deadline = time.time() + timeout
+    fd: int | None = None
+    while True:
+        try:
+            fd = os.open(str(lock_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, f"pid={os.getpid()} ts={time.time():.3f}".encode("utf-8", errors="ignore"))
+            break
+        except (FileExistsError, PermissionError):
+            try:
+                age = time.time() - lock_file.stat().st_mtime
+            except FileNotFoundError:
+                age = 0.0
+            if age > LOCK_STALE_SECONDS:
+                try:
+                    lock_file.unlink()
+                except (FileNotFoundError, PermissionError):
+                    pass
+                continue
+            if time.time() >= deadline:
+                raise TimeoutError(f"Timed out waiting for lock: {lock_file}")
+            time.sleep(0.05)
+    try:
+        yield
+    finally:
+        if fd is not None:
+            os.close(fd)
+        try:
+            lock_file.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def resolve_current_agent(explicit: str = "") -> str:
+    candidate = str(explicit or "").strip()
+    if candidate:
+        return candidate
+    for key in AGENT_ENV_KEYS:
+        value = str(os.getenv(key) or "").strip()
+        if value:
+            return value
+    if str(os.getenv("CODEX_SHELL") or "").strip() or str(os.getenv("CODEX_THREAD_ID") or "").strip():
+        return "codex"
+    return ""
+
+
 def _parse_iso_utc(raw: str) -> datetime | None:
     text = str(raw or "").strip()
     if not text:
@@ -70,6 +134,33 @@ def _parse_iso_utc(raw: str) -> datetime | None:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
+
+
+def _message_age_seconds(row: dict[str, str], *, now: datetime | None = None) -> int:
+    stamp = _parse_iso_utc(str(row.get("updated_at") or row.get("created_at") or ""))
+    if stamp is None:
+        return 0
+    current = now or datetime.now(timezone.utc)
+    return max(0, int((current - stamp).total_seconds()))
+
+
+def _escalation(row: dict[str, str], *, now: datetime | None = None) -> str:
+    if _norm(row.get("state", "")) != "open":
+        return ""
+    threshold = ESCALATION_MINUTES.get(_norm(row.get("priority", "")))
+    if threshold is None:
+        return ""
+    age_seconds = _message_age_seconds(row, now=now)
+    if age_seconds >= threshold * 60:
+        return f"stale_{_norm(row.get('priority', ''))}"
+    return ""
+
+
+def _decorate_message(row: dict[str, str], *, now: datetime | None = None) -> dict[str, str]:
+    out = dict(row)
+    out["age_seconds"] = str(_message_age_seconds(row, now=now))
+    out["escalation"] = _escalation(row, now=now)
+    return out
 
 
 def _sanitize(label: str, value: str) -> str:
@@ -321,6 +412,7 @@ def list_messages(
     # "task-manager-agent" — and vice versa.
     sender_is_tm = _is_task_manager_agent(sender)
     recipient_is_tm = _is_task_manager_agent(recipient)
+    now = datetime.now(timezone.utc)
     out: list[dict[str, str]] = []
     for row in rows:
         row_from = _norm(row.get("from", ""))
@@ -337,8 +429,28 @@ def list_messages(
             continue
         if task_key and _norm(row.get("task_id", "")) != task_key:
             continue
-        out.append(dict(row))
+        out.append(_decorate_message(dict(row), now=now))
+    if recipient_key and (not state_key or state_key == "open"):
+        out.sort(
+            key=lambda row: (
+                PRIORITY_SORT.get(_norm(row.get("priority", "")), 99),
+                0 if str(row.get("escalation") or "").strip() else 1,
+                -int(str(row.get("age_seconds") or "0") or "0"),
+                str(row.get("created_at") or ""),
+            )
+        )
     return True, {"messages": out, "message_count": len(out)}
+
+
+def unread_messages(
+    workboard_path: Path,
+    *,
+    agent: str,
+) -> tuple[bool, dict[str, object]]:
+    agent_clean = str(agent or "").strip()
+    if not agent_clean:
+        return False, {"error": "agent identity is required for inbox checks"}
+    return list_messages(workboard_path, recipient=agent_clean, state="open")
 
 
 def send_message(
@@ -355,56 +467,57 @@ def send_message(
     msg_id: str = "",
     require_claims_to_have_active_task: bool = True,
 ) -> tuple[bool, dict[str, object]]:
-    sender_clean = _sanitize("from", sender)
-    recipient_clean = _sanitize("to", recipient)
-    summary_clean = _sanitize("summary", summary)
-    task_clean = _sanitize("task_id", task_id or "none")
-    kind_clean = _validate_kind(kind)
-    priority_clean = _validate_priority(priority)
-    requested_clean = _sanitize("requested_action", requested_action or "none")
-    decision_clean = _validate_decision(decision or "pending")
-    if _norm(kind_clean) not in TASK_ID_OPTIONAL_KINDS and _norm(task_clean) in {"", "none", "_none_"}:
-        return False, {
-            "error": (f"task_id is required for kind `{kind_clean}` (only coordination/ping may use task_id=none)")
-        }
+    with _file_lock():
+        sender_clean = _sanitize("from", sender)
+        recipient_clean = _sanitize("to", recipient)
+        summary_clean = _sanitize("summary", summary)
+        task_clean = _sanitize("task_id", task_id or "none")
+        kind_clean = _validate_kind(kind)
+        priority_clean = _validate_priority(priority)
+        requested_clean = _sanitize("requested_action", requested_action or "none")
+        decision_clean = _validate_decision(decision or "pending")
+        if _norm(kind_clean) not in TASK_ID_OPTIONAL_KINDS and _norm(task_clean) in {"", "none", "_none_"}:
+            return False, {
+                "error": (f"task_id is required for kind `{kind_clean}` (only coordination/ping may use task_id=none)")
+            }
 
-    lines = workboard_path.read_text(encoding="utf-8").splitlines()
-    section = _ensure_section(lines, heading=MESSAGE_HEADING)
-    rows, errors = _load_messages(lines, section)
-    if errors:
-        return False, {"error": "message section parse failed", "violations": errors}
+        lines = workboard_path.read_text(encoding="utf-8").splitlines()
+        section = _ensure_section(lines, heading=MESSAGE_HEADING)
+        rows, errors = _load_messages(lines, section)
+        if errors:
+            return False, {"error": "message section parse failed", "violations": errors}
 
-    message_id = str(msg_id or "").strip() or _next_message_id(rows, sender_clean)
-    if any(_norm(row.get("msg_id", "")) == _norm(message_id) for row in rows):
-        return False, {"error": f"message id `{message_id}` already exists"}
+        message_id = str(msg_id or "").strip() or _next_message_id(rows, sender_clean)
+        if any(_norm(row.get("msg_id", "")) == _norm(message_id) for row in rows):
+            return False, {"error": f"message id `{message_id}` already exists"}
 
-    now_iso = _now_iso()
-    row = _normalize_message_fields(
-        {
-            "msg_id": message_id,
-            "from": sender_clean,
-            "to": recipient_clean,
-            "task_id": task_clean,
-            "kind": kind_clean,
-            "priority": priority_clean,
-            "state": "open",
-            "summary": summary_clean,
-            "requested_action": requested_clean,
-            "decision": decision_clean,
-            "created_at": now_iso,
-            "updated_at": now_iso,
-            "updated_by": sender_clean,
-        }
-    )
-    rows.append(row)
-    ok, violations = _write_messages(
-        workboard_path,
-        messages=rows,
-        require_claims_to_have_active_task=bool(require_claims_to_have_active_task),
-    )
-    if not ok:
-        return False, {"error": "message update rejected by gate", "violations": violations}
-    return True, {"message": row}
+        now_iso = _now_iso()
+        row = _normalize_message_fields(
+            {
+                "msg_id": message_id,
+                "from": sender_clean,
+                "to": recipient_clean,
+                "task_id": task_clean,
+                "kind": kind_clean,
+                "priority": priority_clean,
+                "state": "open",
+                "summary": summary_clean,
+                "requested_action": requested_clean,
+                "decision": decision_clean,
+                "created_at": now_iso,
+                "updated_at": now_iso,
+                "updated_by": sender_clean,
+            }
+        )
+        rows.append(row)
+        ok, violations = _write_messages(
+            workboard_path,
+            messages=rows,
+            require_claims_to_have_active_task=bool(require_claims_to_have_active_task),
+        )
+        if not ok:
+            return False, {"error": "message update rejected by gate", "violations": violations}
+        return True, {"message": row}
 
 
 def latest_activity_by_task(
@@ -445,67 +558,68 @@ def _set_message_state(
     decision: str = "",
     require_claims_to_have_active_task: bool = True,
 ) -> tuple[bool, dict[str, object]]:
-    msg_key = _norm(msg_id)
-    if not msg_key:
-        return False, {"error": "msg_id is required"}
-    actor_clean = _sanitize("by", actor)
-    state_clean = _validate_state(state)
+    with _file_lock():
+        msg_key = _norm(msg_id)
+        if not msg_key:
+            return False, {"error": "msg_id is required"}
+        actor_clean = _sanitize("by", actor)
+        state_clean = _validate_state(state)
 
-    lines = workboard_path.read_text(encoding="utf-8").splitlines()
-    section = _find_section(lines, heading_prefix=MESSAGE_HEADING)
-    if section is None:
-        return False, {"error": "missing `## Agent Message Traffic` section"}
-    rows, errors = _load_messages(lines, section)
-    if errors:
-        return False, {"error": "message section parse failed", "violations": errors}
+        lines = workboard_path.read_text(encoding="utf-8").splitlines()
+        section = _find_section(lines, heading_prefix=MESSAGE_HEADING)
+        if section is None:
+            return False, {"error": "missing `## Agent Message Traffic` section"}
+        rows, errors = _load_messages(lines, section)
+        if errors:
+            return False, {"error": "message section parse failed", "violations": errors}
 
-    target: dict[str, str] | None = None
-    for row in rows:
-        if _norm(row.get("msg_id", "")) == msg_key:
-            target = row
-            break
-    if target is None:
-        return False, {"error": f"message `{msg_id}` not found"}
+        target: dict[str, str] | None = None
+        for row in rows:
+            if _norm(row.get("msg_id", "")) == msg_key:
+                target = row
+                break
+        if target is None:
+            return False, {"error": f"message `{msg_id}` not found"}
 
-    current_state = _validate_state(target.get("state", "open"))
-    if current_state == state_clean:
-        return False, {"error": f"message `{msg_id}` already in state `{state_clean}`"}
-    if current_state == "resolved":
-        return False, {"error": f"message `{msg_id}` is already resolved"}
-    if current_state == "acked" and state_clean != "resolved":
-        return False, {"error": f"invalid state transition `{current_state}` -> `{state_clean}`"}
+        current_state = _validate_state(target.get("state", "open"))
+        if current_state == state_clean:
+            return False, {"error": f"message `{msg_id}` already in state `{state_clean}`"}
+        if current_state == "resolved":
+            return False, {"error": f"message `{msg_id}` is already resolved"}
+        if current_state == "acked" and state_clean != "resolved":
+            return False, {"error": f"invalid state transition `{current_state}` -> `{state_clean}`"}
 
-    actor_key = _norm(actor_clean)
-    sender_key = _norm(target.get("from", ""))
-    recipient_key = _norm(target.get("to", ""))
-    if state_clean == "acked" and actor_key != recipient_key:
-        return False, {
-            "error": (f"only recipient `{target.get('to', '')}` can ack message `{target.get('msg_id', msg_id)}`")
-        }
-    if state_clean == "resolved":
-        allowed = {sender_key, recipient_key}
-        if actor_key not in allowed and not _is_task_manager_agent(actor_clean):
+        actor_key = _norm(actor_clean)
+        sender_key = _norm(target.get("from", ""))
+        recipient_key = _norm(target.get("to", ""))
+        if state_clean == "acked" and actor_key != recipient_key:
             return False, {
-                "error": (
-                    f"only sender `{target.get('from', '')}` or recipient `{target.get('to', '')}` "
-                    f"can resolve message `{target.get('msg_id', msg_id)}`"
-                )
+                "error": (f"only recipient `{target.get('to', '')}` can ack message `{target.get('msg_id', msg_id)}`")
             }
+        if state_clean == "resolved":
+            allowed = {sender_key, recipient_key}
+            if actor_key not in allowed and not _is_task_manager_agent(actor_clean):
+                return False, {
+                    "error": (
+                        f"only sender `{target.get('from', '')}` or recipient `{target.get('to', '')}` "
+                        f"can resolve message `{target.get('msg_id', msg_id)}`"
+                    )
+                }
 
-    target["state"] = state_clean
-    target["updated_at"] = _now_iso()
-    target["updated_by"] = actor_clean
-    if decision:
-        target["decision"] = _validate_decision(decision)
+        target["state"] = state_clean
+        target["updated_at"] = _now_iso()
+        target["updated_by"] = actor_clean
+        if decision:
+            target["decision"] = _validate_decision(decision)
 
-    ok, violations = _write_messages(
-        workboard_path,
-        messages=rows,
-        require_claims_to_have_active_task=bool(require_claims_to_have_active_task),
-    )
-    if not ok:
-        return False, {"error": "message update rejected by gate", "violations": violations}
-    return True, {"message": target}
+        ok, violations = _write_messages(
+            workboard_path,
+            messages=rows,
+            require_claims_to_have_active_task=bool(require_claims_to_have_active_task),
+        )
+        if not ok:
+            return False, {"error": "message update rejected by gate", "violations": violations}
+        return True, {"message": target}
 
 
 def ack_message(
@@ -562,6 +676,9 @@ def run(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--requested-action", default="none")
     parser.add_argument("--decision", default="")
     parser.add_argument("--state", default="")
+    parser.add_argument("--agent", default="", help="Current agent identity for default inbox/sent modes.")
+    parser.add_argument("--all", action="store_true", help="With --list, show all messages instead of my unread inbox.")
+    parser.add_argument("--sent", action="store_true", help="With --list, show messages sent by the current agent.")
     args = parser.parse_args(argv)
 
     workboard_path = Path(args.workboard).expanduser()
@@ -592,31 +709,48 @@ def run(argv: Sequence[str] | None = None) -> int:
             )
             action_name = "send"
         elif args.ack:
-            if not str(args.msg_id).strip() or not str(args.by).strip():
-                raise ValueError("--msg-id and --by are required for --ack")
+            actor = str(args.by or "").strip() or resolve_current_agent(args.agent)
+            if not str(args.msg_id).strip() or not actor:
+                raise ValueError("--msg-id and --by/--agent are required for --ack")
             ok, payload = ack_message(
                 workboard_path,
                 msg_id=args.msg_id,
-                actor=args.by,
+                actor=actor,
                 decision=args.decision,
             )
             action_name = "ack"
         elif args.resolve:
-            if not str(args.msg_id).strip() or not str(args.by).strip():
-                raise ValueError("--msg-id and --by are required for --resolve")
+            actor = str(args.by or "").strip() or resolve_current_agent(args.agent)
+            if not str(args.msg_id).strip() or not actor:
+                raise ValueError("--msg-id and --by/--agent are required for --resolve")
             ok, payload = resolve_message(
                 workboard_path,
                 msg_id=args.msg_id,
-                actor=args.by,
+                actor=actor,
                 decision=args.decision,
             )
             action_name = "resolve"
         else:
+            sender = args.from_agent
+            recipient = args.to_agent
+            state = args.state
+            if args.sent:
+                sender = sender or resolve_current_agent(args.agent)
+                if not sender:
+                    raise ValueError("--sent requires --agent or an agent identity environment variable")
+            elif not args.all and not sender and not recipient and not state:
+                recipient = resolve_current_agent(args.agent)
+                if not recipient:
+                    raise ValueError(
+                        "--list defaults to this agent's unread inbox; pass --agent, set AGENT_ID/THOMAS_AGENT_ID, "
+                        "or use --all"
+                    )
+                state = "open"
             ok, payload = list_messages(
                 workboard_path,
-                sender=args.from_agent,
-                recipient=args.to_agent,
-                state=args.state,
+                sender=sender,
+                recipient=recipient,
+                state=state,
                 task_id=args.task_id if _norm(args.task_id) not in {"", "none"} else "",
             )
             action_name = "list"
@@ -633,10 +767,13 @@ def run(argv: Sequence[str] | None = None) -> int:
         if ok:
             if action_name == "list":
                 for row in list(payload.get("messages") or []):
-                    print(
-                        f"- {row.get('msg_id')}: {row.get('from')} -> {row.get('to')} "
-                        f"[{row.get('state')}] {row.get('summary')}"
-                    )
+                    priority = str(row.get("priority") or "").strip()
+                    escalation = str(row.get("escalation") or "").strip()
+                    state_label = str(row.get("state") or "").strip()
+                    badge = f"{state_label} {priority}".strip()
+                    if escalation:
+                        badge = f"{badge} ESCALATED"
+                    print(f"- {row.get('msg_id')}: {row.get('from')} -> {row.get('to')} [{badge}] {row.get('summary')}")
             else:
                 row = dict(payload.get("message") or {})
                 print(

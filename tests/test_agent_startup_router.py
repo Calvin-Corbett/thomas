@@ -242,3 +242,55 @@ def test_router_text_output_surfaces_preflight(tmp_path: Path) -> None:
     assert "gate_handling:" in text
     assert "auto_remediate_gates:" in text
     assert "hard_stop_gates:" in text
+
+
+def test_router_text_output_surfaces_unread_inbox() -> None:
+    payload = {
+        "lane": "chat",
+        "workflow_mode": "guided",
+        "edit_intent": False,
+        "workboard_required": False,
+        "workboard": {
+            "path": "plans/thomas/WORKBOARD.md",
+            "active_claims": 0,
+            "matching_claims": [],
+            "claim_conflict": False,
+            "stale": False,
+            "updated_at": "2026-06-02",
+        },
+        "bootstrap_command": "",
+        "gate_handling": {},
+        "flags": {
+            "ui_proof": False,
+            "benchmark_mode": False,
+            "tracked_work": False,
+            "multi_agent": False,
+            "long_running": False,
+            "risky_paths": [],
+        },
+        "paths": [],
+        "required_reads": [],
+        "required_checks": [],
+        "escalation_triggers": [],
+        "preflight": {},
+        "inbox": {
+            "ok": True,
+            "agent": "codex",
+            "unread_count": 1,
+            "messages": [
+                {
+                    "msg_id": "msg-1",
+                    "from": "claude",
+                    "priority": "p0",
+                    "summary": "stop before touching scripts",
+                    "escalation": "stale_p0",
+                }
+            ],
+        },
+    }
+
+    text = mod._text_output(payload)
+
+    assert "inbox: agent=codex; unread=1" in text
+    assert "msg-1: from=claude priority=p0 ESCALATED; stop before touching scripts" in text
+    assert "inbox_action: python scripts/crew/workboard/message.py --list --agent codex" in text

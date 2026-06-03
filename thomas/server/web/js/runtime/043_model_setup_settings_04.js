@@ -88,8 +88,17 @@ function moduleUiEditorParseShellPluginCards(rawCards) {
 function moduleUiEditorNormalizeGitHubRawUrl(urlRaw) {
     const url = safeString(urlRaw);
     if (!url) return '';
-    if (url.includes('raw.githubusercontent.com')) return url;
-    if (/^https?:\/\/github\.com\//i.test(url) && /\/blob\//i.test(url)) {
+    let parsed = null;
+    try {
+        parsed = new URL(url);
+    } catch {
+        return url;
+    }
+    const host = (parsed.hostname || '').toLowerCase();
+    if (host === 'raw.githubusercontent.com') return url;
+    if ((parsed.protocol === 'http:' || parsed.protocol === 'https:')
+        && host === 'github.com'
+        && /\/blob\//i.test(parsed.pathname)) {
         return url
             .replace('https://github.com/', 'https://raw.githubusercontent.com/')
             .replace('/blob/', '/');

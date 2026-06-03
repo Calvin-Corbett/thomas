@@ -13,6 +13,7 @@ import zipfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from aiohttp import web
 
@@ -402,6 +403,9 @@ class PluginRegistry:
     def validate_api_key(self, key: str) -> bool:
         if not key:
             return False
+        env_key = _safe_text(os.environ.get("THOMAS_PLUGIN_STORE_API_KEY"))
+        if env_key and hmac.compare_digest(key, env_key):
+            return True
         try:
             payload = json.loads(self._api_keys_file.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError):
@@ -409,7 +413,16 @@ class PluginRegistry:
         keys = payload.get("keys") if isinstance(payload, dict) else {}
         if not isinstance(keys, dict):
             return False
-        return key in keys and bool(keys[key].get("active", True))
+        # Constant-time match: compare against every stored key with
+        # hmac.compare_digest. A plain `in`/`==` leaks the key byte-by-byte via
+        # timing; not early-returning also avoids revealing a match's position.
+        matched = False
+        active = False
+        for stored_key, meta in keys.items():
+            if hmac.compare_digest(key, stored_key):
+                matched = True
+                active = bool(meta.get("active", True)) if isinstance(meta, dict) else True
+        return matched and active
 
     def record_download(self, plugin_id: str) -> None:
         manifest_path = self._plugins_dir / plugin_id / "manifest.json"
@@ -455,10 +468,23 @@ def get_registry() -> PluginRegistry:
     return _registry
 
 
+def _trust_forwarded_for() -> bool:
+    """Whether X-Forwarded-For may be trusted for the client identity.
+
+    Off by default: on a direct connection a client can set any XFF value, so
+    trusting it unconditionally lets an attacker mint a fresh rate-limit bucket
+    per request and bypass the per-IP throttle. Operators who terminate behind a
+    reverse proxy that *overwrites* XFF opt in with THOMAS_TRUST_FORWARDED_FOR=1.
+    """
+    return _safe_text(os.environ.get("THOMAS_TRUST_FORWARDED_FOR")).lower() in {"1", "true", "yes", "on"}
+
+
 def _get_client_ip(request: web.Request) -> str:
-    forwarded = _safe_text(request.headers.get("X-Forwarded-For"))
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    if _trust_forwarded_for():
+        forwarded = _safe_text(request.headers.get("X-Forwarded-For"))
+        if forwarded:
+            # Left-most entry is the original client per the trusted proxy chain.
+            return forwarded.split(",")[0].strip()
     peername = request.transport.get_extra_info("peername") if request.transport else None
     return peername[0] if peername else "unknown"
 
@@ -530,7 +556,10 @@ async def api_plugin_manual_download(request: web.Request) -> web.StreamResponse
     if not plugin:
         return web.json_response({"error": f"Plugin '{plugin_id}' not found"}, status=404)
     token = _sign_token(plugin_id, "manual-download", int(time.time()) + DOWNLOAD_TOKEN_TTL)
-    raise web.HTTPFound(location=f"/api/v1/plugins/download/{token}")
+    # Redirect only ever targets this fixed same-origin download path. The token
+    # embeds the (user-supplied) plugin id, so percent-encode it as a single path
+    # segment to prevent any URL/header manipulation; aiohttp re-decodes match_info.
+    raise web.HTTPFound(location=f"/api/v1/plugins/download/{quote(token, safe='')}")
 
 
 async def api_plugin_download_token(request: web.Request) -> web.Response:

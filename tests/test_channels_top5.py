@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import urlparse
 
 from click.testing import CliRunner
 
@@ -112,15 +113,16 @@ def test_channels_cli_test_validates_whatsapp_local_shape(tmp_path: Path) -> Non
 def test_provider_contract_send_supports_top_five(monkeypatch) -> None:
     def fake_urlopen(req, timeout):
         url = getattr(req, "full_url", "")
-        if "api.telegram.org" in url:
+        host = urlparse(url).hostname or ""
+        if host == "api.telegram.org":
             return _FakeHTTPResponse({"ok": True, "result": {"message_id": 101, "id": 7}})
-        if "discord.com" in url:
+        if host == "discord.com":
             return _FakeHTTPResponse({"id": "discord-1"})
-        if "graph.facebook.com" in url:
+        if host == "graph.facebook.com":
             return _FakeHTTPResponse({"messages": [{"id": "wamid-1"}]})
-        if "webchat.example.test" in url:
+        if host == "webchat.example.test":
             return _FakeHTTPResponse({"message_id": "webchat-1"})
-        if "hooks.slack.com" in url:
+        if host == "hooks.slack.com":
             return _FakeHTTPResponse("ok")
         raise AssertionError(f"unexpected url: {url}")
 

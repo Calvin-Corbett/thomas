@@ -137,7 +137,10 @@ def _get_user_id(request: web.Request) -> str:
             raise web.HTTPUnauthorized(text="server api token is not configured")
         if not hmac.compare_digest(incoming.encode("utf-8"), expected.encode("utf-8")):
             raise web.HTTPUnauthorized(text="invalid api token")
-        return hashlib.sha256(incoming.encode("utf-8")).hexdigest()
+        # The token is already verified above via constant-time compare; this hash
+        # is only a stable identity/bucket key for membership lookups, not a
+        # security control protecting the token, so it is not security-sensitive.
+        return hashlib.sha256(incoming.encode("utf-8"), usedforsecurity=False).hexdigest()
 
     raw = str(request.headers.get("X-User-Id") or "").strip()
     return raw if raw else "default"

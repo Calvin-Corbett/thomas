@@ -19,7 +19,13 @@ _REGISTRY_VERSION = 1
 _INSTALLED_REGISTRY_RELATIVE_PATH = Path(".thomas") / "installed_marketplace_plugins.json"
 _INSTALLED_PLUGINS_RELATIVE_DIR = Path(".thomas") / "plugins"
 _PLUGIN_STORE_IDENTITY_RELATIVE_PATH = Path(".thomas") / "plugin_store_identity.json"
-_DEFAULT_PLUGIN_STORE_API_KEY = "local-dev-install-key"
+# NOT a secret: a well-known placeholder credential for the *local* dev plugin
+# store only. It is shipped in source (and asserted verbatim in the test suite),
+# carries no access to any real resource. Production plugin-store access refuses
+# to enable unless THOMAS_PLUGIN_STORE_API_KEY is present. The
+# clear-text-storage finding on the identity file is therefore a false positive
+# for this constant. Real keys come from the environment and are never written here.
+_DEFAULT_PLUGIN_STORE_API_KEY = "local-dev-install-key"  # noqa: S105 - non-secret local-dev placeholder
 _MARKETPLACE_TYPES = {"command_center", "plugin", "dependency", "integration"}
 _LEFT_NAV_BEHAVIORS = {"none", "workspace"}
 _DEFAULT_NAV_SECTIONS = {"command_centers", "installed"}

@@ -216,6 +216,7 @@ async def handle_post_loop_completion(
         require_tests_for_code_edits=require_tests,
         require_monolith_guard_for_coding=bool(getattr(quality_cfg, "require_monolith_guard_for_coding", True)),
         strict_issue_ownership=bool(strict_issue_ownership),
+        skill_required_checks=list(runtime_skills_payload.get("required_checks") or []),
         attempt=int(_quality_retry_count),
         repo_root=Path.cwd(),
     )

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import json
+import logging
 import re
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
@@ -14,6 +15,8 @@ from typing import Any, Literal
 from aiohttp import web
 
 from thomas.core.persistence import get_persistence
+
+log = logging.getLogger(__name__)
 
 RequireAccessFn = Callable[[web.Request], None]
 ReadJsonFn = Callable[[web.Request], Awaitable[Any]]
@@ -326,13 +329,10 @@ def _resolve_initiative_enqueue() -> tuple[Any, str]:
 
         errors.append(f"{mod_name}: no enqueue method found")
 
+    # Log internal probe diagnostics server-side; do not leak them to the client.
+    log.error("initiative engine not found; probe errors: %s", errors[-6:])
     raise web.HTTPNotImplemented(
-        text=json.dumps(
-            {
-                "error": "initiative engine not found",
-                "probe_errors": errors[-6:],
-            }
-        ),
+        text=json.dumps({"error": "initiative engine not found"}),
     )
 
 

@@ -35,6 +35,18 @@ from thomas.server.desktop_plugins_manifest import (
     load_bundled_desktop_plugin_manifest,
     load_desktop_plugin_manifest_from_data,
 )
+from thomas.server.net_safety import validate_public_url
+
+
+def _is_production_plugin_store_mode(config: AppConfig | None = None) -> bool:
+    if config is not None and bool(getattr(config, "is_production", False)):
+        return True
+    environment = _safe_text(os.environ.get("THOMAS_ENV")).lower()
+    return environment in {"prod", "production", "release", "live"}
+
+
+def _missing_plugin_store_api_key_message() -> str:
+    return "THOMAS_PLUGIN_STORE_API_KEY must be set in production before plugin store access is enabled"
 
 
 def _load_installed_registry(config: AppConfig) -> dict[str, Any]:
@@ -76,8 +88,31 @@ def _remove_installed_record(config: AppConfig, plugin_id: str) -> None:
     _save_installed_registry(config, rows)
 
 
+def _safe_plugin_id_segment(plugin_id: str) -> str:
+    """Validate that ``plugin_id`` is a single, safe path segment.
+
+    ``plugin_id`` is request-controlled (URL match_info), so reject anything
+    that could escape the plugins root: empty values, path separators, drive
+    markers, and ``.``/``..`` segments.
+    """
+    candidate = _safe_text(plugin_id)
+    if not candidate:
+        raise ValueError("plugin_id is required")
+    if "/" in candidate or "\\" in candidate or candidate in {".", ".."}:
+        raise ValueError("Unsafe plugin id")
+    if PurePosixPath(candidate).is_absolute() or PurePosixPath(candidate).parts != (candidate,):
+        raise ValueError("Unsafe plugin id")
+    return candidate
+
+
 def _installed_plugin_dir(config: AppConfig, plugin_id: str) -> Path:
-    return _installed_plugins_root(config) / plugin_id
+    root = _installed_plugins_root(config)
+    safe_id = _safe_plugin_id_segment(plugin_id)
+    resolved = (root / safe_id).resolve()
+    # Confine the resolved directory to the plugins root to block traversal.
+    if not resolved.is_relative_to(root.resolve()):
+        raise ValueError("Unsafe plugin id")
+    return resolved
 
 
 def _delete_installed_plugin_payload(config: AppConfig, plugin_id: str) -> bool:
@@ -174,7 +209,12 @@ def list_installed_plugins(config: AppConfig, *, include_disabled: bool = True) 
             continue
         if not include_disabled and not row["enabled"]:
             continue
-        if not _installed_plugin_dir(config, row["plugin_id"]).exists():
+        try:
+            plugin_dir = _installed_plugin_dir(config, row["plugin_id"])
+        except ValueError:
+            # Skip registry rows whose plugin_id is not a safe path segment.
+            continue
+        if not plugin_dir.exists():
             continue
         out.append(row)
     return out
@@ -459,6 +499,8 @@ def get_or_create_plugin_store_api_key(config: AppConfig) -> str:
     env_key = _safe_text(os.environ.get("THOMAS_PLUGIN_STORE_API_KEY"))
     if env_key:
         return env_key
+    if _is_production_plugin_store_mode(config):
+        raise RuntimeError(_missing_plugin_store_api_key_message())
     path = _plugin_store_identity_path(config)
     payload = _read_json_file(path, {})
     if isinstance(payload, dict):
@@ -494,21 +536,21 @@ def install_plugin_from_store(
     verify_url = urljoin(base_url + "/", "api/v1/plugins/verify")
     with httpx.Client(timeout=25.0, follow_redirects=True) as client:
         token_response = client.post(
-            token_url,
+            validate_public_url(token_url),
             headers={"X-Thomas-API-Key": api_key},
             json={"plugin_id": plugin_id, "channel": _safe_text(channel) or "stable"},
         )
         token_response.raise_for_status()
         token_payload = token_response.json()
         download_url = urljoin(base_url + "/", _safe_text(token_payload.get("download_url")).lstrip("/"))
-        bundle_response = client.get(download_url)
+        bundle_response = client.get(validate_public_url(download_url))
         bundle_response.raise_for_status()
         bundle_bytes = bundle_response.content
         expected_sha256 = _safe_text(token_payload.get("sha256"))
         actual_sha256 = hashlib.sha256(bundle_bytes).hexdigest()
         if expected_sha256 and expected_sha256 != actual_sha256:
             raise ValueError("Hosted plugin download checksum mismatch")
-        verify_response = client.post(verify_url, json={"plugin_id": plugin_id})
+        verify_response = client.post(validate_public_url(verify_url), json={"plugin_id": plugin_id})
         verify_response.raise_for_status()
         verify_payload = verify_response.json()
         if not bool(verify_payload.get("valid")):
@@ -559,7 +601,20 @@ def build_plugin_install_deep_link(plugin_id: str, store: str, *, channel: str =
 
 
 def create_plugin_store_api_key_file(storage_dir: Path, api_key: str | None = None) -> None:
-    key_value = _safe_text(api_key) or _DEFAULT_PLUGIN_STORE_API_KEY
+    explicit_key = _safe_text(api_key)
+    env_key = _safe_text(os.environ.get("THOMAS_PLUGIN_STORE_API_KEY"))
+    if _is_production_plugin_store_mode():
+        if explicit_key == _DEFAULT_PLUGIN_STORE_API_KEY:
+            raise RuntimeError(_missing_plugin_store_api_key_message())
+        if not explicit_key:
+            if env_key:
+                api_keys_path = storage_dir / "api_keys.json"
+                if not api_keys_path.exists():
+                    _write_json_file(api_keys_path, {"keys": {}})
+                return
+            raise RuntimeError(_missing_plugin_store_api_key_message())
+
+    key_value = explicit_key or env_key or _DEFAULT_PLUGIN_STORE_API_KEY
     payload = _read_json_file(storage_dir / "api_keys.json", {"keys": {}})
     if not isinstance(payload, dict):
         payload = {"keys": {}}

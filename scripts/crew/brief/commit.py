@@ -41,6 +41,7 @@ LOCAL_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("agent_safety", (sys.executable, "scripts/validate_agent_changes.py")),
     ("exception_handler", (sys.executable, "scripts/forge/gates/exception_handler_gate.py")),
     ("duplicate_filename", (sys.executable, "scripts/forge/gates/duplicate_filename_gate.py")),
+    ("workboard_inbox", (sys.executable, "scripts/forge/gates/workboard_inbox.py")),
     (
         "active_folder_guard",
         (
@@ -105,6 +106,7 @@ LOCAL_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("type_safety", (sys.executable, "scripts/forge/gates/type_safety_gate.py")),
     ("circular_imports", (sys.executable, "scripts/forge/gates/circular_imports_gate.py")),
     ("changelog", (sys.executable, "scripts/forge/gates/changelog_gate.py")),
+    ("workboard_inbox_final", (sys.executable, "scripts/forge/gates/workboard_inbox.py")),
 )
 FALLBACK_SCOPE_ENV = "THOMAS_WORKBOARD_SCOPE_FALLBACK"
 FALLBACK_REASON_ENV = "THOMAS_WORKBOARD_SCOPE_FALLBACK_REASON"

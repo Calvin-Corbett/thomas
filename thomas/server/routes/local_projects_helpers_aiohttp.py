@@ -807,7 +807,8 @@ def _pick_folder_via_dialog() -> str:
             pass
         selected = filedialog.askdirectory(title="Choose a project folder for My Stuff", mustexist=True)
     except Exception as exc:  # pragma: no cover - platform dependent
-        raise web.HTTPConflict(text=f"could not open the local folder picker: {exc}") from exc
+        log.exception("Local folder picker failed")
+        raise web.HTTPConflict(text="could not open the local folder picker") from exc
     finally:
         if root is not None:
             try:

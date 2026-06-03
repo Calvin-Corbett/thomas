@@ -6,10 +6,17 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+import pytest
 from aiohttp import web
 from aiohttp.test_utils import AioHTTPTestCase
 
-from thomas.server.desktop_plugins import build_plugin_install_deep_link, parse_plugin_install_deep_link
+from thomas.core.config import AppConfig, MemoryConfig
+from thomas.server.desktop_plugins import (
+    build_plugin_install_deep_link,
+    create_plugin_store_api_key_file,
+    get_or_create_plugin_store_api_key,
+    parse_plugin_install_deep_link,
+)
 from thomas.server.routes import plugin_hosting
 
 
@@ -97,6 +104,38 @@ def _build_registry(
         signature=signature,
     )
     return registry
+
+
+def test_plugin_store_key_file_requires_env_key_in_production(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("THOMAS_ENV", "production")
+    monkeypatch.delenv("THOMAS_PLUGIN_STORE_API_KEY", raising=False)
+
+    with pytest.raises(RuntimeError, match="THOMAS_PLUGIN_STORE_API_KEY"):
+        create_plugin_store_api_key_file(tmp_path)
+
+
+def test_plugin_store_key_file_uses_env_key_in_production_without_writing_secret(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("THOMAS_ENV", "production")
+    monkeypatch.setenv("THOMAS_PLUGIN_STORE_API_KEY", "prod-plugin-store-key")
+
+    registry = plugin_hosting.PluginRegistry(tmp_path)
+    registry.ensure_storage()
+
+    assert registry.validate_api_key("prod-plugin-store-key") is True
+    assert registry.validate_api_key("local-dev-install-key") is False
+    assert json.loads((tmp_path / "api_keys.json").read_text(encoding="utf-8")) == {"keys": {}}
+
+
+def test_get_or_create_plugin_store_api_key_requires_env_key_in_production(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("THOMAS_PLUGIN_STORE_API_KEY", raising=False)
+    config = AppConfig(memory=MemoryConfig(root=str(tmp_path)), environment="production")
+
+    with pytest.raises(RuntimeError, match="THOMAS_PLUGIN_STORE_API_KEY"):
+        get_or_create_plugin_store_api_key(config)
 
 
 class TestPluginHostingRoutes(AioHTTPTestCase):

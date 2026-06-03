@@ -862,11 +862,14 @@ def _setup_routes_and_handlers(
         if not raw_path or rel_path.is_absolute() or ".." in rel_path.parts:
             raise web.HTTPNotFound()
 
-        candidates = (
-            web_dir / rel_path,
-            web_dir / "static" / rel_path,
-        )
-        for candidate in candidates:
+        # Confine the resolved target inside one of the intended base directories.
+        # Resolving first defends against symlink escapes that the parts() check
+        # above cannot catch (py/path-injection).
+        base_dirs = (web_dir.resolve(), (web_dir / "static").resolve())
+        for base in base_dirs:
+            candidate = (base / rel_path).resolve()
+            if not candidate.is_relative_to(base):
+                continue
             if candidate.is_file():
                 response = web.FileResponse(candidate)
                 guessed_type, _ = mimetypes.guess_type(str(candidate))

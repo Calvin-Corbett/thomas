@@ -33,7 +33,15 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 ROOT = Path(__file__).resolve().parents[3]
-MANIFEST_PATH = ROOT / ".git" / "thomas_enforcement_hashes.json"
+# The manifest is a TRACKED file (not in .git/) so that:
+#   - tampering with a gate script forces a manifest change that is visible in
+#     the PR diff and (with branch protection) needs CODEOWNERS review;
+#   - the server-side gates.yml job can verify scripts against it;
+#   - it cannot be silently deleted + regenerated locally to re-bless tampered
+#     scripts (the old .git/ trust-on-first-use bypass, B7).
+# It lives under scripts/ which is a filesystem-protected dir, so the agent's
+# sanctioned fs tools refuse to write it.
+MANIFEST_PATH = ROOT / "scripts" / "forge" / "gates" / "enforcement_manifest.json"
 
 # Self-check: this script's own hash is verified against the manifest too.
 # If an attacker modifies this script to skip checks, the post-commit audit
@@ -62,16 +70,27 @@ def _load_protected_scripts() -> list[str]:
     return [str(s) for s in scripts]
 
 
+def _normalize(content: bytes) -> bytes:
+    """Normalize line endings before hashing (B14).
+
+    Without this, the worktree bytes (CRLF on a Windows checkout) hash
+    differently from the staged/committed blob bytes (LF after .gitattributes
+    normalization), so `--check-staged` and the CI checkout disagree with a
+    manifest generated from the worktree. Normalizing CRLF→LF makes all three
+    modes — worktree, staged, and CI checkout — produce identical hashes.
+    """
+    return content.replace(b"\r\n", b"\n")
+
+
 def _hash_file(path: Path) -> str | None:
-    """Compute SHA-256 of a file. Returns None if file doesn't exist."""
+    """Compute SHA-256 of a file's line-ending-normalized bytes. None if absent."""
     if not path.exists():
         return None
-    content = path.read_bytes()
-    return hashlib.sha256(content).hexdigest()
+    return hashlib.sha256(_normalize(path.read_bytes())).hexdigest()
 
 
 def _staged_content_hash(rel_path: str) -> str | None:
-    """Hash the STAGED version of a file (what will be committed)."""
+    """Hash the STAGED (index) version of a file (what will be committed)."""
     proc = subprocess.run(
         ["git", "show", f":{rel_path}"],
         cwd=ROOT,
@@ -79,7 +98,7 @@ def _staged_content_hash(rel_path: str) -> str | None:
     )
     if proc.returncode != 0:
         return None
-    return hashlib.sha256(proc.stdout).hexdigest()
+    return hashlib.sha256(_normalize(proc.stdout)).hexdigest()
 
 
 def generate_manifest(argv: list[str] | None = None) -> int:
@@ -117,11 +136,27 @@ def verify(argv: list[str] | None = None) -> int:
         return generate_manifest()
 
     if not MANIFEST_PATH.exists():
-        # No manifest yet — generate one on first run so the system
-        # bootstraps itself. After this, any tampering is detected.
-        print("No integrity manifest found — generating initial manifest.")
-        print("Future runs will detect any tampering.")
-        return generate_manifest()
+        # B7 (praxis-unbypassable-2026-05-29): fail CLOSED on a missing manifest.
+        # The old behavior auto-generated a manifest from the CURRENT scripts and
+        # returned PASS — so an attacker could delete the manifest, tamper a gate
+        # to always pass, and the next run would re-bless the tampered script.
+        # The manifest is a committed, reviewed artifact; if it is missing the
+        # repo owner must (re)generate it deliberately.
+        msg = (
+            "SAFETY GATE FAILED: enforcement integrity manifest is missing\n"
+            f"  expected: {MANIFEST_PATH.relative_to(ROOT)}\n"
+            "  A missing manifest cannot attest that gate scripts are untampered.\n"
+            "  The repo owner regenerates it (after reviewing the gate scripts):\n"
+            "    python scripts/forge/gates/enforcement_integrity.py --generate-manifest\n"
+            "  then commits the manifest."
+        )
+        if args.json:
+            print(
+                json.dumps({"gate": "enforcement_integrity", "ok": False, "error": "manifest_missing"}, sort_keys=True)
+            )
+        else:
+            print(msg)
+        return 1
 
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     scripts = _load_protected_scripts()

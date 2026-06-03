@@ -24,8 +24,10 @@ if str(ROOT) not in sys.path:
 
 try:
     from scripts import gate_response_policy
+    from scripts.crew.workboard import message as workboard_message
 except (ImportError, ModuleNotFoundError):  # pragma: no cover
     import gate_response_policy  # type: ignore
+    from crew.workboard import message as workboard_message  # type: ignore
 
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 ROUTER_DOC = "docs/ai/AGENT_ROUTER.md"
@@ -177,6 +179,27 @@ def _parse_workboard_claims(path: Path) -> dict[str, Any]:
         "claims": claims,
         "stale": stale,
         "updated_at": updated_at,
+    }
+
+
+def _startup_inbox(workboard_path: Path, *, agent: str = "") -> dict[str, Any]:
+    actor = workboard_message.resolve_current_agent(agent)
+    if not actor:
+        return {
+            "agent": "",
+            "ok": False,
+            "unread_count": 0,
+            "messages": [],
+            "error": "agent identity unavailable; pass --agent or set AGENT_ID/THOMAS_AGENT_ID",
+        }
+    ok, payload = workboard_message.unread_messages(workboard_path, agent=actor)
+    messages = list(payload.get("messages") or []) if ok else []
+    return {
+        "agent": actor,
+        "ok": bool(ok),
+        "unread_count": len(messages),
+        "messages": messages[:8],
+        "error": "" if ok else str(payload.get("error") or "inbox check failed"),
     }
 
 
@@ -671,6 +694,7 @@ def build_startup_payload(
     workflow_mode: str,
     workboard_path: Path,
     cwd: Path | None = None,
+    agent: str = "",
 ) -> dict[str, Any]:
     payload = classify_task(
         summary=summary,
@@ -684,6 +708,7 @@ def build_startup_payload(
         workboard_path=workboard_path,
     )
     payload["preflight"] = agent_preflight.evaluate_preflight(root=ROOT, cwd=cwd)
+    payload["inbox"] = _startup_inbox(workboard_path, agent=agent)
     payload["branch_scan"] = _scan_related_branches(summary, paths)
     payload["orphaned_state"] = _detect_orphaned_dirty_state(ROOT)
     return payload
@@ -711,6 +736,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Override the saved workflow mode preference.",
     )
     parser.add_argument("--workboard", default=str(DEFAULT_WORKBOARD), help="Path to WORKBOARD.md.")
+    parser.add_argument("--agent", default="", help="Agent identity for startup inbox surfacing.")
     parser.add_argument("--json", action="store_true", help="Emit JSON.")
     return parser
 
@@ -718,10 +744,23 @@ def _build_parser() -> argparse.ArgumentParser:
 def _text_output(payload: dict[str, Any]) -> str:
     preflight = dict(payload.get("preflight") or {})
     policy = dict(preflight.get("policy") or {})
-    lines = [
-        "Thomas agent startup router",
-        "CHECK YOUR INBOX -- python scripts/crew/workboard/message.py --list --",
-    ]
+    lines = ["Thomas agent startup router"]
+    inbox = dict(payload.get("inbox") or {})
+    inbox_agent = str(inbox.get("agent") or "")
+    inbox_count = int(inbox.get("unread_count") or 0)
+    if inbox.get("ok"):
+        lines.append(f"inbox: agent={inbox_agent}; unread={inbox_count}")
+        for row in list(inbox.get("messages") or []):
+            escalation = " ESCALATED" if str(row.get("escalation") or "").strip() else ""
+            lines.append(
+                "  - "
+                f"{row.get('msg_id')}: from={row.get('from')} priority={row.get('priority')}{escalation}; "
+                f"{row.get('summary')}"
+            )
+        if inbox_count:
+            lines.append(f"inbox_action: python scripts/crew/workboard/message.py --list --agent {inbox_agent}")
+    else:
+        lines.append(f"inbox: unavailable; {inbox.get('error', 'unknown inbox error')}")
     if preflight:
         lines.extend(
             [
@@ -829,6 +868,7 @@ def run(argv: list[str] | None = None) -> int:
         long_running=bool(args.long_running),
         workflow_mode=workflow_mode,
         workboard_path=Path(str(args.workboard)).expanduser(),
+        agent=str(args.agent or ""),
     )
     if args.json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))

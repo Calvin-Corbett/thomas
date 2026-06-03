@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable, Iterable
 from typing import Any
 
 from aiohttp import web
 
 from thomas.core.ui_workflow_engine import get_ui_workflow_engine
+
+log = logging.getLogger(__name__)
 
 RequireAccessFn = Callable[[web.Request], None]
 ReadJsonFn = Callable[[web.Request], Awaitable[Any]]
@@ -160,8 +163,9 @@ def register_ui_engine_routes(
         reason = str(payload.get("reason") or "manual").strip() or "manual"
         try:
             force = _parse_bool(payload.get("force"), default=False)
-        except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
+        except ValueError:
+            log.warning("Invalid 'force' value for audit cycle", exc_info=True)
+            raise web.HTTPBadRequest(text="invalid 'force' value")
         report = _engine().run_cycle_once(reason=reason, force=force)
 
         if not bool(report.get("ok", True)):
@@ -185,20 +189,23 @@ def register_ui_engine_routes(
             raise web.HTTPBadRequest(text="query must be at least 2 characters")
         try:
             limit = _parse_int(payload.get("limit"), default=12, minimum=1, maximum=50)
-        except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
+        except ValueError:
+            log.warning("Invalid 'limit' value for asset search", exc_info=True)
+            raise web.HTTPBadRequest(text="invalid 'limit' value")
 
         providers: Iterable[str] | None = None
         if "providers" in payload:
             try:
                 providers = _parse_providers(payload.get("providers"))
-            except ValueError as exc:
-                raise web.HTTPBadRequest(text=str(exc))
+            except ValueError:
+                log.warning("Invalid 'providers' value for asset search", exc_info=True)
+                raise web.HTTPBadRequest(text="invalid 'providers' value")
 
         try:
             report = _engine().search_assets(query, limit=limit, providers=providers)
-        except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
+        except ValueError:
+            log.warning("Asset search request was rejected", exc_info=True)
+            raise web.HTTPBadRequest(text="invalid asset search request")
         return web.json_response(report)
 
     async def api_ui_engine_review(request: web.Request) -> web.Response:
@@ -212,14 +219,16 @@ def register_ui_engine_routes(
         intent = str(payload.get("intent") or "").strip()
         try:
             strict = _parse_bool(payload.get("strict"), default=True)
-        except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
+        except ValueError:
+            log.warning("Invalid 'strict' value for UI review", exc_info=True)
+            raise web.HTTPBadRequest(text="invalid 'strict' value")
         changed_paths: Iterable[str] | None = None
         if "changed_paths" in payload:
             try:
                 changed_paths = _parse_changed_paths(payload.get("changed_paths"))
-            except ValueError as exc:
-                raise web.HTTPBadRequest(text=str(exc))
+            except ValueError:
+                log.warning("Invalid 'changed_paths' value for UI review", exc_info=True)
+                raise web.HTTPBadRequest(text="invalid 'changed_paths' value")
 
         report = _engine().review_ui_edits(intent=intent, changed_paths=changed_paths, strict=strict)
         verdict = str(report.get("verdict") or "").strip().lower()

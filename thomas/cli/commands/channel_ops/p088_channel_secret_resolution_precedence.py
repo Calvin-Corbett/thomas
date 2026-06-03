@@ -120,17 +120,21 @@ def _run(args: argparse.Namespace) -> int:
             sys.stderr.write(f"ERROR [{err.get('code')}]: {err.get('message')}\n")
         return 2
 
+    # include_secret=False => payload["secret"] is already redacted
+    # (masked to the last few characters by ChannelSecretResolution.to_dict),
+    # so the value emitted here is never the clear-text secret.
     payload = res.to_dict(include_secret=False)
     if json_mode:
         sys.stdout.write(json.dumps(payload, sort_keys=True) + "\n")
     else:
+        masked_secret = payload["secret"]  # redacted representation, not the real value
         sys.stdout.write(
             " ".join(
                 [
                     f"provider={payload['provider']}",
                     f"secret_key={payload['secret_key']}",
                     f"source={payload['source']}",
-                    f"secret={payload['secret']}",
+                    f"secret={masked_secret}",
                 ]
             )
             + "\n"

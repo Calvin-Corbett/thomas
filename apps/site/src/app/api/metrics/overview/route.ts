@@ -1,10 +1,20 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getRecentEventSummary } from "@/lib/db";
 import { fetchReleases } from "@/lib/github";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const rateLimit = checkRateLimit(request, {
+    keyPrefix: "site-metrics-overview",
+    limit: 60,
+    windowMs: 5 * 60 * 1000,
+  });
+  if (!rateLimit.allowed) {
+    return rateLimitResponse(rateLimit);
+  }
+
   const [eventSummary, releases] = await Promise.all([getRecentEventSummary(30), fetchReleases(20)]);
 
   const releaseDownloads = releases.reduce((total, release) => {

@@ -349,10 +349,11 @@ class ItinerarySharing:
         Returns:
             Share token/link
         """
-        import random
-        import string
+        import secrets
 
-        token = "".join(random.choices(string.ascii_letters + string.digits, k=16))
+        # Capability token guarding access to a shared itinerary -- must be
+        # unguessable, so use a CSPRNG (secrets) not random's Mersenne Twister.
+        token = secrets.token_urlsafe(16)
 
         self._share_tokens[token] = {
             "itinerary_id": itinerary_id,

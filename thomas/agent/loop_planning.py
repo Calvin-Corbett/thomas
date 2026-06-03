@@ -106,8 +106,14 @@ def strip_premature_followup(text: str) -> tuple[str, bool]:
     out = "\n".join(lines)
 
     # Remove trailing generic follow-up question at end of a sentence.
+    # Every quantifier here is explicitly bounded (whitespace `\s{0,16}`, the
+    # outer repeat `{1,8}`, and the open-ended "how can i assist ..." tail uses a
+    # single bounded char class instead of the nested quantifier
+    # `(?: [a-z]+){0,4}`) so adversarial input — e.g. a long whitespace run that
+    # ultimately fails the `$` anchor — cannot trigger catastrophic
+    # backtracking (py/redos).
     trailing = re.compile(
-        r"(?:\s*(?:anything else\??|what(?:'s| is)? next\??|what would you like (?:me )?to do next\??|what do you want(?: me)? to do next\??|how can i help(?: you)?(?: further)?\??|how can i assist(?: you)?(?: [a-z]+){0,4}\??|what can i help with\??)\s*)+$",
+        r"\s{0,16}(?:(?:anything else\??|what(?:'s| is)? next\??|what would you like (?:me )?to do next\??|what do you want(?: me)? to do next\??|how can i help(?: you)?(?: further)?\??|how can i assist(?: you)?(?:[a-z ]{0,40})\??|what can i help with\??)\s{0,16}){1,8}$",
         re.I,
     )
     new_out = trailing.sub("", out).rstrip()

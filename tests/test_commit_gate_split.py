@@ -22,6 +22,10 @@ merge_readiness = _load_module("check_merge_readiness", ROOT / "scripts" / "forg
 def test_precommit_config_moves_global_gates_to_merge_readiness() -> None:
     content = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
 
+    assert "id: thomas-workboard-inbox-gate" in content
+    assert "id: thomas-workboard-inbox-final-gate" in content
+    assert "id: thomas-workboard-inbox-commit-msg-gate" in content
+    assert "stages: [commit-msg]" in content
     assert "id: thomas-merge-readiness" in content
     assert "entry: python scripts/forge/gates/merge_readiness.py" in content
     assert "stages: [pre-push]" in content
@@ -49,6 +53,15 @@ def test_agent_commit_local_gate_commands_ignore_release_metadata() -> None:
     assert "auto_checks_quick" not in local_gates
     assert merge_gates["plan_structure"] == (sys.executable, "scripts/forge/gates/plan_structure_gate.py")
     assert merge_gates["auto_checks_quick"] == (sys.executable, "scripts/auto_checks.py", "--quick")
+
+
+def test_agent_commit_runs_inbox_gate_early_and_final() -> None:
+    gate_names = [name for name, _command in agent_commit.LOCAL_GATE_COMMANDS]
+
+    assert "workboard_inbox" in gate_names
+    assert "workboard_inbox_final" in gate_names
+    assert gate_names.index("workboard_inbox") < gate_names.index("active_folder_guard")
+    assert gate_names.index("workboard_inbox_final") > gate_names.index("changelog")
 
 
 def test_merge_readiness_can_fail_while_local_scoped_commit_path_stays_separate(tmp_path, monkeypatch) -> None:

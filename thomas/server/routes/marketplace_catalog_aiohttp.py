@@ -28,6 +28,7 @@ from thomas.server.desktop_plugins import (
     set_installed_plugin_enabled,
     uninstall_plugin,
 )
+from thomas.server.net_safety import validate_public_url
 
 log = logging.getLogger(__name__)
 
@@ -328,7 +329,7 @@ async def _load_hosted_marketplace_catalog(*, store_url: str, channel: str) -> d
     async with httpx.AsyncClient(timeout=25.0, follow_redirects=True) as client:
         for catalog_url in catalog_urls:
             try:
-                response = await client.get(catalog_url)
+                response = await client.get(validate_public_url(catalog_url))
                 response.raise_for_status()
                 payload = response.json()
             except (httpx.HTTPError, ValueError) as exc:
@@ -499,11 +500,31 @@ def _parse_int(value: str, default: int, *, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, parsed))
 
 
+def _safe_plugin_id_segment(plugin_id: str) -> str | None:
+    """Return ``plugin_id`` if it is a single safe path segment, else ``None``.
+
+    ``plugin_id`` is request-controlled (URL match_info / catalog rows), so
+    reject anything that could escape ``extensions_root``: empty values, path
+    separators, drive markers, and ``.``/``..`` segments.
+    """
+    candidate = _safe_string(plugin_id).strip()
+    if not candidate or candidate in {".", ".."}:
+        return None
+    if "/" in candidate or "\\" in candidate:
+        return None
+    if PurePosixPath(candidate).is_absolute() or PurePosixPath(candidate).parts != (candidate,):
+        return None
+    return candidate
+
+
 def _resolve_pack_dir(extensions_root: Path, plugin_id: str) -> Path | None:
-    candidate = (extensions_root / plugin_id).resolve()
-    try:
-        candidate.relative_to(extensions_root)
-    except ValueError:
+    safe_id = _safe_plugin_id_segment(plugin_id)
+    if safe_id is None:
+        return None
+    base = extensions_root.resolve()
+    candidate = (base / safe_id).resolve()
+    # Confine the resolved directory to the extensions root to block traversal.
+    if not candidate.is_relative_to(base):
         return None
     return candidate if candidate.is_dir() else None
 
@@ -983,7 +1004,18 @@ def register_marketplace_catalog_routes(
                 )
             else:
                 body = await _read_optional_json(request)
-                bundle_path = Path(_safe_string(body.get("path"))).expanduser().resolve()
+                raw_path = _safe_string(body.get("path")).strip()
+                if not raw_path:
+                    raise ValueError("A bundle file path is required")
+                # ``path`` is request-controlled. Reject traversal components and
+                # require the resolved target to be an existing regular bundle file
+                # before reading it, so a caller cannot point the importer at
+                # arbitrary system files via ``..`` segments.
+                if ".." in PurePosixPath(raw_path.replace("\\", "/")).parts:
+                    raise ValueError("Unsafe bundle file path")
+                bundle_path = Path(raw_path).expanduser().resolve()
+                if not bundle_path.is_file():
+                    raise FileNotFoundError(f"Bundle file was not found: {bundle_path}")
                 plugin = install_plugin_bundle_file(
                     config,
                     bundle_path,
@@ -1005,9 +1037,11 @@ def register_marketplace_catalog_routes(
         try:
             asset = resolve_installed_plugin_asset(config, plugin_id, asset_path)
         except PermissionError as exc:
-            raise web.HTTPForbidden(text=str(exc)) from exc
+            log.warning("Denied plugin asset request for '%s'", plugin_id)
+            raise web.HTTPForbidden(text="plugin asset is not available") from exc
         except (FileNotFoundError, ValueError) as exc:
-            raise web.HTTPNotFound(text=str(exc)) from exc
+            log.info("Plugin asset request could not be resolved for '%s'", plugin_id)
+            raise web.HTTPNotFound(text="plugin asset was not found") from exc
         return web.FileResponse(asset, headers={"Cache-Control": "no-store"})
 
     app.router.add_get("/api/marketplace/plugins", api_marketplace_plugins)

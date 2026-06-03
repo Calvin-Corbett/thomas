@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { localUpdates } from "@/content/local-updates";
 import { fetchReleases, summarizeReleaseBody } from "@/lib/github";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -73,6 +74,15 @@ function toPayloadRelease(release: ApiRelease) {
 }
 
 export async function GET(req: NextRequest) {
+  const rateLimit = checkRateLimit(req, {
+    keyPrefix: "site-releases",
+    limit: 120,
+    windowMs: 5 * 60 * 1000,
+  });
+  if (!rateLimit.allowed) {
+    return rateLimitResponse(rateLimit);
+  }
+
   const params = req.nextUrl.searchParams;
   const limit = Math.max(1, Math.min(Number(params.get("limit") ?? "12"), 30));
   const includePrerelease = params.get("channel") === "beta";
