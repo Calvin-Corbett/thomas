@@ -61,7 +61,11 @@ def _load_protected_scripts() -> list[str]:
 
     toml_path = ROOT / "agent_safety.toml"
     if not toml_path.exists():
-        return []
+        # Fail closed: even with no config we must still self-check this script
+        # (and verify() additionally re-checks every manifest entry). The old
+        # behavior returned [] -- so deleting agent_safety.toml collapsed the
+        # protected list to empty and verify() passed while checking nothing.
+        return [SELF_PATH]
     data = loader.loads(toml_path.read_text(encoding="utf-8"))
     scripts = data.get("protected", {}).get("enforcement_scripts", [])
     # Also include this script itself
@@ -160,14 +164,25 @@ def verify(argv: list[str] | None = None) -> int:
 
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     scripts = _load_protected_scripts()
+    # Verify the UNION of the live protected list and the manifest keys so that
+    # neither side can shrink coverage on its own:
+    #   - every manifest entry is checked even if agent_safety.toml was edited
+    #     or deleted to drop it from the protected list (defeats the "remove the
+    #     gate from the config to un-protect it" bypass);
+    #   - a protected-list entry with NO manifest hash now FAILS closed, instead
+    #     of passing as merely "missing_from_manifest" advisory -- that gap let
+    #     an active hook (e.g. the pre-push secret-scan preflight) sit on the
+    #     protected list yet be silently rewritable with zero integrity alarm.
+    checklist = sorted(set(scripts) | set(manifest.keys()))
     tampered: list[dict[str, str]] = []
     missing_from_manifest: list[str] = []
 
-    for rel_path in sorted(scripts):
+    for rel_path in checklist:
         expected_hash = manifest.get(rel_path)
         if expected_hash is None:
-            # New script added to protected list but not in manifest.
-            # Not a tampering signal, but worth noting.
+            # On the protected list but never hashed -> we cannot attest it is
+            # untampered, so a malicious rewrite would go undetected. Fail
+            # closed; the repo owner regenerates the manifest after review.
             missing_from_manifest.append(rel_path)
             continue
 
@@ -195,7 +210,7 @@ def verify(argv: list[str] | None = None) -> int:
                 }
             )
 
-    ok = len(tampered) == 0
+    ok = len(tampered) == 0 and len(missing_from_manifest) == 0
 
     if args.json:
         print(
@@ -204,7 +219,7 @@ def verify(argv: list[str] | None = None) -> int:
                     "gate": "enforcement_integrity",
                     "ok": ok,
                     "tampered": tampered,
-                    "scripts_checked": len(scripts),
+                    "scripts_checked": len(checklist),
                     "missing_from_manifest": missing_from_manifest,
                 },
                 sort_keys=True,
@@ -212,34 +227,41 @@ def verify(argv: list[str] | None = None) -> int:
         )
     else:
         if ok:
-            note = ""
-            if missing_from_manifest:
-                note = f" ({len(missing_from_manifest)} new scripts not yet in manifest)"
-            print(f"Enforcement integrity: PASS ({len(scripts)} scripts){note}")
+            print(f"Enforcement integrity: PASS ({len(checklist)} scripts)")
         else:
-            print("SAFETY GATE FAILED: Enforcement Scripts Tampered")
+            print("SAFETY GATE FAILED: Enforcement Scripts Tampered Or Uncovered")
             print("=" * 70)
             print()
             print("WHAT HAPPENED:")
-            print("  One or more enforcement scripts have been modified since the")
+            print("  One or more enforcement scripts cannot be attested as the")
             print("  last known-good state. This could mean:")
             print("    - A malicious agent rewrote a gate to always pass")
+            print("    - A protected gate has no known-good hash to compare against")
             print("    - A legitimate change was made without updating the manifest")
-            print()
-            print("TAMPERED FILES:")
-            for item in tampered:
-                print(f"  - {item['path']}")
-                print(f"    Expected hash: {item['expected']}...")
-                print(f"    Actual:        {item['actual']}...")
+            if tampered:
+                print()
+                print("TAMPERED FILES:")
+                for item in tampered:
+                    print(f"  - {item['path']}")
+                    print(f"    Expected hash: {item['expected']}...")
+                    print(f"    Actual:        {item['actual']}...")
+            if missing_from_manifest:
+                print()
+                print("PROTECTED SCRIPTS WITH NO MANIFEST HASH (cannot attest untampered):")
+                for path in missing_from_manifest:
+                    print(f"  - {path}")
+                print("  A protected gate with no hash could be silently rewritten;")
+                print("  failing closed until the repo owner hashes it (see below).")
             print()
             print("IF THIS IS LEGITIMATE:")
             print("  The repo owner (human) should regenerate the manifest:")
             print("    python scripts/forge/gates/enforcement_integrity.py --generate-manifest")
-            print()
-            print("IF THIS IS SUSPICIOUS:")
-            print("  Restore the scripts from git:")
-            for item in tampered:
-                print(f"    git checkout HEAD -- {item['path']}")
+            if tampered:
+                print()
+                print("IF THIS IS SUSPICIOUS:")
+                print("  Restore the scripts from git:")
+                for item in tampered:
+                    print(f"    git checkout HEAD -- {item['path']}")
             print("=" * 70)
 
     return 0 if ok else 1

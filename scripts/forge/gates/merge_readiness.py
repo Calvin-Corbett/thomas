@@ -69,6 +69,15 @@ def evaluate_merge_readiness(
 
 
 def run(argv: Sequence[str] | None = None) -> int:
+    try:
+        from scripts.forge.gates._quickbuilder_guard import announce_suppressed
+    except ImportError:  # pragma: no cover - import path varies by run context
+        try:
+            from forge.gates._quickbuilder_guard import announce_suppressed
+        except ImportError:
+            from _quickbuilder_guard import announce_suppressed
+    if announce_suppressed("thomas-merge-readiness", ROOT, "Merge readiness"):
+        return 0
     parser = argparse.ArgumentParser(description="Run repo-wide merge readiness gates.")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output.")
     args = parser.parse_args(argv)

@@ -151,6 +151,8 @@ def test_sanitize_env_strips_worker_bypass_vars() -> None:
         "THOMAS_BULK_COMMIT_GUARD_DISABLE": "1",
         "THOMAS_COMMIT_GROWTH_GUARD_DISABLE": "1",
         "THOMAS_PRAXIS_MARKER_KEY_FILE": "/tmp/evil.key",
+        "THOMAS_AGENT_ROLE": "orchestrator",  # core_overhead_guard role exemption
+        "THOMAS_CORE_OVERHEAD_UNLOCK": "1",  # core_overhead_guard full unlock
         "HOME": "/home/dev",
     }
     out = sanitize_env(base)
@@ -164,6 +166,8 @@ def test_sanitize_env_strips_worker_bypass_vars() -> None:
         "THOMAS_BULK_COMMIT_GUARD_DISABLE",
         "THOMAS_COMMIT_GROWTH_GUARD_DISABLE",
         "THOMAS_PRAXIS_MARKER_KEY_FILE",
+        "THOMAS_AGENT_ROLE",
+        "THOMAS_CORE_OVERHEAD_UNLOCK",
     ):
         assert stripped not in out, stripped
     assert out["PATH"] == "/usr/bin"

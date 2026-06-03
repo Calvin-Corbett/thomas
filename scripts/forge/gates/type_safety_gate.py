@@ -64,7 +64,9 @@ def _staged_files() -> list[str]:
         text=True,
     )
     if proc.returncode != 0:
-        return []
+        # Fail closed: a git error must not look like an empty change set
+        # (which would PASS the gate). Surface it so run() can FAIL.
+        raise RuntimeError(proc.stderr.strip() or "git diff --cached --name-only failed")
     return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
 
 
@@ -98,7 +100,14 @@ def run(argv: list[str] | None = None) -> int:
             print("Type safety gate: PASS (mypy not installed — install with: pip install mypy)")
         return 0
 
-    staged = _staged_files()
+    try:
+        staged = _staged_files()
+    except RuntimeError as exc:
+        if args.json:
+            print(json.dumps({"gate": "type_safety", "ok": False, "error": str(exc)}, sort_keys=True))
+        else:
+            print(f"Type safety gate: FAIL ({exc})")
+        return 1
     python_files = [f for f in staged if f.endswith(".py")]
     enabled_files = [f for f in python_files if _is_enabled(f)]
 
