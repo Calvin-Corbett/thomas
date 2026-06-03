@@ -275,6 +275,15 @@ def _fallback_conflicts(agent: str, claims: Sequence[claims_gate.Claim], scopes:
 
 
 def run(argv: Sequence[str] | None = None) -> int:
+    try:
+        from scripts.forge.gates._quickbuilder_guard import announce_suppressed
+    except ImportError:  # pragma: no cover - import path varies by run context
+        try:
+            from forge.gates._quickbuilder_guard import announce_suppressed
+        except ImportError:
+            from _quickbuilder_guard import announce_suppressed
+    if announce_suppressed("thomas-workboard-agent-claim-gate", ROOT, "Workboard agent claim gate"):
+        return 0
     # Honour the runtime protection toggle (requires Windows auth to disable).
     if _runtime_protection_disabled():
         print("Workboard agent claim gate: PASS (runtime protection disabled by human)")

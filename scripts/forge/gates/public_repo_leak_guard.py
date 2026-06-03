@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import subprocess
 import sys
@@ -94,13 +93,16 @@ def _load_local_blocklist() -> tuple[tuple[str, ...], frozenset[str], tuple[str,
 
     Absent file (e.g. a fresh public clone) -> empty extras, so the gate
     still runs and enforces the generic defaults; it simply has no
-    competitor-specific terms to check. Set ``THOMAS_LEAK_BLOCKLIST_FILE``
-    to point at an alternate location.
+    competitor-specific terms to check.
+
+    The path is FIXED (not env-overridable). An earlier draft honored
+    ``THOMAS_LEAK_BLOCKLIST_FILE``, but a worker-settable path is a fail-open
+    hole: point it at a nonexistent file and every competitor-name rule is
+    silently dropped while the gate still passes. The blocklist now always
+    loads from the one gitignored location -- mirroring the
+    THOMAS_PRAXIS_MARKER_KEY_FILE decision (see commit_breakglass_guard).
     """
     path = LOCAL_BLOCKLIST_PATH
-    env_override = os.getenv("THOMAS_LEAK_BLOCKLIST_FILE", "").strip()
-    if env_override:
-        path = Path(env_override)
     if not path.is_file():
         return (), frozenset(), (), ()
     try:

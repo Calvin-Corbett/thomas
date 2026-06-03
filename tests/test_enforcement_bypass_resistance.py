@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
@@ -16,6 +19,11 @@ commit_growth_guard = importlib.import_module("forge.gates.commit_growth_guard")
 exception_handler_gate = importlib.import_module("forge.gates.exception_handler_gate")
 post_commit_audit = importlib.import_module("post_commit_audit")
 protected_files_gate = importlib.import_module("forge.gates.protected_files_gate")
+enforcement_integrity = importlib.import_module("forge.gates.enforcement_integrity")
+commit_scope_gate = importlib.import_module("forge.gates.commit_scope_gate")
+type_safety_gate = importlib.import_module("forge.gates.type_safety_gate")
+validate_agent_changes = importlib.import_module("validate_agent_changes")
+precommit_skip_policy = importlib.import_module("forge.gates.precommit_skip_policy")
 
 
 def _clear_agent_context(monkeypatch) -> None:
@@ -446,3 +454,171 @@ def test_commit_growth_guard_ignores_disable_env_R4(monkeypatch, capsys) -> None
     payload = json.loads(capsys.readouterr().out)
     assert rc == 1
     assert payload["ok"] is False
+
+
+# ---------------------------------------------------------------------------
+# enforcement_integrity fail-closed (2026-06-03 hardening): a protected gate
+# must be attestable. Two prior gaps let coverage shrink silently:
+#   (1) a script on the protected list but absent from the manifest passed as
+#       advisory-only "missing_from_manifest" -- so the active pre-push
+#       secret-scan preflight could be rewritten with no integrity alarm;
+#   (2) deleting agent_safety.toml collapsed the protected list to [] (not even
+#       self-checking), so verify() passed while checking nothing.
+# ---------------------------------------------------------------------------
+
+
+def _setup_integrity(monkeypatch, tmp_path: Path, *, scripts: list[str], manifest: dict[str, str]) -> None:
+    """Point enforcement_integrity at a hermetic ROOT + manifest + script list."""
+    monkeypatch.setattr(enforcement_integrity, "ROOT", tmp_path)
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    monkeypatch.setattr(enforcement_integrity, "MANIFEST_PATH", manifest_path)
+    monkeypatch.setattr(enforcement_integrity, "_load_protected_scripts", lambda: list(scripts))
+
+
+def _write_script(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def test_enforcement_integrity_fails_closed_on_protected_script_missing_hash(monkeypatch, tmp_path, capsys) -> None:
+    # Gap (1): a protected-list script with NO manifest hash must FAIL closed.
+    _write_script(tmp_path / "gate_a.py", "print('a')\n")
+    _write_script(tmp_path / "preflight.py", "print('secret-scan')\n")
+    manifest = {"gate_a.py": enforcement_integrity._hash_file(tmp_path / "gate_a.py")}
+    _setup_integrity(monkeypatch, tmp_path, scripts=["gate_a.py", "preflight.py"], manifest=manifest)
+
+    rc = enforcement_integrity.verify(["--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert "preflight.py" in payload["missing_from_manifest"]
+
+
+def test_enforcement_integrity_checks_manifest_entry_even_if_list_shrinks(monkeypatch, tmp_path, capsys) -> None:
+    # Gap (2) corollary: a manifest entry is verified even if the live protected
+    # list omits it -- deleting the config cannot un-protect a tracked gate.
+    _write_script(tmp_path / "gate_a.py", "print('tampered')\n")
+    manifest = {"gate_a.py": hashlib.sha256(b"print('good')\n").hexdigest()}
+    _setup_integrity(monkeypatch, tmp_path, scripts=[], manifest=manifest)
+
+    rc = enforcement_integrity.verify(["--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert any(item["path"] == "gate_a.py" for item in payload["tampered"])
+
+
+def test_enforcement_integrity_missing_toml_still_self_checks(monkeypatch, tmp_path) -> None:
+    # Gap (2): with no agent_safety.toml the protected list must still include
+    # SELF_PATH (was [] -> verify() checked nothing).
+    monkeypatch.setattr(enforcement_integrity, "ROOT", tmp_path)
+    assert enforcement_integrity._load_protected_scripts() == [enforcement_integrity.SELF_PATH]
+
+
+def test_enforcement_integrity_passes_when_manifest_matches(monkeypatch, tmp_path, capsys) -> None:
+    # Positive control: list == manifest with matching hashes -> PASS.
+    _write_script(tmp_path / "gate_a.py", "print('a')\n")
+    manifest = {"gate_a.py": enforcement_integrity._hash_file(tmp_path / "gate_a.py")}
+    _setup_integrity(monkeypatch, tmp_path, scripts=["gate_a.py"], manifest=manifest)
+
+    rc = enforcement_integrity.verify(["--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["ok"] is True
+    assert payload["missing_from_manifest"] == []
+
+
+# ---------------------------------------------------------------------------
+# staged-files fail-closed (2026-06-03 hardening): a git error while listing
+# staged/changed files must FAIL the gate, not look like an empty (clean) change
+# set that PASSes. Previously each helper returned [] on `git diff` rc!=0.
+# ---------------------------------------------------------------------------
+
+
+def _git_boom(*_args, **_kwargs):
+    raise RuntimeError("git exploded")
+
+
+class _GitFail:
+    returncode = 128
+    stdout = ""
+    stderr = "fatal: not a git repository"
+
+
+def test_commit_scope_staged_files_raises_on_git_error(monkeypatch) -> None:
+    monkeypatch.setattr(commit_scope_gate.subprocess, "run", lambda *a, **k: _GitFail())
+    with pytest.raises(RuntimeError):
+        commit_scope_gate._staged_files()
+
+
+def test_commit_scope_gate_fails_closed_on_git_error(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(commit_scope_gate, "_staged_files", _git_boom)
+    rc = commit_scope_gate.run(["--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert payload["ok"] is False
+
+
+def test_protected_files_gate_fails_closed_on_git_error(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(protected_files_gate, "_runtime_protection_disabled", lambda: False)
+    monkeypatch.setattr(protected_files_gate, "_staged_files", _git_boom)
+    rc = protected_files_gate.run(["--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert payload["ok"] is False
+
+
+def test_type_safety_gate_fails_closed_on_git_error(monkeypatch, capsys) -> None:
+    # mypy must appear installed so the gate reaches the staged-files read.
+    monkeypatch.setattr(type_safety_gate.shutil, "which", lambda _name: "/usr/bin/mypy")
+    monkeypatch.setattr(type_safety_gate, "_staged_files", _git_boom)
+    rc = type_safety_gate.run(["--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert payload["ok"] is False
+
+
+def test_validate_agent_changes_fails_closed_on_git_error(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(validate_agent_changes, "get_staged_files", _git_boom)
+    rc = validate_agent_changes.main()
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "FAILED" in out
+
+
+def test_validate_agent_changes_staged_helper_raises_on_git_error(monkeypatch) -> None:
+    monkeypatch.setattr(validate_agent_changes.subprocess, "run", lambda *a, **k: _GitFail())
+    with pytest.raises(RuntimeError):
+        validate_agent_changes.get_staged_files()
+
+
+# ---------------------------------------------------------------------------
+# skip-policy audit log must be writable from a linked worktree (2026-06-03):
+# ROOT/.git is a `gitdir:` POINTER FILE there, not a directory, so the audit log
+# (and thus an authorized breakglass skip) could not be written.
+# ---------------------------------------------------------------------------
+
+
+def test_skip_policy_git_dir_follows_worktree_pointer(monkeypatch, tmp_path) -> None:
+    real_gitdir = tmp_path / "realgit" / "worktrees" / "wt"
+    real_gitdir.mkdir(parents=True)
+    fake_root = tmp_path / "wt"
+    fake_root.mkdir()
+    (fake_root / ".git").write_text(f"gitdir: {real_gitdir}\n", encoding="utf-8")
+    monkeypatch.setattr(precommit_skip_policy, "ROOT", fake_root)
+
+    resolved = precommit_skip_policy._git_dir()
+    assert resolved == real_gitdir
+    assert resolved.is_dir()  # writable: the audit log can land here
+
+
+def test_skip_policy_git_dir_normal_repo_uses_dot_git(monkeypatch, tmp_path) -> None:
+    fake_root = tmp_path / "repo"
+    (fake_root / ".git").mkdir(parents=True)
+    monkeypatch.setattr(precommit_skip_policy, "ROOT", fake_root)
+
+    assert precommit_skip_policy._git_dir() == fake_root / ".git"

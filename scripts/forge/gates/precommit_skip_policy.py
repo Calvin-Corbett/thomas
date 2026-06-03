@@ -26,7 +26,50 @@ except ImportError:  # pragma: no cover
     from scripts.crew.brief.safety_config import load_config  # type: ignore
 
 ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_AUDIT_LOG = ROOT / ".git" / "thomas_skip_audit.jsonl"
+
+
+def _git_dir() -> Path:
+    """Resolve the real git directory for the audit log.
+
+    In a linked git worktree, ``ROOT/.git`` is a ``gitdir: <path>`` POINTER FILE,
+    not a directory -- so writing the audit log under ``ROOT/.git`` fails with
+    "cannot create a file when that file already exists". Follow the pointer to
+    the real per-worktree git dir, which is always a writable directory. A normal
+    checkout (``.git`` is a directory) is returned unchanged.
+    """
+    dot_git = ROOT / ".git"
+    try:
+        if dot_git.is_file():
+            content = dot_git.read_text(encoding="utf-8").strip()
+            if content.startswith("gitdir:"):
+                target = Path(content.split(":", 1)[1].strip())
+                if not target.is_absolute():
+                    target = (ROOT / target).resolve()
+                return target
+    except OSError:
+        pass
+    return dot_git
+
+
+DEFAULT_AUDIT_LOG = _git_dir() / "thomas_skip_audit.jsonl"
+
+
+def _quickbuilder_active() -> bool:
+    """True iff a validly SIGNED QuickBuilder flag is active.
+
+    QuickBuilder disables the breakglass *cooldown* (not the human tap) so a
+    person can iterate fast. The flag is HMAC-signed; a forged file is ignored.
+    """
+    try:
+        from scripts.forge.gates._quickbuilder_guard import quickbuilder_active
+    except ImportError:  # pragma: no cover - import path varies by run context
+        try:
+            from forge.gates._quickbuilder_guard import quickbuilder_active
+        except ImportError:
+            from _quickbuilder_guard import quickbuilder_active
+    return quickbuilder_active(ROOT)
+
+
 AGENT_ENV_KEYS: tuple[str, ...] = (
     "AGENT_ID",
     "THOMAS_AGENT_ID",
@@ -572,6 +615,12 @@ def run(argv: Sequence[str] | None = None) -> int:
         principal = authorized_by or agent
         history = _load_breakglass_history(audit_log=audit_log, agent=principal, now=now)
         cooldown_minutes = max(0, int(args.breakglass_cooldown_minutes))
+        if cooldown_minutes > 0 and _quickbuilder_active():
+            # QuickBuilder mode (human-activated, signed flag) waives the cooldown
+            # so protected-file edits can land back-to-back. The native-auth tap
+            # itself is still required above; only the rate-limit is relaxed.
+            print("  (QuickBuilder mode: breakglass cooldown waived)")
+            cooldown_minutes = 0
         if cooldown_minutes > 0 and history:
             latest = history[-1]
             delta = now - latest
@@ -605,7 +654,11 @@ def run(argv: Sequence[str] | None = None) -> int:
         # the per-actor rate-limit on breakglass events. The public default
         # remains 3.
         raw_quota = int(args.breakglass_max_per_agent_24h)
-        if raw_quota <= 0:
+        if raw_quota <= 0 or _quickbuilder_active():
+            # QuickBuilder waives the per-agent 24h breakglass quota as well as the
+            # cooldown -- a human activated build-fast mode, and every protected
+            # commit still requires its own native-auth tap, so only the rate-limit
+            # and the daily count are relaxed, not the human authorization.
             max_breakglass_per_agent = 0  # 0 == unlimited (sentinel)
         else:
             max_breakglass_per_agent = raw_quota

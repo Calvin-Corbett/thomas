@@ -254,19 +254,29 @@ def check_placeholder_files_not_modified(staged_files: list[str]) -> tuple[bool,
 
 
 def get_staged_files() -> list[str]:
-    """Return currently staged file paths."""
+    """Return currently staged file paths.
+
+    Raises ``RuntimeError`` if git cannot be run or errors out. Callers must
+    fail closed: a git failure (or timeout) must not be mistaken for an empty
+    change set, which would silently PASS this safety gate.
+    """
     try:
         result = subprocess.run(["git", "diff", "--cached", "--name-only"], capture_output=True, text=True, timeout=5)
-    except Exception:  # pragma: no cover - defensive
-        return []
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError(f"git diff --cached failed: {exc}") from exc
     if result.returncode != 0:
-        return []
+        raise RuntimeError(result.stderr.strip() or "git diff --cached --name-only failed")
     return [path.strip() for path in result.stdout.splitlines() if path.strip()]
 
 
 def main() -> int:
     """Run the safety gate against staged files."""
-    staged_files = get_staged_files()
+    try:
+        staged_files = get_staged_files()
+    except RuntimeError as exc:
+        # Fail closed: cannot enumerate staged files -> refuse rather than pass.
+        print(f"Safety gate FAILED: cannot read staged files ({exc})")
+        return 1
     if not staged_files:
         print("No staged files to check.")
         return 0
