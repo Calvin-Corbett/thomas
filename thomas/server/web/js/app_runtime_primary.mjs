@@ -1652,7 +1652,7 @@ function upsertAgentActivity(container, agentId, status, currentTask, elapsedMs)
     try {
         existing = container.querySelector(`[data-agent-id="${CSS.escape(agentId)}"]`);
     } catch {
-        existing = container.querySelector(`[data-agent-id="${agentId.replace(/"/g, '\\"')}"]`);
+        existing = container.querySelector(`[data-agent-id="${agentId.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"]`);
     }
     if (existing) {
         existing.dataset.status = status || 'running';
@@ -1822,6 +1822,15 @@ function createOnboardingTelemetrySessionId() {
     try {
         if (window.crypto && typeof window.crypto.randomUUID === 'function') {
             return window.crypto.randomUUID();
+        }
+        if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+            const bytes = new Uint8Array(8);
+            window.crypto.getRandomValues(bytes);
+            let suffix = '';
+            for (let i = 0; i < bytes.length; i += 1) {
+                suffix += bytes[i].toString(36);
+            }
+            return `session_${Date.now().toString(36)}_${suffix.slice(0, 8)}`;
         }
     } catch {
         // Fallback below.
@@ -33929,7 +33938,7 @@ function moduleWorkbenchStudioFfmpegConcatCommand(wb) {
     if (!media.length) {
         return 'ffmpeg -f concat -safe 0 -i clips.txt -c copy output.mp4';
     }
-    const lines = media.map((asset) => `file '${safeString(asset.name).replace(/'/g, "\\'")}'`);
+    const lines = media.map((asset) => `file '${safeString(asset.name).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`);
     return [
         '# 1) Save this as clips.txt',
         ...lines,
@@ -47088,8 +47097,14 @@ function moduleUiEditorParseShellPluginCards(rawCards) {
 function moduleUiEditorNormalizeGitHubRawUrl(urlRaw) {
     const url = safeString(urlRaw);
     if (!url) return '';
-    if (url.includes('raw.githubusercontent.com')) return url;
-    if (/^https?:\/\/github\.com\//i.test(url) && /\/blob\//i.test(url)) {
+    let host = '';
+    try {
+        host = new URL(url).hostname.toLowerCase();
+    } catch {
+        return url;
+    }
+    if (host === 'raw.githubusercontent.com') return url;
+    if (host === 'github.com' && /\/blob\//i.test(url)) {
         return url
             .replace('https://github.com/', 'https://raw.githubusercontent.com/')
             .replace('/blob/', '/');

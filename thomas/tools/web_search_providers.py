@@ -28,6 +28,8 @@ try:
 except ImportError:
     from thomas._vendor import httpx_shim as httpx  # type: ignore[assignment]
 
+from thomas.tools.url_safety import check_url
+
 # Defaults + public constants consumed by web_search.py
 _BRAVE_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
 _DDG_ENDPOINT = "https://api.duckduckgo.com/"
@@ -311,29 +313,29 @@ def _host_matches_rule(host: str, rule: str) -> bool:
 
 
 def _enforce_host_policy(url: str) -> str | None:
-    p = urlparse(url)
-    host = (p.hostname or "").strip().lower()
-    if not host:
-        return "Invalid URL host."
+    """Apply the operator host policy to *url* (SSRF guard).
 
+    Delegates to :func:`thomas.tools.url_safety.check_url`, the single source of
+    truth shared with ``eng.web_extract`` and ``browser.open`` so all outbound
+    tool fetches enforce the same tiered policy (cloud-metadata/link-local are
+    always blocked; RFC1918/loopback gated behind ``allow_private``).
+    """
     policy = _get_host_policy()
-    allowed = policy["allowed_hosts"]
-    blocked = policy["blocked_hosts"]
-    allow_private = policy["allow_private_network"]
+    return check_url(
+        url,
+        allow_private=policy["allow_private_network"],
+        allowed_hosts=policy["allowed_hosts"],
+        blocked_hosts=policy["blocked_hosts"],
+    )
 
-    for r in blocked:
-        if _host_matches_rule(host, r):
-            return f"Host blocked by policy: {host}"
 
-    if allowed:
-        ok = any(_host_matches_rule(host, r) for r in allowed)
-        if not ok:
-            return f"Host not in allowed_hosts policy: {host}"
+def check_outbound_url(url: str) -> str | None:
+    """Public SSRF guard for any tool that fetches a model/user-supplied URL.
 
-    if not allow_private and _host_is_private(host):
-        return f"Private network host disallowed by policy: {host}"
-
-    return None
+    Returns an error message to surface to the caller, or ``None`` if the URL is
+    allowed by the current host policy.
+    """
+    return _enforce_host_policy(url)
 
 
 # --- Text / HTML extraction ---------------------------------------------------

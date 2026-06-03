@@ -5,6 +5,12 @@ on:
   push:
   workflow_dispatch:
 
+# Least-privilege default for every job: these jobs only check out the repo,
+# run gate/test scripts, build a Docker image, and upload artifacts. None push
+# commits, make releases, comment on PRs, or deploy.
+permissions:
+  contents: read
+
 jobs:
   test-collection-gate:
     runs-on: ubuntu-latest

@@ -140,12 +140,14 @@ def create_rate_limit_middleware(
         auth = str(request.headers.get("Authorization") or "")
         if auth.lower().startswith("bearer "):
             token = auth.split(" ", 1)[1].strip()
-            digest = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
+            # Bucket key only (not auth/storage); flag as non-security hashing.
+            digest = hashlib.sha256(token.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
             return f"token:{digest}"
 
         token = str(request.headers.get("X-Api-Token") or "").strip()
         if token:
-            digest = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
+            # Bucket key only (not auth/storage); flag as non-security hashing.
+            digest = hashlib.sha256(token.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
             return f"token:{digest}"
 
         # Fall back to IP address

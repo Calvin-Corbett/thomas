@@ -78,7 +78,7 @@ Thomas is an AI-first workspace platform with a **marketplace of domain modules*
 **Core runtime modules** (the only directories you should modify for core work):
 
 - `thomas/agent/` — Chat dispatch and agent loop
-- `thomas/core/` — Config, persistence, token economy, LLM clients (MUST NOT import from server, tools, or any sibling)
+- `thomas/core/` — Config, persistence, token economy, LLM clients (intended bottom tier; do NOT add new imports from server/tools — a few legacy ones remain, tracked as debt in `thomas/_architecture.py`)
 - `thomas/server/` — aiohttp web app, routes, web UI
 - `thomas/cli/` — CLI and REPL
 - `thomas/tools/` — Tool definitions and registry
@@ -156,9 +156,9 @@ Before writing ANY code, read:
 
 ## Agent Commit Path (Required for Agents)
 
-- Use `python scripts/agent_commit.py --message "<msg>"` instead of raw `git commit`.
-- `agent_commit.py` isolates claimed files in a temporary git index, runs local gates, and leaves unrelated repo dirt untouched.
-- For dirty-worktree fallback: `python scripts/agent_commit.py --include <file> --allow-scope-fallback --fallback-reason "<reason>" --message "<msg>"`
+- Use `python scripts/crew/brief/commit.py --message "<msg>"` instead of raw `git commit`.
+- `commit.py` isolates claimed files in a temporary git index, runs local gates, and leaves unrelated repo dirt untouched.
+- For dirty-worktree fallback: `python scripts/crew/brief/commit.py --include <file> --allow-scope-fallback --fallback-reason "<reason>" --message "<msg>"`
 - For merge readiness: `python scripts/forge/gates/merge_readiness.py`
 - If no commit is created, report the explicit blocker class: `local_gate_failed`, `broken_repo_tool`, `claim_scope_mismatch`, `branch_race`, or `no_claimed_changes`.
 

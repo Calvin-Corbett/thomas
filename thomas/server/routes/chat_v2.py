@@ -68,7 +68,10 @@ _BACKGROUND_REPLY_NOW_RE = (
 )
 _BACKGROUND_DELEGATION_RE = (
     r"(?:background|delegate|delegation|parallel|while you work|in the background)"
-    r"|(?:rest|deeper work|longer work)\s+(?:in|into)?\s*background"
+    # Single mandatory whitespace run; the optional in/into connector carries
+    # its own trailing space. Avoids the adjacent \s+...?\s* ambiguity that
+    # caused polynomial backtracking (py/polynomial-redos).
+    r"|(?:rest|deeper work|longer work)\s+(?:(?:in|into)\s+)?background"
 )
 _EXPLICIT_DELEGATION_RE = (
     r"(?:spawn|start|launch|run|use|create)\s+(?:exactly\s+|real\s+|live\s+|multiple\s+|few\s+|three\s+|four\s+|five\s+)*"

@@ -11,6 +11,12 @@ concurrency:
   group: github-publish-safety-${{ github.ref }}
   cancel-in-progress: true
 
+# Least-privilege default: this workflow only checks out the repo, runs
+# preflight/leak-guard scripts, a smoke test, and uploads artifacts. No job
+# writes to the repo, makes releases, comments on PRs, or deploys.
+permissions:
+  contents: read
+
 jobs:
   publish-safety:
     runs-on: ubuntu-latest

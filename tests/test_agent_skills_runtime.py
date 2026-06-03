@@ -120,6 +120,39 @@ def test_runtime_skills_context_format_includes_selected_instructions(tmp_path: 
     assert "--- Runtime Skills ---" in ctx
     assert "robot-ui" in ctx
     assert "Verify before finishing" in ctx
+    assert "convert any skill-required probes" in ctx
+    assert "nearby or simplified checks are not a substitute" in ctx
+
+
+def test_runtime_skills_payload_extracts_required_literal_probe(tmp_path: Path, monkeypatch) -> None:
+    cfg = _build_cfg(tmp_path)
+    home_root = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home_root))
+    monkeypatch.setenv("USERPROFILE", str(home_root))
+    monkeypatch.chdir(tmp_path)
+
+    _write_skill(
+        home_root / ".thomas",
+        "probe-skill",
+        "Use literal probes before finishing.",
+        "- Before finishing, run a literal probe with `alpha --case exact` and expect `[]`.",
+    )
+
+    selection = resolve_runtime_skills(
+        cfg,
+        prompt_text="please use $probe-skill for this pass",
+        relevance_text="",
+        route_path="coding_task",
+        cwd=tmp_path,
+        max_selected=1,
+    )
+
+    payload = selection.to_event_payload()
+    checks = list(payload.get("required_checks") or [])
+    assert checks
+    assert checks[0]["skill"] == "probe-skill"
+    assert "alpha --case exact" in checks[0]["snippets"]
+    assert "[]" in checks[0]["expected_outputs"]
 
 
 def test_agent_loop_injects_runtime_skill_context_into_system_prompt(tmp_path: Path, monkeypatch) -> None:
@@ -203,6 +236,7 @@ def test_runtime_skills_loads_explicit_env_roots_for_external_harnesses(tmp_path
     monkeypatch.setenv("HOME", str(home_root))
     monkeypatch.setenv("USERPROFILE", str(home_root))
     monkeypatch.setenv("THOMAS_RUNTIME_SKILL_ROOTS", str(thomas_root / "skills"))
+    monkeypatch.setenv("THOMAS_RUNTIME_SKILLS_AUTO_RELEVANCE", "1")
     harness_repo.mkdir(parents=True, exist_ok=True)
     monkeypatch.chdir(harness_repo)
 
@@ -220,6 +254,37 @@ def test_runtime_skills_loads_explicit_env_roots_for_external_harnesses(tmp_path
     assert "serializer-matrix" in [s.name for s in selection.selected]
 
 
+def test_runtime_skills_can_ignore_codex_home_roots_for_benchmarks(tmp_path: Path, monkeypatch) -> None:
+    cfg = _build_cfg(tmp_path)
+    home_root = tmp_path / "home"
+    codex_home = tmp_path / "codex-home"
+    harness_repo = tmp_path / "harness-repo"
+    thomas_root = tmp_path / "thomas-root"
+    monkeypatch.setenv("HOME", str(home_root))
+    monkeypatch.setenv("USERPROFILE", str(home_root))
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    monkeypatch.setenv("THOMAS_RUNTIME_IGNORE_CODEX_HOME_SKILLS", "1")
+    monkeypatch.setenv("THOMAS_RUNTIME_SKILL_ROOTS", str(thomas_root / "skills"))
+    monkeypatch.setenv("THOMAS_RUNTIME_SKILLS_AUTO_RELEVANCE", "1")
+    harness_repo.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(harness_repo)
+
+    _write_skill(codex_home, "codex-system-skill", "Codex home skill should stay out.", "- Codex only.")
+    _write_skill(thomas_root, "serializer-matrix", "Use serializer feature matrices.", "- Cross feature axes.")
+    selection = resolve_runtime_skills(
+        cfg,
+        prompt_text="fix serializer aliases and flattening",
+        relevance_text="serializer flatten alias matrix",
+        route_path="coding_task",
+        cwd=harness_repo,
+        max_selected=2,
+    )
+
+    assert str(codex_home / "skills") not in selection.roots
+    assert "codex-system-skill" not in [s.name for s in selection.selected]
+    assert "serializer-matrix" in [s.name for s in selection.selected]
+
+
 def test_runtime_skills_routes_partial_structuring_over_spreadsheet(tmp_path: Path, monkeypatch) -> None:
     cfg = _build_cfg(tmp_path)
     home_root = tmp_path / "home"
@@ -228,6 +293,7 @@ def test_runtime_skills_routes_partial_structuring_over_spreadsheet(tmp_path: Pa
     monkeypatch.setenv("HOME", str(home_root))
     monkeypatch.setenv("USERPROFILE", str(home_root))
     monkeypatch.setenv("THOMAS_RUNTIME_SKILL_ROOTS", str(thomas_root / "skills"))
+    monkeypatch.setenv("THOMAS_RUNTIME_SKILLS_AUTO_RELEVANCE", "1")
     harness_repo.mkdir(parents=True, exist_ok=True)
     monkeypatch.chdir(harness_repo)
 
@@ -275,6 +341,7 @@ def test_runtime_skills_routes_multipart_response_parsing_over_spreadsheet(tmp_p
     monkeypatch.setenv("HOME", str(home_root))
     monkeypatch.setenv("USERPROFILE", str(home_root))
     monkeypatch.setenv("THOMAS_RUNTIME_SKILL_ROOTS", str(thomas_root / "skills"))
+    monkeypatch.setenv("THOMAS_RUNTIME_SKILLS_AUTO_RELEVANCE", "1")
     harness_repo.mkdir(parents=True, exist_ok=True)
     monkeypatch.chdir(harness_repo)
 
@@ -310,6 +377,48 @@ def test_runtime_skills_routes_multipart_response_parsing_over_spreadsheet(tmp_p
     )
 
     assert [skill.name for skill in selection.selected] == ["multipart-http-response-parser"]
+    assert selection.selected_reasons[selection.selected[0].key].startswith("relevance:")
+
+
+def test_runtime_skills_routes_line_suppression_directives(tmp_path: Path, monkeypatch) -> None:
+    cfg = _build_cfg(tmp_path)
+    home_root = tmp_path / "home"
+    harness_repo = tmp_path / "harness-repo"
+    thomas_root = tmp_path / "thomas-root"
+    monkeypatch.setenv("HOME", str(home_root))
+    monkeypatch.setenv("USERPROFILE", str(home_root))
+    monkeypatch.setenv("THOMAS_RUNTIME_SKILL_ROOTS", str(thomas_root / "skills"))
+    monkeypatch.setenv("THOMAS_RUNTIME_SKILLS_AUTO_RELEVANCE", "1")
+    harness_repo.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(harness_repo)
+
+    _write_skill(
+        thomas_root,
+        "line-suppression-directives",
+        "Implement analyzer suppression directives such as nosec-begin, nosec-end, nosec-next-line, per-rule selectors, inline comments, statement-wide multi-line AST suppression, and skipped_tests versus nosec metrics.",
+        "- Build a line to statement range map before applying suppression comments.",
+        "- Probe subprocess.Popen with shell=True and nosec-begin B602 on a later argument line.",
+        "- Keep per-rule selectors specific for metrics even when they cover every enabled check.",
+    )
+
+    prompt = """
+    Add Bandit # nosec-begin/# nosec-end regions and # nosec-next-line.
+    Selectors include B602, all, none, globs, boolean operators, and test names.
+    Suppressions are statement-wide for multi-line subprocess.Popen calls, so
+    shell=True with # nosec-begin B602 on a later argument line must suppress B602
+    reported on the call statement. Specific B602 suppressions count skipped_tests,
+    not blanket nosec metrics.
+    """
+    selection = resolve_runtime_skills(
+        cfg,
+        prompt_text=prompt,
+        relevance_text=prompt,
+        route_path="coding_task",
+        cwd=harness_repo,
+        max_selected=1,
+    )
+
+    assert [skill.name for skill in selection.selected] == ["line-suppression-directives"]
     assert selection.selected_reasons[selection.selected[0].key].startswith("relevance:")
 
 
@@ -353,6 +462,43 @@ def test_runtime_skills_require_explicit_for_risky_pinned_skills(tmp_path: Path,
     )
     assert "deploy-prod" in [s.name for s in allowed.selected]
     assert "deploy-prod" in (allowed.approved_risky or [])
+
+
+def test_runtime_skills_does_not_fall_back_after_blocked_top_relevance(tmp_path: Path, monkeypatch) -> None:
+    cfg = _build_cfg(tmp_path)
+    home_root = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home_root))
+    monkeypatch.setenv("USERPROFILE", str(home_root))
+    monkeypatch.setenv("THOMAS_RUNTIME_SKILLS_REQUIRE_EXPLICIT_RISK_APPROVAL", "1")
+    monkeypatch.setenv("THOMAS_RUNTIME_SKILLS_AUTO_RELEVANCE", "1")
+    monkeypatch.chdir(tmp_path)
+
+    _write_skill(
+        home_root / ".thomas",
+        "cache-maintenance",
+        "Use for cache clear prune import export stats summary module path ABS workflows.",
+        "- Delete stale cache entries only when the user explicitly requests cleanup.",
+        "- Validate cache clear prune import export stats summary and module path behavior.",
+    )
+    _write_skill(
+        home_root / ".thomas",
+        "ui-cache-status",
+        "Use for UI cache status panels.",
+        "- Verify cache size mode output labels in a screenshot.",
+    )
+
+    selection = resolve_runtime_skills(
+        cfg,
+        prompt_text="implement ABS module path cache clear prune import export stats summary flags",
+        relevance_text="abs module path cache clear prune import export stats summary size mode output",
+        route_path="coding_task",
+        cwd=tmp_path,
+        max_selected=1,
+    )
+
+    assert [skill.name for skill in selection.selected] == []
+    assert any(item.get("name") == "cache-maintenance" for item in selection.blocked)
+    assert all(item.get("name") != "ui-cache-status" for item in selection.blocked)
 
 
 def test_runtime_skills_provider_conformance_same_selection_and_prompt(tmp_path: Path, monkeypatch) -> None:
@@ -411,13 +557,14 @@ def test_runtime_skills_allows_unlimited_count_when_configured(tmp_path: Path, m
     assert set(selected_names) == {f"big-skill-{i}" for i in range(1, 6)}
 
 
-def test_runtime_skills_auto_mode_defaults_to_bounded_selection(tmp_path: Path, monkeypatch) -> None:
+def test_runtime_skills_default_mode_does_not_auto_select_by_relevance(tmp_path: Path, monkeypatch) -> None:
     cfg = _build_cfg(tmp_path)
     home_root = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home_root))
     monkeypatch.setenv("USERPROFILE", str(home_root))
     monkeypatch.delenv("THOMAS_RUNTIME_MAX_SKILLS", raising=False)
     monkeypatch.delenv("THOMAS_RUNTIME_LOAD_ALL_SKILLS", raising=False)
+    monkeypatch.delenv("THOMAS_RUNTIME_SKILLS_AUTO_RELEVANCE", raising=False)
     monkeypatch.chdir(tmp_path)
 
     for i in range(1, 8):
@@ -431,7 +578,66 @@ def test_runtime_skills_auto_mode_defaults_to_bounded_selection(tmp_path: Path, 
         cwd=tmp_path,
     )
 
+    assert selection.selected == []
+
+
+def test_runtime_skills_auto_relevance_can_be_opted_in_and_bounded(tmp_path: Path, monkeypatch) -> None:
+    cfg = _build_cfg(tmp_path)
+    home_root = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home_root))
+    monkeypatch.setenv("USERPROFILE", str(home_root))
+    monkeypatch.setenv("THOMAS_RUNTIME_SKILLS_AUTO_RELEVANCE", "1")
+    monkeypatch.delenv("THOMAS_RUNTIME_MAX_SKILLS", raising=False)
+    monkeypatch.delenv("THOMAS_RUNTIME_LOAD_ALL_SKILLS", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    for i in range(1, 8):
+        _write_skill(
+            home_root / ".thomas",
+            f"serializer-skill-{i}",
+            f"Serializer flattening skill {i}.",
+            "- Preserve serializer flattening behavior.",
+        )
+
+    selection = resolve_runtime_skills(
+        cfg,
+        prompt_text="fix serializer flattening",
+        relevance_text="serializer flattening",
+        route_path="coding_task",
+        cwd=tmp_path,
+    )
+
     assert len(selection.selected) == 4
+
+
+def test_runtime_skills_excerpt_depth_can_be_configured(tmp_path: Path, monkeypatch) -> None:
+    cfg = _build_cfg(tmp_path)
+    home_root = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home_root))
+    monkeypatch.setenv("USERPROFILE", str(home_root))
+    monkeypatch.setenv("THOMAS_RUNTIME_SKILL_EXCERPT_CHARS", "2400")
+    monkeypatch.chdir(tmp_path)
+
+    late_marker = "late critical validation marker"
+    _write_skill(
+        home_root / ".thomas",
+        "deep-skill",
+        "Deep skill for configurable excerpts.",
+        *[f"- Filler line {i}." for i in range(80)],
+        f"- {late_marker}.",
+    )
+
+    selection = resolve_runtime_skills(
+        cfg,
+        prompt_text="please use $deep-skill",
+        relevance_text="",
+        route_path="coding_task",
+        cwd=tmp_path,
+        max_selected=1,
+    )
+
+    assert [skill.name for skill in selection.selected] == ["deep-skill"]
+    assert late_marker in selection.selected[0].excerpt
 
 
 def test_runtime_skills_all_mode_and_unbounded_chars_env(tmp_path: Path, monkeypatch) -> None:

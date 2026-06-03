@@ -2,6 +2,9 @@
 Tests for HTML rendering.
 """
 
+import re
+from urllib.parse import urlparse
+
 from thomas.marketplace.markdown._types import Document, RenderConfig
 from thomas.marketplace.markdown.html_renderer import HTMLRenderer
 from thomas.marketplace.markdown.parser import Parser
@@ -131,7 +134,10 @@ class TestLinkRendering:
         renderer = HTMLRenderer()
         html = renderer.render(doc)
         assert "<a href=" in html
-        assert "http://example.com" in html
+        # Parse the rendered href and verify the host exactly (not a substring).
+        href_match = re.search(r'<a href="([^"]*)"', html)
+        assert href_match is not None
+        assert urlparse(href_match.group(1)).hostname == "example.com"
         assert "text" in html
         assert "</a>" in html
 

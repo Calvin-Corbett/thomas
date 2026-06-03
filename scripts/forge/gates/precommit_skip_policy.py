@@ -49,6 +49,7 @@ PROTECTED_SKIP_HOOKS: tuple[str, ...] = (
     "thomas-agent-safety-validation",
     "thomas-active-folder-guard",
     "thomas-precommit-skip-policy-gate",
+    "thomas-enforcement-integrity",
     "thomas-protected-files-gate",
     "thomas-plan-structure-gate",
     "thomas-core-overhead-guard",
@@ -236,7 +237,12 @@ def _load_breakglass_history(*, audit_log: Path, agent: str, now: datetime) -> l
             continue
         if not bool(payload.get("breakglass_used", False)):
             continue
-        if str(payload.get("agent", "")).strip().lower() != agent_key:
+        # B5: match on the VERIFIED actor (breakglass_authorized_by) so the
+        # quota cannot be reset by rotating the agent-controlled AGENT_ID. Fall
+        # back to the advisory agent field for legacy rows that predate this.
+        row_actor = str(payload.get("breakglass_authorized_by", "")).strip().lower()
+        row_agent = str(payload.get("agent", "")).strip().lower()
+        if agent_key not in {row_actor, row_agent}:
             continue
         stamp = _parse_iso_utc(str(payload.get("timestamp_utc", "")))
         if stamp is None:
@@ -524,7 +530,47 @@ def run(argv: Sequence[str] | None = None) -> int:
     authorized_by = ""
     if breakglass_enabled:
         now = _now_utc()
-        history = _load_breakglass_history(audit_log=audit_log, agent=agent, now=now)
+        # B4: there is NO env-based "CI-trusted" shortcut — this gate is local
+        # only, so a `GITHUB_ACTIONS=true` branch was a spoofable way to skip the
+        # human Windows confirmation. Breakglass always requires native-auth.
+        #
+        # B5 (praxis-unbypassable-2026-05-29): authenticate FIRST so the rate
+        # limit binds to the VERIFIED OS actor returned by native-auth, not the
+        # agent-controlled AGENT_ID. Otherwise an agent rotates AGENT_ID to reset
+        # its own breakglass quota/cooldown. AGENT_ID stays as advisory metadata.
+        auth = authorize_breakglass(
+            purpose="pre-commit hook skip authorization",
+            agent=agent,
+            ticket=skip_ticket,
+            reason=reason,
+            skip_hooks=list(skip_hooks),
+        )
+        if not auth.ok:
+            message = auth.message or "human breakglass authorization failed"
+            if args.json:
+                print(
+                    json.dumps(
+                        {
+                            "gate": "precommit_skip_policy",
+                            "ok": False,
+                            "skip_hooks": list(skip_hooks),
+                            "error": message,
+                            "breakglass_human_verified": False,
+                            "breakglass_cancelled": bool(auth.cancelled),
+                        },
+                        sort_keys=True,
+                    )
+                )
+            else:
+                print("Pre-commit skip policy gate: FAIL")
+                print(f"- {message}")
+            return 1
+        auth_method = str(auth.method or "").strip()
+        authorized_by = str(auth.actor or "").strip()
+        # The rate-limit principal is the VERIFIED actor, not the spoofable
+        # agent id. Fall back to agent only if native-auth returned no actor.
+        principal = authorized_by or agent
+        history = _load_breakglass_history(audit_log=audit_log, agent=principal, now=now)
         cooldown_minutes = max(0, int(args.breakglass_cooldown_minutes))
         if cooldown_minutes > 0 and history:
             latest = history[-1]
@@ -532,7 +578,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             if delta < timedelta(minutes=cooldown_minutes):
                 remaining = max(1, int((timedelta(minutes=cooldown_minutes) - delta).total_seconds() // 60))
                 message = (
-                    f"breakglass cooldown active for `{agent}`; retry in ~{remaining} minute(s) "
+                    f"breakglass cooldown active for `{principal}`; retry in ~{remaining} minute(s) "
                     f"(cooldown={cooldown_minutes}m)"
                 )
                 if args.json:
@@ -556,7 +602,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         # agent_safety.local.toml overlay. The other safety layers (protected-
         # files-gate, signed-commits, server-side workflow mirror) still apply,
         # so opting out of this one quota doesn't disable safety, just removes
-        # the per-agent rate-limit on breakglass events. The public default
+        # the per-actor rate-limit on breakglass events. The public default
         # remains 3.
         raw_quota = int(args.breakglass_max_per_agent_24h)
         if raw_quota <= 0:
@@ -567,7 +613,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         recent_24h = [stamp for stamp in history if stamp >= window_start]
         if max_breakglass_per_agent > 0 and len(recent_24h) >= max_breakglass_per_agent:
             message = (
-                f"breakglass quota exceeded for `{agent}`: "
+                f"breakglass quota exceeded for `{principal}`: "
                 f"{len(recent_24h)} uses in last 24h (max {max_breakglass_per_agent})"
             )
             if args.json:
@@ -586,48 +632,6 @@ def run(argv: Sequence[str] | None = None) -> int:
                 print("Pre-commit skip policy gate: FAIL")
                 print(f"- {message}")
             return 1
-        # CI-trusted breakglass path: in GitHub Actions runs the workflow YAML
-        # is itself the audit trail (committed + reviewed). Skip the Windows-
-        # only human-confirmation dialog when GITHUB_ACTIONS=true.
-        if str(os.environ.get("GITHUB_ACTIONS", "")).strip().lower() == "true":
-            from types import SimpleNamespace
-
-            auth = SimpleNamespace(
-                ok=True,
-                message="",
-                method="ci-trusted",
-                actor=f"github-actions/{os.environ.get('RUNNER_OS', 'unknown')}",
-            )
-        else:
-            auth = authorize_breakglass(
-                purpose="pre-commit hook skip authorization",
-                agent=agent,
-                ticket=skip_ticket,
-                reason=reason,
-                skip_hooks=list(skip_hooks),
-            )
-        if not auth.ok:
-            message = auth.message or "human breakglass authorization failed"
-            if args.json:
-                print(
-                    json.dumps(
-                        {
-                            "gate": "precommit_skip_policy",
-                            "ok": False,
-                            "skip_hooks": list(skip_hooks),
-                            "error": message,
-                            "breakglass_human_verified": False,
-                            "breakglass_cancelled": bool(auth.cancelled),
-                        },
-                        sort_keys=True,
-                    )
-                )
-            else:
-                print("Pre-commit skip policy gate: FAIL")
-                print(f"- {message}")
-            return 1
-        auth_method = str(auth.method or "").strip()
-        authorized_by = str(auth.actor or "").strip()
 
     try:
         _append_audit_log(

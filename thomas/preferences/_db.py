@@ -6,7 +6,7 @@ import sqlite3
 import threading
 from typing import Any
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
 from ._patches import PreferencesPatch
 from ._prefs import (
@@ -33,6 +33,7 @@ from ._prefs import (
 from ._types import _NON_CODER_RUNTIME_LOCKS, PROVIDERS
 from ._utils import (
     _derive_fernet_key_from_secret,
+    _legacy_derive_fernet_key_from_secret,
     _mask_key_tail,
     _sha256_hex,
     get_db_path,
@@ -147,14 +148,42 @@ class PreferencesStore:
 
             conn.commit()
 
-    def _get_fernet(self, conn: sqlite3.Connection) -> Fernet:
+    def _get_or_create_kdf_salt(self, conn: sqlite3.Connection) -> bytes:
+        """Return the persisted per-install KDF salt, creating it on first use.
+
+        Stored base64-encoded in preferences_meta so the passphrase-derived key
+        is stable across restarts. Like the fernet_key fallback, the write is
+        left for the caller's transaction to commit.
+        """
+        import base64
+        import secrets as _secrets
+
+        row = conn.execute("SELECT v FROM preferences_meta WHERE k = ?", ("kdf_salt",)).fetchone()
+        if row and row["v"]:
+            try:
+                return base64.b64decode(row["v"])
+            except (ValueError, TypeError):
+                pass
+        salt = _secrets.token_bytes(16)
+        conn.execute(
+            "INSERT OR REPLACE INTO preferences_meta (k, v) VALUES (?, ?)",
+            ("kdf_salt", base64.b64encode(salt).decode("ascii")),
+        )
+        return salt
+
+    def _get_fernet(self, conn: sqlite3.Connection) -> Fernet | MultiFernet:
         env_key = os.getenv("THOMAS_PREFERENCES_FERNET_KEY")
         if env_key:
             return Fernet(env_key.encode("utf-8"))
 
         secret = os.getenv("THOMAS_SECRET_KEY")
         if secret:
-            return Fernet(_derive_fernet_key_from_secret(secret))
+            salt = self._get_or_create_kdf_salt(conn)
+            strong = Fernet(_derive_fernet_key_from_secret(secret, salt))
+            legacy = Fernet(_legacy_derive_fernet_key_from_secret(secret))
+            # Encrypt new data with the salted PBKDF2 key; still decrypt data
+            # written under the old unsalted key (transparent migration).
+            return MultiFernet([strong, legacy])
 
         row = conn.execute("SELECT v FROM preferences_meta WHERE k = ?", ("fernet_key",)).fetchone()
         if row:

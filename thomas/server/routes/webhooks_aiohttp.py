@@ -8,6 +8,7 @@ this bridge exposes equivalent aiohttp routes by adapting requests/responses.
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -17,6 +18,8 @@ from fastapi import HTTPException as FastAPIHTTPException
 from pydantic import ValidationError
 
 from thomas.server.routes import webhooks as webhook_mod
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -73,14 +76,18 @@ def _remote_host(request: web.Request) -> str:
 async def _read_json_object(request: web.Request) -> dict[str, Any]:
     try:
         raw = await request.read()
-    except Exception as e:
-        raise web.HTTPBadRequest(text=f"invalid json: {type(e).__name__}: {e}")
+    except Exception:
+        # Log full detail server-side; return a generic message to the client.
+        log.exception("Failed to read webhook request body")
+        raise web.HTTPBadRequest(text="invalid json")
     if not raw:
         return {}
     try:
         payload = json.loads(raw.decode("utf-8-sig"))
-    except Exception as e:
-        raise web.HTTPBadRequest(text=f"invalid json: {type(e).__name__}: {e}")
+    except Exception:
+        # Log full detail server-side; return a generic message to the client.
+        log.exception("Failed to parse webhook request body as JSON")
+        raise web.HTTPBadRequest(text="invalid json")
     if not isinstance(payload, dict):
         raise web.HTTPBadRequest(text="json body must be an object")
     return payload
@@ -119,8 +126,10 @@ def register_webhooks_routes(
         payload = await _read_json_object(request)
         try:
             body = webhook_mod.RegisterWebhookRequest(**payload)
-        except (ValidationError, TypeError) as e:
-            raise web.HTTPBadRequest(text=f"Invalid webhook registration payload: {e}")
+        except (ValidationError, TypeError):
+            # Log full detail server-side; return a generic message to the client.
+            log.exception("Invalid webhook registration payload")
+            raise web.HTTPBadRequest(text="Invalid webhook registration payload")
         return await _dispatch(
             webhook_mod.register_webhook,
             body=body,
@@ -132,8 +141,10 @@ def register_webhooks_routes(
         payload = await _read_json_object(request)
         try:
             body = webhook_mod.PatchWebhookRequest(**payload)
-        except (ValidationError, TypeError) as e:
-            raise web.HTTPBadRequest(text=f"Invalid webhook patch payload: {e}")
+        except (ValidationError, TypeError):
+            # Log full detail server-side; return a generic message to the client.
+            log.exception("Invalid webhook patch payload")
+            raise web.HTTPBadRequest(text="Invalid webhook patch payload")
         return await _dispatch(
             webhook_mod.patch_webhook,
             id=str(request.match_info.get("id") or "").strip(),

@@ -4,9 +4,21 @@ from __future__ import annotations
 
 import ctypes
 import os
+import sys
 from ctypes import wintypes
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Final
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from scripts.breakglass_context import (
+    BreakglassContext,
+    breakglass_context_from_env,
+    breakglass_context_payload,
+)
 
 WINDOWS_CREDENTIAL_METHOD: Final[str] = "windows-credential-dialog"
 WINDOWS_CREDENTIAL_CAPTION: Final[str] = "Thomas Windows Sign-In"
@@ -31,6 +43,9 @@ IDOK: Final[int] = 1
 IDCANCEL: Final[int] = 2
 TD_SHIELD_ICON_RESOURCE_ID: Final[int] = -4
 
+THOMAS_ASSET_PATH: Final[Path] = _REPO_ROOT / "assets" / "thomas.png"
+THOMAS_ICON_PATH: Final[Path] = _REPO_ROOT / "assets" / "thomas.ico"
+
 
 @dataclass(frozen=True)
 class BreakglassAuthorization:
@@ -39,6 +54,8 @@ class BreakglassAuthorization:
     actor: str | None = None
     method: str | None = None
     cancelled: bool = False
+    action_requested: bool = False
+    action_prompt: str | None = None
 
 
 @dataclass(frozen=True)
@@ -164,7 +181,7 @@ def _build_windows_confirmation_copy(
     reason: str,
     skip_hooks: list[str],
     current_user: str,
-) -> tuple[str, str]:
+) -> tuple[str, str, str]:
     hooks_preview = ", ".join(skip_hooks[:2]) if skip_hooks else "none"
     content = "\n".join(
         [
@@ -182,6 +199,114 @@ def _build_windows_confirmation_copy(
     return WINDOWS_CONFIRMATION_CAPTION, "Approve protected Thomas change?", content
 
 
+def _clip(value: str, limit: int = 260) -> str:
+    text = " ".join(str(value or "").split()).strip()
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 3)].rstrip() + "..."
+
+
+def _without_recommendation_prefix(value: str) -> str:
+    return _clip(str(value or "").removeprefix("Recommendation:"), 420).strip()
+
+
+def _format_context_issue(index: int, issue) -> list[str]:
+    human_reason = _clip(getattr(issue, "plain_reason", "") or issue.why, 240)
+    impact = _clip(getattr(issue, "impact", ""), 260)
+    next_step = _clip(getattr(issue, "next_step", ""), 260)
+    recommendation = _without_recommendation_prefix(getattr(issue, "recommendation", ""))
+    lines = [
+        f"{index}. {issue.gate}",
+        f"   What happened: {human_reason}",
+    ]
+    if impact:
+        lines.append(f"   Why it matters: {impact}")
+    for item in tuple(issue.evidence or ())[:2]:
+        detail = _clip(item, 240)
+        if detail.lower() == human_reason.lower():
+            continue
+        lines.append(f"   Evidence: {detail}")
+    if recommendation:
+        lines.append(f"   What I recommend: {recommendation}")
+    if next_step:
+        lines.append(f"   Next step: {next_step}")
+    return lines
+
+
+def _build_context_confirmation_copy(
+    *,
+    context: BreakglassContext,
+    purpose: str,
+    agent: str,
+    ticket: str,
+    reason: str,
+    skip_hooks: list[str],
+    current_user: str,
+) -> tuple[str, str, str, str, str, str, str]:
+    hooks_preview = ", ".join(skip_hooks[:4]) if skip_hooks else "none"
+    lines = [
+        _clip(context.summary, 360),
+        "",
+        "Thomas recommendation:",
+        _clip(context.recommendation or reason, 560),
+        "",
+        "Commit issues:",
+    ]
+    for index, issue in enumerate(tuple(context.issues or ())[:5], start=1):
+        lines.extend(_format_context_issue(index, issue))
+        lines.append("")
+    lines.extend(
+        [
+            "Request details:",
+            f"Account: {current_user or 'current signed-in user'}",
+            f"Requested by: {agent}",
+            f"Ticket: {ticket}",
+            f"Action: {purpose}",
+            f"Guardrails involved: {hooks_preview}",
+        ]
+    )
+    return (
+        str(context.title or "Thomas commit blocker"),
+        "Thomas needs your decision before breakglass.",
+        "\n".join(lines).strip(),
+        str(context.action_label or "Authorize recommended commit"),
+        str(context.cancel_label or "Back out and talk to Thomas"),
+        str(context.resolution_label or ""),
+        str(context.resolution_prompt or ""),
+    )
+
+
+def _build_breakglass_decision_copy(
+    *,
+    purpose: str,
+    agent: str,
+    ticket: str,
+    reason: str,
+    skip_hooks: list[str],
+    current_user: str,
+    context: BreakglassContext | None = None,
+) -> tuple[str, str, str, str, str, str, str]:
+    if context is not None:
+        return _build_context_confirmation_copy(
+            context=context,
+            purpose=purpose,
+            agent=agent,
+            ticket=ticket,
+            reason=reason,
+            skip_hooks=skip_hooks,
+            current_user=current_user,
+        )
+    title, instruction, content = _build_windows_confirmation_copy(
+        purpose=purpose,
+        agent=agent,
+        ticket=ticket,
+        reason=reason,
+        skip_hooks=skip_hooks,
+        current_user=current_user,
+    )
+    return title, instruction, content, "Authorize protected change", "Back out", "", ""
+
+
 def _build_windows_prompt_copy(*, current_user: str) -> tuple[str, str]:
     return (
         WINDOWS_CREDENTIAL_CAPTION,
@@ -193,7 +318,494 @@ def _task_dialog_icon(resource_id: int) -> ctypes.c_void_p:
     return ctypes.c_void_p(resource_id & 0xFFFF)
 
 
-def _show_breakglass_confirmation_dialog(*, window_title: str, main_instruction: str, content: str) -> bool:
+def _enable_windows_dpi_awareness() -> None:
+    if os.name != "nt":
+        return
+    try:
+        shcore = ctypes.WinDLL("shcore")
+        shcore.SetProcessDpiAwareness(2)
+        return
+    except (AttributeError, OSError):
+        pass
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except (AttributeError, OSError):
+        pass
+
+
+def _dialog_geometry(screen_width: int, screen_height: int) -> tuple[int, int, int, int]:
+    width = min(max(int(screen_width * 0.46), 920), min(1120, max(900, screen_width - 96)))
+    height = min(max(int(screen_height * 0.54), 620), min(760, max(560, screen_height - 96)))
+    left = max(24, int((screen_width - width) / 2))
+    top = max(24, int((screen_height - height) / 2))
+    return width, height, left, top
+
+
+def _button_width_chars(label: str) -> int:
+    return min(max((len(str(label or "")) + 2) // 2, 13), 22)
+
+
+def _show_custom_breakglass_dialog(
+    *,
+    window_title: str,
+    main_instruction: str,
+    content: str,
+    approve_label: str,
+    cancel_label: str,
+    resolution_label: str = "",
+    resolution_prompt: str = "",
+    context: BreakglassContext | None = None,
+) -> str | None:
+    _enable_windows_dpi_awareness()
+    try:
+        import tkinter as tk
+        from tkinter import font as tkfont
+        from tkinter import ttk
+    except Exception:
+        return None
+
+    try:
+        root = tk.Tk()
+    except Exception:
+        return None
+
+    result = {"decision": "cancel"}
+
+    def finish(decision: str) -> None:
+        result["decision"] = decision
+        root.destroy()
+
+    root.title(window_title)
+    width, height, left, top = _dialog_geometry(root.winfo_screenwidth(), root.winfo_screenheight())
+    root.geometry(f"{width}x{height}+{left}+{top}")
+    root.minsize(min(width, 900), min(height, 560))
+    root.configure(bg="#f3faff")
+    root.protocol("WM_DELETE_WINDOW", lambda: finish("cancel"))
+
+    try:
+        root.iconbitmap(str(THOMAS_ICON_PATH))
+    except tk.TclError:
+        pass
+
+    try:
+        root.attributes("-topmost", True)
+        root.after(750, lambda: root.attributes("-topmost", False))
+    except tk.TclError:
+        pass
+
+    scale = max(0.9, min(1.03, width / 1220))
+    title_font = tkfont.Font(family="Segoe UI", size=round(18 * scale), weight="bold")
+    rail_title_font = tkfont.Font(family="Segoe UI", size=round(15 * scale), weight="bold")
+    subtitle_font = tkfont.Font(family="Segoe UI", size=round(9 * scale))
+    body_font = tkfont.Font(family="Segoe UI", size=round(10 * scale))
+    body_bold_font = tkfont.Font(family="Segoe UI", size=round(10 * scale), weight="bold")
+    label_font = tkfont.Font(family="Segoe UI", size=round(8 * scale), weight="bold")
+    issue_title_font = tkfont.Font(family="Segoe UI", size=round(11 * scale), weight="bold")
+    button_font = tkfont.Font(family="Segoe UI", size=round(9 * scale), weight="bold")
+
+    navy = "#0b1726"
+    blue = "#1769e0"
+    robot_blue = "#9ad8ff"
+    pale_blue = "#e5f6ff"
+    page_bg = "#f3faff"
+    card_border = "#b8d9f4"
+    text_dark = "#0f172a"
+    text_muted = "#475569"
+
+    shell = tk.Frame(root, bg=page_bg)
+    shell.pack(fill=tk.BOTH, expand=True)
+
+    rail_width = max(150, int(width * 0.16))
+    rail = tk.Frame(shell, bg=navy, width=rail_width, padx=18, pady=20)
+    rail.pack(side=tk.LEFT, fill=tk.Y)
+    rail.pack_propagate(False)
+
+    try:
+        robot_image = tk.PhotoImage(file=str(THOMAS_ASSET_PATH))
+        max_robot_width = max(72, rail_width - 54)
+        if robot_image.width() > max_robot_width:
+            robot_image = robot_image.subsample(max(1, (robot_image.width() + max_robot_width - 1) // max_robot_width))
+        root._thomas_robot_image = robot_image  # type: ignore[attr-defined]
+        tk.Label(rail, image=robot_image, bg=navy).pack(anchor="w", pady=(0, 14))
+    except tk.TclError:
+        tk.Label(rail, text="Thomas", bg=navy, fg=robot_blue, font=rail_title_font, anchor="w").pack(
+            fill=tk.X,
+            pady=(0, 14),
+        )
+
+    tk.Label(
+        rail,
+        text="Thomas\nSecurity",
+        bg=navy,
+        fg=robot_blue,
+        font=rail_title_font,
+        anchor="w",
+        justify=tk.LEFT,
+    ).pack(fill=tk.X, pady=(0, 12))
+    tk.Label(
+        rail,
+        text="Commit blocked. Human decision required.",
+        bg=navy,
+        fg="#d5ecff",
+        font=body_bold_font,
+        anchor="w",
+        justify=tk.LEFT,
+        wraplength=max(110, rail_width - 36),
+    ).pack(fill=tk.X, pady=(0, 10))
+    tk.Label(
+        rail,
+        text="Read the recommendation before bypassing guardrails.",
+        bg=navy,
+        fg="#94a3b8",
+        font=subtitle_font,
+        anchor="w",
+        justify=tk.LEFT,
+        wraplength=max(110, rail_width - 36),
+    ).pack(fill=tk.X)
+
+    main = tk.Frame(shell, bg=page_bg, padx=20, pady=16)
+    main.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+    header = tk.Frame(main, bg=page_bg)
+    header.pack(fill=tk.X)
+    tk.Label(
+        header,
+        text=window_title,
+        bg=page_bg,
+        fg=text_dark,
+        font=title_font,
+        anchor="w",
+    ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+    tk.Label(
+        header,
+        text="BLOCKED",
+        bg="#fff7ed",
+        fg="#9a3412",
+        font=label_font,
+        padx=10,
+        pady=5,
+    ).pack(side=tk.RIGHT)
+    tk.Label(
+        main,
+        text=main_instruction,
+        bg=page_bg,
+        fg=text_muted,
+        font=subtitle_font,
+        anchor="w",
+        pady=4,
+        wraplength=max(480, int(width * 0.52)),
+    ).pack(fill=tk.X)
+
+    recommendation_text = _clip(
+        str(getattr(context, "recommendation", "") or "").strip() or _clip(content.split("Commit issues:", 1)[0], 560),
+        460,
+    )
+    rec_card = tk.Frame(main, bg="#ffffff", highlightbackground=robot_blue, highlightthickness=2)
+    rec_card.pack(fill=tk.X, pady=(12, 10))
+    tk.Label(
+        rec_card,
+        text="MY RECOMMENDATION",
+        bg=robot_blue,
+        fg=navy,
+        font=label_font,
+        anchor="w",
+        padx=12,
+        pady=5,
+    ).pack(fill=tk.X)
+    tk.Label(
+        rec_card,
+        text=recommendation_text,
+        bg="#ffffff",
+        fg=text_dark,
+        font=body_bold_font,
+        anchor="w",
+        justify=tk.LEFT,
+        wraplength=max(460, width - rail_width - 100),
+        padx=12,
+        pady=10,
+    ).pack(fill=tk.X)
+
+    panel = tk.Frame(main, bg="#ffffff", highlightbackground="#b8d9f4", highlightthickness=1)
+    panel.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+
+    canvas = tk.Canvas(panel, bg="#ffffff", highlightthickness=0, bd=0)
+    scrollbar = ttk.Scrollbar(panel, orient=tk.VERTICAL, command=canvas.yview)
+    scroll_body = tk.Frame(canvas, bg="#ffffff")
+    canvas_window = canvas.create_window((0, 0), window=scroll_body, anchor="nw")
+
+    def sync_scroll_region(_event=None) -> None:
+        canvas.configure(scrollregion=canvas.bbox("all"))
+
+    def sync_canvas_width(event) -> None:
+        canvas.itemconfigure(canvas_window, width=event.width)
+
+    scroll_body.bind("<Configure>", sync_scroll_region)
+    canvas.bind("<Configure>", sync_canvas_width)
+    canvas.configure(yscrollcommand=scrollbar.set)
+    canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+    def on_mousewheel(event) -> None:
+        canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    canvas.bind_all("<MouseWheel>", on_mousewheel)
+
+    content_wrap = max(440, width - rail_width - 130)
+
+    def add_field(parent, label: str, value: str, *, color: str, bg: str = "#ffffff") -> None:
+        text_value = _clip(value, 360)
+        if not text_value:
+            return
+        block = tk.Frame(parent, bg=bg, highlightbackground=color, highlightthickness=1)
+        block.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(
+            block,
+            text=label.upper(),
+            bg=color,
+            fg=navy,
+            font=label_font,
+            anchor="w",
+            padx=9,
+            pady=3,
+        ).pack(fill=tk.X)
+        tk.Label(
+            block,
+            text=text_value,
+            bg=bg,
+            fg=text_dark,
+            font=body_bold_font if label.lower().startswith(("what", "why")) else body_font,
+            anchor="w",
+            justify=tk.LEFT,
+            wraplength=content_wrap,
+            padx=10,
+            pady=8,
+        ).pack(fill=tk.X)
+
+    def add_compact_row(parent, label: str, value: str, *, color: str) -> None:
+        text_value = _clip(value, 240)
+        if not text_value:
+            return
+        row = tk.Frame(parent, bg="#ffffff")
+        row.pack(fill=tk.X, pady=(0, 6))
+        tk.Label(
+            row,
+            text=label.upper(),
+            bg=color,
+            fg=navy,
+            font=label_font,
+            anchor="w",
+            width=18,
+            padx=8,
+            pady=4,
+        ).pack(side=tk.LEFT, padx=(0, 8))
+        tk.Label(
+            row,
+            text=text_value,
+            bg="#ffffff",
+            fg=text_dark,
+            font=body_bold_font,
+            anchor="w",
+            justify=tk.LEFT,
+            wraplength=max(320, content_wrap - 180),
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+    def toggle_details(panel, button) -> None:
+        if panel.winfo_ismapped():
+            panel.pack_forget()
+            button.configure(text="Details")
+        else:
+            panel.pack(fill=tk.X, pady=(8, 0))
+            button.configure(text="Hide details")
+        sync_scroll_region()
+
+    if context is not None:
+        issue_intro = tk.Frame(scroll_body, bg="#ffffff")
+        issue_intro.pack(fill=tk.X, padx=14, pady=(10, 6))
+        tk.Label(
+            issue_intro,
+            text=f"{len(tuple(context.issues or ())[:5])} commit issue(s)",
+            bg="#ffffff",
+            fg=text_dark,
+            font=issue_title_font,
+            anchor="w",
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        tk.Label(
+            issue_intro,
+            text="Use Details only when you want the evidence.",
+            bg="#ffffff",
+            fg=text_muted,
+            font=subtitle_font,
+            anchor="e",
+        ).pack(side=tk.RIGHT)
+        for index, issue in enumerate(tuple(context.issues or ())[:5], start=1):
+            card = tk.Frame(scroll_body, bg="#ffffff", highlightbackground=card_border, highlightthickness=1)
+            card.pack(fill=tk.X, padx=14, pady=(0, 8))
+            card_header = tk.Frame(card, bg=pale_blue)
+            card_header.pack(fill=tk.X)
+            tk.Label(
+                card_header,
+                text=str(index),
+                bg=blue,
+                fg="#ffffff",
+                font=body_bold_font,
+                width=3,
+                pady=5,
+            ).pack(side=tk.LEFT)
+            tk.Label(
+                card_header,
+                text=str(issue.gate or "Commit issue"),
+                bg=pale_blue,
+                fg=text_dark,
+                font=issue_title_font,
+                anchor="w",
+                padx=10,
+                pady=6,
+            ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+            detail_button = tk.Button(
+                card_header,
+                text="Details",
+                font=button_font,
+                bg="#ffffff",
+                fg=text_dark,
+                activebackground="#eef8ff",
+                relief=tk.SOLID,
+                bd=1,
+                padx=8,
+                pady=3,
+            )
+            detail_button.pack(side=tk.RIGHT, padx=(0, 8))
+            tk.Label(
+                card_header,
+                text="BLOCKING",
+                bg="#fff7ed",
+                fg="#9a3412",
+                font=label_font,
+                padx=8,
+                pady=4,
+            ).pack(side=tk.RIGHT, padx=8)
+            body = tk.Frame(card, bg="#ffffff", padx=10, pady=8)
+            body.pack(fill=tk.X)
+            add_compact_row(
+                body,
+                "Blocked because",
+                getattr(issue, "plain_reason", "") or issue.why,
+                color="#c7efff",
+            )
+            add_compact_row(
+                body,
+                "Thomas recommends",
+                _without_recommendation_prefix(getattr(issue, "recommendation", "")),
+                color="#bbf7d0",
+            )
+            details = tk.Frame(body, bg="#ffffff")
+            detail_button.configure(command=lambda panel=details, button=detail_button: toggle_details(panel, button))
+            add_field(details, "Why it matters", getattr(issue, "impact", ""), color="#fed7aa", bg="#fffaf5")
+            evidence = tuple(getattr(issue, "evidence", ()) or ())[:2]
+            if evidence:
+                add_field(
+                    details, "Evidence Thomas found", " | ".join(_clip(item, 180) for item in evidence), color="#e2e8f0"
+                )
+            add_field(details, "Next step", getattr(issue, "next_step", ""), color="#bfdbfe", bg="#eff6ff")
+    else:
+        text = tk.Text(
+            scroll_body,
+            wrap=tk.WORD,
+            font=body_font,
+            bg="#ffffff",
+            fg="#1d2733",
+            padx=12,
+            pady=12,
+            relief=tk.FLAT,
+            height=16,
+        )
+        text.pack(fill=tk.BOTH, expand=True)
+        text.insert("1.0", content)
+        text.configure(state=tk.DISABLED)
+
+    footer = tk.Frame(main, bg=page_bg)
+    footer.pack(fill=tk.X)
+    tk.Label(
+        footer,
+        text="Choose an action:",
+        bg=page_bg,
+        fg=text_dark,
+        font=body_bold_font,
+        anchor="w",
+    ).pack(side=tk.LEFT, padx=(0, 8))
+    tk.Label(
+        footer,
+        text="Authorize opens Windows sign-in. Recommended action avoids breakglass and asks Thomas to fix the blocker first.",
+        bg=page_bg,
+        fg=text_muted,
+        font=subtitle_font,
+        anchor="w",
+        justify=tk.LEFT,
+        wraplength=max(260, int(width * 0.25)),
+    ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+    button_bar = tk.Frame(footer, bg=page_bg)
+    button_bar.pack(side=tk.RIGHT)
+
+    def add_button(label: str, decision: str, *, bg: str, fg: str, border: int = 0) -> tk.Button:
+        button = tk.Button(
+            button_bar,
+            text=label,
+            font=button_font,
+            bg=bg,
+            fg=fg,
+            activebackground=bg,
+            activeforeground=fg,
+            relief=tk.FLAT if border == 0 else tk.SOLID,
+            bd=border,
+            padx=8,
+            pady=7,
+            width=_button_width_chars(label),
+            wraplength=max(110, int(width * 0.11)),
+            justify=tk.CENTER,
+            command=lambda: finish(decision),
+        )
+        button.pack(side=tk.RIGHT, padx=(8, 0))
+        return button
+
+    add_button(cancel_label, "cancel", bg="#ffffff", fg=text_dark, border=1)
+    approve = add_button(approve_label, "approve", bg="#fff7ed", fg="#9a3412", border=1)
+    if resolution_label and resolution_prompt:
+        primary_button = add_button(resolution_label, "action", bg=blue, fg="#ffffff")
+    else:
+        primary_button = approve
+
+    root.bind("<Escape>", lambda _event: finish("cancel"))
+    root.bind("<Return>", lambda _event: finish("approve"))
+    primary_button.focus_set()
+
+    root.mainloop()
+    return str(result["decision"])
+
+
+def _show_breakglass_confirmation_dialog(
+    *,
+    window_title: str,
+    main_instruction: str,
+    content: str,
+    approve_label: str = "Authorize protected change",
+    cancel_label: str = "Back out",
+    resolution_label: str = "",
+    resolution_prompt: str = "",
+    context: BreakglassContext | None = None,
+) -> str:
+    custom_result = _show_custom_breakglass_dialog(
+        window_title=window_title,
+        main_instruction=main_instruction,
+        content=content,
+        approve_label=approve_label,
+        cancel_label=cancel_label,
+        resolution_label=resolution_label,
+        resolution_prompt=resolution_prompt,
+        context=context,
+    )
+    if custom_result is not None:
+        return custom_result
+
     comctl32 = _ctypes_lib("comctl32", use_last_error=True)
     task_dialog = comctl32.TaskDialog
     task_dialog.argtypes = [
@@ -214,14 +826,14 @@ def _show_breakglass_confirmation_dialog(*, window_title: str, main_instruction:
         None,
         window_title,
         main_instruction,
-        content,
+        content + "\n\nPress OK to authorize. Press Cancel to back out.",
         TDCBF_OK_BUTTON | TDCBF_CANCEL_BUTTON,
         _task_dialog_icon(TD_SHIELD_ICON_RESOURCE_ID),
         ctypes.byref(button),
     )
     if hr != 0:
         raise OSError(int(hr), f"TaskDialog failed: {_format_windows_error(hr)}")
-    return int(button.value) == IDOK
+    return "approve" if int(button.value) == IDOK else "cancel"
 
 
 def _pack_current_user(credui, current_user: str):
@@ -614,6 +1226,7 @@ def authorize_breakglass(
     ticket: str,
     reason: str,
     skip_hooks: list[str] | None = None,
+    context: BreakglassContext | dict[str, object] | None = None,
 ) -> BreakglassAuthorization:
     hooks = [str(item or "").strip() for item in list(skip_hooks or []) if str(item or "").strip()]
     if os.name != "nt":
@@ -636,19 +1249,34 @@ def authorize_breakglass(
             method=WINDOWS_CREDENTIAL_METHOD,
         )
 
-    confirm_title, confirm_instruction, confirm_content = _build_windows_confirmation_copy(
+    context_payload = breakglass_context_payload(context) or breakglass_context_from_env(os.environ)
+    (
+        confirm_title,
+        confirm_instruction,
+        confirm_content,
+        approve_label,
+        cancel_label,
+        resolution_label,
+        resolution_prompt,
+    ) = _build_breakglass_decision_copy(
         purpose=str(purpose or "").strip() or "breakglass override",
         agent=str(agent or "").strip() or "unknown-agent",
         ticket=str(ticket or "").strip(),
         reason=str(reason or "").strip(),
         skip_hooks=hooks,
         current_user=current_user,
+        context=context_payload,
     )
     try:
         approved = _show_breakglass_confirmation_dialog(
             window_title=confirm_title,
             main_instruction=confirm_instruction,
             content=confirm_content,
+            approve_label=approve_label,
+            cancel_label=cancel_label,
+            resolution_label=resolution_label,
+            resolution_prompt=resolution_prompt,
+            context=context_payload,
         )
     except OSError as exc:
         return BreakglassAuthorization(
@@ -657,7 +1285,18 @@ def authorize_breakglass(
             actor=current_user,
             method=WINDOWS_CREDENTIAL_METHOD,
         )
-    if not approved:
+    decision = "approve" if approved is True else "cancel" if approved is False else str(approved or "cancel")
+    if decision == "action":
+        return BreakglassAuthorization(
+            ok=False,
+            message="recommended action requested instead of breakglass authorization",
+            actor=current_user,
+            method=WINDOWS_CREDENTIAL_METHOD,
+            cancelled=True,
+            action_requested=True,
+            action_prompt=resolution_prompt or None,
+        )
+    if decision != "approve":
         return BreakglassAuthorization(
             ok=False,
             message="breakglass approval cancelled before Windows sign-in",

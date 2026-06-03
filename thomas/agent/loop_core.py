@@ -194,18 +194,26 @@ class AgentLoop:
         self._guardrails_event_cb = guardrails_event_cb
         self._automation_policy = automation_policy
         self._autonomy_level = clamp_autonomy_level(autonomy_level, default=3)
-        self._max_parallel_tools: int | None = None
+        # Bound tool execution by default so a hung tool (or a huge fan-out)
+        # can't stall a turn indefinitely. The streaming chat path passes
+        # explicit values; plan-mode/CLI/integrations historically passed None,
+        # which the executor treated as "no timeout" + unbounded parallelism.
+        # 600s is a generous backstop above any single tool's own timeout
+        # (shell caps at 300s), and 6 matches the main chat path.
+        default_tool_timeout_s = 600
+        default_max_parallel_tools = 6
+        self._max_parallel_tools: int = default_max_parallel_tools
         if max_parallel_tools is not None:
             try:
                 self._max_parallel_tools = max(1, int(max_parallel_tools))
             except (ValueError, TypeError):
-                self._max_parallel_tools = None
-        self._tool_timeout_s: int | None = None
+                self._max_parallel_tools = default_max_parallel_tools
+        self._tool_timeout_s: int = default_tool_timeout_s
         if tool_timeout_s is not None:
             try:
                 self._tool_timeout_s = max(1, int(tool_timeout_s))
             except (ValueError, TypeError):
-                self._tool_timeout_s = None
+                self._tool_timeout_s = default_tool_timeout_s
         raw_profile_type = str(profile_type or "").strip().lower()
         if not raw_profile_type:
             raw_profile_type = "non_coder" if bool(non_coder_profile) else "adaptive"

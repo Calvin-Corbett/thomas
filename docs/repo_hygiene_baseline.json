@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "max_tracked_root_files": 39,
+  "max_tracked_root_files": 41,
   "allowed_tracked_root_files": [
     ".dockerignore",
     ".env.example",
@@ -20,6 +20,7 @@
     "IDENTITY.md",
     "LICENSE",
     "MANIFEST.in",
+    "ONBOARDING.md",
     "PROJECT_MANAGEMENT_RULES.md",
     "README.md",
     "SECURITY.md",
@@ -39,6 +40,7 @@
     "run-repl.cmd",
     "run-ui.cmd",
     "setup.cmd",
+    "sitecustomize.py",
     "thomas.prod.toml",
     "thomas.toml"
   ],

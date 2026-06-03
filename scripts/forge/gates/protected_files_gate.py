@@ -178,9 +178,17 @@ def _drop_precommit_breadcrumb() -> None:
 
 
 def _runtime_protection_disabled() -> bool:
-    """Check if a human has temporarily disabled runtime protection."""
-    flag = ROOT / "runtime" / ".runtime_protection_disabled"
-    return flag.is_file()
+    """B9 (praxis-unbypassable-2026-05-29): only a validly SIGNED disable flag
+    counts. Presence alone is not enough — an unsigned planted flag must not
+    disable this gate. Mirrors thomas.tools.filesystem signed-flag validation."""
+    try:
+        from scripts.forge.gates._runtime_guard import runtime_protection_disabled
+    except ImportError:  # pragma: no cover - import path varies by run context
+        try:
+            from forge.gates._runtime_guard import runtime_protection_disabled
+        except ImportError:
+            from _runtime_guard import runtime_protection_disabled
+    return runtime_protection_disabled(ROOT)
 
 
 def run(argv: list[str] | None = None) -> int:
@@ -209,11 +217,14 @@ def run(argv: list[str] | None = None) -> int:
     approval_trailer = ""
     approval_reason = ""
     if violations and args.base and args.head:
+        # Server-side (diff-range) approval lives in reviewed, immutable commit
+        # history — that is a legitimate, human-reviewed authorization path.
         approved, approval_trailer, approval_reason = _protected_files_approval(_commit_messages(args.base, args.head))
-    elif violations:
-        message = str(os.getenv(COMMIT_MESSAGE_ENV, "") or "")
-        if message:
-            approved, approval_trailer, approval_reason = _protected_files_approval([message])
+    # NOTE (R4, praxis-unbypassable-2026-05-29): local staged commits have NO
+    # env-based self-approval. An earlier THOMAS_COMMIT_MESSAGE path let an
+    # agent self-approve a protected-file edit by setting an env var. Local
+    # protected-file edits must go through the native-auth breakglass SKIP path
+    # (Windows sign-in, audited) — see precommit_skip_policy / commit_breakglass_guard.
     ok = len(violations) == 0 or approved
 
     if args.json:

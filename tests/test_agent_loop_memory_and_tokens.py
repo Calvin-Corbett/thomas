@@ -95,6 +95,33 @@ class TestAgentLoopMemoryAndTokens(unittest.TestCase):
         self.assertGreaterEqual(len(memory.retrieve_calls), 1)
         self.assertEqual(memory.retrieve_calls[0]["mode"], "auto")
 
+    def test_benchmark_mode_skips_memory_read_and_write(self) -> None:
+        agent, memory = self._build_agent()
+
+        async def run_once():
+            events = []
+            async for ev in agent.run(
+                "find the bug in main.py",
+                tools_policy="never",
+                mode="thinking",
+                job_type="benchmark",
+            ):
+                events.append(ev)
+            await asyncio.sleep(0.02)
+            return events
+
+        events = asyncio.run(run_once())
+        done = next((e for e in events if e.type == EventType.AGENT_DONE), None)
+        self.assertIsNotNone(done)
+        assert done is not None
+
+        self.assertEqual([], memory.retrieve_calls)
+        self.assertEqual([], memory.events)
+        self.assertEqual({}, memory.pins)
+        self.assertEqual({}, memory.thread_policies)
+        token_report = done.data.get("token_report") or {}
+        self.assertEqual(0, int(token_report.get("memory_context_tokens") or 0))
+
     def test_fast_mode_uses_fast_memory_retrieval(self) -> None:
         agent, memory = self._build_agent()
 
@@ -233,7 +260,7 @@ class TestAgentLoopMemoryAndTokens(unittest.TestCase):
 
         self.assertTrue(max_policy.include_memory_profile)
         self.assertTrue(max_policy.include_test_visibility_hint)
-        self.assertEqual(max_policy.runtime_skills_mode, "auto")
+        self.assertEqual(max_policy.runtime_skills_mode, "explicit")
 
     def test_build_system_message_can_omit_optional_overhead_sections(self) -> None:
         agent, _memory = self._build_agent()

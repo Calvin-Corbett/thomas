@@ -6,7 +6,9 @@ selection, connection testing, and config file generation.
 
 from __future__ import annotations
 
+import contextlib
 import logging
+import os
 from pathlib import Path
 
 try:
@@ -266,6 +268,13 @@ def run_wizard() -> str | None:
     config_path = Path("thomas.toml")
 
     config_path.write_text(config_content, encoding="utf-8")
+    # The config embeds the provider API key in clear text (it must be sent
+    # verbatim to authenticate and so cannot be hashed). Restrict the file to
+    # the owner to limit on-disk exposure
+    # (py/clear-text-storage-sensitive-data).
+    if api_key:
+        with contextlib.suppress(OSError):
+            os.chmod(config_path, 0o600)
     click.echo(click.style(f"  OK: Config saved to {config_path.resolve()}", fg="green"))
 
     # ── Step 7: Desktop Shortcut ─────────────────────────────────

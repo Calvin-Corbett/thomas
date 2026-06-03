@@ -88,11 +88,12 @@ def test_fails_for_broad_skip_tokens(tmp_path: Path, capsys, monkeypatch) -> Non
     assert not audit_log.exists()
 
 
-@pytest.mark.xfail(
-    reason="Test pins 'windows-credential-dialog' as the breakglass auth method, but on Linux CI the auth path uses 'ci-trusted'. The gate still works correctly; the assertion needs platform-aware fixtures (tracked separately).",
-    strict=False,
-)
 def test_records_audit_log_on_valid_skip(tmp_path: Path, capsys, monkeypatch) -> None:
+    # Previously xfail: the old GITHUB_ACTIONS "ci-trusted" branch bypassed the
+    # mocked authorize_breakglass on Linux CI, so the auth method came back
+    # "ci-trusted" instead of "windows-credential-dialog". B4 removed that
+    # branch, so breakglass now always routes through authorize_breakglass
+    # (mocked here) and the method is deterministic on every platform.
     audit_log = tmp_path / "skip_audit.jsonl"
     monkeypatch.setenv("SKIP", "thomas-release-hygiene-gate,thomas-release-update-gate")
     monkeypatch.setenv("AGENT_ID", "Codex 3")
@@ -235,12 +236,15 @@ def test_fails_when_breakglass_staged_files_exceed_hard_limit(tmp_path: Path, ca
 def test_fails_when_breakglass_cooldown_active(tmp_path: Path, capsys, monkeypatch) -> None:
     audit_log = tmp_path / "skip_audit.jsonl"
     now = datetime(2026, 2, 27, 12, 0, tzinfo=timezone.utc)
+    # B5: history + quota now bind to the VERIFIED actor (breakglass_authorized_by),
+    # not the spoofable AGENT_ID.
     audit_log.write_text(
         json.dumps(
             {
                 "gate": "precommit_skip_policy",
                 "timestamp_utc": "2026-02-27T11:55:00+00:00",
                 "agent": "Codex 3",
+                "breakglass_authorized_by": "WORKSTATION\\corbe",
                 "breakglass_used": True,
             }
         )
@@ -254,12 +258,13 @@ def test_fails_when_breakglass_cooldown_active(tmp_path: Path, capsys, monkeypat
     monkeypatch.setenv("THOMAS_SKIP_TICKET", "OPS-2005")
     monkeypatch.setattr(mod, "_staged_files", lambda: ["scripts/forge/gates/precommit_skip_policy.py"])
     monkeypatch.setattr(mod, "_now_utc", lambda: now)
+    _approve_breakglass(monkeypatch)
 
     rc = mod.run(["--audit-log", str(audit_log), "--breakglass-cooldown-minutes", "15"])
     out = capsys.readouterr().out
 
     assert rc == 1
-    assert "breakglass cooldown active for `Codex 3`" in out
+    assert "breakglass cooldown active for `WORKSTATION\\corbe`" in out
 
 
 def test_fails_when_breakglass_quota_exceeded(tmp_path: Path, capsys, monkeypatch) -> None:
@@ -270,12 +275,14 @@ def test_fails_when_breakglass_quota_exceeded(tmp_path: Path, capsys, monkeypatc
             "gate": "precommit_skip_policy",
             "timestamp_utc": "2026-02-27T09:00:00+00:00",
             "agent": "Codex 3",
+            "breakglass_authorized_by": "WORKSTATION\\corbe",
             "breakglass_used": True,
         },
         {
             "gate": "precommit_skip_policy",
             "timestamp_utc": "2026-02-27T10:00:00+00:00",
             "agent": "Codex 3",
+            "breakglass_authorized_by": "WORKSTATION\\corbe",
             "breakglass_used": True,
         },
     ]
@@ -287,6 +294,7 @@ def test_fails_when_breakglass_quota_exceeded(tmp_path: Path, capsys, monkeypatc
     monkeypatch.setenv("THOMAS_SKIP_TICKET", "OPS-2006")
     monkeypatch.setattr(mod, "_staged_files", lambda: ["scripts/forge/gates/precommit_skip_policy.py"])
     monkeypatch.setattr(mod, "_now_utc", lambda: now)
+    _approve_breakglass(monkeypatch)
 
     rc = mod.run(
         ["--audit-log", str(audit_log), "--breakglass-cooldown-minutes", "0", "--breakglass-max-per-agent-24h", "2"]
@@ -294,7 +302,49 @@ def test_fails_when_breakglass_quota_exceeded(tmp_path: Path, capsys, monkeypatc
     out = capsys.readouterr().out
 
     assert rc == 1
-    assert "breakglass quota exceeded for `Codex 3`" in out
+    assert "breakglass quota exceeded for `WORKSTATION\\corbe`" in out
+
+
+def test_breakglass_quota_binds_to_verified_actor_not_agent_id_B5(tmp_path: Path, capsys, monkeypatch) -> None:
+    # B5: rotating AGENT_ID must NOT reset the quota — history binds to the
+    # verified OS actor returned by native-auth. Two prior breakglass rows for
+    # actor WORKSTATION\corbe (written under a DIFFERENT agent id) must still
+    # count against a fresh agent id when the same actor authenticates.
+    audit_log = tmp_path / "skip_audit.jsonl"
+    now = datetime(2026, 2, 27, 12, 0, tzinfo=timezone.utc)
+    rows = [
+        {
+            "gate": "precommit_skip_policy",
+            "timestamp_utc": "2026-02-27T09:00:00+00:00",
+            "agent": "Codex Red A",
+            "breakglass_authorized_by": "WORKSTATION\\corbe",
+            "breakglass_used": True,
+        },
+        {
+            "gate": "precommit_skip_policy",
+            "timestamp_utc": "2026-02-27T10:00:00+00:00",
+            "agent": "Codex Red A",
+            "breakglass_authorized_by": "WORKSTATION\\corbe",
+            "breakglass_used": True,
+        },
+    ]
+    audit_log.write_text("\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n", encoding="utf-8")
+    monkeypatch.setenv("SKIP", "thomas-release-update-gate")
+    monkeypatch.setenv("AGENT_ID", "Codex Red B")  # rotated id — must not help
+    monkeypatch.setenv("THOMAS_SKIP_REASON", "Rotating agent id to dodge the quota.")
+    monkeypatch.setenv("THOMAS_SKIP_BREAKGLASS", "1")
+    monkeypatch.setenv("THOMAS_SKIP_TICKET", "OPS-2007")
+    monkeypatch.setattr(mod, "_staged_files", lambda: ["scripts/forge/gates/precommit_skip_policy.py"])
+    monkeypatch.setattr(mod, "_now_utc", lambda: now)
+    _approve_breakglass(monkeypatch)  # actor = WORKSTATION\corbe regardless of AGENT_ID
+
+    rc = mod.run(
+        ["--audit-log", str(audit_log), "--breakglass-cooldown-minutes", "0", "--breakglass-max-per-agent-24h", "2"]
+    )
+    out = capsys.readouterr().out
+
+    assert rc == 1
+    assert "breakglass quota exceeded for `WORKSTATION\\corbe`" in out
 
 
 @pytest.mark.xfail(
@@ -328,3 +378,35 @@ def test_fails_when_human_authorization_is_cancelled(tmp_path: Path, capsys, mon
     assert payload["breakglass_human_verified"] is False
     assert payload["breakglass_cancelled"] is True
     assert not audit_log.exists()
+
+
+def test_github_actions_env_does_not_shortcut_human_breakglass_B4(tmp_path: Path, capsys, monkeypatch) -> None:
+    # B4 (praxis-unbypassable-2026-05-29): setting GITHUB_ACTIONS=true locally
+    # must NOT grant a no-human "ci-trusted" breakglass. authorize_breakglass
+    # must still be invoked, and its denial must block.
+    audit_log = tmp_path / "skip_audit.jsonl"
+    monkeypatch.setenv("SKIP", "thomas-architecture")
+    monkeypatch.setenv("AGENT_ID", "attacker")
+    monkeypatch.setenv("THOMAS_SKIP_REASON", "spoofing CI to skip the human prompt")
+    monkeypatch.setenv("THOMAS_SKIP_BREAKGLASS", "1")
+    monkeypatch.setenv("THOMAS_SKIP_TICKET", "OPS-9999")
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")  # the spoof codex demonstrated
+    monkeypatch.setattr(mod, "_staged_files", lambda: ["scripts/forge/gates/precommit_skip_policy.py"])
+    monkeypatch.setattr(mod, "_run_git", lambda _args: "mock")
+
+    calls = {"n": 0}
+
+    def fake_auth(**_):
+        calls["n"] += 1
+        return SimpleNamespace(
+            ok=False, message="human denied", actor=None, method="windows-credential-dialog", cancelled=True
+        )
+
+    monkeypatch.setattr(mod, "authorize_breakglass", fake_auth)
+
+    rc = mod.run(["--audit-log", str(audit_log)])
+    out = capsys.readouterr().out
+
+    assert calls["n"] == 1, "authorize_breakglass must be called despite GITHUB_ACTIONS=true"
+    assert rc == 1
+    assert "FAIL" in out

@@ -127,11 +127,29 @@ def get_gateway_process(app: web.Application) -> subprocess.Popen | None:
 
 
 def _resolve_config_path(config_path: str) -> str:
+    # Reject path-injection vectors in the request-supplied value before it
+    # touches the filesystem: embedded NUL bytes and parent-directory ("..")
+    # traversal components. Absolute and ordinary relative paths remain allowed
+    # (the operator chooses the config location).
+    if "\x00" in config_path:
+        raise GatewayStartException(
+            "invalid_input",
+            "Invalid config_path: contains a NUL byte.",
+            details={"field": "config_path"},
+            http_status=400,
+        )
     p = Path(config_path).expanduser()
+    if ".." in p.parts:
+        raise GatewayStartException(
+            "invalid_input",
+            "Invalid config_path: parent-directory traversal is not allowed.",
+            details={"field": "config_path"},
+            http_status=400,
+        )
     # Do not require absolute; just normalize for stable error details.
     try:
         p = p.resolve()
-    except Exception:
+    except (OSError, RuntimeError):
         p = p.absolute()
     return str(p)
 

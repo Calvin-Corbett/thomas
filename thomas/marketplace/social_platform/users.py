@@ -6,6 +6,7 @@ relationships, and user discovery with efficient graph algorithms.
 
 import hashlib
 import re
+import secrets
 from collections import defaultdict
 from datetime import datetime
 from uuid import UUID, uuid4
@@ -96,15 +97,21 @@ class UserManager:
 
     @staticmethod
     def _hash_password(password: str) -> str:
-        """Hash password using SHA-256.
+        """Hash a password with PBKDF2-HMAC-SHA256.
+
+        Uses a random per-password salt and a high iteration count so the stored
+        value is a slow, salted password hash rather than a fast unsalted digest.
 
         Args:
             password: Password to hash
 
         Returns:
-            Hashed password
+            Self-describing hash string: ``pbkdf2_sha256$<iterations>$<salt_hex>$<hash_hex>``
         """
-        return hashlib.sha256(password.encode()).hexdigest()
+        iterations = 600_000
+        salt = secrets.token_bytes(16)
+        derived = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, iterations)
+        return f"pbkdf2_sha256${iterations}${salt.hex()}${derived.hex()}"
 
     def register_user(self, username: str, email: str, password: str, display_name: str | None = None) -> User:
         """Register a new user.

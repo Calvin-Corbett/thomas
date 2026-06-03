@@ -10,6 +10,10 @@ if str(ROOT) not in sys.path:
 
 sys.dont_write_bytecode = True
 os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+# Tests legitimately point the server at local test HTTP servers (loopback), which
+# the SSRF guard (thomas/server/net_safety.py) blocks by default. Opt out here so
+# integration tests run; the guard's blocking behavior is covered by test_net_safety.py.
+os.environ.setdefault("THOMAS_ALLOW_PRIVATE_OUTBOUND", "1")
 
 pytest_plugins = []
 if (Path(__file__).with_name("conftest_factories.py")).exists():

@@ -63,9 +63,17 @@ SKIP_DIR_NAMES = {
 
 
 def _runtime_protection_disabled() -> bool:
-    """Check if a human has temporarily disabled runtime protection."""
-    flag = ROOT / "runtime" / ".runtime_protection_disabled"
-    return flag.is_file()
+    """B9 (praxis-unbypassable-2026-05-29): only a validly SIGNED disable flag
+    counts. Presence alone is not enough — an unsigned planted flag must not
+    disable this gate. Mirrors thomas.tools.filesystem signed-flag validation."""
+    try:
+        from scripts.forge.gates._runtime_guard import runtime_protection_disabled
+    except ImportError:  # pragma: no cover - import path varies by run context
+        try:
+            from forge.gates._runtime_guard import runtime_protection_disabled
+        except ImportError:
+            from _runtime_guard import runtime_protection_disabled
+    return runtime_protection_disabled(ROOT)
 
 
 def _is_skipped_path(path: Path) -> bool:
