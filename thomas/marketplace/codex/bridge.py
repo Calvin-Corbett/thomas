@@ -41,6 +41,26 @@ def _resolve_stdout_read_limit() -> int:
     return max(_STDOUT_READ_LIMIT_MIN, min(value, _STDOUT_READ_LIMIT_MAX))
 
 
+# JSON-RPC param keys that carry secrets and must never be logged in clear text.
+_SENSITIVE_PARAM_KEYS = frozenset({"apiKey", "api_key", "token", "refreshToken", "accessToken", "secret", "password"})
+
+
+def _redact_rpc_line(method: str, params: dict[str, Any]) -> str:
+    """Build a log-safe one-line summary of an outbound JSON-RPC message.
+
+    The full message body is never logged because params can contain
+    credentials (e.g. account/login/start carries an apiKey). We log the
+    method plus the param key names only, masking any sensitive values.
+    """
+    safe_keys = []
+    for key in params:
+        if key in _SENSITIVE_PARAM_KEYS:
+            safe_keys.append(f"{key}=***")
+        else:
+            safe_keys.append(str(key))
+    return f"method={method} params=[{', '.join(safe_keys)}]"
+
+
 from thomas.marketplace.codex.bridge_helpers import (
     event_matches_turn as _event_matches_turn,  # noqa: F401  -- re-exported for tests/test_codex_bridge_usage.py
 )
@@ -582,7 +602,7 @@ class CodexBridge:
 
         msg = {"method": method, "id": req_id, "params": params}
         line = json.dumps(msg, separators=(",", ":")) + "\n"
-        log.debug(">> codex: %s", line.rstrip())
+        log.debug(">> codex: %s", _redact_rpc_line(method, params))
 
         try:
             self._proc.stdin.write(line.encode("utf-8"))
@@ -607,7 +627,7 @@ class CodexBridge:
 
         msg = {"method": method, "params": params}
         line = json.dumps(msg, separators=(",", ":")) + "\n"
-        log.debug(">> codex (notify): %s", line.rstrip())
+        log.debug(">> codex (notify): %s", _redact_rpc_line(method, params))
 
         self._proc.stdin.write(line.encode("utf-8"))
         await self._proc.stdin.drain()

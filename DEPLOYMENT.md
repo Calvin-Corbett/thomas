@@ -6,7 +6,7 @@
 
 ```bash
 # Clone and install
-git clone https://github.com/thomas-ai-assistant/thomas.git
+git clone https://github.com/Calvin-Corbett/thomas.git
 cd thomas
 bash install.sh
 

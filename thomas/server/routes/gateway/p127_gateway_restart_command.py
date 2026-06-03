@@ -316,7 +316,9 @@ def _extract_request_token(request: web.Request) -> str:
 
 
 def _token_hash(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
+    # Not security-relevant: used only to derive a rate-limit bucket key
+    # (and avoid logging raw tokens), never to protect stored secrets.
+    return hashlib.sha256(token.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
 
 
 def _is_loopback_request(request: web.Request) -> bool:

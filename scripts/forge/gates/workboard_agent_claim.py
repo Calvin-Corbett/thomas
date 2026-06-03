@@ -38,8 +38,16 @@ DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 
 
 def _runtime_protection_disabled() -> bool:
-    """Check if a human has temporarily disabled runtime protection."""
-    return (ROOT / "runtime" / ".runtime_protection_disabled").is_file()
+    """B9 (praxis-unbypassable-2026-05-29): only a validly SIGNED disable flag
+    counts (presence alone does not). Mirrors filesystem signed-flag validation."""
+    try:
+        from scripts.forge.gates._runtime_guard import runtime_protection_disabled
+    except ImportError:  # pragma: no cover - import path varies by run context
+        try:
+            from forge.gates._runtime_guard import runtime_protection_disabled
+        except ImportError:
+            from _runtime_guard import runtime_protection_disabled
+    return runtime_protection_disabled(ROOT)
 
 
 DEFAULT_STAGED_SCOPE_IGNORE: tuple[str, ...] = ("CHANGELOG.md", "pyproject.toml", "thomas/__init__.py")
@@ -51,6 +59,40 @@ SCOPE_SOURCE_FALLBACK = "explicit_fallback"
 
 def _resolve_agent(explicit_agent: str | None) -> str | None:
     return agent_identity.resolve_agent(explicit_agent, include_name_fallback=True)
+
+
+def _orphan_adoption_hints(workboard_path: Path, agent: str, paths: Sequence[str]) -> list[dict]:
+    """Orphan claims (>48h stale) owned by others that cover ``paths``.
+
+    Purely informational — NEVER changes this gate's pass/fail. When another
+    agent stranded a claim on files you need, this surfaces the adoption path
+    so work doesn't stall (Calvin 2026-06-01). Any error -> [] (silent).
+    """
+    try:
+        from scripts.crew.workboard.claim_adopt import orphans_covering_paths
+    except ImportError:  # pragma: no cover - import path varies by run context
+        try:
+            from crew.workboard.claim_adopt import orphans_covering_paths  # type: ignore
+        except ImportError:
+            return []
+    try:
+        return orphans_covering_paths(workboard_path, list(paths), exclude_agent=agent)
+    except Exception:
+        return []
+
+
+def _print_orphan_adoption_hint(orphan_hints: list[dict]) -> None:
+    if not orphan_hints:
+        return
+    print("- NOTE: some of these files are held by an ORPHANED claim (stale > 48h):")
+    for hit in orphan_hints:
+        age = hit.get("age_hours")
+        age_s = f"{age}h stale" if age is not None else "uncommitted"
+        covered = ", ".join(str(p) for p in (hit.get("covered_paths") or []))
+        print(f"  - `{hit.get('agent')}` ({age_s}) covers: {covered}")
+    print("  You can ADOPT an orphan to finish its work (requires a Windows Hello tap):")
+    print("    python scripts/crew/workboard/claim_adopt.py adopt --agent <you> \\")
+    print('      --scope <path> --reason "<why you are taking over>"')
 
 
 def _norm(value: str) -> str:
@@ -591,6 +633,7 @@ def run(argv: Sequence[str] | None = None) -> int:
                 f"agent '{agent}' has staged files outside the explicit fallback scope. "
                 "Narrow the staged files or update the fallback scope before committing."
             )
+        orphan_hints = _orphan_adoption_hints(workboard_path, agent, unclaimed_staged_files)
         if args.json:
             payload = {
                 "gate": "workboard_agent_claim",
@@ -607,6 +650,7 @@ def run(argv: Sequence[str] | None = None) -> int:
                 "staged_file_count": len(staged_files),
                 "staged_files_outside_scope_count": len(unclaimed_staged_files),
                 "staged_files_outside_scope": unclaimed_staged_files,
+                "orphan_adoption": orphan_hints,
                 "scope_source": scope_source,
                 "fallback_reason": fallback_reason,
             }
@@ -620,6 +664,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             print("- staged files outside scope:")
             for path in unclaimed_staged_files:
                 print(f"  - {path}")
+            _print_orphan_adoption_hint(orphan_hints)
         return 1
 
     claimed_scope_ignore = _split_patterns(args.claimed_scope_ignore)

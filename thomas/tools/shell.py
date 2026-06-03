@@ -4,12 +4,51 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
 
 from thomas.tools.base import Tool, ToolResult
 from thomas.tools.filesystem import _safe_path
+
+_GIT_TOPOLOGY_MUTATION_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\bgit\s+clone\b", re.I), "git clone"),
+    (re.compile(r"\bgit\s+init\b", re.I), "git init"),
+    (
+        re.compile(r"\bgit\s+worktree\s+(?:add|move|remove|prune|repair)\b", re.I),
+        "git worktree mutation",
+    ),
+    (
+        re.compile(r"\bgit\s+(?:checkout|switch)\s+[^;&|\n]*(?:-b|-B|-c|-C|--create|--orphan)\b", re.I),
+        "git branch creation",
+    ),
+    (
+        re.compile(
+            r"\bgit\s+branch\s+"
+            r"(?!(?:$|-(?:a|r|v|vv|av|va|rv|vr|ar|ra)\b|"
+            r"--(?:all|list|show-current|contains|merged|no-merged|remotes|verbose|"
+            r"format|points-at|sort|color|column|abbrev)(?:=|\b)))",
+            re.I,
+        ),
+        "git branch mutation",
+    ),
+)
+
+
+def _git_topology_mutation_reason(command: str) -> str | None:
+    text = str(command or "").strip()
+    if not text:
+        return None
+    normalized = re.sub(r"\s+", " ", text)
+    for pattern, label in _GIT_TOPOLOGY_MUTATION_PATTERNS:
+        if pattern.search(normalized):
+            return (
+                "Blocked by Thomas repo-topology guard: agents cannot create side clones, "
+                f"branches, or worktrees with shell.exec ({label}). Work in the assigned "
+                "canonical checkout and ask the human for an explicit repository-topology change."
+            )
+    return None
 
 
 class ShellTool(Tool):
@@ -60,6 +99,10 @@ class ShellTool(Tool):
             )
 
         command = args["command"]
+        topology_block = _git_topology_mutation_reason(command)
+        if topology_block:
+            return ToolResult(ok=False, error=topology_block)
+
         timeout = min(
             args.get("timeout", self._default_timeout),
             self._max_timeout,

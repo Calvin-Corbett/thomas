@@ -622,9 +622,18 @@ def _coerce_types(data: dict[str, Any]) -> None:
             _coerce_types(val)
         elif isinstance(val, str):
             if key in int_fields:
-                data[key] = int(val)
+                try:
+                    data[key] = int(val)
+                except ValueError:
+                    # Malformed override (e.g. THOMAS_MAX_TOKENS=abc): drop it so
+                    # the validated default applies, rather than crashing
+                    # load_config() at startup with a raw ValueError.
+                    del data[key]
             elif key in float_fields:
-                data[key] = float(val)
+                try:
+                    data[key] = float(val)
+                except ValueError:
+                    del data[key]
             elif key in bool_fields:
                 data[key] = val.lower() in ("true", "1", "yes")
             elif key == "profiles":

@@ -390,9 +390,13 @@ def setup_middleware_and_handlers(
                 raise web.HTTPBadRequest(text="empty request body")
             return json.loads(raw.decode("utf-8", errors="replace"))
         except json.JSONDecodeError as e:
-            raise web.HTTPBadRequest(text=f"malformed json: {e}") from e
+            # Log the parse detail server-side; return a generic client message so
+            # exception text is not exposed to the caller (py/stack-trace-exposure).
+            log.debug("Rejected malformed JSON request body: %s", e)
+            raise web.HTTPBadRequest(text="malformed json") from e
         except UnicodeDecodeError as e:
-            raise web.HTTPBadRequest(text=f"invalid encoding: {e}") from e
+            log.debug("Rejected request body with invalid encoding: %s", e)
+            raise web.HTTPBadRequest(text="invalid encoding") from e
 
     async def _session_lock_for(session_id: str) -> asyncio.Lock:
         """Get or create a lock for a session ID, with LRU eviction of old locks."""
@@ -673,7 +677,9 @@ def setup_middleware_and_handlers(
         return chats
 
     def _web_build_fingerprint(*relative_paths: str) -> str:
-        digest = hashlib.sha1()
+        # Cache-busting build fingerprint over file mtime/size only -- not a
+        # security primitive, so sha1 is acceptable here (py/weak-sensitive-data-hashing).
+        digest = hashlib.sha1(usedforsecurity=False)
         for relative in relative_paths:
             try:
                 path = web_dir / relative

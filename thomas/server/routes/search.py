@@ -6,6 +6,7 @@ channel listing, bookmarks, saved searches, and index management.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import asdict
 from typing import Any
@@ -16,6 +17,8 @@ from thomas.core.search_history import get_search
 
 # Type alias matching the pattern used by spend/goals routes.
 RequireAccessFn = Callable[[web.Request], None]
+
+_log = logging.getLogger(__name__)
 
 
 def register_search_routes(
@@ -58,7 +61,8 @@ def register_search_routes(
         try:
             data = await request.json()
         except Exception as exc:
-            raise web.HTTPBadRequest(text=f"invalid json: {exc}")
+            _log.debug("search: invalid json body: %s", type(exc).__name__)
+            raise web.HTTPBadRequest(text="invalid json body") from exc
         if not isinstance(data, dict):
             raise web.HTTPBadRequest(text="json body must be an object")
         return data

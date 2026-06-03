@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@opennextjs/cloudflare": "^1.19.11",
+    "@splinetool/viewer": "1.10.10",
     "gsap": "^3.14.2",
     "next": "^16.2.6",
     "postgres": "^3.4.5",

@@ -163,6 +163,31 @@ def test_claim_presence_gate_requires_override(monkeypatch, capsys) -> None:
     assert payload["error"] == "presence gate requires override"
 
 
+def test_presence_gate_blocks_unread_inbox(monkeypatch) -> None:
+    monkeypatch.undo()
+    monkeypatch.setattr(
+        mod.agent_presence,
+        "evaluate_soft_gate",
+        lambda **_kwargs: {"ok": True, "warnings": []},
+    )
+    monkeypatch.setattr(
+        mod,
+        "_workboard_inbox_gate",
+        lambda _agent: (False, "unread workboard messages for `codex` must be acked"),
+    )
+
+    ok, message = mod._presence_gate(
+        purpose="active_folders_guard_staged",
+        agent="codex",
+        paths=["scripts"],
+        allow_override=False,
+        override_reason="",
+    )
+
+    assert ok is False
+    assert "unread workboard messages" in message
+
+
 def test_claim_requires_explicit_agent_for_coordinated_claims(capsys) -> None:
     rc = mod._claim(_claim_args(agent=None))
     payload = json.loads(capsys.readouterr().out)

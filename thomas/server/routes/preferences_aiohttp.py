@@ -104,7 +104,7 @@ def register_preferences_routes(
             return _prefs_json(store.get(user_id=user_id, thread_id=thread_id))
         except Exception as exc:
             log.exception("preferences get failed for user=%s", user_id)
-            raise web.HTTPInternalServerError(text=f"preferences read failed: {type(exc).__name__}: {exc}") from exc
+            raise web.HTTPInternalServerError(text="preferences read failed") from exc
 
     async def api_preferences_patch(request: web.Request) -> web.Response:
         require_api_access(request)
@@ -123,7 +123,8 @@ def register_preferences_routes(
         try:
             patch = PreferencesPatch(**payload)
         except ValidationError as exc:
-            raise web.HTTPBadRequest(text=f"invalid preferences payload: {exc}") from exc
+            log.debug("preferences patch validation failed: %d error(s)", exc.error_count())
+            raise web.HTTPBadRequest(text="invalid preferences payload") from exc
 
         store = _get_store()
         thread_id = _parse_thread_id(request)
@@ -131,10 +132,11 @@ def register_preferences_routes(
         try:
             updated = store.patch(patch=patch, user_id=user_id, thread_id=thread_id)
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc)) from exc
+            log.debug("preferences patch rejected for user=%s: %s", user_id, type(exc).__name__)
+            raise web.HTTPBadRequest(text="invalid preferences payload") from exc
         except Exception as exc:
             log.exception("preferences patch failed for user=%s", user_id)
-            raise web.HTTPInternalServerError(text=f"preferences update failed: {type(exc).__name__}: {exc}") from exc
+            raise web.HTTPInternalServerError(text="preferences update failed") from exc
         _emit_onboarding_patch_telemetry(user_id=user_id, thread_id=thread_id, patch=patch)
 
         return _prefs_json(updated)

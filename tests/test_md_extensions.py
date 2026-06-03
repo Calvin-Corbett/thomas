@@ -2,6 +2,9 @@
 Tests for Markdown extensions.
 """
 
+import re
+from urllib.parse import urlparse
+
 from thomas.marketplace.markdown.extensions import (
     AbbreviationExtension,
     AdmonitionExtension,
@@ -293,6 +296,8 @@ class TestExtensionIntegration:
         """Test smart typography doesn't break Markdown."""
         text = "Visit http://example.com --- it's great!"
         result = SmartTypographyExtension.apply(text)
-        # Should have smart dash and preserved URL
-        assert "example.com" in result
+        # Should have smart dash and a preserved URL whose host is unchanged.
+        url_match = re.search(r"https?://\S+", result)
+        assert url_match is not None
+        assert urlparse(url_match.group(0)).hostname == "example.com"
         assert "\u2014" in result

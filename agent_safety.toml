@@ -87,6 +87,10 @@ guardrails_files = [
 enforcement_files = [
     "tests/test_architecture.py",
     "thomas/_architecture.py",
+    # B13 (praxis-unbypassable-2026-05-29): the anti-tamper manifest is itself a
+    # protected artifact — an agent must not silently edit it to re-bless
+    # tampered gate scripts. Edits trip protected_files_gate.
+    "scripts/forge/gates/enforcement_manifest.json",
 ]
 
 # Scripts that enforce the rules — also protected.
@@ -94,6 +98,20 @@ enforcement_files = [
 # here. An unprotected hook script can be rewritten by an agent to always pass,
 # silently disabling that gate. (Audit Finding 1, 2026-03-19)
 enforcement_scripts = [
+    # ── Local-choke-point + runtime-policy keystones (praxis-unbypassable-2026-05-29) ──
+    # These were NOT previously integrity-checked even though they are the L2
+    # commit choke point, the human-auth primitive, and the runtime good-
+    # engineering policy. Tampering with them must be detected.
+    "scripts/commit_breakglass_guard.py",
+    "scripts/breakglass_auth.py",
+    "scripts/breakglass_context.py",
+    "scripts/commit_guarded.py",
+    "scripts/forge/gates/enforcement_integrity.py",
+    "scripts/forge/gates/_runtime_guard.py",
+    "thomas/core/rules_of_road.py",
+    "thomas/tools/shell.py",
+    "thomas/agent/skills_runtime.py",
+    "thomas/agent/skills_policy.py",
     # ── Core safety gates (original 13) ──
     "scripts/validate_agent_changes.py",
     "scripts/forge/gates/protected_files_gate.py",
@@ -110,6 +128,8 @@ enforcement_scripts = [
     "scripts/crew/brief/safety_config.py",
     # ── Workboard & scope enforcement (Audit Finding 1) ──
     "scripts/forge/gates/workboard_claims.py",
+    "scripts/forge/gates/workboard_inbox.py",
+    "scripts/forge/gates/workboard_inbox_hook.py",
     "scripts/forge/gates/workboard_task_problems.py",
     "scripts/forge/gates/workboard_changed_files.py",
     "scripts/forge/gates/workboard_agent_claim.py",

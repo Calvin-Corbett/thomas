@@ -62,7 +62,9 @@ _EXPLORATORY_RE = re.compile(
 
 _TOOL_OR_FILE_REQUEST_RE = re.compile(
     r"(?:\buse\s+(?:your\s+)?(?:file|files|tool|tools)\b|"
-    r"\b(?:file|files|tool|tools)\b.*\b(?:repo|repository|workspace|folder|directory|path)\b|"
+    # Bounded, non-newline gap (cap 80 chars, lazy) instead of `.*` to avoid
+    # polynomial backtracking on adversarial input (py/polynomial-redos).
+    r"\b(?:file|files|tool|tools)\b[^\n]{0,80}?\b(?:repo|repository|workspace|folder|directory|path)\b|"
     r"\btop[- ]level\s+files?\b|"
     r"\bcurrent\s+(?:repo|repository|workspace)\b|"
     r"\bname\s+\w*\s*three\s+top[- ]level\s+files?\b)",

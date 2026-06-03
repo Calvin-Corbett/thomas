@@ -48,9 +48,9 @@ REQUIRED_GITIGNORE_SNIPPETS = (
 )
 # Production target is `main` on the public remote, not a local `prod` branch
 # (push-vs-publish model — see docs/ai/AGENT_ROUTER.md and the 2026-05-19 security
-# incident docs). Only `dev` is required locally; `main` is the deliberate publish
-# target and is force-pushed from a curated subset of `dev`.
-DEFAULT_REQUIRED_BRANCHES = ("dev",)
+# incident docs). No local integration branch is required by default because
+# public release readiness is anchored on the protected public publish target.
+DEFAULT_REQUIRED_BRANCHES: tuple[str, ...] = ()
 SCAN_SKIP_PREFIXES = (
     "tests/",
     "docs/",
@@ -143,6 +143,21 @@ def _is_scan_candidate(path: str) -> bool:
     return not any(lower_path.endswith(suffix) for suffix in SCAN_SKIP_SUFFIXES)
 
 
+def _redact_match(line: str, match: re.Match[str]) -> str:
+    """Mask the matched secret inside a source line for safe reporting.
+
+    Keeps a short prefix (up to 4 chars) of the matched token for triage but
+    replaces the remainder with ``***`` so the live secret is never emitted to
+    logs, JSON output, or the console. Surrounding (non-secret) context is
+    preserved, then truncated for readability.
+    """
+    secret = match.group(0)
+    keep = secret[:4]
+    masked = f"{keep}***" if keep else "***"
+    redacted = line[: match.start()] + masked + line[match.end() :]
+    return redacted.strip()[:200]
+
+
 def _scan_for_live_secrets(repo_root: Path, tracked: Sequence[str]) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     for rel_path in tracked:
@@ -165,13 +180,16 @@ def _scan_for_live_secrets(repo_root: Path, tracked: Sequence[str]) -> list[dict
             if _is_allowed_secret_line(line):
                 continue
             for name, pattern in SECRET_PATTERNS:
-                if pattern.search(line):
+                match = pattern.search(line)
+                if match:
                     findings.append(
                         {
                             "file": rel_path,
                             "line": index,
                             "pattern": name,
-                            "snippet": line.strip()[:200],
+                            # Redact the matched secret so the live value never
+                            # reaches JSON output, logs, or the console.
+                            "snippet": _redact_match(line, match),
                         }
                     )
                     break
@@ -266,9 +284,9 @@ def _run_optional_deep_checks(repo_root: Path) -> list[str]:
         [sys.executable, "scripts/forge/gates/release_hygiene.py"],
         [sys.executable, "scripts/forge/gates/claim_integrity.py", "--json"],
         [sys.executable, "scripts/security_audit.py", "--repo-root", ".", "--json", "--strict"],
-        # Public repo leak guard: blocks pushes that contain competitor
-        # names or internal-only docs. Installed during the 2026-05-21
-        # cleanup after 538 OpenClaw references leaked to public main.
+        # Public repo leak guard: blocks pushes that contain internal-only
+        # names or docs that must not reach the public mirror. Blocklist is
+        # loaded from a local, gitignored file so the terms never ship.
         [sys.executable, "scripts/forge/gates/public_repo_leak_guard.py"],
     ]
     for cmd in commands:
@@ -290,7 +308,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         "--required-branch",
         action="append",
         default=[],
-        help="Required local branch name (repeatable). Defaults to dev + prod.",
+        help="Required local branch name (repeatable). Defaults to no local branch requirement.",
     )
     parser.add_argument("--skip-worktree-clean-check", action="store_true", help="Skip dirty worktree check.")
     parser.add_argument("--deep", action="store_true", help="Run deep checks (repo hygiene + release + security).")

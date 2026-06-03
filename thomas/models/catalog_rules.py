@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
+from urllib.parse import urlparse
 
 from thomas.core.config import ModelConfig
 
@@ -27,7 +28,12 @@ def provider_family(cfg: ModelConfig) -> str:
     text = " ".join((provider, base_url, model))
     if provider == "codex":
         return "openai"
-    if "api.openai.com" in text or model.startswith("gpt-"):
+    # Match the OpenAI API host on the parsed URL hostname (exact / suffix on a
+    # dot boundary) instead of a bare substring, so look-alike hosts such as
+    # "api.openai.com.evil.example" cannot spoof the openai family.
+    host = urlparse(base_url if "://" in base_url else f"//{base_url}").hostname or ""
+    is_openai_host = host == "api.openai.com" or host.endswith(".api.openai.com")
+    if is_openai_host or model.startswith("gpt-"):
         return "openai"
     if provider == "anthropic" or "anthropic" in text or model.startswith("claude-"):
         return "anthropic"

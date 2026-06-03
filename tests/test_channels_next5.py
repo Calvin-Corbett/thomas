@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import urlparse
 
 from click.testing import CliRunner
 
@@ -70,15 +71,17 @@ def test_provider_contract_send_supports_next_five(monkeypatch) -> None:
     def fake_urlopen(req, timeout):
         url = getattr(req, "full_url", "")
         method = getattr(req, "method", "GET")
-        if "chat.googleapis.com" in url:
+        parsed = urlparse(url)
+        host = parsed.hostname or ""
+        if host == "chat.googleapis.com":
             return _FakeHTTPResponse({"name": "spaces/AAAA/messages/1"})
-        if "office.com" in url:
+        if host == "outlook.office.com":
             return _FakeHTTPResponse({"id": "teams-1"})
-        if method == "PUT" and "/_matrix/client/v3/rooms/" in url:
+        if method == "PUT" and parsed.path.startswith("/_matrix/client/v3/rooms/"):
             return _FakeHTTPResponse({"event_id": "$event-1"})
-        if "signal.example.test" in url:
+        if host == "signal.example.test":
             return _FakeHTTPResponse({"message_id": "signal-1"})
-        if "imessage.example.test" in url:
+        if host == "imessage.example.test":
             return _FakeHTTPResponse({"message_id": "imsg-1"})
         raise AssertionError(f"unexpected url: {url}")
 

@@ -15,12 +15,18 @@ if str(_REPO_ROOT) not in sys.path:
 
 ROOT = Path(__file__).resolve().parents[3]
 DISABLE_ENV = "THOMAS_WORKTREE_BRANCH_GUARD_DISABLE"
+PRIMARY_THOMAS_ROOT = r"C:\Users\corbe\Thomas"
 
 EXPECTED_BY_BRANCH = {
     "master": r"C:\Users\corbe\Thomas",
     "release/oss-launch": r"C:\Users\corbe\thomas-oss-launch",
     "publish-clean": r"C:\Users\corbe\Thomas_publish_clean",
 }
+
+# Explicitly approved linked worktrees. Anything else is treated as a side
+# checkout, so an agent cannot make proof in a hidden clone/worktree and call it
+# production evidence for the real Thomas repository.
+APPROVED_EXTRA_WORKTREE_ROOTS: tuple[str, ...] = (r"C:\Users\corbe\tmp\thomas_heartbeat_l1",)
 
 
 def _normalize_path(value: str | Path) -> str:
@@ -38,6 +44,64 @@ def _branch_name() -> str:
     if proc.returncode != 0:
         raise RuntimeError(f"git branch detection failed: {proc.stderr.strip()}")
     return proc.stdout.strip()
+
+
+def _approved_worktree_roots() -> set[str]:
+    roots = [PRIMARY_THOMAS_ROOT, *EXPECTED_BY_BRANCH.values(), *APPROVED_EXTRA_WORKTREE_ROOTS]
+    return {_normalize_path(root) for root in roots if str(root).strip()}
+
+
+def _canonical_common_git_dir() -> str:
+    return _normalize_path(Path(PRIMARY_THOMAS_ROOT) / ".git")
+
+
+def _git_common_dir() -> str:
+    proc = subprocess.run(
+        ["git", "rev-parse", "--git-common-dir"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"git common-dir detection failed: {proc.stderr.strip()}")
+    raw = proc.stdout.strip()
+    if not raw:
+        raise RuntimeError("git common-dir detection returned an empty path")
+    path = Path(raw)
+    if not path.is_absolute():
+        path = ROOT / path
+    return str(path.resolve())
+
+
+def _topology_violations(branch: str) -> list[str]:
+    actual_root = _normalize_path(ROOT)
+    approved_roots = _approved_worktree_roots()
+    canonical_common = _canonical_common_git_dir()
+    common_dir = _normalize_path(_git_common_dir())
+
+    violations: list[str] = []
+    if actual_root not in approved_roots:
+        if common_dir == canonical_common:
+            violations.append(
+                "unapproved linked worktree detected: "
+                f"branch '{branch}' is running from '{ROOT}', which is not an approved Thomas worktree."
+            )
+        else:
+            violations.append(
+                "side clone detected: "
+                f"branch '{branch}' is running from '{ROOT}' with git database '{common_dir}', "
+                f"not the canonical Thomas git database '{canonical_common}'."
+            )
+        return violations
+
+    if common_dir != canonical_common:
+        violations.append(
+            "repo topology drift detected: "
+            f"approved worktree '{ROOT}' is not attached to the canonical Thomas git database "
+            f"'{canonical_common}' (actual: '{common_dir}')."
+        )
+
+    return violations
 
 
 def _local_branch_names() -> list[str]:
@@ -88,9 +152,21 @@ def _is_topic_branch(name: str) -> bool:
     return name not in CANONICAL_BASE_BRANCHES
 
 
+def _runtime_protection_disabled() -> bool:
+    """B9: only a validly SIGNED disable flag counts (presence alone does not)."""
+    try:
+        from scripts.forge.gates._runtime_guard import runtime_protection_disabled
+    except ImportError:  # pragma: no cover - import path varies by run context
+        try:
+            from forge.gates._runtime_guard import runtime_protection_disabled
+        except ImportError:
+            from _runtime_guard import runtime_protection_disabled
+    return runtime_protection_disabled(ROOT)
+
+
 def run(_argv: Sequence[str] | None = None) -> int:
     # Honour the runtime protection toggle (requires Windows auth to disable).
-    if (ROOT / "runtime" / ".runtime_protection_disabled").is_file():
+    if _runtime_protection_disabled():
         print("Worktree branch guard: PASS (runtime protection disabled by human)")
         return 0
     if _truthy(os.environ.get(DISABLE_ENV)):
@@ -108,6 +184,21 @@ def run(_argv: Sequence[str] | None = None) -> int:
         print("Worktree branch guard: FAIL")
         print(f"- {exc}")
         return 1
+
+    if not ci_env:
+        try:
+            topology_violations = _topology_violations(branch)
+        except Exception as exc:
+            print("Worktree branch guard: FAIL")
+            print(f"- {exc}")
+            return 1
+        if topology_violations:
+            print("Worktree branch guard: FAIL")
+            for violation in topology_violations:
+                print(f"- {violation}")
+            print("- work only from the assigned canonical Thomas checkout or an explicitly approved linked worktree")
+            print(f"- override only when intentional: set {DISABLE_ENV}=1")
+            return 1
 
     if not ci_env:
         expected = EXPECTED_BY_BRANCH.get(branch)

@@ -8,6 +8,7 @@ import hmac
 import io
 import ipaddress
 import json
+import logging
 import platform
 import sqlite3
 import sys
@@ -22,6 +23,8 @@ from aiohttp import web
 from thomas.core.config import resolve_thomas_data_dir
 from thomas.observability import run_store
 from thomas.observability.redaction import RedactionConfig, redact_obj
+
+_log = logging.getLogger(__name__)
 
 RUNS_DB_PATH_KEY = web.AppKey("runs_db_path", str)
 RUNS_CONFIG_KEY = web.AppKey("runs_config", object)
@@ -563,7 +566,8 @@ async def _read_json_body(request: web.Request) -> dict[str, Any]:
     try:
         payload = await request.json()
     except Exception as e:
-        raise web.HTTPBadRequest(text=f"invalid json: {type(e).__name__}: {e}")
+        _log.debug("runs: invalid json body: %s", type(e).__name__)
+        raise web.HTTPBadRequest(text="invalid json body") from e
     if not isinstance(payload, dict):
         raise web.HTTPBadRequest(text="json body must be an object")
     return payload

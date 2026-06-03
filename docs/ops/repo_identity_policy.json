@@ -6,6 +6,12 @@
   "enforce_local_root_when_not_ci": true,
   "allowed_remote_names": [
     "origin",
-    "upstream"
-  ]
+    "upstream",
+    "dev-origin"
+  ],
+  "allowed_repo_slugs": [
+    "calvin-corbett/thomas",
+    "calvin-corbett/thomas-dev"
+  ],
+  "forbid_unlisted_remotes": true
 }

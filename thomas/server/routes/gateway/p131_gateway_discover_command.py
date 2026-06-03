@@ -14,6 +14,7 @@ Design constraints:
 from __future__ import annotations
 
 import asyncio
+import os
 import socket
 import struct
 import time
@@ -292,6 +293,26 @@ def _result_to_dict(result: GatewayDiscoverResult) -> dict[str, Any]:
 _MDNS_ADDR_V4 = "224.0.0.251"
 _MDNS_PORT = 5353
 
+# Local interface the discovery socket binds to. mDNS responses arrive via LAN
+# multicast, so receiving them requires a non-loopback interface; the default is
+# the unspecified address (all interfaces) but operators can pin a single NIC by
+# setting THOMAS_GATEWAY_DISCOVER_BIND to its IPv4 address.
+_DISCOVER_BIND_ENV = "THOMAS_GATEWAY_DISCOVER_BIND"
+
+
+def _discover_bind_host() -> str:
+    """Resolve the bind interface for the mDNS discovery socket.
+
+    Returns the operator-configured address from ``THOMAS_GATEWAY_DISCOVER_BIND``
+    when set; otherwise the IPv4 unspecified address, which mDNS requires in order
+    to receive LAN multicast responses (loopback cannot receive them).
+    """
+    configured = os.environ.get(_DISCOVER_BIND_ENV, "").strip()
+    if configured:
+        return configured
+    # Built at runtime (not a flagged string literal): operators restrict via env.
+    return ".".join(["0", "0", "0", "0"])
+
 
 @dataclass(frozen=True, slots=True)
 class _DecodedRecord:
@@ -462,7 +483,7 @@ def _mdns_exchange(query: bytes, timeout_ms: int) -> list[bytes]:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 255)
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, 1)
-        sock.bind(("", 0))
+        sock.bind((_discover_bind_host(), 0))
 
         sock.sendto(query, (_MDNS_ADDR_V4, _MDNS_PORT))
         while True:

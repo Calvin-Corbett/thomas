@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "thomas-ai"
-version = "0.16.9"
+version = "0.16.11"
 description = "Autonomous AI execution platform for local and remote deployments"
 readme = "README.md"
 license = {text = "MIT"}
@@ -38,9 +38,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/thomas-ai-assistant/thomas"
-Repository = "https://github.com/thomas-ai-assistant/thomas"
-Issues = "https://github.com/thomas-ai-assistant/thomas/issues"
+Homepage = "https://github.com/Calvin-Corbett/thomas"
+Repository = "https://github.com/Calvin-Corbett/thomas"
+Issues = "https://github.com/Calvin-Corbett/thomas/issues"
 
 [project.optional-dependencies]
 repl = ["prompt_toolkit>=3.0", "rich>=13.0"]

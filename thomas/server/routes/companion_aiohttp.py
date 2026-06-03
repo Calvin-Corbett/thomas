@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
@@ -43,6 +44,8 @@ from thomas.server.routes.companion_runtime import (
     run_companion_device_app_push,
     run_companion_ship,
 )
+
+log = logging.getLogger(__name__)
 
 RequireAccessFn = Callable[[web.Request], None]
 ReadJsonFn = Callable[[web.Request], Awaitable[Any]]
@@ -131,7 +134,8 @@ def _require_control_plane_identity(request: web.Request, kernel: CompanionKerne
     try:
         assert_peer_allowed(peer_identity, policy=_tailscale_policy(kernel))
     except PermissionError as exc:
-        raise web.HTTPForbidden(text=str(exc))
+        log.warning("Companion control-plane access denied: %s", exc)
+        raise web.HTTPForbidden(text="access denied") from exc
     return peer_identity
 
 

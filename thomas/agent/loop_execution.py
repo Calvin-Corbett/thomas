@@ -112,6 +112,7 @@ async def _agent_loop_run(
             if isinstance(part, dict) and part.get("type") == "text":
                 prompt_text += str(part.get("text", "")) + "\n"
         prompt_text = prompt_text.strip()
+    benchmark_mode = str(job_type or "").strip().lower() == "benchmark"
 
     # Suspicious prompt gate: if the prompt matches jailbreak/extraction patterns,
     # require Windows PIN before continuing. Abort if denied.
@@ -273,7 +274,7 @@ async def _agent_loop_run(
             },
         )
 
-        if prompt_text:
+        if prompt_text and not benchmark_mode:
             self._record_event("user_message", prompt_text)
             self._capture_profile_hints(prompt_text)
         self._conversation.append({"role": "user", "content": prompt})
@@ -344,6 +345,7 @@ async def _agent_loop_run(
             require_tests_for_code_edits=bool(getattr(quality_cfg, "require_tests_for_code_edits", False)),
             require_monolith_guard_for_coding=bool(getattr(quality_cfg, "require_monolith_guard_for_coding", True)),
             strict_issue_ownership=bool(strict_issue_ownership),
+            skill_required_checks=list(runtime_skills_payload.get("required_checks") or []),
             attempt=int(_quality_retry_count),
             repo_root=Path.cwd(),
         )
@@ -592,20 +594,24 @@ async def _agent_loop_run(
         },
     )
 
-    self._apply_memory_policy(route)
+    if not benchmark_mode:
+        self._apply_memory_policy(route)
 
     # Record user message in memory
-    if prompt_text:
+    if prompt_text and not benchmark_mode:
         self._record_event("user_message", prompt_text)
         self._capture_profile_hints(prompt_text)
     # Keep reply-first turns lean unless continuity or policy signals need extra context.
     if prompt_text:
         should_retrieve_memory = bool(
-            not reply_first_route
-            or continuation_turn
-            or user_is_confused
-            or best_practice_gate_active
-            or code_output_validation_enabled
+            (not benchmark_mode)
+            and (
+                not reply_first_route
+                or continuation_turn
+                or user_is_confused
+                or best_practice_gate_active
+                or code_output_validation_enabled
+            )
         )
         if should_retrieve_memory:
             memory_mode = self.config.memory.mode or "auto"
@@ -633,6 +639,7 @@ async def _agent_loop_run(
         memory_text = memory_text + "\n\n" + str(best_practice_hint)
     if (
         overhead_policy.include_library_context
+        and not benchmark_mode
         and (not reply_first_route)
         and (route_path != "coding_task" or str(effective_mode or "").strip().lower() == "thinking")
     ):
@@ -876,6 +883,7 @@ async def _agent_loop_run(
                                 "ok": ok,
                                 "command": quality_command,
                                 "path": quality_path,
+                                "output_preview": output[:2000],
                             }
                         )
                         state.total_tool_calls += 1
@@ -1062,7 +1070,8 @@ async def _agent_loop_run(
             if iter_text:
                 self._conversation.append({"role": "assistant", "content": iter_text})
                 self._sync_assistant_message_to_intelligence(iter_text)
-                self._record_event("assistant_response", iter_text)
+                if not benchmark_mode:
+                    self._record_event("assistant_response", iter_text)
             state.finished = True
             break
 
@@ -1111,11 +1120,14 @@ async def _agent_loop_run(
                     "name": str(tc.get("name") or ""),
                     "ok": bool(result_event.data.get("ok", False)),
                     "command": str(args_meta.get("command") or args_meta.get("cmd") or args_meta.get("shell") or "")[
-                        :500
+                        :2000
                     ],
                     "path": str(args_meta.get("path") or args_meta.get("file") or args_meta.get("filename") or "")[
                         :500
                     ],
+                    "output_preview": str(
+                        result_event.data.get("result_text") or result_event.data.get("result") or ""
+                    )[:2000],
                 }
             )
 

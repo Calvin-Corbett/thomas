@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,8 @@ from aiohttp import web
 from thomas.marketplace.asset_studio.comfy_service import ComfyStudioService
 from thomas.marketplace.asset_studio.runtime import TERMINAL_STATES, AssetStudioJobStore, AssetStudioRuntime
 from thomas.preferences.store import get_db_path
+
+log = logging.getLogger(__name__)
 
 RequireAccessFn = Callable[[web.Request], None]
 ReadJsonFn = Callable[[web.Request], Awaitable[Any]]
@@ -215,9 +218,11 @@ def register_asset_studio_routes(
                 output=str(payload.get("output") or "").strip(),
             )
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
-        except Exception as exc:
-            raise web.HTTPBadGateway(text=str(exc))
+            log.warning("Asset Studio comfy queue rejected invalid request: %s", exc)
+            raise web.HTTPBadRequest(text="invalid comfy queue request")
+        except Exception:
+            log.exception("Asset Studio comfy queue failed")
+            raise web.HTTPBadGateway(text="comfy queue request failed")
         return web.json_response({"ok": True, "result": result})
 
     async def api_asset_studio_comfy_history(request: web.Request) -> web.Response:
@@ -230,9 +235,11 @@ def register_asset_studio_routes(
         try:
             result = await comfy_service.get_history(server_url=server_url, prompt_id=prompt_id, timeout_s=timeout_s)
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
-        except Exception as exc:
-            raise web.HTTPBadGateway(text=str(exc))
+            log.warning("Asset Studio comfy history rejected invalid request: %s", exc)
+            raise web.HTTPBadRequest(text="invalid comfy history request")
+        except Exception:
+            log.exception("Asset Studio comfy history failed")
+            raise web.HTTPBadGateway(text="comfy history request failed")
         return web.json_response({"ok": True, "result": result})
 
     async def api_asset_studio_comfy_outputs(request: web.Request) -> web.Response:
@@ -245,9 +252,11 @@ def register_asset_studio_routes(
         try:
             result = await comfy_service.get_outputs(server_url=server_url, prompt_id=prompt_id, timeout_s=timeout_s)
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
-        except Exception as exc:
-            raise web.HTTPBadGateway(text=str(exc))
+            log.warning("Asset Studio comfy outputs rejected invalid request: %s", exc)
+            raise web.HTTPBadRequest(text="invalid comfy outputs request")
+        except Exception:
+            log.exception("Asset Studio comfy outputs failed")
+            raise web.HTTPBadGateway(text="comfy outputs request failed")
         return web.json_response({"ok": True, "outputs": result})
 
     async def api_asset_studio_completion_webhook_get(request: web.Request) -> web.Response:
@@ -280,7 +289,8 @@ def register_asset_studio_routes(
                 timeout_s=timeout_s,
             )
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
+            log.warning("Asset Studio completion webhook config rejected invalid request: %s", exc)
+            raise web.HTTPBadRequest(text="invalid completion webhook configuration")
         return web.json_response({"ok": True, "configured": True, "webhook": webhook})
 
     async def api_asset_studio_completion_webhook_delete(request: web.Request) -> web.Response:
@@ -313,7 +323,8 @@ def register_asset_studio_routes(
         except KeyError:
             raise web.HTTPNotFound(text=f"unknown connector '{connector_id}'")
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
+            log.warning("Asset Studio job preview rejected invalid payload: %s", exc)
+            raise web.HTTPBadRequest(text="invalid job preview payload")
         return web.json_response({"ok": True, "preview": preview})
 
     async def api_asset_studio_jobs_validate(request: web.Request) -> web.Response:
@@ -341,7 +352,8 @@ def register_asset_studio_routes(
         except KeyError:
             raise web.HTTPNotFound(text=f"unknown connector '{connector_id}'")
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
+            log.warning("Asset Studio job validation rejected invalid payload: %s", exc)
+            raise web.HTTPBadRequest(text="invalid job validation payload")
         return web.json_response({"ok": True, "validation": validation})
 
     async def api_asset_studio_jobs_batch(request: web.Request) -> web.Response:
@@ -390,7 +402,8 @@ def register_asset_studio_routes(
         try:
             recommendation = await runtime.recommend_job(goal=goal, payload=body)
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
+            log.warning("Asset Studio job recommend rejected invalid request: %s", exc)
+            raise web.HTTPBadRequest(text="invalid job recommendation request")
         return web.json_response({"ok": True, "recommendation": recommendation})
 
     async def api_asset_studio_jobs_recommendations(request: web.Request) -> web.Response:
@@ -410,7 +423,8 @@ def register_asset_studio_routes(
         try:
             recommendations = await runtime.recommend_jobs(goal=goal, payload=body, limit=limit)
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
+            log.warning("Asset Studio job recommendations rejected invalid request: %s", exc)
+            raise web.HTTPBadRequest(text="invalid job recommendations request")
         return web.json_response({"ok": True, "count": len(recommendations), "recommendations": recommendations})
 
     async def api_asset_studio_jobs_auto(request: web.Request) -> web.Response:
@@ -486,7 +500,8 @@ def register_asset_studio_routes(
         try:
             tags = _parse_tags(payload.get("tags"))
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
+            log.warning("Asset Studio template create rejected invalid tags: %s", exc)
+            raise web.HTTPBadRequest(text="invalid tags")
         pin_index_present = "pin_index" in payload
         pin_index = (
             _parse_int(payload.get("pin_index"), default=0, minimum=0, maximum=9999) if pin_index_present else None
@@ -507,7 +522,8 @@ def register_asset_studio_routes(
         except KeyError:
             raise web.HTTPNotFound(text=f"unknown connector '{connector_id}'")
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
+            log.warning("Asset Studio template create rejected invalid request: %s", exc)
+            raise web.HTTPBadRequest(text="invalid template request")
         return web.json_response({"ok": True, "template": template})
 
     async def api_asset_studio_templates_list(request: web.Request) -> web.Response:
@@ -539,7 +555,8 @@ def register_asset_studio_routes(
             try:
                 tags = _parse_tags(payload.get("tags"))
             except ValueError as exc:
-                raise web.HTTPBadRequest(text=str(exc))
+                log.warning("Asset Studio template update rejected invalid tags: %s", exc)
+                raise web.HTTPBadRequest(text="invalid tags")
         favorite = _parse_bool(payload.get("favorite"), default=False) if has_favorite else None
         pinned = _parse_bool(payload.get("pinned"), default=False) if has_pinned else None
         pin_index = _parse_int(payload.get("pin_index"), default=0, minimum=0, maximum=9999) if has_pin_index else None
@@ -553,7 +570,8 @@ def register_asset_studio_routes(
                 pin_index=pin_index,
             )
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
+            log.warning("Asset Studio template update rejected invalid request: %s", exc)
+            raise web.HTTPBadRequest(text="invalid template update request")
         if template is None:
             raise web.HTTPNotFound(text=f"unknown template '{template_id}'")
         return web.json_response({"ok": True, "template": template})
@@ -582,7 +600,8 @@ def register_asset_studio_routes(
         try:
             cloned = await runtime.clone_template(template_id, name=clone_name)
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
+            log.warning("Asset Studio template clone rejected invalid request: %s", exc)
+            raise web.HTTPBadRequest(text="invalid template clone request")
         if cloned is None:
             raise web.HTTPNotFound(text=f"unknown template '{template_id}'")
         return web.json_response({"ok": True, "template": cloned, "cloned_from": template_id})
@@ -612,9 +631,11 @@ def register_asset_studio_routes(
         try:
             result = await runtime.import_template_bundle(bundle, name_override=name_override)
         except KeyError as exc:
-            raise web.HTTPNotFound(text=str(exc))
+            log.warning("Asset Studio template import referenced unknown connector: %s", exc)
+            raise web.HTTPNotFound(text="referenced connector is not available")
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
+            log.warning("Asset Studio template import rejected invalid bundle: %s", exc)
+            raise web.HTTPBadRequest(text="invalid template bundle")
         return web.json_response(
             {
                 "ok": True,
@@ -666,7 +687,8 @@ def register_asset_studio_routes(
         except KeyError:
             raise web.HTTPNotFound(text=f"unknown template '{template_id}'")
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
+            log.warning("Asset Studio template webhook config rejected invalid request: %s", exc)
+            raise web.HTTPBadRequest(text="invalid template webhook configuration")
         return web.json_response(
             {
                 "ok": True,
@@ -714,7 +736,8 @@ def register_asset_studio_routes(
         except KeyError:
             raise web.HTTPNotFound(text="template connector is no longer available")
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
+            log.warning("Asset Studio template run rejected invalid request: %s", exc)
+            raise web.HTTPBadRequest(text="invalid template run request")
         if result is None:
             raise web.HTTPNotFound(text=f"unknown template '{template_id}'")
         validation = result.get("validation")
@@ -785,7 +808,8 @@ def register_asset_studio_routes(
         except KeyError:
             raise web.HTTPNotFound(text="template connector is no longer available")
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
+            log.warning("Asset Studio template run by name rejected invalid request: %s", exc)
+            raise web.HTTPBadRequest(text="invalid template run request")
         if result is None:
             raise web.HTTPNotFound(text=f"unknown template '{template_name}'")
         validation = result.get("validation")
@@ -856,7 +880,8 @@ def register_asset_studio_routes(
         except KeyError:
             raise web.HTTPNotFound(text="template connector is no longer available")
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
+            log.warning("Asset Studio favorite template run rejected invalid request: %s", exc)
+            raise web.HTTPBadRequest(text="invalid template run request")
         if result is None:
             raise web.HTTPNotFound(text="no matching favorite template")
         validation = result.get("validation")
@@ -925,9 +950,11 @@ def register_asset_studio_routes(
                 payload=action_payload,
             )
         except KeyError as exc:
-            raise web.HTTPNotFound(text=str(exc))
+            log.warning("Asset Studio job create referenced unknown connector: %s", exc)
+            raise web.HTTPNotFound(text="unknown connector")
         except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc))
+            log.warning("Asset Studio job create rejected invalid request: %s", exc)
+            raise web.HTTPBadRequest(text="invalid job request")
         waited = False
         wait_timed_out = False
         if wait and isinstance(job, dict):

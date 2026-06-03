@@ -562,7 +562,7 @@ function upsertAgentActivity(container, agentId, status, currentTask, elapsedMs)
     try {
         existing = container.querySelector(`[data-agent-id="${CSS.escape(agentId)}"]`);
     } catch {
-        existing = container.querySelector(`[data-agent-id="${agentId.replace(/"/g, '\\"')}"]`);
+        existing = container.querySelector(`[data-agent-id="${agentId.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"]`);
     }
     if (existing) {
         existing.dataset.status = status || 'running';
@@ -733,10 +733,20 @@ function createOnboardingTelemetrySessionId() {
         if (window.crypto && typeof window.crypto.randomUUID === 'function') {
             return window.crypto.randomUUID();
         }
+        // Cryptographically secure fallback (avoid Math.random for id material).
+        if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+            const bytes = new Uint8Array(8);
+            window.crypto.getRandomValues(bytes);
+            let suffix = '';
+            for (let i = 0; i < bytes.length; i += 1) {
+                suffix += bytes[i].toString(16).padStart(2, '0');
+            }
+            return `session_${Date.now().toString(36)}_${suffix}`;
+        }
     } catch {
         // Fallback below.
     }
-    return `session_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    return `session_${Date.now().toString(36)}`;
 }
 
 function ensureOnboardingTelemetryClock() {

@@ -601,6 +601,14 @@ class BrowserOpenTool(Tool):
                 return ToolResult(ok=False, data=None, error="Missing required param: url")
 
             url = _normalize_url(raw_url)
+            # SSRF guard before opening a browser session or navigating. Blocks
+            # cloud-metadata/link-local always and honors the operator host
+            # policy, matching web.fetch / eng.web_extract.
+            from thomas.tools.web_search_providers import check_outbound_url
+
+            policy_err = check_outbound_url(url)
+            if policy_err:
+                return ToolResult(ok=False, data=None, error=policy_err)
             wait_for = (args.get("wait_for") or "").strip() or None
             headless = bool(args.get("headless", True))
             session_name = _get_session_name(args)
@@ -614,6 +622,14 @@ class BrowserOpenTool(Tool):
                     return ToolResult(ok=False, data=None, error=_fmt_nav_error(url, e, _NAV_TIMEOUT_MS))
 
                 if resp is not None:
+                    # Re-validate the final URL in case a redirect landed on a
+                    # blocked host (e.g. a 302 to the cloud metadata endpoint).
+                    # check_outbound_url never raises; if resp.url itself is
+                    # unreadable the outer handler fails the call closed rather
+                    # than returning unvalidated content.
+                    final_err = check_outbound_url(str(resp.url))
+                    if final_err:
+                        return ToolResult(ok=False, data=None, error=final_err)
                     try:
                         status = resp.status
                         if status >= 400:

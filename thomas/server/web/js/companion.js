@@ -77,11 +77,27 @@ function asText(value, fallback = "") {
   return text || fallback;
 }
 
+function cryptoRandomSuffix(length = 6) {
+  const cryptoObj = window.crypto || window.msCrypto;
+  if (cryptoObj && typeof cryptoObj.getRandomValues === "function") {
+    const bytes = new Uint8Array(length);
+    cryptoObj.getRandomValues(bytes);
+    let out = "";
+    for (let i = 0; i < bytes.length; i += 1) {
+      // Map each byte into base36 to keep the existing id shape.
+      out += (bytes[i] % 36).toString(36);
+    }
+    return out.slice(0, length);
+  }
+  // Last-resort fallback when Web Crypto is unavailable.
+  return Math.random().toString(36).slice(2, 2 + length);
+}
+
 function makeId(prefix = "id") {
   if (window.crypto && typeof window.crypto.randomUUID === "function") {
     return `${prefix}-${window.crypto.randomUUID()}`;
   }
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  return `${prefix}-${Date.now().toString(36)}-${cryptoRandomSuffix(6)}`;
 }
 
 function getStoredToken() {
@@ -237,7 +253,7 @@ function hydrateDeviceState() {
     const raw = localStorage.getItem(COMPANION_DEVICE_KEY);
     const parsed = raw ? JSON.parse(raw) : {};
     const existingId = asText(parsed && parsed.id, "");
-    const generated = `phone-${Math.random().toString(36).slice(2, 8)}`;
+    const generated = `phone-${cryptoRandomSuffix(6)}`;
     state.device.id = existingId || generated;
     state.device.platform = asText(parsed && parsed.platform, "ios");
     state.device.distributionChannel = asText(parsed && parsed.distributionChannel, "app_store");
@@ -253,7 +269,7 @@ function hydrateDeviceState() {
     }
     state.device.paired = Boolean(parsed && parsed.paired);
   } catch (_error) {
-    state.device.id = `phone-${Math.random().toString(36).slice(2, 8)}`;
+    state.device.id = `phone-${cryptoRandomSuffix(6)}`;
   }
 
   try {

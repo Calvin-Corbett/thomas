@@ -10,6 +10,14 @@ concurrency:
   group: site-release-${{ github.ref }}
   cancel-in-progress: true
 
+# Least-privilege default for every job: read-only checkout access. No job in
+# this workflow pushes commits, cuts releases/tags, comments on PRs, deploys
+# GitHub Pages, or publishes packages — the deploy jobs ship to Cloudflare via
+# repository secrets, which do not consume GITHUB_TOKEN scopes. Artifact upload
+# uses the Actions runtime token, not these permissions.
+permissions:
+  contents: read
+
 jobs:
   site-checks:
     runs-on: ubuntu-latest
