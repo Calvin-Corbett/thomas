@@ -777,6 +777,13 @@ async def _agent_loop_run(
         streamed_visible_text = ""
         iter_prompt_start_total = int(stream_usage.get("prompt_tokens", 0) or 0)
 
+        # Observational plugin hook: fires immediately before the LLM call.
+        # Read-only this release (return value ignored); never breaks the turn.
+        await self._run_plugin_hook(
+            "before_model",
+            {"messages": messages, "model": str(getattr(self.llm.config, "model", "") or "")},
+        )
+
         try:
             llm_stream_error: str | None = None
             await _ensure_llm_hardened_client(self.llm)
@@ -1072,6 +1079,9 @@ async def _agent_loop_run(
                 self._sync_assistant_message_to_intelligence(iter_text)
                 if not benchmark_mode:
                     self._record_event("assistant_response", iter_text)
+            # Observational plugin hook: fires at end-of-turn once the final
+            # assistant text is finalized. Read-only this release.
+            await self._run_plugin_hook("after_response", {"text": state.text_response})
             state.finished = True
             break
 
