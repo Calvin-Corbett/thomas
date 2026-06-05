@@ -230,6 +230,24 @@ def parse_tool_args(raw_args: Any) -> tuple[dict[str, Any] | None, str | None]:
         return None, f"Could not parse tool arguments: {type(e).__name__}: {e}"
 
 
+async def _run_loop_hook(loop: Any, hook: str, payload: dict[str, Any]) -> None:
+    """Invoke ``loop._run_plugin_hook`` if present; otherwise no-op.
+
+    ``execute_tools`` accepts any loop-like object, so resolve the plugin-hook
+    invoker defensively. The real AgentLoop always provides it (base class);
+    minimal test stubs and other callers that omit it simply skip hooks. The
+    invoker itself already swallows plugin exceptions, so a hook can never break
+    tool execution.
+    """
+    invoker = getattr(loop, "_run_plugin_hook", None)
+    if invoker is None:
+        return
+    try:
+        await invoker(hook, payload)
+    except Exception as e:  # REVIEWED: plugin hooks must never break a turn
+        log.debug("Plugin hook %r failed (non-fatal): %s", hook, e)
+
+
 async def execute_tools(
     loop: Any,
     tool_calls: list[dict[str, Any]],
@@ -354,6 +372,10 @@ async def execute_tools(
                         "approved_path": str(validated_path or ""),
                     },
                 )
+
+        # Observational plugin hook: fires after arg parsing / path sanitization
+        # and before tool execution. Read-only this release (return ignored).
+        await _run_loop_hook(loop, "before_tool", {"name": name, "args": args})
 
         start = time.monotonic()
         await loop._audit_action(
@@ -602,6 +624,14 @@ async def execute_tools(
             event_data["verification"] = verification_feedback
             # Append verification feedback to result so the LLM sees it
             event_data["result_text"] = result_text + "\n\n" + verification_feedback
+
+        # Observational plugin hook: fires after the tool completes, once
+        # duration/ok/result_text are known. Read-only this release.
+        await _run_loop_hook(
+            loop,
+            "after_tool",
+            {"name": name, "args": args, "ok": ok, "result_text": result_text},
+        )
 
         return AgentEvent(
             type=EventType.TOOL_RESULT,
