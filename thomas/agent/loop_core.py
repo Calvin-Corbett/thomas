@@ -162,6 +162,7 @@ class AgentLoop:
         run_id: str | None = None,
         session_id: str | None = None,
         guardrails_event_cb: Callable[[str, dict[str, Any]], Awaitable[None]] | None = None,
+        hook_runner: Callable[[str, dict[str, Any]], Awaitable[None]] | None = None,
         memory_retrieval_scope: str = "thread",
         automation_policy: PolicyEngine | None = None,
         autonomy_level: int = 3,
@@ -192,6 +193,12 @@ class AgentLoop:
         self._guarded_tool_runner = guarded_tool_runner
         self._action_audit = action_audit
         self._guardrails_event_cb = guardrails_event_cb
+        # Optional caller-supplied plugin hook runner. Kept as an opaque
+        # awaitable callable so thomas/agent stays decoupled from thomas/plugins
+        # (the agent tier does not depend on the plugins tier). When None, all
+        # hook invocation sites are no-ops. See thomas.plugins.runtime +
+        # thomas.plugins.p108_plugin_hook_runner_core for the wiring.
+        self._plugin_hook_runner = hook_runner
         self._automation_policy = automation_policy
         self._autonomy_level = clamp_autonomy_level(autonomy_level, default=3)
         # Bound tool execution by default so a hung tool (or a huge fan-out)
@@ -266,6 +273,21 @@ class AgentLoop:
                 )
             except Exception as e:  # REVIEWED: log-and-continue — compaction is optional
                 log.debug("ContextCompactor init failed: %s", e)
+
+    async def _run_plugin_hook(self, hook: str, payload: dict[str, Any]) -> None:
+        """Invoke the optional plugin hook runner, never breaking the turn.
+
+        Observational-only this release: any return value is ignored, and any
+        exception is swallowed at debug level so a misbehaving plugin can never
+        abort an agent turn. No-op when no hook runner was supplied.
+        """
+        runner = self._plugin_hook_runner
+        if runner is None:
+            return
+        try:
+            await runner(hook, payload)
+        except Exception as e:  # REVIEWED: plugin hooks must never break a turn
+            log.debug("Plugin hook %r failed (non-fatal): %s", hook, e)
 
     def _build_system_message(
         self,

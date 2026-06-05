@@ -11,6 +11,7 @@ import contextlib
 import json
 import logging
 import time
+from pathlib import Path
 from typing import Any
 
 from aiohttp import web
@@ -163,6 +164,40 @@ async def execute_agent_loop(
     async def _emit_guardrails_event(evt_type: str, payload_obj: dict[str, Any]) -> None:
         await send({"type": "guardrails", "event": str(evt_type), "payload": payload_obj})
 
+    # Plugin hook runner: dispatches before_model/before_tool/after_tool/
+    # after_response into enabled installed plugins. Observational only this
+    # release (continue_on_error + strict=False; return values ignored). Cheap
+    # no-op when no plugins are enabled. Kept as a closure so thomas/agent stays
+    # decoupled from thomas/plugins (the agent tier must not import plugins).
+    def _resolve_plugins_install_root() -> str | None:
+        import os
+
+        env_dir = os.getenv("THOMAS_PLUGINS_DIR")
+        if env_dir:
+            return env_dir
+        home = os.getenv("THOMAS_HOME")
+        if home:
+            return str(Path(home).expanduser() / "plugins")
+        try:
+            return str(Path.home() / ".thomas" / "plugins")
+        except (OSError, RuntimeError):
+            return None
+
+    async def _plugin_hook_runner(name: str, payload: dict[str, Any]) -> None:
+        try:
+            from thomas.plugins.p108_plugin_hook_runner_core import HookRunRequest, run_hook
+            from thomas.plugins.runtime import get_enabled_plugin_instances
+
+            plugins = get_enabled_plugin_instances(_resolve_plugins_install_root())
+            if not plugins:
+                return
+            run_hook(
+                HookRunRequest(hook=name, payload=payload, strict=False, continue_on_error=True),
+                plugins=plugins,
+            )
+        except Exception as exc:  # REVIEWED: plugin dispatch must never break a turn
+            log.debug("Plugin hook dispatch for %r failed (non-fatal): %s", name, exc)
+
     requested_runtime = {
         "profile": str(llm.config.name or profile or ""),
         "provider": str(llm.config.provider or ""),
@@ -208,6 +243,7 @@ async def execute_agent_loop(
         "run_id": run_id,
         "session_id": sid,
         "guardrails_event_cb": _emit_guardrails_event if guarded_runner is not None else None,
+        "hook_runner": _plugin_hook_runner,
         "autonomy_level": int(getattr(session, "autonomy_level", 3) or 3),
         "max_parallel_tools": int(getattr(advanced_tools, "max_parallel_tools", 6) or 6),
         "tool_timeout_s": int(getattr(advanced_tools, "tool_timeout_s", 120) or 120),
