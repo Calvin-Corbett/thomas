@@ -3,8 +3,8 @@
 | Field            | Value                                                   |
 |------------------|---------------------------------------------------------|
 | Status           | functional (REPL works, many commands exist, gaps below)|
-| Last assessed    | 2026-03-18                                              |
-| Assessed by      | claude-opus-4-6 (Cowork session) + the product owner|
+| Last assessed    | 2026-06-05                                              |
+| Assessed by      | claude-opus-4-8 (wiring truth-up)|
 | Used in prod     | yes — REPL and CLI commands are the terminal interface   |
 | Has real tests   | partial                                                  |
 | Blocking issues  | repl.py over 800-line limit (1806 lines)                 |
@@ -32,34 +32,45 @@ developed to have personality and polish. It's not a throwaway dev tool.
   Uses prompt_toolkit for input and rich for output. Streaming responses,
   tool approval flow, slash commands, keybindings, background tasks, plan mode,
   session management. This is real and actively used.
-- **Core CLI commands** (`main.py` → `main_part01-03.py`): `thomas serve`,
-  `thomas chat`, basic subcommand routing. Works.
-- **Subcommands** (`commands/` — 17 files): channels, companion, cron, evolve,
-  investigate, quickstart, release, research, runs, sessions, setup_wizard,
-  shortcuts, telegram, training, updater, webhooks. **These exist as files
-  but have NOT been individually verified.** Some may be scaffold.
+- **Core CLI commands** (`main.py` + `main_chatops.py` +
+  `main_library_commands.py` + `main_runtime_ops.py`): `thomas serve`,
+  `thomas chat`, command registration and basic subcommand routing. Works.
+- **Subcommands** (`commands/`): channels, companion, cron, evolve,
+  investigate, quickstart, release, research, sessions, setup_wizard,
+  shortcuts, updater, webhooks are **registered** in `main.py` and are live.
+  `telegram` (`register_telegram_commands`) and `training` (`training_group`)
+  exist as files but are **NOT registered** in `main.py` — they are not
+  reachable from the CLI yet. There is no `runs` subcommand (no `runs.py`).
 - **Doctor** (`doctor.py`): Diagnostics command. Exists, not fully assessed.
 - **Recent REPL UX work** (0.14.37): Ephemeral input, accent theming,
   live activity feeds, panel toggles, mascot styling, reasoning picker.
   These were recently developed and appear functional.
 
-## What Has NOT Been Verified
+## Registration Status
 
-**WARNING: The presence of a file does NOT mean it works.** The following
-exist as code but have not been assessed for whether they actually function:
+The following are **registered** in `main.py` and reachable from the CLI
+(`companion`, `cron`, `webhooks`, `investigate`, `shortcuts` via the command
+register loop; `sweep`, `why`, `scaffold`, `doctor`, `heartbeat`,
+`desktop_operator` added individually). Their end-to-end behavior is not all
+verified, but they are wired:
 
-- `commands/telegram.py` — Telegram bot integration. May be scaffold.
-- `commands/training.py` — Training system. May be scaffold.
-- `commands/companion.py` — Companion device commands. May be scaffold.
-- `commands/cron.py` — Cron/scheduled tasks. May be scaffold.
-- `commands/webhooks.py` — Webhook management. May be scaffold.
-- `commands/investigate.py` — Investigation workflow. May be scaffold.
-- `commands/shortcuts.py` — Shortcut system. May be scaffold.
-- `sweep.py` — Unknown purpose. Not assessed.
-- `scaffold.py` — Literally named "scaffold." Not assessed.
-- `why.py` — Unknown purpose. Not assessed.
-- `product_shell.py` — Unknown purpose. Not assessed.
-- `virtual_office_roster.py` — Virtual office from CLI. Not assessed.
+- `commands/companion.py` — Companion device commands. Registered.
+- `commands/cron.py` — Cron/scheduled tasks. Registered.
+- `commands/webhooks.py` — Webhook management. Registered.
+- `commands/investigate.py` — Investigation workflow. Registered.
+- `commands/shortcuts.py` — Shortcut system. Registered.
+- `sweep.py` (`sweep_command`) — Registered via `cli.add_command`.
+- `why.py` (`why_command`) — Registered via `cli.add_command`.
+- `scaffold.py` (`scaffold_group`) — Registered via `cli.add_command`.
+
+**NOT registered (exist as files, not reachable from the CLI):**
+
+- `commands/telegram.py` — `register_telegram_commands` is defined but never
+  called in `main.py`.
+- `commands/training.py` — `training_group` is defined but never added in
+  `main.py`.
+- `product_shell.py`, `virtual_office_roster.py` — Not registered; purpose
+  not assessed.
 
 ## What Should Exist (full vision, NOT yet verified as working)
 
@@ -93,7 +104,6 @@ naming the competitor.
 ## Architecture Issues
 
 - `repl.py` is **1,806 lines** — more than 2x the 800-line limit. Needs split.
-- `main_part02.py` is 1,044 lines — over limit. Needs split.
 - The parity/compat layer is ~10 files of glue. Could potentially be
   consolidated or absorbed into the main command structure.
 - 232 files total is a lot. Some may be dead code.
@@ -101,8 +111,8 @@ naming the competitor.
 ## Known Gaps
 
 - repl.py over size limit (1806 lines)
-- main_part02.py over size limit (1044 lines)
-- Many subcommands not verified as functional
+- `telegram` and `training` subcommands exist but are not registered in main.py
+- Many subcommands not verified end-to-end
 - Competitor references throughout parity/compat files (pre-public blocker)
 - No STATUS.md existed before this one (added 2026-03-18)
 
@@ -111,4 +121,4 @@ naming the competitor.
 - `repl.py` core event loop — this is the heart of the interactive experience.
   Refactoring is needed (split the file) but don't change the behavior
   without explicit user approval.
-- `main.py` — monolith loader entry point. Don't restructure the load order.
+- `main.py` — CLI entry point and command registration. Don't restructure the registration order.

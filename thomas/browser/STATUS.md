@@ -2,33 +2,33 @@
 
 | Field            | Value                                                  |
 |------------------|--------------------------------------------------------|
-| Status           | not integrated (REAL CODE — see audit) |
-| Last assessed    | 2026-03-18                                                  |
-| Assessed by      | claude-opus-4-6 (deep audit with parallel agents)      |
-| Used in prod     | no — not imported by production code                   |
+| Status           | integrated (CLI browser contract/adapter package) |
+| Last assessed    | 2026-06-05                                                  |
+| Assessed by      | claude-opus-4-8 (wiring truth-up)      |
+| Used in prod     | yes — backs the `thomas browser ...` CLI subcommands (≈45 commands via pack_bridge) |
 | Has real tests   | not assessed       |
-| Blocking issues  | not wired into Thomas                                  |
+| Blocking issues  | live-runtime adapter mismatch (browser-01); agent-registry gap (browser-02) |
 
 ## What This Is
 
-Domain module: browser.
+The browser contract/adapter package that backs Thomas's CLI browser
+subcommands. It exposes the command surface (≈45 commands) that
+`thomas browser ...` drives via the pack bridge.
 
 **Stats:** 221 Python files, 17,931 lines total.
 
 ## Honest Assessment
 
-**Contains real algorithms and logic** — verified by deep audit (2026-03-18). This is not a stub or placeholder. It has actual implementations with data structures, computations, and domain-specific logic. However, it is NOT imported by any production code and is NOT wired into the Thomas agent loop.
-
-## Marketplace Destination
-
-Per the product owner (2026-03-18), all domain modules will become marketplace extensions.
-Needs tool wrapping (`tools.py` inheriting from `thomas.tools.base.Tool`), a `manifest.json` for the marketplace, and testing before it can be shipped as an installable extension. The core code is ready — the gap is integration.
-
-See `docs/DOMAIN_MODULES_AUDIT.md` for the full audit findings.
+**Contains real algorithms and logic** with actual implementations, data
+structures, and domain-specific logic. It IS wired — the CLI `thomas browser`
+subcommands route into this package through the pack bridge. The remaining
+gaps are integration-quality issues at the live-runtime boundary, not a
+lack of wiring (see Known Gaps).
 
 ## Known Gaps
 
-- Not imported by production code
-- Not exposed as Thomas tools
-- No marketplace manifest
-- No STATUS.md existed before this one (added 2026-03-18)
+- Live-runtime adapter mismatch between the contract surface and the
+  executing runtime (browser-01)
+- Agent-registry gap: not exposed as agent-loop tools the same way other
+  packs are (browser-02)
+- Test coverage not assessed

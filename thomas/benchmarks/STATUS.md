@@ -2,12 +2,12 @@
 
 | Field            | Value                                                  |
 |------------------|--------------------------------------------------------|
-| Status           | not integrated (REAL CODE — see audit) |
-| Last assessed    | 2026-03-18                                                  |
-| Assessed by      | claude-opus-4-6 (deep audit with parallel agents)      |
-| Used in prod     | no — not imported by production code                   |
+| Status           | partially integrated (benchmark_lane wired; full harness not) |
+| Last assessed    | 2026-06-05                                                  |
+| Assessed by      | claude-opus-4-8 (wiring truth-up)      |
+| Used in prod     | partially — `benchmark_lane.py` imported by `thomas/agent/loop_tool_exec.py:16`; academic harness not wired |
 | Has real tests   | not assessed       |
-| Blocking issues  | not wired into Thomas                                  |
+| Blocking issues  | full benchmark harness (runner.py/types.py/adapters) not wired (misc-singletons-03) |
 
 ## What This Is
 
@@ -17,18 +17,14 @@ Thomas benchmark harness for measuring model amplification.
 
 ## Honest Assessment
 
-**Contains real algorithms and logic** — verified by deep audit (2026-03-18). This is not a stub or placeholder. It has actual implementations with data structures, computations, and domain-specific logic. However, it is NOT imported by any production code and is NOT wired into the Thomas agent loop.
-
-## Marketplace Destination
-
-Per the product owner (2026-03-18), all domain modules will become marketplace extensions.
-Needs tool wrapping (`tools.py` inheriting from `thomas.tools.base.Tool`), a `manifest.json` for the marketplace, and testing before it can be shipped as an installable extension. The core code is ready — the gap is integration.
-
-See `docs/DOMAIN_MODULES_AUDIT.md` for the full audit findings.
+**Contains real algorithms and logic** with actual implementations. Partially
+wired: `benchmark_lane.py` (`audit_benchmark_event`, `get_benchmark_context`)
+is imported by the agent at `thomas/agent/loop_tool_exec.py:16` and is part of
+the live tool-execution path. The full academic benchmark harness
+(`runner.py`, `types.py`, and the adapters) is NOT wired into production yet
+(tracked as misc-singletons-03).
 
 ## Known Gaps
 
-- Not imported by production code
-- Not exposed as Thomas tools
-- No marketplace manifest
-- No STATUS.md existed before this one (added 2026-03-18)
+- Full benchmark harness (runner.py/types.py/adapters) not wired (misc-singletons-03)
+- Test coverage not assessed

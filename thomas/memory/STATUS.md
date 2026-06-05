@@ -2,12 +2,12 @@
 
 | Field            | Value                                                    |
 |------------------|----------------------------------------------------------|
-| Status           | wip (v2 Fabric has real architecture, key subsystems placeholder) |
-| Last assessed    | 2026-03-18                                               |
-| Assessed by      | claude-opus-4-6 (Cowork session) + the product owner|
+| Status           | wip (v2 Fabric wired; episodic ingest layer not yet built) |
+| Last assessed    | 2026-06-05                                               |
+| Assessed by      | claude-opus-4-8 (wiring truth-up)|
 | Used in prod     | partially — v2 Fabric is wired, episodic layer not yet   |
 | Has real tests   | partial (fabric FTS fallback tested, others unclear)      |
-| Blocking issues  | 4 core files are source placeholders                     |
+| Blocking issues  | episodic ingest/extract layer unbuilt (placeholder files removed) |
 
 ## What This Is
 
@@ -50,9 +50,11 @@ extraction model would work in parallel.
   profile_hints tables. Well-designed with proper indexes, foreign keys,
   and columns for salience scoring, decay, retrieval counting.
 - `db.py` — Database layer. Real code.
-- `fabric.py` → monolith-loaded from `fabric_part01-04.py` — The main
-  Fabric runtime. fabric_part02 (980 lines) handles FTS search with
-  fallback to LIKE mode (bug fixed in 0.14.34). Real and tested.
+- `fabric.py` (17-line re-export facade) → `fabric_core.py` (575 lines) +
+  `fabric_retrieval.py` (749 lines) + `fabric_utils.py` (48 lines) +
+  `fabric_compat.py` (25 lines) — The main Fabric runtime. fabric_retrieval
+  handles FTS search with fallback to LIKE mode (bug fixed in 0.14.34).
+  Real and tested.
 - `types.py` — RetrievalItem/RetrievalResult dataclasses. Real.
 - `scoring.py` — Scoring logic for retrieval. Real.
 - `token.py` — Token counting for context packing. Real.
@@ -77,22 +79,19 @@ extraction model would work in parallel.
 - `listing.py` (131 lines) — Memory listing/display. Real code.
 - `autonomy.py` (954 lines) — Memory autonomy behaviors. Real code.
 
-## What Is Placeholder / Not Working
+## What Is Not Working / Unbuilt
 
-**WARNING: These files EXIST but are source placeholders:**
+The episodic ingest/extract layer is the main gap. The placeholder files that
+used to stand in for it were **removed** (they no longer exist in this
+package):
 
-- `episodic.py` — **PLACEHOLDER.** Episodic memory system — the part that
-  stores and retrieves conversation episodes as experiences. Not implemented.
-  This is one of the most important missing pieces.
-- `episodic_store.py` — **PLACEHOLDER.** Storage backend for episodic memory.
-  Not implemented.
-- `summarization.py` — **PLACEHOLDER.** Conversation/memory summarization.
-  Not implemented.
-- `thought_signatures.py` — **PLACEHOLDER.** Thought pattern fingerprinting.
-  Not implemented.
-
-**These are also listed in AGENTS.md as "Do Not Touch" — they are reserved
-for a specific future implementation, not abandoned.**
+- `episodic.py` — **REMOVED.** Episodic memory system: storing/retrieving
+  conversation episodes as experiences. Unbuilt — one of the most important
+  missing pieces.
+- `episodic_store.py` — **REMOVED.** Storage backend for episodic memory.
+  Unbuilt.
+- `summarization.py` — **REMOVED.** Conversation/memory summarization. Unbuilt.
+- `thought_signatures.py` — **REMOVED.** Thought pattern fingerprinting. Unbuilt.
 
 ## Architecture Overview
 
@@ -113,18 +112,15 @@ main gap.
 
 ## Known Gaps
 
-- Episodic memory system not implemented (placeholder)
-- Episodic store not implemented (placeholder)
-- Summarization not implemented (placeholder)
-- Thought signatures not implemented (placeholder)
+- Episodic memory system not implemented (episodic.py removed, not yet built)
+- Episodic store not implemented (episodic_store.py removed, not yet built)
+- Summarization not implemented (summarization.py removed, not yet built)
+- Thought signatures not implemented (thought_signatures.py removed, not yet built)
 - curator.py is 1134 lines (over 800 limit — needs split)
 - End-to-end memory flow has not been tested as a complete pipeline
 - No STATUS.md existed before this one (added 2026-03-18)
 
 ## Do Not Touch
 
-- `episodic.py`, `episodic_store.py`, `summarization.py` — AGENTS.md
-  explicitly lists these as frozen. Reserved for planned implementation.
-  Do not fill with placeholder logic or stub implementations.
 - `v2/schema.py` — Schema changes require migration planning.
 - `store.py` — Core storage layer, production-critical.

@@ -2,12 +2,12 @@
 
 | Field            | Value                                                  |
 |------------------|--------------------------------------------------------|
-| Status           | functional (core loop works, 6 placeholders)           |
-| Last assessed    | 2026-03-18                                             |
-| Assessed by      | claude-opus-4-6 (Cowork session)                       |
+| Status           | functional (core loop is the live agent runtime)       |
+| Last assessed    | 2026-06-05                                             |
+| Assessed by      | claude-opus-4-8 (wiring truth-up)                       |
 | Used in prod     | yes — this IS the AI agent runtime                     |
 | Has real tests   | partial                                                |
-| Blocking issues  | swarm.py over limit (1136), 6 placeholder files        |
+| Blocking issues  | swarm.py over limit (1136), loop_execution.py over limit |
 
 ## What This Is
 
@@ -19,10 +19,13 @@ chat dispatch, and approval handling.
 
 ## What Actually Works
 
-- **Agent loop** (`loop_core.py` + `loop_part01-03.py` + `loop_tool_exec.py`
-  + `loop_streaming.py`): The main think→act→respond cycle. Handles message
-  building, routing, intent detection, tool execution, streaming output.
-  This is the core of Thomas. Real and production-used.
+- **Agent loop** (`loop.py` thin facade → `loop_core.py` + `loop_execution.py`
+  + `loop_planning.py` + `loop_streaming.py` + `loop_tools.py` +
+  `loop_tool_exec.py` + `loop_helpers.py` + `loop_completion.py`): The main
+  think→act→respond cycle. `loop.py` re-exports `AgentLoop`/`LoopState` and
+  delegates run() to the specialized modules. Handles message building,
+  routing, intent detection, tool execution, streaming output. This is the
+  core of Thomas. Real and production-used.
 - `response_tone.py` (861 lines) — Controls Thomas's personality/tone. Real.
   This is part of how Thomas has "flavor" — the robot personality.
 - `verification.py` (745 lines) — Verifies agent outputs. Real.
@@ -40,14 +43,12 @@ chat dispatch, and approval handling.
 
 ## What Is Placeholder
 
-- `checkpointing.py` — **PLACEHOLDER.** Agent state checkpointing.
-- `checkpoints.py` — **PLACEHOLDER.** Checkpoint storage.
-- `hooks_registry.py` — **PLACEHOLDER.** Hook registration system.
-- `integration_hooks.py` — **PLACEHOLDER.** Integration hook implementations.
-- `policy_runtime.py` — **PLACEHOLDER.** Runtime policy enforcement for the
-  agent. This connects to the guardrails/security vision — should enforce
-  what the agent is allowed to do autonomously.
-- `project_guidelines.py` — **PLACEHOLDER.** Per-project agent guidelines.
+None in this package. The placeholder files previously listed here
+(`checkpointing.py`, `checkpoints.py`, `hooks_registry.py`,
+`integration_hooks.py`, `policy_runtime.py`, `project_guidelines.py`) were
+deleted, not implemented. The capabilities they were reserved for
+(checkpointing, a pluggable hook system, a runtime policy engine) do not
+exist yet — see Known Gaps.
 
 ## Architecture Notes
 
@@ -56,17 +57,18 @@ User message → chat_dispatcher → agent loop (think) → tool_exec (act) →
 response_tone (style) → streaming output (respond).
 
 The approval system (`approval.py` → server `guardrails_api.py`) is the
-existing mechanism for gating dangerous actions. The guardrails module
-(currently placeholder) should eventually wrap this in a policy engine.
+existing mechanism for gating dangerous actions. A dedicated runtime policy
+engine for the agent does not exist yet (the old `policy_runtime.py`
+placeholder was removed); approval gating is the current mechanism.
 
 ## Known Gaps
 
 - swarm.py over 800-line limit (1136 lines)
+- loop_execution.py over 800-line limit (~1190 lines)
 - response_tone.py over 800-line limit (861 lines)
-- 6 placeholder files including policy_runtime (security-critical gap)
-- Checkpointing not implemented (can't save/restore mid-task state)
-- No hook system (can't plug in custom behavior at agent loop points)
-- No STATUS.md existed before this one (added 2026-03-18)
+- No runtime policy engine for the agent (policy_runtime.py was removed; only approval.py gating exists)
+- Checkpointing not implemented (can't save/restore mid-task state; checkpointing.py/checkpoints.py removed)
+- No hook system (can't plug in custom behavior at agent loop points; hooks_registry.py/integration_hooks.py removed)
 
 ## Do Not Touch
 

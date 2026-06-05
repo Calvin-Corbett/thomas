@@ -26,8 +26,9 @@ hard-coded global paths.
   - **Dispatch-first chat architecture**: `dispatch.py` classifies messages as casual
     (Thomas replies directly) or actionable (dispatched to workboard task manager).
     `chat_dispatcher.py` bridges chat to `WORKBOARD.md`. See `docs/CHAT_EXECUTION_MODEL.md`.
-  - Agent loop (`loop.py` assembled from `loop_part01/02/03.py`) handles LLM streaming,
-    tool execution, and context management for both casual replies and worker agents.
+  - Agent loop (`loop.py` facade over `loop_core.py`, `loop_execution.py`, `loop_streaming.py`,
+    `loop_tool_exec.py`, `loop_planning.py`, `loop_helpers.py`, `loop_tools.py`, `loop_completion.py`)
+    handles LLM streaming, tool execution, and context management for both casual replies and worker agents.
   - In-process swarm orchestrator (`swarm.py`) for future parallel task execution.
     NOT the same as `scripts/crew/swarm/cli.py` (terminal process spawner).
   - See `thomas/agent/README.md` for a complete file map.
@@ -52,8 +53,8 @@ guards to make changes pass.
 
 ## Web Surface Contract
 
-- Native Thomas web sections must render inside the shared `module-workspace` shell in `thomas/server/web/js/app_runtime_primary.mjs`.
-- Reuse the shared workspace background/tint tokens from `thomas/server/web/css/components_parts/part-003a.css` and the core panel/control language in `part-004a.css` before adding mode-specific CSS in `part-004b.css`.
+- Native Thomas web sections must render inside the shared `module-workspace` shell (`#moduleWorkspace` in `thomas/server/web/index.html`); section rendering is driven by the numbered runtime modules in `thomas/server/web/js/runtime/` (001-045), not by the legacy `app_runtime_primary.mjs` monolith.
+- Reuse the shared workspace/panel/control language defined in `thomas/server/web/css/components_parts/` (e.g. `marketplace-workspace.css`, `content-panels.css`, `module-cards.css`) before adding mode-specific CSS.
 - Do not introduce nested full-page shells, page-inside-page layouts, or one-off color systems for native Thomas surfaces unless the feature is explicitly an external embedded app.
 
 ## Core Data Flow

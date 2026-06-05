@@ -128,6 +128,16 @@ def _build_tools(config: AppConfig) -> ToolRegistry:
     except (ImportError, ModuleNotFoundError, OSError):
         pass
 
+    # Browser automation tools (Playwright) -- registered only if the
+    # ``playwright`` package is installed; otherwise the tools would only fail
+    # at call time. register_browser_tools() performs the find_spec gate.
+    try:
+        from thomas.tools.browser import register_browser_tools
+
+        register_browser_tools(registry)
+    except (ImportError, ModuleNotFoundError):
+        pass
+
     # Register all optional domain module tools
     register_all_optional_tools(registry)
 

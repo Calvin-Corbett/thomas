@@ -2,18 +2,20 @@
 
 | Field            | Value                                                  |
 |------------------|--------------------------------------------------------|
-| Status           | wip (infrastructure real, adapters partially functional)|
-| Last assessed    | 2026-03-18                                             |
-| Assessed by      | claude-opus-4-6 (Cowork session)                       |
+| Status           | wip (infrastructure real; ~10 channel adapters present, dynamically loaded)|
+| Last assessed    | 2026-06-05                                             |
+| Assessed by      | claude-opus-4-8 (wiring truth-up)                       |
 | Used in prod     | yes — imported by production code                      |
 | Has real tests   | not assessed                                           |
-| Blocking issues  | only 2 real integrations exist                         |
+| Blocking issues  | adapter functionality not individually verified end-to-end |
 
 ## What This Is
 
-Third-party integration infrastructure. Small module — 1,400 lines across 8 files.
-Has reliability primitives (circuit breaker, rate limiter, retry, health checks)
-plus two actual integrations (Telegram and GitHub).
+Third-party integration infrastructure plus the provider-contract channel
+adapters. ~5,200 lines across 21 files. Has reliability primitives (circuit
+breaker, rate limiter, retry, health checks) plus ~10+ channel adapters
+(Telegram, GitHub automation, Discord, Slack, Google Chat, iMessage, Matrix,
+MS Teams, Signal, WhatsApp, webchat, moltbook).
 
 ## Honest Assessment
 
@@ -25,14 +27,17 @@ plus two actual integrations (Telegram and GitHub).
 
 These are good, clean utility modules that any integration can use.
 
-**Actual integrations:**
-- `telegram.py` (451 lines) — Telegram bot integration. Has real code (not
-  a placeholder). NOT verified as currently functional.
-- `github_automation.py` (272 lines) — GitHub automation. Has real code.
-  NOT verified as currently functional.
+**Channel adapters (~10+ provider-contract modules):**
+- `telegram.py`, `github_automation.py`, `discord.py` (+ `discord_bridge_runtime*.py`),
+  `slack/` (package), `googlechat.py`, `imessage.py`, `matrix.py`, `msteams.py`,
+  `signal.py`, `whatsapp.py`, `webchat.py`, `moltbook.py`. Each is a real
+  provider adapter; individual end-to-end functionality is not all verified.
 
-**Empty:**
-- `workspace_adapters.py` (7 lines) — essentially empty.
+**Dynamic loading:** adapters are loaded by name via
+`thomas/marketplace/channels/_catalog.py` (`provider_module()` →
+`importlib.import_module(f"thomas.integrations.{name}")`). Because the import
+is dynamic, a static import scan will report these adapter modules as orphans
+by design — they are not dead code.
 
 ## Product Vision (from the product owner, 2026-03-18)
 
@@ -50,8 +55,7 @@ Telegram + GitHub integration with good reliability plumbing underneath.
 
 ## Known Gaps
 
-- Only 2 real integrations (Telegram, GitHub) — both unverified
-- workspace_adapters.py is basically empty
+- ~10 channel adapters exist but are not all individually verified end-to-end
 - No "master importer" capability exists yet
 - No ability to read/absorb other tools' architectures
 - No sub-agent execution of external tools
