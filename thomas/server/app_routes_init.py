@@ -350,6 +350,24 @@ def _setup_routes_and_handlers(
 
     _register_gateway_routes(app, config)
 
+    def _register_engine_actions_routes(app_ref: web.Application) -> None:
+        """Register the user-triggered manual engine-actions endpoint."""
+        if not callable(_require_api_access) or not callable(_read_json):
+            log.warning("Engine actions route registration skipped: missing runtime dependencies")
+            return
+        try:
+            from thomas.server.routes.engine_actions_aiohttp import register_engine_actions_routes
+
+            register_engine_actions_routes(
+                app_ref,
+                require_api_access=_require_api_access,
+                read_json=_read_json,
+            )
+        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
+            log.warning("Engine actions routes unavailable: %s", e)
+
+    _register_engine_actions_routes(app)
+
     def _register_chat_and_session_routes(app_ref: web.Application, cfg_ref: AppConfig) -> None:
         """Register the live session/chat route bundles when their deps are available."""
         if not all(

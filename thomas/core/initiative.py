@@ -117,7 +117,7 @@ class InitiativeEngine:
 
     def start(
         self,
-        executor_fn: Callable,
+        executor_fn: Callable | None,
         notify_fn: Callable | None = None,
     ) -> None:
         """Start the background polling daemon thread."""
