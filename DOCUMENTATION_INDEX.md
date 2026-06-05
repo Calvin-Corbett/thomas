@@ -57,13 +57,12 @@ A fast binary classifier routes user messages:
 
 See: `thomas/README.md`, `docs/CHAT_EXECUTION_MODEL.md`
 
-### Monolith Pattern
-Large files split into parts for manageability:
+### Module Organization
+Large subsystems are split into focused modules with normal Python imports.
 
-**Python**: Files like `app_part01.py`, `app_part02.py`, `llm_client_part01.py`
-- Edit the `_partXX.py` file
-- Clear `.pyc` caches after editing
-- Restart server
+**Python**: The `*_partXX.py` monolith-split pattern is BANNED (see `CLAUDE.md` / `agent_safety.toml`). Large files are split into named modules and wired together with regular imports — e.g. the server app lives in `thomas/server/app.py` + `app_core.py` + `app_routes_init.py`, and the agent loop in `thomas/agent/loop.py` + `loop_core.py` + `loop_execution.py` (etc.).
+- Edit the real module file, then clear `.pyc` caches and restart the server
+- Do NOT create any new `*_part*.py` file
 
 **JavaScript**: All frontend runs through `thomas/server/web/js/runtime/` (45 numbered files, combined 41K lines)
 - Edit files in `runtime/` directory (001–045) only
@@ -142,7 +141,7 @@ See: `thomas/chat/README.md`, `docs/CHAT_EXECUTION_MODEL.md`
 ### To add a new HTTP endpoint
 → Read: `thomas/server/routes/README.md`
 → Create/Edit: File in `thomas/server/routes/`
-→ Register: In `thomas/server/app_partXX.py`
+→ Register: In `thomas/server/app_routes_init.py`
 
 ### To update the UI
 → Read: `thomas/server/web/README.md`
@@ -171,7 +170,7 @@ See: `thomas/chat/README.md`, `docs/CHAT_EXECUTION_MODEL.md`
 5. **Assume all code is active** — Check for `_archived/`, placeholders, and dead code markers.
 6. **Call LLM directly** — Always use `thomas.core.llm_client.LLMClient`.
 7. **Bypass memory system** — Use specialist interface, not raw tools.
-8. **Edit monolith stubs** — Find and edit the actual `_partXX.py` file.
+8. **Create `*_part*.py` files** — The monolith-split pattern is banned. Split large files into named modules with normal imports.
 
 ### Placeholder/Incomplete Code
 
@@ -181,8 +180,10 @@ See: `thomas/chat/README.md`, `docs/CHAT_EXECUTION_MODEL.md`
 - `thomas/memory/summarization.py` — Mostly stubs
 Use active modules: `retrieval.py`, `embedder.py`, `store.py`
 
+**Active Core Modules**:
+- `thomas/agent/loop.py` — Primary `AgentLoop` entry point (facade over `loop_core.py`); imported by the CLI, server chat routes, and `thomas/agent/__init__.py`. NOT dead.
+
 **Dead Code**:
-- `thomas/agent/loop.py` — Not primary chat path, kept for fallback
 - `thomas/agent/routing.py` — Deprecated, use `dispatch.py`
 - `thomas/server/web/js/app_parts/` — Never loaded
 - `thomas/server/web/js/app_runtime_primary.mjs` — Legacy pre-split monolith, never loaded
@@ -190,11 +191,11 @@ Use active modules: `retrieval.py`, `embedder.py`, `store.py`
 **Domain Skeletons** (all placeholder):
 - All `thomas/{domain}/` folders (agriculture, autonomous_vehicles, blockchain, etc.)
 
-## File Locations (Absolute Paths)
+## File Locations (Repo-Relative)
 
-All documentation and code is in:
+All documentation and code is under the repository root:
 ```
-/sessions/lucid-confident-cannon/mnt/Thomas/
+.
 ├── thomas/                  # Main app code
 │   ├── README.md           # Start here
 │   ├── orchestrator/        # Brain
@@ -206,7 +207,7 @@ All documentation and code is in:
 │   ├── server/              # HTTP server
 │   │   ├── routes/          # API endpoints
 │   │   └── web/             # Frontend
-│   └── agent/               # (partially deprecated)
+│   └── agent/               # Chat dispatch + agent loop (active)
 ├── scripts/                 # Automation
 ├── docs/                    # Additional docs
 │   └── CHAT_EXECUTION_MODEL.md  # AUTHORITATIVE
@@ -242,8 +243,8 @@ After editing code:
 
 ```bash
 # Clear Python caches
-find /sessions/lucid-confident-cannon/mnt/Thomas -name "*.pyc" -delete
-find /sessions/lucid-confident-cannon/mnt/Thomas -name "__pycache__" -type d -exec rm -rf {} +
+find . -name "*.pyc" -delete
+find . -name "__pycache__" -type d -exec rm -rf {} +
 
 # Restart server
 # (For JS: clear browser cache and hard-reload)

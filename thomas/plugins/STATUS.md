@@ -2,7 +2,7 @@
 
 | Field            | Value                                                     |
 |------------------|-----------------------------------------------------------|
-| Status           | functional (core install/hook system works, extras scaffold)|
+| Status           | functional (install/CLI management only — runtime hook interception not wired)|
 | Last assessed    | 2026-03-18                                                |
 | Assessed by      | claude-opus-4-6 (Cowork session) + the product owner |
 | Used in prod     | yes — desktop plugin install/enable/disable/uninstall works|
@@ -51,7 +51,12 @@ The marketplace is WAY bigger than just plugins. The full vision:
 - **Install/uninstall** (`p102`, `p103`): Local install from path, cleanup. Works.
 - **Enable/disable** (`p101`): State store for toggling plugins. Works.
 - **Hook system** (`p107-p112`): Before/after model, before/after tool, after
-  response hooks. Framework exists and runs.
+  response hook *modules* exist and are unit-tested in isolation
+  (`tests/prompt_pack/test_p108..p112*`), and are registered via the CLI parity
+  commands. **NOT yet invoked during an actual agent turn** — see Known Gaps.
+  The agent loop (`thomas/agent/loop_*.py`) does not call `p108.run_hook`, so
+  installed/enabled plugins' `before_model`/`before_tool`/`after_tool`/
+  `after_response` callbacks never fire on a live request.
 - **Extension catalog** (`extension_catalog_runtime.py`): Loads and validates
   extension pack catalogs from disk. Works.
 - **Desktop plugin facade** (in `thomas/server/`): Install, enable, uninstall
@@ -99,6 +104,18 @@ confirmed as functional:
 - No category filtering in marketplace UI
 - 3 key files are source placeholders
 - Competitor reference files need scrubbing
+- **p107-p112 hook callbacks never fire during actual agent turns.** The hook
+  modules and the `p108` runner (`run_hook`) are built and unit-tested, but
+  nothing wires them into the live agent loop or the server chat path. The loop
+  (`thomas/agent/loop_core.py` / `loop_execution.py` / `loop_tool_exec.py`) has
+  no plugin-manager handle, `AgentLoop.__init__` takes no hook-runner argument,
+  and no runtime registry of *enabled plugin instances* exists to pass to
+  `run_hook` (only install state in `installed_plugins.json` and the
+  `p105` registry data model). Wiring is intentionally deferred: it requires a
+  new enabled-plugin loader/registry singleton plus a hook-runner injected into
+  `AgentLoop` at construction time, which is a cross-layer change to the core
+  loop and out of scope for a surgical wiring fix. See the wiring-audit deferral
+  note for misc-singletons-02 for the full design.
 - No STATUS.md existed before this one (added 2026-03-18)
 
 ## Do Not Touch

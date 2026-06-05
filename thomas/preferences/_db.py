@@ -4,6 +4,7 @@ import json
 import os
 import sqlite3
 import threading
+from functools import lru_cache
 from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
@@ -440,6 +441,60 @@ class PreferencesStore:
             self._save_base_prefs(conn, user_id, base)
         return self.get(user_id=user_id)
 
+    # ── Free-form key/value preferences ──────────────────────────
+    # Backed by the existing free-form ``thomads`` JSON bag inside the per-user
+    # preferences blob, so arbitrary tool/agent settings persist alongside the
+    # structured prefs without a schema migration.
+    _KV_NAMESPACE = "thomads"
+
+    def get_preference(self, key: str, default: Any = None, *, user_id: str = "default") -> Any:
+        """Return a free-form preference value, or ``default`` if unset."""
+        with self._lock, self._connect() as conn:
+            base = self._get_or_create_base_prefs(conn, user_id)
+        kv = base.get(self._KV_NAMESPACE)
+        if not isinstance(kv, dict):
+            return default
+        return kv.get(str(key), default)
+
+    def set_preference(self, key: str, value: Any, *, user_id: str = "default") -> None:
+        """Set a free-form preference value."""
+        with self._lock, self._connect() as conn, conn:
+            base = self._get_or_create_base_prefs(conn, user_id)
+            kv = dict(base.get(self._KV_NAMESPACE) or {})
+            kv[str(key)] = value
+            base[self._KV_NAMESPACE] = kv
+            self._save_base_prefs(conn, user_id, base)
+
+    def list_preferences(self, *, user_id: str = "default") -> dict[str, Any]:
+        """Return all free-form preferences as a dict."""
+        with self._lock, self._connect() as conn:
+            base = self._get_or_create_base_prefs(conn, user_id)
+        kv = base.get(self._KV_NAMESPACE)
+        return dict(kv) if isinstance(kv, dict) else {}
+
+    def delete_preference(self, key: str, *, user_id: str = "default") -> bool:
+        """Delete a single free-form preference. Returns True if it existed."""
+        with self._lock, self._connect() as conn, conn:
+            base = self._get_or_create_base_prefs(conn, user_id)
+            kv = dict(base.get(self._KV_NAMESPACE) or {})
+            existed = str(key) in kv
+            kv.pop(str(key), None)
+            base[self._KV_NAMESPACE] = kv
+            self._save_base_prefs(conn, user_id, base)
+        return existed
+
+    def reset_preferences(self, key: str | None = None, *, user_id: str = "default") -> None:
+        """Reset free-form preferences. Clears one key, or all when key is None."""
+        with self._lock, self._connect() as conn, conn:
+            base = self._get_or_create_base_prefs(conn, user_id)
+            kv = dict(base.get(self._KV_NAMESPACE) or {})
+            if key is None:
+                kv = {}
+            else:
+                kv.pop(str(key), None)
+            base[self._KV_NAMESPACE] = kv
+            self._save_base_prefs(conn, user_id, base)
+
     def get(self, user_id: str = "default", thread_id: str | None = None) -> PreferencesResponse:
         with self._lock, self._connect() as conn:
             base = self._get_or_create_base_prefs(conn, user_id)
@@ -682,3 +737,41 @@ class PreferencesStore:
             self._save_base_prefs(conn, user_id, base)
 
         return self.get(user_id=user_id, thread_id=thread_id)
+
+
+# ── Module-level free-form preference API ──────────────────────────────
+# Thin wrappers over a process-wide PreferencesStore singleton (cached per DB
+# path, like preferences/api.py) so callers — e.g. the registered preferences
+# tools — can do ``from thomas.preferences.store import get_preference``.
+@lru_cache(maxsize=8)
+def _kv_store_for_path(db_path: str) -> PreferencesStore:
+    return PreferencesStore(db_path=db_path)
+
+
+def _kv_store() -> PreferencesStore:
+    return _kv_store_for_path(get_db_path())
+
+
+def get_preference(key: str, default: Any = None, *, user_id: str = "default") -> Any:
+    """Module-level accessor: return a free-form preference or ``default``."""
+    return _kv_store().get_preference(key, default, user_id=user_id)
+
+
+def set_preference(key: str, value: Any, *, user_id: str = "default") -> None:
+    """Module-level accessor: set a free-form preference value."""
+    _kv_store().set_preference(key, value, user_id=user_id)
+
+
+def list_preferences(*, user_id: str = "default") -> dict[str, Any]:
+    """Module-level accessor: list all free-form preferences."""
+    return _kv_store().list_preferences(user_id=user_id)
+
+
+def delete_preference(key: str, *, user_id: str = "default") -> bool:
+    """Module-level accessor: delete one free-form preference."""
+    return _kv_store().delete_preference(key, user_id=user_id)
+
+
+def reset_preferences(key: str | None = None, *, user_id: str = "default") -> None:
+    """Module-level accessor: reset one key, or all when key is None."""
+    _kv_store().reset_preferences(key, user_id=user_id)
