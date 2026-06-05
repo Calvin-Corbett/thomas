@@ -2,12 +2,12 @@
 
 | Field            | Value                                                  |
 |------------------|--------------------------------------------------------|
-| Status           | not integrated (REAL CODE — see audit) |
-| Last assessed    | 2026-03-18                                                  |
-| Assessed by      | claude-opus-4-6 (deep audit with parallel agents)      |
-| Used in prod     | no — not imported by production code                   |
+| Status           | functional (subprocess-spawned + console-script) |
+| Last assessed    | 2026-06-05                                                  |
+| Assessed by      | claude-opus-4-8 (wiring truth-up)      |
+| Used in prod     | yes — spawned by `thomas/server/app_core.py` and exposed as the `bootdoctor` console-script (pyproject.toml:80) |
 | Has real tests   | not assessed       |
-| Blocking issues  | not wired into Thomas                                  |
+| Blocking issues  | none                                  |
 
 ## What This Is
 
@@ -17,18 +17,12 @@ BootDoctor standalone CLI package.
 
 ## Honest Assessment
 
-**Contains real algorithms and logic** — verified by deep audit (2026-03-18). This is not a stub or placeholder. It has actual implementations with data structures, computations, and domain-specific logic. However, it is NOT imported by any production code and is NOT wired into the Thomas agent loop.
-
-## Marketplace Destination
-
-Per the product owner (2026-03-18), all domain modules will become marketplace extensions.
-Needs tool wrapping (`tools.py` inheriting from `thomas.tools.base.Tool`), a `manifest.json` for the marketplace, and testing before it can be shipped as an installable extension. The core code is ready — the gap is integration.
-
-See `docs/DOMAIN_MODULES_AUDIT.md` for the full audit findings.
+**Contains real algorithms and logic** with actual implementations. It IS
+wired into production: the server spawns a boot-doctor report as a subprocess
+(`thomas/server/app_core.py`, `_bootdoctor_spawn_report` around line 451), and
+it is exposed as the `bootdoctor` console-script entry point
+(`pyproject.toml:80` → `thomas.bootdoctor.__main__:main`).
 
 ## Known Gaps
 
-- Not imported by production code
-- Not exposed as Thomas tools
-- No marketplace manifest
-- No STATUS.md existed before this one (added 2026-03-18)
+- Test coverage not assessed

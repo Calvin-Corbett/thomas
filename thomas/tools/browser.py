@@ -980,3 +980,22 @@ TOOLS: list[Tool] = [
     BrowserExtractTool(),
     BrowserCloseTool(),
 ]
+
+
+def register_browser_tools(registry: Any) -> int:
+    """Register the Playwright browser tools into a ToolRegistry.
+
+    Gated on Playwright being importable: if the ``playwright`` package is not
+    installed the tools would only fail at call time with a RuntimeError, so we
+    skip registration entirely and return 0 rather than advertising tools that
+    cannot run. Returns the number of tools registered.
+    """
+    import importlib.util
+
+    if importlib.util.find_spec("playwright") is None:
+        return 0
+    count = 0
+    for tool in TOOLS:
+        registry.register(tool)
+        count += 1
+    return count

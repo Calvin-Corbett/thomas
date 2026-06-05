@@ -17,7 +17,7 @@ What this is
 Hard constraints honored
 - stdlib-only for all new Python code
 - Windows compatible
-- Existing /api/chat behavior remains unchanged unless mode="swarm" routes here
+- Existing /api/chat behavior remains unchanged; this module is not currently wired into /api/chat
 
 Event contract
 Every emitted event is NDJSON-friendly (a dict) and includes:

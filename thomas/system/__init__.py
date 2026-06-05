@@ -1,1 +1,1 @@
-"""Scaffold package for accelerated catch-up work."""
+"""System-level services: config validation, heartbeat/checkpoint, perf profiling, release contracts, soak runner."""

@@ -340,6 +340,19 @@ class EngineManager:
     ) -> bool:
         """Start initiative engine (autonomous work when idle)."""
         name = "initiative"
+        # Honest state: the InitiativeEngine can poll, but with no executor_fn it
+        # can never act on a goal (_run_goal short-circuits when executor_fn is
+        # None). Production callers (app_core.start_all, agents_runtime) currently
+        # supply no executor, so starting the daemon and reporting running=True
+        # would be a false-positive. Skip starting and report disabled instead.
+        if executor_fn is None:
+            self._status[name] = EngineStatus(
+                name=name,
+                running=False,
+                error="disabled: no executor",
+            )
+            log.info("InitiativeEngine: not started (no executor_fn supplied)")
+            return True
         try:
             from thomas.core.initiative import get_initiative_engine
 

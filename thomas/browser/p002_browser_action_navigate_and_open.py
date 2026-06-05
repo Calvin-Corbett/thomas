@@ -316,11 +316,48 @@ def _validate_url(url: str) -> None:
         )
 
 
-def _resolve_browser_tool() -> Any:
-    """Resolve the default browser tool/client.
+class _LiveRuntimeBrowser:
+    """Adapter that drives the live ``thomas.tools.browser`` runtime.
 
-    We prefer explicit factory helpers if present. Otherwise, we try a short list
-    of common class/singleton names.
+    The runtime exposes async ``Tool`` classes (``BrowserOpenTool`` …) rather
+    than a navigable browser object, so this adapter presents the duck-typed
+    ``navigate``/``open`` async methods that :func:`_perform_async` expects and
+    forwards them to :class:`thomas.tools.browser.BrowserOpenTool`.
+    """
+
+    def __init__(self, runtime: Any) -> None:
+        self._runtime = runtime
+
+    async def navigate(self, url: str, *, timeout_ms: int | None = None, profile: str | None = None) -> Any:
+        return await self._open(url, profile=profile)
+
+    async def open(self, url: str, *, timeout_ms: int | None = None, profile: str | None = None) -> Any:
+        return await self._open(url, profile=profile)
+
+    async def _open(self, url: str, *, profile: str | None) -> Any:
+        tool = self._runtime.BrowserOpenTool()
+        args: dict[str, Any] = {"url": url}
+        if profile:
+            args["session"] = profile
+        result = await _maybe_await(tool.execute(args))
+        if not getattr(result, "ok", False):
+            raise BrowserOperationFailed(
+                "Browser operation failed.",
+                details={"cause": str(getattr(result, "error", None) or "runtime_failure")},
+            )
+        data = getattr(result, "data", None)
+        return data if data is not None else {}
+
+
+def _resolve_browser_tool() -> Any:
+    """Resolve a browser object that drives the live runtime.
+
+    Preference order:
+    1. The canonical :mod:`thomas.tools.browser` runtime, wrapped in
+       :class:`_LiveRuntimeBrowser` so navigate/open hit real Playwright state.
+    2. Legacy factory/class/attr probes, kept for injected modules. Async
+       factories are skipped so we never return (and leak) an un-awaited
+       coroutine.
 
     Failures are surfaced deterministically via :class:`MissingBrowserConfiguration`.
     """
@@ -332,6 +369,9 @@ def _resolve_browser_tool() -> Any:
             details={"cause": str(meta.get("error") or "import_error")},
         ) from None
 
+    if callable(getattr(browser_mod, "BrowserOpenTool", None)):
+        return _LiveRuntimeBrowser(browser_mod)
+
     for fn_name in (
         "get_default_browser",
         "get_browser",
@@ -339,7 +379,7 @@ def _resolve_browser_tool() -> Any:
         "default_browser",
     ):
         fn = getattr(browser_mod, fn_name, None)
-        if callable(fn):
+        if callable(fn) and not inspect.iscoroutinefunction(fn):
             try:
                 return fn()
             except Exception as exc:

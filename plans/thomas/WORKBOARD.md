@@ -9,12 +9,12 @@ Last updated: 2026-03-01
 
 ## Agent Claims
 
-- agent=claude; name=Claude coordinator; role=solo; parent=none; scope=thomas,docs,tests,scripts,plans,skills,library,.github,README.md,ONBOARDING.md,AGENTS.md,.gitignore,DOCUMENTATION_INDEX.md,Thomas-Pitch-Deck.pptx,CHANGELOG.md,pyproject.toml,.pre-commit-config.yaml,agent_safety.toml; task=agent-coordination-hardening-2026-05-28
+- agent=claude; name=Claude; role=solo; parent=none; scope=thomas,docs,tests,scripts,plans,skills,library,.github,README.md,ONBOARDING.md,AGENTS.md,.gitignore,DOCUMENTATION_INDEX.md,Thomas-Pitch-Deck.pptx,CHANGELOG.md,pyproject.toml,.pre-commit-config.yaml,agent_safety.toml,ARCHITECTURE.md; task=agent-coordination-hardening-2026-05-28
 
 ## Active Tasks
 
 
-- task_id=agent-coordination-hardening-2026-05-28; agent=claude; scope=thomas,docs,tests,scripts,plans,skills,library,.github,README.md,ONBOARDING.md,AGENTS.md,.gitignore,DOCUMENTATION_INDEX.md,Thomas-Pitch-Deck.pptx,CHANGELOG.md,pyproject.toml,.pre-commit-config.yaml,agent_safety.toml; summary=agent-coordination-hardening-2026-05-28; status=active
+- task_id=agent-coordination-hardening-2026-05-28; agent=claude; scope=thomas,docs,tests,scripts,plans,skills,library,.github,README.md,ONBOARDING.md,AGENTS.md,.gitignore,DOCUMENTATION_INDEX.md,Thomas-Pitch-Deck.pptx,CHANGELOG.md,pyproject.toml,.pre-commit-config.yaml,agent_safety.toml,ARCHITECTURE.md; summary=agent-coordination-hardening-2026-05-28; status=active
 
 ## Up For Grabs
 

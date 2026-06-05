@@ -173,3 +173,9 @@ def training_logs(count: int, kind: str | None, flags_only: bool, as_json: bool)
         kind_str = evt.kind[:16].ljust(16)
         data_preview = json.dumps(evt.data, default=str)[:100]
         click.echo(f"  [{ts}] {kind_str} {data_preview}")
+
+
+def register_training_commands(cli: click.Group) -> None:
+    """Register the training command group with the CLI."""
+    if "training" not in cli.commands:
+        cli.add_command(training_group)
