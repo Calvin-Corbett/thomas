@@ -51,17 +51,17 @@ No bots. No delegation. Just Thomas being Thomas.
 
 ### User sends an actionable message
 ```
-User: research Trey Corbett from Honey Grove Texas
+User: research Ada Lovelace from Computing History
 
 Thomas: On it.
 
     ┌──🟢── Portal opens ──────────────────┐
     │ 🤖 Nova spawned                       │
-    │ Task: Research Trey Corbett            │
+    │ Task: Research Ada Lovelace            │
     │ ▸ Thinking... (click to expand)       │
     │                                       │
-    │ Nova: Found some results. Trey        │
-    │ Corbett appears to be...              │
+    │ Nova: Found some results. Ada        │
+    │ Lovelace appears to be...              │
     │ [streaming response]                  │
     └───────────────────────────────────────┘
 ```
@@ -155,13 +155,13 @@ User message
 ```json
 {"type": "ack", "text": "On it."}
 
-{"type": "bot_spawn", "bot_id": "nova", "bot_name": "Nova", "bot_color": "#4fc3f7", "bot_costume": "cap", "task": "Research Trey Corbett", "specialist": "research"}
+{"type": "bot_spawn", "bot_id": "nova", "bot_name": "Nova", "bot_color": "#4fc3f7", "bot_costume": "cap", "task": "Research Ada Lovelace", "specialist": "research"}
 
 {"type": "bot_thinking", "bot_id": "nova", "text": "Searching for information..."}
 
 {"type": "bot_text", "bot_id": "nova", "text": "Found some results. "}
 
-{"type": "bot_tool", "bot_id": "nova", "tool": "web_search", "query": "Trey Corbett Honey Grove Texas"}
+{"type": "bot_tool", "bot_id": "nova", "tool": "web_search", "query": "Ada Lovelace Computing History"}
 
 {"type": "bot_done", "bot_id": "nova", "content": "full response", "elapsed_ms": 3200}
 
