@@ -142,8 +142,9 @@ def _send_dispatch_message(
             return False
         wb.write_text("\n".join(result) + "\n", encoding="utf-8")
         return True
-    except Exception as exc:
-        log.warning("Failed to send dispatch message: %s", exc)
+    except Exception:
+        # Broad catch: dispatch notices are best-effort; workboard mirroring already queued the task.
+        log.exception("Failed to send dispatch message for task_id=%s", task_id)
         return False
 
 
@@ -238,6 +239,7 @@ def dispatch_to_workboard(
         )
         return DispatchResult(ok=True, task_id=task_id, execution_id=execution_id)
     except Exception as exc:
+        # Broad catch: keep chat responsive while recording any dispatch boundary failure.
         log.exception("Chat dispatch failed for task_id=%s", task_id)
         try:
             task_bot_runtime.fail_execution(
@@ -248,7 +250,8 @@ def dispatch_to_workboard(
                 repo_root=repo_root_path,
             )
         except Exception:
-            pass
+            # Broad catch: failure-recording is secondary and must not mask the original dispatch error.
+            log.exception("Failed to mark dispatch execution %s as failed", execution_id)
         return DispatchResult(
             ok=False,
             task_id=task_id,
@@ -279,7 +282,8 @@ async def dispatch_async(
                 }
             )
         except Exception:
-            pass
+            # Broad catch: caller-provided event hooks must not block dispatch.
+            log.exception("Dispatch start event callback failed for session_id=%s", session_id)
 
     result = await loop.run_in_executor(
         None,
@@ -317,6 +321,7 @@ async def dispatch_async(
                     }
                 )
         except Exception:
-            pass
+            # Broad catch: caller-provided event hooks must not block returning the dispatch result.
+            log.exception("Dispatch result event callback failed for task_id=%s", result.task_id)
 
     return result
