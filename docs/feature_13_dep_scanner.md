@@ -20,10 +20,6 @@ but adds *meaningful* upgrades that humans actually like using.
 - OSV cache on disk (TTL) so you don't re-fetch severities/fixes every scan.
 - OSV can fill missing fix versions (best-effort).
 
-### 4) DepMonitor that doesn’t spam you
-- Alerts include **new** high/critical since last scan (still includes the full current set).
-- Stores a small **history** ring buffer (default 30) for charts/trends.
-
 ## Config (optional)
 
 ### thomas.toml
@@ -57,15 +53,9 @@ osv_ttl_s = 604800
 
 ## Wiring
 
-```python
-from thomas.core.dep_monitor import get_dep_monitor
-
-def notify_fn(payload):
-    # route into your notification center / SSE stream
-    print(payload)
-
-get_dep_monitor().start(notify_fn)
-```
+Dependency scanning is **on-demand** via the `deps.scan` tool — call it from chat,
+a route, or a scheduled job. (A background daily-watchdog wrapper, `dep_monitor.py`,
+was removed 2026-06-05 as unwired scaffolding; the scan capability below is unaffected.)
 
 Tool registry manual registration (if needed):
 
