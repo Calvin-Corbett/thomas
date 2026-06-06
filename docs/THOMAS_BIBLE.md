@@ -6064,7 +6064,7 @@ package imports. By rough functional grouping:
   synchronization (likely related to evolve / blue-green).
 - **Cost / tokens**: `cost_tracker.py`, `tokens.py`,
   `token_economy.py`.
-- **Boot / health**: `boot_doctor.py`, `dep_monitor.py`.
+- **Boot / health**: `boot_doctor.py`.
 - **Code analysis**: `code_issue_engine.py`, `py_compile_safe.py`.
 - **Search history**: `search_history.py`, `search_history_shared.py`.
 - **Safety utilities**: `safe_expression.py` (sandboxed eval),
