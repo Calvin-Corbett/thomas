@@ -688,6 +688,16 @@ async function fetchModels() {
         if (res.ok) {
             const data = res.data || {};
             availableModelProfiles = Array.isArray(data.profiles) ? data.profiles : [];
+            if (data.preferences && typeof data.preferences === 'object') {
+                currentPreferences = currentPreferences && typeof currentPreferences === 'object' ? currentPreferences : {};
+                currentPreferences.advanced = currentPreferences.advanced && typeof currentPreferences.advanced === 'object'
+                    ? currentPreferences.advanced
+                    : {};
+                currentPreferences.advanced.model = {
+                    ...(currentPreferences.advanced.model || {}),
+                    ...data.preferences,
+                };
+            }
             modelSelector.innerHTML = '';
             setupProviderSelector.innerHTML = '';
 
@@ -711,7 +721,8 @@ async function fetchModels() {
                 || safeString(window.localStorage.getItem('thomas_active_profile'));
             const savedProfileMeta = savedProfile ? availableModelProfiles.find(m => m.name === savedProfile) : null;
             const hasPersistedProfile = Boolean(safeString(currentPreferences?.advanced?.model?.active_profile));
-            const targetProfile = (savedProfileMeta && savedProfileMeta.active)
+            const savedProfileReady = savedProfileMeta && (savedProfileMeta.has_api_key || savedProfileMeta.active);
+            const targetProfile = savedProfileReady
                 ? savedProfile
                 : (data.default || (active[0] && active[0].name) || (availableModelProfiles[0] && availableModelProfiles[0].name) || '');
 

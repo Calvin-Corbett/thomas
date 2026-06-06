@@ -19,6 +19,7 @@ try:
 except ImportError:
     from thomas._vendor import httpx_shim as httpx  # type: ignore[assignment]
 
+from thomas.core.codex_provider import OPENAI_CODEX_BASE_URL, is_openai_codex_provider
 from thomas.core.config import ModelConfig
 
 log = logging.getLogger(__name__)
@@ -118,6 +119,8 @@ async def handshake_models_async(
     """
     if cfg.provider == "codex":
         return await _handshake_codex_async(cfg, timeout_s=timeout_s, max_results=max_results)
+    if is_openai_codex_provider(cfg.provider):
+        return _handshake_openai_codex(cfg, max_results=max_results)
 
     headers = _auth_headers(cfg)
     params = cfg.query or None
@@ -279,6 +282,11 @@ async def discover_models_async(
         if hs.ok and hs.models:
             return [DiscoveredModel(id=m, raw={}) for m in (hs.models or [])]
         return []
+    if is_openai_codex_provider(cfg.provider):
+        hs = _handshake_openai_codex(cfg, max_results=max_results)
+        if hs.ok and hs.models:
+            return [DiscoveredModel(id=m, raw={}) for m in (hs.models or [])]
+        return []
 
     headers = _auth_headers(cfg)
     params = cfg.query or None
@@ -320,6 +328,23 @@ async def discover_models_async(
             log.debug("Ollama tags discovery failed for %s: %s", cfg.base_url, e)
 
     return []
+
+
+def _handshake_openai_codex(cfg: ModelConfig, *, max_results: int = 200) -> ModelsHandshake:
+    """Handshake for native ChatGPT/Codex OAuth profiles."""
+    url = str(cfg.base_url or OPENAI_CODEX_BASE_URL).rstrip("/") + "/responses"
+    token_ready = bool(str(getattr(cfg, "api_key", "") or "").strip())
+    token_ready = token_ready or bool(getattr(cfg, "_openai_codex_token_ready", False))
+    if not token_ready:
+        return ModelsHandshake(
+            ok=False,
+            status="auth_error",
+            url=url,
+            error="Not signed in to ChatGPT OAuth. Run Easy Setup or connect the ChatGPT profile.",
+            models=[],
+        )
+    model_id = str(getattr(cfg, "model", "") or "").strip() or "gpt-5.5"
+    return ModelsHandshake(ok=True, status="ok", url=url, http_status=None, models=[model_id][:max_results])
 
 
 def discover_models(cfg: ModelConfig, *, timeout_s: float = 2.0) -> list[DiscoveredModel]:

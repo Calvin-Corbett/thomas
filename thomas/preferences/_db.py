@@ -591,6 +591,24 @@ class PreferencesStore:
                     incoming = patch.advanced.model.model_dump(exclude_unset=True)
                     fields_set = patch.advanced.model.model_fields_set
                     for k in fields_set:
+                        if k in {"role_profiles", "role_model_ids"}:
+                            value = incoming.get(k, None)
+                            if value is None:
+                                current[k] = {}
+                                continue
+                            role_map = dict(current.get(k) or {})
+                            if isinstance(value, dict):
+                                for role, selected in value.items():
+                                    role_key = str(role or "").strip().lower().replace("-", "_").replace(" ", "_")
+                                    if not role_key:
+                                        continue
+                                    selected_text = str(selected or "").strip() if selected is not None else ""
+                                    if selected_text:
+                                        role_map[role_key] = selected_text
+                                    else:
+                                        role_map.pop(role_key, None)
+                            current[k] = role_map
+                            continue
                         if k == "deterministic_seed":
                             current[k] = incoming.get(k, None)
                             continue

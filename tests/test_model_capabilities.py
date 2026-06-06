@@ -31,3 +31,16 @@ def test_anthropic_profile_capabilities_disable_video_generation() -> None:
     assert caps["batch"] is True
     assert caps["video_gen"] is False
     assert caps["tts"] is False
+
+
+def test_openai_codex_profile_capabilities_support_chat_tools_and_streaming() -> None:
+    cfg = ModelConfig(
+        name="chatgpt",
+        provider="openai_codex",
+        base_url="https://chatgpt.com/backend-api/codex",
+        model="gpt-5.5",
+    )
+    caps = profile_capability_map(cfg)
+    assert caps["chat"] is True
+    assert caps["tools"] is True
+    assert caps["streaming"] is True

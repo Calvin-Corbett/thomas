@@ -18,15 +18,24 @@ framework (Feb 2026).
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from inspect import isawaitable
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from thomas.chat.conversation import ConversationManager
 
 log = logging.getLogger(__name__)
+
+_RECALL_PROMPT_RE = re.compile(
+    r"\b(?:what\s+(?:was|did|were)|remind\s+me|recall|previously|earlier|"
+    r"did\s+i\s+tell|did\s+you\s+remember|remembered|stored|code\s+phrase|"
+    r"temporary\s+code|what\s+phrase)\b",
+    re.I,
+)
 
 # ── memory context dataclass ─────────────────────────────────────
 
@@ -124,6 +133,105 @@ class MemoryCoordinator:
 
         # Episode log (for capturing what happened this session)
         self._episodes: list[dict[str, Any]] = []
+
+    @staticmethod
+    def _memory_result_text(result: Any) -> str:
+        """Normalize legacy memory and Memory Fabric v2 retrieval results."""
+        if result is None:
+            return ""
+        if isinstance(result, str):
+            return result
+        if isinstance(result, dict):
+            for key in ("text", "pack_text", "content"):
+                value = result.get(key)
+                if value:
+                    return str(value)
+        if isinstance(result, (list, tuple)):
+            return "\n".join(str(item) for item in result if item is not None)
+        for attr in ("text", "pack_text", "content"):
+            value = getattr(result, attr, None)
+            if value:
+                return str(value)
+        return str(result)
+
+    async def _retrieve_memory_text(
+        self,
+        *,
+        query: str,
+        thread_id: str | None,
+        budget: int,
+        mode: str,
+    ) -> str:
+        """Call the configured memory backend across supported API shapes."""
+        if self._memory is None or not hasattr(self._memory, "retrieve"):
+            return ""
+
+        retrieve = self._memory.retrieve
+        api_thread_id = thread_id if thread_id is not None else self._session_id
+        attempts = (
+            lambda: retrieve(query=query, thread=thread_id, budget=budget, mode=mode),
+            lambda: retrieve(query=query, thread_id=api_thread_id, budget_tokens=budget, mode=mode),
+            lambda: retrieve(query=query, thread_id=api_thread_id, budget_tokens=budget),
+            lambda: retrieve(api_thread_id, query, budget),
+        )
+        last_type_error: TypeError | None = None
+        for attempt in attempts:
+            try:
+                result = attempt()
+                if isawaitable(result):
+                    result = await result
+                return self._memory_result_text(result)
+            except TypeError as exc:
+                last_type_error = exc
+                continue
+        if last_type_error is not None:
+            raise last_type_error
+        return ""
+
+    def _recent_thread_memory(self, *, limit: int = 8) -> str:
+        """Fetch recent raw thread episodes as a recall fallback."""
+        candidates = [
+            self._memory,
+            getattr(self._memory, "_fabric_v2", None),
+            getattr(self._memory, "fabric", None),
+        ]
+        db = None
+        for candidate in candidates:
+            candidate_db = getattr(candidate, "db", None)
+            if candidate_db is not None and hasattr(candidate_db, "execute"):
+                db = candidate_db
+                break
+        if db is None:
+            return ""
+
+        try:
+            rows = db.execute(
+                """
+                SELECT role, content
+                FROM episodes
+                WHERE thread_id=?
+                ORDER BY ts_ms DESC, id DESC
+                LIMIT ?
+                """,
+                (self._session_id, int(limit)),
+            ).fetchall()
+        except Exception as exc:
+            log.debug("Recent thread memory fallback failed: %s", exc)
+            return ""
+
+        if not rows:
+            return ""
+
+        lines = ["[Recent thread memory]"]
+        for row in reversed(list(rows)):
+            role = str(row["role"] if isinstance(row, dict) else row["role"] if hasattr(row, "keys") else row[0])
+            content = str(
+                row["content"] if isinstance(row, dict) else row["content"] if hasattr(row, "keys") else row[1]
+            )
+            content = " ".join(content.split())
+            if content:
+                lines.append(f"  [{role}] {content[:500]}")
+        return "\n".join(lines) if len(lines) > 1 else ""
 
     # ── main refresh entry point ─────────────────────────────────
 
@@ -225,13 +333,20 @@ class MemoryCoordinator:
         try:
             # Query memory engine scoped to this thread
             if hasattr(self._memory, "retrieve"):
-                ctx = self._memory.retrieve(
+                self._episodic_cache = await self._retrieve_memory_text(
                     query=prompt,
-                    thread=self._session_id,
+                    thread_id=self._session_id,
                     budget=self._context_budget // 3,
                     mode="fast",
                 )
-                self._episodic_cache = getattr(ctx, "text", str(ctx)) if ctx else ""
+                if _RECALL_PROMPT_RE.search(str(prompt or "")):
+                    recent_memory = self._recent_thread_memory()
+                    if recent_memory and recent_memory not in self._episodic_cache:
+                        self._episodic_cache = (
+                            f"{self._episodic_cache.rstrip()}\n\n{recent_memory}"
+                            if self._episodic_cache.strip()
+                            else recent_memory
+                        )
             elif hasattr(self._memory, "search"):
                 results = self._memory.search(
                     query=prompt,
@@ -264,13 +379,12 @@ class MemoryCoordinator:
 
         try:
             if hasattr(self._memory, "retrieve"):
-                ctx = self._memory.retrieve(
+                self._semantic_cache = await self._retrieve_memory_text(
                     query=prompt,
-                    thread=None,  # all threads — domain knowledge is global
+                    thread_id=None,  # all threads — domain knowledge is global when supported
                     budget=self._context_budget // 2,
                     mode="thorough",
                 )
-                self._semantic_cache = getattr(ctx, "text", str(ctx)) if ctx else ""
             elif hasattr(self._memory, "search"):
                 results = self._memory.search(
                     query=prompt,
@@ -340,6 +454,21 @@ class MemoryCoordinator:
                         thread=self._session_id,
                         metadata={"turn": turn_number, "specialist": specialist},
                     )
+                elif hasattr(self._memory, "add_event"):
+                    metadata = {"turn": turn_number, "specialist": specialist}
+                    self._memory.add_event(
+                        self._session_id,
+                        "user_message",
+                        user_message[:1000],
+                        metadata,
+                    )
+                    if assistant_response:
+                        self._memory.add_event(
+                            self._session_id,
+                            "assistant_message",
+                            assistant_response[:1000],
+                            metadata,
+                        )
                 elif hasattr(self._memory, "store"):
                     self._memory.store(
                         text=f"Turn {turn_number}: {user_message[:300]} → {assistant_response[:300]}",

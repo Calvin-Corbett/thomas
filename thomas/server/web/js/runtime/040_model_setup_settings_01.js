@@ -268,6 +268,179 @@ function applyFontSize(px) {
     document.body.style.fontSize = px + 'px';
 }
 
+const MODEL_SPECIALTY_ROLES = [
+    { id: 'research', label: 'Research' },
+    { id: 'coding', label: 'Coding' },
+    { id: 'planning', label: 'Planning' },
+    { id: 'memory', label: 'Memory' },
+    { id: 'tools', label: 'Tool use' },
+    { id: 'creative', label: 'Creative' },
+];
+const COMPOSER_MODE_MODEL_ROLES = {
+    research: 'research',
+    create_image: 'creative',
+    create_video: 'creative',
+    create_song: 'creative',
+};
+let setupSpecialtyDraftProfiles = {};
+let setupSpecialtyDraftModelIds = {};
+let setupSpecialtySyncing = false;
+
+function normalizeModelSpecialtyRole(roleRaw = '') {
+    return safeString(roleRaw).toLowerCase().replace(/[\s-]+/g, '_');
+}
+
+function modelSpecialtyLabel(roleRaw = '') {
+    const role = normalizeModelSpecialtyRole(roleRaw);
+    const found = MODEL_SPECIALTY_ROLES.find((entry) => entry.id === role);
+    return found?.label || role || 'Specialty';
+}
+
+function currentModelPreferenceMaps() {
+    const modelPrefs = currentPreferences?.advanced?.model || {};
+    return {
+        roleProfiles: { ...(modelPrefs.role_profiles || {}) },
+        roleModelIds: { ...(modelPrefs.role_model_ids || {}) },
+    };
+}
+
+function resetSpecialtyDraftsFromPreferences() {
+    const { roleProfiles, roleModelIds } = currentModelPreferenceMaps();
+    setupSpecialtyDraftProfiles = { ...roleProfiles };
+    setupSpecialtyDraftModelIds = { ...roleModelIds };
+}
+
+function buildSpecialtyPreferencePatch() {
+    const { roleProfiles, roleModelIds } = currentModelPreferenceMaps();
+    const nextProfiles = { ...setupSpecialtyDraftProfiles };
+    const nextModelIds = { ...setupSpecialtyDraftModelIds };
+    for (const role of Object.keys(roleProfiles)) {
+        if (!safeString(nextProfiles[role])) nextProfiles[role] = null;
+    }
+    for (const role of Object.keys(roleModelIds)) {
+        if (!safeString(nextModelIds[role])) nextModelIds[role] = null;
+    }
+    return {
+        role_profiles: nextProfiles,
+        role_model_ids: nextModelIds,
+    };
+}
+
+function resolveComposerModelRole() {
+    const modeId = normalizeModelSpecialtyRole(composerModeSelection?.id);
+    return COMPOSER_MODE_MODEL_ROLES[modeId] || '';
+}
+
+function resolveSpecialtyModelSelection(roleRaw = '', fallbackProfileRaw = '') {
+    const role = normalizeModelSpecialtyRole(roleRaw);
+    const modelPrefs = currentPreferences?.advanced?.model || {};
+    const roleProfiles = modelPrefs.role_profiles || {};
+    const roleModelIds = modelPrefs.role_model_ids || {};
+    const fallbackProfile = safeString(fallbackProfileRaw)
+        || safeString(modelSelector?.value)
+        || safeString(setupProviderSelector?.value)
+        || safeString(modelPrefs.active_profile);
+    const profile = safeString(roleProfiles[role]) || fallbackProfile;
+    const modelId = safeString(roleModelIds[role]) || resolveActiveModelIdForProfile(profile);
+    return { role, profile, modelId };
+}
+
+function populateSelectOptions(selectEl, modelIds, preferredValue = '') {
+    if (!selectEl) return;
+    const preferred = safeString(preferredValue);
+    selectEl.innerHTML = '';
+    const seen = new Set();
+    for (const id of modelIds) {
+        const clean = safeString(id);
+        if (!clean || seen.has(clean)) continue;
+        seen.add(clean);
+        const opt = document.createElement('option');
+        opt.value = clean;
+        opt.textContent = clean;
+        selectEl.appendChild(opt);
+    }
+    if (preferred && !seen.has(preferred)) {
+        const opt = document.createElement('option');
+        opt.value = preferred;
+        opt.textContent = preferred;
+        selectEl.insertBefore(opt, selectEl.firstChild);
+        seen.add(preferred);
+    }
+    if (preferred && seen.has(preferred)) {
+        selectEl.value = preferred;
+    } else if (selectEl.options.length > 0) {
+        selectEl.value = selectEl.options[0].value;
+    }
+}
+
+function renderSpecialtyProviderOptions() {
+    if (!setupSpecialtyProviderSelector) return;
+    const currentValue = safeString(setupSpecialtyProviderSelector.value);
+    setupSpecialtyProviderSelector.innerHTML = '';
+    const inherit = document.createElement('option');
+    inherit.value = '';
+    inherit.textContent = 'Inherit base model';
+    setupSpecialtyProviderSelector.appendChild(inherit);
+    for (const profile of availableModelProfiles || []) {
+        const name = safeString(profile?.name);
+        if (!name) continue;
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        setupSpecialtyProviderSelector.appendChild(opt);
+    }
+    if (currentValue && Array.from(setupSpecialtyProviderSelector.options).some((opt) => opt.value === currentValue)) {
+        setupSpecialtyProviderSelector.value = currentValue;
+    }
+}
+
+function syncSpecialtyModelControls() {
+    if (!setupSpecialtyRoleSelector || !setupSpecialtyProviderSelector || !setupSpecialtyModelSelector) return;
+    setupSpecialtySyncing = true;
+    try {
+        const role = normalizeModelSpecialtyRole(setupSpecialtyRoleSelector.value) || 'research';
+        renderSpecialtyProviderOptions();
+        const explicitProfile = safeString(setupSpecialtyDraftProfiles[role]);
+        setupSpecialtyProviderSelector.value = explicitProfile;
+        const baseProfile = safeString(setupProviderSelector?.value)
+            || safeString(modelSelector?.value)
+            || safeString(currentPreferences?.advanced?.model?.active_profile);
+        const effectiveProfile = explicitProfile || baseProfile;
+        const profileInfo = (availableModelProfiles || []).find((entry) => safeString(entry?.name) === effectiveProfile) || {};
+        const defaultModel = defaultModelIdForProfile(effectiveProfile);
+        const preferredModel = explicitProfile
+            ? (safeString(setupSpecialtyDraftModelIds[role]) || resolveStoredModelSelection(effectiveProfile, { allowLocalBackup: true }))
+            : (resolveActiveModelIdForProfile(baseProfile) || defaultModel);
+        const suggestions = KNOWN_MODEL_SUGGESTIONS[safeString(profileInfo?.provider)] || [];
+        populateSelectOptions(setupSpecialtyModelSelector, [preferredModel, defaultModel, ...suggestions], preferredModel);
+        setupSpecialtyModelSelector.disabled = !explicitProfile;
+        if (setupSpecialtyStatus) {
+            setupSpecialtyStatus.textContent = explicitProfile
+                ? `${modelSpecialtyLabel(role)} uses ${explicitProfile} / ${safeString(setupSpecialtyModelSelector.value) || preferredModel}.`
+                : `${modelSpecialtyLabel(role)} inherits the base model.`;
+        }
+    } finally {
+        setupSpecialtySyncing = false;
+    }
+}
+
+function updateSpecialtyDraftFromControls() {
+    if (setupSpecialtySyncing || !setupSpecialtyRoleSelector) return;
+    const role = normalizeModelSpecialtyRole(setupSpecialtyRoleSelector.value) || 'research';
+    const profile = safeString(setupSpecialtyProviderSelector?.value);
+    if (!profile) {
+        delete setupSpecialtyDraftProfiles[role];
+        delete setupSpecialtyDraftModelIds[role];
+        syncSpecialtyModelControls();
+        return;
+    }
+    setupSpecialtyDraftProfiles[role] = profile;
+    const modelId = safeString(setupSpecialtyModelSelector?.value)
+        || resolveStoredModelSelection(profile, { allowLocalBackup: true });
+    if (modelId) setupSpecialtyDraftModelIds[role] = modelId;
+    syncSpecialtyModelControls();
+}
+
 function initModelSetup() {
     const closeModelSetupModal = () => {
         closeSetupProviderMenu();
@@ -284,6 +457,7 @@ function initModelSetup() {
             || safeString(currentPreferences?.advanced?.model?.active_profile);
         setupProviderSelector.value = savedProfile;
         renderSetupProviderPickerMenu(savedProfile, { preserveExpanded: false });
+        resetSpecialtyDraftsFromPreferences();
 
         // Restore segmented controls from preferences
         const savedAutonomy = safeString(currentPreferences?.autonomy?.default_level).replace('L', '');
@@ -299,6 +473,7 @@ function initModelSetup() {
         }
 
         if (typeof _syncProviderUI === 'function') _syncProviderUI(savedProfile);
+        syncSpecialtyModelControls();
         if (setupProviderPickerBtn) {
             setupProviderPickerBtn.focus();
         } else if (setupProviderSelector) {
@@ -440,6 +615,7 @@ function initModelSetup() {
 
         // --- Reasoning effort ---
         syncSetupReasoningVisibility(profileName);
+        syncSpecialtyModelControls();
         renderChatComposerSubbar();
     };
 
@@ -502,6 +678,26 @@ function initModelSetup() {
     if (setupModelSelector) {
         setupModelSelector.addEventListener('change', (e) => {
             activeModelOverride = safeString(e.target.value);
+            syncSpecialtyModelControls();
+        });
+    }
+
+    if (setupSpecialtyRoleSelector) {
+        setupSpecialtyRoleSelector.addEventListener('change', () => syncSpecialtyModelControls());
+    }
+    if (setupSpecialtyProviderSelector) {
+        setupSpecialtyProviderSelector.addEventListener('change', () => updateSpecialtyDraftFromControls());
+    }
+    if (setupSpecialtyModelSelector) {
+        setupSpecialtyModelSelector.addEventListener('change', () => updateSpecialtyDraftFromControls());
+    }
+    if (setupSpecialtyClearBtn) {
+        setupSpecialtyClearBtn.addEventListener('click', () => {
+            if (!setupSpecialtyRoleSelector) return;
+            const role = normalizeModelSpecialtyRole(setupSpecialtyRoleSelector.value) || 'research';
+            delete setupSpecialtyDraftProfiles[role];
+            delete setupSpecialtyDraftModelIds[role];
+            syncSpecialtyModelControls();
         });
     }
 
@@ -520,6 +716,7 @@ function initModelSetup() {
 
         // 3. Build preferences patch (map UI values to preferences schema)
         const economyMap = { cheap: 'cheap', balanced: 'optimal', max: 'max' };
+        const specialtyPatch = buildSpecialtyPreferencePatch();
         const patch = {
             memory: { enabled_global: Boolean(setupMemoryToggle && setupMemoryToggle.checked) },
             autonomy: { default_level: 'L' + activeAutonomyLevel },
@@ -527,6 +724,8 @@ function initModelSetup() {
                 model: {
                     active_profile: selectedProfile,
                     model_id: selectedModel,
+                    role_profiles: specialtyPatch.role_profiles,
+                    role_model_ids: specialtyPatch.role_model_ids,
                     reasoning_effort: normalizeReasoningEffort(activeReasoningEffort) || 'medium',
                 },
                 runtime: {
@@ -881,9 +1080,9 @@ function refreshSettingsAvatarPreview() {
 
 async function refreshIdentityState() {
     try {
-        const [prefsRes, codexRes] = await Promise.all([
+        const [prefsRes, codexStatus] = await Promise.all([
             fetch('/api/preferences'),
-            fetchJsonSafe('/api/codex/status'),
+            fetchPreferredCodexIdentityStatus(),
         ]);
         if (prefsRes.ok) {
             currentPreferences = await prefsRes.json();
@@ -898,11 +1097,7 @@ async function refreshIdentityState() {
             if (settingAutonomy) settingAutonomy.value = `L${activeAutonomyLevel}`;
         }
         }
-        if (codexRes.ok) {
-            currentCodexStatus = codexRes.data || null;
-        } else if (!codexRes.ok && codexRes.status) {
-            currentCodexStatus = null;
-        }
+        currentCodexStatus = codexStatus || null;
     } catch (e) {
         console.error('Failed to load identity state', e);
     } finally {
@@ -911,6 +1106,16 @@ async function refreshIdentityState() {
         setDebugDockOpen(false, { recordEvent: false });
         updateDebugDockSnapshot();
     }
+}
+
+async function fetchPreferredCodexIdentityStatus() {
+    const nativeCodexRes = await fetchJsonSafe('/api/openai-codex/status?profile=chatgpt');
+    if (nativeCodexRes.ok) return nativeCodexRes.data || null;
+    if (nativeCodexRes.status === 404 || nativeCodexRes.status === 405) {
+        const legacyCodexRes = await fetchJsonSafe('/api/codex/status');
+        return legacyCodexRes.ok ? (legacyCodexRes.data || null) : null;
+    }
+    return null;
 }
 
 function ensureAdvancedChatPhysicsSettingUi() {
@@ -963,16 +1168,16 @@ function syncAdvancedChatPhysicsSettingUi() {
 
 async function loadSettings() {
     try {
-        const [prefsRes, codexRes] = await Promise.all([
+        const [prefsRes, codexStatus] = await Promise.all([
             fetchJsonSafe('/api/preferences'),
-            fetchJsonSafe('/api/codex/status'),
+            fetchPreferredCodexIdentityStatus(),
         ]);
         if (!prefsRes.ok) {
             throw new Error(`Failed to load preferences (${prefsRes.status})`);
         }
 
         currentPreferences = prefsRes.data || {};
-        currentCodexStatus = codexRes.ok ? (codexRes.data || null) : null;
+        currentCodexStatus = codexStatus || null;
         applyTheme(safeString(currentPreferences?.appearance?.theme) || 'auto');
         applyFontSize(toInt(currentPreferences?.appearance?.font_size, 16, 12, 28));
         applyInterfaceMotionPreference();

@@ -428,10 +428,11 @@ function resolveProfileReasoningEffort(profileName = '') {
         : null;
     const reasoningControl = profile?.chat_controls?.model?.reasoning_effort;
     const persistedEffort = getPersistedReasoningEffort(targetProfile);
+    const provider = safeString(profile?.provider).toLowerCase();
     const defaultEffort = normalizeReasoningEffort(
         reasoningControl?.default_value
         || profile?.reasoning_effort
-        || (safeString(profile?.provider) === 'codex' ? 'medium' : '')
+        || (provider === 'codex' || provider === 'openai_codex' || provider === 'openai-codex' ? 'medium' : '')
     );
     if (!reasoningControl?.supported && !defaultEffort && !persistedEffort) return '';
     if (persistedEffort) return persistedEffort;
@@ -509,7 +510,7 @@ function resolveEasySetupPathForProfile(profileName = '') {
     const profile = findSetupProviderProfile(profileName);
     const provider = safeString(profile?.provider).toLowerCase();
     const profileKey = safeString(profile?.name).toLowerCase();
-    if (provider === 'codex' || profileKey === 'codex') return 'codex';
+    if (provider === 'codex' || provider === 'openai_codex' || provider === 'openai-codex' || profileKey === 'codex' || profileKey === 'chatgpt') return 'codex';
     if (provider === 'local' || provider === 'ollama' || profileKey === 'local' || profileKey.includes('ollama')) return 'local';
     return 'manual';
 }
@@ -1229,4 +1230,3 @@ function parseEngineRows(enginePayload) {
     });
     return rows;
 }
-

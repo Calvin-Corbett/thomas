@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
-from thomas import __version__ as THOMAS_VERSION
 from thomas.core.config import AppConfig
 from thomas.server.app_keys import (
     APP_SECRETS,
@@ -468,6 +467,21 @@ def setup_middleware_and_handlers(
                 api_key = secret_store.get(secret_name)
                 if api_key:
                     cfg_copy.api_key = api_key
+        if (
+            secret_store
+            and str(getattr(cfg_copy, "provider", "") or "").strip().lower().replace("-", "_") == "openai_codex"
+        ):
+            try:
+                from thomas.server.openai_codex_oauth import access_token_from_store, has_openai_codex_token
+
+                access_token = access_token_from_store(secret_store, str(profile or cfg_copy.name or "chatgpt"))
+                if access_token:
+                    cfg_copy.api_key = access_token
+                cfg_copy._openai_codex_token_ready = bool(
+                    access_token or has_openai_codex_token(secret_store, str(profile or cfg_copy.name or "chatgpt"))
+                )
+            except Exception as e:
+                log.debug("Failed to resolve ChatGPT OAuth token for %s: %s", profile, e)
         return cfg_copy
 
     def _failover_cfgs_with_secrets(config: AppConfig, profile: str) -> list[Any]:
@@ -490,6 +504,22 @@ def setup_middleware_and_handlers(
                     api_key = secret_store.get(secret_name)
                     if api_key:
                         fcfg_copy.api_key = api_key
+            if (
+                secret_store
+                and str(getattr(fcfg_copy, "provider", "") or "").strip().lower().replace("-", "_") == "openai_codex"
+            ):
+                try:
+                    from thomas.server.openai_codex_oauth import access_token_from_store, has_openai_codex_token
+
+                    profile_name = str(getattr(fcfg_copy, "name", "") or "chatgpt")
+                    access_token = access_token_from_store(secret_store, profile_name)
+                    if access_token:
+                        fcfg_copy.api_key = access_token
+                    fcfg_copy._openai_codex_token_ready = bool(
+                        access_token or has_openai_codex_token(secret_store, profile_name)
+                    )
+                except Exception as e:
+                    log.debug("Failed to resolve ChatGPT OAuth failover token for %s: %s", fcfg_copy.name, e)
             result.append(fcfg_copy)
         return result
 
@@ -692,78 +722,13 @@ def setup_middleware_and_handlers(
                 digest.update(b"missing")
         return digest.hexdigest()[:12]
 
-    async def index(request: web.Request) -> web.StreamResponse:
-        try:
-            html = await asyncio.to_thread(
-                lambda: (web_dir / "index.html").read_text(encoding="utf-8", errors="replace")
-            )
-            web_build = _web_build_fingerprint(
-                "js/app.js",
-                "js/app_runtime_loader.js",
-                "js/runtime/001_preamble.js",
-                "index.html",
-            )
-            html = html.replace("__THOMAS_VERSION__", THOMAS_VERSION)
-            html = html.replace("__THOMAS_WEB_BUILD__", web_build)
-            return web.Response(
-                text=html,
-                content_type="text/html",
-                headers={"Cache-Control": "no-store"},
-            )
-        except (OSError, UnicodeDecodeError):
-            return web.FileResponse(web_dir / "index.html")
+    from .app_middleware_helpers import build_page_handlers
 
-    async def settings(request: web.Request) -> web.StreamResponse:
-        try:
-            html = (web_dir / "settings.html").read_text(encoding="utf-8", errors="replace")
-            web_build = _web_build_fingerprint(
-                "js/app.js",
-                "js/app_runtime_loader.js",
-                "js/runtime/001_preamble.js",
-                "index.html",
-            )
-            html = html.replace("__THOMAS_VERSION__", THOMAS_VERSION)
-            html = html.replace("__THOMAS_WEB_BUILD__", web_build)
-            return web.Response(
-                text=html,
-                content_type="text/html",
-                headers={"Cache-Control": "no-store"},
-            )
-        except (OSError, UnicodeDecodeError):
-            return web.FileResponse(web_dir / "settings.html")
-
-    async def companion(request: web.Request) -> web.StreamResponse:
-        try:
-            html = (web_dir / "companion.html").read_text(encoding="utf-8", errors="replace")
-            web_build = _web_build_fingerprint(
-                "js/app.js",
-                "js/app_runtime_loader.js",
-                "js/runtime/001_preamble.js",
-                "index.html",
-            )
-            html = html.replace("__THOMAS_VERSION__", THOMAS_VERSION)
-            html = html.replace("__THOMAS_WEB_BUILD__", web_build)
-            return web.Response(
-                text=html,
-                content_type="text/html",
-                headers={"Cache-Control": "no-store"},
-            )
-        except (OSError, UnicodeDecodeError):
-            return web.FileResponse(web_dir / "companion.html")
-
-    async def landing(request: web.Request) -> web.StreamResponse:
-        try:
-            html = (web_dir / "landing.html").read_text(encoding="utf-8", errors="replace")
-            web_build = _web_build_fingerprint("index.html", "js/landing.js")
-            html = html.replace("__THOMAS_VERSION__", THOMAS_VERSION)
-            html = html.replace("__THOMAS_WEB_BUILD__", web_build)
-            return web.Response(
-                text=html,
-                content_type="text/html",
-                headers={"Cache-Control": "no-store"},
-            )
-        except (OSError, UnicodeDecodeError):
-            return web.FileResponse(web_dir / "landing.html")
+    _page_handlers = build_page_handlers(web_dir, _web_build_fingerprint)
+    index = _page_handlers["index"]
+    settings = _page_handlers["settings"]
+    companion = _page_handlers["companion"]
+    landing = _page_handlers["landing"]
 
     from .app_routes_init import _setup_routes_and_handlers
 

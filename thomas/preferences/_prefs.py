@@ -146,6 +146,8 @@ class ProfilePrefs(BaseModel):
 class AdvancedModelPrefs(BaseModel):
     active_profile: str = ""  # persisted selected provider/profile
     model_id: str = ""  # persisted model override
+    role_profiles: dict[str, str] = Field(default_factory=dict)
+    role_model_ids: dict[str, str] = Field(default_factory=dict)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     top_p: float = Field(default=1.0, ge=0.0, le=1.0)
     frequency_penalty: float = Field(default=0.0, ge=-2.0, le=2.0)
@@ -161,6 +163,19 @@ class AdvancedModelPrefs(BaseModel):
     @classmethod
     def _trim_stop_sequences(cls, v: str) -> str:
         return str(v or "").strip()
+
+    @field_validator("role_profiles", "role_model_ids", mode="before")
+    @classmethod
+    def _normalize_role_map(cls, v: Any) -> dict[str, str]:
+        if not isinstance(v, dict):
+            return {}
+        normalized: dict[str, str] = {}
+        for key, value in v.items():
+            role = str(key or "").strip().lower().replace("-", "_").replace(" ", "_")
+            text = str(value or "").strip()
+            if role and text:
+                normalized[role] = text
+        return normalized
 
 
 class AdvancedToolsPrefs(BaseModel):

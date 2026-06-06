@@ -8,6 +8,8 @@ async function applyOnboardingCompletion({ skippedInterview = false } = {}) {
     };
     const derived = deriveOnboardingDefaults(onboardingAnswers);
     const completedAt = onboardingNowIso();
+    const selectedProfile = resolveEasySetupSelectedProfile();
+    const selectedModelId = resolveEasySetupSelectedModelId(selectedProfile);
 
     const patch = {
         autonomy: { default_level: `L${derived.autonomyLevel}` },
@@ -15,6 +17,10 @@ async function applyOnboardingCompletion({ skippedInterview = false } = {}) {
         notifications: { desktop: derived.desktopNotifications },
         profile: { profile_type: derived.profileType },
         advanced: {
+            model: {
+                active_profile: selectedProfile,
+                model_id: selectedModelId,
+            },
             runtime: {
                 default_mode: derived.defaultMode,
                 default_token_economy: derived.tokenEconomy,
@@ -70,6 +76,24 @@ async function applyOnboardingCompletion({ skippedInterview = false } = {}) {
     activeAutonomyLevel = derived.autonomyLevel;
     activeTokenEconomy = derived.tokenEconomy === 'optimal' ? 'balanced' : derived.tokenEconomy;
     activeChatMode = normalizeChatMode(derived.defaultMode) || 'auto';
+    if (selectedProfile) {
+        activeModelOverride = selectedModelId;
+        if (setupProviderSelector) setupProviderSelector.value = selectedProfile;
+        if (modelSelector) modelSelector.value = selectedProfile;
+        if (setupModelSelector && selectedModelId) {
+            if (!setupModelSelector.querySelector(`option[value="${CSS.escape(selectedModelId)}"]`)) {
+                const opt = document.createElement('option');
+                opt.value = selectedModelId;
+                opt.textContent = selectedModelId;
+                setupModelSelector.appendChild(opt);
+            }
+            setupModelSelector.value = selectedModelId;
+        }
+        try { window.localStorage.setItem('thomas_active_profile', selectedProfile); } catch (_) {}
+        try { window.localStorage.setItem('thomas_active_model_id', selectedModelId); } catch (_) {}
+        renderSetupProviderPickerMenu(selectedProfile, { preserveExpanded: false });
+        if (modelSetupCurrentLabel) modelSetupCurrentLabel.textContent = _profileHeaderLabel(selectedProfile);
+    }
     setSegmentedControlSelection('setupAutonomyGroup', String(activeAutonomyLevel));
     setSegmentedControlSelection('setupEconomyGroup', activeTokenEconomy);
     if (settingAdvDefaultMode) settingAdvDefaultMode.value = activeChatMode;
@@ -800,7 +824,15 @@ function initChatComposerSubbar() {
 }
 
 function buildChatRequestPayload(message, { docs = [], images = [], systemPrompt = '', resolvedProfile = '', studioChatContext = null } = {}) {
-    const profile = safeString(resolvedProfile) || safeString(modelSelector?.value) || safeString(setupProviderSelector?.value);
+    const requestedProfile = safeString(resolvedProfile);
+    const fallbackProfile = requestedProfile || safeString(modelSelector?.value) || safeString(setupProviderSelector?.value);
+    const role = typeof resolveComposerModelRole === 'function' && !safeString(studioChatContext?.preferredProfile)
+        ? resolveComposerModelRole()
+        : '';
+    const specialty = role && typeof resolveSpecialtyModelSelection === 'function'
+        ? resolveSpecialtyModelSelection(role, fallbackProfile)
+        : null;
+    const profile = safeString(specialty?.profile) || fallbackProfile;
     const payload = {
         message: message,
         docs: Array.isArray(docs) ? docs : [],
@@ -808,7 +840,7 @@ function buildChatRequestPayload(message, { docs = [], images = [], systemPrompt
         session_id: sessionId,
         profile: profile,
         model: profile,
-        model_id: resolveActiveModelIdForProfile(profile) || undefined,
+        model_id: safeString(specialty?.modelId) || resolveActiveModelIdForProfile(profile) || undefined,
         autonomy_level: Math.max(1, parseInt(String(activeAutonomyLevel || 1), 10) || 1),
         token_economy: resolveChatPayloadTokenEconomy(),
         system_prompt: systemPrompt || undefined,

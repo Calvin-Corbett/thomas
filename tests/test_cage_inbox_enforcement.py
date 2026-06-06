@@ -136,6 +136,32 @@ def test_plain_offscope_coordination_does_not_block(tmp_path: Path) -> None:
     assert _blocking(repo, wb, "codex") == []
 
 
+@pytest.mark.parametrize(
+    "summary,requested_action",
+    [
+        ("do not submit yet", "none"),
+        ("landing is on hold", "none"),
+        ("coordination needed", "ack before commit"),
+    ],
+)
+def test_unscoped_submission_hold_blocks(tmp_path: Path, summary: str, requested_action: str) -> None:
+    repo = _init_repo(tmp_path)
+    wb = _workboard(repo)
+    _send(
+        wb,
+        sender="claude",
+        recipient="codex",
+        summary=summary,
+        requested_action=requested_action,
+        kind="coordination",
+        task_id="none",
+    )
+    _stage(repo, "feature.py")
+    blocking = _blocking(repo, wb, "codex")
+    assert len(blocking) == 1
+    assert "submit/commit hold directive" in blocking[0]["_reasons"][0]
+
+
 def test_task_scope_linkage_blocks(tmp_path: Path) -> None:
     repo = _init_repo(tmp_path)
     wb = _workboard(

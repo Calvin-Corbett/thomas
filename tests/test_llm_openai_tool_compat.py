@@ -27,8 +27,10 @@ class _FakeClient:
     def __init__(self, lines, status_code=200):
         self._lines = lines
         self._status_code = status_code
+        self.last_request = None
 
-    def stream(self, method, url, json=None, params=None):  # noqa: ANN001
+    def stream(self, method, url, json=None, params=None, headers=None):  # noqa: ANN001
+        self.last_request = {"method": method, "url": url, "json": json, "params": params, "headers": headers or {}}
         return _FakeStreamResponse(self._lines, status_code=self._status_code)
 
 
@@ -51,10 +53,10 @@ def _make_client(lines):
     return _TestableLLMClient(cfg, _FakeClient(lines))
 
 
-def _collect_events(llm: LLMClient):
+def _collect_events(llm: LLMClient, tools=None):
     async def run_once():
         events = []
-        async for ev in llm.stream_chat([{"role": "user", "content": "hello"}], tools=None):
+        async for ev in llm.stream_chat([{"role": "user", "content": "hello"}], tools=tools):
             events.append(ev)
         return events
 
@@ -126,3 +128,60 @@ def test_stream_chat_accepts_coroutine_stream_openai(monkeypatch) -> None:
     events = asyncio.run(run())
 
     assert [e.type for e in events] == ["token", "done"]
+
+
+def test_openai_codex_responses_stream_parses_text_usage_and_tools() -> None:
+    lines = [
+        "event: response.output_item.added",
+        'data: {"type":"response.output_item.added","item":{"type":"function_call","call_id":"call_1","name":"fs_read_file"}}',
+        "",
+        "event: response.function_call_arguments.delta",
+        'data: {"type":"response.function_call_arguments.delta","call_id":"call_1","delta":"{\\"path\\":"}',
+        "",
+        "event: response.function_call_arguments.delta",
+        'data: {"type":"response.function_call_arguments.delta","call_id":"call_1","delta":"\\"README.md\\"}"}',
+        "",
+        "event: response.output_item.done",
+        'data: {"type":"response.output_item.done","item":{"type":"function_call","call_id":"call_1","name":"fs_read_file","arguments":"{\\"path\\":\\"README.md\\"}"}}',
+        "",
+        "event: response.output_text.delta",
+        'data: {"type":"response.output_text.delta","delta":"done"}',
+        "",
+        "event: response.completed",
+        'data: {"type":"response.completed","response":{"usage":{"input_tokens":3,"output_tokens":4,"total_tokens":7}}}',
+        "",
+    ]
+    cfg = ModelConfig(
+        name="chatgpt",
+        provider="openai_codex",
+        base_url="https://chatgpt.com/backend-api/codex",
+        model="gpt-5.5",
+        api_key="access-token",
+    )
+    fake_client = _FakeClient(lines)
+    llm = _TestableLLMClient(cfg, fake_client)
+    events = _collect_events(
+        llm,
+        tools=[
+            {
+                "type": "function",
+                "function": {
+                    "name": "fs.read_file",
+                    "description": "Read a file",
+                    "parameters": {"type": "object"},
+                },
+            }
+        ],
+    )
+
+    assert fake_client.last_request["url"] == "https://chatgpt.com/backend-api/codex/responses"
+    assert fake_client.last_request["headers"]["Authorization"] == "Bearer access-token"
+    assert fake_client.last_request["json"]["model"] == "gpt-5.5"
+    assert fake_client.last_request["json"]["tools"][0]["name"] == "fs_read_file"
+    assert [e.type for e in events].count("done") == 1
+    token_events = [e for e in events if e.type == "token"]
+    assert token_events[0].data["text"] == "done"
+    ends = [e for e in events if e.type == "tool_call_end"]
+    assert ends[0].data["name"] == "fs.read_file"
+    assert ends[0].data["arguments"] == '{"path":"README.md"}'
+    assert llm.session_usage.total_tokens == 7

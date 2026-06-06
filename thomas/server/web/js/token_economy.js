@@ -530,15 +530,19 @@ if (!window.__teSpace) {
 
     // ── Screensaver / idle mode ──────────────────────────────────
     let _idleTimeout = null;
-    const _idleEvents = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'];
+    const _idleEvents = ['mousemove', 'mousedown', 'pointermove', 'pointerdown', 'click', 'keydown', 'touchstart', 'wheel', 'scroll', 'focusin', 'input'];
 
     function _startScreensaverWatch() {
         _resetIdleTimer();
         _idleEvents.forEach(e => document.addEventListener(e, _onUserActivity, { passive: true }));
+        window.addEventListener('thomas:exit-screensaver', _onUserActivity);
+        window.__teExitScreensaver = _onUserActivity;
     }
 
     function _stopScreensaverWatch() {
         _idleEvents.forEach(e => document.removeEventListener(e, _onUserActivity));
+        window.removeEventListener('thomas:exit-screensaver', _onUserActivity);
+        if (window.__teExitScreensaver === _onUserActivity) delete window.__teExitScreensaver;
         if (_idleTimeout) { clearTimeout(_idleTimeout); _idleTimeout = null; }
         _exitScreensaver();
     }
@@ -548,12 +552,36 @@ if (!window.__teSpace) {
         _resetIdleTimer();
     }
 
+    function _screensaverAllowed() {
+        return !document.body.classList.contains('te-nav-chat');
+    }
+
     function _resetIdleTimer() {
         if (_idleTimeout) clearTimeout(_idleTimeout);
+        if (!_screensaverAllowed()) {
+            _idleTimeout = null;
+            _exitScreensaver();
+            return;
+        }
         _idleTimeout = setTimeout(_enterScreensaver, SCREENSAVER_IDLE_MS);
     }
 
     function _enterScreensaver() {
+        if (!_screensaverAllowed()) {
+            _exitScreensaver();
+            return;
+        }
+        const focused = document.activeElement;
+        const inputFocused = focused && ['INPUT', 'TEXTAREA', 'SELECT'].includes(String(focused.tagName || '').toUpperCase());
+        const generating = (typeof isGenerating !== 'undefined' && Boolean(isGenerating));
+        const composerLocked = (
+            typeof composerInputLockUntil !== 'undefined'
+            && Number(composerInputLockUntil || 0) > Date.now()
+        );
+        if (generating || composerLocked || inputFocused) {
+            _resetIdleTimer();
+            return;
+        }
         if (_screensaverActive) return;
         _screensaverActive = true;
         document.body.classList.remove('te-screensaver-exit');
@@ -561,7 +589,7 @@ if (!window.__teSpace) {
     }
 
     function _exitScreensaver() {
-        if (!_screensaverActive) return;
+        if (!_screensaverActive && !document.body.classList.contains('te-screensaver-active')) return;
         _screensaverActive = false;
         document.body.classList.remove('te-screensaver-active');
         document.body.classList.add('te-screensaver-exit');

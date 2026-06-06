@@ -136,6 +136,27 @@ async function fetchTaskContinuitySessionActivity(sessionToken) {
         console.warn('Task continuity delegation fetch failed', error);
     }
 
+    const cachedActivity = taskContinuityLatestActivity && typeof taskContinuityLatestActivity === 'object'
+        ? taskContinuityLatestActivity
+        : null;
+    const cachedActive = Boolean(
+        cachedActivity
+        && (
+            Number(cachedActivity.activeCount || 0) > 0
+            || (Array.isArray(cachedActivity.liveAgents) && cachedActivity.liveAgents.length > 0)
+        )
+    );
+    const now = Date.now();
+    if (
+        cachedActivity
+        && !cachedActive
+        && taskContinuityActivityFallbackLastFetchAt
+        && (now - taskContinuityActivityFallbackLastFetchAt) < TASK_CONTINUITY_IDLE_ACTIVITY_REFRESH_INTERVAL_MS
+    ) {
+        return cachedActivity;
+    }
+    taskContinuityActivityFallbackLastFetchAt = now;
+
     const [missionResp, jobsResp] = await Promise.all([
         fetchJsonSafe('/api/mission/control'),
         fetchJsonSafe(`/api/mission/jobs?session_id=${encodeURIComponent(sid)}&limit=36`),
@@ -504,6 +525,26 @@ async function refreshEvolveChatReplies({ sessionOverride = '', force = false } 
     const sid = safeString(sessionOverride || sessionId || activeChatId || taskContinuityLatestSessionId);
     if (!sid) return;
     if (evolveChatRepliesInFlight && !force) return;
+    const activity = taskContinuityLatestActivity && typeof taskContinuityLatestActivity === 'object'
+        ? taskContinuityLatestActivity
+        : null;
+    const hasActiveActivity = Boolean(
+        activity
+        && (
+            Number(activity.activeCount || 0) > 0
+            || (Array.isArray(activity.liveAgents) && activity.liveAgents.length > 0)
+        )
+    );
+    const now = Date.now();
+    if (
+        !force
+        && !hasActiveActivity
+        && evolveChatRepliesLastRefreshAt
+        && (now - evolveChatRepliesLastRefreshAt) < EVOLVE_CHAT_REPLY_IDLE_REFRESH_INTERVAL_MS
+    ) {
+        return;
+    }
+    evolveChatRepliesLastRefreshAt = now;
     evolveChatRepliesInFlight = true;
     try {
         const res = await fetchJsonSafe(`/api/mission/jobs?kind=evolve_session&session_id=${encodeURIComponent(sid)}&limit=24`);

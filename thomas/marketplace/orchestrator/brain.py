@@ -53,6 +53,14 @@ _TOOLS_ROUTE_RE = re.compile(
     r"\b(?:shell|command|directory listing|list files)\b)",
     re.I,
 )
+_CODE_PHRASE_RECALL_RE = re.compile(
+    r"\b(?:what\s+was|what\s+is|recall|remind\s+me).{0,120}\bcode\s+phrase\b", re.I | re.S
+)
+_CODE_PHRASE_FACT_RE = re.compile(
+    r"\b(?:temporary\s+)?code\s+phrase(?:\s+for\b[^.?!:\n\r]*?)?(?:\s+is\b|\s*[=:])\s*"
+    r"([A-Za-z0-9][A-Za-z0-9 _-]{1,80})",
+    re.I,
+)
 
 
 def _wants_background_status(prompt: str) -> bool:
@@ -129,6 +137,40 @@ def _summarize_background_status(active_tasks: list[dict[str, Any]] | None) -> s
     for row in (active_rows + completed_rows + failed_rows + other_rows)[:3]:
         lines.append(f"- {_detail(row)}")
     return "\n".join(lines)
+
+
+def _clean_recalled_phrase(raw: str) -> str:
+    phrase = re.split(r"\b(?:reply|respond|answer)\b|[.?!\n\r]", str(raw or ""), maxsplit=1, flags=re.I)[0]
+    return phrase.strip(" \t'\"`:-")
+
+
+def _answer_memory_recall_from_context(
+    prompt: str,
+    conversation: ConversationManager,
+    memory_ctx: MemoryContext,
+) -> str:
+    """Answer narrow recall prompts directly when the fact is visible in context."""
+    if not _CODE_PHRASE_RECALL_RE.search(str(prompt or "")):
+        return ""
+
+    sources: list[str] = []
+    try:
+        for msg in reversed(conversation.get_context_window(max_tokens=8_000)):
+            content = str(msg.get("content") or "")
+            if content and content.strip() != str(prompt or "").strip():
+                sources.append(content)
+    except Exception:
+        pass
+
+    sources.extend([memory_ctx.episodic, memory_ctx.working, memory_ctx.semantic])
+    for source in sources:
+        match = _CODE_PHRASE_FACT_RE.search(str(source or ""))
+        if not match:
+            continue
+        phrase = _clean_recalled_phrase(match.group(1))
+        if phrase:
+            return phrase
+    return ""
 
 
 # Default token budgets by mode
@@ -382,6 +424,36 @@ class OrchestratorBrain:
         )
         if active_task_digest and _wants_background_status(prompt):
             memory_ctx.working = f"{memory_ctx.working}\n\n{active_task_digest}".strip()
+
+        recalled_answer = _answer_memory_recall_from_context(prompt, conversation, memory_ctx)
+        if recalled_answer:
+            await dispatcher.emit_text(recalled_answer)
+            conversation = conversation.append_message(
+                "assistant",
+                recalled_answer,
+                metadata={"specialists": ["reasoning"], "mode": reply_kind, "source": "memory_recall"},
+            )
+            await memory_coord.capture_episode(
+                turn_number=conversation.length // 2,
+                user_message=prompt,
+                assistant_response=recalled_answer[:500],
+                thinking="memory_recall",
+                tool_calls=[],
+                specialist="reasoning",
+            )
+            elapsed = int((time.monotonic() - turn_start) * 1000)
+            await dispatcher.emit_done(
+                session_id=session_id,
+                conversation_version=conversation.version,
+                thinking_summary="memory_recall",
+                total_thinking_ms=0,
+                iterations=1,
+                tool_calls=0,
+                tokens_used=0,
+                specialists_used=["reasoning"],
+                total_elapsed_ms=elapsed,
+            )
+            return conversation
 
         result = await self._dispatch_single(
             session_id=session_id,

@@ -794,6 +794,23 @@ def _setup_routes_and_handlers(
 
     _register_codex_routes(app)
 
+    def _register_openai_codex_routes(app_ref: web.Application) -> None:
+        """Register native ChatGPT/Codex OAuth APIs used by onboarding and model setup."""
+        if not callable(_require_api_access):
+            log.warning("Native ChatGPT/Codex route registration skipped: missing runtime dependencies")
+            return
+        try:
+            from thomas.server.routes.openai_codex_aiohttp import register_openai_codex_routes
+
+            register_openai_codex_routes(
+                app_ref,
+                require_api_access=_require_api_access,
+            )
+        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
+            log.warning("Native ChatGPT/Codex routes unavailable: %s", e)
+
+    _register_openai_codex_routes(app)
+
     def _register_mission_routes(app_ref: web.Application, cfg_ref: AppConfig) -> None:
         """Register Mission Control APIs used by the main Thomas shell."""
         if not callable(_require_api_access):

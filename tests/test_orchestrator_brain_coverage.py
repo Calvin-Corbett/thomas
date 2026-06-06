@@ -386,6 +386,47 @@ def test_background_status_helpers_cover_active_failed_and_mixed_states() -> Non
     assert "mixed outcomes" in mixed.lower()
 
 
+def test_code_phrase_recall_prefers_visible_memory_fact() -> None:
+    conversation = (
+        ConversationManager()
+        .append_message(
+            "user",
+            "Memory smoke test: remember that the temporary code phrase for this live QA run is SILVER MAPLE 482. "
+            "Reply with exactly: stored",
+        )
+        .append_message("assistant", "stored")
+        .append_message("user", "What was the temporary code phrase for this live QA run? Reply with only the phrase.")
+        .append_message("assistant", "Sorry, I had trouble with that.")
+        .append_message("user", "What was the temporary code phrase for this live QA run?")
+    )
+    memory_ctx = MemoryContext(
+        working="Earlier unrelated code phrase is UIVAL-FRESH-27",
+        episodic="[Recent thread memory] temporary code phrase for this live QA run is SILVER MAPLE 482",
+        semantic="",
+    )
+
+    answer = brain_mod._answer_memory_recall_from_context(
+        "What was the temporary code phrase for this live QA run?",
+        conversation,
+        memory_ctx,
+    )
+
+    assert answer == "SILVER MAPLE 482"
+
+    compacted_conversation = ConversationManager().append_message(
+        "user",
+        "What was the temporary code phrase for this live QA run?",
+    )
+    assert (
+        brain_mod._answer_memory_recall_from_context(
+            "What was the temporary code phrase for this live QA run?",
+            compacted_conversation,
+            memory_ctx,
+        )
+        == "SILVER MAPLE 482"
+    )
+
+
 @pytest.mark.asyncio
 async def test_handle_background_status_without_tasks_and_call_llm_error_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     class _BrokenMemoryCoordinator:

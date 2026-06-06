@@ -275,14 +275,25 @@ def _submission_changed_files(repo: Path, patch_file: str | None) -> list[str]:
 # Scope-aware relevance is Calvin's chosen policy (2026-06-02) and exact wording:
 # "block commits to claimed paths until RELEVANT messages are acked". A focused
 # worker must not be wedged by an unrelated FYI, so the cage blocks only when a
-# message is a must-read kind OR concerns the files in THIS submission. Kept
-# INLINE (not a separate importable module) so the cage's choke point is
-# self-contained and cannot be silently disabled by deleting a helper. It reuses
-# message.unread_messages -- the shared "what is unread for me" primitive -- so
-# it composes with, rather than duplicates, the repo-wide block-on-any
-# pre-commit gate (scripts/forge/gates/workboard_inbox.py).
+# message is a must-read kind, an explicit submit/commit hold directive, OR
+# concerns the files in THIS submission. Kept INLINE (not a separate importable
+# module) so the cage's choke point is self-contained and cannot be silently
+# disabled by deleting a helper. It reuses message.unread_messages -- the shared
+# "what is unread for me" primitive -- so it composes with, rather than
+# duplicates, the repo-wide block-on-any pre-commit gate
+# (scripts/forge/gates/workboard_inbox.py).
 _ALWAYS_BLOCK_KINDS = frozenset({"blocker", "scope_change"})
 _PATH_TOKEN_RE = re.compile(r"(?:[A-Za-z0-9_.\-]+/)+[A-Za-z0-9_.\-]+")
+_SUBMISSION_HOLD_RE = re.compile(
+    r"\b(?:do\s+not|don't|dont|stop|hold|pause|wait|block)\s+"
+    r"(?:the\s+)?(?:submit|submission|commit|commits|land|landing|push|merge)\b"
+    r"|\b(?:submit|submission|commit|commits|land|landing|push|merge)\s+"
+    r"(?:(?:is|are)\s+)?(?:blocked|paused|held|on\s+hold)\b"
+    r"|\back\s+before\s+(?:submit|submission|commit|land|landing|push|merge)\b"
+    r"|\bread\b.*\b(?:before|prior\s+to)\s+"
+    r"(?:submit|submission|commit|land|landing|push|merge)\b",
+    re.IGNORECASE,
+)
 
 
 def _co_norm_path(value: str) -> str:
@@ -317,6 +328,11 @@ def _co_path_tokens(text: str) -> list[str]:
         if token and "/" in token and token not in out:
             out.append(token)
     return out
+
+
+def _co_submission_hold(text: str) -> bool:
+    """Return True when a message is explicitly about stopping submission itself."""
+    return bool(_SUBMISSION_HOLD_RE.search(str(text or "")))
 
 
 def _co_active_task_scopes(workboard_text: str) -> dict[str, list[str]]:
@@ -361,12 +377,12 @@ def _inbox_blocking(workboard: Path, agent: str, repo: Path, patch_file: str | N
     """Relevant unread messages that should block this submission ([] if none).
 
     Scope-aware: a message blocks only when it is a must-read kind
-    (blocker/scope_change) OR its subject paths (its task scope, or repo paths
-    named in its text) overlap the files in THIS submission. Fails OPEN (returns
-    []) when the workboard, agent, or message module is unavailable, so a
-    missing coordination surface never bricks a submission -- the cage's real
-    security boundary is the clean-room gate + privilege separation, not this
-    coordination-delivery check.
+    (blocker/scope_change), an explicit submit/commit hold directive, OR its
+    subject paths (its task scope, or repo paths named in its text) overlap the
+    files in THIS submission. Fails OPEN (returns []) when the workboard, agent,
+    or message module is unavailable, so a missing coordination surface never
+    bricks a submission -- the cage's real security boundary is the clean-room
+    gate + privilege separation, not this coordination-delivery check.
     """
     workboard = Path(workboard)
     if not workboard.exists() or not str(agent or "").strip():
@@ -384,6 +400,9 @@ def _inbox_blocking(workboard: Path, agent: str, repo: Path, patch_file: str | N
         reasons: list[str] = []
         if kind in _ALWAYS_BLOCK_KINDS:
             reasons.append(f"{kind} addressed to you (must-read)")
+        message_text = f"{msg.get('summary', '')} {msg.get('requested_action', '')}"
+        if _co_submission_hold(message_text):
+            reasons.append("submit/commit hold directive addressed to you")
         subject = list(task_scopes.get(str(msg.get("task_id", "")).strip().lower(), []))
         subject += _co_path_tokens(msg.get("summary", "")) + _co_path_tokens(msg.get("requested_action", ""))
         hits = sorted({c for c in changed for s in subject if _co_paths_overlap(c, s)})

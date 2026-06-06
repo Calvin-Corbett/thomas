@@ -60,6 +60,20 @@ _EXPLORATORY_RE = re.compile(
     re.I,
 )
 
+_MEMORY_DIRECTIVE_RE = re.compile(
+    r"\b(?:remember|memorize|store this|save this|keep (?:this|that) in memory|"
+    r"what (?:did|do) i (?:ask you to )?remember|recall)\b",
+    re.I,
+)
+
+_DIRECT_RESPONSE_RE = re.compile(
+    r"\b(?:reply|respond|say|answer)\s+(?:with\s+)?exactly\b|"
+    r"\bexactly\s*:\s*\S+",
+    re.I,
+)
+
+_QUESTION_PREFIX_RE = re.compile(r"^\s*(?:what|who|when|where|why|how)\b", re.I)
+
 _TOOL_OR_FILE_REQUEST_RE = re.compile(
     r"(?:\buse\s+(?:your\s+)?(?:file|files|tool|tools)\b|"
     # Bounded, non-newline gap (cap 80 chars, lazy) instead of `.*` to avoid
@@ -147,7 +161,17 @@ def should_dispatch(
     if _EXPLORATORY_RE.search(src) and not _DIRECTIVE_PREFIX_RE.search(src):
         return DispatchDecision(action="casual", reason="exploratory_conversation")
 
-    if _TOOL_OR_FILE_REQUEST_RE.search(src):
+    explicit_tool_or_file = bool(_TOOL_OR_FILE_REQUEST_RE.search(src))
+    if not explicit_tool_or_file and _QUESTION_PREFIX_RE.search(src) and not _DIRECTIVE_PREFIX_RE.search(src):
+        return DispatchDecision(action="casual", reason="question_prompt")
+
+    if not explicit_tool_or_file and _MEMORY_DIRECTIVE_RE.search(src):
+        return DispatchDecision(action="casual", reason="memory_instruction")
+
+    if not explicit_tool_or_file and _DIRECT_RESPONSE_RE.search(src):
+        return DispatchDecision(action="casual", reason="direct_response_instruction")
+
+    if explicit_tool_or_file:
         return DispatchDecision(action="dispatch", reason="explicit_tool_or_file_request")
 
     recent_assistant = ""

@@ -164,6 +164,27 @@ def _resolve_default_model(cfg: AppConfig) -> tuple[str, str]:
     return fallback, ""
 
 
+def _model_preferences_payload() -> dict[str, Any]:
+    try:
+        from thomas.preferences.store import PreferencesStore, get_db_path
+
+        prefs = PreferencesStore(get_db_path()).get(user_id="default")
+        model_prefs = getattr(getattr(prefs, "advanced", None), "model", None)
+        return {
+            "active_profile": str(getattr(model_prefs, "active_profile", "") or "").strip(),
+            "model_id": str(getattr(model_prefs, "model_id", "") or "").strip(),
+            "role_profiles": dict(getattr(model_prefs, "role_profiles", {}) or {}),
+            "role_model_ids": dict(getattr(model_prefs, "role_model_ids", {}) or {}),
+        }
+    except Exception:
+        return {
+            "active_profile": "",
+            "model_id": "",
+            "role_profiles": {},
+            "role_model_ids": {},
+        }
+
+
 def register_models_routes(
     app: web.Application,
     *,
@@ -179,11 +200,24 @@ def register_models_routes(
 
         profiles = []
         for name, m in cfg.models.items():
-            has_key = m.provider == "codex" or bool(secrets.get(name) or m.api_key)
+            provider_name = str(m.provider or "").strip().lower().replace("-", "_")
+            if provider_name == "openai_codex":
+                try:
+                    from thomas.server.openai_codex_oauth import has_openai_codex_token
+
+                    has_key = bool(m.api_key or has_openai_codex_token(secrets, name))
+                except Exception:
+                    has_key = bool(m.api_key)
+            else:
+                has_key = provider_name == "codex" or bool(secrets.get(name) or m.api_key)
             profile_info: dict[str, Any] = {
                 "name": name,
                 "provider": m.provider,
-                "base_url": "codex://app-server" if m.provider == "codex" else m.base_url,
+                "base_url": (
+                    "codex://app-server"
+                    if provider_name == "codex"
+                    else ("https://chatgpt.com/backend-api/codex" if provider_name == "openai_codex" else m.base_url)
+                ),
                 "model": m.model,
                 "context_window": m.context_window,
                 "max_tokens": m.max_tokens,
@@ -193,7 +227,11 @@ def register_models_routes(
             if m.reasoning_effort:
                 profile_info["reasoning_effort"] = m.reasoning_effort
             profiles.append(profile_info)
-        payload: dict[str, Any] = {"default": resolved_default or cfg.default_model, "profiles": profiles}
+        payload: dict[str, Any] = {
+            "default": resolved_default or cfg.default_model,
+            "profiles": profiles,
+            "preferences": _model_preferences_payload(),
+        }
         if str(request.query.get("catalog", "")).strip().lower() in {"1", "true", "yes"}:
             from thomas.models.catalog import get_model_catalog_async
 

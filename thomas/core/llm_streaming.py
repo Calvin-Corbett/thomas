@@ -10,7 +10,14 @@ from typing import Any
 
 import httpx
 
+from thomas.core.codex_provider import OPENAI_CODEX_BASE_URL
 from thomas.core.llm_shared import LLMError, StreamEvent, TokenUsage, ToolCallAccumulator
+from thomas.core.llm_streaming_codex import (
+    _build_openai_codex_request,
+    _extract_responses_usage,
+    _response_item,
+)
+from thomas.server.openai_codex_oauth import ensure_openai_codex_access_token
 
 log = logging.getLogger(__name__)
 
@@ -295,6 +302,219 @@ async def stream_openai(
             raise LLMError(f"Connection failed after {max_retries} attempts: {e}")
 
     raise last_error or LLMError("Request failed after retries")
+
+
+async def stream_openai_codex(
+    owner: Any,
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]] | None = None,
+) -> AsyncIterator[StreamEvent]:
+    """Stream through ChatGPT's native Codex Responses endpoint."""
+    base = str(owner.config.base_url or OPENAI_CODEX_BASE_URL).rstrip("/")
+    url = base + "/responses"
+    body = _build_openai_codex_request(owner, messages, tools)
+    access_token = str(getattr(owner.config, "api_key", "") or "").strip()
+    if not access_token:
+        access_token = await ensure_openai_codex_access_token(getattr(owner.config, "name", "") or "chatgpt")
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream",
+    }
+    client = await owner._get_client()
+    last_error: Exception | None = None
+    max_retries = max(1, int(owner._max_retries))
+    base_delay = max(0.0, float(owner._base_retry_delay))
+
+    for attempt in range(max_retries):
+        try:
+            async with client.stream("POST", url, json=body, headers=headers) as resp:
+                if resp.status_code != 200:
+                    error_body = await resp.aread()
+                    if resp.status_code == 429:
+                        retry_after_s = owner._retry_after_seconds(getattr(resp, "headers", None))
+                        owner._mark_rate_limited(owner.config, retry_after_s)
+                        wait_note = (
+                            f" Retry after about {int(retry_after_s)}s."
+                            if retry_after_s is not None and retry_after_s > 0
+                            else ""
+                        )
+                        raise LLMError(
+                            f"ChatGPT/Codex HTTP 429 rate limited.{wait_note} {error_body.decode(errors='replace')[:240]}",
+                            status=429,
+                            retryable=True,
+                        )
+                    if resp.status_code in _RETRYABLE:
+                        last_error = LLMError(
+                            f"ChatGPT/Codex HTTP {resp.status_code}: {error_body.decode(errors='replace')[:200]}",
+                            status=resp.status_code,
+                            retryable=True,
+                        )
+                        delay = base_delay * (2**attempt)
+                        if delay > 0:
+                            await asyncio.sleep(delay)
+                        continue
+                    raise LLMError(
+                        f"ChatGPT/Codex HTTP {resp.status_code}: {error_body.decode(errors='replace')[:500]}",
+                        status=resp.status_code,
+                    )
+
+                tool_calls: dict[str, ToolCallAccumulator] = {}
+                event_name = ""
+                data_lines: list[str] = []
+                done_emitted = False
+
+                async def _emit_pending_tool_ends() -> list[StreamEvent]:
+                    pending: list[StreamEvent] = []
+                    for tc in tool_calls.values():
+                        if not tc.finished:
+                            tc.finished = True
+                            pending.append(
+                                StreamEvent(
+                                    type="tool_call_end",
+                                    data={"id": tc.id, "name": tc.name, "arguments": tc.arguments},
+                                )
+                            )
+                    return pending
+
+                async def _process_sse(payload: str, sse_event: str) -> list[StreamEvent]:
+                    nonlocal done_emitted
+                    events: list[StreamEvent] = []
+                    data_str = payload.strip()
+                    if not data_str or data_str == "[DONE]":
+                        events.extend(await _emit_pending_tool_ends())
+                        events.append(StreamEvent(type="done"))
+                        done_emitted = True
+                        return events
+                    try:
+                        chunk = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        return events
+                    if not isinstance(chunk, dict):
+                        return events
+
+                    if "choices" in chunk:
+                        # Defensive fallback for proxies that emit chat-completion chunks.
+                        choices = chunk.get("choices") if isinstance(chunk.get("choices"), list) else []
+                        if choices:
+                            delta = choices[0].get("delta", {}) if isinstance(choices[0], dict) else {}
+                            content = delta.get("content") if isinstance(delta, dict) else ""
+                            if content:
+                                events.append(StreamEvent(type="token", data={"text": content}))
+                        return events
+
+                    event_type = str(chunk.get("type") or sse_event or "").strip()
+                    usage = _extract_responses_usage(chunk)
+                    if usage is not None:
+                        owner.session_usage.add(usage)
+                        events.append(StreamEvent(type="usage", data={"usage": usage}))
+
+                    if event_type in {"response.output_text.delta", "response.refusal.delta"}:
+                        delta = str(chunk.get("delta") or chunk.get("text") or "")
+                        if delta:
+                            events.append(StreamEvent(type="token", data={"text": delta}))
+                    elif event_type in {
+                        "response.reasoning_summary_text.delta",
+                        "response.reasoning_text.delta",
+                        "response.reasoning_summary.delta",
+                    }:
+                        delta = str(chunk.get("delta") or chunk.get("text") or "")
+                        if delta:
+                            events.append(StreamEvent(type="thinking", data={"text": delta}))
+                    elif event_type == "response.output_item.added":
+                        item = _response_item(chunk)
+                        if str(item.get("type") or "") == "function_call":
+                            call_id = str(item.get("call_id") or item.get("id") or "").strip()
+                            raw_name = str(item.get("name") or "").strip()
+                            name = owner._openai_tool_name_map.get(raw_name, raw_name)
+                            if call_id and call_id not in tool_calls:
+                                tool_calls[call_id] = ToolCallAccumulator(id=call_id, name=name)
+                                events.append(StreamEvent(type="tool_call_start", data={"id": call_id, "name": name}))
+                    elif event_type == "response.function_call_arguments.delta":
+                        call_id = str(chunk.get("call_id") or chunk.get("item_id") or "").strip()
+                        if not call_id and len(tool_calls) == 1:
+                            call_id = next(iter(tool_calls.keys()))
+                        delta = str(chunk.get("delta") or "")
+                        if call_id and delta:
+                            if call_id not in tool_calls:
+                                tool_calls[call_id] = ToolCallAccumulator(id=call_id, name="")
+                                events.append(StreamEvent(type="tool_call_start", data={"id": call_id, "name": ""}))
+                            tool_calls[call_id].arguments += delta
+                            events.append(StreamEvent(type="tool_call_delta", data={"id": call_id, "delta": delta}))
+                    elif event_type == "response.output_item.done":
+                        item = _response_item(chunk)
+                        if str(item.get("type") or "") == "function_call":
+                            call_id = str(item.get("call_id") or item.get("id") or "").strip()
+                            if call_id:
+                                raw_name = str(item.get("name") or "").strip()
+                                name = owner._openai_tool_name_map.get(raw_name, raw_name)
+                                tc = tool_calls.get(call_id) or ToolCallAccumulator(id=call_id, name=name)
+                                if name:
+                                    tc.name = name
+                                final_args = str(item.get("arguments") or "")
+                                if final_args:
+                                    tc.arguments = final_args
+                                tc.finished = True
+                                tool_calls[call_id] = tc
+                                events.append(
+                                    StreamEvent(
+                                        type="tool_call_end",
+                                        data={"id": tc.id, "name": tc.name, "arguments": tc.arguments},
+                                    )
+                                )
+                    elif event_type in {"response.completed", "response.incomplete"}:
+                        events.extend(await _emit_pending_tool_ends())
+                        events.append(StreamEvent(type="done"))
+                        done_emitted = True
+                    elif event_type in {"response.failed", "error"}:
+                        err = chunk.get("error")
+                        if isinstance(err, dict):
+                            message = str(err.get("message") or err.get("code") or err)
+                        else:
+                            message = str(err or chunk.get("message") or "ChatGPT/Codex response failed")
+                        raise LLMError(message, status=None)
+                    return events
+
+                async for line in resp.aiter_lines():
+                    if line == "":
+                        if data_lines:
+                            for ev in await _process_sse("\n".join(data_lines), event_name):
+                                yield ev
+                            data_lines = []
+                            event_name = ""
+                        continue
+                    if line.startswith("event:"):
+                        event_name = line[6:].strip()
+                    elif line.startswith("data:"):
+                        data_lines.append(line[5:].lstrip())
+
+                if data_lines:
+                    for ev in await _process_sse("\n".join(data_lines), event_name):
+                        yield ev
+
+                if not done_emitted:
+                    for ev in await _emit_pending_tool_ends():
+                        yield ev
+                    yield StreamEvent(type="done")
+                return
+
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code in _RETRYABLE and attempt < max_retries - 1:
+                delay = base_delay * (2**attempt)
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                continue
+            raise LLMError(str(e), status=e.response.status_code)
+        except (httpx.ConnectError, httpx.ReadTimeout) as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                delay = base_delay * (2**attempt)
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                continue
+            raise LLMError(f"ChatGPT/Codex connection failed after {max_retries} attempts: {e}")
+
+    raise last_error or LLMError("ChatGPT/Codex request failed after retries")
 
 
 async def stream_anthropic(

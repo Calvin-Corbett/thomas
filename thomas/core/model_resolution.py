@@ -50,17 +50,45 @@ def _read_user_model_prefs(config: AppConfig, *, user_id: str, db_path: str | No
     return preferred_profile, preferred_model_id
 
 
+def _read_user_model_role_prefs(
+    config: AppConfig, *, user_id: str, role: str | None, db_path: str | None = None
+) -> tuple[str, str]:
+    """Read persisted role-specific model preferences.
+
+    Unknown profiles are ignored so a stale role override cannot strand startup.
+    """
+    resolved_role = str(role or "").strip()
+    if not user_id or not resolved_role:
+        return "", ""
+    try:
+        from thomas.server.model_preferences import read_user_model_role_preferences
+
+        preferred_profile, preferred_model_id = read_user_model_role_preferences(
+            user_id=user_id,
+            role=resolved_role,
+            db_path=db_path,
+        )
+    except Exception:
+        return "", ""
+
+    preferred_profile = resolve_model_profile_name(config, preferred_profile)
+    if not preferred_profile:
+        return "", ""
+    return preferred_profile, preferred_model_id
+
+
 def resolve_effective_model(
     config: AppConfig,
     *,
     cli_profile: str | None = None,
     env_profile: str | None = None,
+    role: str | None = None,
     user_id: str = "default",
     db_path: str | None = None,
 ) -> tuple[str, str]:
     """Resolve active model profile and optional model-id override.
 
-    Precedence is: CLI flag -> env var -> user prefs -> project default -> first model.
+    Precedence is: CLI flag -> env var -> role prefs -> user prefs -> project default -> first model.
     Model-id is read from user prefs when the selected profile came from or matches
     persisted user profile data.
     """
@@ -70,8 +98,20 @@ def resolve_effective_model(
 
     user_profile = ""
     user_model_id = ""
+    role_profile = ""
+    role_model_id = ""
     if candidate_profile:
         candidate_profile = resolve_model_profile_name(config, candidate_profile)
+
+    if not candidate_profile and role:
+        role_profile, role_model_id = _read_user_model_role_prefs(
+            config,
+            user_id=user_id or "default",
+            role=role,
+            db_path=db_path,
+        )
+        if role_profile:
+            candidate_profile = role_profile
 
     if not candidate_profile:
         user_profile, user_model_id = _read_user_model_prefs(config, user_id=user_id or "default", db_path=db_path)
@@ -82,9 +122,31 @@ def resolve_effective_model(
         candidate_profile = _model_fallback_profile(config)
 
     active_model_id = ""
-    if user_profile and candidate_profile and user_profile == candidate_profile:
+    if role_profile and candidate_profile and role_profile == candidate_profile:
+        active_model_id = role_model_id
+    elif user_profile and candidate_profile and user_profile == candidate_profile:
         active_model_id = user_model_id
     return candidate_profile, active_model_id
+
+
+def resolve_effective_model_for_role(
+    config: AppConfig,
+    role: str,
+    *,
+    cli_profile: str | None = None,
+    env_profile: str | None = None,
+    user_id: str = "default",
+    db_path: str | None = None,
+) -> tuple[str, str]:
+    """Resolve active model profile/model-id for a named specialty role."""
+    return resolve_effective_model(
+        config,
+        cli_profile=cli_profile,
+        env_profile=env_profile,
+        role=role,
+        user_id=user_id,
+        db_path=db_path,
+    )
 
 
 def build_model_label(profile: str, model_id: str) -> str:

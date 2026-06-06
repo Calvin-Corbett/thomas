@@ -703,6 +703,25 @@
 <select id="setupModelSelector" class="setup-fluid-select">
 </select>
 </div>
+<div class="form-group model-specialty-group" id="setupSpecialtyModelGroup">
+<label for="setupSpecialtyRoleSelector">Specialties</label>
+<div class="model-specialty-controls">
+<select id="setupSpecialtyRoleSelector" class="setup-fluid-select">
+<option value="research">Research</option>
+<option value="coding">Coding</option>
+<option value="planning">Planning</option>
+<option value="memory">Memory</option>
+<option value="tools">Tool use</option>
+<option value="creative">Creative</option>
+</select>
+<select id="setupSpecialtyProviderSelector" class="setup-fluid-select" aria-label="Specialty provider">
+</select>
+<select id="setupSpecialtyModelSelector" class="setup-fluid-select" aria-label="Specialty model">
+</select>
+<button type="button" class="settings-mini-btn" id="setupSpecialtyClearBtn">Inherit</button>
+</div>
+<p class="model-specialty-status" id="setupSpecialtyStatus">Roles inherit the base model until a specialty override is selected.</p>
+</div>
 <div class="form-group" id="setupReasoningGroup" style="display:none">
 <label>Reasoning Effort</label>
 <div class="segmented-control" id="setupReasoningEffortGroup">

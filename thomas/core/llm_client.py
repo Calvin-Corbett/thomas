@@ -24,7 +24,7 @@ except ImportError:
 
 from thomas.core.config import ModelConfig
 from thomas.core.llm_shared import LLMError, StreamEvent, TokenUsage
-from thomas.core.llm_streaming import stream_anthropic, stream_openai
+from thomas.core.llm_streaming import stream_anthropic, stream_openai, stream_openai_codex
 
 log = logging.getLogger(__name__)
 
@@ -666,7 +666,8 @@ class LLMClient:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> AsyncIterator[StreamEvent]:
-        if self.config.provider == "codex":
+        provider_name = str(self.config.provider or "").strip().lower().replace("-", "_")
+        if provider_name == "codex":
             provider = await self._get_codex_provider()
             stream_obj = await _coerce_async_iterator(
                 provider.stream_chat(messages, tools),
@@ -674,7 +675,14 @@ class LLMClient:
             )
             async for event in stream_obj:
                 yield event
-        elif self.config.provider == "anthropic":
+        elif provider_name == "openai_codex":
+            stream_obj = await _coerce_async_iterator(
+                self._stream_openai_codex(messages, tools),
+                source="stream_openai_codex",
+            )
+            async for event in stream_obj:
+                yield event
+        elif provider_name == "anthropic":
             stream_obj = await _coerce_async_iterator(
                 self._stream_anthropic(messages, tools),
                 source="stream_anthropic",
@@ -697,6 +705,18 @@ class LLMClient:
         stream_obj = await _coerce_async_iterator(
             stream_openai(self, messages, tools),
             source="stream_openai",
+        )
+        async for event in stream_obj:
+            yield event
+
+    async def _stream_openai_codex(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+    ) -> AsyncIterator[StreamEvent]:
+        stream_obj = await _coerce_async_iterator(
+            stream_openai_codex(self, messages, tools),
+            source="stream_openai_codex",
         )
         async for event in stream_obj:
             yield event

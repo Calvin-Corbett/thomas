@@ -64,6 +64,11 @@ _PROVIDER_CAPABILITIES: dict[str, dict[str, bool]] = {
         tools=True,
         streaming=True,
     ),
+    "openai_codex": _cap(
+        chat=True,
+        tools=True,
+        streaming=True,
+    ),
 }
 
 

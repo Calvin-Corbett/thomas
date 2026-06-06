@@ -24,6 +24,24 @@ class TestMemoryFabricV2(unittest.TestCase):
         self.assertTrue(res.pack_text)
         self.assertIn("Hudson", res.pack_text)
 
+    def test_memory_persists_after_reopening_fabric(self):
+        thread_id = "t1_restart"
+        self.fabric.ingest_episode(
+            thread_id,
+            "user",
+            "Remember that the desktop QA color is cobalt blue",
+            ts_ms=1700000000000,
+        )
+        self.fabric.add_pin(kind="note", ref_id="qa_color", thread_id=thread_id, note="desktop QA color: cobalt blue")
+        self.fabric.db.close()
+
+        reopened = MemoryFabricV2(root_path=self.tmp)
+        try:
+            res = reopened.retrieve(thread_id, "desktop QA color", budget_tokens=500)
+            self.assertIn("cobalt blue", res.pack_text.lower())
+        finally:
+            reopened.db.close()
+
     def test_contradiction_detection_on_profile_hint_change(self):
         thread_id = "t2"
         self.fabric.upsert_profile_hints(

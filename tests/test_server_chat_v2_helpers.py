@@ -55,6 +55,11 @@ def test_auto_background_actionable_helper_respects_mode_autonomy_inline_tools(m
     assert mod._should_auto_background_actionable("do the task", mode="auto", autonomy_level=4) is False
 
 
+def test_auto_background_actionable_keeps_memory_prompt_inline() -> None:
+    prompt = "Memory smoke test: remember that the temporary code phrase is BLUE CEDAR 936. Reply with exactly: stored"
+    assert mod._should_auto_background_actionable(prompt, mode="auto", autonomy_level=4) is False
+
+
 @pytest.mark.asyncio
 async def test_voice_bridge_request_refresh_and_cached_llm_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
     class _FakeVoiceBridge:

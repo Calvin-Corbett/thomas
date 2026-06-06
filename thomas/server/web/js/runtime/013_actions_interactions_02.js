@@ -286,10 +286,26 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
         let _delegationPollTimer = 0;
         let _delegationPolling = false;
         let _delegationShouldPollAfterStream = false;
+        const _DELEGATION_POLL_STALE_MS = 30 * 60 * 1000;
+        const _DELEGATION_POLL_SLOW_AFTER_MS = 5 * 60 * 1000;
 
         function _delegationIsTerminalState(state) {
             const normalized = safeString(state).toLowerCase();
-            return normalized === 'completed' || normalized === 'failed' || normalized === 'abandoned';
+            return normalized === 'completed' || normalized === 'failed' || normalized === 'abandoned' || normalized === 'cancelled' || normalized === 'canceled' || normalized === 'done';
+        }
+        function _delegationUpdatedAtMs(row) {
+            return missionToEpoch(safeString(row?.updated_at || row?.created_at)) || 0;
+        }
+        function _delegationAgeMs(row) {
+            const updatedAt = _delegationUpdatedAtMs(row);
+            return updatedAt > 0 ? Math.max(0, Date.now() - updatedAt) : 0;
+        }
+        function _delegationShouldKeepPolling(row) {
+            if (!row || typeof row !== 'object') return false;
+            if (_delegationIsTerminalState(row.state)) return false;
+            const updatedAt = _delegationUpdatedAtMs(row);
+            if (!updatedAt) return true;
+            return (Date.now() - updatedAt) <= _DELEGATION_POLL_STALE_MS;
         }
         function _delegationEventTypeForState(state) {
             return _delegationIsTerminalState(state)
@@ -320,7 +336,8 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                 }
                 const payload = resp.data && typeof resp.data === 'object' ? resp.data : {};
                 const delegations = Array.isArray(payload.delegations) ? payload.delegations : [];
-                delegations.forEach((row) => {
+                const liveDelegations = delegations.filter((row) => _delegationIsTerminalState(row?.state) || _delegationShouldKeepPolling(row));
+                liveDelegations.forEach((row) => {
                     if (!row || typeof row !== 'object') return;
                     _handleDelegationLifecycle({
                         ...row,
@@ -328,8 +345,10 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                         bot_name: safeString(row.bot_name || row.bot_id),
                     });
                 });
-                if (delegations.some((row) => !_delegationIsTerminalState(row?.state))) {
-                    _scheduleDelegationPoll(2500);
+                const activeDelegations = liveDelegations.filter((row) => _delegationShouldKeepPolling(row));
+                if (activeDelegations.length > 0) {
+                    const hasSlowPollingWork = activeDelegations.some((row) => _delegationAgeMs(row) >= _DELEGATION_POLL_SLOW_AFTER_MS);
+                    _scheduleDelegationPoll(hasSlowPollingWork ? 15000 : 2500);
                 } else {
                     _stopDelegationPolling();
                 }

@@ -102,6 +102,17 @@ class TestModelsRoutesLocal(AioHTTPTestCase):
         self.assertIn("autonomy_level", controls.get("thomas", {}))
         self.assertIn("token_economy", controls.get("thomas", {}))
 
+    async def test_models_exposes_model_preferences(self):
+        resp = await self.client.get("/api/models")
+        self.assertEqual(resp.status, 200)
+        body = await resp.json()
+        preferences = body.get("preferences")
+        self.assertIsInstance(preferences, dict)
+        self.assertIn("active_profile", preferences)
+        self.assertIn("model_id", preferences)
+        self.assertIsInstance(preferences.get("role_profiles"), dict)
+        self.assertIsInstance(preferences.get("role_model_ids"), dict)
+
     async def test_models_capabilities(self):
         resp = await self.client.get("/api/models/capabilities")
         self.assertEqual(resp.status, 200)

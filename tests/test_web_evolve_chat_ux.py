@@ -64,11 +64,26 @@ def test_chat_runtime_prefers_visible_model_selector_over_setup_profile() -> Non
 def test_chat_runtime_scopes_model_state_to_active_profile_and_skips_inactive_saved_profiles() -> None:
     text = _read_all_runtime_js()
     assert "function resolveStoredModelSelection(profileName = '', { allowLocalBackup = false } = {}) {" in text
-    assert "const targetProfile = (savedProfileMeta && savedProfileMeta.active)" in text
+    assert (
+        "const savedProfileReady = savedProfileMeta && (savedProfileMeta.has_api_key || savedProfileMeta.active);"
+        in text
+    )
+    assert "const targetProfile = savedProfileReady" in text
     assert "applyProfileSelection(targetProfile, { allowLocalBackup: !hasPersistedProfile });" in text
     assert "const model = (activeProfile === safeString(profileName) ? safeString(activeModelOverride) : '')" in text
-    assert "model_id: resolveActiveModelIdForProfile(profile) || undefined," in text
+    assert "model_id: safeString(specialty?.modelId) || resolveActiveModelIdForProfile(profile) || undefined," in text
     assert "activeModelOverride = savedModelId ||" not in text
+
+
+def test_chat_runtime_persists_easy_setup_and_specialty_model_preferences() -> None:
+    text = _read_all_runtime_js()
+    assert "function resolveEasySetupSelectedProfile() {" in text
+    assert "active_profile: selectedProfile," in text
+    assert "model_id: selectedModelId," in text
+    assert "role_profiles: specialtyPatch.role_profiles," in text
+    assert "role_model_ids: specialtyPatch.role_model_ids," in text
+    assert "function resolveSpecialtyModelSelection(roleRaw = '', fallbackProfileRaw = '') {" in text
+    assert "model_id: safeString(specialty?.modelId) || resolveActiveModelIdForProfile(profile) || undefined," in text
 
 
 def test_chat_runtime_provider_picker_expands_inline_and_routes_inactive_profiles_to_setup() -> None:
