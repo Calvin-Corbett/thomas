@@ -1,0 +1,18 @@
+{
+  "approved_by_human": true,
+  "approved_by": "Calvin (repo owner)",
+  "approval_context": "Selected 'Delete it (recommended)' for thomas/core/dep_monitor.py via the agent's wire-vs-delete decision prompt on 2026-06-05, after reviewing that the module has zero production importers, was never wired into boot, and that the dependency-scan capability survives on-demand via thomas/tools/dep_scanner.",
+  "date": "2026-06-05",
+  "reason": "Remove the never-wired DepMonitor daily-vuln watchdog (wiring-audit follow-up to #39). thomas/core/dep_monitor.py was a background daemon wrapper (get_dep_monitor().start(notify_fn)) around the live deps_scan tool, but no production caller ever started it; it sat unwired for ~3.5 months and was flagged dead by two prior audits (plans/thomas/WIRING_INTENT_AUDIT_2026-06-04.md core-04, and plans/thomas/WIRING_AUDIT_REPORT_2026-06-05.md which lists it DELETE/High). It fell outside wave-3's verified-safe subset, so it is recorded and removed here separately. The underlying dependency-scan capability is unaffected (thomas/tools/dep_scanner.deps_scan remains and is invoked on-demand).",
+  "verification": [
+    "Reference re-check on dev: zero production importers of dep_monitor / DepMonitor / get_dep_monitor across thomas/, tests/, scripts/. The only references were the now-deleted test, two docs updated in this PR (THOMAS_BIBLE.md, feature_13_dep_scanner.md), and historical audit reports.",
+    "thomas/core/__init__.py does not re-export dep_monitor (it only re-exports from .retry).",
+    "Imports clean after deletion: `import thomas.core; import thomas.tools.dep_scanner` OK and deps_scan present (capability retained).",
+    "pytest tests/ --collect-only: 11191 tests collected, no import errors after removing tests/test_dep_monitor.py.",
+    "tests/test_dep_monitor.py only exercised the dead class's private _diff_new_high_critical helper; removed together with the module."
+  ],
+  "files": [
+    "thomas/core/dep_monitor.py",
+    "tests/test_dep_monitor.py"
+  ]
+}
