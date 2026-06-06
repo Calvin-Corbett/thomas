@@ -195,3 +195,8 @@ docs/internal/
 .tmp_*
 thomas_vs_*.json
 thomas_vs_*.docx
+
+# Per-user library captures — never tracked (chat/test-derived data, was leaking PII)
+/library/catalog.json
+/library/INDEX.md
+/library/entries/*/
