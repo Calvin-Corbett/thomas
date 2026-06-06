@@ -134,7 +134,7 @@ tabulate==0.9.0
 tomli==2.4.0
 tornado==6.5.5
 typing_extensions==4.15.0
-tzdata==2025.3
+tzdata==2026.2
 unoserver==3.6
 urllib3==2.7.0
 userpath==1.8.0
