@@ -154,12 +154,50 @@ def test_evolve_run_reverts_protected_file_changes(tmp_path: Path, monkeypatch) 
     session = payload["session"]
     green_test = get_paths(tmp_path).green_root / "tests" / "test_architecture.py"
 
-    assert session["status"] == "policy_violation"
-    assert session["promotable"] is False
+    # The guardrail edit is reverted out of green, but the clean change to
+    # thomas/__init__.py still promotes. The revert is the safety boundary, not
+    # the rejection -- the protected file is guaranteed unchanged.
+    assert session["status"] == "ready"
+    assert session["promotable"] is True
     assert session["policy_violations"] == ["tests/test_architecture.py"]
     assert "tests/test_architecture.py" not in session["changed_files"]
     assert "thomas/__init__.py" in session["changed_files"]
     assert green_test.read_text(encoding="utf-8") == "def test_smoke():\n    assert True\n"
+
+
+def test_promote_applies_clean_change_but_not_reverted_guardrail(tmp_path: Path, monkeypatch) -> None:
+    """Safety invariant: promoting a session that touched a protected file lands
+    the clean change but leaves the guardrail file unchanged in live Thomas."""
+    _seed_repo(tmp_path)
+    (tmp_path / "agent_safety.toml").write_text(
+        "[protected]\n"
+        "policy_files=[]\n"
+        "guardrails_files=[]\n"
+        'enforcement_files=["tests/test_architecture.py"]\n'
+        "enforcement_scripts=[]\n",
+        encoding="utf-8",
+    )
+
+    def fake_run_exec(command, *, cwd, env, timeout_seconds):
+        if isinstance(command, list) and "chat" in command:
+            Path(cwd, "thomas", "__init__.py").write_text('__version__ = "9.9.9"\n', encoding="utf-8")
+            Path(cwd, "tests", "test_architecture.py").write_text(
+                "def test_smoke():\n    assert False\n", encoding="utf-8"
+            )
+            return {"command": "chat", "returncode": 0, "stdout_tail": "", "stderr_tail": "", "timed_out": False}
+        return {"command": "verify", "returncode": 0, "stdout_tail": "", "stderr_tail": "", "timed_out": False}
+
+    monkeypatch.setattr(evolve_runtime, "_run_exec", fake_run_exec)
+    monkeypatch.setattr(evolve_runtime, "ensure_green_venv", lambda paths: Path(sys.executable))
+
+    payload = evolve_runtime.run_evolve_session(tmp_path, goal="tweak", promote_on_pass=True)
+    assert payload["session"]["promoted"] is True
+    # The good change landed in live Thomas...
+    assert (tmp_path / "thomas" / "__init__.py").read_text(encoding="utf-8").strip() == '__version__ = "9.9.9"'
+    # ...but the protected guardrail file in live is UNCHANGED -- never modified.
+    assert (tmp_path / "tests" / "test_architecture.py").read_text(
+        encoding="utf-8"
+    ) == "def test_smoke():\n    assert True\n"
 
 
 def test_evolve_run_defaults_to_codex_profile(tmp_path: Path, monkeypatch) -> None:

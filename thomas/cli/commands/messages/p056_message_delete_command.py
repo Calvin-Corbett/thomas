@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import inspect
+import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
 from thomas.messages.p056_message_delete_command import MessageDeleteRequest, delete_message
+
+logger = logging.getLogger(__name__)
 
 
 def _safe_add_argument(parser: Any, *args: Any, **kwargs: Any) -> None:
@@ -191,6 +194,8 @@ def _build_command_spec() -> Any:
         try:
             return factory(**kwargs)
         except Exception:  # REVIEWED: broad catch
+            # Broad catch: registry factories vary by loader; fall through to positional attempts.
+            logger.exception("Message delete command factory rejected keyword construction.")
             pass
 
     # Positional fallbacks (seen across a few registry styles).
@@ -206,6 +211,8 @@ def _build_command_spec() -> Any:
         try:
             return factory(*args)
         except Exception:  # REVIEWED: broad catch
+            # Broad catch: try the next legacy registry signature without breaking import.
+            logger.exception("Message delete command factory rejected positional construction: %r", args)
             continue
 
     return fallback

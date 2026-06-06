@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import logging
 import os
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -37,6 +38,7 @@ from thomas.browser.p004_browser_action_type_and_press import (
 from thomas.cli.commands.browser._runtime_entrypoint import run_typer_app
 
 COMMAND_NAME = "type-and-press"
+logger = logging.getLogger(__name__)
 
 
 app = typer.Typer(add_completion=False, help="Type into an element and press a key.")
@@ -105,6 +107,8 @@ def _resolve_from_thomas_modules(url: str | None) -> _ResolvedPage | None:
                 try:
                     page.goto(url)
                 except Exception as exc:
+                    # Broad catch: Playwright/page providers expose backend-specific navigation exceptions.
+                    logger.exception("Navigation failed for browser type-and-press action.")
                     raise TypeAndPressError(
                         code="EXTERNAL_FAILURE",
                         message=f"Navigation failed: {exc.__class__.__name__}: {exc}",
@@ -155,19 +159,27 @@ def _resolve_page_with_cleanup(url: str | None) -> _ResolvedPage:
                     try:
                         pw.stop()
                     except Exception:  # REVIEWED: broad catch
+                        # Broad catch: Playwright shutdown is best-effort after the action is complete.
+                        logger.exception("Failed to stop Playwright after endpoint browser action.")
                         pass
 
                 return _ResolvedPage(page=page, cleanup=_cleanup, source="endpoint")
             except Exception:  # REVIEWED: broad catch
+                # Broad catch: connection setup can fail from several Playwright/browser backends.
+                logger.exception("Failed to prepare endpoint browser connection.")
                 # Ensure Playwright is stopped if connect fails mid-way.
                 try:
                     pw.stop()
                 except Exception:  # REVIEWED: broad catch
+                    # Broad catch: cleanup must not mask the original endpoint connection failure.
+                    logger.exception("Failed to stop Playwright after endpoint connection failure.")
                     pass
                 raise
         except TypeAndPressError:
             raise
         except Exception as exc:
+            # Broad catch: endpoint configuration wraps backend-specific errors in a CLI-safe error.
+            logger.exception("Failed to connect to THOMAS_BROWSER_WS_ENDPOINT.")
             raise TypeAndPressError(
                 code="CONFIG_INVALID",
                 message=f"Failed to connect using THOMAS_BROWSER_WS_ENDPOINT: {exc.__class__.__name__}: {exc}",
@@ -201,6 +213,8 @@ def _resolve_page_with_cleanup(url: str | None) -> _ResolvedPage:
 
         return _ResolvedPage(page=page, cleanup=_cleanup, source="local")
     except Exception as exc:
+        # Broad catch: local browser launch wraps backend-specific Playwright failures.
+        logger.exception("Failed to launch local browser for type-and-press.")
         raise TypeAndPressError(
             code="EXTERNAL_FAILURE",
             message=f"Failed to launch local browser: {exc.__class__.__name__}: {exc}",
@@ -290,6 +304,8 @@ def add_to(parent_app: typer.Typer) -> None:
 try:  # pragma: no cover
     command = typer.main.get_command(app)
 except Exception:  # REVIEWED: error boundary:  # pragma: no cover
+    # Broad catch: optional loader compatibility should not break importing the command module.
+    logger.exception("Failed to build Typer compatibility command for browser type-and-press.")
     command = None
 
 

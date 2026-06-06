@@ -169,7 +169,7 @@ class SessionStore:
                 with os.fdopen(fd, "w", encoding="utf-8") as f:
                     f.write(data)
                 os.replace(tmp_path, str(target))
-            except Exception:
+            except OSError:
                 # Clean up temp file on failure
                 try:
                     os.unlink(tmp_path)
@@ -187,8 +187,9 @@ class SessionStore:
             )
             return True
 
-        except Exception as exc:
-            log.error("Failed to save session %s: %s", session_id[:12], exc)
+        except Exception:
+            # Broad catch: auto-save is best-effort and must not crash an active chat turn.
+            log.exception("Failed to save session %s", session_id[:12])
             return False
 
     async def flush_dirty(
@@ -217,8 +218,9 @@ class SessionStore:
                 data = json.loads(raw)
                 conv_data = data.get("conversation", {})
                 return ConversationManager.from_dict(conv_data)
-            except Exception as exc:
-                log.error("Failed to load session %s: %s", session_id[:12], exc)
+            except Exception:
+                # Broad catch: corrupt or incompatible session files should not block chat startup.
+                log.exception("Failed to load session %s", session_id[:12])
                 return None
 
     async def load_meta(self, session_id: str) -> SessionMeta | None:
@@ -233,8 +235,9 @@ class SessionStore:
             if meta_data:
                 return SessionMeta.from_dict(meta_data)
             return None
-        except Exception as exc:
-            log.error("Failed to load meta for %s: %s", session_id[:12], exc)
+        except Exception:
+            # Broad catch: metadata is optional and malformed files should not block recovery.
+            log.exception("Failed to load meta for %s", session_id[:12])
             return None
 
     # ── list / cleanup ───────────────────────────────────────────
@@ -250,6 +253,8 @@ class SessionStore:
                 if sid:
                     sessions.append(sid)
             except Exception:
+                # Broad catch: skip unreadable or malformed session files while listing sessions.
+                log.exception("Skipping unreadable session file %s", p)
                 continue
         return sessions
 
@@ -279,6 +284,8 @@ class SessionStore:
                     os.unlink(str(p))
                     removed += 1
             except Exception:
+                # Broad catch: vacuum should continue past corrupt or concurrently removed files.
+                log.exception("Skipping session file during vacuum: %s", p)
                 continue
         if removed:
             log.info("Vacuumed %d stale sessions (older than %dh)", removed, older_than_hours)

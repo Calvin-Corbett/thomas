@@ -13,11 +13,12 @@ The command supports ``--json`` for machine-readable automation output.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 try:
     import typer
-except Exception as exc:  # pragma: no cover
+except ImportError as exc:  # pragma: no cover
     raise RuntimeError("Typer is required for the Thomas CLI") from exc
 
 from thomas.messages.p061_message_unpin_command import (
@@ -29,6 +30,8 @@ from thomas.messages.p061_message_unpin_command import (
     format_error_json,
     format_success_json,
 )
+
+logger = logging.getLogger(__name__)
 
 app = typer.Typer(add_completion=False, help="Unpin a message from a channel.", invoke_without_command=True)
 
@@ -174,12 +177,16 @@ def register(parent_app: typer.Typer) -> None:
         parent_app.command("unpin")(unpin_command)
         return
     except Exception:  # REVIEWED: broad catch
+        # Broad catch: different Typer loaders reject duplicate/direct command registration differently.
+        logger.exception("Failed to register message unpin as a direct command.")
         pass
 
     try:
         parent_app.add_typer(app, name="message")
         return
     except Exception:  # REVIEWED: broad catch
+        # Broad catch: fall back to a standalone compatibility command name when message group registration fails.
+        logger.exception("Failed to register message unpin under the message group.")
         pass
 
     parent_app.add_typer(app, name="message-unpin")
