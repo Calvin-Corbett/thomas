@@ -88,7 +88,7 @@ packaging==26.0
 pandas==2.3.3
 pdf2image==1.17.0
 pdfkit==1.0.0
-pdfminer.six==20251230
+pdfminer.six==20260107
 pdfplumber==0.11.9
 pexpect==4.8.0
 pikepdf==10.3.0
