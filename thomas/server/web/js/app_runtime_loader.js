@@ -52,6 +52,7 @@
         '043_model_setup_settings_04.js',
         '044_model_setup_settings_05.js',
         '045_model_setup_settings_06.js',
+        '046_evolution_dashboard.js',
     ];
 
     var basePath = '/static/js/runtime/';

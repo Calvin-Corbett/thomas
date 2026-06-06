@@ -75,6 +75,7 @@ function setSidebarNavMode(mode = 'chat', { persist = true } = {}) {
     const isOffice = sidebarNavMode === 'office';
     const showOfficePreview = false;
     const isMission = sidebarNavMode === 'mission';
+    const isEvolution = sidebarNavMode === 'evolution';
     const isContent = sidebarNavMode === 'content';
     const isModule = MODULE_NAV_MODE_SET.has(sidebarNavMode);
 
@@ -85,6 +86,7 @@ function setSidebarNavMode(mode = 'chat', { persist = true } = {}) {
     const navOfficeBtnLive = document.getElementById('navOfficeBtn');
     if (navOfficeBtnLive) navOfficeBtnLive.classList.toggle('active', isOffice);
     if (navMissionBtn) navMissionBtn.classList.toggle('active', isMission);
+    if (navEvolutionBtn) navEvolutionBtn.classList.toggle('active', isEvolution);
     if (navContentBtn) navContentBtn.classList.toggle('active', isContent);
     sidebarModeButtons.forEach((button) => {
         const buttonMode = normalizeNavMode(button.dataset.navMode);
@@ -101,12 +103,14 @@ function setSidebarNavMode(mode = 'chat', { persist = true } = {}) {
         officeWorkspace.classList.toggle('chat-preview-active', showOfficePreview);
     }
     if (missionWorkspace) missionWorkspace.classList.toggle('hidden', !isMission);
+    if (evolutionWorkspace) evolutionWorkspace.classList.toggle('hidden', !isEvolution);
     if (contentWorkspace) contentWorkspace.classList.toggle('hidden', !isContent);
     if (moduleWorkspace) moduleWorkspace.classList.toggle('hidden', !isModule);
     if (appRoot) {
         appRoot.classList.toggle('office-active', isOffice);
         appRoot.classList.toggle('office-preview-active', showOfficePreview);
         appRoot.classList.toggle('mission-active', isMission);
+        appRoot.classList.toggle('evolution-active', isEvolution);
         appRoot.classList.toggle('content-active', isContent);
         appRoot.classList.toggle('module-active', isModule);
     }
@@ -116,6 +120,7 @@ function setSidebarNavMode(mode = 'chat', { persist = true } = {}) {
         sidebar.classList.toggle('mode-chat', isChat);
         sidebar.classList.toggle('mode-office', isOffice);
         sidebar.classList.toggle('mode-mission', isMission);
+        sidebar.classList.toggle('mode-evolution', isEvolution);
         sidebar.classList.toggle('mode-content', isContent);
         sidebar.classList.toggle('mode-module', isModule);
     }
@@ -140,6 +145,12 @@ function setSidebarNavMode(mode = 'chat', { persist = true } = {}) {
         missionEnterMode();
     } else {
         missionLeaveMode();
+    }
+
+    if (isEvolution) {
+        if (typeof evolutionEnterMode === 'function') evolutionEnterMode();
+    } else if (typeof evolutionLeaveMode === 'function') {
+        evolutionLeaveMode();
     }
 
     if (isContent) {
@@ -828,6 +839,13 @@ function initFeatures() {
         navMissionBtn.addEventListener('click', () => {
             ensureSettingsUiClosed();
             setSidebarNavMode('mission');
+        });
+    }
+
+    if (navEvolutionBtn) {
+        navEvolutionBtn.addEventListener('click', () => {
+            ensureSettingsUiClosed();
+            setSidebarNavMode('evolution');
         });
     }
 

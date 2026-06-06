@@ -508,7 +508,7 @@ const MODULE_WORKBENCH_MODES = new Set([
 
 function normalizeNavMode(modeRaw) {
     const mode = safeString(modeRaw).toLowerCase();
-    if (mode === 'search' || mode === 'office' || mode === 'mission' || mode === 'content') return mode;
+    if (mode === 'search' || mode === 'office' || mode === 'mission' || mode === 'content' || mode === 'evolution') return mode;
     if (MODULE_NAV_MODE_SET.has(mode)) return mode;
     return 'chat';
 }
