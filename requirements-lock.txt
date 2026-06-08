@@ -56,7 +56,7 @@ iniconfig==2.3.0
 jeepney==0.7.1
 jsonpatch==1.32
 jsonpointer==2.0
-jsonschema==3.2.0
+jsonschema==4.26.0
 keyring==23.5.0
 kiwisolver==1.4.9
 launchpadlib==1.10.16
