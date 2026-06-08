@@ -5,7 +5,9 @@ from __future__ import annotations
 import difflib
 import hashlib
 import json
+import logging
 import os
+import re
 import shlex
 import shutil
 import subprocess  # nosec
@@ -44,10 +46,16 @@ DEFAULT_EVOLVE_PRINCIPLES = [
     "If verification fails, fix it or stop with an honest failure record instead of hand-waving.",
 ]
 # Verification runs inside the green mirror, which intentionally has no .git.
-# test_no_new_legacy_files needs git to know what is "new", so exclude just that
-# one check; the dependency-direction architecture checks still run, and the
-# commit-time monolith filename gate still catches any banned new files.
-DEFAULT_VERIFY_COMMANDS = ['python -m pytest tests/test_architecture.py -q -k "not test_no_new_legacy_files"']
+# Exclude checks that need git history/baselines; the dependency-direction
+# architecture checks still run, and commit-time gates still catch banned files.
+DEFAULT_VERIFY_COMMANDS = [
+    'python -m pytest tests/test_architecture.py -q -k "not test_no_new_legacy_files and not test_debt_trending"'
+]
+LEGACY_DEFAULT_VERIFY_COMMAND_SETS = {
+    ('python -m pytest tests/test_architecture.py -q -k "not test_no_new_legacy_files"',),
+    ("python -m pytest tests/test_architecture.py -x --tb=short -q",),
+}
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -71,16 +79,29 @@ class EvolveCharter:
     def from_dict(cls, payload: dict[str, Any] | None) -> EvolveCharter:
         payload = dict(payload or {})
         principles = payload.get("principles")
-        verify_commands = payload.get("verify_commands")
+        verify_commands = _normalize_verify_commands(payload.get("verify_commands"))
         return cls(
             objective=str(payload.get("objective") or DEFAULT_EVOLVE_OBJECTIVE),
             default_goal=str(payload.get("default_goal") or DEFAULT_EVOLVE_GOAL),
             principles=[str(x).strip() for x in (principles or []) if str(x).strip()]
             or list(DEFAULT_EVOLVE_PRINCIPLES),
-            verify_commands=[str(x).strip() for x in (verify_commands or []) if str(x).strip()]
-            or list(DEFAULT_VERIFY_COMMANDS),
+            verify_commands=_current_default_if_legacy(verify_commands),
             max_passes=max(1, min(int(payload.get("max_passes") or 1), 8)),
         )
+
+
+def _normalize_verify_commands(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _current_default_if_legacy(commands: list[str]) -> list[str]:
+    if not commands:
+        return list(DEFAULT_VERIFY_COMMANDS)
+    if tuple(commands) in LEGACY_DEFAULT_VERIFY_COMMAND_SETS:
+        return list(DEFAULT_VERIFY_COMMANDS)
+    return list(commands)
 
 
 def utc_now_iso() -> str:
@@ -186,7 +207,8 @@ def list_evolve_sessions(project_root: Path | None = None, *, limit: int = 20) -
             continue
         try:
             rows.append(_read_json(payload_path))
-        except Exception:
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            logger.warning("Skipping unreadable evolve session metadata %s: %s", payload_path, exc)
             continue
         if len(rows) >= max(1, int(limit)):
             break
@@ -456,11 +478,53 @@ def _build_agent_prompt(charter: EvolveCharter, goal: str, *, pass_index: int, p
     return "\n".join(lines).strip()
 
 
-def _build_verify_commands(charter: EvolveCharter, delta: dict[str, Any]) -> list[str | list[str]]:
+def _blast_radius_tests(changed_py: list[str], repo_root: Path) -> list[str]:
+    """The "blast radius" of a change: the test files that import any of the
+    changed modules.
+
+    Running these as part of verification makes a promotion's "verified" mean the
+    change's own tests pass -- not merely that it compiles (py_compile) and
+    layering is intact (test_architecture). Cheap: a grep over tests/ + a bounded
+    pytest. Returns [] when nothing references the change, so verification falls
+    back to the architecture ladder unchanged.
+    """
+    modules: set[str] = set()
+    for rel in changed_py:
+        norm = str(rel).replace("\\", "/")
+        if not norm.startswith("thomas/") or not norm.endswith(".py"):
+            continue
+        dotted = norm[:-3].replace("/", ".")  # thomas/core/x.py -> thomas.core.x
+        modules.add(dotted)
+        modules.add(dotted.rsplit(".", 1)[-1])  # bare module name: x
+    if not modules:
+        return []
+    tests_dir = repo_root / "tests"
+    if not tests_dir.is_dir():
+        return []
+    hits: set[str] = set()
+    for test_path in tests_dir.rglob("test_*.py"):
+        try:
+            text = test_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for mod in modules:
+            if re.search(rf"(?<![\w.]){re.escape(mod)}(?![\w])", text):
+                hits.add(test_path.relative_to(repo_root).as_posix())
+                break
+    return sorted(hits)
+
+
+def _build_verify_commands(charter: EvolveCharter, delta: dict[str, Any], repo_root: Path) -> list[str | list[str]]:
     commands: list[str | list[str]] = []
     changed_py = [rel for rel in (delta.get("changed_files") or []) if str(rel).endswith(".py")]
     if changed_py:
         commands.append([sys.executable, "-m", "py_compile", *changed_py])
+        # Blast-radius verification: run the test files that import the changed
+        # modules, so a promotion is gated on the change's OWN tests passing --
+        # not just that it compiles and architecture is intact.
+        blast = _blast_radius_tests(changed_py, repo_root)
+        if blast:
+            commands.append([sys.executable, "-m", "pytest", *blast, "-q", "-p", "no:cacheprovider"])
     commands.extend(cmd for cmd in charter.verify_commands if str(cmd).strip())
     return commands
 
@@ -605,9 +669,19 @@ def run_evolve_session(
         pre_policy_delta,
         protected_paths,
     )
-    verify_commands = _build_verify_commands(charter, delta)
+    verify_commands = _build_verify_commands(charter, delta, paths.green_root)
+    # Verification (pytest) must run in a CLEAN environment. The agent runs with
+    # THOMAS_SPEND_PATH / THOMAS_MEMORY_ROOT redirected at the green runtime so it
+    # cannot pollute real state -- but those overrides leak into tests that assert
+    # default (unset) behavior, producing false-negative verification failures
+    # unrelated to the change under test. Strip them for the verify subprocess so
+    # the gate measures the change, not the harness environment.
+    verify_env = dict(os.environ)
+    verify_env["PYTHONPATH"] = str(paths.green_root)
+    verify_env.pop("THOMAS_SPEND_PATH", None)
+    verify_env.pop("THOMAS_MEMORY_ROOT", None)
     verification = [
-        _run_exec(command, cwd=paths.green_root, env=green_env, timeout_seconds=timeout_seconds)
+        _run_exec(command, cwd=paths.green_root, env=verify_env, timeout_seconds=timeout_seconds)
         for command in verify_commands
     ]
 

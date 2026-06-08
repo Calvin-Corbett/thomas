@@ -15,6 +15,7 @@ Versioning: Semantic Versioning.
 - Cage coordination delivery enforcement (PROBLEM 2): the commit-master `submit` (`scripts/forge/commit_master.py`) refuses while the submitting agent has *relevant* unread coordination messages — a must-read kind (blocker/scope_change) or a message whose subject paths overlap the files being submitted (scope-aware policy, Calvin-chosen 2026-06-02). Reuses `message.unread_messages` so it composes with the repo-wide block-on-any inbox gate and the session-start surfacing. Tests in `tests/test_cage_inbox_enforcement.py`.
 - **QuickBuilder mode** (2026-06-03): a human-activated build-fast mode (`python scripts/quickbuilder_toggle.py on`, Windows-Hello gated, HMAC-signed flag) that relaxes the *workflow/coordination/location* gates (worktree-branch-guard, worktree-rules, workboard claims/agent-claim/changed-files/task-problems, plan-structure, merge-readiness) and removes the breakglass cooldown + per-agent 24h quota, while keeping the **entire code-engineering and security spine enforced** — tests, ruff, enforcement-integrity, the secret-scan, exception-handler, type-safety, monolith, protected-files, and the workboard **inbox** (coordination still surfaces) can never be suppressed (fail-safe allowlist in `scripts/forge/gates/_quickbuilder_guard.py`). Protected-file edits still require the human tap; only the cooldown is waived. Forged/unsigned flags are rejected, so an agent cannot self-activate. Docs: `docs/QUICKBUILDER.md`; tests: `tests/test_quickbuilder.py`.
 - **`scripts/dev_land.py`** (2026-06-03): one-command, Windows-Hello-approved owner-override to land a PR into a protected branch — the "approve, don't block" flow. Branch protection stays ON for everyone; an admin approves a specific PR with a credential tap, and the tool lifts `enforce_admins`, merges with `--admin` (past stale/infra checks), and **always restores** protection (even on error). A headless agent can't produce the tap, so it can't land a PR.
+- **Evolve loop — blast-radius verification** (2026-06-07): a promotion now also runs the changed module's own importing test files (discovered via `_blast_radius_tests`), not just `py_compile` + the architecture ladder — so "verified" means the change's behavioral tests pass, not merely that it parses and layering holds. New suite `tests/test_evolve_blast_radius.py`.
 
 ### Security
 
@@ -23,6 +24,9 @@ Versioning: Semantic Versioning.
 
 ### Fixed
 
+- Evolve: green-mirror verification now runs in a clean environment (the agent's `THOMAS_SPEND_PATH` / `THOMAS_MEMORY_ROOT` runtime overrides are stripped for the verify subprocess) so environment-sensitive tests no longer false-fail an otherwise-good promotion.
+- Evolve: session listing now logs malformed or unreadable session metadata instead of silently swallowing it under a blanket catch-all.
+- Evolve: refreshed the default green-mirror verification ladder and migrate known legacy default charter commands on load so stale persisted defaults do not override the engine's current verification policy.
 - Reliability: narrowed file/path/JSON fallback handlers in runtime skill policy code and added `logger.exception()` coverage plus explicit broad-catch rationale comments for best-effort chat dispatch, session persistence, browser CLI, and message CLI compatibility boundaries.
 
 ## [0.16.11] - 2026-05-29
