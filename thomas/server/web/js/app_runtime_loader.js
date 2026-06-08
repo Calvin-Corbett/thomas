@@ -53,6 +53,7 @@
         '044_model_setup_settings_05.js',
         '045_model_setup_settings_06.js',
         '046_evolution_dashboard.js',
+        '047_evolve_agent_chat.js',
     ];
 
     var basePath = '/static/js/runtime/';

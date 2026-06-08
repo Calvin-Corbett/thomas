@@ -865,6 +865,11 @@ def _setup_routes_and_handlers(
             from thomas.server.routes.evolve_loop_routes import register_evolve_loop_routes
 
             register_evolve_loop_routes(app_ref, require_api_access=_require_api_access)
+            # Directed Evolve agent (Thomas's self-builder: direct engineering
+            # session, no dispatcher). Registered alongside the autonomous loop.
+            from thomas.server.routes.evolve_agent_routes import register_evolve_agent_routes
+
+            register_evolve_agent_routes(app_ref, require_api_access=_require_api_access)
         except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
             log.warning("Evolve loop routes unavailable: %s", e)
 
