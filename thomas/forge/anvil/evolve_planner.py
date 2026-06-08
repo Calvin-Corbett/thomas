@@ -21,6 +21,7 @@ This module is the public facade: the data model lives in
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -58,6 +59,7 @@ def plan_backlog(
     focus: str = "",
     categories: set[str] | None = None,
     limit: int = 12,
+    ranker: Callable[[list[EvolveGoal], str], list[EvolveGoal]] | None = None,
 ) -> EvolveBacklog:
     """Survey Thomas and return a ranked backlog of self-chosen improvements.
 
@@ -66,6 +68,11 @@ def plan_backlog(
         focus: free-text focus hint (e.g. "hardening", "perf"); biases ranking.
         categories: allow-list of categories; ``None`` means all of them.
         limit: maximum number of goals to return.
+        ranker: optional ``(goals, focus) -> goals`` callable that re-orders the
+            deterministic shortlist (e.g. a model-backed impact ranker). The
+            planner is deterministic and free by default; injecting a ranker is
+            opt-in and the only seam that may incur a model call. Best-effort: a
+            failing or empty ranker keeps the deterministic order.
     """
     # Imported lazily so the facade has no import cycle with the detectors
     # (which import the model from this package).
@@ -83,6 +90,17 @@ def plan_backlog(
     )
     if limit > 0:
         candidates = candidates[:limit]
+
+    # Opt-in model-ranking seam (off by default -> deterministic + free). A caller
+    # may inject a model-backed ranker to refine the order; it must never break
+    # planning, so any failure falls back to the deterministic ranking.
+    if ranker is not None:
+        try:
+            reordered = ranker(list(candidates), focus_category)
+        except Exception:  # noqa: BLE001 - best-effort refinement must not break planning
+            reordered = None
+        if reordered:
+            candidates = list(reordered)
 
     return EvolveBacklog(
         goals=candidates,
