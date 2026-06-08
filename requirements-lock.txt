@@ -50,7 +50,7 @@ hyperlink==21.0.0
 idna==3.15
 imageio-ffmpeg==0.6.0
 img2pdf==0.6.3
-importlib-metadata==4.6.4
+importlib-metadata==9.0.0
 incremental==21.3.0
 iniconfig==2.3.0
 jeepney==0.7.1
