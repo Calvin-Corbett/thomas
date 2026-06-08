@@ -74,6 +74,15 @@ _DIRECT_RESPONSE_RE = re.compile(
 
 _QUESTION_PREFIX_RE = re.compile(r"^\s*(?:what|who|when|where|why|how)\b", re.I)
 
+# An information-seeking question located anywhere in the message: a wh-word
+# followed by a "?" within a bounded, newline-free gap. Catches conversational
+# questions that do not START with the wh-word, e.g. "quick note - what is 8 x 7?".
+# The bounded {0,120} gap (no "?"/newline) avoids polynomial backtracking.
+_QUESTION_ANYWHERE_RE = re.compile(
+    r"\b(?:what|whats|who|whom|whose|when|where|why|how|which)\b[^?\n]{0,120}\?",
+    re.I,
+)
+
 _TOOL_OR_FILE_REQUEST_RE = re.compile(
     r"(?:\buse\s+(?:your\s+)?(?:file|files|tool|tools)\b|"
     # Bounded, non-newline gap (cap 80 chars, lazy) instead of `.*` to avoid
@@ -164,6 +173,14 @@ def should_dispatch(
     explicit_tool_or_file = bool(_TOOL_OR_FILE_REQUEST_RE.search(src))
     if not explicit_tool_or_file and _QUESTION_PREFIX_RE.search(src) and not _DIRECTIVE_PREFIX_RE.search(src):
         return DispatchDecision(action="casual", reason="question_prompt")
+
+    # A question embedded mid-message (not just at the start) is still an
+    # information request, not a task -- e.g. "quick note, what is 8 x 7?".
+    # Guarded so genuine work still dispatches: skipped when there is an explicit
+    # tool/file ask or a leading directive ("build me X, what stack?" starts with
+    # a directive and routes to dispatch as before).
+    if not explicit_tool_or_file and _QUESTION_ANYWHERE_RE.search(src) and not _DIRECTIVE_PREFIX_RE.search(src):
+        return DispatchDecision(action="casual", reason="embedded_question")
 
     if not explicit_tool_or_file and _MEMORY_DIRECTIVE_RE.search(src):
         return DispatchDecision(action="casual", reason="memory_instruction")

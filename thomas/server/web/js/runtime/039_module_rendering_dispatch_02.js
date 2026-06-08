@@ -106,6 +106,13 @@ function setSidebarNavMode(mode = 'chat', { persist = true } = {}) {
     if (evolutionWorkspace) evolutionWorkspace.classList.toggle('hidden', !isEvolution);
     if (contentWorkspace) contentWorkspace.classList.toggle('hidden', !isContent);
     if (moduleWorkspace) moduleWorkspace.classList.toggle('hidden', !isModule);
+    /* The main chat composer belongs to the chat view only. Without this it
+       stays floating (position:absolute, z-index:20) on top of the workspace
+       dashboards (Evolution/Mission/Office/Content/Module), which reads as a
+       confusing second chat whose messages post to the now-hidden chat thread.
+       Hide it whenever we are not in chat/search so each workspace owns its
+       surface cleanly. */
+    if (composerContainer) composerContainer.classList.toggle('hidden', !isChat);
     if (appRoot) {
         appRoot.classList.toggle('office-active', isOffice);
         appRoot.classList.toggle('office-preview-active', showOfficePreview);

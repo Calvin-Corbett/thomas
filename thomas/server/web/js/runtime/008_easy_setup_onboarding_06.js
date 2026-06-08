@@ -803,6 +803,15 @@ function renderChatComposerSubbar() {
             activeAutonomyLevel = parseInt(event.target.value, 10) || 1;
             setSegmentedControlSelection('setupAutonomyGroup', String(activeAutonomyLevel));
             if (settingAutonomy) settingAutonomy.value = `L${activeAutonomyLevel}`;
+            /* Persist the pick so it sticks across launches. Previously this menu
+               only changed the level for the current session, so it reverted to
+               the saved default on reload. Mirror the Settings page save exactly
+               (same endpoint/method -> server deep-merges, concurrency preserved). */
+            fetch('/api/preferences', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ autonomy: { default_level: `L${activeAutonomyLevel}` } }),
+            }).catch(() => {});
         });
     }
 
