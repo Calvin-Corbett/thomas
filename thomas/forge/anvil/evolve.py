@@ -465,6 +465,7 @@ def _build_agent_prompt(charter: EvolveCharter, goal: str, *, pass_index: int, p
         "- Never modify policy, guardrail, or verification files such as tests/test_architecture.py, thomas/_architecture.py, agent_safety.toml, GUARDRAILS.md, or scripts/check_*.py.",
         "- If verification fails because of environment limits or missing metadata, report that honestly instead of editing the guard.",
         "- Prefer concrete code improvements over commentary-only work.",
+        "- Keep this pass SMALL and focused: a handful of related edits, not an exhaustive sweep. The loop runs many passes, so for a large goal (e.g. dozens of call sites) fix only a few this pass and stop -- finishing cleanly and promoting beats timing out with nothing done.",
         "- Run targeted verification yourself before you stop.",
         "- End with a concise summary of files changed and verification run.",
         "",
