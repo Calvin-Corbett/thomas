@@ -19,3 +19,5 @@
 @import url("./components_parts/chat-robot-animations.css?v=20260401-rename");
 /* 6 — Agent delegation */
 @import url("./components_parts/agent-delegation.css?v=20260401-rename");
+/* 7 — Modal viewport containment (keeps footers reachable on short windows) */
+@import url("./modals.css?v=20260612-modal-containment");

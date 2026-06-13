@@ -500,7 +500,9 @@ class WriteFileTool(Tool):
 
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(args["content"], encoding="utf-8")
-        return ToolResult(ok=True, data=f"Wrote {len(args['content'])} chars to {rel}")
+        # Report the resolved absolute path so the model can answer
+        # "where did you save it?" instead of guessing with pwd/ls.
+        return ToolResult(ok=True, data=f"Wrote {len(args['content'])} chars to {path}")
 
 
 class WriteProtectedFileTool(Tool):

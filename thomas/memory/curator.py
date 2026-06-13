@@ -30,7 +30,9 @@ _WS_RE = re.compile(r"\s+")
 _SAFE_KEY_RE = re.compile(r"[^a-z0-9_]+")
 
 _RE_MY_FACT = re.compile(
-    r"\bmy (?P<pred>[a-z][a-z0-9 _-]{1,40}) is (?P<obj>[^.!?\n]{2,160})",
+    # pred allows possessives ("dog's name"); obj stops before a following
+    # ", and my ..." clause so compound sentences yield one fact per clause.
+    r"\bmy (?P<pred>[a-z][a-z0-9 _'’-]{1,40}) is (?P<obj>(?:(?!,?\s+and\s+my\s)[^.!?\n]){2,160})",
     re.IGNORECASE,
 )
 _RE_BUILDING = re.compile(

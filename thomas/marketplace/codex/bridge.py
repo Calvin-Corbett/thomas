@@ -24,6 +24,20 @@ log = logging.getLogger(__name__)
 
 _REQUEST_TIMEOUT = 30.0  # seconds for non-streaming requests
 _INIT_TIMEOUT = 15.0
+_TURN_IDLE_TIMEOUT_DEFAULT = 300.0  # seconds without any app-server event before the turn is declared stalled
+
+
+def _resolve_turn_idle_timeout() -> float:
+    raw = str(os.environ.get("THOMAS_CODEX_TURN_IDLE_S", "")).strip()
+    if not raw:
+        return _TURN_IDLE_TIMEOUT_DEFAULT
+    try:
+        value = float(raw)
+    except ValueError:
+        return _TURN_IDLE_TIMEOUT_DEFAULT
+    return max(30.0, value)
+
+
 _STDOUT_READ_LIMIT_DEFAULT = 1024 * 1024  # 1 MiB
 _STDOUT_READ_LIMIT_MIN = 64 * 1024
 _STDOUT_READ_LIMIT_MAX = 64 * 1024 * 1024
@@ -153,6 +167,9 @@ class CodexBridge:
         self._reader_task: asyncio.Task | None = None
         self._initialized = False
         self._thread_id: str | None = None
+        # Instructions last delivered to the thread (developerInstructions at
+        # thread/start, or a per-turn context-update input item).
+        self._thread_instructions: str = ""
         # Accumulate streamed text for the current turn
         self._current_turn_text: str = ""
         # Track active turn for interruption
@@ -242,6 +259,7 @@ class CodexBridge:
 
         self._initialized = False
         self._thread_id = None
+        self._thread_instructions = ""
         self._fail_pending_requests(CodexBridgeError("Bridge stopped"))
 
     def _fail_pending_requests(self, error: Exception) -> None:
@@ -339,6 +357,7 @@ class CodexBridge:
         """Log out of the current account."""
         await self._request("account/logout", {})
         self._thread_id = None
+        self._thread_instructions = ""
 
     # â”€â”€ Models â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -504,17 +523,30 @@ class CodexBridge:
         self._on("item/fileChange/requestApproval", on_file_approval)
 
         try:
+            # turn/start has NO instructions field in the app-server protocol
+            # (only thread/start does, as developerInstructions). When the
+            # caller's instructions changed since the thread started — e.g.
+            # Thomas's per-turn memory context — deliver the update as an
+            # extra input item so the model actually sees it.
+            input_items: list[dict[str, Any]] = []
+            if instructions and instructions != self._thread_instructions:
+                input_items.append(
+                    {
+                        "type": "text",
+                        "text": f"[Context update from Thomas — not the user]\n{instructions}",
+                    }
+                )
+                self._thread_instructions = instructions
+            input_items.append({"type": "text", "text": text})
             turn_params: dict[str, Any] = {
                 "threadId": self._thread_id,
-                "input": [{"type": "text", "text": text}],
+                "input": input_items,
                 "effort": effort,
             }
             if cwd:
                 turn_params["cwd"] = cwd
             if model:
                 turn_params["model"] = model
-            if instructions:
-                turn_params["instructions"] = instructions
             # Auto-approve everything â€” Thomas handles its own sandboxing
             if allow_tools:
                 turn_params["approvalPolicy"] = "never"
@@ -534,6 +566,9 @@ class CodexBridge:
             self._active_turn_id = turn.get("id")
 
             # Yield events until turn completes
+            idle_timeout = _resolve_turn_idle_timeout()
+            loop = asyncio.get_event_loop()
+            last_event_ts = loop.time()
             while True:
                 # Check if turn is done
                 if turn_done.done():
@@ -545,8 +580,31 @@ class CodexBridge:
 
                 try:
                     event = await asyncio.wait_for(events_queue.get(), timeout=0.1)
+                    last_event_ts = loop.time()
                     yield event
                 except asyncio.TimeoutError:
+                    # A turn that emits nothing for idle_timeout seconds is
+                    # stalled (e.g. the agent looping on declined approvals);
+                    # without this check the chat hangs forever.
+                    if loop.time() - last_event_ts > idle_timeout:
+                        log.warning(
+                            "Codex turn %s stalled: no events for %.0fs; interrupting.",
+                            self._active_turn_id,
+                            idle_timeout,
+                        )
+                        try:
+                            await self.interrupt()
+                        except (CodexBridgeError, RuntimeError, OSError) as e:
+                            log.warning("Codex turn interrupt failed: %s", e)
+                        yield {
+                            "type": "error",
+                            "error": (
+                                f"The model stopped responding (no activity for {int(idle_timeout)}s), "
+                                "so the turn was cancelled. Please try again."
+                            ),
+                        }
+                        yield {"type": "done"}
+                        break
                     continue
 
         finally:
@@ -576,7 +634,11 @@ class CodexBridge:
         if model:
             params["model"] = model
         if instructions:
-            params["instructions"] = instructions
+            # The app-server protocol field is developerInstructions; a bare
+            # "instructions" key is silently dropped (unknown field), which
+            # left the model with no Thomas identity or memory context.
+            params["developerInstructions"] = instructions
+            self._thread_instructions = instructions
         if allow_tools:
             params["approvalPolicy"] = "never"
             params["sandbox"] = "danger-full-access"

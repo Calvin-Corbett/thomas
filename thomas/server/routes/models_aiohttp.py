@@ -310,8 +310,21 @@ def register_models_routes(
         except Exception:
             tool_timeout_s = 20.0
 
+        profile_cfg = model_cfg_with_secrets(profile)
+
+        # Self-heal the most common local failure before declaring it: an
+        # installed-but-not-running Ollama. The setup wizard's "Connect and
+        # Test" lands here — start the backend so the test can pass instead
+        # of telling the user to go start it themselves.
+        from thomas.core.ollama_autostart import maybe_autostart_ollama
+
+        if maybe_autostart_ollama(getattr(profile_cfg, "base_url", None)):
+            import asyncio as _asyncio
+
+            await _asyncio.sleep(2.5)  # give the backend a moment to bind
+
         report = await validate_model_profile_async(
-            model_cfg_with_secrets(profile),
+            profile_cfg,
             handshake_timeout_s=max(0.5, min(30.0, handshake_timeout_s)),
             tool_timeout_s=max(2.0, min(120.0, tool_timeout_s)),
             run_tool_smoke=run_tool_smoke,

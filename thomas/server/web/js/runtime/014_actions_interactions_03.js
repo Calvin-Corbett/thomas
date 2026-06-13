@@ -458,13 +458,29 @@ function findSetupProviderProfile(profileName = '') {
     return availableModelProfiles.find((entry) => safeString(entry?.name) === targetProfile) || null;
 }
 
+function isKeylessLocalProfile(profile) {
+    // Local/Ollama providers need no API key — they are "connected" when the
+    // local runtime is reachable, not when a key is present. Without this they
+    // are classified inactive, so picking a local model in Model Setup always
+    // bounces through the full onboarding wizard instead of just switching.
+    const provider = safeString(profile?.provider).toLowerCase();
+    const name = safeString(profile?.name).toLowerCase();
+    const baseUrl = safeString(profile?.base_url).toLowerCase();
+    if (provider === 'local' || provider === 'ollama' || name === 'local' || name.includes('ollama')) return true;
+    return baseUrl.includes('11434') || baseUrl.includes('//localhost') || baseUrl.includes('//127.0.0.1');
+}
+
+function isSetupProviderProfileActive(profile) {
+    return Boolean(profile?.has_api_key) || isKeylessLocalProfile(profile);
+}
+
 function classifySetupProviderProfiles() {
     const profiles = Array.isArray(availableModelProfiles)
         ? availableModelProfiles.filter((profile) => Boolean(safeString(profile?.name)))
         : [];
     return {
-        active: profiles.filter((profile) => Boolean(profile?.has_api_key)),
-        inactive: profiles.filter((profile) => !profile?.has_api_key),
+        active: profiles.filter((profile) => isSetupProviderProfileActive(profile)),
+        inactive: profiles.filter((profile) => !isSetupProviderProfileActive(profile)),
     };
 }
 
@@ -472,7 +488,7 @@ function updateSetupProviderPickerButton(profileName = '') {
     if (!setupProviderPickerBtn || !setupProviderPickerLabel) return;
     const selectedProfile = safeString(profileName) || safeString(setupProviderSelector?.value);
     const profile = findSetupProviderProfile(selectedProfile);
-    const isConnected = Boolean(profile?.has_api_key);
+    const isConnected = isSetupProviderProfileActive(profile);
     setupProviderPickerLabel.textContent = selectedProfile || 'Select provider';
     setupProviderPickerBtn.dataset.state = isConnected ? 'connected' : (profile ? 'inactive' : 'idle');
     if (setupProviderPickerState) setupProviderPickerState.textContent = '';
@@ -487,7 +503,7 @@ function createSetupProviderMenuLabel(text, className = 'setup-provider-section-
 
 function createSetupProviderOptionButton(profile, selectedProfile = '') {
     const profileName = safeString(profile?.name);
-    const isConnected = Boolean(profile?.has_api_key);
+    const isConnected = isSetupProviderProfileActive(profile);
     const isSelected = profileName === safeString(selectedProfile);
     const button = document.createElement('button');
     button.type = 'button';

@@ -52,6 +52,7 @@ for _module_name, _register_name in (
     ("thomas.cli.commands.updater", "register_update_commands"),
     ("thomas.cli.commands.release", "register_release_commands"),
     ("thomas.cli.commands.training", "register_training_commands"),
+    ("thomas.cli.commands.ship", "register_ship_commands"),
 ):
     try:
         _mod = __import__(_module_name, fromlist=[_register_name])

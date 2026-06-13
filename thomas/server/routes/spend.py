@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import json
+import logging
 from collections.abc import Callable
 from io import StringIO
 
@@ -12,6 +13,8 @@ from aiohttp import web
 
 from thomas.core.cost_tracker import get_cost_tracker
 from thomas.core.runtime_profile import all_profiles, resolve_runtime_profile
+
+log = logging.getLogger(__name__)
 
 RequireAccessFn = Callable[[web.Request], None]
 
@@ -153,14 +156,20 @@ def register_spend_routes(
     async def api_runtime_profile(request: web.Request) -> web.Response:
         """Return the current resolved runtime profile (autonomy × economy)."""
         require_api_access(request)
-        # Read current settings from preferences
-        from thomas.core.persistence import get_preferences_store
+        # Read current settings from the preferences store; fall back to
+        # defaults if preferences are unavailable (fresh install, store error).
+        economy = "optimal"
+        autonomy = 3
+        try:
+            from thomas.preferences.store import PreferencesStore, get_db_path
 
-        prefs = get_preferences_store().snapshot()
-        adv = prefs.get("advanced", {}) if isinstance(prefs, dict) else {}
-        rt = adv.get("runtime", {}) if isinstance(adv, dict) else {}
-        economy = rt.get("default_token_economy", "optimal") if isinstance(rt, dict) else "optimal"
-        autonomy = rt.get("autonomy_level", 3) if isinstance(rt, dict) else 3
+            runtime_prefs = PreferencesStore(get_db_path()).get(user_id="default", thread_id=None)
+            advanced = getattr(runtime_prefs, "advanced", None)
+            rt = getattr(advanced, "runtime", None)
+            economy = str(getattr(rt, "default_token_economy", economy) or economy)
+            autonomy = int(getattr(rt, "autonomy_level", autonomy) or autonomy)
+        except Exception:
+            log.debug("Runtime profile: preferences unavailable; using defaults", exc_info=True)
 
         profile = resolve_runtime_profile(
             autonomy_level=autonomy,

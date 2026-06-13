@@ -1,0 +1,16 @@
+/* modals.css */
+/* Viewport containment for generic modals. The centered .thomas-modal
+   overlay clips BOTH the header and the footer when .modal-content grows
+   taller than the window — on laptop-height screens the Model Setup
+   modal's "Apply Configuration" button became unreachable. Cap the modal
+   at viewport height and let the body scroll; header/footer stay pinned. */
+
+.thomas-modal .modal-content {
+    max-height: calc(100vh - 32px);
+}
+
+.thomas-modal .modal-body {
+    overflow-y: auto;
+    /* Let this flex child actually shrink below its content height. */
+    min-height: 0;
+}

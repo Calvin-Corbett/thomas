@@ -227,10 +227,17 @@ async def probe_ollama_model(
     if not out["responded"]:
         out["error"] = "empty generation response"
         return out
-    out["ok"] = bool(out["responded"] and (tool_signal if require_tool_signal else True))
+    # Readiness = the model responded and could follow the JSON contract.
+    # The self-reported tool_ready VALUE is recorded as a capability signal
+    # but must not gate health: at temperature 0 some healthy models (e.g.
+    # llama3.1) answer the probe "honestly" with tool_ready=false instead of
+    # echoing it, which made them fail this probe deterministically forever —
+    # and auto-repair re-pulled and re-probed them in a loop that could
+    # never succeed.
+    out["ok"] = bool(out["responded"] and (json_like if require_tool_signal else True))
     if not out["ok"] and not out["error"]:
         if require_tool_signal:
-            out["error"] = "tool_readiness_signal_missing"
+            out["error"] = "json_contract_not_followed"
         else:
             out["error"] = "probe_failed"
     return out

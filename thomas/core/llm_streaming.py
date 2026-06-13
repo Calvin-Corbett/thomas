@@ -295,6 +295,11 @@ async def stream_openai(
         except (httpx.ConnectError, httpx.ReadTimeout) as e:
             if attempt < max_retries - 1:
                 delay = base_delay * (2**attempt)
+                if isinstance(e, httpx.ConnectError):
+                    from thomas.core.ollama_autostart import maybe_autostart_ollama
+
+                    if maybe_autostart_ollama(getattr(owner.config, "base_url", None)):
+                        delay = max(delay, 3.0)  # give the backend a moment to bind
                 log.warning("Connection error, retrying in %.1fs: %s", delay, e)
                 if delay > 0:
                     await asyncio.sleep(delay)
