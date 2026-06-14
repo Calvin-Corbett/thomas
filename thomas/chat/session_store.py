@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from thomas.chat.conversation import ConversationManager
+from thomas.core.autonomy import DEFAULT_AUTONOMY_LEVEL
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ class SessionMeta:
     session_id: str
     profile: str = ""
     model_id: str | None = None
-    autonomy_level: int = 3
+    autonomy_level: int = DEFAULT_AUTONOMY_LEVEL  # L2 Assist — ask before acting (Calvin law)
     system_prompt: str | None = None
     reasoning_effort: str | None = None
     created_at: float = field(default_factory=time.time)
@@ -62,7 +63,7 @@ class SessionMeta:
             session_id=data.get("session_id", ""),
             profile=data.get("profile", ""),
             model_id=data.get("model_id"),
-            autonomy_level=data.get("autonomy_level", 3),
+            autonomy_level=data.get("autonomy_level", DEFAULT_AUTONOMY_LEVEL),
             system_prompt=data.get("system_prompt"),
             reasoning_effort=data.get("reasoning_effort"),
             created_at=data.get("created_at", time.time()),

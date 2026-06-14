@@ -1,3 +1,4 @@
+import types
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -17,10 +18,21 @@ class _FakeDispatcher:
         self.done_payloads.append(dict(payload))
 
 
+class _FakeMemoryCtx:
+    working = ""
+    episodic = ""
+    semantic = ""
+    total_tokens = 0
+
+
 class _FakeMemoryCoordinator:
     def __init__(self, *args, **kwargs):  # noqa: ANN002, ANN003
         _ = args
         _ = kwargs
+
+    async def refresh(self, **kwargs):  # noqa: ANN003
+        _ = kwargs
+        return _FakeMemoryCtx()
 
     async def capture_episode(self, **kwargs):  # noqa: ANN003
         _ = kwargs
@@ -69,7 +81,13 @@ class TestOrchestratorBrainStatus(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(dispatcher.done_payloads)
         self.assertEqual(dispatcher.done_payloads[-1].get("thinking_summary"), "background_status")
 
-    async def test_background_ack_reply_skips_llm_and_emits_short_started_message(self):
+    async def test_background_actionable_reply_is_model_generated_not_canned(self):
+        """An auto-background task no longer gets a canned 'task started' ack.
+
+        Calvin: an instantaneous templated reply isn't the AI replying. With
+        background_ack_only set, the brain must still call the model and surface
+        its real words — not a hash-selected canned line.
+        """
         brain = OrchestratorBrain(
             config=None,
             llm=None,
@@ -78,10 +96,14 @@ class TestOrchestratorBrainStatus(unittest.IsolatedAsyncioTestCase):
         )
         dispatcher = _FakeDispatcher()
         conversation = ConversationManager()
+        model_reply = types.SimpleNamespace(ok=True, content="Sure — I'll get that going for you.", tokens_used=12)
 
         with (
             patch("thomas.marketplace.orchestrator.brain.MemoryCoordinator", _FakeMemoryCoordinator),
-            patch.object(OrchestratorBrain, "_dispatch_single", new=AsyncMock()) as dispatch_single,
+            patch("thomas.marketplace.orchestrator.brain._answer_memory_recall_from_context", return_value=""),
+            patch.object(
+                OrchestratorBrain, "_dispatch_single", new=AsyncMock(return_value=model_reply)
+            ) as dispatch_single,
         ):
             updated = await brain.process_message(
                 session_id="sess-ack",
@@ -94,11 +116,12 @@ class TestOrchestratorBrainStatus(unittest.IsolatedAsyncioTestCase):
                 background_ack_only=True,
             )
 
-        dispatch_single.assert_not_awaited()
-        self.assertEqual("".join(dispatcher.text_parts), "Working on that now.")
-        self.assertEqual(updated.last_assistant_message(), "Working on that now.")
+        # The model WAS used — the defining difference from the old canned path.
+        dispatch_single.assert_awaited()
+        self.assertEqual(updated.last_assistant_message(), "Sure — I'll get that going for you.")
         self.assertTrue(dispatcher.done_payloads)
-        self.assertEqual(dispatcher.done_payloads[-1].get("thinking_summary"), "background_ack")
+        # No longer the dedicated "background_ack" canned summary.
+        self.assertNotEqual(dispatcher.done_payloads[-1].get("thinking_summary"), "background_ack")
 
 
 if __name__ == "__main__":

@@ -46,7 +46,7 @@
   "scripts/forge/gates/workboard_inbox.py": "f98334000d48a7bf094f5cbb61e67e8e7ff6b58188ca2983dbc7f31b0dbd43b4",
   "scripts/forge/gates/workboard_inbox_hook.py": "c1e8b50c5eb7e89b7c4a4f7b3334c91359eafa426c73cb43325f826dfad8f865",
   "scripts/forge/gates/workboard_task_problems.py": "2b7330def8daaecb2cb7a474c9cf4fe52925333a56817dd3a3446b7974ba226b",
-  "scripts/forge/gates/worktree_branch_guard.py": "42beb56278b8cbca6c82c29cd5a35994047ff84cc8cabe5cfb9a5db58eec4683",
+  "scripts/forge/gates/worktree_branch_guard.py": "20c269110794f4c96411af47b94b7737227fce8597d462429ddd9b227c64c903",
   "scripts/forge/gates/worktree_rules_gate.py": "6409325fb275b11cfd25534201d21741251ac67f31a19267d341e75303ce02d3",
   "scripts/forge/publish/preflight.py": "cd9385bcecb39504a6e7adb9dc17e3bb622bd9cf4d6519458913122be57da31b",
   "scripts/post_commit_audit.py": "fd7a60319f2946abb72513427bfaf73c903a4c1d13f08c87a958186bb6c2d1b0",

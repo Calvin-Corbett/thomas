@@ -9,6 +9,7 @@ from typing import Any
 
 from thomas.agent.chat_dispatcher import dispatch_async
 from thomas.agent.dispatch import should_dispatch
+from thomas.agent.task_titling import derive_task_title
 from thomas.core import task_bot_runtime
 from thomas.marketplace.orchestrator.bot_roster import pick_bot_for_specialist
 from thomas.server.app_keys import APP_CODEX_BRIDGE
@@ -161,13 +162,6 @@ async def _ensure_bridge(app: Any) -> Any | None:
             return None
 
         return bridge
-
-
-def _summarize_prompt(prompt: str) -> str:
-    text = " ".join(str(prompt or "").strip().split())
-    if len(text) > 160:
-        return text[:157] + "..."
-    return text
 
 
 def _infer_specialist(prompt: str) -> str:
@@ -371,7 +365,7 @@ async def _start_task_manager_delegation(
             "session_id": session_id,
             "backend_type": TASK_MANAGER_BACKEND,
             "state": "failed",
-            "summary": _summarize_prompt(prompt),
+            "summary": derive_task_title(prompt),
             "last_progress": result.error or "Background dispatch failed.",
         }
         await emitter.failed(failed, specialist_id=specialist_id, bot=bot, text=failed["last_progress"])
@@ -405,7 +399,9 @@ async def _start_provider_native_delegation(
     root = _resolve_repo_root(repo_root)
     execution = task_bot_runtime.create_execution(
         session_id=session_id,
-        summary=_summarize_prompt(prompt),
+        # Display title for the task card — a real name for the work, not a raw
+        # prompt truncation. The worker still receives the full `prompt` below.
+        summary=derive_task_title(prompt),
         intent="chat_task",
         scope=[specialist_id],
         visibility="background",

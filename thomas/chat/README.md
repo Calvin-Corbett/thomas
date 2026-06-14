@@ -2,6 +2,28 @@
 
 This directory manages conversation state, multi-turn context, memory layers, session storage, and event streaming for chat interactions.
 
+## ⚖️ LAW: the chat agent (Thomas) is ONLY a chatbot — do not change this
+
+Owner: Calvin (2026-06-14). This is in stone. There is exactly ONE chat-agent
+identity and **no alternative**: if you add a second persona, an identity flag,
+or a "mode" that lets the chat agent do work, an agent will eventually pick the
+wrong one — so don't create the option.
+
+- The chat agent **talks** with the user and **reads** to inform the conversation
+  (e.g. "how's the evolve loop going?" → it reads state and reports back). That's
+  it. Like an executive's personal assistant: it takes the ask, hands it off, and
+  reports — it does not do the task.
+- It **NEVER** builds, writes code, edits, runs, deploys, **or plans/designs** the
+  work. All of that is handed to the **task manager** (worker bots, live task card).
+- It **never** claims it did/does/finished/planned work it didn't do. No canned or
+  instant auto-acknowledgements — every visible reply is model-authored.
+- **Autonomy levels STAY.** They govern how much gets handed off and how much asks
+  for approval first; they do **not** change who the chat agent is.
+
+Single source of truth: `thomas/marketplace/specialists/reasoning.py` →
+`THOMAS_CHATBOT_SYSTEM_PROMPT`, guarded by `tests/test_reasoning_identity.py`.
+Do not fork or soften it. See memory `thomas-chatbot-only-no-modes-law`.
+
 ## What This Directory Does
 
 Chat infrastructure keeps track of the conversation:

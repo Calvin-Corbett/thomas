@@ -234,7 +234,7 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(str(payload.get("session_id") or ""), "sess-delegations")
         self.assertTrue(any(str(row.get("task_id") or "") == "task-xyz" for row in delegations))
 
-    async def test_auto_mode_launches_background_delegation_for_actionable_requests(self):
+    async def test_auto_mode_wires_send_task_at_agent_autonomy_no_regex_launch(self):
         _FakeBrain.calls = []
         _FakeDelegationStarter.calls = []
         with (
@@ -247,6 +247,10 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
                     "session_id": "sess-auto",
                     "profile": "local",
                     "mode": "auto",
+                    # At L3+ the MODEL gets the send_task tool and decides whether to
+                    # hand work off — organically, no regex pre-classification, no
+                    # auto-launch behind its back.
+                    "autonomy_level": 3,
                     "message": "please implement this plan",
                 },
             )
@@ -254,13 +258,15 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         events = _parse_ndjson(await resp.text())
         event_types = [str(evt.get("type") or "") for evt in events]
-        self.assertIn("delegation_started", event_types)
-        self.assertEqual(len(_FakeDelegationStarter.calls), 1)
-        self.assertEqual(_FakeDelegationStarter.calls[0]["mode"], "auto")
+        # No regex-driven auto-launch: dispatch is the model's call via send_task.
+        self.assertNotIn("delegation_started", event_types)
+        self.assertEqual(len(_FakeDelegationStarter.calls), 0)
         self.assertEqual(len(_FakeBrain.calls), 1)
-        self.assertFalse(bool(_FakeBrain.calls[0].get("dispatch_actionable", True)))
-        self.assertTrue(bool(_FakeBrain.calls[0].get("background_ack_only", False)))
-        self.assertIn("[Visible reply constraint]", str(_FakeBrain.calls[0].get("prompt") or ""))
+        # The send_task callback IS wired at L3 (the model can dispatch organically).
+        self.assertIsNotNone(_FakeBrain.calls[0].get("send_task"))
+        # No canned background-ack path; the prompt is unmodified (no visible-reply hack).
+        self.assertFalse(bool(_FakeBrain.calls[0].get("background_ack_only", False)))
+        self.assertEqual(str(_FakeBrain.calls[0].get("prompt") or ""), "please implement this plan")
 
     async def test_auto_mode_low_autonomy_keeps_actionable_request_inline(self):
         _FakeBrain.calls = []

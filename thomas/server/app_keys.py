@@ -13,6 +13,7 @@ from typing import Any
 
 from aiohttp import web
 
+from thomas.core.autonomy import DEFAULT_AUTONOMY_LEVEL
 from thomas.core.config import AppConfig
 from thomas.server.secrets import SecretStore
 from thomas.tools.registry import ToolRegistry
@@ -62,7 +63,7 @@ class ChatSession:
     conversation: list[dict[str, Any]]
     profile: str
     model_id: str | None = None
-    autonomy_level: int = 3
+    autonomy_level: int = DEFAULT_AUTONOMY_LEVEL  # L2 Assist — ask before acting (Calvin law)
     system_prompt: str | None = None
     reasoning_effort: str | None = None
     session_token_spend: int = 0

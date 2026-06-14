@@ -225,6 +225,7 @@ class OrchestratorBrain:
         active_tasks: list[dict[str, Any]] | None = None,
         dispatch_actionable: bool = True,
         background_ack_only: bool = False,
+        send_task: Any = None,
     ) -> ConversationManager:
         """Process a user message.
 
@@ -234,6 +235,11 @@ class OrchestratorBrain:
         """
         _ = images
         _ = is_first_message
+        # background_ack_only used to short-circuit to a canned "Working on that
+        # now." line and skip the model entirely. That is gone: every visible
+        # reply is model-authored. The route still launches background work in
+        # parallel; here we just always let Thomas actually answer.
+        _ = background_ack_only
         turn_start = time.monotonic()
 
         conversation = conversation.append_message("user", prompt)
@@ -261,15 +267,6 @@ class OrchestratorBrain:
                 active_tasks=active_tasks,
             )
 
-        if background_ack_only:
-            return await self._handle_background_ack(
-                session_id=session_id,
-                conversation=conversation,
-                prompt=prompt,
-                dispatcher=dispatcher,
-                turn_start=turn_start,
-            )
-
         if decision.action == "dispatch" and dispatch_actionable:
             return await self._handle_actionable(
                 session_id=session_id,
@@ -295,6 +292,7 @@ class OrchestratorBrain:
             turn_start=turn_start,
             reply_kind=reply_kind,
             active_task_digest=active_task_digest,
+            send_task=send_task,
         )
 
     async def _handle_background_status(
@@ -349,54 +347,6 @@ class OrchestratorBrain:
 
         return conversation
 
-    async def _handle_background_ack(
-        self,
-        session_id: str,
-        conversation: ConversationManager,
-        prompt: str,
-        dispatcher: EventDispatcher,
-        turn_start: float,
-    ) -> ConversationManager:
-        final_text = "Working on that now."
-        await dispatcher.emit_text(final_text)
-
-        conversation = conversation.append_message(
-            "assistant",
-            final_text,
-            metadata={"specialists": ["reasoning"], "mode": "background_ack"},
-        )
-
-        try:
-            memory_coord = MemoryCoordinator(
-                self.memory_engine,
-                session_id,
-                context_budget=_MODE_BUDGETS.get("fast", 1_500),
-            )
-            await memory_coord.capture_episode(
-                turn_number=conversation.length // 2,
-                user_message=prompt,
-                assistant_response=final_text,
-                thinking="background_ack",
-                tool_calls=[],
-                specialist="reasoning",
-            )
-        except Exception as exc:
-            log.debug("Background ack episode capture skipped: %s", exc)
-
-        elapsed = int((time.monotonic() - turn_start) * 1000)
-        await dispatcher.emit_done(
-            session_id=session_id,
-            conversation_version=conversation.version,
-            thinking_summary="background_ack",
-            total_thinking_ms=0,
-            iterations=1,
-            tool_calls=0,
-            tokens_used=0,
-            specialists_used=["reasoning"],
-            total_elapsed_ms=elapsed,
-        )
-        return conversation
-
     async def _handle_casual(
         self,
         session_id: str,
@@ -409,6 +359,7 @@ class OrchestratorBrain:
         turn_start: float,
         reply_kind: str = "casual",
         active_task_digest: str = "",
+        send_task: Any = None,
     ) -> ConversationManager:
         """Handle direct Thomas replies without visible delegation."""
         memory_coord = MemoryCoordinator(
@@ -467,6 +418,7 @@ class OrchestratorBrain:
             autonomy_level=autonomy_level,
             token_economy=token_economy,
             stream_text_events=True,
+            send_task=send_task,
         )
 
         final_text = result.content if result.ok else "Sorry, I had trouble with that."
@@ -517,14 +469,15 @@ class OrchestratorBrain:
         turn_start: float,
         images: list[dict[str, Any]] | None = None,
     ) -> ConversationManager:
-        """Handle actionable messages — acknowledge fast, dispatch work.
+        """Handle actionable messages — route to specialists, dispatch work.
 
-        Thomas immediately streams a quick acknowledgment so the user sees
-        a response in milliseconds. Then the real work happens:
+        No canned acknowledgment is emitted: the only user-visible text is the
+        specialist's actual model output. (Calvin: an instantaneous templated
+        reply isn't the AI replying — it defeats the point.) The work:
 
         1. Route to best specialist(s) via LLM classification
         2. Dispatch specialist work
-        3. Stream results as they complete
+        3. Stream the real results as they complete
         4. Thomas stays responsive for follow-up messages
 
         This is the core of the dispatch-first architecture.
@@ -536,12 +489,7 @@ class OrchestratorBrain:
             context_budget=_MODE_BUDGETS.get(mode, 4_000),
         )
 
-        # ── Immediately stream acknowledgment ─────────────────────
-        # Thomas replies fast. The user sees this right away.
-        # Keep it natural — not robotic. Acknowledge and stay open.
-        await dispatcher.emit_text("Working on that — ")
-
-        # ── Refresh memory (runs while user sees "On it.") ────────
+        # ── Refresh memory ────────────────────────────────────────
         thinking.start(DelegationPhase.PLANNING.value)
         memory_ctx = await memory_coord.refresh(
             prompt=prompt,
@@ -624,8 +572,8 @@ class OrchestratorBrain:
         for i in range(0, len(final_text), chunk_size):
             await dispatcher.emit_text(final_text[i : i + chunk_size])
 
-        # Build full assistant message (acknowledgment + result)
-        full_response = "Working on that — " + final_text
+        # The assistant message is the model's actual output — no canned prefix.
+        full_response = final_text
 
         # ── Update conversation ───────────────────────────────────
         conversation = conversation.append_message(
@@ -759,6 +707,7 @@ class OrchestratorBrain:
         autonomy_level: int,
         token_economy: str,
         stream_text_events: bool = False,
+        send_task: Any = None,
     ) -> DelegationResult:
         """Dispatch to a single specialist with contract + token."""
         specialist = self.registry.get(specialist_id)
@@ -780,6 +729,9 @@ class OrchestratorBrain:
                 "memory": memory_ctx.to_system_injection(),
                 "mode": mode,
                 "token_economy": str(token_economy or "optimal"),
+                # The send_task callback (organic, no-regex dispatch). When present,
+                # the reasoning model can hand work off via the send_task tool.
+                "send_task": send_task,
             },
         )
 

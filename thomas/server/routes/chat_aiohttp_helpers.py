@@ -10,7 +10,7 @@ from typing import Any
 
 from aiohttp import web
 
-from thomas.core.autonomy import clamp_autonomy_level
+from thomas.core.autonomy import DEFAULT_AUTONOMY_LEVEL, clamp_autonomy_level
 from thomas.core.config import AppConfig, load_config
 from thomas.server.app_keys import APP_CONFIG, ChatSession
 
@@ -62,7 +62,10 @@ def _create_parallel_fork_session(
         conversation=cloned_conversation,
         profile=str(getattr(base_session, "profile", "")),
         model_id=getattr(base_session, "model_id", None),
-        autonomy_level=clamp_autonomy_level(getattr(base_session, "autonomy_level", 3), default=3),
+        autonomy_level=clamp_autonomy_level(
+            getattr(base_session, "autonomy_level", DEFAULT_AUTONOMY_LEVEL),
+            default=DEFAULT_AUTONOMY_LEVEL,
+        ),
         conversation_mode=str(getattr(base_session, "conversation_mode", "default") or "default"),
         active_plan=copy.deepcopy(getattr(base_session, "active_plan", None)),
     )

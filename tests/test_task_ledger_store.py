@@ -62,6 +62,15 @@ def test_goal_derivation_preserves_ack_followups() -> None:
     assert replace == "Implement task ledger API"
 
 
+def test_goal_derivation_produces_clean_title_not_raw_prompt() -> None:
+    # The card title must name the task, not echo the raw chat ("hey thomas can
+    # you please ...") — Calvin's generic-card-name complaint. See task_titling.
+    assert derive_active_goal("hey thomas can you please build me a pac-man game", current_goal="") == (
+        "Build a pac-man game"
+    )
+    assert derive_active_goal("i need you to fix the login bug", current_goal="") == "Fix the login bug"
+
+
 def test_missing_input_extraction_and_completion_classification() -> None:
     missing = extract_missing_inputs("I need your GitHub token and repository URL to continue.")
     assert "GitHub token" in missing

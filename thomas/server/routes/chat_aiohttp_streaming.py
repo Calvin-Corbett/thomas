@@ -394,10 +394,10 @@ async def execute_chat_request(
                     with contextlib.suppress(ConnectionResetError, BrokenPipeError, OSError):
                         await dispatch_resp.write(line.encode("utf-8") + b"\n")
 
-                ack_text = "On it."
-                await dispatch_send({"type": "text", "text": ack_text})
-                session.conversation.append({"role": "assistant", "content": ack_text})
-
+                # No canned acknowledgment text. The live task card (the
+                # task_dispatched event + delegation updates below) is what tells
+                # the user the work started; we never fake an instant assistant
+                # reply. Thomas only "speaks" with model-authored text.
                 dispatch_result = await dispatch_async(
                     text,
                     sid,

@@ -351,8 +351,13 @@ async def test_handle_casual_and_actionable_emit_done_and_stream_output(monkeypa
         turn_start=0.0,
     )
     assert dispatcher.memory_refreshes
-    assert "".join(dispatcher.text_parts).startswith("Working on that")
+    # No canned "Working on that —" prefix: the only visible text is the model's
+    # actual answer. The reply must not start with a templated acknowledgment.
+    streamed = "".join(dispatcher.text_parts)
+    assert not streamed.startswith("Working on that")
+    assert "clean answer" in streamed
     assert "clean answer" in (actionable.last_assistant_message() or "")
+    assert not (actionable.last_assistant_message() or "").startswith("Working on that")
     assert dispatcher.done_payloads[-1]["tool_calls"] == 1
 
 

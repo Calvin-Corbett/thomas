@@ -286,7 +286,11 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
             "ok",
         )
         self.assertIsNone(chat_delegation._coerce_bridge(object()))
-        self.assertTrue(chat_delegation._summarize_prompt("x" * 200).endswith("..."))
+        # Task cards are titled with a real name now, not a raw prompt truncation.
+        self.assertEqual(
+            chat_delegation.derive_task_title("hey thomas can you please build me a pac-man game"),
+            "Build a pac-man game",
+        )
         self.assertEqual(chat_delegation._infer_specialist("Please investigate and compare this."), "research")
         self.assertEqual(chat_delegation._infer_specialist("Run this command and configure it."), "tools")
         self.assertEqual(chat_delegation._infer_specialist("Just think it through."), "reasoning")

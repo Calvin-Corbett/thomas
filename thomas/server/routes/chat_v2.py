@@ -22,6 +22,7 @@ from thomas.agent.dispatch import should_dispatch
 from thomas.chat.conversation import ConversationManager
 from thomas.chat.event_stream import EventDispatcher
 from thomas.chat.session_store import SessionMeta, SessionStore
+from thomas.core.autonomy import DEFAULT_AUTONOMY_LEVEL
 from thomas.core.llm import LLMClient
 from thomas.marketplace.orchestrator.brain import OrchestratorBrain
 from thomas.marketplace.orchestrator.registry import SpecialistRegistry
@@ -487,7 +488,7 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
 
     sid = str(payload.get("session_id", "") or secrets.token_urlsafe(18))
     mode = str(payload.get("mode", "auto"))
-    autonomy_level = int(payload.get("autonomy_level", 3))
+    autonomy_level = int(payload.get("autonomy_level", DEFAULT_AUTONOMY_LEVEL))
     token_economy = str(payload.get("token_economy", "optimal") or "optimal")
 
     session_store: SessionStore = request.app[APP_SESSION_STORE]
@@ -566,22 +567,30 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
     dispatch_inline_actionable = _requires_inline_tool_execution(prompt)
     reply_first_background = bool(mode == "auto" and _requests_reply_first_background(prompt))
     explicit_delegation = bool(autonomy_level >= 4 and _requests_explicit_delegation(prompt))
-    auto_actionable_background = _should_auto_background_actionable(
-        prompt,
-        mode=mode,
-        autonomy_level=autonomy_level,
-        recent_messages=recent_messages,
-        active_tasks=current_active_tasks,
-        requires_inline_tools=dispatch_inline_actionable,
-    )
-    launch_background = bool(
-        mode == "max" or reply_first_background or explicit_delegation or auto_actionable_background
-    )
-    force_background = bool(reply_first_background or explicit_delegation or auto_actionable_background)
-    background_ack_only = bool(auto_actionable_background and not reply_first_background and not explicit_delegation)
-    visible_prompt = (
-        _foreground_reply_prompt(prompt) if reply_first_background or auto_actionable_background else prompt
-    )
+    # No-regex dispatch: the old `should_dispatch` regex that GUESSED whether a
+    # message was a task (and then faked an instant ack) is gone. Whether to hand
+    # work off is now the MODEL's call, made organically via the send_task tool
+    # (wired below). Autonomy still governs it: the tool is only offered at L3+
+    # (Agent/Full), so at L1/L2 Thomas talks/offers and never dispatches on its own.
+    auto_actionable_background = False
+    launch_background = bool(mode == "max" or reply_first_background or explicit_delegation)
+    force_background = bool(reply_first_background or explicit_delegation)
+    background_ack_only = False
+    visible_prompt = _foreground_reply_prompt(prompt) if reply_first_background else prompt
+
+    async def _send_task(*, title: str, instructions: str) -> None:
+        """Organic dispatch: the model calls this to hand work to the task manager."""
+        await start_background_delegation(
+            request.app,
+            session_id=sid,
+            prompt=str(instructions or title or prompt),
+            mode=mode,
+            recent_messages=recent_messages,
+            emit_event=dispatcher.emit,
+            force=True,
+        )
+
+    send_task_cb = _send_task if autonomy_level >= 3 else None
 
     try:
         if launch_background:
@@ -616,6 +625,7 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
                 active_tasks=active_tasks,
                 dispatch_actionable=dispatch_inline_actionable,
                 background_ack_only=background_ack_only,
+                send_task=send_task_cb,
             )
 
         if llm_lock is not None:
