@@ -37,10 +37,22 @@ _LEADING_FILLER = (
     "i'd like to",
     "i want to",
     "i need to",
+    "i would love for you to",
+    "i'd love for you to",
+    "i would love to",
+    "i'd love to",
     "i would like",
     "i'd like",
     "i want",
     "i need",
+    # "help me ..." is the single most common non-engineer phrasing ("help me make
+    # a card" -> "Make a card"). The "...to" variant precedes the bare one.
+    "help me to",
+    "help me",
+    "i'm trying to",
+    "i am trying to",
+    "i'm",
+    "i am",
     "can you please",
     "could you please",
     "would you please",
@@ -114,8 +126,75 @@ _ACTION_VERBS = frozenset(
         "migrate",
         "scaffold",
         "wire",
+        # Common real-life/real-eng task verbs surfaced by the persona sweep.
+        "figure",
+        "organize",
+        "organise",
+        "track",
+        "outline",
+        "teach",
+        "negotiate",
+        "launch",
+        "sell",
+        "pick",
+        "automate",
+        "digitize",
+        "digitise",
+        "start",
+        "explain",
+        "study",
+        "learn",
+        "schedule",
+        "split",
+        "lower",
+        "slim",
+        "profile",
+        "instrument",
+        "harden",
+        "introduce",
+        "replace",
+        "audit",
+        "lead",
+        "set up",
+        "back up",
+        "clean up",
     }
 )
+
+
+def _starts_with_action_verb(text: str) -> bool:
+    words = str(text or "").strip().split()
+    if not words:
+        return False
+    first = words[0].lower().strip(",.:;")
+    if first in _ACTION_VERBS:
+        return True
+    # two-word verbs like "set up", "back up"
+    if len(words) >= 2:
+        pair = f"{first} {words[1].lower().strip(',.:;')}"
+        if pair in _ACTION_VERBS:
+            return True
+    return False
+
+
+def _imperative_clause(text: str) -> str:
+    """Find the first imperative clause in a statement-then-request prompt.
+
+    Many people lead with context and bury the ask: "I keep forgetting birthdays
+    — set up a reminder", "My computer is slow, can you clean it up". This splits
+    on clause boundaries, strips per-clause filler, and returns the first clause
+    that actually starts with an action verb.
+    """
+    collapsed = " ".join(str(text or "").split())
+    if not collapsed:
+        return ""
+    # Split on dashes, sentence enders, and comma-introduced clauses.
+    parts = re.split(r"\s*[—–]\s*|(?<=[.!?])\s+|,\s+", collapsed)
+    for part in parts:
+        cleaned = _strip_leading_filler(part.strip())
+        if cleaned and _starts_with_action_verb(cleaned):
+            return cleaned
+    return ""
 
 
 def _first_clause(text: str) -> str:
@@ -123,8 +202,10 @@ def _first_clause(text: str) -> str:
     collapsed = " ".join(str(text or "").split())
     if not collapsed:
         return ""
-    # Cut at the first strong terminator or a clause break that introduces detail.
-    cut = re.split(r"(?<=[.!?])\s+|\s+(?:that also|and also|, then|; )", collapsed, maxsplit=1)
+    # Cut at the first strong terminator, an em/en-dash aside, or a clause break
+    # that introduces detail. The dash split keeps "Start a blog — can you write
+    # the post" as just "Start a blog".
+    cut = re.split(r"(?<=[.!?])\s+|\s+[—–]\s+|\s+(?:that also|and also|, then|; )", collapsed, maxsplit=1)
     return cut[0].strip() if cut else collapsed
 
 
@@ -153,6 +234,13 @@ def derive_task_title(prompt: str, *, max_words: int = _MAX_TITLE_WORDS) -> str:
     only when no model is available to title the task.
     """
     core = _strip_leading_filler(_first_clause(prompt))
+    # If the cleaned first clause still doesn't read as an action ("My computer is
+    # slow, ...", "I keep forgetting ..."), look for the buried imperative clause
+    # and prefer it. Falls back to the first clause if none is found.
+    if not _starts_with_action_verb(core):
+        alt = _imperative_clause(prompt)
+        if alt:
+            core = alt
     if not core:
         return "New task"
 
@@ -167,8 +255,14 @@ def derive_task_title(prompt: str, *, max_words: int = _MAX_TITLE_WORDS) -> str:
         words[0] = first[:1].upper() + first[1:]
 
     truncated = words[: max(1, int(max_words))]
+    was_truncated = len(words) > len(truncated)
+    # Don't end a truncated title on a dangling article/preposition ("... needs a").
+    if was_truncated:
+        _trailing_stopwords = {"a", "an", "the", "of", "for", "to", "with", "and", "my", "in", "on", "that", "this", "your"}
+        while len(truncated) > 1 and truncated[-1].lower().strip(",.:;") in _trailing_stopwords:
+            truncated = truncated[:-1]
     title = " ".join(truncated).rstrip(" ,.:;-")
-    if len(words) > len(truncated):
+    if was_truncated:
         title += "…"
     return title or "New task"
 

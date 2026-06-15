@@ -35,6 +35,38 @@ class TestDeriveTaskTitle(unittest.TestCase):
     def test_drops_indirect_object_pronoun(self):
         self.assertEqual(derive_task_title("make us a landing page"), "Make a landing page")
 
+    def test_strips_help_me(self):
+        # The most common non-engineer phrasing — surfaced by the persona sweep
+        # (29% of titles kept "Help me ..." before this fix).
+        self.assertEqual(
+            derive_task_title("Help me make a printable birthday invitation"),
+            "Make a printable birthday invitation",
+        )
+        self.assertEqual(derive_task_title("help me negotiate my salary"), "Negotiate my salary")
+
+    def test_strips_im_statement_opener(self):
+        self.assertEqual(
+            derive_task_title("I'm starting an Etsy shop for handmade jewelry"),
+            "Starting an Etsy shop for handmade jewelry",
+        )
+
+    def test_extracts_buried_imperative_clause(self):
+        # Statement-then-request: the task is the imperative clause, not the lead-in.
+        self.assertEqual(
+            derive_task_title("I keep forgetting birthdays, set up a reminder a week before"),
+            "Set up a reminder a week before",
+        )
+        self.assertTrue(
+            derive_task_title("My computer is running slow, can you figure out what's wrong").startswith(
+                "Figure out what's wrong"
+            )
+        )
+
+    def test_truncated_title_does_not_end_on_article(self):
+        title = derive_task_title("set up a small home network with a guest wifi and parental controls for the kids")
+        self.assertTrue(title.endswith("…"))
+        self.assertFalse(title.rstrip("…").rstrip().lower().endswith((" a", " the", " with", " for", " and")))
+
     def test_empty_prompt_is_safe(self):
         self.assertEqual(derive_task_title("   "), "New task")
 
