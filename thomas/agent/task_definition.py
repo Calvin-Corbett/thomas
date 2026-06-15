@@ -59,13 +59,6 @@ def _clean_lines(text: str) -> list[str]:
     return [line.strip(" -\t") for line in str(text or "").splitlines() if line.strip()]
 
 
-def _summarize_prompt(text: str, *, limit: int = 140) -> str:
-    collapsed = " ".join(str(text or "").split())
-    if len(collapsed) <= limit:
-        return collapsed
-    return collapsed[: limit - 3].rstrip() + "..."
-
-
 def _extract_explicit_checks(text: str) -> list[str]:
     checks: list[str] = []
     for raw_line in _clean_lines(text):
@@ -128,7 +121,13 @@ def should_activate_task_definition(
 def derive_task_definition(text: str) -> TaskDefinition:
     prompt = str(text or "").strip()
     deliverable_type, interactive = infer_deliverable_type(prompt)
-    summary = _summarize_prompt(prompt)
+    # task_summary is the office/codex card title. Use the real titler ("Help me
+    # build a fishing log…" -> "Build a fishing log…") instead of a raw prompt
+    # truncation. The full prompt is preserved in source_prompt and in the actual
+    # user message the contract is appended to, so the contract loses no detail.
+    from thomas.core.task_titling import derive_task_title
+
+    summary = derive_task_title(prompt) if prompt else ""
     explicit_checks = _extract_explicit_checks(prompt)
 
     required_outputs = ["A result that directly satisfies the user request."]

@@ -33,6 +33,16 @@ def test_derive_task_definition_prioritizes_visible_success_for_interactive_task
     assert any("manual time advancement" in item.lower() for item in payload["failure_conditions"])
 
 
+def test_task_summary_is_a_clean_title_not_raw_prompt() -> None:
+    # task_summary is the office/codex task-card title. Live persona testing found
+    # it showed the raw "Help me build a fishing log…" — it must name the task.
+    summary = derive_task_definition(
+        "Help me build a fishing log that tracks the spot, weather, bait, and what I caught"
+    ).task_summary
+    assert summary.startswith("Build a fishing log")
+    assert not summary.lower().startswith(("help me", "i'm", "can you", "please"))
+
+
 def test_augment_prompt_with_task_definition_embeds_contract() -> None:
     definition = derive_task_definition("Build a snake game")
     prompt = augment_prompt_with_task_definition("Build a snake game", definition.to_dict())
