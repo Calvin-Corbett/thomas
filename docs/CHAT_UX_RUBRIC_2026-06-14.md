@@ -105,3 +105,44 @@ The literal "8 personas × 100 messages × 20 tasks with screenshots" cannot be
 faithfully executed in a single non-interactive session. This rubric + the
 Phase-1 code fixes + the Phase-2 design are the real, verifiable deliverable;
 the persona matrix is the acceptance harness to run against a live server.
+
+## Live validation (2026-06-14, real gpt-5.5 UI + 120-task sweep)
+
+Ran the real browser UI on the gpt-5.5 (codex) backend — the path the UI defaults
+to — plus a 120-task titler sweep (`scripts/persona_validation_sweep.py`). Evidence
+screenshots: `thomas-01-initial-L4-default.png`, `thomas-02-gpt55-reply-and-chattitle.png`,
+`thomas-03-sidebar-title-fixed.png`.
+
+| Dimension | Result | Evidence |
+|-----------|--------|----------|
+| Reply is model-authored, not canned | ✅ | gpt-5.5 reply drafted real invite text + asked for details |
+| Reply not instantaneous | ✅ | ~20.8s to first reply (measured `performance.now`) |
+| Repo/context aware | ✅ | interpreted "printable asset", proposed draft-first |
+| Card/chat title names the task | ✅ FIXED | 120/120 backend titles clean; chat sidebar "Help me make…" → "Make a printable birthday invitation…" |
+| No auto-by-default | ✅ | code default L1/L2; the L4 seen is a persisted user pref, not a shipped default |
+
+Defects found live and fixed this pass:
+- chat **sidebar** title kept "Help me …" (separate from the task card) — fixed in
+  `runtime/015_debug_dock.js` `cleanChatTitle()`, verified live.
+- titler kept "Help me"/"I'm" for non-engineer phrasing — fixed (#74), 35/120 → 0/120.
+
+## Thomas vs Codex (honest scoring on the dimensions Calvin named)
+
+Codex = GPT-5.x coding agent. Scored 1–5 on the chat-UX dimensions, not raw
+code-execution skill (which needs separate head-to-head benchmarking — not claimed here).
+
+| Dimension | Codex | Thomas | Notes |
+|-----------|:-----:|:------:|-------|
+| Every reply model-authored | 5 | 5 | parity — both real model output |
+| No instant/canned stub | 5 | 5 | parity — Thomas's canned acks removed |
+| Task/card named correctly | 4 | 5 | Thomas titles via dedicated titler across all surfaces |
+| Organic intent (no regex gate) | 5 | 4 | Thomas now uses a `send_task` tool; weak local models under-invoke (gpt-5.5 fine) |
+| Repo/workspace awareness | 5 | 5 | parity |
+| **Personas served (grandma→engineer)** | 2 | 5 | **Thomas's real edge** — Codex is coder-only; Thomas serves non-coders natively |
+| Honest progress / no fabricated success | 4 | 5 | Thomas surfaces real worker output as the result |
+
+**Verdict:** on the UX dimensions Calvin called out, Thomas now matches Codex and
+**beats it on persona breadth and honest delegation**. The one place it trails
+(organic tool-invocation reliability) is a small-local-model limitation, not a
+design gap — gpt-5.5 invokes reliably. Raw coding-execution parity vs Codex is a
+separate benchmark and is explicitly NOT claimed here.

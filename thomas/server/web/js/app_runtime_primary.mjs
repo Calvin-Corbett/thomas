@@ -17077,9 +17077,49 @@ function deriveChatPreviewFromMessages(messagesRaw) {
     return '';
 }
 
+// Strip conversational filler so the chat title names the task, not the chatter.
+// Mirrors the backend titler (thomas/core/task_titling.py): "Help me make a card"
+// -> "Make a card". Calvin: the card/chat name must identify the actual task.
+const _CHAT_TITLE_FILLER = [
+    'i would like you to', "i'd like you to", 'i want you to', 'i need you to',
+    'i would love to', "i'd love to", 'i would like to', "i'd like to",
+    'i want to', 'i need to', 'i would like', "i'd like", 'i want', 'i need',
+    'help me to', 'help me', "i'm trying to", 'i am trying to', "i'm", 'i am',
+    'can you please', 'could you please', 'would you please',
+    'can you', 'could you', 'would you', 'will you',
+    'please go ahead and', 'please', 'go ahead and',
+    'hey thomas', 'hi thomas', 'hey there', 'ok so', 'okay so', 'so basically',
+    'basically', 'hey', 'hi', 'hello', 'yo', 'thomas',
+];
+function cleanChatTitle(textRaw) {
+    let out = safeString(textRaw).replace(/\s+/g, ' ').trim();
+    let changed = true;
+    while (changed) {
+        changed = false;
+        const low = out.toLowerCase();
+        for (const phrase of _CHAT_TITLE_FILLER) {
+            if (low.startsWith(phrase)) {
+                const rest = out.slice(phrase.length);
+                if (!/^[a-z]/i.test(rest)) { // whole-word boundary
+                    out = rest.replace(/^[\s,.:;-]+/, '');
+                    changed = true;
+                    break;
+                }
+            }
+        }
+    }
+    // drop indirect-object pronoun after a verb ("Build me a X" -> "Build a X")
+    out = out.replace(/^(\w+)\s+(me|us)\s+/i, '$1 ');
+    if (out && /^[a-z]/.test(out)) out = out.charAt(0).toUpperCase() + out.slice(1);
+    return out;
+}
+
 function deriveChatTitleFromMessages(messagesRaw) {
     const preview = deriveChatPreviewFromMessages(messagesRaw);
-    if (preview) return preview.slice(0, 72);
+    if (preview) {
+        const cleaned = cleanChatTitle(preview);
+        return (cleaned || preview).slice(0, 72);
+    }
     return 'New Chat';
 }
 
