@@ -251,14 +251,25 @@ def _normalize_record(payload: dict[str, Any] | None) -> dict[str, Any]:
     progress = str(row.get("progress_summary") or summary).strip()
     bot_id = str(row.get("bot_id") or "").strip()
     bot_name = str(row.get("bot_name") or "").strip() or (bot_id[:1].upper() + bot_id[1:] if bot_id else "")
+    execution_id = str(row.get("execution_id") or "")
+    # If the worker built a playable web artifact in its isolated workspace, expose a
+    # one-click URL so the task card can offer "Play". Empty when there's nothing to open.
+    artifact_url = ""
+    try:
+        from thomas.server.routes.deliverable_aiohttp import deliverable_url
+
+        artifact_url = deliverable_url(execution_id)
+    except Exception:
+        artifact_url = ""
     return {
-        "execution_id": str(row.get("execution_id") or ""),
+        "execution_id": execution_id,
         "task_id": str(row.get("task_id") or ""),
         "session_id": str(row.get("conversation_id") or row.get("thread_id") or ""),
         "backend_type": str(row.get("backend_type") or TASK_MANAGER_BACKEND),
         "state": str(row.get("state") or "requested"),
         "summary": summary,
         "last_progress": progress,
+        "artifact_url": artifact_url,
         "bot_id": bot_id,
         "bot_name": bot_name,
         "created_at": str(row.get("created_at") or ""),

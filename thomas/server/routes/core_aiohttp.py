@@ -34,6 +34,11 @@ def register_core_routes(
     if "landing" in handlers:
         app.router.add_get("/landing", handlers["landing"])
     app.router.add_static("/static/", web_dir, show_index=False)
+    # Serve worker-built deliverables (generated games/apps) so the task card can
+    # offer a one-click "Play" — loopback-only, path-traversal-safe.
+    from thomas.server.routes.deliverable_aiohttp import register_deliverable_routes
+
+    register_deliverable_routes(app)
     for method, path, handler_name in _ROUTES:
         handler = handlers[handler_name]
         getattr(app.router, f"add_{method}")(path, handler)
