@@ -189,11 +189,18 @@ def _build_result_summary(result_text_parts: list[str], tools_used: list[str]) -
     the user sees as the finished-task result, so it must reflect real output — never
     a fabricated success.
     """
-    text = " ".join("".join(result_text_parts).split()).strip()
-    if text:
-        if len(text) > 600:
-            text = text[:597] + "..."
-        return text
+    raw = "".join(result_text_parts).strip()
+    if raw:
+        # Show the worker's FINAL one-line summary (it is instructed to end with one),
+        # NOT its full chain-of-thought. Otherwise the worker's reasoning leaks onto
+        # the user-facing task card ("I'll use the web-game workflow... the workspace
+        # is empty, so I'm going to add snake.html plus the required progress...").
+        # The user should see the result, not the thinking.
+        lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+        summary = " ".join((lines[-1] if lines else raw).split())
+        if len(summary) > 300:
+            summary = summary[:297] + "..."
+        return summary
     if tools_used:
         names = ", ".join(tools_used[:5])
         return f"Done. Worked the task using: {names}."
