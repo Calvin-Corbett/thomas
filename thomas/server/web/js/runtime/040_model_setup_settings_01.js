@@ -1297,6 +1297,36 @@ async function loadSettings() {
         if (settingAdvToolTimeoutS) settingAdvToolTimeoutS.value = String(toInt(advTools.tool_timeout_s, 120, 5, 1800));
         if (settingAdvMaxParallelTools) settingAdvMaxParallelTools.value = String(toInt(advTools.max_parallel_tools, 6, 1, 32));
         if (settingAdvRequireCommandApproval) settingAdvRequireCommandApproval.checked = Boolean(advTools.require_command_approval);
+        const advSecurity = advanced.security || {};
+        if (settingAdvBreakglassWindowEnabled) settingAdvBreakglassWindowEnabled.checked = Boolean(advSecurity.breakglass_window_enabled);
+        if (settingAdvBreakglassWindowHours) settingAdvBreakglassWindowHours.value = String(toFloat(advSecurity.breakglass_window_hours, 3, 0.25, 12));
+        // The approval window is a security pref, so it saves through its own
+        // step-up-authed route (a tap), NOT the general settings PATCH. Bind once.
+        if (settingAdvBreakglassWindowEnabled && !settingAdvBreakglassWindowEnabled.dataset.bgwBound) {
+            settingAdvBreakglassWindowEnabled.dataset.bgwBound = '1';
+            const saveBreakglassWindow = async () => {
+                try {
+                    const res = await fetch('/api/security/breakglass-window', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            enabled: Boolean(settingAdvBreakglassWindowEnabled.checked),
+                            hours: toFloat(settingAdvBreakglassWindowHours?.value, 3, 0.25, 12),
+                        }),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (res.ok && data.ok) {
+                        notifyUser('Approval window updated.', { tone: 'success', durationMs: 1800, debugKind: 'settings' });
+                    } else {
+                        notifyUser('Approval window unchanged: ' + (data.reason || ('HTTP ' + res.status)), { tone: 'warning', durationMs: 3200, debugKind: 'settings' });
+                    }
+                } catch (e) {
+                    notifyUser('Could not reach the approval-window endpoint.', { tone: 'error', durationMs: 3000, debugKind: 'error' });
+                }
+            };
+            settingAdvBreakglassWindowEnabled.addEventListener('change', saveBreakglassWindow);
+            if (settingAdvBreakglassWindowHours) settingAdvBreakglassWindowHours.addEventListener('change', saveBreakglassWindow);
+        }
         if (settingAdvAllowShell) settingAdvAllowShell.checked = Boolean(advTools.allow_shell);
         if (settingAdvAllowFileWrite) settingAdvAllowFileWrite.checked = Boolean(advTools.allow_file_write);
         if (settingAdvAllowNetwork) settingAdvAllowNetwork.checked = Boolean(advTools.allow_network);

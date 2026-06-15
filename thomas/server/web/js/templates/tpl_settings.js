@@ -687,6 +687,23 @@
 </div>
 <div class="switch-row">
 <div>
+<strong>Keep Me Approved (Approval Window)</strong>
+<p>After you approve a protected action with Windows Hello, don't ask again for the time below. Every other safety check still runs.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingAdvBreakglassWindowEnabled">
+<span class="slider round">
+</span>
+</label>
+</div>
+<div class="settings-grid two-col">
+<div class="form-group">
+<label for="settingAdvBreakglassWindowHours">Approval Window (hours)</label>
+<input id="settingAdvBreakglassWindowHours" class="form-control" type="number" min="0.25" max="12" step="0.25" value="3">
+</div>
+</div>
+<div class="switch-row">
+<div>
 <strong>Allow Shell Execution</strong>
 <p>Let agents run shell commands.</p>
 </div>

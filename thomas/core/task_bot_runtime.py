@@ -237,11 +237,21 @@ def _new_record(
 
 
 def _summary_row(record: dict[str, Any], *, stale_after_minutes: float) -> dict[str, Any]:
-    heartbeat = _from_iso(str(record.get("last_heartbeat_at") or ""))
     now = _now()
+    state = str(record.get("state") or "")
+    # Liveness = the freshest sign of life. Heartbeat is best, but tasks that were
+    # never claimed (stuck in queued/requested) have NO heartbeat — fall back to
+    # updated_at then created_at so an orphaned task that no agent ever picked up
+    # still ages into "stale" instead of lingering as "active" forever. This is the
+    # "no agent has been there for a while" detection.
+    liveness = (
+        _from_iso(str(record.get("last_heartbeat_at") or ""))
+        or _from_iso(str(record.get("updated_at") or ""))
+        or _from_iso(str(record.get("created_at") or ""))
+    )
     stale = False
-    if heartbeat is not None and float(stale_after_minutes) > 0:
-        stale = now - heartbeat > timedelta(minutes=float(stale_after_minutes))
+    if state not in TERMINAL_STATES and liveness is not None and float(stale_after_minutes) > 0:
+        stale = now - liveness > timedelta(minutes=float(stale_after_minutes))
     return {
         "execution_id": str(record.get("execution_id") or ""),
         "task_id": str(record.get("task_id") or ""),
@@ -281,7 +291,9 @@ def _write_summary(
     summary = {
         "generated_at": _to_iso(_now()),
         "execution_count": len(rows),
-        "active_count": sum(1 for row in rows if str(row.get("state") or "") not in TERMINAL_STATES),
+        "active_count": sum(
+            1 for row in rows if str(row.get("state") or "") not in TERMINAL_STATES and not bool(row.get("stale"))
+        ),
         "stale_count": sum(1 for row in rows if bool(row.get("stale"))),
         "blocked_count": sum(1 for row in rows if str(row.get("state") or "") == "blocked"),
         "awaiting_proof_count": sum(1 for row in rows if str(row.get("state") or "") == "awaiting_proof"),

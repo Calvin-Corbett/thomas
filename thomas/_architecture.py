@@ -131,6 +131,7 @@ MODULES = {
         "tier": "core",
         "depends_on": ["core", "tools"],
         "health": "yellow",
+        "debt": "_db.py exceeds 820 lines (over the 800-line soft cap; consider splitting the PreferencesStore methods from the module-level accessors)",
         "description": "User preferences persistence and API",
     },
     # -- EXTENSIONS --feature modules, isolated from each other ------------
@@ -317,7 +318,7 @@ MODULES = {
         "tier": "support",
         "depends_on": ["core", "tools", "plugins", "server"],
         "health": "yellow",
-        "debt": "asset_studio/contracts.py exceeds 870 lines, autonomy/workflows.py exceeds 1050 lines, db_internals/query_parser.py exceeds 890 lines, observability/run_store.py exceeds 920 lines, orchestrator/brain.py exceeds 970 lines, doc_processing/extraction.py exceeds 801 lines; TODO[batch-8]: marketplace publisher imports server --factor HTTP push behind an interface so marketplace does not reach up into server (plugins dep is housekeeping: publisher legitimately interacts with plugin definitions)",
+        "debt": "asset_studio/contracts.py exceeds 870 lines, autonomy/workflows.py exceeds 1050 lines, db_internals/query_parser.py exceeds 890 lines, observability/run_store.py exceeds 920 lines, orchestrator/brain.py exceeds 970 lines, doc_processing/extraction.py exceeds 801 lines, codex/bridge.py exceeds 830 lines; TODO[batch-8]: marketplace publisher imports server --factor HTTP push behind an interface so marketplace does not reach up into server (plugins dep is housekeeping: publisher legitimately interacts with plugin definitions)",
         "description": "Marketplace domain algorithms and utilities",
     },
     "markdown": {

@@ -11,8 +11,29 @@ from typing import Any
 
 from aiohttp import web
 
+from thomas.core import task_bot_runtime
 from thomas.desktop_operator import manager as desktop_operator_manager
 from thomas.server.app_keys import APP_APPROVALS_BROKER
+
+# Map a task_bot delegation state to a Mission Control (room, status) so live chat
+# delegations (the named worker bots — Nova, Taylor, …) show up on the board the
+# same way runs and jobs do. This is the bridge that makes Mission Control reflect
+# what the chat is actually doing instead of only the run/autonomy stores.
+_DELEGATION_STATE_ROOM_STATUS: dict[str, tuple[str, str]] = {
+    "requested": ("inbox", "queued"),
+    "classified": ("inbox", "queued"),
+    "queued": ("inbox", "queued"),
+    "claimed": ("planning", "running"),
+    "executing": ("tools", "running"),
+    "running": ("tools", "running"),
+    "awaiting_proof": ("review", "awaiting_approval"),
+    "blocked": ("review", "blocked"),
+    "verified": ("done", "completed"),
+    "completed": ("done", "completed"),
+    "failed": ("review", "failed"),
+    "abandoned": ("review", "failed"),
+}
+_DELEGATION_ACTIVE_STATES = {"requested", "classified", "queued", "claimed", "executing", "running", "awaiting_proof"}
 
 from .mission_runtime_views import (
     _job_room_and_summary,
@@ -410,6 +431,83 @@ def build_mission_control_routes(
                         ),
                     }
                 )
+
+        # Live chat delegations (the task manager's worker bots). This is the source
+        # of truth for "Thomas make me X" work — without it Mission Control shows 0
+        # agents even while a bot is actively building in the background.
+        try:
+            delegations = list(task_bot_runtime.list_executions(refresh=True) or [])
+        except Exception:
+            delegations = []
+        # Drop stale rows entirely: a non-terminal task no agent has touched in a
+        # while is a dead orphan, not live or recently-finished work — it should not
+        # appear on the board at all (this is what clears the "claimed by an agent
+        # that isn't there" ghosts). Completed/failed tasks are terminal, never
+        # stale, so real finished work still shows.
+        delegations = [d for d in delegations if not bool((d or {}).get("stale"))]
+        active_delegations = [
+            d for d in delegations if str((d or {}).get("state") or "").strip().lower() in _DELEGATION_ACTIVE_STATES
+        ]
+        active_delegations.sort(key=lambda d: _iso_to_epoch((d or {}).get("updated_at")), reverse=True)
+        ended_delegations = [
+            d for d in delegations if str((d or {}).get("state") or "").strip().lower() not in _DELEGATION_ACTIVE_STATES
+        ]
+        ended_delegations.sort(key=lambda d: _iso_to_epoch((d or {}).get("updated_at")), reverse=True)
+        for deleg in active_delegations[:40] + ended_delegations[:20]:
+            exec_id = str((deleg or {}).get("execution_id") or "").strip()
+            if not exec_id:
+                continue
+            state = str(deleg.get("state") or "").strip().lower()
+            room, status = _DELEGATION_STATE_ROOM_STATUS.get(state, ("inbox", "queued"))
+            bot_id = str(deleg.get("bot_id") or "").strip()
+            bot_name = str(deleg.get("claimed_owner") or "").strip() or (
+                bot_id[:1].upper() + bot_id[1:] if bot_id else "Worker"
+            )
+            summary = str(deleg.get("progress_summary") or deleg.get("summary") or "").strip()
+            task_ask = str(deleg.get("summary") or "").strip()
+            created_at = _coerce_iso(deleg.get("created_at"))
+            updated_at = _coerce_iso(deleg.get("updated_at") or deleg.get("created_at"))
+            is_terminal = state in {"completed", "verified", "failed", "abandoned"}
+            # FREEZE elapsed for finished work: a task that ran for 3 minutes must not
+            # display "7h" just because it finished 7 hours ago. Active tasks elapse
+            # live (now - created); terminal tasks freeze at (ended - created).
+            ended_at = _coerce_iso(deleg.get("completed_at")) or updated_at if is_terminal else ""
+            start_epoch = _iso_to_epoch(created_at)
+            end_epoch = _iso_to_epoch(ended_at) if (is_terminal and ended_at) else _iso_to_epoch(_utc_iso_now())
+            elapsed_seconds = max(0, int(end_epoch - start_epoch)) if (start_epoch and end_epoch) else 0
+            agents.append(
+                {
+                    "id": f"delegation:{exec_id}",
+                    "source": "chat_delegation",
+                    "kind": "delegation",
+                    "name": bot_name,
+                    "room": room,
+                    "status": status,
+                    "summary": _trim_summary(summary or task_ask, 160),
+                    "task": _trim_summary(task_ask, 120),
+                    "updated_at": updated_at,
+                    "created_at": created_at,
+                    "started_at": created_at,
+                    "ended_at": ended_at,
+                    "elapsed_seconds": elapsed_seconds,
+                    "session_id": str(deleg.get("conversation_id") or ""),
+                    "execution_id": exec_id,
+                    "bot_id": bot_id,
+                    "backend": str(deleg.get("backend_type") or ""),
+                    "parent_id": "",
+                }
+            )
+            events.append(
+                {
+                    "id": f"evt:delegation:{exec_id}",
+                    "source": "chat_delegation",
+                    "agent_id": f"delegation:{exec_id}",
+                    "run_id": "",
+                    "ts": updated_at,
+                    "type": f"delegation_{state or 'update'}",
+                    "text": _trim_summary(f"{bot_name}: {summary or task_ask}", 160),
+                }
+            )
 
         desktop_snapshot, desktop_agent, desktop_events = _desktop_operator_snapshot_payload()
         if desktop_agent is not None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -123,6 +124,7 @@ class ShellTool(Tool):
         else:
             shell_cmd = ["bash", "-c", command]
 
+        proc: asyncio.subprocess.Process | None = None
         try:
             proc = await asyncio.create_subprocess_exec(
                 *shell_cmd,
@@ -132,9 +134,36 @@ class ShellTool(Tool):
                 env={**os.environ, "PYTHONUNBUFFERED": "1"},
             )
             stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            exit_code = proc.returncode
+        except NotImplementedError:
+            # Windows: asyncio subprocesses require the Proactor event loop. On a
+            # Selector loop (used for prompt_toolkit/codex compatibility) the call
+            # above raises NotImplementedError and the command "never reaches the
+            # shell". Fall back to a blocking subprocess.run on a worker thread,
+            # which works regardless of the active event loop.
+            loop = asyncio.get_event_loop()
+
+            def _blocking_run() -> tuple[bytes, bytes, int]:
+                completed = subprocess.run(
+                    shell_cmd,
+                    capture_output=True,
+                    cwd=str(cwd),
+                    env={**os.environ, "PYTHONUNBUFFERED": "1"},
+                    timeout=timeout,
+                    check=False,
+                )
+                return completed.stdout, completed.stderr, int(completed.returncode or 0)
+
+            try:
+                stdout_bytes, stderr_bytes, exit_code = await loop.run_in_executor(None, _blocking_run)
+            except subprocess.TimeoutExpired:
+                return ToolResult(ok=False, error=f"Command timed out after {timeout}s: {command}")
+            except FileNotFoundError:
+                return ToolResult(ok=False, error=f"Shell not found. Command: {command}")
         except asyncio.TimeoutError:
             try:
-                proc.kill()  # type: ignore[union-attr]
+                if proc is not None:
+                    proc.kill()
             except ProcessLookupError:
                 pass
             return ToolResult(
@@ -149,7 +178,6 @@ class ShellTool(Tool):
 
         stdout = stdout_bytes.decode("utf-8", errors="replace")
         stderr = stderr_bytes.decode("utf-8", errors="replace")
-        exit_code = proc.returncode
 
         # Build output
         parts: list[str] = []

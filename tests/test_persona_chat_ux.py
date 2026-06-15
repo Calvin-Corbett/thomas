@@ -17,7 +17,7 @@ replaces it with a model-driven `send_task` tool.
 import unittest
 
 from thomas.agent.dispatch import should_dispatch
-from thomas.agent.task_titling import derive_task_title
+from thomas.core.task_titling import derive_task_title
 
 # (persona, prompt) — each prompt is a non-trivial task, in that persona's voice.
 PERSONA_TASKS = [

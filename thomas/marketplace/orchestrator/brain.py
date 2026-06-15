@@ -139,6 +139,72 @@ def _summarize_background_status(active_tasks: list[dict[str, Any]] | None) -> s
     return "\n".join(lines)
 
 
+# Per-session record of which finished background tasks Thomas has already told the
+# user about, so he reports each completion exactly once ("comes back with it when
+# it's done") instead of repeating it every turn. Process-local; resets on restart,
+# which is fine — completions are only interesting right after they land.
+_reported_completions: dict[str, set[str]] = {}
+
+_COMPLETED_STATES = {"completed", "verified"}
+
+
+def _unreported_completion_note(session_id: str, active_tasks: list[dict[str, Any]] | None) -> str:
+    """Build a one-time context note about background tasks that JUST finished.
+
+    Returns a short block describing each newly-completed task and its real result,
+    with guidance for Thomas to surface it conversationally. Marks those tasks as
+    reported so they are not announced again. Returns "" when nothing new finished.
+    This is how a finished background task gets delivered back into the chat: the
+    worker stored its real output, and on the user's next message Thomas reports it.
+    """
+    rows = [dict(r or {}) for r in list(active_tasks or []) if isinstance(r, dict)]
+    if not rows:
+        return ""
+    seen = _reported_completions.setdefault(str(session_id or ""), set())
+    fresh: list[dict[str, Any]] = []
+    for row in rows:
+        state = str(row.get("state") or "").strip().lower()
+        exec_id = str(row.get("execution_id") or "").strip()
+        if not exec_id or state not in _COMPLETED_STATES:
+            continue
+        if exec_id in seen:
+            continue
+        seen.add(exec_id)
+        fresh.append(row)
+    if not fresh:
+        return ""
+    lines = [
+        "[Background work just finished — tell the user, in your own natural voice, "
+        "that it's done and share the result. Do not say you did it yourself; a "
+        "worker handled it.]",
+    ]
+    for row in fresh[:3]:
+        lines.append(f"- {_completion_detail(row)}")
+    return "\n".join(lines)
+
+
+def _completion_detail(row: dict[str, Any]) -> str:
+    """Render one finished task as 'Bot finished: "ask". Result: ...'."""
+    bot = str(row.get("bot_name") or row.get("bot_id") or "A worker").strip() or "A worker"
+    ask = str(row.get("summary") or "").strip()
+    result = str(row.get("last_progress") or "").strip()
+    detail = f'{bot} finished: "{ask}".' if ask else f"{bot} finished a task."
+    if result and result.lower() != "background execution completed.":
+        detail += f" Result: {result}"
+    return detail
+
+
+def _completion_delivery_line(note: str) -> str:
+    """Turn a completion note into a plain user-facing line for non-LLM reply paths."""
+    bullets = [ln[2:].strip() for ln in str(note or "").splitlines() if ln.strip().startswith("- ")]
+    bullets = [b for b in bullets if b]
+    if not bullets:
+        return ""
+    if len(bullets) == 1:
+        return f"Quick update — {bullets[0]}"
+    return "Quick update — " + " ".join(bullets)
+
+
 def _clean_recalled_phrase(raw: str) -> str:
     phrase = re.split(r"\b(?:reply|respond|answer)\b|[.?!\n\r]", str(raw or ""), maxsplit=1, flags=re.I)[0]
     return phrase.strip(" \t'\"`:-")
@@ -293,6 +359,7 @@ class OrchestratorBrain:
             reply_kind=reply_kind,
             active_task_digest=active_task_digest,
             send_task=send_task,
+            completion_note=_unreported_completion_note(session_id, active_tasks),
         )
 
     async def _handle_background_status(
@@ -360,6 +427,7 @@ class OrchestratorBrain:
         reply_kind: str = "casual",
         active_task_digest: str = "",
         send_task: Any = None,
+        completion_note: str = "",
     ) -> ConversationManager:
         """Handle direct Thomas replies without visible delegation."""
         memory_coord = MemoryCoordinator(
@@ -375,13 +443,23 @@ class OrchestratorBrain:
         )
         if active_task_digest and _wants_background_status(prompt):
             memory_ctx.working = f"{memory_ctx.working}\n\n{active_task_digest}".strip()
+        # Deliver any just-finished background work BEFORE the normal reply, and do
+        # it deterministically (emit it, don't merely hint it to the model) so the
+        # result always reaches the user — that's the "comes back with it when it's
+        # done" promise. The note is marked reported at compute time, so guaranteeing
+        # delivery here keeps compute == delivered.
+        delivered_prefix = ""
+        if completion_note:
+            delivered_prefix = _completion_delivery_line(completion_note)
+            if delivered_prefix:
+                await dispatcher.emit_text(delivered_prefix + "\n\n")
 
         recalled_answer = _answer_memory_recall_from_context(prompt, conversation, memory_ctx)
         if recalled_answer:
             await dispatcher.emit_text(recalled_answer)
             conversation = conversation.append_message(
                 "assistant",
-                recalled_answer,
+                f"{delivered_prefix}\n\n{recalled_answer}".strip() if delivered_prefix else recalled_answer,
                 metadata={"specialists": ["reasoning"], "mode": reply_kind, "source": "memory_recall"},
             )
             await memory_coord.capture_episode(
@@ -427,9 +505,12 @@ class OrchestratorBrain:
             for i in range(0, len(final_text), chunk_size):
                 await dispatcher.emit_text(final_text[i : i + chunk_size])
 
+        # Record the delivered completion update as part of this turn's saved reply
+        # (it was already streamed to the user above).
+        saved_text = f"{delivered_prefix}\n\n{final_text}".strip() if delivered_prefix else final_text
         conversation = conversation.append_message(
             "assistant",
-            final_text,
+            saved_text,
             metadata={"specialists": ["reasoning"], "mode": reply_kind},
         )
 

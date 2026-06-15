@@ -28,11 +28,12 @@ class EvolvePosture(str, Enum):
 
 DEFAULT_POSTURE = EvolvePosture.AUTO_SAFE
 
-# Human-facing one-liners for the dashboard/chat.
+# Human-facing one-liners for the dashboard/chat. Plain verbs, self-explaining,
+# shared vocabulary with the chat autonomy dial (was Posture vs L1-L4 -- now one).
 POSTURE_LABELS: dict[str, str] = {
-    EvolvePosture.PROPOSE.value: "Propose only -- you approve every change",
-    EvolvePosture.AUTO_SAFE.value: "Auto-promote safe, hold risky for you",
-    EvolvePosture.AUTONOMOUS.value: "Fully autonomous -- promote anything that verifies",
+    EvolvePosture.PROPOSE.value: "Ask first -- talks and proposes, but changes nothing until you say go",
+    EvolvePosture.AUTO_SAFE.value: "Auto-safe -- makes the safe changes itself, asks before risky ones",
+    EvolvePosture.AUTONOMOUS.value: "Full autonomy -- keeps working on its own until done or the limit you set",
 }
 
 # Actions a promotion decision can take.
@@ -49,6 +50,7 @@ def parse_posture(value: str | EvolvePosture | None) -> EvolvePosture:
     aliases = {
         "propose": EvolvePosture.PROPOSE,
         "propose_only": EvolvePosture.PROPOSE,
+        "ask_first": EvolvePosture.PROPOSE,
         "manual": EvolvePosture.PROPOSE,
         "review": EvolvePosture.PROPOSE,
         "auto_safe": EvolvePosture.AUTO_SAFE,
@@ -56,6 +58,7 @@ def parse_posture(value: str | EvolvePosture | None) -> EvolvePosture:
         "balanced": EvolvePosture.AUTO_SAFE,
         "auto": EvolvePosture.AUTO_SAFE,
         "autonomous": EvolvePosture.AUTONOMOUS,
+        "full_autonomy": EvolvePosture.AUTONOMOUS,
         "full": EvolvePosture.AUTONOMOUS,
         "full_send": EvolvePosture.AUTONOMOUS,
         "yolo": EvolvePosture.AUTONOMOUS,

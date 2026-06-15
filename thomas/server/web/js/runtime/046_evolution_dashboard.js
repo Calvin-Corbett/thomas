@@ -83,34 +83,26 @@ function evolutionBuildShell() {
     <div class="evolution-status-pill" id="evoStatusPill">idle</div>
   </header>
 
-  <section class="evolution-chat">
-    <div class="evo-chat-log" id="evoChatLog"></div>
-    <form class="evo-chat-form" id="evoChatForm">
-      <input id="evoChatInput" type="text" autocomplete="off" placeholder="Tell Thomas what to evolve &mdash; e.g. &quot;focus on hardening, but ask me first&quot;" />
-      <button class="evo-btn evo-btn-primary" type="submit">Send</button>
-    </form>
-  </section>
-
   <section class="evolution-controls">
-    <label>Posture
+    <label title="How much Thomas does on its own. Ask first = it changes nothing without your OK. Auto-safe = it makes safe changes itself and asks before risky ones. Full autonomy = it keeps going on its own until the goal is met or it hits the limit you set (risky changes still wait for you).">Autonomy
       <select id="evoPosture">
-        <option value="propose">Propose &mdash; approve every change</option>
-        <option value="auto_safe" selected>Auto-safe &mdash; promote safe, hold risky</option>
-        <option value="autonomous">Autonomous &mdash; promote anything verified</option>
+        <option value="propose">Ask first &mdash; changes nothing until you say go</option>
+        <option value="auto_safe" selected>Auto-safe &mdash; safe changes itself, asks before risky</option>
+        <option value="autonomous">Full autonomy &mdash; keeps going until done or your limit</option>
       </select>
     </label>
-    <label>Focus
+    <label title="Optional. Steer what Thomas works on first, e.g. hardening, performance, or tests. Leave blank and it picks the highest-value work.">Focus
       <input id="evoFocus" type="text" placeholder="optional: hardening, perf, tests&hellip;" />
     </label>
-    <label>Max changes
+    <label title="Thomas stops after this many working changes are ready &mdash; so one run can't make a giant edit. A 'change' is an edit it keeps after it passes tests in a safe copy.">Max changes
       <input id="evoMaxPromos" type="number" value="3" min="1" max="20" />
     </label>
-    <label>Max steps
+    <label title="Thomas stops after this many rounds of work. A 'step' is one round: it looks at the code, makes a move, and checks the result.">Max steps
       <input id="evoMaxIters" type="number" value="6" min="1" max="40" />
     </label>
-    <button id="evoStartBtn" class="evo-btn evo-btn-primary" type="button">Start evolving</button>
-    <button id="evoPauseBtn" class="evo-btn" type="button">Pause</button>
-    <button id="evoRefreshBtn" class="evo-btn" type="button">Refresh</button>
+    <button id="evoStartBtn" class="evo-btn evo-btn-primary" type="button" title="Begin a run with the settings above. You can talk to Thomas in the chat below at any time &mdash; pausing, refocusing, or just asking what it's doing.">Start evolving</button>
+    <button id="evoPauseBtn" class="evo-btn" type="button" title="Stop the current run. Work already promoted stays; nothing in progress is lost.">Pause</button>
+    <button id="evoRefreshBtn" class="evo-btn" type="button" title="Re-check the latest status and backlog.">Refresh</button>
   </section>
 
   <section class="evolution-counters" id="evoCounters"></section>
@@ -146,13 +138,9 @@ function evolutionBuildShell() {
             }
         });
     }
-    const chatForm = document.getElementById('evoChatForm');
-    if (chatForm) {
-        chatForm.addEventListener('submit', function (evt) {
-            evt.preventDefault();
-            void evolutionChatSend();
-        });
-    }
+    // The separate "guide Thomas" chat box was removed. You now guide the
+    // evolution by talking to the real Thomas in the single chat below (scoped
+    // to Evolution via module:"evolve"), not a keyword command box.
     // Delegate approve/reject clicks from the pending column.
     const pending = document.getElementById('evoPending');
     if (pending) {
@@ -205,27 +193,9 @@ async function evolutionReject(id) {
     void evolutionRefresh();
 }
 
-function evolutionChatAppend(who, text) {
-    const log = document.getElementById('evoChatLog');
-    if (!log) return;
-    const row = document.createElement('div');
-    row.className = 'evo-chat-msg evo-chat-' + who;
-    row.textContent = text;
-    log.appendChild(row);
-    log.scrollTop = log.scrollHeight;
-}
-
-async function evolutionChatSend() {
-    const input = document.getElementById('evoChatInput');
-    if (!input) return;
-    const message = (input.value || '').trim();
-    if (!message) return;
-    input.value = '';
-    evolutionChatAppend('you', message);
-    const resp = await evoPost('/api/evolve/loop/chat', { message: message });
-    evolutionChatAppend('thomas', (resp && resp.reply) || 'Sorry, I could not parse that just now.');
-    void evolutionRefresh();
-}
+// NOTE: the old evolutionChatSend/evolutionChatAppend helpers (which posted to
+// the keyword route /api/evolve/loop/chat) were removed. Guiding the evolution
+// now happens through the single real Thomas chat, tagged module:"evolve".
 
 async function evolutionRefresh() {
     if (!evolutionWorkspace || evolutionState.busy) return;

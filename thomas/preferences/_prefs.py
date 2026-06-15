@@ -294,6 +294,11 @@ class AdvancedSecurityPrefs(BaseModel):
     human_breakglass_enabled: bool = False
     human_breakglass_changed_at: str | None = None
     human_breakglass_changed_by: str | None = None
+    # Approval window: when enabled, a single (AI-prompted) Windows-Hello tap
+    # opens a time-boxed window during which protected actions don't re-prompt.
+    # Scoped to the breakglass auth gate only; user-adjustable here in Settings.
+    breakglass_window_enabled: bool = False
+    breakglass_window_hours: float = Field(default=3.0, ge=0.25, le=12.0)
     enforcement_mode: str = "development"
     last_changed_at: str | None = None
     last_changed_by: str | None = None

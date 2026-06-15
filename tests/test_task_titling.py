@@ -2,7 +2,7 @@
 
 import unittest
 
-from thomas.agent.task_titling import derive_task_title, generate_task_title
+from thomas.core.task_titling import derive_task_title, generate_task_title
 
 
 class TestDeriveTaskTitle(unittest.TestCase):

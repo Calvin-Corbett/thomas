@@ -193,7 +193,7 @@ def derive_active_goal(
     # text ("hey thomas can you please build me a pac-man game" -> "Build a
     # pac-man game"). This is the task-card title Calvin flagged as too generic.
     # Function-local import keeps this leaf util off the module load path.
-    from thomas.agent.task_titling import derive_task_title
+    from thomas.core.task_titling import derive_task_title
 
     return _normalize_goal(derive_task_title(user_text)) or text
 

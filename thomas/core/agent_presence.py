@@ -620,8 +620,84 @@ def _ancestor_family(pid: int, records: dict[int, dict[str, Any]]) -> str:
     return ""
 
 
+def _own_commit_tree_pids(records: list[dict[str, Any]]) -> set[int]:
+    """PIDs that belong to THIS invocation's own process tree.
+
+    When the presence scan runs inside a ``git commit`` / pre-commit hook, the hook
+    python processes and their git/pre-commit ancestors are not rogue "unregistered
+    agents" — they ARE the agent doing the commit. Flagging them creates a
+    self-defeating loop (the gate blocks the very process trying to commit) and
+    spams the workboard with coordination threads addressed to ``process:<pid>``.
+    This returns the bounded tree: the self→ancestor chain plus the full subtree of
+    the topmost git/pre-commit ancestor (covers sibling hook subprocesses), so only
+    the commit's own processes are excluded — never unrelated agents.
+    """
+    parent_by_pid: dict[int, int] = {}
+    cmd_by_pid: dict[int, str] = {}
+    children: dict[int, list[int]] = {}
+    for row in records:
+        pid = int(row.get("pid") or 0)
+        ppid = int(row.get("parent_pid") or 0)
+        if pid <= 0:
+            continue
+        parent_by_pid[pid] = ppid
+        cmd_by_pid[pid] = f"{row.get('name') or ''} {row.get('command') or ''}".lower()
+        children.setdefault(ppid, []).append(pid)
+    self_pid = os.getpid()
+    ancestors: list[int] = []
+    cur = self_pid
+    seen: set[int] = set()
+    while cur and cur not in seen:
+        seen.add(cur)
+        ancestors.append(cur)
+        cur = parent_by_pid.get(cur, 0)
+    # Topmost git/pre-commit ancestor is the commit-tree root; default to self.
+    root = self_pid
+    for anc in ancestors:
+        cmd = cmd_by_pid.get(anc, "")
+        if "git" in cmd or "pre-commit" in cmd or "pre_commit" in cmd:
+            root = anc
+    own: set[int] = set(ancestors)
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        if node in own and node != root:
+            continue
+        own.add(node)
+        stack.extend(children.get(node, []))
+    return own
+
+
+def _is_commit_machinery(command: str) -> bool:
+    """True for processes that are part of THIS repo's own commit/gate machinery.
+
+    pre-commit hook runners and gate scripts are not separate agents — they are the
+    tooling the committing agent runs. Identifying them by their command signature
+    (pre-commit cache, gate/guard scripts) is robust even when the Windows process
+    ancestry doesn't cleanly expose the git/pre-commit parent.
+    """
+    cmd = str(command or "").lower().replace("\\", "/")
+    if not cmd:
+        return False
+    signatures = (
+        ".cache/pre-commit",
+        "pre_commit",
+        "pre-commit",
+        "scripts/forge/gates",
+        "scripts/active_folders.py",
+        "scripts/crew/brief/startup_router",
+    )
+    return any(sig in cmd for sig in signatures)
+
+
 def _list_processes(repo_root: Path) -> list[dict[str, Any]]:
     records = _query_process_records(repo_root)
+    own_tree = _own_commit_tree_pids(records)
+    records = [
+        row
+        for row in records
+        if int(row.get("pid") or 0) not in own_tree and not _is_commit_machinery(str(row.get("command") or ""))
+    ]
     by_pid = {int(row.get("pid") or 0): row for row in records if int(row.get("pid") or 0) > 0}
     groups: dict[str, dict[str, Any]] = {}
     for row in records:

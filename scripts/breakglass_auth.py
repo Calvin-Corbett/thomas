@@ -19,6 +19,11 @@ from scripts.breakglass_context import (
     breakglass_context_from_env,
     breakglass_context_payload,
 )
+from scripts.breakglass_window_core import (
+    DEFAULT_WINDOW_HOURS,
+    active_window,
+    mint_window,
+)
 
 WINDOWS_CREDENTIAL_METHOD: Final[str] = "windows-credential-dialog"
 WINDOWS_CREDENTIAL_CAPTION: Final[str] = "Thomas Windows Sign-In"
@@ -160,6 +165,32 @@ def _human_breakglass_enabled() -> bool:
 
     security = getattr(getattr(prefs, "advanced", None), "security", None)
     return bool(getattr(security, "human_breakglass_enabled", False))
+
+
+def _breakglass_window_prefs() -> tuple[bool, float]:
+    """Read (enabled, hours) for the breakglass approval window from user prefs.
+
+    The window length is user-controlled in Settings (Protected Override
+    Approval). Returns (False, default) when prefs are unavailable so behavior
+    falls back to prompting every time.
+    """
+    try:
+        from thomas.preferences.store import PreferencesStore, get_db_path
+    except ImportError:
+        return False, DEFAULT_WINDOW_HOURS
+
+    try:
+        prefs = PreferencesStore(get_db_path()).get(user_id="default")
+    except (OSError, RuntimeError, ValueError):
+        return False, DEFAULT_WINDOW_HOURS
+
+    security = getattr(getattr(prefs, "advanced", None), "security", None)
+    enabled = bool(getattr(security, "breakglass_window_enabled", False))
+    try:
+        hours = float(getattr(security, "breakglass_window_hours", DEFAULT_WINDOW_HOURS))
+    except (TypeError, ValueError):
+        hours = DEFAULT_WINDOW_HOURS
+    return enabled, hours
 
 
 def _build_windows_prompt_message(
@@ -1249,6 +1280,23 @@ def authorize_breakglass(
             method=WINDOWS_CREDENTIAL_METHOD,
         )
 
+    # Approval window (sudo-style timestamp) for THIS gate only: if the human
+    # recently proved presence and opened a time-boxed window via
+    # scripts/breakglass_window.py, honor it without re-prompting. Scoped purely
+    # to breakglass auth -- every other gate still runs exactly as before. Any
+    # error falls back to the normal Windows sign-in prompt below.
+    try:
+        window = active_window(_REPO_ROOT, current_user)
+    except Exception:  # noqa: BLE001 - never let a window error block the real prompt
+        window = None
+    if window:
+        return BreakglassAuthorization(
+            ok=True,
+            message=f"authorized by active breakglass approval window (expires {window.get('expires_at')})",
+            actor=current_user,
+            method="windows-hello-window",
+        )
+
     context_payload = breakglass_context_payload(context) or breakglass_context_from_env(os.environ)
     (
         confirm_title,
@@ -1306,7 +1354,19 @@ def authorize_breakglass(
         )
 
     prompt_caption, prompt_message = _build_windows_prompt_copy(current_user=current_user)
-    return _run_windows_credential_prompt(
+    result = _run_windows_credential_prompt(
         prompt_caption=prompt_caption,
         prompt_message=prompt_message,
     )
+    # If the user turned on the approval window in Settings, this single
+    # (AI-prompted) tap also opens a time-boxed window for the duration they
+    # chose -- so they aren't asked again for a while. Scoped to this gate only;
+    # minting failures never block the authorization that already succeeded.
+    if result.ok:
+        try:
+            window_enabled, window_hours = _breakglass_window_prefs()
+            if window_enabled:
+                mint_window(_REPO_ROOT, result.actor or current_user, window_hours)
+        except Exception:  # noqa: BLE001 - window is a convenience, never fail the auth
+            pass
+    return result

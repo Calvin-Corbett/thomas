@@ -9,8 +9,8 @@ from typing import Any
 
 from thomas.agent.chat_dispatcher import dispatch_async
 from thomas.agent.dispatch import should_dispatch
-from thomas.agent.task_titling import derive_task_title
 from thomas.core import task_bot_runtime
+from thomas.core.task_titling import derive_task_title
 from thomas.marketplace.orchestrator.bot_roster import pick_bot_for_specialist
 from thomas.server.app_keys import APP_CODEX_BRIDGE
 
@@ -110,6 +110,23 @@ def _resolve_repo_root(repo_root: str | Path | None = None) -> Path:
     return (Path(repo_root).expanduser() if repo_root is not None else ROOT).resolve()
 
 
+def _ensure_task_workspace(execution_id: str) -> Path:
+    """Create and return a clean per-task workspace OUTSIDE the source repo.
+
+    User deliverables are built here (e.g. a pac-man HTML file). Keeping it outside
+    the Thomas repo avoids the dev guardrails that block writes inside the repo.
+    """
+    safe_id = "".join(ch for ch in str(execution_id or "") if ch.isalnum() or ch in "-_") or "task"
+    base = Path.home() / ".thomas" / "workspaces" / safe_id
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        # Fall back to a repo-local runtime dir if home isn't writable.
+        base = (ROOT / "runtime" / "workspaces" / safe_id).resolve()
+        base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
 def _coerce_bridge(app: Any) -> Any | None:
     try:
         bridge_ref = app.get(APP_CODEX_BRIDGE)
@@ -162,6 +179,25 @@ async def _ensure_bridge(app: Any) -> Any | None:
             return None
 
         return bridge
+
+
+def _build_result_summary(result_text_parts: list[str], tools_used: list[str]) -> str:
+    """Condense a background worker's actual output into a result line for chat.
+
+    Prefers the worker's own final words (what it reports it did / produced). Falls
+    back to naming the tools it ran, then to a generic completion line. This is what
+    the user sees as the finished-task result, so it must reflect real output — never
+    a fabricated success.
+    """
+    text = " ".join("".join(result_text_parts).split()).strip()
+    if text:
+        if len(text) > 600:
+            text = text[:597] + "..."
+        return text
+    if tools_used:
+        names = ", ".join(tools_used[:5])
+        return f"Done. Worked the task using: {names}."
+    return "Background execution completed."
 
 
 def _infer_specialist(prompt: str) -> str:
@@ -442,11 +478,22 @@ async def _start_provider_native_delegation(
     record = _normalize_record(task_bot_runtime.get_execution(execution_id, root))
     await emitter.started(record, specialist_id=specialist_id, bot=bot)
 
+    # Run the worker in a CLEAN per-task workspace OUTSIDE the Thomas source repo.
+    # Running in the repo root made the worker trip Thomas's own dev guardrails
+    # (startup router / "worktree is dirty" / shell rejecting reads), so user
+    # deliverables like "make me a pac-man game" could never write files. A fresh
+    # empty directory has no AGENTS.md/CLAUDE.md/git, so the worker just builds.
+    work_dir = _ensure_task_workspace(execution_id)
+
     instructions = (
-        "You are a background execution worker inside Thomas. "
-        "Work the task directly. Use tools when needed. "
-        "Do not address the end user conversationally. "
-        "Focus on execution, concise progress, and completing the task."
+        "You are a background worker building a deliverable for the user. "
+        f"Your working directory is a fresh, empty workspace: {work_dir}. "
+        "It is NOT a source repository — there are no repo rules, startup routers, "
+        "or coordination checks to run here, so do not look for them. Just build "
+        "what was asked directly: create whatever files are needed in this folder. "
+        "Use tools as needed. Do not address the user conversationally. "
+        "When done, end with a one-line summary of what you built and the main file "
+        "name(s) so it can be shown back in chat."
     )
 
     asyncio.create_task(
@@ -459,6 +506,7 @@ async def _start_provider_native_delegation(
             emitter=emitter,
             instructions=instructions,
             repo_root=root,
+            work_dir=work_dir,
         )
     )
     return record
@@ -474,18 +522,32 @@ async def _run_provider_native_worker(
     emitter: _DelegationEmitter,
     instructions: str,
     repo_root: Path,
+    work_dir: Path | None = None,
 ) -> None:
+    # Accumulate the worker's actual output text and the tools it used so the
+    # completed task carries a REAL result (what the bot did / produced) instead
+    # of a generic "Background execution completed." The chat surfaces this back
+    # to the user — both on the live task card (frontend polls delegations) and
+    # in the next-turn context digest so Thomas reports the finished work.
+    result_text_parts: list[str] = []
+    tools_used: list[str] = []
     try:
         async for event in bridge.chat(
             prompt,
-            cwd=str(repo_root),
+            cwd=str(work_dir or repo_root),
             allow_tools=True,
             instructions=instructions,
         ):
             event_type = str(event.get("type") or "").strip()
-            if event_type == "tool_start":
+            if event_type == "text":
+                chunk = str(event.get("text") or "")
+                if chunk:
+                    result_text_parts.append(chunk)
+            elif event_type == "tool_start":
                 tool_name = str(event.get("name") or "tool").strip() or "tool"
-                progress = f"Using {tool_name}."
+                if tool_name not in tools_used:
+                    tools_used.append(tool_name)
+                progress = f"Using {tool_name}…"
                 task_bot_runtime.update_execution(
                     execution_id,
                     progress_summary=progress,
@@ -496,7 +558,8 @@ async def _run_provider_native_worker(
                 record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
                 await emitter.progress(record, specialist_id=specialist_id, bot=bot, text=progress)
             elif event_type == "tool_output":
-                progress = "Completed a tool step."
+                last_tool = tools_used[-1] if tools_used else "tool"
+                progress = f"Finished {last_tool}; continuing."
                 task_bot_runtime.update_execution(
                     execution_id,
                     progress_summary=progress,
@@ -509,10 +572,11 @@ async def _run_provider_native_worker(
             elif event_type == "error":
                 raise RuntimeError(str(event.get("error") or "provider-native delegation failed"))
             elif event_type == "done":
+                result_summary = _build_result_summary(result_text_parts, tools_used)
                 task_bot_runtime.complete_execution(
                     execution_id,
                     actor=bot.name,
-                    summary="Background execution completed.",
+                    summary=result_summary,
                     repo_root=repo_root,
                 )
                 record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
@@ -520,18 +584,19 @@ async def _run_provider_native_worker(
                     record,
                     specialist_id=specialist_id,
                     bot=bot,
-                    text="Background execution completed.",
+                    text=result_summary,
                 )
                 return
 
+        result_summary = _build_result_summary(result_text_parts, tools_used)
         task_bot_runtime.complete_execution(
             execution_id,
             actor=bot.name,
-            summary="Background execution completed.",
+            summary=result_summary,
             repo_root=repo_root,
         )
         record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
-        await emitter.completed(record, specialist_id=specialist_id, bot=bot, text="Background execution completed.")
+        await emitter.completed(record, specialist_id=specialist_id, bot=bot, text=result_summary)
     except Exception as exc:
         task_bot_runtime.fail_execution(
             execution_id,

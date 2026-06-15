@@ -161,7 +161,17 @@ def build_evolve_loop_handlers(
     async def status(request: web.Request) -> web.Response:
         require_api_access(request)
         state = _read_state(_root())
-        state["running_task"] = _task_running(app.get(APP_EVOLVE_TASK))
+        running_task = _task_running(app.get(APP_EVOLVE_TASK))
+        state["running_task"] = running_task
+        # Reconcile a stale "running" status. The loop runs as a child of this
+        # server (APP_EVOLVE_TASK); a crash or restart orphans/kills that child,
+        # but the persisted state file is left saying "running". Without this, the
+        # dashboard sees status=="running" forever and greys out "Start evolving",
+        # locking the user out. If no live subprocess exists, the run is dead ->
+        # report idle so the UI re-enables Start.
+        if not running_task and state.get("status") == "running":
+            state["status"] = "idle"
+            state["stale_run"] = True
         return web.json_response({"ok": True, "state": state})
 
     async def plan(request: web.Request) -> web.Response:

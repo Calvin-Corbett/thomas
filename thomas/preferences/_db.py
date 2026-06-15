@@ -441,6 +441,34 @@ class PreferencesStore:
             self._save_base_prefs(conn, user_id, base)
         return self.get(user_id=user_id)
 
+    def set_breakglass_window(
+        self,
+        *,
+        enabled: bool,
+        hours: float,
+        user_id: str = "default",
+        changed_by: str = "system",
+    ) -> PreferencesResponse:
+        """Set the breakglass approval-window preference (a security pref).
+
+        Only the window fields are touched; human_breakglass_enabled is left
+        untouched (it has its own toggle). hours is clamped to the model bounds
+        so a bad value can never poison the stored prefs.
+        """
+        clamped_hours = max(0.25, min(12.0, float(hours)))
+        with self._lock, self._connect() as conn, conn:
+            base = self._get_or_create_base_prefs(conn, user_id)
+            advanced = dict(base.get("advanced") or {})
+            security = AdvancedSecurityPrefs(**(advanced.get("security") or {})).model_dump()
+            security["breakglass_window_enabled"] = bool(enabled)
+            security["breakglass_window_hours"] = clamped_hours
+            security["last_changed_at"] = utc_now_iso()
+            security["last_changed_by"] = str(changed_by or "system")
+            advanced["security"] = security
+            base["advanced"] = advanced
+            self._save_base_prefs(conn, user_id, base)
+        return self.get(user_id=user_id)
+
     # ── Free-form key/value preferences ──────────────────────────
     # Backed by the existing free-form ``thomads`` JSON bag inside the per-user
     # preferences blob, so arbitrary tool/agent settings persist alongside the

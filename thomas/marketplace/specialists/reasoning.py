@@ -10,7 +10,7 @@ import json
 from collections.abc import AsyncIterator
 from typing import Any
 
-from thomas.agent.send_task_tool import SEND_TASK_TOOL, SEND_TASK_TOOL_NAME
+from thomas.core.send_task_tool import SEND_TASK_TOOL, SEND_TASK_TOOL_NAME
 from thomas.marketplace.orchestrator.protocol import CapabilityToken, DelegationContract
 from thomas.marketplace.specialists.base import BaseSpecialist
 

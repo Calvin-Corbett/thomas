@@ -842,11 +842,17 @@ function buildChatRequestPayload(message, { docs = [], images = [], systemPrompt
         ? resolveSpecialtyModelSelection(role, fallbackProfile)
         : null;
     const profile = safeString(specialty?.profile) || fallbackProfile;
+    // Module scope: when the user is inside a workspace module (e.g. Evolution),
+    // tag the turn so the server starts Thomas in that module's context. It is
+    // still the full Thomas -- the module is a starting point, not a cage, and he
+    // can break out if the conversation goes elsewhere.
+    const activeModuleKey = (typeof sidebarNavMode === 'string' && sidebarNavMode === 'evolution') ? 'evolve' : '';
     const payload = {
         message: message,
         docs: Array.isArray(docs) ? docs : [],
         images: Array.isArray(images) ? images : [],
         session_id: sessionId,
+        module: activeModuleKey || undefined,
         profile: profile,
         model: profile,
         model_id: safeString(specialty?.modelId) || resolveActiveModelIdForProfile(profile) || undefined,

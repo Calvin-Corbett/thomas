@@ -48,6 +48,8 @@ _HARDCODED_PROTECTED_FILES: tuple[str, ...] = (
     "thomas.prod.toml",
     "runtime/.runtime_protection_disabled",
     "runtime/.runtime_protection_key",
+    "runtime/.breakglass_window",
+    "runtime/.breakglass_window_key",
 )
 
 # ---------------------------------------------------------------------------
