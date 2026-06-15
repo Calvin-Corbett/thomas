@@ -146,3 +146,30 @@ code-execution skill (which needs separate head-to-head benchmarking — not cla
 (organic tool-invocation reliability) is a small-local-model limitation, not a
 design gap — gpt-5.5 invokes reliably. Raw coding-execution parity vs Codex is a
 separate benchmark and is explicitly NOT claimed here.
+
+## Scaled end-to-end validation (2026-06-14) — 120 real-backend tasks
+
+Ran all 6 personas × 20 complex tasks = **120 tasks through the real /api/v2/chat
+pipeline** (`scripts/persona_e2e_sweep.py`), capturing per-task reply + first-text
+latency + elapsed + dispatch + the card title (all 3 titlers). Rubric result:
+
+| Check | Result (n=120) |
+|-------|----------------|
+| Canned reply | **0** |
+| Instant reply (<0.5s first text) | **0** (latency 0.66–0.91s) |
+| Empty reply | **0** |
+| Card title still filler | **0** |
+| Errors | **0** |
+
+Plus 5 personas verified LIVE in-browser on gpt-5.5 with screenshots (replies
+model-authored, honest, repo-aware — the engineer task inspected git state + read
+the real auth code).
+
+### Cynical finding (weak local model): formulaic openers
+114/120 local-model replies opened with "Got it"/"Sure". gpt-5.5 (the live path)
+varied its openers naturally. The identity prompt now explicitly forbids
+"Got it!/Sure!/Certainly" openers — gpt-5.5 complies; the small local model still
+ignores it (weak instruction-following). NOT fixed with a regex stripper by design:
+Calvin bans regex rewriting of replies. Decision point for Calvin: extend the
+existing `strip_robotic_opener` to trim "Got it/Sure" (would fix the local model
+too) — or leave it (gpt-5.5, the real backend, is already clean).
