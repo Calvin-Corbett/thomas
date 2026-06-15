@@ -142,7 +142,19 @@ class ReasoningSpecialist(BaseSpecialist):
             send_task = (getattr(contract, "input_context", None) or {}).get("send_task")
         except Exception:
             send_task = None
-        tools = [SEND_TASK_TOOL] if (send_task and hasattr(self.llm, "stream_chat")) else None
+        # NEVER hand tools to the codex chat provider. It can't route a Thomas-level
+        # tool callback like send_task, and worse: passing ANY tool makes it enable
+        # its full NATIVE toolset (shell, file-write) in the repo cwd — turning the
+        # chatbot into a coding agent that builds inside Thomas's own source tree and
+        # leaks repo internals (Calvin's "build me a game" -> web/snake/ bug, on the
+        # live /api/v2/chat path). On codex the chat stays a pure chatbot; dispatch is
+        # handled at the route level (chat_v2 -> start_background_delegation -> worker).
+        _llm_is_codex = str(getattr(getattr(self.llm, "config", None), "provider", "") or "").lower() == "codex"
+        tools = (
+            [SEND_TASK_TOOL]
+            if (send_task and hasattr(self.llm, "stream_chat") and not _llm_is_codex)
+            else None
+        )
 
         response = ""
         dispatched_titles: list[str] = []
