@@ -43164,7 +43164,22 @@ async function fetchChatHistory() {
     }
 }
 
+// Cancel an in-flight streaming generation (used when switching/creating chats so
+// a prior reply can't bleed into a different chat). Best-effort and side-effect-safe.
+function abortInFlightChatGeneration() {
+    try {
+        if (typeof currentAbortController !== 'undefined' && currentAbortController) {
+            currentAbortController.abort();
+            currentAbortController = null;
+        }
+    } catch (_) { /* best-effort */ }
+    try {
+        if (typeof setGeneratingState === 'function') setGeneratingState(false);
+    } catch (_) { /* best-effort */ }
+}
+
 async function createNewSessionAndRefresh() {
+    abortInFlightChatGeneration();
     try {
         const res = await fetchJsonSafe('/api/session/new', { method: 'POST' });
         const data = res.data || {};
@@ -43258,6 +43273,7 @@ async function promptRenameAgentIdentity() {
 }
 
 async function loadSessionFromHistory(sid) {
+    abortInFlightChatGeneration();
     activeChatId = sid;
     saveStoredActiveChatId(activeChatId);
     rebuildChatHistorySelector();

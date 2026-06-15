@@ -537,6 +537,10 @@ async function fetchChatHistory() {
 }
 
 async function createNewSessionAndRefresh() {
+    // Abort any in-flight generation so a still-streaming reply from the old chat
+    // can't bleed into the new one (live persona testing: starting a new chat while
+    // a prior task was still streaming mis-titled the new chat and dropped its prompt).
+    abortInFlightChatGeneration();
     try {
         const res = await fetchJsonSafe('/api/session/new', { method: 'POST' });
         const data = res.data || {};
@@ -629,7 +633,24 @@ async function promptRenameAgentIdentity() {
     await saveAgentIdentityName(nextName, { source: 'sidebar_pencil' });
 }
 
+// Cancel an in-flight streaming generation (used when switching/creating chats so
+// a prior reply can't bleed into a different chat). Best-effort and side-effect-safe.
+function abortInFlightChatGeneration() {
+    try {
+        if (typeof currentAbortController !== 'undefined' && currentAbortController) {
+            currentAbortController.abort();
+            currentAbortController = null;
+        }
+    } catch (_) { /* best-effort */ }
+    try {
+        if (typeof setGeneratingState === 'function') setGeneratingState(false);
+    } catch (_) { /* best-effort */ }
+}
+
 async function loadSessionFromHistory(sid) {
+    // Abort any in-flight generation before switching chats so the prior reply
+    // can't stream into the chat we're switching to.
+    abortInFlightChatGeneration();
     activeChatId = sid;
     saveStoredActiveChatId(activeChatId);
     rebuildChatHistorySelector();
