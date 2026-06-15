@@ -840,6 +840,17 @@ def _setup_routes_and_handlers(
 
     _register_observability_routes(app)
 
+    def _register_deliverable_routes(app_ref: web.Application) -> None:
+        """Serve worker-built deliverables (generated games/apps) for one-click Play."""
+        try:
+            from thomas.server.routes.deliverable_aiohttp import register_deliverable_routes
+
+            register_deliverable_routes(app_ref)
+        except (ImportError, ModuleNotFoundError, RuntimeError) as e:
+            log.warning("Deliverable routes unavailable: %s", e)
+
+    _register_deliverable_routes(app)
+
     def _register_chat_v2_routes(app_ref: web.Application, cfg_ref: AppConfig) -> None:
         """Register the unified V2 chat routes when the supporting modules are available."""
         try:

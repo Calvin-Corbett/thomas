@@ -215,6 +215,7 @@ function chatTaskStripState(messageId) {
             checkpoints: [],
             startedAt: 0,
             endedAt: 0,
+            artifactUrl: '',
         });
     }
     return chatTaskStripStateByMessageId.get(normalizedId) || null;
@@ -235,6 +236,7 @@ function ensureMessageTaskStrip(messageId) {
                 <span class="message-task-strip-badge" data-role="badge">Running</span>
                 <span class="message-task-strip-elapsed" data-role="elapsed">--</span>
                 <button type="button" class="message-task-strip-open" data-role="open">Open Office</button>
+                <button type="button" class="message-task-strip-play hidden" data-role="play">▶ Play</button>
             </div>
             <p class="message-task-strip-summary" data-role="summary"></p>
             <p class="message-task-strip-latest" data-role="latest"></p>
@@ -257,6 +259,17 @@ function ensureMessageTaskStrip(messageId) {
                 });
             });
         }
+        // "Play" opens the worker's built deliverable (e.g. a generated game) in a new
+        // tab. The URL is served by the loopback-only /deliverable/<id>/ route and is
+        // surfaced on the delegation record as artifact_url once the build exists.
+        const playBtn = strip.querySelector('[data-role="play"]');
+        if (playBtn instanceof HTMLButtonElement) {
+            playBtn.addEventListener('click', () => {
+                const state = chatTaskStripState(messageId);
+                const url = state && safeString(state.artifactUrl);
+                if (url) window.open(url, '_blank', 'noopener');
+            });
+        }
     }
 
     return {
@@ -266,6 +279,7 @@ function ensureMessageTaskStrip(messageId) {
         summary: strip.querySelector('[data-role="summary"]'),
         latest: strip.querySelector('[data-role="latest"]'),
         checkpoints: strip.querySelector('[data-role="checkpoints"]'),
+        play: strip.querySelector('[data-role="play"]'),
     };
 }
 
@@ -298,6 +312,11 @@ function renderMessageTaskStrip(messageId) {
     if (ui.latest instanceof HTMLElement) {
         ui.latest.textContent = latestText;
     }
+    if (ui.play instanceof HTMLElement) {
+        // Show "Play" only once the worker has actually produced a playable artifact.
+        const playUrl = safeString(state.artifactUrl);
+        ui.play.classList.toggle('hidden', !playUrl);
+    }
     if (ui.checkpoints instanceof HTMLElement) {
         const points = Array.isArray(state.checkpoints) ? state.checkpoints.slice(-3) : [];
         ui.checkpoints.classList.toggle('hidden', points.length === 0);
@@ -316,6 +335,9 @@ function updateMessageTaskStrip(messageId, patch = {}) {
     if (sessionId) {
         state.sessionId = sessionId;
         chatTaskMessageBySessionId.set(sessionId, state.messageId);
+    }
+    if (safeString(patch.artifactUrl)) {
+        state.artifactUrl = safeString(patch.artifactUrl);
     }
     const nextStatus = safeString(patch.status || state.status || 'running').toLowerCase() || 'running';
     state.status = nextStatus;

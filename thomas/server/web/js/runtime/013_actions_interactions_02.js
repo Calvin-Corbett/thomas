@@ -415,6 +415,7 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                     status: _taskUiTerminated ? 'completed' : 'executing',
                     summary: taskText || label,
                     checkpoint: `${prefix}: ${taskText || label}`,
+                    artifactUrl: safeString(evt?.artifact_url),
                 });
                 thinkingText += `\n${prefix}: ${taskText}`;
             }
