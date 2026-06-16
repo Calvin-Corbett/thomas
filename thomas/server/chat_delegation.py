@@ -464,8 +464,13 @@ async def _start_agent_worker_delegation(
         "name(s) so it can be shown back in chat."
     )
 
+    from thomas.server.exhaustive_runtime import is_exhaustive
+
+    # Exhaustive Effort runs the full quality pipeline; everything else runs the
+    # ordinary single worker.
+    runner = _run_exhaustive_worker if is_exhaustive(effort) else _run_agent_worker
     asyncio.create_task(
-        _run_agent_worker(
+        runner(
             app,
             execution_id=execution_id,
             prompt=prompt,
@@ -596,3 +601,88 @@ async def _run_agent_worker(
         )
         record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
         await emitter.failed(record, specialist_id=specialist_id, bot=bot, text=f"Background execution failed: {exc}")
+
+
+async def _run_exhaustive_worker(
+    app: Any,
+    *,
+    execution_id: str,
+    prompt: str,
+    specialist_id: str,
+    bot: Any,
+    emitter: _DelegationEmitter,
+    instructions: str,
+    repo_root: Path,
+    work_dir: Path | None = None,
+    profile: str | None = None,
+    effort: str = "exhaustive",
+) -> None:
+    """Run a task at Exhaustive Effort through the full pipeline (build -> verify ->
+    adversarial review -> bounded remediation), emitting stage progress. Falls back
+    to the single worker on any pipeline error so the user still gets a result.
+    """
+    from thomas.server.exhaustive_runtime import run_exhaustive_pipeline
+
+    tools_used: list[str] = []
+    work = work_dir or repo_root
+
+    async def _on_tool(name: str) -> None:
+        if name not in tools_used:
+            tools_used.append(name)
+        progress = f"Using {name}…"
+        task_bot_runtime.update_execution(
+            execution_id, progress_summary=progress, actor=bot.name, repo_root=repo_root, force=True
+        )
+        record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
+        await emitter.progress(record, specialist_id=specialist_id, bot=bot, text=progress)
+
+    async def _on_stage(event: dict[str, Any]) -> None:
+        progress = f"Exhaustive: {str(event.get('stage') or '').replace('_', ' ')}…"
+        task_bot_runtime.update_execution(
+            execution_id, progress_summary=progress, actor=bot.name, repo_root=repo_root, force=True
+        )
+        record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
+        await emitter.progress(record, specialist_id=specialist_id, bot=bot, text=progress)
+
+    try:
+        ctx = await run_exhaustive_pipeline(
+            app,
+            prompt=prompt,
+            instructions=instructions,
+            work_dir=work,
+            profile=profile,
+            effort=effort,
+            specialist_id=specialist_id,
+            emit_stage=_on_stage,
+            on_tool=_on_tool,
+        )
+        if ctx.aborted:
+            raise RuntimeError(f"exhaustive pipeline aborted: {ctx.aborted}")
+        result_summary = _build_result_summary([ctx.result], tools_used)
+        task_bot_runtime.complete_execution(execution_id, actor=bot.name, summary=result_summary, repo_root=repo_root)
+        record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
+        await emitter.completed(record, specialist_id=specialist_id, bot=bot, text=result_summary)
+    except asyncio.CancelledError:
+        task_bot_runtime.fail_execution(
+            execution_id,
+            actor=bot.name,
+            summary="Background execution cancelled.",
+            blocker="cancelled",
+            repo_root=repo_root,
+        )
+        raise
+    except Exception as exc:
+        log.warning("Exhaustive pipeline failed; falling back to single worker: %s", exc, exc_info=True)
+        await _run_agent_worker(
+            app,
+            execution_id=execution_id,
+            prompt=prompt,
+            specialist_id=specialist_id,
+            bot=bot,
+            emitter=emitter,
+            instructions=instructions,
+            repo_root=repo_root,
+            work_dir=work_dir,
+            profile=profile,
+            effort=effort,
+        )
