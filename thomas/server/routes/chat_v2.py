@@ -513,6 +513,9 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
 
     llm: Any = None
     llm_lock: asyncio.Lock | None = None
+    # The model this chat is on; threaded into the background worker so a worker
+    # spawned from this chat builds with the SAME model the chat is using.
+    model_profile = ""
     if app_config is not None:
         try:
             model_profile = str(payload.get("profile", "") or "")
@@ -588,6 +591,7 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
             recent_messages=recent_messages,
             emit_event=dispatcher.emit,
             force=True,
+            profile=model_profile or None,
         )
 
     send_task_cb = _send_task if autonomy_level >= 3 else None
@@ -603,6 +607,7 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
                     recent_messages=recent_messages,
                     emit_event=dispatcher.emit,
                     force=force_background,
+                    profile=model_profile or None,
                 )
             )
             await asyncio.sleep(0)

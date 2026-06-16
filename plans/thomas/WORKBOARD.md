@@ -8,15 +8,15 @@ Last updated: 2026-03-01
 ## Problem Traceability
 
 ## Agent Claims
+- agent=claude; name=Claude; role=solo; parent=none; scope=.; task=land provider-agnostic worker
 
 
-- agent=claude; name=claude; role=solo; parent=none; scope=thomas/marketplace/codex/bridge.py,thomas/marketplace/specialists/tools.py,thomas/memory/curator.py,thomas/server/routes/spend.py,thomas/tools/filesystem.py,scripts/forge/ship.py,scripts/forge/ship_phases.py,thomas/cli/commands/ship.py,thomas/cli/main.py,plans/thomas/WORKBOARD.md; task=provider-parity-2026-06-13
 
 ## Active Tasks
+- task_id=land provider-agnostic worker; agent=claude; scope=.; summary=land provider-agnostic worker; status=active
 
 
 
-- task_id=provider-parity-2026-06-13; agent=claude; scope=thomas/marketplace/codex/bridge.py,thomas/marketplace/specialists/tools.py,thomas/memory/curator.py,thomas/server/routes/spend.py,thomas/tools/filesystem.py,scripts/forge/ship.py,scripts/forge/ship_phases.py,thomas/cli/commands/ship.py,thomas/cli/main.py,plans/thomas/WORKBOARD.md; summary=provider-parity-2026-06-13; status=active
 
 ## Up For Grabs
 

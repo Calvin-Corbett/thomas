@@ -12,7 +12,7 @@ from thomas.agent.dispatch import should_dispatch
 from thomas.core import task_bot_runtime
 from thomas.core.task_titling import derive_task_title
 from thomas.marketplace.orchestrator.bot_roster import pick_bot_for_specialist
-from thomas.server.app_keys import APP_CODEX_BRIDGE
+from thomas.server.worker_runtime import run_agent_worker_events
 
 log = logging.getLogger(__name__)
 
@@ -125,60 +125,6 @@ def _ensure_task_workspace(execution_id: str) -> Path:
         base = (ROOT / "runtime" / "workspaces" / safe_id).resolve()
         base.mkdir(parents=True, exist_ok=True)
     return base
-
-
-def _coerce_bridge(app: Any) -> Any | None:
-    try:
-        bridge_ref = app.get(APP_CODEX_BRIDGE)
-    except Exception:
-        return None
-    if isinstance(bridge_ref, dict):
-        return bridge_ref.get("bridge")
-    return bridge_ref
-
-
-async def _ensure_bridge(app: Any) -> Any | None:
-    bridge = _coerce_bridge(app)
-    if bridge is not None and bool(getattr(bridge, "is_running", False)):
-        return bridge
-
-    try:
-        bridge_ref = app.get(APP_CODEX_BRIDGE)
-    except Exception:
-        bridge_ref = None
-
-    if not isinstance(bridge_ref, dict):
-        return None
-
-    lock = bridge_ref.get("_start_lock")
-    if not isinstance(lock, asyncio.Lock):
-        lock = asyncio.Lock()
-        bridge_ref["_start_lock"] = lock
-
-    async with lock:
-        bridge = bridge_ref.get("bridge")
-        if bridge is None:
-            try:
-                from thomas.codex.bridge import CodexBridge
-
-                bridge = CodexBridge()
-                bridge_ref["bridge"] = bridge
-            except Exception as exc:
-                log.debug("Codex bridge bootstrap unavailable: %s", exc)
-                return None
-
-        try:
-            if not bool(getattr(bridge, "is_running", False)):
-                await bridge.start()
-            account = await bridge.check_auth()
-        except Exception as exc:
-            log.debug("Codex bridge startup skipped: %s", exc)
-            return None
-
-        if not bool(getattr(account, "logged_in", False)):
-            return None
-
-        return bridge
 
 
 def _build_result_summary(result_text_parts: list[str], tools_used: list[str]) -> str:
@@ -324,6 +270,7 @@ async def start_background_delegation(
     emit_event: Callable[[dict[str, Any]], Awaitable[None]],
     repo_root: str | Path | None = None,
     force: bool = False,
+    profile: str | None = None,
 ) -> dict[str, Any] | None:
     normalized_mode = str(mode or "").strip().lower()
     forced = bool(force)
@@ -342,7 +289,6 @@ async def start_background_delegation(
 
     specialist_id = _infer_specialist(prompt)
     emitter = _DelegationEmitter(emit_event)
-    bridge = await _ensure_bridge(app)
     delegate_count = _requested_delegate_count(prompt) if forced else 1
 
     if delegate_count > 1:
@@ -371,19 +317,19 @@ async def start_background_delegation(
 
     bot = pick_bot_for_specialist(specialist_id)
 
-    if bridge is not None:
-        try:
-            return await _start_provider_native_delegation(
-                bridge,
-                session_id=session_id,
-                prompt=prompt,
-                specialist_id=specialist_id,
-                bot=bot,
-                emitter=emitter,
-                repo_root=repo_root,
-            )
-        except Exception as exc:
-            log.warning("Provider-native delegation failed, falling back to task manager: %s", exc, exc_info=True)
+    try:
+        return await _start_agent_worker_delegation(
+            app,
+            session_id=session_id,
+            prompt=prompt,
+            specialist_id=specialist_id,
+            bot=bot,
+            emitter=emitter,
+            repo_root=repo_root,
+            profile=profile,
+        )
+    except Exception as exc:
+        log.warning("Agent worker delegation failed, falling back to task manager: %s", exc, exc_info=True)
 
     return await _start_task_manager_delegation(
         session_id=session_id,
@@ -440,8 +386,8 @@ async def _start_task_manager_delegation(
     return record
 
 
-async def _start_provider_native_delegation(
-    bridge: Any,
+async def _start_agent_worker_delegation(
+    app: Any,
     *,
     session_id: str,
     prompt: str,
@@ -449,6 +395,7 @@ async def _start_provider_native_delegation(
     bot: Any,
     emitter: _DelegationEmitter,
     repo_root: str | Path | None,
+    profile: str | None = None,
 ) -> dict[str, Any]:
     root = _resolve_repo_root(repo_root)
     execution = task_bot_runtime.create_execution(
@@ -460,7 +407,7 @@ async def _start_provider_native_delegation(
         scope=[specialist_id],
         visibility="background",
         bot_id=bot.id,
-        actor="codex-bridge",
+        actor="thomas-worker",
         backend_type=PROVIDER_NATIVE_BACKEND,
         repo_root=root,
     )
@@ -469,14 +416,14 @@ async def _start_provider_native_delegation(
         execution_id,
         state="classified",
         progress_summary="Prepared for provider-native background execution.",
-        actor="codex-bridge",
+        actor="thomas-worker",
         repo_root=root,
     )
     task_bot_runtime.update_execution(
         execution_id,
         state="queued",
         progress_summary="Queued on the provider-native worker.",
-        actor="codex-bridge",
+        actor="thomas-worker",
         repo_root=root,
     )
     task_bot_runtime.update_execution(
@@ -515,8 +462,8 @@ async def _start_provider_native_delegation(
     )
 
     asyncio.create_task(
-        _run_provider_native_worker(
-            bridge,
+        _run_agent_worker(
+            app,
             execution_id=execution_id,
             prompt=prompt,
             specialist_id=specialist_id,
@@ -525,13 +472,14 @@ async def _start_provider_native_delegation(
             instructions=instructions,
             repo_root=root,
             work_dir=work_dir,
+            profile=profile,
         )
     )
     return record
 
 
-async def _run_provider_native_worker(
-    bridge: Any,
+async def _run_agent_worker(
+    app: Any,
     *,
     execution_id: str,
     prompt: str,
@@ -541,6 +489,7 @@ async def _run_provider_native_worker(
     instructions: str,
     repo_root: Path,
     work_dir: Path | None = None,
+    profile: str | None = None,
 ) -> None:
     # Accumulate the worker's actual output text and the tools it used so the
     # completed task carries a REAL result (what the bot did / produced) instead
@@ -550,11 +499,15 @@ async def _run_provider_native_worker(
     result_text_parts: list[str] = []
     tools_used: list[str] = []
     try:
-        async for event in bridge.chat(
-            prompt,
-            cwd=str(work_dir or repo_root),
-            allow_tools=True,
+        async for event in run_agent_worker_events(
+            app,
+            prompt=prompt,
             instructions=instructions,
+            work_dir=work_dir or repo_root,
+            profile=profile,
+            role=specialist_id,
+            session_id=execution_id,
+            execution_id=execution_id,
         ):
             event_type = str(event.get("type") or "").strip()
             if event_type == "text":
@@ -615,6 +568,18 @@ async def _run_provider_native_worker(
         )
         record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
         await emitter.completed(record, specialist_id=specialist_id, bot=bot, text=result_summary)
+    except asyncio.CancelledError:
+        # Server shutdown / connection loss cancels this background task.
+        # CancelledError is NOT an Exception subclass, so mark the execution so it
+        # is not stranded mid-run, then propagate the cancellation.
+        task_bot_runtime.fail_execution(
+            execution_id,
+            actor=bot.name,
+            summary="Background execution cancelled.",
+            blocker="cancelled",
+            repo_root=repo_root,
+        )
+        raise
     except Exception as exc:
         task_bot_runtime.fail_execution(
             execution_id,
