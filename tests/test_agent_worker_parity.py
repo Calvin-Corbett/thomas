@@ -185,6 +185,39 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
             # no role override -> the chat's model is the default
             self.assertEqual(worker_runtime._resolve_profile(cfg, "chatgpt", role="coding"), "chatgpt")
 
+    async def test_worker_scales_iterations_with_effort(self):
+        # The worker's pass budget scales with Effort (after the Autonomy coupling),
+        # and it threads the coupled level through as token_economy.
+        async def _run(effort: str, autonomy: int) -> dict:
+            _FakeLLM.instances = []
+            with TemporaryDirectory() as tmp:
+                app = _app_with_model("anthropic", "claude", "local")  # no per-model override
+                with (
+                    patch.object(worker_runtime, "LLMClient", _FakeLLM),
+                    patch.object(worker_runtime, "AgentLoop", _FakeAgentLoop),
+                    patch("thomas.server.app_helpers._build_tools", return_value=SimpleNamespace(_tools={})),
+                ):
+                    _ = [
+                        ev
+                        async for ev in worker_runtime.run_agent_worker_events(
+                            app,
+                            prompt="x",
+                            instructions="y",
+                            work_dir=tmp,
+                            profile="local",
+                            effort=effort,
+                            autonomy_level=autonomy,
+                        )
+                    ]
+            return dict(_FakeAgentLoop.run_kwargs or {})
+
+        brisk = await _run("brisk", 4)
+        exhaustive = await _run("exhaustive", 4)
+        # Brisk @ L4 auto-promotes to Diligent (optimal); Exhaustive stays max.
+        self.assertEqual(brisk["token_economy"], "optimal")
+        self.assertEqual(exhaustive["token_economy"], "max")
+        self.assertLess(brisk["max_iterations"], exhaustive["max_iterations"])
+
 
 if __name__ == "__main__":
     unittest.main()

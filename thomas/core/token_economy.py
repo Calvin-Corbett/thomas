@@ -19,6 +19,12 @@ from thomas.core.config import AppConfig
 TOKEN_ECONOMY_LEVELS = ("cheap", "optimal", "max")
 TOKEN_ECONOMY_ALIASES = {
     "balanced": "optimal",
+    # Public "Effort" vocabulary (Brisk / Diligent / Exhaustive) maps onto the
+    # internal token-economy levels (cheap / optimal / max). The user-facing dial
+    # is "Effort"; the internal keys stay for backward-compat across the pipeline.
+    "brisk": "cheap",
+    "diligent": "optimal",
+    "exhaustive": "max",
 }
 RUN_MODES = ("auto", "fast", "thinking")
 
@@ -244,3 +250,101 @@ def loop_iteration_prompt_caps(level: Any, mode: Any) -> tuple[int, int | None]:
     else:
         hard_cap = max(warn_cap + 2_000, int(base_hard * multiplier))
     return warn_cap, hard_cap
+
+
+# ── Effort dial — public vocabulary + Autonomy coupling + cost ──────────────────
+# The user-facing dial is "Effort": Brisk / Diligent / Exhaustive. These are public
+# aliases over the internal token-economy levels (cheap / optimal / max), which stay
+# for backward-compat. Effort is deliberately NOT orthogonal to Autonomy — see
+# effective_effort(). Cost helpers are advisory pre-dispatch estimates for budgeting.
+
+EFFORT_LEVELS = ("brisk", "diligent", "exhaustive")
+_EFFORT_TO_INTERNAL = {"brisk": "cheap", "diligent": "optimal", "exhaustive": "max"}
+_INTERNAL_TO_EFFORT = {internal: effort for effort, internal in _EFFORT_TO_INTERNAL.items()}
+
+# Rough output-tokens per pass, for advisory pre-dispatch cost estimates only.
+_TOKENS_PER_PASS = 3_000
+
+
+def internal_to_effort(level: Any) -> str:
+    """Map an internal token-economy level (or Effort name) to its public Effort name."""
+    return _INTERNAL_TO_EFFORT.get(normalize_token_economy_level(level), "diligent")
+
+
+def effort_display_name(level: Any) -> str:
+    """Title-case public Effort label, e.g. 'Exhaustive'."""
+    return internal_to_effort(level).title()
+
+
+def effective_effort(level: Any, autonomy_level: int) -> str:
+    """Apply the Effort<->Autonomy coupling; return the internal level to actually run.
+
+    Effort and Autonomy are deliberately NOT orthogonal:
+      * L1 (chat-only) caps Effort to Brisk — no deep pipeline at the lowest autonomy.
+      * Exhaustive requires L3+ (Agent/Full); below that it steps down to Diligent.
+      * L4+ (full agent) auto-promotes Brisk -> Diligent (full autonomy implies real work).
+    """
+    internal = normalize_token_economy_level(level)
+    try:
+        a = int(autonomy_level)
+    except (TypeError, ValueError):
+        a = 3
+    if a <= 1:
+        return "cheap"
+    if internal == "max" and a < 3:
+        internal = "optimal"
+    if a >= 4 and internal == "cheap":
+        internal = "optimal"
+    return internal
+
+
+def _passes_for(internal_level: str) -> tuple[int, int]:
+    return _MIN_PASSES[internal_level], _MAX_PASSES[internal_level]
+
+
+def _cost_for(internal_level: str, team_size: int) -> tuple[int, int]:
+    lo, hi = _passes_for(internal_level)
+    team = max(1, int(team_size or 1))
+    return lo * _TOKENS_PER_PASS * team, hi * _TOKENS_PER_PASS * team
+
+
+def estimate_passes(level: Any, autonomy_level: int) -> tuple[int, int]:
+    """(min, max) passes for an Effort level after the Autonomy coupling."""
+    return _passes_for(effective_effort(level, autonomy_level))
+
+
+def estimate_token_cost(level: Any, autonomy_level: int, *, team_size: int = 1) -> tuple[int, int]:
+    """Advisory (min, max) output-token estimate for a run.
+
+    Cost scales with passes x team size. A rough pre-dispatch estimate for budgeting
+    and UI, NOT hard accounting — calibrate ``_TOKENS_PER_PASS`` from telemetry.
+    """
+    return _cost_for(effective_effort(level, autonomy_level), team_size)
+
+
+def within_budget(level: Any, autonomy_level: int, budget_tokens: int | None, *, team_size: int = 1) -> bool:
+    """True if the worst-case estimate fits the spend cap (no cap -> always True)."""
+    if not budget_tokens or int(budget_tokens) <= 0:
+        return True
+    return estimate_token_cost(level, autonomy_level, team_size=team_size)[1] <= int(budget_tokens)
+
+
+def degrade_to_budget(
+    level: Any, autonomy_level: int, budget_tokens: int | None, *, team_size: int = 1
+) -> tuple[str, int]:
+    """Return (internal_level, team_size) reduced until the worst-case estimate fits.
+
+    Spend cap with graceful degradation: shrink the team first, then step Effort
+    down (max -> optimal -> cheap), rather than rejecting the task outright.
+    """
+    applied = effective_effort(level, autonomy_level)
+    team = max(1, int(team_size or 1))
+    if not budget_tokens or int(budget_tokens) <= 0:
+        return applied, team
+    budget = int(budget_tokens)
+    while team > 1 and _cost_for(applied, team)[1] > budget:
+        team -= 1
+    ladder = ["max", "optimal", "cheap"]
+    while applied in ladder and ladder.index(applied) < len(ladder) - 1 and _cost_for(applied, team)[1] > budget:
+        applied = ladder[ladder.index(applied) + 1]
+    return applied, team

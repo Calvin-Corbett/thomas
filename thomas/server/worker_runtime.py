@@ -34,6 +34,7 @@ from thomas.agent.loop import AgentLoop
 from thomas.core.config import AppConfig
 from thomas.core.events import EventType
 from thomas.core.llm_client import LLMClient
+from thomas.core.token_economy import compute_max_passes, effective_effort
 from thomas.models.worker_overrides import resolve_override
 from thomas.server.app_keys import APP_CONFIG, APP_MEMORY, APP_SECRETS
 
@@ -155,6 +156,7 @@ async def run_agent_worker_events(
     work_dir: Path | str,
     profile: str | None = None,
     role: str | None = None,
+    effort: str = "diligent",
     session_id: str | None = None,
     execution_id: str | None = None,
     autonomy_level: int = 4,
@@ -227,14 +229,19 @@ async def run_agent_worker_events(
         autonomy_level=autonomy_level,
     )
 
+    # Effort x Autonomy drives the pass budget; a per-model override can still cap it.
+    applied_effort = effective_effort(effort, autonomy_level)
+    effort_passes = compute_max_passes(applied_effort, run_cfg.max_agent_iterations)
+    max_iters = effort_passes if override.max_iterations is None else min(effort_passes, override.max_iterations)
+
     streamed_text = False
     try:
         async for event in agent.run(
             prompt,
             mode="auto",
             tools_policy="auto",
-            token_economy="optimal",
-            max_iterations=override.max_iterations,
+            token_economy=applied_effort,
+            max_iterations=max_iters,
         ):
             etype = event.type
             if etype == EventType.TEXT_DELTA:

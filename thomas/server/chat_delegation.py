@@ -271,6 +271,7 @@ async def start_background_delegation(
     repo_root: str | Path | None = None,
     force: bool = False,
     profile: str | None = None,
+    effort: str = "diligent",
 ) -> dict[str, Any] | None:
     normalized_mode = str(mode or "").strip().lower()
     forced = bool(force)
@@ -327,6 +328,7 @@ async def start_background_delegation(
             emitter=emitter,
             repo_root=repo_root,
             profile=profile,
+            effort=effort,
         )
     except Exception as exc:
         log.warning("Agent worker delegation failed, falling back to task manager: %s", exc, exc_info=True)
@@ -396,6 +398,7 @@ async def _start_agent_worker_delegation(
     emitter: _DelegationEmitter,
     repo_root: str | Path | None,
     profile: str | None = None,
+    effort: str = "diligent",
 ) -> dict[str, Any]:
     root = _resolve_repo_root(repo_root)
     execution = task_bot_runtime.create_execution(
@@ -473,6 +476,7 @@ async def _start_agent_worker_delegation(
             repo_root=root,
             work_dir=work_dir,
             profile=profile,
+            effort=effort,
         )
     )
     return record
@@ -490,6 +494,7 @@ async def _run_agent_worker(
     repo_root: Path,
     work_dir: Path | None = None,
     profile: str | None = None,
+    effort: str = "diligent",
 ) -> None:
     # Accumulate the worker's actual output text and the tools it used so the
     # completed task carries a REAL result (what the bot did / produced) instead
@@ -505,6 +510,7 @@ async def _run_agent_worker(
             instructions=instructions,
             work_dir=work_dir or repo_root,
             profile=profile,
+            effort=effort,
             role=specialist_id,
             session_id=execution_id,
             execution_id=execution_id,

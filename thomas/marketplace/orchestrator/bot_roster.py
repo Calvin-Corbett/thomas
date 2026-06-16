@@ -116,6 +116,24 @@ def pick_bot_for_specialist(specialist_id: str, *, exclude: set[str] | None = No
     return random.choice(candidates)
 
 
+def pick_bot_for_specialty(specialty: str, *, exclude: set[str] | None = None) -> Bot:
+    """Pick a named bot that has the given roster specialty.
+
+    Unlike ``pick_bot_for_specialist`` (which maps a small fixed set of ids), this
+    looks the specialty up directly in the roster, so the richer team-composition
+    specialties (design, data, debug, ...) resolve to a real bot. Falls back to any
+    non-excluded bot, then Brandon — so a named bot always spawns for every role.
+    """
+    exclude = exclude or set()
+    spec = str(specialty or "").strip().lower()
+    candidates = [b for b in _BY_SPECIALTY.get(spec, []) if b.id not in exclude]
+    if not candidates:
+        candidates = [b for b in ROSTER if b.id not in exclude]
+    if not candidates:
+        return _BY_ID["brandon"]
+    return random.choice(candidates)
+
+
 def all_bots() -> list[Bot]:
     """Return the full roster."""
     return list(ROSTER)

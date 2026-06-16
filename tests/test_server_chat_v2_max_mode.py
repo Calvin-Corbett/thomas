@@ -85,7 +85,17 @@ class _FakeDelegationStarter:
 
     @staticmethod
     async def start(
-        app, *, session_id, prompt, mode, recent_messages, emit_event, repo_root=None, force=False, profile=None
+        app,
+        *,
+        session_id,
+        prompt,
+        mode,
+        recent_messages,
+        emit_event,
+        repo_root=None,
+        force=False,
+        profile=None,
+        effort="diligent",
     ):  # noqa: ANN001
         _ = app
         _ = repo_root
@@ -97,6 +107,7 @@ class _FakeDelegationStarter:
                 "mode": mode,
                 "recent_messages": list(recent_messages or []),
                 "profile": profile,
+                "effort": effort,
             }
         )
         await emit_event(

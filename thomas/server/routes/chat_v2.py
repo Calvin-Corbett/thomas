@@ -592,6 +592,7 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
             emit_event=dispatcher.emit,
             force=True,
             profile=model_profile or None,
+            effort=token_economy,
         )
 
     send_task_cb = _send_task if autonomy_level >= 3 else None
@@ -608,6 +609,7 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
                     emit_event=dispatcher.emit,
                     force=force_background,
                     profile=model_profile or None,
+                    effort=token_economy,
                 )
             )
             await asyncio.sleep(0)
