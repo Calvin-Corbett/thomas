@@ -1,8 +1,8 @@
 # Web/API Threat Model (Baseline)
 
 Date: 2026-03-29  
-Last reviewed: 2026-05-19  
-Cadence touch on 2026-05-19: no security-relevant code changes since prior review (Praxis rename arc was structural reorganization only — no new attack surface, no auth/authz logic changes, no new public endpoints).  
+Last reviewed: 2026-06-26  
+Cadence touch on 2026-06-26: reviewed current web/API release posture after the main-integration queue exposed the stale cadence gate. The aggregated security audit was rerun, mutating-route policy passed for 186 routes with the 3 expected webhook exceptions, and the active H3 non-Python promotion lane does not change web/API routes, auth/authz logic, CSRF policy, or public endpoints. Existing webhook exception reviews still expire on 2026-06-30 and remain the next dated follow-up.  
 Scope: `thomas/server/app.py`, `thomas/server/web/**`, browser chat UI, mutating `/api/*` and `/gateway/*` routes, the root OpenAI-compatible `/openai-compat/*` proxy surface, and public webhook receivers.
 
 ## Assets
