@@ -8,12 +8,12 @@ Last updated: 2026-03-01
 ## Problem Traceability
 
 ## Agent Claims
-- agent=codex-merge-coordinator; name=Codex Merge Coordinator; role=solo; parent=none; scope=thomas/forge/anvil/evolve.py,tests/test_cli_evolve_commands.py,CHANGELOG.md,docs/THREAT_MODEL_WEB_API.md,plans/thomas/WORKBOARD.md,plans/thomas/tasks/integrate-h3-non-python-promotion-main-2026-06-26/PLAN.md; task=integrate-h3-non-python-promotion-main-2026-06-26
+- agent=codex-merge-coordinator; name=Codex Merge Coordinator; role=solo; parent=none; scope=thomas/forge/anvil/evolve.py,tests/test_cli_evolve_commands.py,CHANGELOG.md,docs/THREAT_MODEL_WEB_API.md,.github/workflows/gates.yml,.github/allowed_signers,plans/thomas/WORKBOARD.md,plans/thomas/tasks/integrate-h3-non-python-promotion-main-2026-06-26/PLAN.md,plans/thomas/problems/integrate-h3-non-python-promotion-main-2026-06-26/PROBLEM.md; task=integrate-h3-non-python-promotion-main-2026-06-26
 
 
 
 ## Active Tasks
-- task_id=integrate-h3-non-python-promotion-main-2026-06-26; agent=codex-merge-coordinator; scope=thomas/forge/anvil/evolve.py,tests/test_cli_evolve_commands.py,CHANGELOG.md,docs/THREAT_MODEL_WEB_API.md,plans/thomas/WORKBOARD.md,plans/thomas/tasks/integrate-h3-non-python-promotion-main-2026-06-26/PLAN.md; summary=integrate-h3-non-python-promotion-main-2026-06-26; status=active
+- task_id=integrate-h3-non-python-promotion-main-2026-06-26; agent=codex-merge-coordinator; scope=thomas/forge/anvil/evolve.py,tests/test_cli_evolve_commands.py,CHANGELOG.md,docs/THREAT_MODEL_WEB_API.md,.github/workflows/gates.yml,.github/allowed_signers,plans/thomas/WORKBOARD.md,plans/thomas/tasks/integrate-h3-non-python-promotion-main-2026-06-26/PLAN.md,plans/thomas/problems/integrate-h3-non-python-promotion-main-2026-06-26/PROBLEM.md; summary=integrate-h3-non-python-promotion-main-2026-06-26; status=active
 
 
 
