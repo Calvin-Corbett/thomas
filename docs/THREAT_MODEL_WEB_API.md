@@ -1,8 +1,8 @@
 # Web/API Threat Model (Baseline)
 
-Date: 2026-03-29  
-Last reviewed: 2026-05-19  
-Cadence touch on 2026-05-19: no security-relevant code changes since prior review (Praxis rename arc was structural reorganization only — no new attack surface, no auth/authz logic changes, no new public endpoints).  
+Date: 2026-03-29
+Last reviewed: 2026-06-26
+Cadence touch on 2026-06-26: reviewed web/API-scope changes since 2026-05-19, including chat route cleanup, gateway route packaging, webhook reload handling, the agent messaging/cage hardening landing, and the self-recursive evolve dashboard route/UI addition. The existing threat categories still cover the changed surface: browser DOM rendering, same-origin/API-access enforcement for mutating HTTP routes, webhook receiver signature/secret enforcement, per-session concurrency guards, persistence integrity, and CI/release bypass. No new unauthenticated remote public endpoint category was identified in this review; the evolve dashboard additions remain under the local server/browser UI and mutating-route policy model.
 Scope: `thomas/server/app.py`, `thomas/server/web/**`, browser chat UI, mutating `/api/*` and `/gateway/*` routes, the root OpenAI-compatible `/openai-compat/*` proxy surface, and public webhook receivers.
 
 ## Assets

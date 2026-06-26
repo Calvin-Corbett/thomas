@@ -444,6 +444,8 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
+      - name: Configure SSH signature verification
+        run: git config --global gpg.ssh.allowedSignersFile "$GITHUB_WORKSPACE/.github/allowed_signers"
       - name: Verify all PR commits are signed
         shell: bash
         run: |

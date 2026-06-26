@@ -115,21 +115,52 @@ def _init_repo(tmp_path: Path) -> tuple[Path, Path]:
     return repo, workboard
 
 
-def test_commit_master_submission_blocks_until_inbox_is_acked(tmp_path: Path) -> None:
+def test_commit_master_submission_blocks_relevant_inbox_until_acked(tmp_path: Path) -> None:
     repo, workboard = _init_repo(tmp_path)
+    ok_unrelated, unrelated_payload = message_tool.send_message(
+        workboard,
+        sender="claude",
+        recipient="codex",
+        summary="FYI no overlap with submitted file",
+        priority="p1",
+        requested_action="watch docs/README.md later",
+        require_claims_to_have_active_task=False,
+    )
+    assert ok_unrelated is True
+    (repo / "src").mkdir()
+    (repo / "src" / "feature.py").write_text("x = 1\n", encoding="utf-8")
+    _git(repo, "add", "src/feature.py")
+    layout = commit_master.CageLayout(root=tmp_path / "cage")
+    layout.ensure()
+
+    submission = commit_master.create_submission(
+        layout=layout,
+        repo=repo,
+        agent="codex",
+        message="submit feature",
+        base="HEAD",
+        workboard=workboard,
+        submission_id="sub-unrelated-ok",
+    )
+    assert (submission / "submission.json").exists()
+
+    ok_ack, _ack_payload = message_tool.ack_message(
+        workboard,
+        msg_id=str(unrelated_payload["message"]["msg_id"]),
+        actor="codex",
+    )
+    assert ok_ack is True
+
     ok_send, send_payload = message_tool.send_message(
         workboard,
         sender="claude",
         recipient="codex",
-        summary="do not submit yet",
+        summary="do not submit src/feature.py yet",
         priority="p1",
+        requested_action="ack before submitting src/feature.py",
         require_claims_to_have_active_task=False,
     )
     assert ok_send is True
-    (repo / "feature.py").write_text("x = 1\n", encoding="utf-8")
-    _git(repo, "add", "feature.py")
-    layout = commit_master.CageLayout(root=tmp_path / "cage")
-    layout.ensure()
 
     with pytest.raises(commit_master.InboxBlockedError):
         commit_master.create_submission(
@@ -139,6 +170,7 @@ def test_commit_master_submission_blocks_until_inbox_is_acked(tmp_path: Path) ->
             message="submit feature",
             base="HEAD",
             workboard=workboard,
+            submission_id="sub-feature-blocked",
         )
 
     msg_id = str(send_payload["message"]["msg_id"])
@@ -151,6 +183,7 @@ def test_commit_master_submission_blocks_until_inbox_is_acked(tmp_path: Path) ->
         message="submit feature",
         base="HEAD",
         workboard=workboard,
+        submission_id="sub-feature-ok",
     )
     assert (submission / "submission.json").exists()
 

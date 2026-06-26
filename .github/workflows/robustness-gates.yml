@@ -69,7 +69,7 @@ jobs:
             # rev-parse will fail and we leave BASE_SHA empty; downstream gates
             # then use --staged-only mode.
             BEFORE="${{ github.event.before }}"
-            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
               BEFORE="$(git rev-parse HEAD~1 2>/dev/null || echo '')"
             fi
             echo "BASE_SHA=$BEFORE" >> "$GITHUB_ENV"

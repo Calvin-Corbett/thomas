@@ -4,23 +4,18 @@
 # path traversal, hardcoded credentials, etc. Results show up in the
 # Security tab → Code scanning alerts.
 #
-# Triggers:
-#   - Every push to dev / main
-#   - Every pull request targeting dev / main
-#   - Weekly scheduled scan (Mondays 06:30 UTC) to catch newly-disclosed
-#     CVE patterns even when no code changed
+# GitHub CodeQL default setup is enabled for this repository. Running this
+# advanced workflow on pull requests or pushes causes SARIF upload failures:
+# "CodeQL analyses from advanced configurations cannot be processed when the
+# default setup is enabled." Keep this workflow manual-only unless default
+# setup is disabled in repository settings.
 #
 # Docs: https://docs.github.com/en/code-security/code-scanning
 
 name: CodeQL
 
 on:
-  push:
-    branches: ["dev", "main"]
-  pull_request:
-    branches: ["dev", "main"]
-  schedule:
-    - cron: "30 6 * * 1"  # Mondays 06:30 UTC
+  workflow_dispatch:
 
 permissions:
   contents: read

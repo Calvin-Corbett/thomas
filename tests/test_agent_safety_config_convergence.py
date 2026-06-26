@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -82,6 +83,17 @@ def test_skip_policy_reads_limits_and_protected_hooks_from_config(
     monkeypatch.setenv("THOMAS_SKIP_REASON", "Scoped breakglass for config propagation test.")
     monkeypatch.setattr(skip_gate, "_staged_files", lambda: ["scripts/forge/gates/precommit_skip_policy.py"])
     monkeypatch.setattr(skip_gate, "_run_git", lambda _args: "mock")
+    monkeypatch.setattr(
+        skip_gate,
+        "authorize_breakglass",
+        lambda **_: SimpleNamespace(
+            ok=True,
+            message="approved",
+            actor="WORKSTATION\\corbe",
+            method="windows-credential-dialog",
+            cancelled=False,
+        ),
+    )
     clear_config_cache()
 
     rc = skip_gate.run(["--audit-log", str(audit_log), "--json"])
