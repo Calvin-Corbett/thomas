@@ -85,6 +85,71 @@ def test_evolve_run_and_promote(tmp_path: Path, monkeypatch) -> None:
     assert (tmp_path / "thomas" / "__init__.py").read_text(encoding="utf-8").strip() == '__version__ = "0.1.0"'
 
 
+def test_manual_promote_rejects_non_python_delta_without_dedicated_verifier(tmp_path: Path, monkeypatch) -> None:
+    _seed_repo(tmp_path)
+    (tmp_path / "README.md").write_text("blue docs\n", encoding="utf-8")
+
+    def fake_run_exec(command, *, cwd, env, timeout_seconds):
+        if isinstance(command, list) and "chat" in command:
+            Path(cwd, "thomas", "__init__.py").write_text('__version__ = "0.2.0"\n', encoding="utf-8")
+            Path(cwd, "README.md").write_text("green docs\n", encoding="utf-8")
+        return {"command": "verify", "returncode": 0, "stdout_tail": "", "stderr_tail": "", "timed_out": False}
+
+    monkeypatch.setattr(evolve_runtime, "_run_exec", fake_run_exec)
+    monkeypatch.setattr(evolve_runtime, "ensure_green_venv", lambda paths: Path(sys.executable))
+
+    payload = evolve_runtime.run_evolve_session(
+        tmp_path,
+        goal="Prepare mixed Python and docs change",
+        promote_on_pass=False,
+        refactor_first=False,
+    )
+    session = payload["session"]
+
+    result = CliRunner().invoke(evolve, ["promote", session["session_id"], "--repo-root", str(tmp_path), "--json"])
+
+    assert result.exit_code != 0
+    assert result.exception is not None
+    assert "non-Python delta requires a dedicated passing non-Python verifier" in str(result.exception)
+    assert (tmp_path / "thomas" / "__init__.py").read_text(encoding="utf-8").strip() == '__version__ = "0.0.0"'
+    assert (tmp_path / "README.md").read_text(encoding="utf-8") == "blue docs\n"
+
+
+def test_manual_promote_allows_non_python_delta_with_dedicated_verifier(tmp_path: Path, monkeypatch) -> None:
+    _seed_repo(tmp_path)
+    (tmp_path / "README.md").write_text("blue docs\n", encoding="utf-8")
+
+    def fake_run_exec(command, *, cwd, env, timeout_seconds):
+        if isinstance(command, list) and "chat" in command:
+            Path(cwd, "thomas", "__init__.py").write_text('__version__ = "0.3.0"\n', encoding="utf-8")
+            Path(cwd, "README.md").write_text("green docs\n", encoding="utf-8")
+        return {"command": "verify", "returncode": 0, "stdout_tail": "", "stderr_tail": "", "timed_out": False}
+
+    monkeypatch.setattr(evolve_runtime, "_run_exec", fake_run_exec)
+    monkeypatch.setattr(evolve_runtime, "ensure_green_venv", lambda paths: Path(sys.executable))
+
+    payload = evolve_runtime.run_evolve_session(
+        tmp_path,
+        goal="Prepare verified mixed Python and docs change",
+        promote_on_pass=False,
+        refactor_first=False,
+    )
+    session = payload["session"]
+    session["verification"].append(
+        {"command": "non-python verifier: inspect docs delta", "returncode": 0, "stdout_tail": "", "stderr_tail": ""}
+    )
+    session_path = tmp_path / ".thomas" / "evolve" / "sessions" / session["session_id"] / "session.json"
+    session_path.write_text(json.dumps(session, indent=2), encoding="utf-8")
+
+    result = CliRunner().invoke(evolve, ["promote", session["session_id"], "--repo-root", str(tmp_path), "--json"])
+
+    assert result.exit_code == 0, result.output
+    promoted = json.loads(result.output)["session"]
+    assert promoted["status"] == "promoted"
+    assert (tmp_path / "thomas" / "__init__.py").read_text(encoding="utf-8").strip() == '__version__ = "0.3.0"'
+    assert (tmp_path / "README.md").read_text(encoding="utf-8") == "green docs\n"
+
+
 def test_sync_blue_to_green_includes_support_docs_and_assets(tmp_path: Path) -> None:
     _seed_repo(tmp_path)
     support_files = {

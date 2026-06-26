@@ -659,6 +659,23 @@ def run_evolve_session(
     return {"ok": session["status"] != "agent_failed", "session": session}
 
 
+def _non_python_delta_files(changed_files: list[str]) -> list[str]:
+    return [str(rel).replace("\\", "/") for rel in changed_files if not str(rel).replace("\\", "/").endswith(".py")]
+
+
+def _has_passing_non_python_verifier(session: dict[str, Any]) -> bool:
+    for item in session.get("verification") or []:
+        if not isinstance(item, dict) or int(item.get("returncode") or 0) != 0:
+            continue
+        label = " ".join(
+            str(item.get(key) or "") for key in ("source", "description", "acceptance_check", "command")
+        ).lower()
+        normalized = label.replace("_", "-")
+        if "non-python" in normalized or "nonpy" in normalized:
+            return True
+    return False
+
+
 def promote_evolve_session(
     project_root: Path | None = None,
     *,
@@ -675,6 +692,13 @@ def promote_evolve_session(
         return {"ok": True, "session": session, "already_promoted": True}
     if not bool(session.get("promotable")):
         raise RuntimeError("latest evolve session is not promotable")
+    changed_files = list((session.get("delta") or {}).get("changed_files") or session.get("changed_files") or [])
+    non_python_files = _non_python_delta_files(changed_files)
+    if non_python_files and not _has_passing_non_python_verifier(session):
+        preview = ", ".join(non_python_files[:8])
+        raise RuntimeError(
+            f"non-Python delta requires a dedicated passing non-Python verifier before promotion: {preview}"
+        )
     paths = get_paths(repo_root)
     if not paths.green_root.exists():
         raise RuntimeError("green doppelganger slot does not exist")

@@ -23,6 +23,7 @@ Versioning: Semantic Versioning.
 
 ### Fixed
 
+- Evolve promotion now rejects manual non-Python deltas unless the session contains a dedicated passing non-Python verifier, so generic verifier passes cannot promote docs/config/UI changes by accident.
 - Reliability: narrowed file/path/JSON fallback handlers in runtime skill policy code and added `logger.exception()` coverage plus explicit broad-catch rationale comments for best-effort chat dispatch, session persistence, browser CLI, and message CLI compatibility boundaries.
 
 ## [0.16.11] - 2026-05-29
