@@ -1,5 +1,6 @@
-"""Upgrade and deployment helpers for Thomas.
+"""Self-modification and upgrade machinery for Thomas.
 
-This package contains the "Doppelganger Protocol" implementation used to
-stage and promote changes safely (blue/green).
+Anvil owns the blue/green Doppelganger staging path, charter-bounded evolve
+runtime, forge dispatch bridges, verification loop, refactor pass, and health
+ledger used to make changes safely.
 """

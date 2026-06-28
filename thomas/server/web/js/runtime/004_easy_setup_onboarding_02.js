@@ -275,6 +275,9 @@ function chatPhysicsWorldActorDebugRow(activityId) {
 
 function chatWorldSyncRootVisibility() {
     const root = chatWorldEnsureUi();
+    if (!(root instanceof HTMLElement)) {
+        return;
+    }
     const hasHelpers = chatAgentPresenceStateByActivityId.size > 0;
     const show = chatRobotWorldShouldBeVisible() && (Boolean(chatPrimaryPresenceState?.element) || hasHelpers);
     root.classList.toggle('is-hidden', !show);
@@ -415,13 +418,16 @@ function chatRobotWorldApplyPalette(state) {
     state.element.style.setProperty('--agent-glow', palette.glow);
     const agentEl = state.element.querySelector('.office-pixel-agent, .chat-robot-agent');
     if (!(agentEl instanceof HTMLElement)) return;
+    agentEl.style.setProperty('--agent-primary', palette.primary);
+    agentEl.style.setProperty('--agent-secondary', palette.secondary);
+    agentEl.style.setProperty('--agent-glow', palette.glow);
     agentEl.classList.toggle('facing-left', Number(state.facing || 1) < 0);
     CHAT_ROBOT_ANIMATIONS.forEach((anim) => agentEl.classList.remove(`chat-robot-anim-${anim}`));
     const behavior = safeString(state.behaviorClass).replace(/^chat-robot-anim-/, '');
     if (behavior) {
         agentEl.classList.add(`chat-robot-anim-${behavior}`);
     }
-    agentEl.classList.remove('costume-cap', 'costume-visor', 'costume-headset', 'costume-bowtie');
+    agentEl.classList.remove('costume-cap', 'costume-visor', 'costume-headset', 'costume-bowtie', 'costume-toolbelt', 'costume-satchel', 'costume-scarf', 'costume-badge', 'costume-tablet', 'costume-wrench', 'costume-mug');
     const costume = safeString(state.costume || 'none').toLowerCase();
     if (costume && costume !== 'none') {
         agentEl.classList.add(`costume-${costume}`);
@@ -1052,4 +1058,3 @@ function chatRobotWorldPickTargetPlatform(state, graph, mode, motion) {
         : candidates;
     return officePick(directional) || officePick(sideBiased) || officePick(candidates) || candidates[0];
 }
-

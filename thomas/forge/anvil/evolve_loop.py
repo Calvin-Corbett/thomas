@@ -24,14 +24,16 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from .evolve_autonomy import (
+from evolve_supervisor import (
     ACTION_APPROVE,
     ACTION_PROMOTE,
     DEFAULT_POSTURE,
     EvolvePosture,
     decide_for_session,
+    evaluate_spend_governor,
     parse_posture,
 )
+
 from .evolve_loop_actions import (
     PlannerFn,
     PromoterFn,
@@ -42,6 +44,7 @@ from .evolve_loop_actions import (
     request_pause,
     resolve_default_root,
 )
+from .evolve_loop_learning import rerank_by_history
 from .evolve_loop_state import (
     STATUS_DONE,
     STATUS_ERROR,
@@ -86,6 +89,40 @@ __all__ = [
 ]
 
 
+def _session_spend_watchdog_verdicts(session: dict[str, Any]) -> list[dict[str, Any]]:
+    verdicts: list[dict[str, Any]] = []
+
+    def collect(rows: Any) -> None:
+        if not isinstance(rows, list):
+            return
+        for item in rows:
+            if not isinstance(item, dict) or not bool(item.get("spend_watchdog_triggered")):
+                continue
+            verdict = item.get("spend_watchdog_verdict")
+            if isinstance(verdict, dict):
+                verdicts.append(dict(verdict))
+            else:
+                verdicts.append({"message": str(item.get("stderr_tail") or "spend watchdog terminated session")})
+
+    collect(session.get("pass_results"))
+    refactor_results = session.get("refactor_results")
+    if isinstance(refactor_results, dict):
+        collect(refactor_results.get("pass_results"))
+        collect(refactor_results.get("health_reviews"))
+    for key in ("spend_governor_checks", "spend_ledger_writes"):
+        rows = session.get(key)
+        if not isinstance(rows, list):
+            continue
+        for item in rows:
+            if isinstance(item, dict) and item.get("enabled") and not item.get("ok", True):
+                verdicts.append(dict(item))
+    rejections = session.get("spend_governor_rejections")
+    if isinstance(rejections, list):
+        for item in rejections:
+            verdicts.append({"code": "session_spend_governor_rejection", "message": str(item)})
+    return verdicts
+
+
 def run_evolve_loop(
     project_root: Path | None = None,
     *,
@@ -97,6 +134,7 @@ def run_evolve_loop(
     max_wall_seconds: float = 0.0,
     timeout_seconds: int = 1800,
     profile: str = "",
+    mode: str = "classic",
     planner: PlannerFn | None = None,
     session_runner: SessionRunnerFn | None = None,
     promoter: PromoterFn | None = None,
@@ -113,7 +151,7 @@ def run_evolve_loop(
     root = Path(project_root) if project_root is not None else resolve_default_root()
     posture_enum = parse_posture(posture)
     now = now_fn or time.monotonic
-    planner, session_runner, promoter = bind_real_collaborators(planner, session_runner, promoter)
+    planner, session_runner, promoter = bind_real_collaborators(planner, session_runner, promoter, mode=mode)
 
     state = EvolveLoopState() if reset else load_loop_state(root)
     state.status = STATUS_RUNNING
@@ -131,7 +169,7 @@ def run_evolve_loop(
     state.run_id = uuid.uuid4().hex[:12]
     save_loop_state(root, state)
     clear_control(root)
-    append_event(root, {"type": "loop_start", "posture": state.posture, "focus": focus}, event_sink)
+    append_event(root, {"type": "loop_start", "posture": state.posture, "focus": focus, "mode": mode}, event_sink)
 
     # Default stop check honours a cross-process pause flag (control.json) so the
     # dashboard can ask a subprocess-launched loop to stop between iterations.
@@ -156,6 +194,14 @@ def run_evolve_loop(
                 stop_reason = "stop requested"
                 break
 
+            spend_verdict = evaluate_spend_governor(root)
+            if not spend_verdict.ok:
+                state.status = STATUS_STOPPED
+                state.last_error = spend_verdict.message
+                stop_reason = f"spend governor: {spend_verdict.message}"
+                append_event(root, {"type": "spend_governor_stop", "verdict": spend_verdict.to_dict()}, event_sink)
+                break
+
             exhausted, why = _budget_exhausted()
             if exhausted:
                 stop_reason = why
@@ -166,10 +212,19 @@ def run_evolve_loop(
                 backlog = planner(root, focus=focus, categories=set(state.categories) or None)
                 state.signals = dict(backlog.signals)
                 fresh = [g for g in backlog.goals if g.id not in attempted_ids]
-                state.counters["planned"] += len(fresh)
-                state.backlog = [g.to_dict() for g in fresh]
+                kept, dropped = rerank_by_history(fresh, state.history)
+                if dropped:
+                    state.counters["skipped_tarpit"] = state.counters.get("skipped_tarpit", 0) + len(dropped)
+                    attempted_ids.update(g.id for g in dropped)
+                    append_event(
+                        root,
+                        {"type": "tarpits_skipped", "count": len(dropped), "goal_ids": [g.id for g in dropped]},
+                        event_sink,
+                    )
+                state.counters["planned"] += len(kept)
+                state.backlog = [g.to_dict() for g in kept]
                 save_loop_state(root, state)
-                append_event(root, {"type": "planned", "count": len(fresh), "signals": state.signals}, event_sink)
+                append_event(root, {"type": "planned", "count": len(kept), "signals": state.signals}, event_sink)
                 if not state.backlog:
                     stop_reason = "backlog empty -- nothing left to improve"
                     break
@@ -200,9 +255,13 @@ def run_evolve_loop(
                     profile=profile,
                     passes=1,
                     promote_on_pass=False,
+                    refactor_first=(goal.category == "refactor"),
                     timeout_seconds=timeout_seconds,
                 )
                 session = dict(result.get("session") or {})
+                session.setdefault("category", goal.category)
+                session.setdefault("risk_tier", goal.risk_tier)
+                spend_watchdog_verdicts = _session_spend_watchdog_verdicts(session)
             except Exception as exc:  # noqa: BLE001 - one bad session must not kill the loop
                 logger.warning("evolve loop session failed for %s: %s", goal.id, exc)
                 state.counters["failed"] += 1
@@ -222,6 +281,20 @@ def run_evolve_loop(
                 save_loop_state(root, state)
                 append_event(root, {"type": "goal_error", "goal_id": goal.id, "error": str(exc)}, event_sink)
                 continue
+
+            if spend_watchdog_verdicts:
+                first_verdict = spend_watchdog_verdicts[0]
+                state.last_error = str(first_verdict.get("message") or "spend watchdog terminated session")
+                append_event(
+                    root,
+                    {
+                        "type": "spend_watchdog_stop",
+                        "iteration": state.iteration,
+                        "goal_id": goal.id,
+                        "verdicts": spend_watchdog_verdicts,
+                    },
+                    event_sink,
+                )
 
             # ---- gate decides promote / hold / reject ----
             decision = decide_for_session(posture_enum, session, goal.risk_tier)
@@ -279,6 +352,11 @@ def run_evolve_loop(
                 },
                 event_sink,
             )
+            if spend_watchdog_verdicts:
+                state.status = STATUS_STOPPED
+                stop_reason = f"spend watchdog: {state.last_error}"
+                save_loop_state(root, state)
+                break
 
         if state.status == STATUS_RUNNING:
             state.status = STATUS_DONE

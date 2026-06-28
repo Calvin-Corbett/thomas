@@ -209,14 +209,12 @@ def register_models_routes(
                 except Exception:
                     has_key = bool(m.api_key)
             else:
-                has_key = provider_name == "codex" or bool(secrets.get(name) or m.api_key)
+                has_key = bool(secrets.get(name) or m.api_key)
             profile_info: dict[str, Any] = {
                 "name": name,
                 "provider": m.provider,
                 "base_url": (
-                    "codex://app-server"
-                    if provider_name == "codex"
-                    else ("https://chatgpt.com/backend-api/codex" if provider_name == "openai_codex" else m.base_url)
+                    "https://chatgpt.com/backend-api/codex" if provider_name == "openai_codex" else m.base_url
                 ),
                 "model": m.model,
                 "context_window": m.context_window,

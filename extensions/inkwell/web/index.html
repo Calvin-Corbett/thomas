@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inkwell</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="iw-shell">
+    <header class="iw-topbar">
+      <div class="iw-brand">
+        <span class="iw-logo">✒︎</span>
+        <div>
+          <h1>Inkwell</h1>
+          <p class="iw-tagline">Sketch it. Say it. Thomas remembers it.</p>
+        </div>
+      </div>
+
+      <div class="iw-tools" id="toolGroup" role="toolbar" aria-label="Page tools">
+        <button class="iw-tool" data-mode="select" title="Select &amp; move blocks (V)">⬚ Select</button>
+        <button class="iw-tool" data-mode="text" title="Click anywhere to type (T)">T Text</button>
+        <button class="iw-tool" data-mode="draw" title="Draw with your mouse (D)">✎ Draw</button>
+        <button class="iw-tool" data-mode="erase" title="Erase strokes (E)">⌫ Erase</button>
+        <span class="iw-divider"></span>
+        <div class="iw-pens" id="penColors"></div>
+        <input type="range" id="penSize" min="2" max="18" value="4" title="Pen size">
+        <button class="iw-tool" id="undoBtn" title="Undo last stroke (Ctrl+Z)">↩ Undo</button>
+      </div>
+
+      <div class="iw-actions">
+        <button class="iw-action" id="micBtn" title="Dictate into the page">🎙 Speak</button>
+        <button class="iw-action iw-action-primary" id="askThomasBtn" title="Have Thomas read this page now">✒ Ask Thomas</button>
+        <button class="iw-action" id="settingsBtn" title="Inkwell settings">⚙</button>
+      </div>
+    </header>
+
+    <div class="iw-body">
+      <aside class="iw-pages">
+        <div class="iw-panel-head">
+          <h2>Pages</h2>
+          <button id="newPageBtn" class="iw-mini" title="New page">＋</button>
+        </div>
+        <div class="iw-page-list" id="pageList"></div>
+        <div class="iw-panel-head iw-tracker-head">
+          <h2>Thomas is tracking</h2>
+          <span class="iw-meta" id="trackerMeta">0</span>
+        </div>
+        <div class="iw-tracker" id="trackerList">
+          <p class="iw-empty">As you write, what Thomas notices and remembers about you shows up here.</p>
+        </div>
+      </aside>
+
+      <main class="iw-board-wrap" id="boardWrap">
+        <div class="iw-board" id="board">
+          <canvas id="inkCanvas" width="2400" height="1600"></canvas>
+          <div class="iw-blocks" id="blocksLayer"></div>
+        </div>
+      </main>
+
+      <aside class="iw-side">
+        <section class="iw-panel">
+          <div class="iw-panel-head">
+            <h2>Reminders</h2>
+            <span class="iw-meta" id="reminderMeta">0</span>
+          </div>
+          <form id="reminderForm" class="iw-reminder-form">
+            <input name="title" type="text" placeholder="Remind me to…" required>
+            <input name="when" type="datetime-local" required>
+            <div class="iw-row">
+              <select name="sound" title="Alert sound">
+                <option value="chime" selected>Chime</option>
+                <option value="bell">Bell</option>
+                <option value="alarm">Alarm</option>
+                <option value="pulse">Pulse</option>
+              </select>
+              <select name="repeat" title="Repeat">
+                <option value="none" selected>Once</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+              </select>
+              <button type="submit">Set</button>
+            </div>
+          </form>
+          <div class="iw-list" id="reminderList"></div>
+        </section>
+
+        <section class="iw-panel">
+          <div class="iw-panel-head">
+            <h2>Thomas noticed</h2>
+            <span class="iw-meta" id="smartMeta"></span>
+          </div>
+          <div class="iw-list" id="smartList">
+            <p class="iw-empty">Write or dictate something, then ask Thomas — proposed reminders and ideas land here.</p>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </div>
+
+  <div class="iw-toasts" id="toasts"></div>
+
+  <div class="iw-settings-backdrop" id="settingsPanel" hidden>
+    <div class="iw-settings">
+      <div class="iw-panel-head">
+        <h2>Inkwell settings</h2>
+        <button class="iw-mini" id="settingsClose" title="Close">×</button>
+      </div>
+      <label class="iw-setting">
+        <input type="checkbox" id="setAutoSmart">
+        <span><strong>Smart auto-sorting</strong><br>Thomas automatically reads and sorts every note as you write. This is what makes Inkwell smart — turn it off for a plain notepad.</span>
+      </label>
+      <label class="iw-setting">
+        <input type="checkbox" id="setAutoReminders">
+        <span><strong>Auto-set reminders</strong><br>When Thomas finds something time-bound ("remind me…", "dentist at 3"), he sets the reminder himself. Off = he proposes and you approve.</span>
+      </label>
+      <label class="iw-setting">
+        <span><strong>Mic auto-off</strong><br>Stop listening after this many seconds of silence.</span>
+        <input type="number" id="setMicSilence" min="3" max="60" step="1">
+      </label>
+    </div>
+  </div>
+
+  <script src="./core.js"></script>
+  <script src="./sketch.js"></script>
+  <script src="./board.js"></script>
+  <script src="./speech.js"></script>
+  <script src="./alarms.js"></script>
+  <script src="./smart.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

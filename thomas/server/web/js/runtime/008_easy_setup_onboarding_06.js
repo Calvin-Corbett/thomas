@@ -658,179 +658,19 @@ function syncSetupReasoningVisibility(profileName = '') {
     }
 }
 
-function ensureChatComposerSubbar() {
-    const inputRow = composerTextarea?.closest('.composer-input-row');
-    if (!(inputRow instanceof HTMLElement)) return null;
-    const shell = composerBox instanceof HTMLElement ? composerBox : inputRow.parentElement;
-    if (!(shell instanceof HTMLElement)) return null;
-
-    let style = document.getElementById('chatComposerSubbarStyle');
-    if (!(style instanceof HTMLStyleElement)) {
-        style = document.createElement('style');
-        style.id = 'chatComposerSubbarStyle';
-        style.textContent = `
-            .chat-composer-subbar {
-                display: flex;
-                flex-wrap: wrap;
-                align-items: center;
-                gap: 6px 10px;
-                padding: 6px 8px 0;
-                border-top: 1px solid var(--border-light, rgba(255,255,255,0.08));
-                margin-top: 4px;
-            }
-            .chat-composer-control {
-                display: flex;
-                align-items: center;
-                gap: 6px;
-                min-width: 0;
-            }
-            .chat-composer-control[hidden] { display: none !important; }
-            .chat-composer-control-label {
-                font-size: 10px;
-                letter-spacing: 0.08em;
-                text-transform: uppercase;
-                color: var(--text-muted, #929bb0);
-                white-space: nowrap;
-            }
-            .chat-composer-control-select {
-                min-width: 108px;
-                padding: 5px 8px;
-                border-radius: 8px;
-                border: 1px solid var(--border-light, rgba(255,255,255,0.12));
-                background: rgba(19, 22, 30, 0.82);
-                color: var(--text-primary, #ececf1);
-                font-size: 11px;
-                font-weight: 600;
-                outline: none;
-            }
-            .chat-composer-control-select:focus {
-                border-color: var(--accent, #58a6ff);
-                box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.18);
-            }
-            @media (max-width: 760px) {
-                .chat-composer-subbar {
-                    align-items: stretch;
-                    gap: 8px;
-                }
-                .chat-composer-control {
-                    width: 100%;
-                    justify-content: space-between;
-                }
-                .chat-composer-control-select {
-                    flex: 1 1 auto;
-                    min-width: 0;
-                }
-            }
-        `;
-        document.head.appendChild(style);
-    }
-
-    let root = document.getElementById('chatComposerSubbar');
-    if (!(root instanceof HTMLElement)) {
-        root = document.createElement('div');
-        root.id = 'chatComposerSubbar';
-        root.className = 'chat-composer-subbar';
-        inputRow.insertAdjacentElement('afterend', root);
-    }
-    return root;
-}
-
-function renderChatComposerSubbar() {
-    const root = ensureChatComposerSubbar();
-    if (!(root instanceof HTMLElement)) return;
-
-    const profileName = safeString(modelSelector?.value) || safeString(setupProviderSelector?.value);
-    const controls = resolveProfileChatControls(profileName);
-    const reasoningControl = controls?.model?.reasoning_effort;
-    const autonomyControl = controls?.thomas?.autonomy_level;
-    const tokenControl = controls?.thomas?.token_economy;
-    const reasoningOptions = Array.isArray(reasoningControl?.options) ? reasoningControl.options : [];
-    const autonomyOptions = Array.isArray(autonomyControl?.options) ? autonomyControl.options : [];
-    const tokenOptions = Array.isArray(tokenControl?.options) ? tokenControl.options : [];
-
-    const renderOptions = (options, selectedValue = '') => options.map((option) => {
-        const value = safeString(option?.value);
-        const label = safeString(option?.label) || value;
-        const selected = value === safeString(selectedValue) ? ' selected' : '';
-        return `<option value="${escapeHtml(value)}"${selected}>${escapeHtml(label)}</option>`;
-    }).join('');
-
-    root.innerHTML = `
-        <div class="chat-composer-control" data-control="reasoning"${reasoningControl?.supported ? '' : ' hidden'}>
-            <span class="chat-composer-control-label">${escapeHtml(safeString(reasoningControl?.label) || 'Reasoning')}</span>
-            <select id="chatComposerReasoningSelect" class="chat-composer-control-select">
-                ${renderOptions(reasoningOptions, normalizeReasoningEffort(activeReasoningEffort))}
-            </select>
-        </div>
-        <div class="chat-composer-control" data-control="autonomy">
-            <span class="chat-composer-control-label">${escapeHtml(safeString(autonomyControl?.label) || 'Autonomy')}</span>
-            <select id="chatComposerAutonomySelect" class="chat-composer-control-select">
-                ${renderOptions(autonomyOptions.length ? autonomyOptions : [
-                    { value: '1', label: 'L1 Chat' },
-                    { value: '2', label: 'L2 Assist' },
-                    { value: '3', label: 'L3 Agent' },
-                    { value: '4', label: 'L4 Full Autonomy' },
-                ], String(activeAutonomyLevel || 1))}
-            </select>
-        </div>
-        <div class="chat-composer-control" data-control="token_economy">
-            <span class="chat-composer-control-label">${escapeHtml(safeString(tokenControl?.label) || 'Token Economy')}</span>
-            <select id="chatComposerTokenEconomySelect" class="chat-composer-control-select">
-                ${renderOptions(tokenOptions.length ? tokenOptions : [
-                    { value: 'cheap', label: 'Cheap' },
-                    { value: 'balanced', label: 'Balanced' },
-                    { value: 'max', label: 'Maximum' },
-                ], safeString(activeTokenEconomy) || 'balanced')}
-            </select>
-        </div>
-    `;
-
-    const reasoningSelect = document.getElementById('chatComposerReasoningSelect');
-    if (reasoningSelect instanceof HTMLSelectElement) {
-        reasoningSelect.value = normalizeReasoningEffort(activeReasoningEffort);
-        reasoningSelect.addEventListener('change', (event) => {
-            activeReasoningEffort = normalizeReasoningEffort(event.target.value);
-            setSegmentedControlSelection('setupReasoningEffortGroup', activeReasoningEffort);
-            if (settingAdvReasoningEffort) settingAdvReasoningEffort.value = activeReasoningEffort || 'medium';
-        });
-    }
-
-    const autonomySelect = document.getElementById('chatComposerAutonomySelect');
-    if (autonomySelect instanceof HTMLSelectElement) {
-        autonomySelect.value = String(activeAutonomyLevel || 1);
-        autonomySelect.addEventListener('change', (event) => {
-            autonomyLevelManuallySet = true;
-            activeAutonomyLevel = parseInt(event.target.value, 10) || 1;
-            setSegmentedControlSelection('setupAutonomyGroup', String(activeAutonomyLevel));
-            if (settingAutonomy) settingAutonomy.value = `L${activeAutonomyLevel}`;
-            /* Persist the pick so it sticks across launches. Previously this menu
-               only changed the level for the current session, so it reverted to
-               the saved default on reload. Mirror the Settings page save exactly
-               (same endpoint/method -> server deep-merges, concurrency preserved). */
-            fetch('/api/preferences', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ autonomy: { default_level: `L${activeAutonomyLevel}` } }),
-            }).catch(() => {});
-        });
-    }
-
-    const tokenSelect = document.getElementById('chatComposerTokenEconomySelect');
-    if (tokenSelect instanceof HTMLSelectElement) {
-        tokenSelect.value = safeString(activeTokenEconomy) || 'balanced';
-        tokenSelect.addEventListener('change', (event) => {
-            activeTokenEconomy = safeString(event.target.value) || 'balanced';
-            setSegmentedControlSelection('setupEconomyGroup', activeTokenEconomy);
-            const runtimeValue = activeTokenEconomy === 'balanced' ? 'optimal' : activeTokenEconomy;
-            if (settingAdvDefaultTokenEconomy) settingAdvDefaultTokenEconomy.value = runtimeValue;
-        });
-    }
-}
-
-function initChatComposerSubbar() {
-    ensureChatComposerSubbar();
-    renderChatComposerSubbar();
-}
+/* ---------------------------------------------------------------------------
+ * Composer controls (the 5 dials) render/toggle MOVED to js/composer_controls.js.
+ *
+ * ensureChatComposerControls / ensureChatComposerSubbar / wireComposerControlsToggle
+ * / renderChatComposerSubbar / initChatComposerSubbar now live in composer_controls.js
+ * (loaded as a classic script before app_runtime_loader.js, so they join this
+ * shared global scope). They still read the same runtime state vars
+ * (activeReasoningEffort, activeTokenEconomy, activeAutonomyLevel, activeFileAccess,
+ * activeGuardrails, autonomyLevelManuallySet) and helpers defined here / elsewhere
+ * in the runtime, and the runtime keeps calling them by bare name. The 5 <select>
+ * ids, option sets and change side-effects are byte-identical to the originals.
+ * buildChatRequestPayload() (below) is the sole reader of those state vars.
+ * ------------------------------------------------------------------------- */
 
 function buildChatRequestPayload(message, { docs = [], images = [], systemPrompt = '', resolvedProfile = '', studioChatContext = null } = {}) {
     const requestedProfile = safeString(resolvedProfile);
@@ -857,7 +697,12 @@ function buildChatRequestPayload(message, { docs = [], images = [], systemPrompt
         model: profile,
         model_id: safeString(specialty?.modelId) || resolveActiveModelIdForProfile(profile) || undefined,
         autonomy_level: Math.max(1, parseInt(String(activeAutonomyLevel || 1), 10) || 1),
+        file_access: safeString(activeFileAccess) || 'workspace',
         token_economy: resolveChatPayloadTokenEconomy(),
+        thomas_guardrails: safeString(activeGuardrails) || 'guarded',
+        thomas_guardrail_modes: (() => {
+            try { return JSON.parse(localStorage.getItem('thomasGuardrailModes') || 'null') || undefined; } catch (e) { return undefined; }
+        })(),
         system_prompt: systemPrompt || undefined,
     };
     const reasoningEffort = resolveChatPayloadReasoningEffort(profile);
@@ -1233,4 +1078,3 @@ function _modelPaletteSelect() {
         debugKind: 'engine-action',
     });
 }
-

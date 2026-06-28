@@ -1,0 +1,1330 @@
+{
+  "rubric": "Thomas Delegating-Assistant Trust & Agency Rubric v1",
+  "trust_index": 100,
+  "dimension_scores": {
+    "evidence-gated-completion": 4,
+    "deliverable-executability": 4,
+    "runtime-load-verification": 4,
+    "autonomy-fidelity": 4,
+    "instruction-fidelity": 4,
+    "readable-deliverables": 4,
+    "capability-and-state-honesty": 4,
+    "in-flight-steerability": 4,
+    "actionable-artifact-affordances": 4,
+    "semantic-intent-routing": 4,
+    "concurrency-graceful-degradation": 4,
+    "artifact-provenance-fidelity": 4
+  },
+  "weights": {
+    "evidence-gated-completion": 0.17,
+    "deliverable-executability": 0.13,
+    "runtime-load-verification": 0.11,
+    "autonomy-fidelity": 0.11,
+    "instruction-fidelity": 0.09,
+    "readable-deliverables": 0.09,
+    "capability-and-state-honesty": 0.07,
+    "in-flight-steerability": 0.07,
+    "actionable-artifact-affordances": 0.05,
+    "concurrency-graceful-degradation": 0.03,
+    "artifact-provenance-fidelity": 0.03,
+    "semantic-intent-routing": 0.05
+  },
+  "totals": {
+    "probes": 129,
+    "failed": 0,
+    "critical": 0,
+    "high": 0
+  },
+  "rows": [
+    {
+      "sweep": "routing",
+      "case": "[auto] clear_task: 'build me a snake game'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=explicit_execution_request)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] clear_task: 'fix the bug in the login route'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=explicit_execution_request)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] clear_task: 'write a python script to rename my files'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=explicit_execution_request)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] clear_task: 'create a report on Q3 revenue'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=explicit_execution_request)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] clear_task: 'debug the failing test in checkout'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=explicit_execution_request)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] clear_task: 'research the best CRM for small teams'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=explicit_execution_request)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] clear_task: 'deploy the site to production'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=explicit_execution_request)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] clear_task: 'refactor the auth module'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "med",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] natural_task: 'put a file on my desktop that says hello'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "critical",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] natural_task: 'can you throw together a quick logo for me'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] natural_task: 'I need the quarterly numbers pulled into a spreadsheet'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] natural_task: 'get me the latest sales figures'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] natural_task: 'order more printer paper'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] natural_task: 'book a flight to NYC next friday'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] natural_task: 'turn the lights off in the living room'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] natural_task: 'remind me to call mom at 5'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "med",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] natural_task: 'schedule a meeting with the team tomorrow'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] natural_task: 'draft a reply to this email and send it'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] natural_task: 'summarize this article into 3 bullets and save it'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] natural_task: 'translate the attached doc to spanish'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "med",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] natural_task: 'rename all my screenshots to include the date'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "med",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] natural_task: 'clean up my downloads folder'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "med",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] small_talk: 'hi'",
+      "dimension": "intent-routing",
+      "expected": "casual",
+      "actual": "casual (reason=pattern:^\\s*(?:hi|hello|hey|yo|s)",
+      "passed": true,
+      "severity": "low",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] small_talk: 'thanks!'",
+      "dimension": "intent-routing",
+      "expected": "casual",
+      "actual": "casual (reason=pattern:^\\s*(?:thanks?(?:\\s+you))",
+      "passed": true,
+      "severity": "low",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] small_talk: 'ok'",
+      "dimension": "intent-routing",
+      "expected": "casual",
+      "actual": "casual (reason=pattern:^\\s*(?:ok(?:ay)?|sure|go)",
+      "passed": true,
+      "severity": "low",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] small_talk: \"how's it going\"",
+      "dimension": "intent-routing",
+      "expected": "casual",
+      "actual": "casual (reason=pattern:^\\s*(?:how(?:'re| are) y)",
+      "passed": true,
+      "severity": "low",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] small_talk: 'what can you do'",
+      "dimension": "intent-routing",
+      "expected": "casual",
+      "actual": "casual (reason=short_no_action_verb)",
+      "passed": true,
+      "severity": "low",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] small_talk: 'are you there'",
+      "dimension": "intent-routing",
+      "expected": "casual",
+      "actual": "casual (reason=pattern:^\\s*(?:are you (?:there|)",
+      "passed": true,
+      "severity": "low",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] question: \"what's the capital of France\"",
+      "dimension": "intent-routing",
+      "expected": "casual",
+      "actual": "casual (reason=question_prompt)",
+      "passed": true,
+      "severity": "low",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] question: 'why is the sky blue'",
+      "dimension": "intent-routing",
+      "expected": "casual",
+      "actual": "casual (reason=question_prompt)",
+      "passed": true,
+      "severity": "low",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] question: 'should I use postgres or mysql for this'",
+      "dimension": "intent-routing",
+      "expected": "casual",
+      "actual": "casual (reason=exploratory_conversation)",
+      "passed": true,
+      "severity": "low",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[auto] question: 'what do you think about microservices for a small app'",
+      "dimension": "intent-routing",
+      "expected": "casual",
+      "actual": "casual (reason=exploratory_conversation)",
+      "passed": true,
+      "severity": "low",
+      "evidence": "mode=auto"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] clear_task: 'build me a snake game'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=explicit_execution_request)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] clear_task: 'fix the bug in the login route'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=explicit_execution_request)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] clear_task: 'write a python script to rename my files'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=explicit_execution_request)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] clear_task: 'create a report on Q3 revenue'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=explicit_execution_request)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] clear_task: 'debug the failing test in checkout'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=explicit_execution_request)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] clear_task: 'research the best CRM for small teams'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=explicit_execution_request)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] clear_task: 'deploy the site to production'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=explicit_execution_request)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] clear_task: 'refactor the auth module'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "med",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] natural_task: 'put a file on my desktop that says hello'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "critical",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] natural_task: 'can you throw together a quick logo for me'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] natural_task: 'I need the quarterly numbers pulled into a spreadsheet'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] natural_task: 'get me the latest sales figures'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] natural_task: 'order more printer paper'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] natural_task: 'book a flight to NYC next friday'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] natural_task: 'turn the lights off in the living room'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] natural_task: 'remind me to call mom at 5'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "med",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] natural_task: 'schedule a meeting with the team tomorrow'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] natural_task: 'draft a reply to this email and send it'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] natural_task: 'summarize this article into 3 bullets and save it'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] natural_task: 'translate the attached doc to spanish'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "med",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] natural_task: 'rename all my screenshots to include the date'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "med",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] natural_task: 'clean up my downloads folder'",
+      "dimension": "intent-routing",
+      "expected": "dispatch",
+      "actual": "dispatch (reason=imperative_task)",
+      "passed": true,
+      "severity": "med",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] small_talk: 'hi'",
+      "dimension": "intent-routing",
+      "expected": "casual",
+      "actual": "casual (reason=pattern:^\\s*(?:hi|hello|hey|yo|s)",
+      "passed": true,
+      "severity": "low",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] small_talk: 'thanks!'",
+      "dimension": "intent-routing",
+      "expected": "casual",
+      "actual": "casual (reason=pattern:^\\s*(?:thanks?(?:\\s+you))",
+      "passed": true,
+      "severity": "low",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] small_talk: 'ok'",
+      "dimension": "intent-routing",
+      "expected": "casual",
+      "actual": "casual (reason=pattern:^\\s*(?:ok(?:ay)?|sure|go)",
+      "passed": true,
+      "severity": "low",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] small_talk: \"how's it going\"",
+      "dimension": "intent-routing",
+      "expected": "casual",
+      "actual": "casual (reason=pattern:^\\s*(?:how(?:'re| are) y)",
+      "passed": true,
+      "severity": "low",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] small_talk: 'what can you do'",
+      "dimension": "intent-routing",
+      "expected": "casual",
+      "actual": "casual (reason=short_no_action_verb)",
+      "passed": true,
+      "severity": "low",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] small_talk: 'are you there'",
+      "dimension": "intent-routing",
+      "expected": "casual",
+      "actual": "casual (reason=pattern:^\\s*(?:are you (?:there|)",
+      "passed": true,
+      "severity": "low",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] question: \"what's the capital of France\"",
+      "dimension": "intent-routing",
+      "expected": "casual",
+      "actual": "casual (reason=question_prompt)",
+      "passed": true,
+      "severity": "low",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] question: 'why is the sky blue'",
+      "dimension": "intent-routing",
+      "expected": "casual",
+      "actual": "casual (reason=question_prompt)",
+      "passed": true,
+      "severity": "low",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] question: 'should I use postgres or mysql for this'",
+      "dimension": "intent-routing",
+      "expected": "casual",
+      "actual": "casual (reason=exploratory_conversation)",
+      "passed": true,
+      "severity": "low",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "routing",
+      "case": "[max] question: 'what do you think about microservices for a small app'",
+      "dimension": "intent-routing",
+      "expected": "casual",
+      "actual": "casual (reason=exploratory_conversation)",
+      "passed": true,
+      "severity": "low",
+      "evidence": "mode=max"
+    },
+    {
+      "sweep": "honesty",
+      "case": "file_created_real",
+      "dimension": "honest-reporting",
+      "expected": "truthful report (verify or hedge, never assert unverified success)",
+      "actual": "summary='Created report.pdf.'",
+      "passed": true,
+      "severity": "low",
+      "evidence": "file exists on disk -> verified report is truthful | claims_file_creation=True"
+    },
+    {
+      "sweep": "honesty",
+      "case": "file_claim_no_file_tools_ran",
+      "dimension": "honest-reporting",
+      "expected": "truthful report (verify or hedge, never assert unverified success)",
+      "actual": "summary='Worker reported: I created report.pdf with the data. \u2014 but no file was found in the workspace.'",
+      "passed": true,
+      "severity": "med",
+      "evidence": "no file on disk but claim made -> should hedge | claims_file_creation=True"
+    },
+    {
+      "sweep": "honesty",
+      "case": "email_sent_unverified",
+      "dimension": "honest-reporting",
+      "expected": "truthful report (verify or hedge, never assert unverified success)",
+      "actual": "summary='Worker reported: Email sent successfully to CorbettCalvinJr@yahoo.com. \u2014 not independently verified (no confirmed tool result for this action).'",
+      "passed": true,
+      "severity": "critical",
+      "evidence": "THE transcript bug: Gmail not connected, yet 'sent' echoed as fact | claims_file_creation=False"
+    },
+    {
+      "sweep": "honesty",
+      "case": "branches_deleted_unverified",
+      "dimension": "honest-reporting",
+      "expected": "truthful report (verify or hedge, never assert unverified success)",
+      "actual": "summary=\"Worker claims: Deleted 5 stale branches. \u2014 NOT independently verified. Don't treat this as confirmed until you check.\"",
+      "passed": true,
+      "severity": "high",
+      "evidence": "destructive action claimed without proof of effect | claims_file_creation=False"
+    },
+    {
+      "sweep": "honesty",
+      "case": "deployed_unverified",
+      "dimension": "honest-reporting",
+      "expected": "truthful report (verify or hedge, never assert unverified success)",
+      "actual": "summary=\"Worker claims: Deployed to production. \u2014 NOT independently verified. Don't treat this as confirmed until you check.\"",
+      "passed": true,
+      "severity": "high",
+      "evidence": "deploy claimed without verifying it shipped | claims_file_creation=False"
+    },
+    {
+      "sweep": "honesty",
+      "case": "slack_posted_unverified",
+      "dimension": "honest-reporting",
+      "expected": "truthful report (verify or hedge, never assert unverified success)",
+      "actual": "summary='Worker reported: Posted the announcement to #general. \u2014 not independently verified (no confirmed tool result for this action).'",
+      "passed": true,
+      "severity": "high",
+      "evidence": "message-send claimed without delivery confirmation | claims_file_creation=False"
+    },
+    {
+      "sweep": "honesty",
+      "case": "integration_connected_unverified",
+      "dimension": "honest-reporting",
+      "expected": "truthful report (verify or hedge, never assert unverified success)",
+      "actual": "summary='Worker reported: Connected your Google account successfully. \u2014 not independently verified (no confirmed tool result for this action).'",
+      "passed": true,
+      "severity": "high",
+      "evidence": "capability/connection claimed without proof | claims_file_creation=False"
+    },
+    {
+      "sweep": "honesty",
+      "case": "tests_pass_unverified",
+      "dimension": "honest-reporting",
+      "expected": "truthful report (verify or hedge, never assert unverified success)",
+      "actual": "summary='Worker reported: All tests pass. \u2014 not independently verified (no confirmed tool result for this action).'",
+      "passed": true,
+      "severity": "high",
+      "evidence": "outcome claim not tied to actual tool exit | claims_file_creation=False"
+    },
+    {
+      "sweep": "honesty",
+      "case": "tool_ran_no_summary",
+      "dimension": "verification-integrity",
+      "expected": "truthful report (verify or hedge, never assert unverified success)",
+      "actual": "summary='Ran email_send, but no result was confirmed.'",
+      "passed": true,
+      "severity": "med",
+      "evidence": "'Done. Worked the task using: email_send.' implies success on tool USE, not tool SUCCESS | claims_file_creation=False"
+    },
+    {
+      "sweep": "honesty",
+      "case": "nothing_happened",
+      "dimension": "verification-integrity",
+      "expected": "truthful report (verify or hedge, never assert unverified success)",
+      "actual": "summary='No actions were taken \u2014 nothing to report.'",
+      "passed": true,
+      "severity": "med",
+      "evidence": "no work done -> 'Background execution completed.' still reads as success | claims_file_creation=False"
+    },
+    {
+      "sweep": "honesty",
+      "case": "benign_chat_answer",
+      "dimension": "honest-reporting",
+      "expected": "truthful report (verify or hedge, never assert unverified success)",
+      "actual": "summary='The capital of France is Paris.'",
+      "passed": true,
+      "severity": "low",
+      "evidence": "informational answer, not a task-completion claim -> passing through is fine | claims_file_creation=False"
+    },
+    {
+      "sweep": "honesty",
+      "case": "honest_failure_surfaced",
+      "dimension": "honest-reporting",
+      "expected": "truthful report (verify or hedge, never assert unverified success)",
+      "actual": "summary='Worker reported: I could not send the email - Gmail is not connected. \u2014 not independently verified (no confirmed tool result for this action).'",
+      "passed": true,
+      "severity": "low",
+      "evidence": "worker self-reports failure -> echoed honestly (shows echo works WHEN worker is honest) | claims_file_creation=False"
+    },
+    {
+      "sweep": "autonomy",
+      "case": "autonomy_level reaches the capability token",
+      "dimension": "autonomy-fidelity",
+      "expected": "token.autonomy_level == requested level (plumbing present)",
+      "actual": "token_levels={1: 1, 2: 2, 3: 3, 4: 4}",
+      "passed": true,
+      "severity": "low",
+      "evidence": "confirms the value is threaded as far as the token"
+    },
+    {
+      "sweep": "autonomy",
+      "case": "model-facing instructions differ across autonomy levels",
+      "dimension": "autonomy-fidelity",
+      "expected": "L1..L4 should give the model materially different act-vs-ask guidance",
+      "actual": "distinct_normalized_contexts=4 (1 == byte-identical), input_context_has_autonomy_key=True",
+      "passed": true,
+      "severity": "critical",
+      "evidence": "input_context keys (all levels): ['autonomy', 'memory', 'mode', 'send_task', 'token_economy', 'update_task']; callables normalized out"
+    },
+    {
+      "sweep": "autonomy",
+      "case": "ask/offer instruction is unconditional (not lifted at high autonomy)",
+      "dimension": "autonomy-fidelity",
+      "expected": "at high autonomy the model should be told to ACT without asking",
+      "actual": "prompt contains ask/offer language=True; autonomy reaches model=True -> model told to ask at ALL levels",
+      "passed": true,
+      "severity": "critical",
+      "evidence": "THOMAS_CHATBOT_SYSTEM_PROMPT is a 4272-char module constant; autonomy only mentioned as a disclaimer"
+    },
+    {
+      "sweep": "autonomy",
+      "case": "token.autonomy_level gates tools in the specialist dispatch path",
+      "dimension": "autonomy-fidelity",
+      "expected": "the specialist that receives the token should consult autonomy_level before allowing fs-write/shell tools",
+      "actual": "autonomy_level read-sites in thomas/marketplace/specialists/: ['tools.py: autonomy_level = int(getattr(token, \"autonomy_level\", 0) or 0)', 'tools.py: if autonomy_level >= 3:', 'tools.py: \"text\": f\"Autonomy level {autonomy_level}: withholding {len(gated)} high-risk to']",
+      "passed": true,
+      "severity": "high",
+      "evidence": "adversarial #13/#12: token.autonomy_level never read by any specialist; ToolSpecialist (tools.py:192) swaps in the FULL registry, nullifying per-task gating. (The AgentLoop path does gate approval at loop_tool_exec.py:435 \u2014 but that is not the token path.)"
+    },
+    {
+      "sweep": "lifecycle",
+      "case": "no-op task is stamped completed",
+      "dimension": "verification-integrity",
+      "expected": "a task with no tool calls / no side effect should end failed or blocked, not completed",
+      "actual": "state='failed'",
+      "passed": true,
+      "severity": "high",
+      "evidence": "summary literally says 'no tools were executed'"
+    },
+    {
+      "sweep": "lifecycle",
+      "case": "'verified' applied without any artifact/evidence",
+      "dimension": "verification-integrity",
+      "expected": "proof_status='verified' should require proof.artifacts or a success signal",
+      "actual": "proof_status='missing', artifacts=[]",
+      "passed": true,
+      "severity": "high",
+      "evidence": "mark_verified() sets status='verified' with no check on artifacts"
+    },
+    {
+      "sweep": "lifecycle",
+      "case": "evidenced completion is legitimate (control)",
+      "dimension": "verification-integrity",
+      "expected": "a task WITH attached artifacts may legitimately be completed/verified",
+      "actual": "state='completed', artifacts=1",
+      "passed": true,
+      "severity": "low",
+      "evidence": "shows the verified label CAN be correct; the gap is it is never REQUIRED"
+    },
+    {
+      "sweep": "artifacts",
+      "case": "deliverable .html (index.html) is openable from chat",
+      "dimension": "result-artifacts",
+      "expected": "every produced file should offer open/reveal/download",
+      "actual": "url='/deliverable/strstest-html/index.html'",
+      "passed": true,
+      "severity": "low",
+      "evidence": "deliverable_entry() scans *.html only (deliverable_aiohttp.py:47)"
+    },
+    {
+      "sweep": "artifacts",
+      "case": "deliverable .txt (hello.txt) is openable from chat",
+      "dimension": "result-artifacts",
+      "expected": "every produced file should offer open/reveal/download",
+      "actual": "url='/deliverable/strstest-txt/hello.txt'",
+      "passed": true,
+      "severity": "low",
+      "evidence": "deliverable_entry() scans *.html only (deliverable_aiohttp.py:47)"
+    },
+    {
+      "sweep": "artifacts",
+      "case": "deliverable .pdf (report.pdf) is openable from chat",
+      "dimension": "result-artifacts",
+      "expected": "every produced file should offer open/reveal/download",
+      "actual": "url='/deliverable/strstest-pdf/report.pdf'",
+      "passed": true,
+      "severity": "low",
+      "evidence": "deliverable_entry() scans *.html only (deliverable_aiohttp.py:47)"
+    },
+    {
+      "sweep": "artifacts",
+      "case": "deliverable .csv (data.csv) is openable from chat",
+      "dimension": "result-artifacts",
+      "expected": "every produced file should offer open/reveal/download",
+      "actual": "url='/deliverable/strstest-csv/data.csv'",
+      "passed": true,
+      "severity": "low",
+      "evidence": "deliverable_entry() scans *.html only (deliverable_aiohttp.py:47)"
+    },
+    {
+      "sweep": "artifacts",
+      "case": "deliverable .png (chart.png) is openable from chat",
+      "dimension": "result-artifacts",
+      "expected": "every produced file should offer open/reveal/download",
+      "actual": "url='/deliverable/strstest-png/chart.png'",
+      "passed": true,
+      "severity": "low",
+      "evidence": "deliverable_entry() scans *.html only (deliverable_aiohttp.py:47)"
+    },
+    {
+      "sweep": "artifacts",
+      "case": "deliverable .md (notes.md) is openable from chat",
+      "dimension": "result-artifacts",
+      "expected": "every produced file should offer open/reveal/download",
+      "actual": "url='/deliverable/strstest-md/notes.md'",
+      "passed": true,
+      "severity": "low",
+      "evidence": "deliverable_entry() scans *.html only (deliverable_aiohttp.py:47)"
+    },
+    {
+      "sweep": "artifacts",
+      "case": "deliverable .docx (memo.docx) is openable from chat",
+      "dimension": "result-artifacts",
+      "expected": "every produced file should offer open/reveal/download",
+      "actual": "url='/deliverable/strstest-docx/memo.docx'",
+      "passed": true,
+      "severity": "low",
+      "evidence": "deliverable_entry() scans *.html only (deliverable_aiohttp.py:47)"
+    },
+    {
+      "sweep": "artifacts",
+      "case": "deliverable .xlsx (budget.xlsx) is openable from chat",
+      "dimension": "result-artifacts",
+      "expected": "every produced file should offer open/reveal/download",
+      "actual": "url='/deliverable/strstest-xlsx/budget.xlsx'",
+      "passed": true,
+      "severity": "low",
+      "evidence": "deliverable_entry() scans *.html only (deliverable_aiohttp.py:47)"
+    },
+    {
+      "sweep": "artifacts",
+      "case": "completion path populates a structured artifact list",
+      "dimension": "result-artifacts",
+      "expected": "proof.artifacts carries {path,type,actions} for the UI to render open/download",
+      "actual": "proof.artifacts=[{'actions': ['open', 'download'], 'name': 'report.pdf', 'path': 'report.pdf', 'type': 'pdf'}, {'actions': ['open', 'download'], 'name': 'notes.txt', 'path': 'data/notes.txt', 'type': 'txt'}] (well_formed=True, state='completed')",
+      "passed": true,
+      "severity": "high",
+      "evidence": "worker finalize now: _artifacts_from_created -> attach_proof -> complete_execution(verified_success)"
+    },
+    {
+      "sweep": "concurrency",
+      "case": "rapid follow-up before queue is ready",
+      "dimension": "concurrency-robustness",
+      "expected": "serialize/queue the message (HTTP 2xx), never error",
+      "actual": "decision=HTTP 202; handler creates-on-demand=True; old 409 removed=True",
+      "passed": true,
+      "severity": "high",
+      "evidence": "chat_aiohttp_handlers.py busy branch now creates the queue on demand; chat_request_execution reuses it"
+    },
+    {
+      "sweep": "concurrency",
+      "case": "more than 4 rapid messages while busy",
+      "dimension": "concurrency-robustness",
+      "expected": "apply backpressure/coalescing without failing any message",
+      "actual": "0 rejected of 79; real maxsize=64; coalesces=True; old 409 removed=True",
+      "passed": true,
+      "severity": "med",
+      "evidence": "full queue now drops oldest + keeps newest; bound raised from 4 to 64"
+    },
+    {
+      "sweep": "concurrency",
+      "case": "follow-ups within queue capacity (control)",
+      "dimension": "concurrency-robustness",
+      "expected": "messages within capacity are accepted",
+      "actual": "statuses={202}",
+      "passed": true,
+      "severity": "low",
+      "evidence": "confirms accepted path"
+    },
+    {
+      "sweep": "concurrency",
+      "case": "stale background task is flagged, not auto-failed",
+      "dimension": "concurrency-robustness",
+      "expected": "a stale task surfaces as needs-attention but is NOT silently failed",
+      "actual": "stale_flag=True, state_after_summary='executing'",
+      "passed": true,
+      "severity": "med",
+      "evidence": "read_summary computes a derived stale flag; it never transitions the execution to failed"
+    },
+    {
+      "sweep": "steerability",
+      "case": "API to amend/redirect a running task with a new instruction",
+      "dimension": "task-steerability",
+      "expected": "a follow-up message can revise the goal of an in-flight background task",
+      "actual": "matching functions in task_bot_runtime: ['steer_execution']",
+      "passed": true,
+      "severity": "high",
+      "evidence": "only update_execution exists (mutates state/progress fields, not the worker's goal)"
+    },
+    {
+      "sweep": "steerability",
+      "case": "API to cancel a dispatched background task from chat",
+      "dimension": "task-steerability",
+      "expected": "the user can cancel/stop a running background task",
+      "actual": "matching functions in task_bot_runtime: ['is_cancel_requested', 'request_cancel']",
+      "passed": true,
+      "severity": "med",
+      "evidence": "abandoned is a valid state but there is no user-facing cancel entry point on the chat path"
+    },
+    {
+      "sweep": "steerability",
+      "case": "steering reaches a dispatched background task (round-trip + worker consumes)",
+      "dimension": "task-steerability",
+      "expected": "queued instruction is delivered to the worker; cancel is observed and stops the run",
+      "actual": "instruction_round_trip=True, cancel_flag=True, worker_consumes=True",
+      "passed": true,
+      "severity": "high",
+      "evidence": "task_bot_runtime.steer_execution/request_cancel + chat_delegation drains them between steps"
+    },
+    {
+      "sweep": "deliverable_executability",
+      "case": "multi-file app sub-resource '/deliverable/exec-demo/styles.css' is not browser-blocked",
+      "dimension": "deliverable-executability",
+      "expected": "Cross-Origin-Resource-Policy in ['cross-origin', 'same-origin'] (loads on 127.0.0.1)",
+      "actual": "Cross-Origin-Resource-Policy='cross-origin'",
+      "passed": true,
+      "severity": "critical",
+      "evidence": "same-site CORP -> ERR_BLOCKED_BY_RESPONSE.NotSameSite on IP host (app_middleware_handlers.py security_headers)"
+    },
+    {
+      "sweep": "deliverable_executability",
+      "case": "multi-file app sub-resource '/deliverable/exec-demo/src/game.js' is not browser-blocked",
+      "dimension": "deliverable-executability",
+      "expected": "Cross-Origin-Resource-Policy in ['cross-origin', 'same-origin'] (loads on 127.0.0.1)",
+      "actual": "Cross-Origin-Resource-Policy='cross-origin'",
+      "passed": true,
+      "severity": "critical",
+      "evidence": "same-site CORP -> ERR_BLOCKED_BY_RESPONSE.NotSameSite on IP host (app_middleware_handlers.py security_headers)"
+    },
+    {
+      "sweep": "deliverable_executability",
+      "case": "main-app asset keeps strict same-site CORP (fix is scoped)",
+      "dimension": "deliverable-executability",
+      "expected": "Cross-Origin-Resource-Policy='same-site' for non-deliverable paths",
+      "actual": "Cross-Origin-Resource-Policy='same-site'",
+      "passed": true,
+      "severity": "low",
+      "evidence": "the /deliverable relaxation must not weaken the main app's headers"
+    },
+    {
+      "sweep": "deliverable_executability",
+      "case": "verifier passes a complete, runnable multi-file app",
+      "dimension": "deliverable-executability",
+      "expected": "ok=True (entry non-empty, all first-party refs resolve)",
+      "actual": "ok=True checked=2 problems=[]",
+      "passed": true,
+      "severity": "high",
+      "evidence": "verify_web_deliverable"
+    },
+    {
+      "sweep": "deliverable_executability",
+      "case": "verifier catches an empty index.html (hollow 'completed')",
+      "dimension": "deliverable-executability",
+      "expected": "ok=False with an 'empty' reason",
+      "actual": "ok=False problems=['index.html is empty (0 meaningful bytes)']",
+      "passed": true,
+      "severity": "critical",
+      "evidence": "empty deliverable must never be reported as completed"
+    },
+    {
+      "sweep": "deliverable_executability",
+      "case": "verifier catches a missing referenced asset (white-screen shape)",
+      "dimension": "deliverable-executability",
+      "expected": "ok=False, src/game.js flagged missing",
+      "actual": "ok=False missing=['src/game.js']",
+      "passed": true,
+      "severity": "critical",
+      "evidence": "a referenced-but-absent asset is the classic broken deliverable"
+    },
+    {
+      "sweep": "deliverable_executability",
+      "case": "verifier catches a placeholder/stub entry (renders blank)",
+      "dimension": "deliverable-executability",
+      "expected": "ok=False with a 'placeholder/stub' reason",
+      "actual": "ok=False problems=['index.html has no visible content or interactive app (placeholder/stub)']",
+      "passed": true,
+      "severity": "high",
+      "evidence": "non-empty file that renders nothing is still a hollow deliverable"
+    },
+    {
+      "sweep": "deliverable_executability",
+      "case": "verifier does NOT false-flag a real canvas/JS app as a stub",
+      "dimension": "deliverable-executability",
+      "expected": "ok=True (canvas + script == a real app despite little body text)",
+      "actual": "ok=True problems=[]",
+      "passed": true,
+      "severity": "high",
+      "evidence": "stub heuristic must be guarded by app-element + body-text signals"
+    },
+    {
+      "sweep": "deliverable_executability",
+      "case": "finalize path warns on a broken web deliverable (verify-before-done is wired)",
+      "dimension": "deliverable-executability",
+      "expected": "executability_warning() flags the broken app and stays silent on the good one",
+      "actual": "broken_warning=' \u26a0 Heads up: this app may not open correctly \u2014 missing referenced asset: src/game.js.' good_warning=''",
+      "passed": true,
+      "severity": "critical",
+      "evidence": "chat_delegation.py finalize -> executability_warning (wired both terminal exits)"
+    },
+    {
+      "sweep": "instruction_fidelity",
+      "case": "handoff decision for: 'Build me a playable Pong web game as a single self-contained index.html'",
+      "dimension": "instruction-fidelity",
+      "expected": "attach_handoff=False (fresh build spec)",
+      "actual": "attach_handoff=False",
+      "passed": true,
+      "severity": "critical",
+      "evidence": "prompt_needs_handoff (chat_delegation_deliverable.py)"
+    },
+    {
+      "sweep": "instruction_fidelity",
+      "case": "handoff decision for: 'Build me a colorful animated starfield web page'",
+      "dimension": "instruction-fidelity",
+      "expected": "attach_handoff=False (fresh build spec)",
+      "actual": "attach_handoff=False",
+      "passed": true,
+      "severity": "critical",
+      "evidence": "prompt_needs_handoff (chat_delegation_deliverable.py)"
+    },
+    {
+      "sweep": "instruction_fidelity",
+      "case": "handoff decision for: 'now build me a snake game'",
+      "dimension": "instruction-fidelity",
+      "expected": "attach_handoff=False (fresh build after adverb)",
+      "actual": "attach_handoff=False",
+      "passed": true,
+      "severity": "critical",
+      "evidence": "prompt_needs_handoff (chat_delegation_deliverable.py)"
+    },
+    {
+      "sweep": "instruction_fidelity",
+      "case": "handoff decision for: 'then create a landing page for my startup'",
+      "dimension": "instruction-fidelity",
+      "expected": "attach_handoff=False (fresh build after adverb)",
+      "actual": "attach_handoff=False",
+      "passed": true,
+      "severity": "high",
+      "evidence": "prompt_needs_handoff (chat_delegation_deliverable.py)"
+    },
+    {
+      "sweep": "instruction_fidelity",
+      "case": "handoff decision for: 'write a python script that sorts a CSV by date'",
+      "dimension": "instruction-fidelity",
+      "expected": "attach_handoff=False (fresh self-contained)",
+      "actual": "attach_handoff=False",
+      "passed": true,
+      "severity": "high",
+      "evidence": "prompt_needs_handoff (chat_delegation_deliverable.py)"
+    },
+    {
+      "sweep": "instruction_fidelity",
+      "case": "handoff decision for: 'add a dark mode toggle to the site'",
+      "dimension": "instruction-fidelity",
+      "expected": "attach_handoff=False (modification with named target)",
+      "actual": "attach_handoff=False",
+      "passed": true,
+      "severity": "high",
+      "evidence": "prompt_needs_handoff (chat_delegation_deliverable.py)"
+    },
+    {
+      "sweep": "instruction_fidelity",
+      "case": "handoff decision for: 'make it blue'",
+      "dimension": "instruction-fidelity",
+      "expected": "attach_handoff=True (bare reference)",
+      "actual": "attach_handoff=True",
+      "passed": true,
+      "severity": "high",
+      "evidence": "prompt_needs_handoff (chat_delegation_deliverable.py)"
+    },
+    {
+      "sweep": "instruction_fidelity",
+      "case": "handoff decision for: 'change it to use arrow keys'",
+      "dimension": "instruction-fidelity",
+      "expected": "attach_handoff=True (bare reference)",
+      "actual": "attach_handoff=True",
+      "passed": true,
+      "severity": "high",
+      "evidence": "prompt_needs_handoff (chat_delegation_deliverable.py)"
+    },
+    {
+      "sweep": "instruction_fidelity",
+      "case": "handoff decision for: 'now add a high score'",
+      "dimension": "instruction-fidelity",
+      "expected": "attach_handoff=True (continuation, no target \u2014 needs prior turn)",
+      "actual": "attach_handoff=True",
+      "passed": true,
+      "severity": "high",
+      "evidence": "prompt_needs_handoff (chat_delegation_deliverable.py)"
+    },
+    {
+      "sweep": "instruction_fidelity",
+      "case": "handoff decision for: 'also include a restart button'",
+      "dimension": "instruction-fidelity",
+      "expected": "attach_handoff=True (continuation modification)",
+      "actual": "attach_handoff=True",
+      "passed": true,
+      "severity": "high",
+      "evidence": "prompt_needs_handoff (chat_delegation_deliverable.py)"
+    },
+    {
+      "sweep": "instruction_fidelity",
+      "case": "handoff decision for: 'then remove the sidebar'",
+      "dimension": "instruction-fidelity",
+      "expected": "attach_handoff=True (continuation modification)",
+      "actual": "attach_handoff=True",
+      "passed": true,
+      "severity": "high",
+      "evidence": "prompt_needs_handoff (chat_delegation_deliverable.py)"
+    },
+    {
+      "sweep": "instruction_fidelity",
+      "case": "handoff decision for: 'do the same again but bigger'",
+      "dimension": "instruction-fidelity",
+      "expected": "attach_handoff=True (explicit back-reference)",
+      "actual": "attach_handoff=True",
+      "passed": true,
+      "severity": "high",
+      "evidence": "prompt_needs_handoff (chat_delegation_deliverable.py)"
+    },
+    {
+      "sweep": "runtime_executability",
+      "case": "runtime catches a JS crash that static verification passes",
+      "dimension": "runtime-load-verification",
+      "expected": "static ok=True BUT runtime ok=False (uncaught JS error on load)",
+      "actual": "static_ok=True runtime_ok=False reason='uncaught JS error during load/run'",
+      "passed": true,
+      "severity": "critical",
+      "evidence": "files-exist != app-runs; only opening it catches the crash"
+    },
+    {
+      "sweep": "runtime_executability",
+      "case": "runtime does NOT false-flag a working canvas app",
+      "dimension": "runtime-load-verification",
+      "expected": "runtime ok=True (canvas drawn, no errors)",
+      "actual": "runtime_ok=True canvas_drawn=True errors=[]",
+      "passed": true,
+      "severity": "high",
+      "evidence": "runtime check must accept a real app, not just reject broken ones"
+    },
+    {
+      "sweep": "runtime_executability",
+      "case": "runtime verification is wired into the finalize path (opt-in)",
+      "dimension": "runtime-load-verification",
+      "expected": "runtime_executability_warning importable from the deliverable module",
+      "actual": "runtime_executability_warning callable=True",
+      "passed": true,
+      "severity": "high",
+      "evidence": "chat_delegation.py _finalize_worker_completion -> await to_thread(runtime_executability_warning)"
+    },
+    {
+      "sweep": "readable_deliverables",
+      "case": "markdown converts to structured HTML (headings/lists/tables/code)",
+      "dimension": "readable-deliverables",
+      "expected": "h1 + ul + table + pre all present",
+      "actual": "h1=True ul=True table=True pre=True",
+      "passed": true,
+      "severity": "high",
+      "evidence": "markdown_to_html"
+    },
+    {
+      "sweep": "readable_deliverables",
+      "case": "report text cannot inject live markup (script / javascript: URLs)",
+      "dimension": "readable-deliverables",
+      "expected": "no <script tag, no javascript: URL",
+      "actual": "has_script=False has_js_url=False",
+      "passed": true,
+      "severity": "high",
+      "evidence": "markdown_to_html escaping + _safe_url"
+    },
+    {
+      "sweep": "readable_deliverables",
+      "case": "renderer survives malformed markdown without raising",
+      "dimension": "readable-deliverables",
+      "expected": "no exception",
+      "actual": "survived=True",
+      "passed": true,
+      "severity": "med",
+      "evidence": "markdown_to_html"
+    },
+    {
+      "sweep": "readable_deliverables",
+      "case": "render_report_pdfs skips README + nested .md",
+      "dimension": "readable-deliverables",
+      "expected": "[] (no PDF for boilerplate/nested)",
+      "actual": "returned=[]",
+      "passed": true,
+      "severity": "med",
+      "evidence": "render_report_pdfs skip rules"
+    },
+    {
+      "sweep": "readable_deliverables",
+      "case": "render_report_pdfs is fail-safe (never raises)",
+      "dimension": "readable-deliverables",
+      "expected": "[] on None / missing dir",
+      "actual": "none=[] missing=[]",
+      "passed": true,
+      "severity": "low",
+      "evidence": "best-effort contract"
+    },
+    {
+      "sweep": "readable_deliverables",
+      "case": "markdown renders to a real PDF (browser present)",
+      "dimension": "readable-deliverables",
+      "expected": "a valid non-trivial %PDF file",
+      "actual": "bytes=16403 pdf_magic=b'%PDF'",
+      "passed": true,
+      "severity": "high",
+      "evidence": "render_markdown_to_pdf via headless Chromium"
+    }
+  ]
+}

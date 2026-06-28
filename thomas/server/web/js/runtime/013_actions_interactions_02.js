@@ -84,7 +84,7 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
 
             // Rotate sayings every 2.5s
             robotSayingInterval = setInterval(() => {
-                const sayingEl = bubbleMsgContent.querySelector('.chat-robot-saying');
+                const sayingEl = bubbleMsgContent.querySelector('.assistant-work-status-text');
                 if (sayingEl) {
                     sayingEl.classList.add('saying-fade');
                     setTimeout(() => {
@@ -96,33 +96,18 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
 
             // Update elapsed timer every 100ms
             robotTimerInterval = setInterval(() => {
-                const timerEl = bubbleMsgContent.querySelector('.chat-robot-timer');
+                const timerEl = bubbleMsgContent.querySelector('.assistant-work-status-timer');
                 if (timerEl) {
                     timerEl.textContent = ((Date.now() - robotStartTime) / 1000).toFixed(1) + 's';
                 }
             }, 100);
-
-            // Swap animation every 8s  use rAF for clean transition
-            robotAnimInterval = setInterval(() => {
-                const agentEl = bubbleMsgContent.querySelector('.chat-robot-agent');
-                if (agentEl) {
-                    const newAnim = _pickRobotAnimation();
-                    // Remove old, pause for one frame, then apply new
-                    CHAT_ROBOT_ANIMATIONS.forEach(a => agentEl.classList.remove('chat-robot-anim-' + a));
-                    agentEl.style.animation = 'none';
-                    requestAnimationFrame(() => {
-                        agentEl.style.animation = '';
-                        agentEl.classList.add('chat-robot-anim-' + newAnim);
-                    });
-                }
-            }, 8000);
 
             // No more task-ledger polling  thinking text arrives via NDJSON stream events
         }
         _startRobotStatus();
 
         function _setRobotSaying(text) {
-            const sayingEl = bubbleMsgContent?.querySelector('.chat-robot-saying');
+            const sayingEl = bubbleMsgContent?.querySelector('.assistant-work-status-text');
             if (sayingEl) {
                 sayingEl.classList.add('saying-fade');
                 setTimeout(() => {
@@ -136,7 +121,7 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             if (robotSayingInterval) { clearInterval(robotSayingInterval); robotSayingInterval = null; }
             if (robotTimerInterval) { clearInterval(robotTimerInterval); robotTimerInterval = null; }
             if (robotAnimInterval) { clearInterval(robotAnimInterval); robotAnimInterval = null; }
-            const robotEl = bubbleMsgContent?.querySelector('.chat-robot-status');
+            const robotEl = bubbleMsgContent?.querySelector('.assistant-work-status');
             if (robotEl) robotEl.remove();
             bubbleMsgContent?.classList.remove('message-content-inline-status', 'streaming-active');
             bubbleRow?.classList.remove('message-row-inline-status');
@@ -147,7 +132,7 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             if (robotTimerInterval) { clearInterval(robotTimerInterval); robotTimerInterval = null; }
             if (robotAnimInterval) { clearInterval(robotAnimInterval); robotAnimInterval = null; }
             robotLandedForThisResponse = true;
-            const statusEl = bubbleMsgContent?.querySelector('.chat-robot-status');
+            const statusEl = bubbleMsgContent?.querySelector('.assistant-work-status');
             if (statusEl) statusEl.remove();
             bubbleRow?.classList.remove('message-row-inline-status');
             bubbleMsgContent?.classList.remove('message-content-inline-status');
@@ -225,48 +210,9 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
         }
 
         function _syncDelegationWorkerVisual(evt, status, taskText) {
-            if (!officeEnsureState()) return;
-            officeStartLoop();
-            const activityId = _delegationActivityId(evt);
-            const terminal = _delegationIsTerminalState(status);
-            const existingTaskId = safeString(_officeDelegationTaskByActivity.get(activityId));
-            if (!terminal && !existingTaskId) {
-                const preferredIdentity = officeResolveAgentIdentity(evt.bot_name || evt.bot_id || evt.agent_id || evt.specialist_id, activityId);
-                const preferredAgent = officeFindAgentByHandle(preferredIdentity.name);
-                const previewSessionId = safeString(evt?.session_id) || _delegationSessionId || safeString(activeChatId) || 'chat';
-                const queuedTask = officeQueueTask(taskText, {
-                    source: `chat-delegation:${previewSessionId}:${activityId}`,
-                    announce: false,
-                    preferredAgentId: preferredAgent?.id || '',
-                });
-                if (queuedTask?.id) {
-                    _officeDelegationTaskByActivity.set(activityId, queuedTask.id);
-                    chatAgentPresenceSetOfficeContext(activityId, {
-                        taskId: queuedTask.id,
-                        agentId: safeString(queuedTask.assignedAgentId || preferredAgent?.id),
-                        agentName: safeString(preferredAgent?.name || preferredIdentity.name),
-                    });
-                }
-                return;
-            }
-            if (!terminal || !existingTaskId || !officeState) return;
-            const linkedTask = officeState.tasks.find((task) => task.id === existingTaskId);
-            if (!linkedTask) return;
-            linkedTask.status = 'done';
-            linkedTask.completedAt = Date.now();
-            if (linkedTask.assignedAgentId) {
-                const agent = officeGetAgentById(linkedTask.assignedAgentId);
-                if (agent) {
-                    officeBeginTeleportSequence(agent, performance.now());
-                }
-            }
-            officeState.tasksDirty = true;
-            const completedIdentity = officeResolveAgentIdentity(evt.bot_name || evt.bot_id || evt.agent_id || evt.specialist_id, activityId);
-            chatAgentPresenceSetOfficeContext(activityId, {
-                taskId: linkedTask.id,
-                agentId: linkedTask.assignedAgentId,
-                agentName: safeString(linkedTask.assignedAgentId ? officeGetAgentById(linkedTask.assignedAgentId)?.name : '') || completedIdentity.name,
-            });
+            void evt;
+            void status;
+            void taskText;
         }
 
         function _delegationActivityId(evt) {
@@ -276,7 +222,11 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             return safeString(evt.bot_name || evt.bot_id || evt.agent_id || evt.specialist_id || evt.backend_type || 'worker');
         }
         function _delegationTask(evt) {
-            const detail = safeString(evt.summary || evt.last_progress || evt.text || evt.task || evt.current_task);
+            const failed = safeString(evt?.type) === 'delegation_failed'
+                || safeString(evt?.state).toLowerCase() === 'failed';
+            const detail = failed
+                ? safeString(evt.last_progress || evt.summary || evt.text || evt.task || evt.current_task)
+                : safeString(evt.summary || evt.last_progress || evt.text || evt.task || evt.current_task);
             const backend = safeString(evt.backend_type);
             if (backend && detail) return `[${backend}] ${detail}`;
             return detail || backend || '';
@@ -286,12 +236,27 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
         let _delegationPollTimer = 0;
         let _delegationPolling = false;
         let _delegationShouldPollAfterStream = false;
+        // The execution_id(s) THIS turn's strip actually spawned. The live
+        // delegation_started arrives before the turn stream closes, so this binding is
+        // reliable; the reconcile poll then only updates this strip for its OWN task(s)
+        // instead of overwriting it with an unrelated old session delegation (the
+        // "foreign-task contamination" where a fresh Pong strip showed "Research the
+        // Iran War" because the poll wrote every session delegation into one strip).
+        const _boundExecutionIds = new Set();
+        // U4: track whether a REAL delegation attached to this turn and whether its
+        // last observed state was terminal, so the seeded task card only reads
+        // "completed" when a real worker actually finished (not just because the
+        // chat reply ended).
+        let _delegationAttached = false;
+        let _delegationLastTerminal = false;
         const _DELEGATION_POLL_STALE_MS = 30 * 60 * 1000;
         const _DELEGATION_POLL_SLOW_AFTER_MS = 5 * 60 * 1000;
 
         function _delegationIsTerminalState(state) {
             const normalized = safeString(state).toLowerCase();
-            return normalized === 'completed' || normalized === 'failed' || normalized === 'abandoned' || normalized === 'cancelled' || normalized === 'canceled' || normalized === 'done';
+            // 'verified' is terminal-completed in the brain (_COMPLETED_STATES); treat it
+            // the same here so a verified-but-not-yet-'completed' row doesn't poll forever.
+            return normalized === 'completed' || normalized === 'verified' || normalized === 'failed' || normalized === 'abandoned' || normalized === 'cancelled' || normalized === 'canceled' || normalized === 'done';
         }
         function _delegationUpdatedAtMs(row) {
             return missionToEpoch(safeString(row?.updated_at || row?.created_at)) || 0;
@@ -308,8 +273,9 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             return (Date.now() - updatedAt) <= _DELEGATION_POLL_STALE_MS;
         }
         function _delegationEventTypeForState(state) {
+            const lower = safeString(state).toLowerCase();
             return _delegationIsTerminalState(state)
-                ? (safeString(state).toLowerCase() === 'completed' ? 'delegation_completed' : 'delegation_failed')
+                ? (lower === 'completed' || lower === 'verified' ? 'delegation_completed' : 'delegation_failed')
                 : 'delegation_progress';
         }
         function _stopDelegationPolling() {
@@ -337,13 +303,23 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                 const payload = resp.data && typeof resp.data === 'object' ? resp.data : {};
                 const delegations = Array.isArray(payload.delegations) ? payload.delegations : [];
                 const liveDelegations = delegations.filter((row) => _delegationIsTerminalState(row?.state) || _delegationShouldKeepPolling(row));
-                liveDelegations.forEach((row) => {
+                let rowsToReconcile = liveDelegations;
+                if (_boundExecutionIds.size > 0) {
+                    // Only reconcile the task(s) this strip actually owns.
+                    rowsToReconcile = liveDelegations.filter((row) => _boundExecutionIds.has(safeString(row?.execution_id)));
+                } else if (liveDelegations.length > 1) {
+                    // No live binding captured this turn (e.g. the started event was lost):
+                    // reconcile only the most-recently-updated task so the strip never
+                    // shows a random older session delegation.
+                    rowsToReconcile = [liveDelegations.slice().sort((a, b) => _delegationUpdatedAtMs(b) - _delegationUpdatedAtMs(a))[0]];
+                }
+                rowsToReconcile.forEach((row) => {
                     if (!row || typeof row !== 'object') return;
                     _handleDelegationLifecycle({
                         ...row,
                         type: _delegationEventTypeForState(row.state),
                         bot_name: safeString(row.bot_name || row.bot_id),
-                    });
+                    }, { fromPoll: true });
                 });
                 const activeDelegations = liveDelegations.filter((row) => _delegationShouldKeepPolling(row));
                 if (activeDelegations.length > 0) {
@@ -359,7 +335,17 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                 _delegationPolling = false;
             }
         }
-        function _handleDelegationLifecycle(evt) {
+        function _handleDelegationLifecycle(evt, opts) {
+            const fromPoll = !!(opts && opts.fromPoll);
+            const execId = safeString(evt.execution_id);
+            // Live events bind this strip to their task; the reconcile poll only updates
+            // a strip for an execution_id it already owns, so it can never overwrite the
+            // strip with a different (older) session delegation.
+            if (!fromPoll && execId) {
+                _boundExecutionIds.add(execId);
+            } else if (fromPoll && execId && _boundExecutionIds.size > 0 && !_boundExecutionIds.has(execId)) {
+                return;
+            }
             const evtType = safeString(evt.type);
             const label = _delegationLabel(evt);
             const badgeKey = safeString(evt.specialist_id || label || 'worker').toLowerCase().replace(/\s+/g, '_');
@@ -373,6 +359,8 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             const cacheKey = `${activityId}::${status}::${taskText}`;
             const alreadySeen = _delegationStateCache.get(activityId) === cacheKey;
             _delegationStateCache.set(activityId, cacheKey);
+            _delegationAttached = true;
+            _delegationLastTerminal = _delegationIsTerminalState(status);
             const helperIdentity = officeResolveAgentIdentity(label, activityId);
             const container = _getToolCardsContainer();
             if (evtType === 'delegation_started') {
@@ -405,20 +393,35 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                 _setRobotSaying(evtType === 'delegation_started' ? 'delegation-started' : 'delegation-progress');
             }
             if (!alreadySeen) {
-                const prefix = evtType === 'delegation_completed'
-                    ? 'Background task completed'
-                    : evtType === 'delegation_failed'
-                        ? 'Background task failed'
-                        : 'Background task';
+                const stripStatus = _delegationIsTerminalState(status)
+                    ? (safeString(status).toLowerCase() === 'failed' ? 'failed' : 'completed')
+                    : 'executing';
+                // Strip backend tags like "[provider_native]" out of user-facing text.
+                const cleanText = safeString(taskText || label).replace(/^\s*\[[^\]]+\]\s*/, '').trim();
                 updateMessageTaskStrip(bubbleId, {
                     sessionId: safeString(evt?.session_id) || _taskUiSessionId,
-                    status: _taskUiTerminated ? 'completed' : 'executing',
-                    summary: taskText || label,
-                    checkpoint: `${prefix}: ${taskText || label}`,
+                    status: stripStatus,
+                    summary: cleanText,
+                    // Carry the deliverable so the strip can show an inline-open chip /
+                    // right-side live preview — no canned text, no "Open it:" link.
                     artifactUrl: safeString(evt?.artifact_url),
+                    artifactName: safeString(evt?.artifact_name),
+                    artifactKind: safeString(evt?.artifact_kind),
                 });
-                thinkingText += `\n${prefix}: ${taskText}`;
+                if (_delegationIsTerminalState(status)) {
+                    _taskUiTerminated = true;
+                    const shouldAppendResult = !fromPoll
+                        || _boundExecutionIds.size === 0
+                        || (execId && _boundExecutionIds.has(execId));
+                    if (shouldAppendResult && typeof appendDelegationResultMessage === 'function') {
+                        appendDelegationResultMessage(evt, { status, summary: cleanText });
+                    }
+                }
+                thinkingText += `\n${cleanText}`;
             }
+            // Terminal events append a message-like result card at the bottom of chat.
+            // The task strip still carries the structured artifact chip. This is UI
+            // surfacing, not reported-to-chat bookkeeping.
         }
 
         function _taskContractStatusForEvent(evt) {
@@ -779,13 +782,39 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             updateMessage(bubbleId, fullText, false);
             if (!robotLandedForThisResponse) _landRobotAtComposerDock();
         }
-        if (_taskUiSeeded && !_taskUiTerminated && !_delegationShouldPollAfterStream) {
-            updateMessageTaskStrip(bubbleId, {
-                sessionId: _taskUiSessionId,
-                status: 'completed',
-                checkpoint: 'Assistant response finished.',
-            });
-            _taskUiTerminated = true;
+        if (_taskUiSeeded && !_taskUiTerminated) {
+            if (_delegationShouldPollAfterStream || (_delegationAttached && !_delegationLastTerminal)) {
+                // A real background delegation is still running after the chat
+                // stream closed. Its live completion event can be lost if the slow
+                // task outlives the response stream (server logs "write() after
+                // write_eof()"), so poll the persisted ledger and flip the card to
+                // its REAL terminal state — instead of falsely marking it completed
+                // now just because the reply ended.
+                _scheduleDelegationPoll(2500);
+            } else if (_delegationAttached && _delegationLastTerminal) {
+                // A real delegation actually finished — finalize honestly.
+                updateMessageTaskStrip(bubbleId, {
+                    sessionId: _taskUiSessionId,
+                    status: 'completed',
+                    checkpoint: 'Background task complete.',
+                });
+                _taskUiTerminated = true;
+            } else {
+                // The card was seeded but no delegation event was seen this turn.
+                // Usually that means the chat handled it conversationally — BUT it can
+                // also be the write_eof race where a real worker's events were ALL
+                // dropped. So mark it "handled in chat" provisionally AND reconcile
+                // against the ledger: if a real delegation surfaces, the poll flips the
+                // card to its true terminal state (M4) and drops the in-thread result
+                // bubble; if none exists, this honest label stands.
+                updateMessageTaskStrip(bubbleId, {
+                    sessionId: _taskUiSessionId,
+                    status: 'completed',
+                    checkpoint: 'Handled in chat — no background task needed.',
+                });
+                _taskUiTerminated = true;
+                _scheduleDelegationPoll(2500);
+            }
         }
 
         let assistantFinalText = fullText;

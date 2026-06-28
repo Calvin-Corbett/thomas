@@ -26,6 +26,8 @@
 /scripts/forge/gates/             @Calvin-Corbett
 /scripts/active_folders.py        @Calvin-Corbett
 /scripts/breakglass_auth.py       @Calvin-Corbett
+/scripts/commit_breakglass_guard.py @Calvin-Corbett
+/scripts/install_commit_breakglass_hooks.py @Calvin-Corbett
 /scripts/validate_agent_changes.py @Calvin-Corbett
 /scripts/post_commit_audit.py     @Calvin-Corbett
 /scripts/crew/brief/safety_config.py @Calvin-Corbett

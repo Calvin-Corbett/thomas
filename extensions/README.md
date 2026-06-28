@@ -1,6 +1,12 @@
 # Thomas Extensions
 
-Last reviewed: 2026-05-29.
+Last reviewed: 2026-06-11.
+
+**Building or reviewing a module? Read `docs/EXTENSION_STANDARD.md` first.**
+It is the binding ruleset: per-type requirements (app / plugin /
+dependency / integration), the standalone principle (every workspace module
+must open as its own app via `/app/<id>`), and the validator
+(`python scripts/validate_extension.py <id> --strict`).
 
 The directories in `extensions/` are custom Thomas marketplace extension packs.
 They are not third-party packages copied from an external marketplace.

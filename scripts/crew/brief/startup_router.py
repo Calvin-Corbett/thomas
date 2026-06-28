@@ -29,6 +29,18 @@ except (ImportError, ModuleNotFoundError):  # pragma: no cover
     import gate_response_policy  # type: ignore
     from crew.workboard import message as workboard_message  # type: ignore
 
+# Worktree-sprawl prevention: surfaced at session start so every agent sees the
+# worktree inventory before creating a new one. Imported defensively — a failure
+# here must never break the startup router.
+try:
+    from scripts.crew import worktree_debt, worktree_ledger
+except (ImportError, ModuleNotFoundError):  # pragma: no cover
+    try:
+        from crew import worktree_debt, worktree_ledger  # type: ignore
+    except (ImportError, ModuleNotFoundError):
+        worktree_ledger = None  # type: ignore
+        worktree_debt = None  # type: ignore
+
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 ROUTER_DOC = "docs/ai/AGENT_ROUTER.md"
 LANE_CARD_PATHS = {
@@ -201,6 +213,69 @@ def _startup_inbox(workboard_path: Path, *, agent: str = "") -> dict[str, Any]:
         "messages": messages[:8],
         "error": "" if ok else str(payload.get("error") or "inbox check failed"),
     }
+
+
+def _startup_current_thread(workboard_path: Path, *, agent: str = "", peer: str = "") -> dict[str, Any]:
+    actor = workboard_message.resolve_current_agent(agent)
+    peer_clean = str(peer or "").strip()
+    if not actor:
+        return {
+            "agent": "",
+            "peer": peer_clean,
+            "ok": False,
+            "message_count": 0,
+            "awaiting_me": 0,
+            "awaiting_peer": 0,
+            "messages": [],
+            "error": "agent identity unavailable; pass --agent or set AGENT_ID/THOMAS_AGENT_ID",
+        }
+    ok, payload = workboard_message.current_messages(workboard_path, agent=actor, peer=peer_clean, limit=5)
+    messages = list(payload.get("messages") or []) if ok else []
+    awaiting_me = sum(1 for row in messages if str(row.get("awaiting") or "") == "me")
+    awaiting_peer = sum(1 for row in messages if str(row.get("awaiting") or "") == "peer")
+    return {
+        "agent": actor,
+        "peer": peer_clean,
+        "ok": bool(ok),
+        "message_count": int(payload.get("message_count") or len(messages)) if ok else 0,
+        "awaiting_me": awaiting_me,
+        "awaiting_peer": awaiting_peer,
+        "messages": messages[:5],
+        "error": "" if ok else str(payload.get("error") or "current-thread check failed"),
+    }
+
+
+def _startup_message_audit(workboard_path: Path, *, agent: str = "", peer: str = "") -> dict[str, Any]:
+    actor = workboard_message.resolve_current_agent(agent)
+    peer_clean = str(peer or "").strip()
+    ok, payload = workboard_message.audit_messages(workboard_path, agent=actor, peer=peer_clean, limit=5)
+    return {
+        "agent": actor,
+        "peer": peer_clean,
+        "ok": bool(ok),
+        "problem_count": int(payload.get("problem_count") or 0),
+        "canonical_inbox_count": int(payload.get("canonical_inbox_count") or 0),
+        "canonical_current_count": int(payload.get("canonical_current_count") or 0),
+        "awaiting_me": int(payload.get("awaiting_me") or 0),
+        "awaiting_peer": int(payload.get("awaiting_peer") or 0),
+        "parse_error_count": int(payload.get("parse_error_count") or 0),
+        "candidate_mention_count": int(payload.get("candidate_mention_count") or 0),
+        "identity_mismatch_count": int(payload.get("identity_mismatch_count") or 0),
+        "stale_identity_mismatch_count": int(payload.get("stale_identity_mismatch_count") or 0),
+        "parse_errors": list(payload.get("parse_errors") or [])[:5],
+        "candidate_mentions": list(payload.get("candidate_mentions") or [])[:5],
+        "identity_mismatches": list(payload.get("identity_mismatches") or [])[:5],
+        "stale_identity_mismatches": list(payload.get("stale_identity_mismatches") or [])[:5],
+        "diagnosis": str(payload.get("diagnosis") or ""),
+        "error": "" if ok else str(payload.get("error") or "message lane audit found problems"),
+    }
+
+
+def _brief_text(value: object, *, limit: int = 180) -> str:
+    text = re.sub(r"\s+", " ", str(value or "").strip())
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 3)].rstrip() + "..."
 
 
 def _paths_overlap(path_a: str, path_b: str) -> bool:
@@ -682,6 +757,48 @@ def _detect_orphaned_dirty_state(repo_root: Path, max_age_hours: float = 24.0) -
     }
 
 
+def _startup_worktree_inventory(repo_root: Path) -> dict[str, Any]:
+    """Surface the worktree ledger + merge-debt alarm at session start.
+
+    Default-safe: with only the main checkout this returns a quiet summary and no
+    warning. Any failure degrades to an ``ok=False`` payload rather than raising.
+    """
+    if worktree_ledger is None:  # pragma: no cover - import guard
+        return {"ok": False, "error": "worktree_ledger unavailable", "summary": "", "warning": ""}
+    try:
+        ledger = worktree_ledger.collect(repo_root)
+        rows = [
+            {
+                "branch": row.branch or ("(main)" if row.is_main else "(detached)"),
+                "purpose": row.purpose,
+                "uncommitted": row.uncommitted_count,
+                "days_since_last_commit": row.days_since_last_commit,
+                "dirty": row.dirty,
+                "stale": row.stale,
+                "is_main": row.is_main,
+            }
+            for row in ledger.rows
+        ]
+        warning = ""
+        if worktree_debt is not None:
+            report = worktree_debt.assess_debt(repo_root)
+            if report.over_ceiling:
+                warning = worktree_debt.render_report(report)
+        return {
+            "ok": True,
+            "total": ledger.total,
+            "dirty": ledger.dirty_count,
+            "stale": ledger.stale_count,
+            "over_ceiling": ledger.over_ceiling,
+            "header": worktree_ledger.header_line(ledger),
+            "summary": worktree_ledger.summary_line(ledger),
+            "worktrees": rows,
+            "warning": warning,
+        }
+    except (OSError, ValueError, TypeError, RuntimeError, subprocess.SubprocessError) as exc:  # pragma: no cover
+        return {"ok": False, "error": str(exc), "summary": "", "warning": ""}
+
+
 def build_startup_payload(
     *,
     summary: str,
@@ -695,6 +812,7 @@ def build_startup_payload(
     workboard_path: Path,
     cwd: Path | None = None,
     agent: str = "",
+    peer: str = "",
 ) -> dict[str, Any]:
     payload = classify_task(
         summary=summary,
@@ -709,8 +827,11 @@ def build_startup_payload(
     )
     payload["preflight"] = agent_preflight.evaluate_preflight(root=ROOT, cwd=cwd)
     payload["inbox"] = _startup_inbox(workboard_path, agent=agent)
+    payload["current_thread"] = _startup_current_thread(workboard_path, agent=agent, peer=peer)
+    payload["message_audit"] = _startup_message_audit(workboard_path, agent=agent, peer=peer)
     payload["branch_scan"] = _scan_related_branches(summary, paths)
     payload["orphaned_state"] = _detect_orphaned_dirty_state(ROOT)
+    payload["worktree_inventory"] = _startup_worktree_inventory(ROOT)
     return payload
 
 
@@ -737,6 +858,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--workboard", default=str(DEFAULT_WORKBOARD), help="Path to WORKBOARD.md.")
     parser.add_argument("--agent", default="", help="Agent identity for startup inbox surfacing.")
+    parser.add_argument("--peer", default="", help="Optional peer identity for startup current-thread surfacing.")
     parser.add_argument("--json", action="store_true", help="Emit JSON.")
     return parser
 
@@ -745,6 +867,29 @@ def _text_output(payload: dict[str, Any]) -> str:
     preflight = dict(payload.get("preflight") or {})
     policy = dict(preflight.get("policy") or {})
     lines = ["Thomas agent startup router"]
+    worktree_inventory = dict(payload.get("worktree_inventory") or {})
+    if worktree_inventory.get("ok"):
+        lines.append(str(worktree_inventory.get("header") or worktree_inventory.get("summary") or ""))
+        if int(worktree_inventory.get("total") or 0) > 1:
+            for row in list(worktree_inventory.get("worktrees") or []):
+                if row.get("is_main"):
+                    continue
+                marks = []
+                if row.get("dirty"):
+                    marks.append("DIRTY")
+                if row.get("stale"):
+                    marks.append("STALE")
+                flag = f" [{','.join(marks)}]" if marks else ""
+                age = row.get("days_since_last_commit")
+                age_text = "?" if age is None else f"{age}d"
+                lines.append(
+                    f"  - {row.get('branch')}{flag}: {row.get('uncommitted')} uncommitted, {age_text} "
+                    f"({row.get('purpose')})"
+                )
+        warning = str(worktree_inventory.get("warning") or "").strip()
+        if warning:
+            lines.append("*** WORKTREE MERGE-DEBT WARNING ***")
+            lines.extend(warning.splitlines())
     inbox = dict(payload.get("inbox") or {})
     inbox_agent = str(inbox.get("agent") or "")
     inbox_count = int(inbox.get("unread_count") or 0)
@@ -755,12 +900,52 @@ def _text_output(payload: dict[str, Any]) -> str:
             lines.append(
                 "  - "
                 f"{row.get('msg_id')}: from={row.get('from')} priority={row.get('priority')}{escalation}; "
-                f"{row.get('summary')}"
+                f"{_brief_text(row.get('summary'))}"
             )
         if inbox_count:
-            lines.append(f"inbox_action: python scripts/crew/workboard/message.py --list --agent {inbox_agent}")
+            lines.append(f"inbox_action: python scripts/crew/workboard/message.py --inbox --agent {inbox_agent}")
     else:
         lines.append(f"inbox: unavailable; {inbox.get('error', 'unknown inbox error')}")
+    current_thread = dict(payload.get("current_thread") or {})
+    if current_thread.get("ok"):
+        thread_agent = str(current_thread.get("agent") or inbox_agent)
+        thread_peer = str(current_thread.get("peer") or "").strip()
+        thread_count = int(current_thread.get("message_count") or 0)
+        awaiting_me = int(current_thread.get("awaiting_me") or 0)
+        awaiting_peer = int(current_thread.get("awaiting_peer") or 0)
+        peer_suffix = f"; peer={thread_peer}" if thread_peer else ""
+        lines.append(
+            f"current_thread: agent={thread_agent}{peer_suffix}; active={thread_count}; "
+            f"awaiting_me={awaiting_me}; awaiting_peer={awaiting_peer}"
+        )
+        for row in list(current_thread.get("messages") or []):
+            lines.append(
+                "  - "
+                f"{row.get('msg_id')}: {row.get('direction')} awaiting={row.get('awaiting')} "
+                f"state={row.get('state')}; {_brief_text(row.get('summary'))}"
+            )
+        if thread_count:
+            peer_arg = f" --peer {thread_peer}" if thread_peer else ""
+            lines.append(
+                f"current_thread_action: python scripts/crew/workboard/message.py --current --agent {thread_agent}{peer_arg}"
+            )
+    elif current_thread:
+        lines.append(f"current_thread: unavailable; {current_thread.get('error', 'unknown current-thread error')}")
+    message_audit = dict(payload.get("message_audit") or {})
+    if message_audit:
+        audit_state = "ok" if message_audit.get("ok") else "warning"
+        lines.append(
+            f"message_audit: {audit_state}; problems={int(message_audit.get('problem_count') or 0)}; "
+            f"inbox={int(message_audit.get('canonical_inbox_count') or 0)}; "
+            f"current={int(message_audit.get('canonical_current_count') or 0)}; "
+            f"awaiting_me={int(message_audit.get('awaiting_me') or 0)}; "
+            f"awaiting_peer={int(message_audit.get('awaiting_peer') or 0)}; "
+            f"{message_audit.get('diagnosis', '')}"
+        )
+        for item in list(message_audit.get("parse_errors") or []):
+            lines.append(f"  - parse_error line {item.get('line')}: {_brief_text(item.get('error'), limit=120)}")
+        for item in list(message_audit.get("candidate_mentions") or []):
+            lines.append(f"  - candidate_mention line {item.get('line')}: {_brief_text(item.get('text'), limit=160)}")
     if preflight:
         lines.extend(
             [
@@ -869,6 +1054,7 @@ def run(argv: list[str] | None = None) -> int:
         workflow_mode=workflow_mode,
         workboard_path=Path(str(args.workboard)).expanduser(),
         agent=str(args.agent or ""),
+        peer=str(args.peer or ""),
     )
     if args.json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))

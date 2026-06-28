@@ -30,6 +30,21 @@ def test_evolve_plan_lists_self_chosen_backlog(tmp_path: Path) -> None:
     assert any(g["category"] == "refactor" for g in payload["goals"])
 
 
+def test_evolve_json_output_is_console_encoding_safe(monkeypatch) -> None:
+    captured = {}
+
+    def cp1252_echo(text: str) -> None:
+        text.encode("cp1252")
+        captured["text"] = text
+
+    monkeypatch.setattr(cli_evolve.click, "echo", cp1252_echo)
+
+    cli_evolve._emit_json({"bad_char": "\ufffd", "plain": "ok"})
+
+    assert "\\ufffd" in captured["text"]
+    assert json.loads(captured["text"])["bad_char"] == "\ufffd"
+
+
 def test_evolve_loop_command_wires_options(tmp_path: Path, monkeypatch) -> None:
     captured = {}
 

@@ -160,6 +160,10 @@ def _is_protected_path(path: str, protected: set[str]) -> bool:
         return False
     if normalized in protected:
         return True
+    for item in protected:
+        prefix = _normalize_repo_path(item)
+        if prefix and str(item).replace("\\", "/").endswith("/") and normalized.startswith(f"{prefix}/"):
+            return True
     return _is_immutable_policy_doc(path)
 
 

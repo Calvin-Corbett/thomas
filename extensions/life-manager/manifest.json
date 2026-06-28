@@ -16,7 +16,7 @@
   "publisher_id": "thomas-official",
   "publisher_name": "Thomas",
   "kind": "desktop_plugin",
-  "marketplace_type": "command_center",
+  "marketplace_type": "app",
   "description": "Track daily tasks, agenda events, habits, and goals in one Thomas command center.",
   "subtitle": "Tasks, agenda, habits, and goals in one local-first workspace.",
   "icon": "ph-list-checks",
@@ -30,7 +30,7 @@
   "tags": [
     "productivity",
     "automation",
-    "command_center",
+    "app",
     "workspace",
     "official"
   ],
@@ -38,7 +38,7 @@
     "life-manager-foundation"
   ],
   "left_nav_behavior": "workspace",
-  "default_nav_section": "command_centers",
+  "default_nav_section": "apps",
   "default_nav_order": 520,
   "surface": {
     "entry_html": "web/index.html",

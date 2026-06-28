@@ -1,3 +1,5 @@
+import asyncio
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -321,6 +323,53 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Background work in this chat:", digest)
         self.assertIn("worker [requested via task manager]", digest)
 
+    def test_live_repo_change_detection_uses_content_and_ignores_library(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d).resolve()
+            target = root / "tests" / "probe_test.py"
+            target.parent.mkdir(parents=True)
+            target.write_text("value = 1\n", encoding="utf-8")
+            library_note = root / "library" / "entries" / "note.md"
+            library_note.parent.mkdir(parents=True)
+            library_note.write_text("note v1\n", encoding="utf-8")
+
+            baseline = chat_delegation._live_repo_workspace_mtimes(root)
+
+            target.write_text("value = 1\n", encoding="utf-8")
+            library_note.write_text("note v2\n", encoding="utf-8")
+            self.assertNotIn("tests/probe_test.py", chat_delegation._live_repo_files_changed_since(root, baseline))
+            self.assertNotIn("library/entries/note.md", chat_delegation._live_repo_files_changed_since(root, baseline))
+
+            target.write_text("value = 2\n", encoding="utf-8")
+            self.assertEqual(chat_delegation._live_repo_files_changed_since(root, baseline), ["tests/probe_test.py"])
+
+    def test_agent_worker_runtime_profile_exposes_ui_build_quality_label(self):
+        profile = chat_delegation._agent_worker_runtime_profile(
+            autonomy_level=4,
+            file_access=2,
+            effort="optimal",
+            guardrails="guarded",
+            requires_live_repo_change=True,
+        )
+
+        self.assertEqual(profile["effort"], "optimal")
+        self.assertEqual(profile["build_quality_label"], "Standard")
+        self.assertEqual(profile["file_access_label"], "project")
+
+    def test_live_repo_replan_after_no_counted_write_requires_changed_content(self):
+        prompt = chat_delegation._replan_prompt(
+            "Modify Thomas.",
+            "self-development task changed no live repo files; write tools used did not change counted files: "
+            "fs.write_file",
+            2,
+            3,
+        )
+
+        self.assertIn("write did not change any counted live-repo source/test/doc content", prompt)
+        self.assertIn("must change file content, not rewrite identical bytes", prompt)
+        self.assertIn("outside runtime/, output/, library/", prompt)
+        self.assertIn("LIVE REPO COMPLETION REQUIREMENT:", prompt)
+
     async def test_start_background_delegation_uses_agent_worker(self):
         # With the bridge gating removed, the agent worker is the unconditional
         # primary delegation path.
@@ -416,7 +465,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
             patch(
                 "thomas.server.chat_delegation.task_bot_runtime.create_execution",
                 return_value={"execution_id": "exec-native"},
-            ),
+            ) as create_execution,
             patch("thomas.server.chat_delegation.task_bot_runtime.update_execution") as update_execution,
             patch(
                 "thomas.server.chat_delegation.task_bot_runtime.get_execution",
@@ -446,15 +495,180 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(record["backend_type"], chat_delegation.PROVIDER_NATIVE_BACKEND)
         self.assertEqual(update_execution.call_count, 4)
         self.assertEqual(len(created_coroutines), 1)
+        runtime_profile = create_execution.call_args.kwargs["runtime_profile"]
+        self.assertEqual(runtime_profile["autonomy_level"], 4)
+        self.assertEqual(runtime_profile["file_access"], 1)
+        self.assertEqual(runtime_profile["effort"], "diligent")
+        self.assertEqual(runtime_profile["build_quality_label"], "diligent")
+        self.assertIs(runtime_profile["requires_live_repo_change"], False)
+        self.assertEqual(runtime_profile["max_attempts"], 3)
         emitter.started.assert_awaited_once()
+
+    async def test_self_development_prompt_requires_project_file_access(self):
+        emitter = SimpleNamespace(started=AsyncMock(), failed=AsyncMock())
+        payload = {
+            "execution_id": "exec-native",
+            "conversation_id": "sess-native",
+            "backend_type": chat_delegation.PROVIDER_NATIVE_BACKEND,
+            "state": "failed",
+            "summary": "Modify Thomas.",
+            "progress_summary": "Raise the file-access dial to Project or higher.",
+            "bot_id": "nova",
+        }
+        with (
+            patch(
+                "thomas.server.chat_delegation.task_bot_runtime.create_execution",
+                return_value={"execution_id": "exec-native"},
+            ),
+            patch("thomas.server.chat_delegation.task_bot_runtime.update_execution"),
+            patch("thomas.server.chat_delegation.task_bot_runtime.fail_execution") as fail_execution,
+            patch("thomas.server.chat_delegation.task_bot_runtime.get_execution", return_value=payload),
+            patch("thomas.server.chat_delegation.asyncio.create_task") as create_task,
+        ):
+            record = await chat_delegation._start_agent_worker_delegation(
+                {},
+                session_id="sess-native",
+                prompt="Modify Thomas's code in the live repo.",
+                specialist_id="coding",
+                bot=_BotStub(),
+                emitter=emitter,
+                repo_root=None,
+                file_access=1,
+            )
+
+        self.assertEqual(record["state"], "failed")
+        fail_execution.assert_called_once()
+        create_task.assert_not_called()
+        emitter.failed.assert_awaited_once()
+
+    async def test_self_development_prompt_runs_worker_in_repo_at_project_access(self):
+        emitter = SimpleNamespace(started=AsyncMock())
+        captured = {}
+        created_coroutines = []
+
+        def _supervisor(*args, **kwargs):  # noqa: ANN001, ANN003
+            captured.update(kwargs["worker_kwargs"])
+            captured["runner"] = args[0]
+
+            async def _noop():
+                return None
+
+            return _noop()
+
+        def _create_task(coro):  # noqa: ANN001
+            created_coroutines.append(coro)
+            coro.close()
+            return SimpleNamespace()
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d).resolve()
+            with (
+                patch(
+                    "thomas.server.chat_delegation.task_bot_runtime.create_execution",
+                    return_value={"execution_id": "exec-native"},
+                ) as create_execution,
+                patch("thomas.server.chat_delegation.task_bot_runtime.update_execution"),
+                patch(
+                    "thomas.server.chat_delegation.task_bot_runtime.get_execution",
+                    return_value={
+                        "execution_id": "exec-native",
+                        "conversation_id": "sess-native",
+                        "backend_type": chat_delegation.PROVIDER_NATIVE_BACKEND,
+                        "state": "executing",
+                        "summary": "Modify Thomas.",
+                        "progress_summary": "Provider-native worker is running.",
+                        "bot_id": "nova",
+                    },
+                ),
+                patch("thomas.server.chat_delegation._run_agent_worker_supervised", new=_supervisor),
+                patch("thomas.server.chat_delegation.asyncio.create_task", side_effect=_create_task),
+            ):
+                await chat_delegation._start_agent_worker_delegation(
+                    {},
+                    session_id="sess-native",
+                    prompt="Work in the live Thomas repo and modify Thomas's code.",
+                    specialist_id="coding",
+                    bot=_BotStub(),
+                    emitter=emitter,
+                    repo_root=root,
+                    file_access=2,
+                )
+
+        self.assertEqual(captured["work_dir"], root)
+        self.assertIs(captured["requires_live_repo_change"], True)
+        self.assertIn("live Thomas repo", captured["instructions"])
+        runtime_profile = create_execution.call_args.kwargs["runtime_profile"]
+        self.assertEqual(runtime_profile["autonomy_level"], 4)
+        self.assertEqual(runtime_profile["file_access"], 2)
+        self.assertEqual(runtime_profile["file_access_label"], "project")
+        self.assertEqual(runtime_profile["build_quality_label"], "diligent")
+        self.assertIs(runtime_profile["requires_live_repo_change"], True)
+        self.assertEqual(runtime_profile["max_attempts"], 3)
+        self.assertEqual(len(created_coroutines), 1)
+
+    async def test_supervised_agent_worker_fails_stale_first_event_from_web_loop(self):
+        emitter = SimpleNamespace(failed=AsyncMock())
+
+        async def _runner(*args, **kwargs):  # noqa: ANN001, ANN003
+            await asyncio.sleep(0.05)
+
+        stale_record = {
+            "execution_id": "exec-native",
+            "conversation_id": "sess-native",
+            "backend_type": chat_delegation.PROVIDER_NATIVE_BACKEND,
+            "state": "executing",
+            "summary": "please implement this plan",
+            "progress_summary": "Provider-native worker is running.",
+            "last_heartbeat_at": "2000-01-01T00:00:00+00:00",
+            "bot_id": "nova",
+        }
+        with (
+            patch("thomas.server.chat_delegation._WORKER_FIRST_EVENT_TIMEOUT_S", 0.005),
+            patch("thomas.server.chat_delegation.task_bot_runtime.get_execution", return_value=stale_record),
+            patch("thomas.server.chat_delegation.task_bot_runtime.fail_execution") as fail_execution,
+        ):
+            await chat_delegation._run_agent_worker_supervised(
+                _runner,
+                {},
+                execution_id="exec-native",
+                specialist_id="coding",
+                bot=_BotStub(),
+                emitter=emitter,
+                repo_root=Path(".").resolve(),
+                worker_kwargs={},
+            )
+
+        fail_execution.assert_called_once()
+        self.assertEqual(fail_execution.call_args.kwargs["blocker"], "provider_native_timeout")
+        emitter.failed.assert_awaited_once()
 
     async def test_run_agent_worker_reports_progress_and_completion(self):
         emitter = SimpleNamespace(progress=AsyncMock(), completed=AsyncMock(), failed=AsyncMock())
 
         async def _events():  # noqa: ANN202
+            yield {"type": "progress", "text": "Provider-native worker is initializing."}
             yield {"type": "tool_start", "name": "grep"}
             yield {"type": "tool_output"}
             yield {"type": "done"}
+
+        complete_called = False
+
+        def _get_execution(*_args, **_kwargs):  # noqa: ANN202
+            state = "completed" if complete_called else "executing"
+            return {
+                "execution_id": "exec-native",
+                "conversation_id": "sess-native",
+                "backend_type": chat_delegation.PROVIDER_NATIVE_BACKEND,
+                "state": state,
+                "summary": "please implement this plan",
+                "progress_summary": "Completed a tool step.",
+                "bot_id": "nova",
+            }
+
+        def _complete_execution(*_args, **_kwargs):  # noqa: ANN202
+            nonlocal complete_called
+            complete_called = True
+            return None
 
         with (
             patch(
@@ -462,19 +676,11 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 new=lambda *args, **kwargs: _events(),  # noqa: ARG005
             ),
             patch("thomas.server.chat_delegation.task_bot_runtime.update_execution") as update_execution,
-            patch("thomas.server.chat_delegation.task_bot_runtime.complete_execution") as complete_execution,
             patch(
-                "thomas.server.chat_delegation.task_bot_runtime.get_execution",
-                return_value={
-                    "execution_id": "exec-native",
-                    "conversation_id": "sess-native",
-                    "backend_type": chat_delegation.PROVIDER_NATIVE_BACKEND,
-                    "state": "executing",
-                    "summary": "please implement this plan",
-                    "progress_summary": "Completed a tool step.",
-                    "bot_id": "nova",
-                },
-            ),
+                "thomas.server.chat_delegation.task_bot_runtime.complete_execution",
+                side_effect=_complete_execution,
+            ) as complete_execution,
+            patch("thomas.server.chat_delegation.task_bot_runtime.get_execution", side_effect=_get_execution),
         ):
             await chat_delegation._run_agent_worker(
                 {},
@@ -487,36 +693,440 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 repo_root=Path(".").resolve(),
             )
 
-        self.assertEqual(update_execution.call_count, 2)
+        self.assertEqual(update_execution.call_count, 4)
         complete_execution.assert_called_once()
-        self.assertEqual(emitter.progress.await_count, 2)
+        self.assertEqual(emitter.progress.await_count, 4)
+        self.assertEqual(emitter.progress.await_args_list[0].kwargs["text"], "Preparing workspace change baseline.")
+        self.assertEqual(emitter.progress.await_args_list[1].kwargs["text"], "Provider-native worker is initializing.")
         emitter.completed.assert_awaited_once()
         emitter.failed.assert_not_awaited()
 
+    async def test_run_agent_worker_heartbeats_before_live_repo_baseline(self):
+        emitter = SimpleNamespace(progress=AsyncMock(), completed=AsyncMock(), failed=AsyncMock())
+        fail_called = False
+        saw_baseline = False
+
+        async def _events():  # noqa: ANN202
+            yield {"type": "error", "error": "stop after baseline"}
+
+        def _workspace_mtimes(_path, **kwargs):  # noqa: ANN202
+            nonlocal saw_baseline
+            saw_baseline = True
+            self.assertIn("runtime/", kwargs.get("ignored_prefixes", ()))
+            self.assertIn("node_modules", kwargs.get("ignored_parts", frozenset()))
+            self.assertEqual(emitter.progress.await_count, 1)
+            self.assertEqual(
+                emitter.progress.await_args_list[0].kwargs["text"],
+                "Preparing live repo change baseline.",
+            )
+            return {}
+
+        def _fail_execution(*_args, **_kwargs):  # noqa: ANN202
+            nonlocal fail_called
+            fail_called = True
+            return None
+
+        def _get_execution(*_args, **_kwargs):  # noqa: ANN202
+            return {
+                "execution_id": "exec-native",
+                "conversation_id": "sess-native",
+                "backend_type": chat_delegation.PROVIDER_NATIVE_BACKEND,
+                "state": "failed" if fail_called else "executing",
+                "summary": "Modify Thomas.",
+                "progress_summary": "Background execution failed: stop after baseline",
+                "bot_id": "nova",
+            }
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d).resolve()
+            with (
+                patch(
+                    "thomas.server.chat_delegation.run_agent_worker_events",
+                    new=lambda *args, **kwargs: _events(),  # noqa: ARG005
+                ),
+                patch("thomas.server.chat_delegation._workspace_mtimes", side_effect=_workspace_mtimes),
+                patch(
+                    "thomas.server.chat_delegation.task_bot_runtime.fail_execution",
+                    side_effect=_fail_execution,
+                ),
+                patch("thomas.server.chat_delegation.task_bot_runtime.update_execution"),
+                patch("thomas.server.chat_delegation.task_bot_runtime.get_execution", side_effect=_get_execution),
+            ):
+                await chat_delegation._run_agent_worker(
+                    {},
+                    execution_id="exec-native",
+                    prompt="Modify Thomas.",
+                    specialist_id="coding",
+                    bot=_BotStub(),
+                    emitter=emitter,
+                    instructions="Do live repo work.",
+                    repo_root=root,
+                    work_dir=root,
+                    requires_live_repo_change=True,
+                    autonomy_level=1,
+                )
+
+        self.assertTrue(saw_baseline)
+        emitter.failed.assert_awaited_once()
+        emitter.completed.assert_not_awaited()
+
+    async def test_run_agent_worker_live_repo_requires_changed_file(self):
+        emitter = SimpleNamespace(progress=AsyncMock(), completed=AsyncMock(), failed=AsyncMock())
+        captured = {}
+
+        async def _events():  # noqa: ANN202
+            yield {"type": "tool_start", "name": "shell.exec"}
+            yield {"type": "tool_output", "name": "shell.exec", "ok": True}
+            yield {"type": "done"}
+
+        def _worker_events(*_args, **kwargs):  # noqa: ANN202
+            captured["prompt"] = kwargs["prompt"]
+            return _events()
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d).resolve()
+            fail_called = False
+
+            def _fail_execution(*_args, **_kwargs):  # noqa: ANN202
+                nonlocal fail_called
+                fail_called = True
+                return None
+
+            def _get_execution(*_args, **_kwargs):  # noqa: ANN202
+                return {
+                    "execution_id": "exec-native",
+                    "conversation_id": "sess-native",
+                    "backend_type": chat_delegation.PROVIDER_NATIVE_BACKEND,
+                    "state": "failed" if fail_called else "executing",
+                    "summary": "Modify Thomas.",
+                    "progress_summary": "self-development task changed no live repo files",
+                    "bot_id": "nova",
+                }
+
+            with (
+                patch(
+                    "thomas.server.chat_delegation.run_agent_worker_events",
+                    new=_worker_events,
+                ),
+                patch("thomas.server.chat_delegation.task_bot_runtime.update_execution"),
+                patch(
+                    "thomas.server.chat_delegation.task_bot_runtime.fail_execution",
+                    side_effect=_fail_execution,
+                ) as fail_execution,
+                patch("thomas.server.chat_delegation.task_bot_runtime.get_execution", side_effect=_get_execution),
+            ):
+                await chat_delegation._run_agent_worker(
+                    {},
+                    execution_id="exec-native",
+                    prompt="Modify Thomas.",
+                    specialist_id="coding",
+                    bot=_BotStub(),
+                    emitter=emitter,
+                    instructions="Do live repo work.",
+                    repo_root=root,
+                    work_dir=root,
+                    requires_live_repo_change=True,
+                    autonomy_level=1,
+                )
+
+        fail_execution.assert_called_once()
+        self.assertIn("LIVE REPO COMPLETION REQUIREMENT:", captured["prompt"])
+        self.assertTrue(
+            "Ignored/generated files" in captured["prompt"] or "Pure inspection does not count" in captured["prompt"]
+        )
+        self.assertIn("fs.write_file", captured["prompt"])
+        self.assertIn("no live repo files", fail_execution.call_args.kwargs["summary"])
+        emitter.failed.assert_awaited_once()
+        emitter.completed.assert_not_awaited()
+
+    async def test_run_agent_worker_live_repo_retry_mentions_missing_write_tool(self):
+        emitter = SimpleNamespace(progress=AsyncMock(), completed=AsyncMock(), failed=AsyncMock())
+        prompts: list[str] = []
+
+        async def _events():  # noqa: ANN202
+            yield {"type": "tool_start", "name": "shell.exec"}
+            yield {"type": "tool_output", "name": "shell.exec", "ok": True}
+            yield {"type": "done"}
+
+        def _worker_events(*_args, **kwargs):  # noqa: ANN202
+            prompts.append(kwargs["prompt"])
+            return _events()
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d).resolve()
+            fail_called = False
+
+            def _fail_execution(*_args, **_kwargs):  # noqa: ANN202
+                nonlocal fail_called
+                fail_called = True
+                return None
+
+            def _get_execution(*_args, **_kwargs):  # noqa: ANN202
+                return {
+                    "execution_id": "exec-native",
+                    "conversation_id": "sess-native",
+                    "backend_type": chat_delegation.PROVIDER_NATIVE_BACKEND,
+                    "state": "failed" if fail_called else "executing",
+                    "summary": "Modify Thomas.",
+                    "progress_summary": "self-development task changed no live repo files",
+                    "bot_id": "nova",
+                }
+
+            with (
+                patch("thomas.server.chat_delegation.run_agent_worker_events", new=_worker_events),
+                patch("thomas.server.chat_delegation.task_bot_runtime.update_execution"),
+                patch(
+                    "thomas.server.chat_delegation.task_bot_runtime.fail_execution",
+                    side_effect=_fail_execution,
+                ) as fail_execution,
+                patch("thomas.server.chat_delegation.task_bot_runtime.get_execution", side_effect=_get_execution),
+            ):
+                await chat_delegation._run_agent_worker(
+                    {},
+                    execution_id="exec-native",
+                    prompt="Modify Thomas.",
+                    specialist_id="coding",
+                    bot=_BotStub(),
+                    emitter=emitter,
+                    instructions="Do live repo work.",
+                    repo_root=root,
+                    work_dir=root,
+                    requires_live_repo_change=True,
+                    autonomy_level=4,
+                )
+
+        self.assertEqual(len(prompts), 3)
+        self.assertIn("LIVE REPO COMPLETION REQUIREMENT:", prompts[0])
+        self.assertIn("no write tool was used", prompts[1])
+        self.assertIn("Stop broad inspection now", prompts[1])
+        self.assertIn("next substantive tool call must be fs.write_file", prompts[1])
+        self.assertIn("prefer a small regression test or catalog policy edit", prompts[1])
+        self.assertIn("Stop broad inspection now", prompts[2])
+        self.assertIn("next substantive tool call must be fs.write_file", prompts[2])
+        self.assertIn("fs.write_file", prompts[1])
+        self.assertIn("no write tool was used", fail_execution.call_args.kwargs["summary"])
+        emitter.failed.assert_awaited_once()
+        emitter.completed.assert_not_awaited()
+
+    async def test_run_agent_worker_live_repo_ignores_generated_test_result_log(self):
+        emitter = SimpleNamespace(progress=AsyncMock(), completed=AsyncMock(), failed=AsyncMock())
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d).resolve()
+            result_log = root / "thomas_test_results.jsonl"
+            fail_called = False
+
+            async def _events():  # noqa: ANN202
+                result_log.write_text('{"ok": true}\n', encoding="utf-8")
+                yield {"type": "tool_start", "name": "shell.exec"}
+                yield {"type": "tool_output", "name": "shell.exec", "ok": True}
+                yield {"type": "done"}
+
+            def _fail_execution(*_args, **_kwargs):  # noqa: ANN202
+                nonlocal fail_called
+                fail_called = True
+                return None
+
+            def _get_execution(*_args, **_kwargs):  # noqa: ANN202
+                return {
+                    "execution_id": "exec-native",
+                    "conversation_id": "sess-native",
+                    "backend_type": chat_delegation.PROVIDER_NATIVE_BACKEND,
+                    "state": "failed" if fail_called else "executing",
+                    "summary": "Modify Thomas.",
+                    "progress_summary": "self-development task changed no live repo files",
+                    "bot_id": "nova",
+                }
+
+            with (
+                patch(
+                    "thomas.server.chat_delegation.run_agent_worker_events",
+                    new=lambda *args, **kwargs: _events(),  # noqa: ARG005
+                ),
+                patch("thomas.server.chat_delegation.task_bot_runtime.update_execution"),
+                patch(
+                    "thomas.server.chat_delegation.task_bot_runtime.fail_execution",
+                    side_effect=_fail_execution,
+                ) as fail_execution,
+                patch("thomas.server.chat_delegation.task_bot_runtime.get_execution", side_effect=_get_execution),
+            ):
+                await chat_delegation._run_agent_worker(
+                    {},
+                    execution_id="exec-native",
+                    prompt="Modify Thomas.",
+                    specialist_id="coding",
+                    bot=_BotStub(),
+                    emitter=emitter,
+                    instructions="Do live repo work.",
+                    repo_root=root,
+                    work_dir=root,
+                    requires_live_repo_change=True,
+                    autonomy_level=1,
+                )
+
+        fail_execution.assert_called_once()
+        self.assertIn("no live repo files", fail_execution.call_args.kwargs["summary"])
+        emitter.failed.assert_awaited_once()
+        emitter.completed.assert_not_awaited()
+
+    async def test_run_agent_worker_live_repo_completion_reports_changed_file(self):
+        emitter = SimpleNamespace(progress=AsyncMock(), completed=AsyncMock(), failed=AsyncMock())
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d).resolve()
+            target = root / "tests" / "self_dev_probe.txt"
+            complete_called = False
+
+            async def _events():  # noqa: ANN202
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("changed", encoding="utf-8")
+                yield {"type": "tool_start", "name": "fs.write_file"}
+                yield {"type": "tool_output", "name": "fs.write_file", "ok": True}
+                yield {"type": "done"}
+
+            def _complete_execution(*_args, **_kwargs):  # noqa: ANN202
+                nonlocal complete_called
+                complete_called = True
+                return None
+
+            def _get_execution(*_args, **_kwargs):  # noqa: ANN202
+                return {
+                    "execution_id": "exec-native",
+                    "conversation_id": "sess-native",
+                    "backend_type": chat_delegation.PROVIDER_NATIVE_BACKEND,
+                    "state": "completed" if complete_called else "executing",
+                    "summary": "Modify Thomas.",
+                    "progress_summary": "Changed live Thomas files: tests/self_dev_probe.txt.",
+                    "bot_id": "nova",
+                }
+
+            with (
+                patch(
+                    "thomas.server.chat_delegation.run_agent_worker_events",
+                    new=lambda *args, **kwargs: _events(),  # noqa: ARG005
+                ),
+                patch("thomas.server.chat_delegation.task_bot_runtime.update_execution"),
+                patch("thomas.server.chat_delegation.task_bot_runtime.attach_proof"),
+                patch(
+                    "thomas.server.chat_delegation.task_bot_runtime.complete_execution",
+                    side_effect=_complete_execution,
+                ) as complete_execution,
+                patch("thomas.server.chat_delegation.task_bot_runtime.get_execution", side_effect=_get_execution),
+            ):
+                await chat_delegation._run_agent_worker(
+                    {},
+                    execution_id="exec-native",
+                    prompt="Modify Thomas.",
+                    specialist_id="coding",
+                    bot=_BotStub(),
+                    emitter=emitter,
+                    instructions="Do live repo work.",
+                    repo_root=root,
+                    work_dir=root,
+                    requires_live_repo_change=True,
+                    autonomy_level=1,
+                )
+
+        complete_execution.assert_called_once()
+        self.assertTrue(complete_execution.call_args.kwargs["verified_success"])
+        emitter.completed.assert_awaited_once()
+        emitter.failed.assert_not_awaited()
+
+    async def test_run_agent_worker_live_repo_rejects_docs_only_for_code_task(self):
+        emitter = SimpleNamespace(progress=AsyncMock(), completed=AsyncMock(), failed=AsyncMock())
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d).resolve()
+            target = root / "docs" / "self_development" / "note.md"
+            fail_called = False
+
+            async def _events():  # noqa: ANN202
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("documented instead of fixed", encoding="utf-8")
+                yield {"type": "tool_start", "name": "fs.write_file"}
+                yield {"type": "tool_output", "name": "fs.write_file", "ok": True}
+                yield {"type": "done"}
+
+            def _fail_execution(*_args, **_kwargs):  # noqa: ANN202
+                nonlocal fail_called
+                fail_called = True
+                return None
+
+            def _get_execution(*_args, **_kwargs):  # noqa: ANN202
+                return {
+                    "execution_id": "exec-native",
+                    "conversation_id": "sess-native",
+                    "backend_type": chat_delegation.PROVIDER_NATIVE_BACKEND,
+                    "state": "failed" if fail_called else "executing",
+                    "summary": "Fix route and tests.",
+                    "progress_summary": "self-development task changed only documentation files",
+                    "bot_id": "nova",
+                }
+
+            with (
+                patch(
+                    "thomas.server.chat_delegation.run_agent_worker_events",
+                    new=lambda *args, **kwargs: _events(),  # noqa: ARG005
+                ),
+                patch("thomas.server.chat_delegation.task_bot_runtime.update_execution"),
+                patch(
+                    "thomas.server.chat_delegation.task_bot_runtime.fail_execution",
+                    side_effect=_fail_execution,
+                ) as fail_execution,
+                patch("thomas.server.chat_delegation.task_bot_runtime.get_execution", side_effect=_get_execution),
+            ):
+                await chat_delegation._run_agent_worker(
+                    {},
+                    execution_id="exec-native",
+                    prompt="Fix the marketplace API route and focused tests.",
+                    specialist_id="coding",
+                    bot=_BotStub(),
+                    emitter=emitter,
+                    instructions="Do live repo work.",
+                    repo_root=root,
+                    work_dir=root,
+                    requires_live_repo_change=True,
+                    autonomy_level=1,
+                )
+
+        fail_execution.assert_called_once()
+        self.assertIn("only documentation files", fail_execution.call_args.kwargs["summary"])
+        emitter.failed.assert_awaited_once()
+        emitter.completed.assert_not_awaited()
+
     async def test_run_agent_worker_reports_failure(self):
         emitter = SimpleNamespace(progress=AsyncMock(), completed=AsyncMock(), failed=AsyncMock())
+        fail_called = False
 
         async def _events():  # noqa: ANN202
             yield {"type": "error", "error": "worker exploded"}
+
+        def _fail_execution(*_args, **_kwargs):  # noqa: ANN202
+            nonlocal fail_called
+            fail_called = True
+            return None
+
+        def _get_execution(*_args, **_kwargs):  # noqa: ANN202
+            return {
+                "execution_id": "exec-native",
+                "conversation_id": "sess-native",
+                "backend_type": chat_delegation.PROVIDER_NATIVE_BACKEND,
+                "state": "failed" if fail_called else "executing",
+                "summary": "please implement this plan",
+                "progress_summary": "Background execution failed: worker exploded",
+                "bot_id": "nova",
+            }
 
         with (
             patch(
                 "thomas.server.chat_delegation.run_agent_worker_events",
                 new=lambda *args, **kwargs: _events(),  # noqa: ARG005
             ),
-            patch("thomas.server.chat_delegation.task_bot_runtime.fail_execution") as fail_execution,
             patch(
-                "thomas.server.chat_delegation.task_bot_runtime.get_execution",
-                return_value={
-                    "execution_id": "exec-native",
-                    "conversation_id": "sess-native",
-                    "backend_type": chat_delegation.PROVIDER_NATIVE_BACKEND,
-                    "state": "failed",
-                    "summary": "please implement this plan",
-                    "progress_summary": "Background execution failed: worker exploded",
-                    "bot_id": "nova",
-                },
-            ),
+                "thomas.server.chat_delegation.task_bot_runtime.fail_execution",
+                side_effect=_fail_execution,
+            ) as fail_execution,
+            patch("thomas.server.chat_delegation.task_bot_runtime.get_execution", side_effect=_get_execution),
         ):
             await chat_delegation._run_agent_worker(
                 {},
@@ -533,9 +1143,51 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
         emitter.failed.assert_awaited_once()
         emitter.completed.assert_not_awaited()
 
-    async def test_run_agent_worker_marks_cancellation_and_propagates(self):
-        import asyncio
+    async def test_run_agent_worker_fails_when_first_event_never_arrives(self):
+        emitter = SimpleNamespace(progress=AsyncMock(), completed=AsyncMock(), failed=AsyncMock())
 
+        async def _events():  # noqa: ANN202
+            await asyncio.sleep(0.05)
+            yield {"type": "done"}
+
+        with (
+            patch(
+                "thomas.server.chat_delegation.run_agent_worker_events",
+                new=lambda *args, **kwargs: _events(),  # noqa: ARG005
+            ),
+            patch("thomas.server.chat_delegation._WORKER_FIRST_EVENT_TIMEOUT_S", 0.005),
+            patch("thomas.server.chat_delegation.task_bot_runtime.fail_execution") as fail_execution,
+            patch(
+                "thomas.server.chat_delegation.task_bot_runtime.get_execution",
+                return_value={
+                    "execution_id": "exec-native",
+                    "conversation_id": "sess-native",
+                    "backend_type": chat_delegation.PROVIDER_NATIVE_BACKEND,
+                    "state": "failed",
+                    "summary": "please implement this plan",
+                    "progress_summary": "Background execution failed: provider-native worker produced no first event",
+                    "bot_id": "nova",
+                },
+            ),
+        ):
+            await chat_delegation._run_agent_worker(
+                {},
+                execution_id="exec-native",
+                prompt="please implement this plan",
+                specialist_id="coding",
+                bot=_BotStub(),
+                emitter=emitter,
+                instructions="Do the work.",
+                repo_root=Path(".").resolve(),
+                autonomy_level=1,
+            )
+
+        fail_execution.assert_called_once()
+        self.assertIn("produced no first event", fail_execution.call_args.kwargs["summary"])
+        emitter.failed.assert_awaited_once()
+        emitter.completed.assert_not_awaited()
+
+    async def test_run_agent_worker_marks_cancellation_and_propagates(self):
         emitter = SimpleNamespace(progress=AsyncMock(), completed=AsyncMock(), failed=AsyncMock())
 
         async def _events():  # noqa: ANN202

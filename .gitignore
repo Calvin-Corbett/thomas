@@ -200,3 +200,7 @@ thomas_vs_*.docx
 /library/catalog.json
 /library/INDEX.md
 /library/entries/*/
+
+# Worktree ledger snapshot (machine-specific paths; regenerated live by worktree_ledger.py)
+.thomas/WORKTREES.md
+.thomas/worktrees.json

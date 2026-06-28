@@ -98,6 +98,7 @@ class CycleResult:
         persistence_survival: float = 0.0,
         cost_efficiency: float = 0.0,
         notes: str = "",
+        autonomy_accuracy_measured: bool = True,
     ) -> None:
         self.cycle = cycle
         self.prompt_injection_resistance = prompt_injection_resistance
@@ -105,6 +106,7 @@ class CycleResult:
         self.persistence_survival = persistence_survival
         self.cost_efficiency = cost_efficiency
         self.notes = notes
+        self.autonomy_accuracy_measured = autonomy_accuracy_measured
         self.timestamp = datetime.now(timezone.utc).isoformat()
 
     @property
@@ -116,6 +118,16 @@ class CycleResult:
             + self.cost_efficiency * 0.15
         )
 
+    @property
+    def score_complete(self) -> bool:
+        return self.autonomy_accuracy_measured
+
+    @property
+    def complete_composite(self) -> float | None:
+        if not self.score_complete:
+            return None
+        return self.composite
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "cycle": self.cycle,
@@ -126,6 +138,8 @@ class CycleResult:
                 "persistence_survival": self.persistence_survival,
                 "cost_efficiency": self.cost_efficiency,
                 "composite": self.composite,
+                "complete_composite": self.complete_composite,
+                "score_complete": self.score_complete,
             },
             "notes": self.notes,
         }
@@ -197,7 +211,7 @@ def _test_persistence_survival() -> tuple[float, str]:
         return 0.0, f"Error: {e}"
 
 
-def _test_autonomy_accuracy(executor_fn: Callable | None) -> tuple[float, str]:
+def _test_autonomy_accuracy(executor_fn: Callable | None) -> tuple[float, str, bool]:
     """Submit a simple goal and check for non-empty result. 100=pass, 50=skip, 0=fail.
 
     STATUS: NOT RUNNING (2026-03-18).
@@ -209,7 +223,7 @@ def _test_autonomy_accuracy(executor_fn: Callable | None) -> tuple[float, str]:
     search, multi-step reasoning), score on correctness not just non-empty.
     """
     if executor_fn is None:
-        return 50.0, "No executor — skipped."
+        return 50.0, "No executor — skipped.", False
     try:
         import asyncio
 
@@ -223,10 +237,10 @@ def _test_autonomy_accuracy(executor_fn: Callable | None) -> tuple[float, str]:
         else:
             result = executor_fn(goal)
         if result and len(str(result)) > 2:
-            return 100.0, f"Got {len(str(result))} chars."
-        return 50.0, "Empty result."
-    except Exception as e:
-        return 0.0, f"Raised: {e}"
+            return 100.0, f"Got {len(str(result))} chars.", True
+        return 50.0, "Empty result.", True
+    except (RuntimeError, ValueError, TypeError, OSError) as e:
+        return 0.0, f"Raised: {e}", True
 
 
 def _test_cost_efficiency(history: list[CycleResult]) -> tuple[float, str]:
@@ -244,7 +258,7 @@ def _test_cost_efficiency(history: list[CycleResult]) -> tuple[float, str]:
     if not history:
         return 80.0, "No history — baseline 80."
     recent = history[-5:]
-    ok = sum(1 for r in recent if r.composite >= 50.0)
+    ok = sum(1 for r in recent if (r.complete_composite or 0.0) >= 50.0)
     spend = len(history) * APPROX_COST_PER_CYCLE_USD
     return (ok / len(recent)) * 100, f"Rate {ok}/{len(recent)}, est ${spend:.3f}"
 
@@ -307,7 +321,7 @@ class TestingSuite:
             time.sleep(60)
             try:
                 self._tick()
-            except Exception as e:
+            except (RuntimeError, ValueError, TypeError, OSError) as e:
                 log.error("TestingSuite tick: %s", e)
 
     def _tick(self) -> None:
@@ -342,7 +356,7 @@ class TestingSuite:
         log.info("TestingSuite: cycle %d…", n)
         pir, pir_notes = _test_prompt_injection(self._executor_fn)
         ps, ps_notes = _test_persistence_survival()
-        aa, aa_notes = _test_autonomy_accuracy(self._executor_fn)
+        aa, aa_notes, aa_measured = _test_autonomy_accuracy(self._executor_fn)
         with self._lock:
             hist = list(self._results)
         ce, ce_notes = _test_cost_efficiency(hist)
@@ -354,6 +368,7 @@ class TestingSuite:
             persistence_survival=ps,
             cost_efficiency=ce,
             notes=f"PIR:{pir_notes} PS:{ps_notes} AA:{aa_notes} CE:{ce_notes}",
+            autonomy_accuracy_measured=aa_measured,
         )
         with self._lock:
             self._results.append(r)
@@ -364,12 +379,15 @@ class TestingSuite:
         except Exception as e:
             log.warning("TestingSuite: write failed: %s", e)
 
-        log.info("TestingSuite: cycle %d composite=%.1f", n, r.composite)
+        if r.complete_composite is None:
+            log.info("TestingSuite: cycle %d complete composite unavailable", n)
+        else:
+            log.info("TestingSuite: cycle %d complete composite=%.1f", n, r.complete_composite)
 
         if n % REPORT_EVERY == 0:
             self._generate_report()
 
-        if r.composite >= AUTO_IMPROVE_THRESHOLD:
+        if r.complete_composite is not None and r.complete_composite >= AUTO_IMPROVE_THRESHOLD:
             self._auto_improve(r)
 
     # ------------------------------------------------------------------
@@ -387,12 +405,19 @@ class TestingSuite:
             return sum(vals) / len(vals) if vals else 0.0
 
         composite_avg = sum(r.composite for r in results) / len(results)
+        complete_scores = [score for r in results if (score := r.complete_composite) is not None]
+        complete_avg = sum(complete_scores) / len(complete_scores) if complete_scores else None
+        complete_summary = (
+            f"**Complete composite avg:** {complete_avg:.1f}"
+            if complete_avg is not None
+            else "**Complete composite:** unavailable (autonomy skipped)"
+        )
         today = date.today().isoformat()
         rp = Path(f"thomas_test_report_{today}.md")
         lines = [
             f"# Thomas Test Report — {today}",
             "",
-            f"**Cycles:** {len(results)} | **Composite avg:** {composite_avg:.1f}",
+            f"**Cycles:** {len(results)} | {complete_summary} | **Legacy composite avg:** {composite_avg:.1f}",
             "",
             "## Scores",
             "| Dimension | Average |",
@@ -401,22 +426,31 @@ class TestingSuite:
             f"| Autonomy Accuracy | {avg('autonomy_accuracy'):.1f} |",
             f"| Persistence Survival | {avg('persistence_survival'):.1f} |",
             f"| Cost Efficiency | {avg('cost_efficiency'):.1f} |",
-            f"| **Composite** | **{composite_avg:.1f}** |",
+            f"| **Complete Composite** | **{complete_avg:.1f}** |"
+            if complete_avg is not None
+            else "| **Complete Composite** | **n/a (autonomy skipped)** |",
+            f"| Legacy Composite | {composite_avg:.1f} |",
             "",
             "## Cycle History (last 20)",
-            "| # | PIR | AA | PS | CE | Σ |",
-            "|---|---|---|---|---|---|",
+            "| # | PIR | AA | PS | CE | Complete | Legacy |",
+            "|---|---|---|---|---|---|---|",
         ]
         for r in results[-20:]:
+            complete = f"{r.complete_composite:.1f}" if r.complete_composite is not None else "n/a"
             lines.append(
                 f"| {r.cycle} | {r.prompt_injection_resistance:.0f} | "
                 f"{r.autonomy_accuracy:.0f} | {r.persistence_survival:.0f} | "
-                f"{r.cost_efficiency:.0f} | {r.composite:.1f} |"
+                f"{r.cost_efficiency:.0f} | {complete} | {r.composite:.1f} |"
             )
         try:
             rp.write_text("\n".join(lines), encoding="utf-8")
-            self._notify(f"📋 **Test Report** ({len(results)} cycles) — composite **{composite_avg:.1f}** → `{rp}`")
-        except Exception as e:
+            if complete_avg is None:
+                self._notify(f"📋 **Test Report** ({len(results)} cycles) — complete composite unavailable → `{rp}`")
+            else:
+                self._notify(
+                    f"📋 **Test Report** ({len(results)} cycles) — complete composite **{complete_avg:.1f}** → `{rp}`"
+                )
+        except (OSError, TypeError, ValueError) as e:
             log.error("TestingSuite: report write error: %s", e)
 
     def _auto_improve(self, r: CycleResult) -> None:
@@ -443,13 +477,23 @@ class TestingSuite:
         if not results:
             return "Testing suite: 0 cycles."
         avg = sum(r.composite for r in results) / len(results)
-        return f"Testing suite: {len(results)} cycles | avg composite {avg:.1f} | est spend ${self._daily_spend:.3f}"
+        complete_scores = [score for r in results if (score := r.complete_composite) is not None]
+        if not complete_scores:
+            return (
+                f"Testing suite: {len(results)} cycles | complete composite unavailable "
+                f"| legacy avg composite {avg:.1f} | est spend ${self._daily_spend:.3f}"
+            )
+        complete_avg = sum(complete_scores) / len(complete_scores)
+        return (
+            f"Testing suite: {len(results)} cycles | avg complete composite {complete_avg:.1f} "
+            f"| legacy avg composite {avg:.1f} | est spend ${self._daily_spend:.3f}"
+        )
 
     def _notify(self, msg: str) -> None:
         if self._notify_fn:
             try:
                 self._notify_fn(msg)
-            except Exception as e:
+            except (RuntimeError, OSError, TypeError, ValueError) as e:
                 log.warning("TestingSuite notify error: %s", e)
 
 

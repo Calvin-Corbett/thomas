@@ -1,5 +1,4 @@
-"""
-thomas/tools/search_code.py
+"""RAG index-backed repository search adapter.
 
 Tool: rag.search
 Category: search
@@ -7,6 +6,10 @@ Parameters: {"query": str, "k": int=5, "extension": str optional}
 
 Returns formatted results with file paths + line hints, grouped by file,
 with short line-numbered previews.
+
+This legacy direct-tool module is intentionally separate from
+``thomas.tools.code_search``, which registers sandboxed ``code.*`` tools for
+live source-tree search.
 """
 
 from __future__ import annotations

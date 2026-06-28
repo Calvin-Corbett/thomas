@@ -168,7 +168,7 @@
     async function renderCodexProfile(panel, profile) {
         let status = { logged_in: false };
         try {
-            status = await fetch('/api/codex/status').then(r => r.json());
+            status = await fetch('/api/openai-codex/status').then(r => r.json());
         } catch { /* fall through */ }
 
         if (status.logged_in) {
@@ -221,7 +221,7 @@
         const actions = panel.querySelector('.msd-actions');
         if (actions) actions.innerHTML = '<span class="msd-loading"><i class="ph ph-spinner msd-spin"></i> Logging out…</span>';
         try {
-            await fetch('/api/codex/logout', { method: 'POST' });
+            await fetch('/api/openai-codex/logout', { method: 'POST' });
         } catch { /* ignore */ }
         await loadPanelContent(panel);
     }
@@ -230,7 +230,7 @@
         const actions = panel.querySelector('.msd-actions');
         if (actions) actions.innerHTML = '<span class="msd-loading"><i class="ph ph-spinner msd-spin"></i> Opening browser…</span>';
         try {
-            await fetch('/api/codex/login', { method: 'POST' });
+            await fetch('/api/openai-codex/login', { method: 'POST' });
         } catch { /* ignore */ }
         await loadPanelContent(panel);
     }

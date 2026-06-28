@@ -25,7 +25,16 @@ def _responses_content(value: Any) -> Any:
         return str(value)
 
 
-def _responses_input_from_messages(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
+def _responses_input_from_messages(owner: Any, messages: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
+    def _safe_name(raw: str) -> str:
+        # The Responses API rejects tool names that don't match ^[a-zA-Z0-9_-]+$
+        # (Thomas tool names use dots, e.g. ``fs.write_file``). Echoed function_call
+        # names in the input MUST be sanitized the SAME way as the tools array
+        # (``_responses_tools``) or a multi-tool-call turn fails with HTTP 400.
+        if hasattr(owner, "_sanitize_tool_name"):
+            return owner._sanitize_tool_name(raw)
+        return raw
+
     instructions: list[str] = []
     out: list[dict[str, Any]] = []
     for msg in messages:
@@ -60,7 +69,7 @@ def _responses_input_from_messages(messages: list[dict[str, Any]]) -> tuple[str,
                             {
                                 "type": "function_call",
                                 "call_id": call_id,
-                                "name": name,
+                                "name": _safe_name(name),
                                 "arguments": str(func.get("arguments") or "{}"),
                             }
                         )
@@ -69,7 +78,33 @@ def _responses_input_from_messages(messages: list[dict[str, Any]]) -> tuple[str,
             out.append({"role": "user", "content": content})
         elif content:
             out.append({"role": role or "user", "content": content})
-    return "\n".join(part for part in instructions if part), out
+
+    # The Responses API rejects a ``function_call_output`` whose ``call_id`` has no
+    # matching ``function_call`` earlier in the same request ("No tool call found for
+    # function call output with call_id ..." -> HTTP 400, which kills the whole turn
+    # and forces a failover to an often-unauthed provider, hanging the task in
+    # 'executing' forever). That orphaning happens whenever history-trimming drops an
+    # assistant tool-call message but keeps its tool result, or when a streamed
+    # tool_call arrived without a ``name`` (skipped above). Drop any orphaned output so
+    # a long multi-tool task survives instead of failing the entire request.
+    declared_calls: set[str] = set()
+    reconciled: list[dict[str, Any]] = []
+    for item in out:
+        item_type = item.get("type")
+        if item_type == "function_call":
+            call_id = str(item.get("call_id") or "")
+            if call_id:
+                declared_calls.add(call_id)
+            reconciled.append(item)
+        elif item_type == "function_call_output":
+            call_id = str(item.get("call_id") or "")
+            if call_id and call_id in declared_calls:
+                reconciled.append(item)
+            # else: orphaned tool result (its call isn't in this request) -> drop it.
+        else:
+            reconciled.append(item)
+
+    return "\n".join(part for part in instructions if part), reconciled
 
 
 def _responses_tools(owner: Any, tools: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
@@ -101,7 +136,7 @@ def _build_openai_codex_request(
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]] | None,
 ) -> dict[str, Any]:
-    instructions, input_items = _responses_input_from_messages(messages)
+    instructions, input_items = _responses_input_from_messages(owner, messages)
     body: dict[str, Any] = {
         "model": owner.config.model,
         "input": input_items,

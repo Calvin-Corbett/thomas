@@ -48,10 +48,16 @@ class TestSpendRoutesLocal(AioHTTPTestCase):
             resp = await self.client.get("/api/spend/today")
         self.assertEqual(resp.status, 200)
         body = await resp.json()
+        self.assertEqual(body["primary_metric"], "tokens")
         self.assertIn("total_usd", body)
         self.assertIn("by_model", body)
         self.assertIn("call_count", body)
         self.assertIn("tokens", body)
+        self.assertIn("graph", body)
+        self.assertIn("achievements", body)
+        self.assertIn("high_scores", body)
+        self.assertIn("streak", body)
+        self.assertIn("runtime_profile", body)
         self.assertEqual(body["total_usd"], 0.0)
 
     async def test_spend_today_with_record(self):
@@ -63,6 +69,9 @@ class TestSpendRoutesLocal(AioHTTPTestCase):
         self.assertGreater(body["total_usd"], 0)
         self.assertIn("gpt-4o", body["by_model"])
         self.assertEqual(body["call_count"], 1)
+        self.assertEqual(body["tokens"]["total"], 150)
+        self.assertEqual(body["by_model_detail"]["gpt-4o"]["tokens"]["prompt"], 100)
+        self.assertEqual(body["by_model_detail"]["gpt-4o"]["total_tokens"], 150)
 
     # ── /api/spend/session ──
 
@@ -72,9 +81,13 @@ class TestSpendRoutesLocal(AioHTTPTestCase):
             resp = await self.client.get("/api/spend/session")
         self.assertEqual(resp.status, 200)
         body = await resp.json()
+        self.assertEqual(body["primary_metric"], "tokens")
         self.assertIn("total_usd", body)
         self.assertGreater(body["total_usd"], 0)
         self.assertIn("call_count", body)
+        self.assertEqual(body["tokens"]["total"], 15)
+        self.assertIn("achievements", body)
+        self.assertIn("runtime_profile", body)
 
     # ── POST /api/spend/session/reset ──
 
@@ -99,6 +112,11 @@ class TestSpendRoutesLocal(AioHTTPTestCase):
         for row in body:
             self.assertIn("date", row)
             self.assertIn("usd", row)
+            self.assertIn("tokens", row)
+            self.assertIn("total_tokens", row)
+            self.assertIn("call_count", row)
+            self.assertIn("by_model_detail", row)
+            self.assertIn("model_count", row)
 
     async def test_spend_history_custom_days(self):
         with patch("thomas.server.routes.spend.get_cost_tracker", return_value=self._tracker):
@@ -116,6 +134,10 @@ class TestSpendRoutesLocal(AioHTTPTestCase):
         body = await resp.json()
         self.assertIn("pricing", body)
         self.assertIsInstance(body["pricing"], dict)
+        self.assertEqual(body["primary_metric"], "tokens")
+        self.assertEqual(body["usage_units"], "tokens")
+        self.assertIn("runtime_profile", body)
+        self.assertIsInstance(body["runtime_matrix"], list)
 
     # ── /api/spend/export.csv ──
 
@@ -127,7 +149,7 @@ class TestSpendRoutesLocal(AioHTTPTestCase):
         content_type = resp.headers.get("Content-Type", "")
         self.assertIn("text/csv", content_type)
         text = await resp.text()
-        self.assertIn("date,usd", text)
+        self.assertIn("date,total_tokens,prompt_tokens,completion_tokens,calls,usd", text)
 
     # ── /api/spend/stream (SSE) ──
 

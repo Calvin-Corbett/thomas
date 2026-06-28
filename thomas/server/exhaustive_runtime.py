@@ -64,6 +64,10 @@ async def run_exhaustive_pipeline(
     effort: str,
     specialist_id: str,
     autonomy_level: int = 4,
+    file_access: int | None = None,
+    guardrails: str = "",
+    guardrail_modes: dict[str, str] | None = None,
+    job_type: str | None = None,
     emit_stage: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     on_tool: Callable[[str], Awaitable[None]] | None = None,
 ) -> PipelineContext:
@@ -81,6 +85,10 @@ async def run_exhaustive_pipeline(
             effort=effort,
             role=specialist_id,
             autonomy_level=autonomy_level,
+            file_access=file_access,
+            guardrails=guardrails,
+            guardrail_modes=guardrail_modes,
+            job_type=job_type,
         ):
             etype = str(event.get("type") or "")
             if etype == "text":

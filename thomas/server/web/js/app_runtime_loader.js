@@ -54,6 +54,7 @@
         '045_model_setup_settings_06.js',
         '046_evolution_dashboard.js',
         '047_evolve_agent_chat.js',
+        '048_ui_studio_canvas.js',
     ];
 
     var basePath = '/static/js/runtime/';
@@ -73,6 +74,22 @@
         });
     }
 
+    function bootstrapRuntime() {
+        return new Promise(function (resolve, reject) {
+            window.setTimeout(function () {
+                try {
+                    if (typeof window.__thomasBootstrapApp !== 'function') {
+                        throw new Error('Runtime bootstrap function was not registered.');
+                    }
+                    window.__thomasBootstrapApp();
+                    resolve();
+                } catch (error) {
+                    reject(error);
+                }
+            }, 0);
+        });
+    }
+
     window.__thomasRuntimeReady = (async function () {
         console.log('[Thomas] Loading ' + RUNTIME_SCRIPTS.length + ' runtime modules...');
         var t0 = performance.now();
@@ -81,5 +98,6 @@
         }
         var elapsed = Math.round(performance.now() - t0);
         console.log('[Thomas] All ' + RUNTIME_SCRIPTS.length + ' runtime modules loaded (' + elapsed + 'ms)');
+        await bootstrapRuntime();
     })();
 })();

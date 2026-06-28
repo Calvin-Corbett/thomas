@@ -278,6 +278,26 @@ class TestAgentLoopConversation(unittest.TestCase):
         asyncio.run(run_once())
         self.assertEqual(llm.last_tools, [])
 
+    def test_self_development_job_suppresses_generic_diff_first_editing_policy(self) -> None:
+        cfg = AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
+        tools = ToolRegistry()
+        tools.register(DummyTool())
+        llm = CaptureLLM("ok")
+        agent = AgentLoop(cfg, llm, tools, conversation=[], autonomy_level=4)
+
+        async def run_once():
+            async for _ in agent.run(
+                "fix Thomas in the live repo by editing thomas/server/web/static/my_stuff.script01.js",
+                tools_policy="auto",
+                job_type="self_development",
+            ):
+                pass
+
+        asyncio.run(run_once())
+        system_text = str((llm.last_messages[0] or {}).get("content") or "")
+        self.assertNotIn("prefer diff.create", system_text)
+        self.assertNotIn("Only use fs.write_file for creating entirely new files", system_text)
+
     def test_sanitize_removes_premature_what_next_on_continuation(self) -> None:
         cfg = AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
         tools = ToolRegistry()

@@ -1,0 +1,18 @@
+{
+  "id": "2026-06-26-dev-clean-slate-integration",
+  "approved_by_human": true,
+  "approved_by": "Calvin (repo owner)",
+  "approval_context": "Owner explicitly directed the dirty dev integration on 2026-06-26 and authorized cutting, adding, merging, and preserving Thomas guardrails while consolidating the worktree.",
+  "date": "2026-06-26",
+  "reason": "Consolidate the dirty dev worktree into a guardrail-compliant integration baseline. The composer attachment stylesheet was renamed out of the forbidden components_parts split directory to css/component_styles/composer-attachments.css, with imports/tests/docs updated. The test-only bad handler fixture was removed as part of the tool-extension/monolith guard cleanup lane.",
+  "verification": [
+    "python -m ruff check on the patched Python integration files passed",
+    "python scripts/forge/gates/exception_handler_gate.py --json against the selected temporary index passed with zero violations",
+    "node --check thomas/server/web/js/composer_controls.js passed",
+    "python -m pytest tests/test_web_evolve_chat_ux.py::test_chat_runtime_uses_profile_aware_composer_subbar_and_payload_helper -q --tb=short passed"
+  ],
+  "files": [
+    "thomas/server/web/css/components_parts/composer-attachments.css",
+    "thomas/tools/_test_bad_handler.py"
+  ]
+}

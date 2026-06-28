@@ -40,9 +40,11 @@ DISALLOWED_PATTERNS = [
     b"os.system(",
     b"shutil.rmtree(",
 ]
-_MARKETPLACE_TYPES = {"command_center", "plugin", "dependency", "integration"}
+_MARKETPLACE_TYPES = {"app", "plugin", "dependency", "integration"}
+_LEGACY_MARKETPLACE_TYPE_ALIASES = {"command_center": "app"}
 _LEFT_NAV_BEHAVIORS = {"none", "workspace"}
-_DEFAULT_NAV_SECTIONS = {"command_centers", "installed"}
+_DEFAULT_NAV_SECTIONS = {"apps", "installed"}
+_LEGACY_NAV_SECTION_ALIASES = {"command_centers": "apps"}
 
 
 @dataclass
@@ -129,10 +131,11 @@ def _string_list(value: Any) -> list[str]:
 
 def _normalize_marketplace_type(data: dict[str, Any], *, mode_id: str, surface_entry_html: str) -> str:
     explicit = _safe_text(data.get("marketplace_type")).lower()
+    explicit = _LEGACY_MARKETPLACE_TYPE_ALIASES.get(explicit, explicit)
     if explicit in _MARKETPLACE_TYPES:
         return explicit
     if _safe_text(data.get("kind")).lower() == "desktop_plugin" and mode_id and surface_entry_html:
-        return "command_center"
+        return "app"
     return "plugin"
 
 
@@ -140,15 +143,16 @@ def _normalize_left_nav_behavior(data: dict[str, Any], marketplace_type: str) ->
     explicit = _safe_text(data.get("left_nav_behavior")).lower()
     if explicit in _LEFT_NAV_BEHAVIORS:
         return explicit
-    return "workspace" if marketplace_type == "command_center" else "none"
+    return "workspace" if marketplace_type == "app" else "none"
 
 
 def _normalize_default_nav_section(data: dict[str, Any], marketplace_type: str, left_nav_behavior: str) -> str:
     explicit = _safe_text(data.get("default_nav_section")).lower()
+    explicit = _LEGACY_NAV_SECTION_ALIASES.get(explicit, explicit)
     if explicit in _DEFAULT_NAV_SECTIONS:
         return explicit
-    if marketplace_type == "command_center" or left_nav_behavior == "workspace":
-        return "command_centers"
+    if marketplace_type == "app" or left_nav_behavior == "workspace":
+        return "apps"
     return "installed"
 
 
@@ -325,9 +329,7 @@ class PluginRegistry:
             requires=_string_list(data.get("requires")),
             left_nav_behavior=left_nav_behavior,
             default_nav_section=_normalize_default_nav_section(data, marketplace_type, left_nav_behavior),
-            default_nav_order=_safe_int(
-                data.get("default_nav_order"), 400 if marketplace_type == "command_center" else 900
-            ),
+            default_nav_order=_safe_int(data.get("default_nav_order"), 400 if marketplace_type == "app" else 900),
             mode_id=mode_id,
             api_namespace=_safe_text(data.get("api_namespace") or data.get("plugin_id") or data.get("id")),
             surface={

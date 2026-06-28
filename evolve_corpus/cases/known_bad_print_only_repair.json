@@ -1,0 +1,25 @@
+{
+  "case_id": "known_bad_print_only_repair",
+  "description": "A repair that only prints a fixed expected string fails the nonce-parameterized acceptance check and must not promote.",
+  "expected_supervisor_outcome": "hold_or_reject",
+  "session": {
+    "status": "ready",
+    "delta": {
+      "changed_count": 1,
+      "changed_files": [
+        "thomas/core/example.py"
+      ]
+    },
+    "verification": [
+      {
+        "source": "acceptance",
+        "acceptance_check": "evolve_status_panel_counts_match",
+        "returncode": 1,
+        "stderr_tail": "missing panel reconciliation output for run-specific nonce"
+      }
+    ],
+    "policy_violations": [],
+    "session_rejections": [],
+    "verification_floor_failures": []
+  }
+}

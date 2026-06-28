@@ -179,10 +179,125 @@ function officeDisperseCrowds(now) {
     });
 }
 
+function officeDraftAgentRouteActive(agent) {
+    const motion = agent?.draftMotion && typeof agent.draftMotion === 'object' ? agent.draftMotion : null;
+    return Boolean(
+        motion
+        && Array.isArray(motion.route)
+        && Number(motion.routeIndex) < motion.route.length,
+    );
+}
+
+function officeTickDraftAgentTaskState(agent, now) {
+    if (!agent || agent.state === 'runaway') return;
+    const routeActive = officeDraftAgentRouteActive(agent);
+    const intent = safeString(agent.intent);
+    const motion = agent?.draftMotion && typeof agent.draftMotion === 'object' ? agent.draftMotion : null;
+    const taskId = safeString(agent.taskId);
+    const taskSignatureArrived = taskId
+        && motion
+        && !routeActive
+        && safeString(motion.targetSignature).includes(`|${taskId}|`)
+        && (Number(now) - (Number(motion.arrivedAt) || Number(now))) >= 120;
+
+    if (agent.state === 'yield') {
+        if (now >= agent.yieldUntil) {
+            agent.state = 'idle';
+            agent.intent = 'wander';
+            agent.yieldUntil = 0;
+            agent.yieldResumeIntent = '';
+        }
+        return;
+    }
+
+    if (agent.state === 'walking' && intent === 'task' && taskSignatureArrived) {
+        agent.state = 'working';
+        agent.workUntil = now + officeRandomRange(6200, 15000);
+        agent.nextWorkLineAt = now + officeRandomRange(2400, 5600);
+        officeBusEmit('agent.state', {
+            agentId: agent.id,
+            state: agent.state,
+            intent: agent.intent,
+        }, now);
+        return;
+    }
+
+    if (agent.state === 'walking' && intent === 'break' && motion && !routeActive && (Number(motion.arrivedAt) || 0) > 0) {
+        agent.state = 'break';
+        agent.breakUntil = now + officeRandomRange(3000, 7600);
+        agent.nextWorkLineAt = now + officeRandomRange(1200, 3200);
+        officeBusEmit('agent.state', {
+            agentId: agent.id,
+            state: agent.state,
+            intent: agent.intent,
+        }, now);
+        return;
+    }
+
+    if (agent.state === 'working') {
+        if (now >= agent.workUntil) {
+            officeFinishTask(agent, now);
+            return;
+        }
+        if (now >= agent.nextWorkLineAt) {
+            const room = typeof officeDraftSpaceForAgent === 'function'
+                ? officeRoomById(officeDraftRoomIdForAgent(agent))
+                : officeCurrentRoomForAgent(agent);
+            officeSpeak(agent, officeBanterForAgent(agent, 'ambient', {
+                roomTheme: room?.theme || room?.kind || '',
+            }));
+            agent.nextWorkLineAt = now + officeRandomRange(3500, 7200);
+        }
+        return;
+    }
+
+    if (agent.state === 'break') {
+        if (now >= agent.breakUntil) {
+            agent.state = 'idle';
+            agent.intent = 'wander';
+            agent.idleUntil = now + officeRandomRange(900, 2200);
+            return;
+        }
+        if (now >= agent.nextWorkLineAt) {
+            const room = typeof officeDraftSpaceForAgent === 'function'
+                ? officeRoomById(officeDraftRoomIdForAgent(agent))
+                : officeCurrentRoomForAgent(agent);
+            officeSpeak(agent, officeBanterForAgent(agent, 'break', {
+                roomTheme: room?.theme || room?.kind || '',
+            }));
+            agent.nextWorkLineAt = now + officeRandomRange(2600, 5600);
+        }
+    }
+}
+
+function officeTickDraftAgentTaskStates(now) {
+    if (!officeState || !Array.isArray(officeState.agents)) return;
+    officeState.agents.forEach((agent) => officeTickDraftAgentTaskState(agent, now));
+}
+
 function officeTick(now, dt, options = {}) {
     if (!officeState) return;
     const background = Boolean(options.background);
+    const draftTimer = Boolean(options.draftTimer);
     officeState.debugFrameRate = dt > 0 ? (1 / dt) : 0;
+    if (draftTimer) {
+        officeAssignQueuedTasks(now);
+        officeTickDraftAgentTaskStates(now);
+        officeTrimTasks();
+        if (!background) {
+            const draftMapActive = typeof officeDraftMapPlane === 'function' && officeDraftMapPlane();
+            if (draftMapActive && typeof officeRenderDraftAgentLayerOnly === 'function') {
+                officeRenderDraftAgentLayerOnly(now);
+            }
+            if (officeState.tasksDirty) {
+                officeState.tasksDirty = false;
+                officeRenderTaskList();
+            }
+            officeRenderDebugOverlay(now);
+        }
+        officePersistRuntimeState(now);
+        return;
+    }
     officeTickBreakSchedules(now);
     officeAssignQueuedTasks(now);
     officeTickLaneReservations(now);
@@ -196,20 +311,29 @@ function officeTick(now, dt, options = {}) {
     officeDisperseCrowds(now);
     officeTrimTasks();
     if (!background) {
-        officeTickFollowCamera();
-        officeTickCamera(dt);
-        officePersistCameraState(now);
-        officeRenderAgents(now);
-        const shouldSyncRoomMeta = (now - (officeState.lastRoomMetaSyncAt || 0)) >= 220;
-        if (shouldSyncRoomMeta) {
-            officeState.lastRoomMetaSyncAt = now;
-            officeUpdateRoomMeta();
+        const draftMapActive = typeof officeDraftMapPlane === 'function' && officeDraftMapPlane();
+        if (draftMapActive) {
+            if (typeof officeRenderDraftAgentLayerOnly === 'function') {
+                officeRenderDraftAgentLayerOnly(now);
+            }
+        } else {
+            officeTickFollowCamera();
+            officeTickCamera(dt);
+            officePersistCameraState(now);
+            officeRenderAgents(now);
+            const shouldSyncRoomMeta = (now - (officeState.lastRoomMetaSyncAt || 0)) >= 220;
+            if (shouldSyncRoomMeta) {
+                officeState.lastRoomMetaSyncAt = now;
+                officeUpdateRoomMeta();
+            }
         }
         if (officeState.tasksDirty) {
             officeState.tasksDirty = false;
             officeRenderTaskList();
-            officeState.lastRoomMetaSyncAt = now;
-            officeUpdateRoomMeta();
+            if (!draftMapActive) {
+                officeState.lastRoomMetaSyncAt = now;
+                officeUpdateRoomMeta();
+            }
         }
         officeRenderDebugOverlay(now);
     }
@@ -239,6 +363,55 @@ function officeStopBackgroundTickTimer() {
     }
 }
 
+const OFFICE_DRAFT_MOTION_TIMER_MS = 48;
+const OFFICE_DRAFT_MOTION_MAX_PAINT_GAP_MS = 260;
+
+function officeDraftMapLoopActive() {
+    return typeof officeDraftMapPlane === 'function'
+        && officeDraftMapPlane()
+        && !document.hidden;
+}
+
+function officeEnsureDraftMotionTimer() {
+    if (!officeState) return;
+    if (!officeState.lastDraftMotionWallAt) {
+        officeState.lastDraftMotionWallAt = Date.now();
+    }
+    if (!officeState.lastDraftOfficeTickAt) {
+        officeState.lastDraftOfficeTickAt = performance.now();
+    }
+}
+
+function officeStopDraftMotionTimer() {
+    if (!officeState) return;
+    if (officeState.draftMotionTimerId) {
+        window.clearInterval(officeState.draftMotionTimerId);
+        officeState.draftMotionTimerId = 0;
+    }
+    officeState.lastDraftMotionWallAt = 0;
+    officeState.lastDraftMotionPaintWallAt = 0;
+}
+
+function officeTickDraftMotionFrame(frameNow, wallNow) {
+    if (!officeState || !officeDraftMapLoopActive()) return;
+    const currentFrameNow = Number(frameNow) || performance.now();
+    const currentWallNow = Number(wallNow) || Date.now();
+    const lastTickAt = Number(officeState.lastDraftOfficeTickAt) || 0;
+    if (lastTickAt && currentFrameNow - lastTickAt < OFFICE_DRAFT_MOTION_TIMER_MS) return;
+    const lastPaintWall = Number(officeState.lastDraftMotionPaintWallAt) || currentWallNow;
+    if (currentWallNow - lastPaintWall > OFFICE_DRAFT_MOTION_MAX_PAINT_GAP_MS) {
+        officeState.lastDraftMotionWallAt = currentWallNow;
+        officeState.lastDraftOfficeTickAt = currentFrameNow;
+        return;
+    }
+    const lastWall = Number(officeState.lastDraftMotionWallAt) || currentWallNow;
+    const dt = officeClamp((currentWallNow - lastWall) / 1000, 0.01, 0.12);
+    officeState.lastDraftMotionWallAt = currentWallNow;
+    officeState.lastWallClockTickAt = currentWallNow;
+    officeState.lastDraftOfficeTickAt = currentFrameNow;
+    officeTick(currentFrameNow, dt, { background: false, draftTimer: true });
+}
+
 function officeAnimationLoop(now) {
     if (!officeState) return;
     if (!officeState.lastFrameAt) {
@@ -248,10 +421,21 @@ function officeAnimationLoop(now) {
     if (!officeState.lastWallClockTickAt) {
         officeState.lastWallClockTickAt = wallNow;
     }
+    const frameNow = Number(now) || performance.now();
+    const draftMapActive = officeDraftMapLoopActive();
+    officeState.lastFrameAt = frameNow;
+    if (draftMapActive) {
+        officeState.lastDraftMotionPaintWallAt = wallNow;
+        officeState.lastDraftMotionPaintAt = frameNow;
+        officeEnsureDraftMotionTimer();
+        officeTickDraftMotionFrame(frameNow, wallNow);
+        officeState.rafId = window.requestAnimationFrame(officeAnimationLoop);
+        return;
+    }
+    officeStopDraftMotionTimer();
     const dt = officeClamp((wallNow - officeState.lastWallClockTickAt) / 1000, 0.01, 0.16);
     officeState.lastWallClockTickAt = wallNow;
-    officeState.lastFrameAt = now;
-    officeTick(now, dt, { background: false });
+    officeTick(frameNow, dt, { background: false });
     officeState.rafId = window.requestAnimationFrame(officeAnimationLoop);
 }
 
@@ -313,6 +497,7 @@ function officeRefreshSurfaceVisibility() {
         appRoot.classList.toggle('office-active', isOffice);
         appRoot.classList.toggle('office-preview-active', showPreview && !isOffice);
     }
+    document.body.classList.toggle('office-active', isOffice);
     if (sidebar) {
         sidebar.classList.toggle('mode-office', isOffice);
     }
@@ -579,7 +764,7 @@ function officeParseMentionCommand(messageRaw) {
 }
 
 function officeHandleMention(agent, messageRaw) {
-    if (!officeState || !agent) return;
+    if (!officeState || !agent) return '';
     const message = safeString(messageRaw);
     const lower = message.toLowerCase();
     const parsed = officeParseMentionCommand(message);
@@ -650,6 +835,7 @@ function officeHandleMention(agent, messageRaw) {
             args: safeString(parsed.args).slice(0, 160),
         });
     }
+    return reply;
 }
 
 function officeHandleAgentTap(agentId) {
@@ -1108,4 +1294,3 @@ function officeEnablePanelResizing() {
         });
     });
 }
-

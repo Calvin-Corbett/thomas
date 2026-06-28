@@ -16,6 +16,7 @@ import sys
 import time
 from collections.abc import Iterable, Sequence
 from pathlib import Path
+from typing import NamedTuple
 
 ROOT = Path(__file__).resolve().parent.parent
 PY = sys.executable
@@ -39,6 +40,39 @@ AGENT_ENV_KEYS: tuple[str, ...] = (
     "AGENT_NAME",
 )
 
+
+class RetiredDocRunnerCheck(NamedTuple):
+    kind: str
+    label: str
+    path: str
+    replacement: str
+    reason: str
+
+
+RETIRED_DOC_RUNNER_CHECKS: Sequence[RetiredDocRunnerCheck] = (
+    RetiredDocRunnerCheck(
+        kind="gate",
+        label="Competitive scope gate",
+        path="scripts/forge/gates/competitive_scope_gate.py",
+        replacement="model onboarding, feature catalog, surface parity, and benchmark evidence checks",
+        reason="the February 2026 launch gate family was retired and is no longer a runnable docs check.",
+    ),
+    RetiredDocRunnerCheck(
+        kind="gate",
+        label="Reference CLI metric parity gate",
+        path="scripts/forge/gates/reference_cli_metric_parity_gate.py",
+        replacement="current benchmark artifacts plus surface parity coverage",
+        reason="the old Reference CLI parity gate was retired with the launch snapshot.",
+    ),
+    RetiredDocRunnerCheck(
+        kind="test",
+        label="Reference CLI metric parity gate test",
+        path="tests/test_reference_cli_metric_parity_gate.py",
+        replacement="the active docs runner path contract in tests/test_doc_runner_contract.py",
+        reason="the retired gate test was deleted with its gate.",
+    ),
+)
+
 GATE_COMMANDS: Sequence[tuple[str, Sequence[str]]] = (
     ("Model onboarding gate", (PY, "scripts/forge/gates/model_onboarding_gate.py")),
     ("Module audit gate", (PY, "scripts/forge/gates/module_audit_gate.py")),
@@ -53,8 +87,6 @@ GATE_COMMANDS: Sequence[tuple[str, Sequence[str]]] = (
     ("Release hygiene gate", (PY, "scripts/forge/gates/release_hygiene.py")),
     ("Surface parity gate", (PY, "scripts/forge/gates/surface_parity.py")),
     ("Feature catalog gate", (PY, "scripts/forge/gates/feature_catalog_gate.py")),
-    ("Competitive scope gate", (PY, "scripts/forge/gates/competitive_scope_gate.py")),
-    ("Reference CLI metric parity gate", (PY, "scripts/forge/gates/reference_cli_metric_parity_gate.py")),
     ("Chat control protocol gate", (PY, "scripts/forge/gates/chat_control_protocol.py")),
 )
 
@@ -71,12 +103,74 @@ CRITICAL_TEST_FILES: Sequence[str] = (
     "tests/test_realtime_ws.py",
     "tests/test_companion_policy_compliance.py",
     "tests/test_server_companion_api.py",
-    "tests/test_reference_cli_metric_parity_gate.py",
 )
 
 
 def _fmt_cmd(cmd: Sequence[str]) -> str:
     return shlex.join([str(part) for part in cmd])
+
+
+def _iter_command_file_args(cmd: Sequence[str]) -> Iterable[str]:
+    for raw_part in cmd[1:]:
+        part = str(raw_part)
+        if part.startswith("-"):
+            continue
+        if part.endswith(".py"):
+            yield part
+
+
+def _runner_path_exists(path: str) -> bool:
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        candidate = ROOT / candidate
+    return candidate.is_file()
+
+
+def _retired_check_messages(
+    retired_checks: Sequence[RetiredDocRunnerCheck] | None = None,
+) -> list[str]:
+    checks = RETIRED_DOC_RUNNER_CHECKS if retired_checks is None else retired_checks
+    return [
+        (
+            f"{check.kind} `{check.label}` retired from docs runner: `{check.path}`; "
+            f"use {check.replacement}. {check.reason}"
+        )
+        for check in checks
+    ]
+
+
+def _print_retired_checks() -> None:
+    for message in _retired_check_messages():
+        print(f"[doc] RETIRED {message}", flush=True)
+
+
+def _validate_active_runner_paths(
+    *,
+    include_gates: bool,
+    include_tests: bool,
+    gate_commands: Sequence[tuple[str, Sequence[str]]] | None = None,
+    critical_test_files: Sequence[str] | None = None,
+) -> list[str]:
+    commands = GATE_COMMANDS if gate_commands is None else gate_commands
+    test_files = CRITICAL_TEST_FILES if critical_test_files is None else critical_test_files
+    failures: list[str] = []
+
+    if include_gates:
+        for label, cmd in commands:
+            file_args = list(_iter_command_file_args(cmd))
+            if not file_args:
+                failures.append(f"{label}: no repo Python path found in `{_fmt_cmd(cmd)}`")
+                continue
+            for rel_path in file_args:
+                if not _runner_path_exists(rel_path):
+                    failures.append(f"{label}: missing runner gate path `{rel_path}`")
+
+    if include_tests:
+        for rel_path in test_files:
+            if not _runner_path_exists(rel_path):
+                failures.append(f"Protocol safety tests: missing critical test path `{rel_path}`")
+
+    return failures
 
 
 def _run_step(label: str, cmd: Sequence[str]) -> tuple[int, float]:
@@ -267,6 +361,17 @@ def run(argv: Iterable[str] | None = None) -> int:
         return 1
     for note in breakglass_notes:
         print(f"[doc] breakglass metadata: {note}", flush=True)
+
+    _print_retired_checks()
+    contract_failures = _validate_active_runner_paths(
+        include_gates=not args.skip_gates,
+        include_tests=not args.skip_tests,
+    )
+    if contract_failures:
+        print("[doc] FAIL active runner path contract", flush=True)
+        for failure in contract_failures:
+            print(f"[doc] - {failure}", flush=True)
+        return 1
 
     steps = _iter_steps(
         include_gates=not args.skip_gates,

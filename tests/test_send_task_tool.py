@@ -66,7 +66,7 @@ class TestSendTaskTool(unittest.IsolatedAsyncioTestCase):
     async def test_model_call_creates_real_task_and_honest_reply(self):
         captured = {}
 
-        async def send_task(*, title, instructions):
+        async def send_task(*, title, instructions, surface=""):
             captured["title"] = title
             captured["instructions"] = instructions
 
@@ -94,7 +94,9 @@ class TestSendTaskTool(unittest.IsolatedAsyncioTestCase):
 
         # The claim is TRUE: send_task was actually invoked.
         self.assertEqual(captured.get("title"), "Build a Pac-Man game")
-        self.assertEqual(captured.get("instructions"), "Build a pac-man browser game")
+        # Instructions forward the USER'S RAW request, not the model's reworded version
+        # (Calvin, 2026-06-26: the task manager reads the real ask, undistorted).
+        self.assertEqual(captured.get("instructions"), "build me a pac-man game")
         # A task_request event was surfaced for the UI/brain.
         self.assertTrue(any(e.get("type") == "task_request" for e in events))
         # Final reply is the model's own confirmation — not a canned line.
@@ -107,7 +109,7 @@ class TestSendTaskTool(unittest.IsolatedAsyncioTestCase):
     async def test_no_tool_call_means_no_dispatch_no_fake(self):
         called = {"n": 0}
 
-        async def send_task(*, title, instructions):
+        async def send_task(*, title, instructions, surface=""):
             called["n"] += 1
 
         scripts = [

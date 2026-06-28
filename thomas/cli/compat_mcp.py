@@ -267,7 +267,7 @@ def install_cmd(ctx: click.Context, compat_json: bool, args: tuple[Any, ...]) ->
     "--provider",
     default="anthropic",
     show_default=True,
-    type=click.Choice(["anthropic", "openai", "gateway", "codex"], case_sensitive=False),
+    type=click.Choice(["anthropic", "openai", "gateway", "openai_codex"], case_sensitive=False),
 )
 @click.option("--token", default="", help="Token value. If omitted, reads env or prompts securely.")
 @click.option("--print-env", is_flag=True, help="Print shell snippet to set the environment variable.")
@@ -287,7 +287,7 @@ def setup_token_cmd(
         "anthropic": "ANTHROPIC_API_KEY",
         "openai": "OPENAI_API_KEY",
         "gateway": "THOMAS_GATEWAY_API_KEY",
-        "codex": "OPENAI_API_KEY",
+        "openai_codex": "OPENAI_API_KEY",
     }
     env_key = env_map[provider_name]
 
@@ -329,8 +329,8 @@ def setup_token_cmd(
         "state_file": str(_token_store_path(config)),
         "env_command": env_command if print_env else "",
         "note": (
-            "codex also supports browser login via `thomas codex login`."
-            if provider_name == "codex"
+            "OpenAI (ChatGPT) also supports browser sign-in via the in-app OAuth in Settings → Model."
+            if provider_name == "openai_codex"
             else "Token is set for this process; persist in your shell profile for future sessions."
         ),
     }

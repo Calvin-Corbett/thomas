@@ -27,6 +27,8 @@ def register_core_routes(
     handlers: Mapping[str, Any],
 ) -> None:
     app.router.add_get("/", handlers["index"])
+    if "classic" in handlers:
+        app.router.add_get("/classic", handlers["classic"])
     if "settings" in handlers:
         app.router.add_get("/settings", handlers["settings"])
     if "companion" in handlers:
@@ -34,6 +36,13 @@ def register_core_routes(
     if "landing" in handlers:
         app.router.add_get("/landing", handlers["landing"])
     app.router.add_static("/static/", web_dir, show_index=False)
+
+    async def _revalidate_static(request: web.Request, response: web.StreamResponse) -> None:
+        if request.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
+
+    app.on_response_prepare.append(_revalidate_static)
+
     # Serve worker-built deliverables (generated games/apps) so the task card can
     # offer a one-click "Play" — loopback-only, path-traversal-safe.
     from thomas.server.routes.deliverable_aiohttp import register_deliverable_routes

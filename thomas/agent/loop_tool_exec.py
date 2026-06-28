@@ -57,6 +57,17 @@ _WRITE_TOOL_PATH_KEYS = (
     "auth_payload_path",
 )
 
+_SELF_DEVELOPMENT_WRITE_TOOLS = {"diff.create", "fs.write_file", "fs.write_protected_file"}
+_SELF_DEVELOPMENT_INSPECTION_TOOL_PREFIXES = (
+    "fs.read",
+    "fs.list",
+    "fs.search",
+    "code.search",
+    "code.view",
+    "git.status",
+    "shell.exec",
+)
+
 
 def _is_write_tool(name: str, file_audit_module: Any) -> bool:
     name_lower = str(name or "").lower()
@@ -66,8 +77,61 @@ def _is_write_tool(name: str, file_audit_module: Any) -> bool:
             try:
                 return bool(checker(name_lower))
             except Exception:
-                pass
+                log.debug(
+                    "file_audit.is_write_tool checker failed for tool %r; using fallback", name_lower, exc_info=True
+                )
     return any(kw in name_lower for kw in _WRITE_TOOL_KEYWORDS)
+
+
+def _self_development_write_guard_event(
+    loop: Any,
+    *,
+    name: str,
+    tc_id: str,
+    iteration: int,
+) -> AgentEvent | None:
+    """Block runaway inspection loops in live Thomas self-development runs.
+
+    Normal coding tasks can inspect as much as their iteration budget allows. A
+    self-development background task, however, has a hard completion contract:
+    no changed live source/test/doc file means failure. After a small inspection
+    budget, return a tool error so the model sees the real constraint and uses
+    the write tool instead of burning the whole run on search/list/status calls.
+    """
+    if str(getattr(loop, "_current_job_type", "") or "").strip().lower() != "self_development":
+        return None
+    guard = getattr(loop, "_self_development_write_guard", None)
+    if not isinstance(guard, dict) or bool(guard.get("write_seen")):
+        return None
+    name_lower = str(name or "").strip().lower()
+    if name_lower in _SELF_DEVELOPMENT_WRITE_TOOLS:
+        guard["write_seen"] = True
+        return None
+    if not any(name_lower.startswith(prefix) for prefix in _SELF_DEVELOPMENT_INSPECTION_TOOL_PREFIXES):
+        return None
+    count = int(guard.get("inspection_count", 0) or 0) + 1
+    guard["inspection_count"] = count
+    limit = max(0, int(guard.get("limit", 6) or 0))
+    if count <= limit:
+        return None
+    msg = (
+        "Self-development write-first guard: this live repo task already used "
+        f"{count} inspection tools without a write. Stop inspecting. The next "
+        "substantive tool call must be fs.write_file or fs.write_protected_file "
+        "on a scoped source/test/doc file, or explicitly report the blocker."
+    )
+    return AgentEvent(
+        type=EventType.TOOL_RESULT,
+        data={
+            "tool_id": tc_id,
+            "tool_name": name,
+            "result": msg,
+            "result_text": msg,
+            "ok": False,
+            "duration_ms": 0,
+        },
+        iteration=iteration,
+    )
 
 
 def _validate_filesystem_path(
@@ -295,6 +359,17 @@ async def execute_tools(
 
         validated_path: str | None = None
         is_write_tool_call = _is_write_tool(name, file_audit_module)
+        guard_event = _self_development_write_guard_event(loop, name=name, tc_id=tc_id, iteration=iteration)
+        if guard_event is not None:
+            await loop._audit_action(
+                kind="tool_action_rejected",
+                tool_call_id=tc_id,
+                tool_name=name,
+                decision="FAILED",
+                reason="self_development_write_first_guard",
+                payload={},
+            )
+            return guard_event
         should_sanitize_paths = is_write_tool_call or any(key in args for key in _WRITE_TOOL_PATH_KEYS)
         if should_sanitize_paths:
             if is_write_tool_call and benchmark_error:
@@ -427,7 +502,13 @@ async def execute_tools(
                     runtime_root=str(loop.config.memory.root_path),
                     conversation_summary=conversation_summary,
                     emit_event=_emit_guardrails_event,
-                    no_human_mode="allow" if int(loop._autonomy_level or 0) >= 4 else None,
+                    # The caller (e.g. the guardrails "gatekeeper" mode) may pin the
+                    # approval posture via this attribute; otherwise derive from autonomy.
+                    no_human_mode=(
+                        loop._no_human_mode_override
+                        if hasattr(loop, "_no_human_mode_override")
+                        else ("allow" if int(loop._autonomy_level or 0) >= 4 else None)
+                    ),
                 )
 
             try:
@@ -473,6 +554,7 @@ async def execute_tools(
                     try:
                         result_text = json.dumps(guarded.get("data"), ensure_ascii=False, default=str)
                     except Exception:
+                        log.debug("guarded tool result data serialization failed; using string fallback", exc_info=True)
                         result_text = str(guarded.get("data"))
                 elif guarded.get("error"):
                     result_text = json.dumps(
@@ -517,6 +599,8 @@ async def execute_tools(
             except Exception as e:
                 duration = (time.monotonic() - start) * 1000
                 err_text = f"{type(e).__name__}: {e}"
+                # Broad catch: tool implementations may raise any exception; capture for audit and agent feedback.
+                log.debug("Tool %r raised an exception during execution: %s", name, err_text, exc_info=True)
                 await loop._audit_action(
                     kind="tool_action_exception",
                     tool_call_id=tc_id,
@@ -660,6 +744,8 @@ async def execute_tools(
                 tc = tool_tasks.get(done, {})
                 tc_id = str(tc.get("id", ""))
                 tool_name = str(tc.get("name") or "tool")
+                # Broad catch: asyncio task wrapper can surface any exception from the tool coroutine.
+                log.debug("Tool task for %r completed with unhandled exception: %s", tool_name, e, exc_info=True)
                 await loop._audit_action(
                     kind="tool_action_exception",
                     tool_call_id=tc_id,

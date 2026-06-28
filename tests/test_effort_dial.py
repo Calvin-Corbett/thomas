@@ -9,6 +9,7 @@ from __future__ import annotations
 import unittest
 
 from thomas.core import token_economy as te
+from thomas.core.runtime_profile import resolve_runtime_profile
 
 
 class TestEffortDial(unittest.TestCase):
@@ -48,6 +49,17 @@ class TestEffortDial(unittest.TestCase):
         _lo_e, hi_e = te.estimate_passes("exhaustive", 3)
         self.assertLess(hi_b, hi_d)
         self.assertLess(hi_d, hi_e)
+
+    def test_compute_max_passes_tolerates_missing_config_value(self):
+        self.assertEqual(te.coerce_base_iterations(None), 10)
+        self.assertEqual(te.coerce_base_iterations(0), 10)
+        self.assertEqual(te.compute_max_passes("optimal", None), 10)
+        self.assertEqual(te.compute_max_passes("max", None), 25)
+        self.assertEqual(te.compute_max_passes("cheap", "not-a-number"), 3)
+
+    def test_runtime_profile_tolerates_missing_config_value(self):
+        profile = resolve_runtime_profile(autonomy_level=4, economy_level="max", base_iterations=None)
+        self.assertEqual(profile.effective_max_iterations, 30)
 
     def test_cost_scales_with_team(self):
         _lo1, hi1 = te.estimate_token_cost("exhaustive", 3, team_size=1)

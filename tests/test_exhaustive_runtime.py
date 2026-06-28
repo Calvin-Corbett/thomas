@@ -77,6 +77,35 @@ class TestRunExhaustivePipeline(unittest.IsolatedAsyncioTestCase):
                     specialist_id="coding",
                 )
 
+    async def test_forwards_self_development_runtime_dials_to_worker(self):
+        captured: dict = {}
+
+        async def fake_worker_events(app, **kwargs):  # noqa: ANN001, ANN003
+            captured.update(kwargs)
+            yield {"type": "tool_start", "name": "fs.write_file"}
+            yield {"type": "text", "text": "Changed my_stuff.script01.js and verified it."}
+            yield {"type": "done"}
+
+        with patch.object(er, "run_agent_worker_events", fake_worker_events):
+            ctx = await er.run_exhaustive_pipeline(
+                app={},
+                prompt="fix Thomas in the live repo",
+                instructions="build",
+                work_dir="",
+                profile="local",
+                effort="exhaustive",
+                specialist_id="coding",
+                autonomy_level=4,
+                file_access=2,
+                guardrails="guarded",
+                job_type="self_development",
+            )
+
+        self.assertIn("my_stuff.script01.js", ctx.result)
+        self.assertEqual(captured["file_access"], 2)
+        self.assertEqual(captured["guardrails"], "guarded")
+        self.assertEqual(captured["job_type"], "self_development")
+
 
 if __name__ == "__main__":
     unittest.main()

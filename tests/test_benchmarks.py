@@ -15,7 +15,14 @@ from thomas.benchmarks.mbpp import create_mbpp_suite
 from thomas.benchmarks.mt_bench import create_mt_bench_suite
 from thomas.benchmarks.report import BenchmarkReport
 from thomas.benchmarks.runner import BenchmarkRunner
-from thomas.benchmarks.swe_bench import create_humaneval_suite, create_swe_bench_suite
+from thomas.benchmarks.swe_bench import (
+    LocalSWEBenchFixture,
+    create_humaneval_suite,
+    create_local_swe_bench_fixture,
+    create_local_swe_bench_suite,
+    create_swe_bench_suite,
+    score_swe_bench_patch,
+)
 from thomas.benchmarks.types import (
     BenchmarkConfig,
     BenchmarkResult,
@@ -668,6 +675,66 @@ class TestSWEBenchSuite(unittest.TestCase):
         suite = create_swe_bench_suite()
         for task in suite.tasks:
             self.assertTrue(len(task.prompt) > 10)
+
+
+class TestLocalSWEBenchFixture(unittest.TestCase):
+    def test_fixture_schema_renders_issue_prompt(self):
+        fixture = create_local_swe_bench_fixture()
+        data = fixture.to_dict()
+        self.assertEqual(data["schema_version"], "local-swe-bench-v1")
+        self.assertEqual(data["issue_id"], "local-zero-division-001")
+        self.assertIn("finance_utils/metrics.py", data["base_files"])
+
+        task = fixture.to_benchmark_task()
+        self.assertEqual(task.category, "issue_patch")
+        self.assertEqual(task.eval_metric, EvalMetric.FUNCTIONAL)
+        self.assertEqual(task.metadata["issue_id"], fixture.issue_id)
+        self.assertIn("Return a unified diff patch only", task.prompt)
+        self.assertIn("pytest tests/test_metrics.py::test_percentage_zero_denominator", task.prompt)
+
+    def test_fixture_rejects_unsafe_paths(self):
+        with self.assertRaises(ValueError):
+            LocalSWEBenchFixture(
+                issue_id="bad",
+                repository="local/bad",
+                issue_title="bad path",
+                issue_body="bad path",
+                base_files={"../escape.py": "x = 1\n"},
+                expected_files={"../escape.py": "x = 2\n"},
+            )
+
+    def test_score_swe_bench_patch_accepts_reference_patch(self):
+        fixture = create_local_swe_bench_fixture()
+        result = score_swe_bench_patch(fixture, fixture.reference_patch())
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["score"], 1.0)
+        self.assertEqual(result["modified_files"], ["finance_utils/metrics.py"])
+
+    def test_score_swe_bench_patch_rejects_incomplete_patch(self):
+        fixture = create_local_swe_bench_fixture()
+        result = score_swe_bench_patch(
+            fixture,
+            """--- a/finance_utils/metrics.py
++++ b/finance_utils/metrics.py
+@@ -1,3 +1,3 @@
+ def percentage(numerator, denominator):
+     \"\"\"Return numerator as a percentage of denominator.\"\"\"
+-    return round((numerator / denominator) * 100, 2)
++    return round((numerator / max(denominator, 1)) * 100, 2)
+""",
+        )
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["mismatched_files"], ["finance_utils/metrics.py"])
+
+    def test_local_swe_bench_suite_runs_through_benchmark_runner(self):
+        fixture = create_local_swe_bench_fixture()
+        suite = create_local_swe_bench_suite()
+        runner = BenchmarkRunner(BenchmarkConfig(save_results=False, run_modes=[RunMode.RAW_MODEL]))
+        runner.set_model_fn(lambda _prompt, _model: fixture.reference_patch())
+        results = runner.run_suite(suite, models=["fixture-model"])
+        self.assertEqual(len(results), 1)
+        self.assertTrue(results[0].passed)
+        self.assertEqual(results[0].score, 1.0)
 
 
 class TestHumanEvalSuite(unittest.TestCase):

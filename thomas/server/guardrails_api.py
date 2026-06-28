@@ -80,5 +80,36 @@ def install_guardrails_routes(app: web.Application, approvals: ApprovalBroker) -
         )
         return web.json_response({"ok": True, "resolved": ok})
 
+    async def policy_get(request: web.Request) -> web.Response:
+        if not _is_localhost(request):
+            return web.json_response({"ok": False, "error": "localhost only"}, status=403)
+        from thomas.server.guardrails_policy_store import load_guardrails_policy
+
+        return web.json_response({"ok": True, "policy": load_guardrails_policy().to_dict()})
+
+    async def policy_set(request: web.Request) -> web.Response:
+        if not _is_localhost(request):
+            return web.json_response({"ok": False, "error": "localhost only"}, status=403)
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response({"ok": False, "error": "invalid json"}, status=400)
+        if not isinstance(data, dict):
+            return web.json_response({"ok": False, "error": "expected object"}, status=400)
+        # Accept either {modes, spend_cap_tokens} directly or {preset} shorthand.
+        from thomas.server.guardrails_policy_store import save_guardrails_policy
+        from thomas.server.guardrails_state import PRESETS, from_preset, normalize_state
+
+        preset = str(data.get("preset") or "").strip().lower()
+        if "modes" not in data and preset in PRESETS:
+            state = from_preset(preset)
+        else:
+            state = normalize_state(data)
+        saved = save_guardrails_policy(state)
+        return web.json_response({"ok": True, "policy": saved.to_dict()})
+
     app.router.add_get("/api/approvals/pending", pending)
     app.router.add_post("/api/approvals/resolve", resolve)
+    app.router.add_get("/api/guardrails/policy", policy_get)
+    app.router.add_put("/api/guardrails/policy", policy_set)
+    app.router.add_post("/api/guardrails/policy", policy_set)

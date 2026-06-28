@@ -70,13 +70,13 @@ def test_runtime_copy_keeps_simple_then_expandable_shell() -> None:
     assert "Find messages in this chat" in index_html
     assert "Current Task" in index_html
     assert "Try asking" in index_html
-    assert "Ask {{agent}} anything or describe a task" in index_html
+    assert "Message {{agent}}" in index_html
     assert "window.__thomasRuntimeReady" in app_loader
     assert "await window.__thomasRuntimeReady" in app_loader
     assert "app_runtime_loader.js" in app_loader
     assert "generated/app_runtime_joined.mjs" not in app_loader
     assert "app_parts/" not in app_loader
-    assert "ChatGPT / Codex" in model_setup_runtime
+    assert "ChatGPT (OpenAI)" in model_setup_runtime
     assert "Local Ollama" in model_setup_runtime
     assert "Provider API key" in model_setup_runtime
 

@@ -211,28 +211,28 @@ const OFFICE_PERSONA_LIBRARY = {
 //  Chat Robot Status Sayings 
 const CHAT_ROBOT_SAYINGS = {
     thinking: [
-        'Booting response core...',
-        'Checking the queue...',
-        'Routing context...',
-        'Lining up the reply...',
-        'Calibrating output...',
-        'Preparing a clean answer...',
-        'Syncing the workspace...',
-        'Warming up the channel...',
-        'Staging the response...',
-        'Checking what matters...',
+        'Reading the request...',
+        'Gathering context...',
+        'Checking the active workspace...',
+        'Planning the next step...',
+        'Preparing the answer...',
+        'Reviewing constraints...',
+        'Selecting the right tools...',
+        'Checking prior results...',
+        'Structuring the response...',
+        'Validating the route...',
     ],
     working: [
-        'Dispatching workers...',
-        'Moving tasks into queue...',
-        'Checking files and tools...',
-        'Coordinating the task lane...',
-        'Keeping the reply tight...',
-        'Working through the steps...',
-        'Wrapping the handoff...',
-        'Locking in the result...',
-        'Finishing the response...',
-        'Keeping things moving...',
+        'Running the task...',
+        'Using tools...',
+        'Checking outputs...',
+        'Verifying files...',
+        'Tracking progress...',
+        'Preparing the result...',
+        'Reviewing failures...',
+        'Reconciling artifacts...',
+        'Updating the task record...',
+        'Finishing verification...',
     ],
 };
 
@@ -421,7 +421,7 @@ function _ensureRobotDock() {
 }
 
 function _positionRobotDock() {
-    return chatWorldPositionDock();
+    return null;
 }
 
 function _asLandedRobotElement(sourceNode = null) {
@@ -444,11 +444,12 @@ function _asLandedRobotElement(sourceNode = null) {
 }
 
 function _landRobotAtComposerDock(sourceNode = null) {
-    return chatWorldLandAtDock(sourceNode);
+    void sourceNode;
+    return null;
 }
 
 function _portalOutLandedRobot() {
-    return chatWorldPortalOutLanded();
+    return Promise.resolve();
 }
 
 window.addEventListener('resize', () => _positionRobotDock());
@@ -460,11 +461,11 @@ if (window.visualViewport) {
 
 function _createRobotStatus(category) {
     const wrapper = document.createElement('div');
-    wrapper.className = 'chat-robot-status chat-robot-status-inline assistant-inline-thinking-status';
+    wrapper.className = 'assistant-inline-thinking-status assistant-work-status';
     wrapper.innerHTML = `
         <span class="assistant-inline-thinking-copy">
-            <span class="chat-robot-saying">${pickChatSaying(category)}</span>
-            <span class="chat-robot-timer">0.0s</span>
+            <span class="assistant-work-status-text">${pickChatSaying(category)}</span>
+            <span class="assistant-work-status-timer">0.0s</span>
         </span>
     `;
     return wrapper;
@@ -508,10 +509,10 @@ function chatMessageTimestampText(valueRaw) {
 
 function robotAmbientStatusText(channel = 'thinking') {
     const normalized = safeString(channel).toLowerCase();
-    if (normalized.includes('memory')) return 'Refreshing memory...';
-    if (normalized.includes('tool')) return 'Checking tools...';
-    if (normalized.includes('delegation') || normalized.includes('background')) return 'Dispatching background work...';
-    if (normalized.includes('route')) return 'Routing the task...';
+    if (normalized.includes('memory')) return 'Reading relevant memory...';
+    if (normalized.includes('tool')) return 'Using tools...';
+    if (normalized.includes('delegation') || normalized.includes('background')) return 'Running background work...';
+    if (normalized.includes('route')) return 'Routing the request...';
     if (normalized.includes('working')) return pickChatSaying('working');
     return pickChatSaying('thinking');
 }

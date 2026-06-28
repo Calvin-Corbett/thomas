@@ -32,21 +32,76 @@ from thomas.server.net_safety import validate_public_url
 
 log = logging.getLogger(__name__)
 
-_MARKETPLACE_TYPES = {"command_center", "plugin", "dependency", "integration"}
+_MARKETPLACE_TYPES = {"app", "plugin", "dependency", "integration"}
+# "command_center" renamed to "app" (2026-06-11); legacy values normalize on read.
+_LEGACY_MARKETPLACE_TYPE_ALIASES = {"command_center": "app"}
 _LEFT_NAV_BEHAVIORS = {"none", "workspace"}
-_DEFAULT_NAV_SECTIONS = {"command_centers", "installed"}
+_DEFAULT_NAV_SECTIONS = {"apps", "installed"}
+_LEGACY_NAV_SECTION_ALIASES = {"command_centers": "apps"}
 _TYPE_LABELS = {
-    "command_center": "Command Center",
+    "app": "App",
+    "command_center": "App",
     "plugin": "Plugin",
     "dependency": "Dependency",
     "integration": "Integration",
 }
+_RETIRED_LOCAL_MODULE_IDS = frozenset(
+    {
+        "life-manager",
+        "life-manager-foundation",
+        "brownies",
+        "smart-home",
+        "telegram-channel",
+    }
+)
 _CANONICAL_MARKETPLACE_STORE_URL = "https://thomas-site.thomasdevhub.workers.dev"
 _LEGACY_MARKETPLACE_STORE_URL = "https://thomas.dev"
 
 
 def _safe_string(value: Any) -> str:
     return value if isinstance(value, str) else ("" if value is None else str(value))
+
+
+def _plugin_id_from_row(row: dict[str, Any]) -> str:
+    return _safe_string(row.get("plugin_id") or row.get("id")).strip()
+
+
+def _is_retired_local_module_id(plugin_id: str) -> bool:
+    return _safe_string(plugin_id).strip().lower() in _RETIRED_LOCAL_MODULE_IDS
+
+
+def _is_retired_local_module_row(row: dict[str, Any]) -> bool:
+    return _is_retired_local_module_id(_plugin_id_from_row(row))
+
+
+def _retired_plugin_response(plugin_id: str, *, status: int = 404) -> web.Response:
+    return web.json_response(
+        {
+            "ok": False,
+            "error": f"Plugin '{plugin_id}' is retired from the local marketplace.",
+            "retired": True,
+        },
+        status=status,
+    )
+
+
+def _remove_retired_local_module_installs(config: Any, plugin: dict[str, Any] | None = None) -> None:
+    plugin_ids = set(_RETIRED_LOCAL_MODULE_IDS)
+    if isinstance(plugin, dict):
+        plugin_id = _plugin_id_from_row(plugin)
+        if plugin_id:
+            plugin_ids.add(plugin_id)
+        for dependency_id in plugin.get("requires") or []:
+            dependency = _safe_string(dependency_id).strip()
+            if dependency:
+                plugin_ids.add(dependency)
+    for plugin_id in plugin_ids:
+        if not _is_retired_local_module_id(plugin_id):
+            continue
+        try:
+            uninstall_plugin(config, plugin_id)
+        except Exception:
+            log.debug("Unable to remove retired marketplace plugin '%s'", plugin_id, exc_info=True)
 
 
 def _safe_int(value: Any, default: int) -> int:
@@ -138,7 +193,7 @@ def _merge_nav_metadata(base: dict[str, Any], installed: dict[str, Any]) -> dict
     installed_marketplace_type = _safe_string(installed.get("marketplace_type"))
     marketplace_type = (
         row_marketplace_type
-        if row_marketplace_type == "command_center"
+        if row_marketplace_type in {"app", "command_center"}
         else (installed_marketplace_type or row_marketplace_type)
     )
 
@@ -151,7 +206,7 @@ def _merge_nav_metadata(base: dict[str, Any], installed: dict[str, Any]) -> dict
     )
 
     row_default_nav_section = _safe_string(base.get("default_nav_section")) or (
-        "command_centers" if left_nav_behavior == "workspace" else "installed"
+        "apps" if left_nav_behavior == "workspace" else "installed"
     )
     installed_default_nav_section = _safe_string(installed.get("default_nav_section"))
     default_nav_section = (
@@ -287,7 +342,7 @@ def _build_orphan_installed_row(installed: dict[str, Any], *, store_url: str, ch
 
 
 def _sort_marketplace_rows(rows: list[dict[str, Any]]) -> None:
-    type_priority = {"command_center": 0, "plugin": 1, "integration": 2, "dependency": 3}
+    type_priority = {"app": 0, "command_center": 0, "plugin": 1, "integration": 2, "dependency": 3}
     rows.sort(
         key=lambda row: (
             0 if row.get("installable") else 1,
@@ -300,7 +355,7 @@ def _sort_marketplace_rows(rows: list[dict[str, Any]]) -> None:
 
 
 def _summarize_marketplace_facets(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    type_priority = {"command_center": 0, "plugin": 1, "integration": 2, "dependency": 3}
+    type_priority = {"app": 0, "command_center": 0, "plugin": 1, "integration": 2, "dependency": 3}
     category_counts = Counter(
         _safe_string(row.get("category")).lower() for row in rows if _safe_string(row.get("category")).strip()
     )
@@ -385,10 +440,11 @@ def _build_local_sync_payload(
 
 def _infer_marketplace_type(raw: dict[str, Any], *, target: str, mode: str) -> str:
     explicit = _safe_string(raw.get("marketplace_type")).strip().lower()
+    explicit = _LEGACY_MARKETPLACE_TYPE_ALIASES.get(explicit, explicit)
     if explicit in _MARKETPLACE_TYPES:
         return explicit
     if target == "desktop" and mode:
-        return "command_center"
+        return "app"
     return "plugin"
 
 
@@ -396,15 +452,16 @@ def _infer_left_nav_behavior(raw: dict[str, Any], marketplace_type: str) -> str:
     explicit = _safe_string(raw.get("left_nav_behavior")).strip().lower()
     if explicit in _LEFT_NAV_BEHAVIORS:
         return explicit
-    return "workspace" if marketplace_type == "command_center" else "none"
+    return "workspace" if marketplace_type == "app" else "none"
 
 
 def _infer_default_nav_section(raw: dict[str, Any], *, marketplace_type: str, left_nav_behavior: str) -> str:
     explicit = _safe_string(raw.get("default_nav_section")).strip().lower()
+    explicit = _LEGACY_NAV_SECTION_ALIASES.get(explicit, explicit)
     if explicit in _DEFAULT_NAV_SECTIONS:
         return explicit
-    if marketplace_type == "command_center" or left_nav_behavior == "workspace":
-        return "command_centers"
+    if marketplace_type == "app" or left_nav_behavior == "workspace":
+        return "apps"
     return "installed"
 
 
@@ -427,7 +484,7 @@ def _normalize_pack(raw: Any) -> dict[str, Any] | None:
     default_nav_section = _infer_default_nav_section(
         raw, marketplace_type=marketplace_type, left_nav_behavior=left_nav_behavior
     )
-    default_nav_order = _safe_int(raw.get("default_nav_order"), 400 if marketplace_type == "command_center" else 900)
+    default_nav_order = _safe_int(raw.get("default_nav_order"), 400 if marketplace_type == "app" else 900)
     tags = _string_list(raw.get("tags"))
     for value in categories + [marketplace_type, target, mode, left_nav_behavior]:
         text = _safe_string(value).strip()
@@ -567,6 +624,8 @@ def _load_marketplace_catalog() -> tuple[dict[str, Any], Path, list[dict[str, An
             row = _normalize_pack(item)
             if row is None:
                 continue
+            if _is_retired_local_module_row(row):
+                continue
             row["download_available"] = _resolve_pack_dir(extensions_root, _safe_string(row.get("id"))) is not None
             rows.append(row)
     return catalog, extensions_root, rows
@@ -576,7 +635,11 @@ def _augment_marketplace_rows(
     app: web.Application, extensions_root: Path, rows: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
     config = app[APP_CONFIG]
-    installed_by_id = {row["plugin_id"]: row for row in list_installed_plugins(config, include_disabled=True)}
+    installed_by_id = {
+        row["plugin_id"]: row
+        for row in list_installed_plugins(config, include_disabled=True)
+        if not _is_retired_local_module_row(row)
+    }
     out: list[dict[str, Any]] = []
     for base in rows:
         row = dict(base)
@@ -778,12 +841,14 @@ def register_marketplace_catalog_routes(
         rows = [dict(item) for item in raw_rows if isinstance(item, dict)] if isinstance(raw_rows, list) else []
         config = app[APP_CONFIG]
         installed = list_installed_plugins(config, include_disabled=True)
-        installed_by_id = {row["plugin_id"]: row for row in installed}
+        installed_by_id = {row["plugin_id"]: row for row in installed if not _is_retired_local_module_row(row)}
         merged_rows: list[dict[str, Any]] = []
         seen_ids: set[str] = set()
         for row in rows:
             plugin_id = _safe_string(row.get("id") or row.get("plugin_id")).strip()
             if not plugin_id:
+                continue
+            if _is_retired_local_module_id(plugin_id):
                 continue
             row["id"] = plugin_id
             row["plugin_id"] = plugin_id
@@ -854,6 +919,8 @@ def register_marketplace_catalog_routes(
         plugin_id = _safe_string(request.match_info.get("plugin_id")).strip()
         if not plugin_id:
             return web.json_response({"ok": False, "error": "plugin_id is required"}, status=400)
+        if _is_retired_local_module_id(plugin_id):
+            return _retired_plugin_response(plugin_id)
 
         try:
             _catalog, extensions_root, rows = _load_marketplace_catalog()
@@ -896,7 +963,11 @@ def register_marketplace_catalog_routes(
     async def api_marketplace_installed(request: web.Request) -> web.Response:
         require_api_access(request)
         config = app[APP_CONFIG]
-        plugins = list_installed_plugins(config, include_disabled=True)
+        plugins = [
+            row
+            for row in list_installed_plugins(config, include_disabled=True)
+            if not _is_retired_local_module_row(row)
+        ]
         return web.json_response({"ok": True, "count": len(plugins), "plugins": plugins})
 
     async def api_marketplace_install(request: web.Request) -> web.Response:
@@ -905,6 +976,8 @@ def register_marketplace_catalog_routes(
         plugin_id = _safe_string(request.match_info.get("plugin_id")).strip()
         if not plugin_id:
             return web.json_response({"ok": False, "error": "plugin_id is required"}, status=400)
+        if _is_retired_local_module_id(plugin_id):
+            return _retired_plugin_response(plugin_id)
         body = await _read_optional_json(request)
         store_url = _safe_string(body.get("store") or body.get("store_url"))
         channel = _safe_string(body.get("channel")) or "stable"
@@ -931,9 +1004,12 @@ def register_marketplace_catalog_routes(
             return web.json_response({"ok": False, "error": "deep_link is required"}, status=400)
         try:
             install_request = parse_plugin_install_deep_link(deep_link)
+            plugin_id = _safe_string(install_request.get("plugin_id"))
+            if _is_retired_local_module_id(plugin_id):
+                return _retired_plugin_response(plugin_id)
             plugin = install_plugin_from_store(
                 config,
-                plugin_id=_safe_string(install_request.get("plugin_id")),
+                plugin_id=plugin_id,
                 store_url=_safe_string(install_request.get("store")),
                 channel=_safe_string(install_request.get("channel")) or "stable",
             )
@@ -954,6 +1030,9 @@ def register_marketplace_catalog_routes(
         plugin_id = _safe_string(request.match_info.get("plugin_id")).strip()
         if not plugin_id:
             return web.json_response({"ok": False, "error": "plugin_id is required"}, status=400)
+        if _is_retired_local_module_id(plugin_id):
+            removed = uninstall_plugin(config, plugin_id)
+            return web.json_response({"ok": True, "plugin_id": plugin_id, "removed": bool(removed), "retired": True})
         deleted = uninstall_plugin(config, plugin_id)
         if not deleted:
             return web.json_response({"ok": False, "error": f"Plugin '{plugin_id}' is not installed"}, status=404)
@@ -963,6 +1042,8 @@ def register_marketplace_catalog_routes(
         require_api_access(request)
         config = app[APP_CONFIG]
         plugin_id = _safe_string(request.match_info.get("plugin_id")).strip()
+        if _is_retired_local_module_id(plugin_id):
+            return _retired_plugin_response(plugin_id)
         try:
             plugin = set_installed_plugin_enabled(config, plugin_id, True)
         except FileNotFoundError as exc:
@@ -973,6 +1054,8 @@ def register_marketplace_catalog_routes(
         require_api_access(request)
         config = app[APP_CONFIG]
         plugin_id = _safe_string(request.match_info.get("plugin_id")).strip()
+        if _is_retired_local_module_id(plugin_id):
+            return _retired_plugin_response(plugin_id)
         try:
             plugin = set_installed_plugin_enabled(config, plugin_id, False)
         except FileNotFoundError as exc:
@@ -1027,6 +1110,10 @@ def register_marketplace_catalog_routes(
         except Exception as exc:
             log.exception("Failed to import marketplace plugin bundle")
             return web.json_response({"ok": False, "error": f"Unable to import plugin bundle: {exc}"}, status=500)
+        plugin_id = _plugin_id_from_row(plugin)
+        if _is_retired_local_module_id(plugin_id):
+            _remove_retired_local_module_installs(config, plugin)
+            return _retired_plugin_response(plugin_id)
         return web.json_response({"ok": True, "plugin": plugin})
 
     async def plugin_asset(request: web.Request) -> web.StreamResponse:
@@ -1034,6 +1121,8 @@ def register_marketplace_catalog_routes(
         config = app[APP_CONFIG]
         plugin_id = _safe_string(request.match_info.get("plugin_id")).strip()
         asset_path = _safe_string(request.match_info.get("asset_path")).strip()
+        if _is_retired_local_module_id(plugin_id):
+            raise web.HTTPNotFound(text="plugin asset was not found")
         try:
             asset = resolve_installed_plugin_asset(config, plugin_id, asset_path)
         except PermissionError as exc:

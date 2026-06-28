@@ -1,4 +1,4 @@
-"""Tool Specialist — executes domain tools from Thomas's 132 modules.
+"""Tool Specialist — executes tools from Thomas's registered domain modules.
 
 This specialist handles tasks that require invoking Thomas's domain
 tools (bioinformatics, CAD, telecom, blockchain, IoT, robotics,
@@ -26,6 +26,41 @@ log = logging.getLogger(__name__)
 # catalog stays within a local model's smaller context window when capped.
 _PRIORITY_CATEGORIES = ("filesystem", "fs", "shell", "git", "code", "diff", "eng", "system")
 _CATALOG_TOOL_CAP = 70
+
+# Tool-name fragments that mark an action as high-risk (irreversible / executes
+# arbitrary code / mutates external state). Withheld below Agent-level autonomy so
+# the autonomy setting actually gates tool access in the worker path.
+_HIGH_RISK_TOOL_HINTS = (
+    "shell",
+    "exec",
+    "run_command",
+    "subprocess",
+    "bash",
+    "powershell",
+    "delete",
+    "remove",
+    "rm_",
+    ".rm",
+    "destroy",
+    "drop",
+    "truncate",
+    "format",
+    "deploy",
+    "publish",
+    "push",
+    "force",
+    "write_file",
+    "fs.write",
+    "overwrite",
+    "chmod",
+    "kill",
+    "terminate",
+)
+
+
+def _is_high_risk_tool(name: str) -> bool:
+    low = str(name or "").lower()
+    return any(hint in low for hint in _HIGH_RISK_TOOL_HINTS)
 
 
 def _extract_tool_calls(plan: str) -> list[dict[str, Any]]:
@@ -72,7 +107,7 @@ def _extract_tool_calls(plan: str) -> list[dict[str, Any]]:
 
 
 class ToolSpecialist(BaseSpecialist):
-    """Domain tool execution specialist for Thomas's 132 tool modules."""
+    """Domain tool execution specialist for Thomas's registered tool modules."""
 
     def _build_tool_catalog(self) -> str:
         """Render available tools as compact signatures the LLM can call.
@@ -120,7 +155,7 @@ class ToolSpecialist(BaseSpecialist):
     def description(self) -> str:
         return (
             "Executes domain-specific tools: file operations, system info, "
-            "engineering analysis, data processing, and all 132 registered "
+            "engineering analysis, data processing, and registered domain "
             "tool modules."
         )
 
@@ -146,78 +181,14 @@ class ToolSpecialist(BaseSpecialist):
         conversation_context: list[dict[str, Any]],
         memory_context: str,
     ) -> AsyncIterator[dict[str, Any]]:
-        provider = str(getattr(getattr(self.llm, "config", None), "provider", "") or "").strip().lower()
-        if provider == "codex" and hasattr(self.llm, "stream_chat"):
-            direct_messages = [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are Thomas's tool execution specialist. "
-                        "Use available tools when needed to complete the user's request. "
-                        "Return the final answer in plain text only."
-                    ),
-                }
-            ]
-            if memory_context:
-                direct_messages.append({"role": "system", "content": f"Context:\n{memory_context}"})
-            for msg in conversation_context:
-                if msg.get("role") == "system":
-                    continue
-                direct_messages.append(msg)
-            direct_messages.append({"role": "user", "content": prompt})
-
-            streamed_parts: list[str] = []
-            tool_results = 0
-            async for event in self.llm.stream_chat(
-                messages=direct_messages,
-                tools=[{"type": "function", "function": {"name": "codex_tools_enabled"}}],
-            ):
-                event_type = str(getattr(event, "type", "") or "")
-                data = getattr(event, "data", {}) or {}
-                if event_type == "token":
-                    token_text = str(data.get("text", "") or "")
-                    if token_text:
-                        streamed_parts.append(token_text)
-                        yield {"type": "text", "text": token_text}
-                elif event_type == "tool_call_start":
-                    yield {
-                        "type": "tool_start",
-                        "name": str(data.get("name", "") or "tool"),
-                        "id": str(data.get("id", "") or ""),
-                        "args": {},
-                    }
-                elif event_type == "tool_call_end":
-                    tool_results += 1
-                    yield {
-                        "type": "tool_result",
-                        "name": str(data.get("name", "") or "tool"),
-                        "id": str(data.get("id", "") or ""),
-                        "ok": True,
-                        "result": str(data.get("output", "") or ""),
-                        "ms": 0,
-                    }
-                elif event_type == "error":
-                    yield {"type": "error", "error": str(data.get("error") or "Tool execution failed")}
-                    return
-                elif event_type == "done":
-                    break
-
-            response = "".join(streamed_parts).strip()
-            if not response:
-                yield {"type": "error", "error": "Tool specialist returned an empty response"}
-                return
-
-            yield {"type": "done", "content": response, "iterations": 1, "tool_calls": tool_results}
-            return
-
         yield {
             "type": "thinking",
             "text": "Determining which tools to use...",
             "phase": "tool_selection",
         }
 
-        # Ask LLM what tools to call. Local models (unlike codex) have no
-        # built-in executor, so they must emit a JSON tool plan. That only
+        # Ask LLM what tools to call. Local models have no built-in tool
+        # executor, so they must emit a JSON tool plan. That only
         # works if the prompt gives them the real tool names AND argument
         # schemas — previously this passed "general tools" (a swallowed
         # ``t[:30]`` TypeError on Tool objects), so local models never knew
@@ -254,11 +225,29 @@ class ToolSpecialist(BaseSpecialist):
         # call. Scope an execution token to the actually-registered tool names
         # (the registry is the security boundary — only sandboxed-safe tools
         # are registered), preserving autonomy/session/expiry.
+        #
+        # Autonomy gating: the token carries autonomy_level — CONSULT it. Below
+        # Agent level (3) the user has not granted hands-off execution, so exclude
+        # high-risk tools (shell/exec, destructive filesystem, deploy/push). Without
+        # this the per-task autonomy setting was nullified (a low-autonomy task could
+        # still run shell + fs-write). See thomas/core/autonomy.
         exec_token = token
         try:
             registered = {str(getattr(t, "name", "") or "") for t in self.tools.list_tools() if getattr(t, "name", "")}
             if registered:
-                exec_token = replace(token, allowed_tools=registered)
+                autonomy_level = int(getattr(token, "autonomy_level", 0) or 0)
+                if autonomy_level >= 3:
+                    allowed = registered
+                else:
+                    allowed = {n for n in registered if not _is_high_risk_tool(n)}
+                    gated = registered - allowed
+                    if gated:
+                        yield {
+                            "type": "thinking",
+                            "text": f"Autonomy level {autonomy_level}: withholding {len(gated)} high-risk tools (shell/destructive/deploy).",
+                            "phase": "tool_selection",
+                        }
+                exec_token = replace(token, allowed_tools=allowed)
         except Exception:
             exec_token = token
 

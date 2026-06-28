@@ -1,4 +1,9 @@
-"""Code search tools: regex search, definition/reference finder, project structure.
+"""Sandboxed source-tree search tools for live code files.
+
+Registers the ``code.*`` tools used by the server, CLI, and agent loop for
+regex search, definition/reference lookup, and project-structure inspection.
+This is intentionally separate from ``thomas.tools.search_code``, which exposes
+the indexed ``rag.search`` adapter.
 
 Uses ripgrep (rg) subprocess when available for speed and .gitignore awareness,
 with a pure Python fallback for environments without rg.

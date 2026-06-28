@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<!--
+  Thomas Chat — faithful vanilla port of the "Thomas Chat.dc.html" design concept
+  imported from claude.ai/design (project 85187ffb-...-d43e5033f957).
+
+  This is a self-contained surface (markup + CSS + JS, no build step, no React/DC
+  runtime). Served by Thomas at /static/thomas_chat.html. Five "living world"
+  themes (Nebula / Dark / Light / Aurora / Sandstone), each with its own animated
+  background, design tokens, fonts and welcome copy; sidebar, model pill, theme
+  switcher, welcome hero, streaming message thread, composer, and the Thomas Canvas
+  (whiteboard / document / chart). Behavior mirrors the design's DCLogic component.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Thomas Chat</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600;6..72,700&family=JetBrains+Mono:wght@400;500;600&family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; }
+    *, *::before, *::after { box-sizing: border-box; }
+    .tc-scroll { scrollbar-width: thin; scrollbar-color: var(--c-border-2) transparent; }
+    .tc-scroll::-webkit-scrollbar { width: 9px; height: 9px; }
+    .tc-scroll::-webkit-scrollbar-thumb { background: var(--c-border-2); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+    .tc-scroll::-webkit-scrollbar-thumb:hover { background: var(--c-muted); background-clip: padding-box; }
+    /* UI */
+    @keyframes tc-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes tc-blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+    @keyframes tc-dot { 0%, 80%, 100% { transform: translateY(0); opacity: 0.4; } 40% { transform: translateY(-4px); opacity: 1; } }
+    @keyframes tc-hover { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+    @keyframes tc-pop { from { transform: scale(0.97) translateY(6px); } to { transform: scale(1) translateY(0); } }
+    /* Nebula */
+    @keyframes tc-twinkle { 0%, 100% { opacity: 0.9; } 50% { opacity: 0.45; } }
+    @keyframes tc-neb-drift { 0% { transform: translate3d(0,0,0) scale(1); } 100% { transform: translate3d(-3%,-2%,0) scale(1.08); } }
+    @keyframes tc-neb-hue { 0% { filter: blur(10px) hue-rotate(0deg); } 100% { filter: blur(10px) hue-rotate(26deg); } }
+    @keyframes tc-stars { 0% { transform: translateY(0); } 100% { transform: translateY(-360px); } }
+    @keyframes tc-planet-drift { 0% { transform: translate(0,0); } 50% { transform: translate(-26px,-16px); } 100% { transform: translate(0,0); } }
+    @keyframes tc-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes tc-fly-right { from { transform: translateX(-16vw); } to { transform: translateX(116vw); } }
+    @keyframes tc-fly-left { from { transform: translateX(116vw); } to { transform: translateX(-16vw); } }
+    @keyframes tc-bob { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-16px) rotate(3deg); } }
+    /* Aurora */
+    @keyframes tc-aurora { 0% { transform: translateX(-6%) skewX(-8deg) scaleY(1); } 50% { transform: translateX(6%) skewX(6deg) scaleY(1.16); } 100% { transform: translateX(-4%) skewX(-6deg) scaleY(1); } }
+    @keyframes tc-snow { 0% { background-position: 0 0, 0 0, 0 0; } 100% { background-position: 0 700px, 0 500px, 0 900px; } }
+    /* Sandstone */
+    @keyframes tc-sun { 0%, 100% { transform: translateY(0) scale(1); opacity: 0.9; } 50% { transform: translateY(-8px) scale(1.03); opacity: 1; } }
+    @keyframes tc-sled { from { transform: translateX(-20vw); } to { transform: translateX(120vw); } }
+    /* Dark */
+    @keyframes tc-scan { 0% { transform: translateY(-10%); opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { transform: translateY(110vh); opacity: 0; } }
+    @keyframes tc-node { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(10px,-12px); } }
+    /* Light */
+    @keyframes tc-cloud { from { transform: translateX(-10vw); } to { transform: translateX(110vw); } }
+    @keyframes tc-spark { 0%, 100% { opacity: 0.2; transform: scale(0.8); } 50% { opacity: 0.9; transform: scale(1.1); } }
+    /* Canvas */
+    @keyframes tc-slide-in { from { transform: translateX(40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes tc-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+    @keyframes tc-fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes tc-shimmer { 0% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
+    @keyframes tc-bar { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+    /* Bot mascot */
+    @keyframes bot-flame { 0% { transform: scaleY(1) scaleX(1); } 33% { transform: scaleY(1.3) scaleX(0.82); } 66% { transform: scaleY(0.8) scaleX(1.12); } 100% { transform: scaleY(1) scaleX(1); } }
+    @keyframes bot-blink { 0%, 90%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
+
+    /* Living-world visibility is driven by [data-theme] on the shell. */
+    .tc-world { display: none; }
+    .tc-shell[data-theme="nebula"]    .tc-world.is-nebula    { display: block; }
+    .tc-shell[data-theme="aurora"]    .tc-world.is-aurora    { display: block; }
+    .tc-shell[data-theme="sandstone"] .tc-world.is-sandstone { display: block; }
+    .tc-shell[data-theme="dark"]      .tc-world.is-dark      { display: block; }
+    .tc-shell[data-theme="light"]     .tc-world.is-light     { display: block; }
+
+    /* Hover utilities (the design used a DC-only style-hover attribute). */
+    .hv-icon:hover   { background: var(--c-hover) !important; color: var(--c-text) !important; border-color: var(--c-border-2) !important; }
+    .hv-soft:hover   { background: var(--c-hover) !important; color: var(--c-text) !important; }
+    .hv-pill:hover   { border-color: var(--c-border-2) !important; background: var(--c-surface-2) !important; }
+    .hv-surface:hover{ background: var(--c-surface-2) !important; }
+    .hv-newchat:hover{ background: var(--c-accent-soft) !important; border-color: var(--c-accent-line) !important; }
+    .hv-card:hover   { border-color: var(--c-accent-line) !important; background: var(--c-surface-2) !important; transform: translateY(-2px); }
+  </style>
+</head>
+<body>
+  <!-- Shell. Default vars below = Nebula Core (mirrors the design's inline root). -->
+  <div id="tc-shell" class="tc-shell" data-theme="nebula" style="position: relative; display: flex; height: 100vh; width: 100%; overflow: hidden; font-family: var(--font-sans); color: var(--c-text); background: var(--c-bg); --c-bg: #070912; --c-sidebar: rgba(11,14,26,0.72); --c-surface: rgba(255,255,255,0.04); --c-surface-2: rgba(255,255,255,0.08); --c-hover: rgba(255,255,255,0.06); --c-border: rgba(255,255,255,0.10); --c-border-2: rgba(255,255,255,0.17); --c-text: #eef0fb; --c-dim: rgba(238,240,251,0.66); --c-muted: rgba(238,240,251,0.42); --c-accent: #8b8cff; --c-accent-ink: #0a0b16; --c-accent-soft: rgba(139,140,255,0.16); --c-accent-line: rgba(139,140,255,0.45); --c-user-bg: rgba(124,118,235,0.20); --c-user-text: #eef0fb; --c-composer-bg: rgba(16,19,34,0.86); --c-menu-bg: #15142b; --c-shadow: 0 18px 50px rgba(2,4,12,0.55); --bot-primary: #9ad8ff; --bot-secondary: #5aaeff; --bot-glow: rgba(90,174,255,0.5); --bot-trim: #0d1117; --r-card: 14px; --r-composer: 18px; --font-head: 'Manrope', system-ui, sans-serif; --font-label: 'Manrope', system-ui, sans-serif; --font-sans: 'Manrope', system-ui, sans-serif; --font-serif: 'Newsreader', Georgia, serif; --font-mono: 'JetBrains Mono', ui-monospace, monospace; --sidebar-margin: 0;">
+
+    <!-- ===================== LIVING WORLDS (behind everything) ===================== -->
+    <div aria-hidden="true" style="position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;">
+
+      <!-- NEBULA -->
+      <div class="tc-world is-nebula">
+        <div style="position: absolute; inset: -12%;">
+          <div style="position: absolute; inset: 0; background:
+              radial-gradient(42% 46% at 24% 30%, rgba(124,108,255,0.42), transparent 60%),
+              radial-gradient(38% 42% at 80% 22%, rgba(64,196,224,0.28), transparent 62%),
+              radial-gradient(48% 50% at 64% 82%, rgba(196,86,196,0.24), transparent 60%),
+              radial-gradient(64% 64% at 50% 50%, rgba(38,28,86,0.32), transparent 72%);
+              animation: tc-neb-drift 160s ease-in-out infinite alternate, tc-neb-hue 110s ease-in-out infinite alternate;"></div>
+          <div style="position: absolute; inset: 0; background-image:
+              radial-gradient(1.4px 1.4px at 12% 18%, rgba(255,255,255,0.95), transparent),
+              radial-gradient(1px 1px at 28% 64%, rgba(255,255,255,0.7), transparent),
+              radial-gradient(1.6px 1.6px at 47% 32%, rgba(214,224,255,0.9), transparent),
+              radial-gradient(1px 1px at 63% 72%, rgba(255,255,255,0.65), transparent),
+              radial-gradient(1.3px 1.3px at 78% 44%, rgba(255,255,255,0.85), transparent),
+              radial-gradient(1px 1px at 88% 78%, rgba(255,255,255,0.6), transparent),
+              radial-gradient(1px 1px at 38% 88%, rgba(255,255,255,0.7), transparent),
+              radial-gradient(1.2px 1.2px at 8% 52%, rgba(255,255,255,0.8), transparent),
+              radial-gradient(1px 1px at 55% 12%, rgba(255,255,255,0.7), transparent),
+              radial-gradient(1.5px 1.5px at 70% 58%, rgba(230,224,255,0.9), transparent);
+              background-size: 360px 360px; animation: tc-stars 150s linear infinite, tc-twinkle 5s ease-in-out infinite;"></div>
+        </div>
+        <div style="position: absolute; right: 6%; bottom: -90px; width: 240px; height: 240px; animation: tc-planet-drift 90s ease-in-out infinite;">
+          <div style="position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 34% 28%, #8f8cff, #4b3fa6 58%, #221a52 100%); box-shadow: inset -26px -20px 50px rgba(0,0,0,0.55), 0 0 70px rgba(124,108,255,0.22);"></div>
+          <div style="position: absolute; top: 44%; left: -22%; width: 144%; height: 36px; border-radius: 50%; border: 3px solid rgba(173,160,255,0.5); transform: rotate(-18deg) scaleY(0.34); animation: tc-spin 80s linear infinite;"></div>
+        </div>
+        <div style="position: absolute; left: 9%; top: 14%; width: 86px; height: 86px; border-radius: 50%; background: radial-gradient(circle at 36% 30%, #7fe4cf, #2f8f93 60%, #16454f 100%); box-shadow: inset -10px -8px 22px rgba(0,0,0,0.5), 0 0 36px rgba(71,215,172,0.25); animation: tc-planet-drift 70s ease-in-out infinite reverse;"></div>
+        <div style="position: absolute; right: 26%; top: 22%; width: 30px; height: 30px; border-radius: 50%; background: radial-gradient(circle at 36% 30%, #e7ecff, #97a0c8 70%, #5b6088); box-shadow: inset -4px -3px 8px rgba(0,0,0,0.4);"></div>
+        <div style="position: absolute; top: 17%; left: 0; animation: tc-fly-right 30s linear infinite;">
+          <div style="animation: tc-bob 4s ease-in-out infinite;" data-bot data-primary="#bcd8ff" data-secondary="#6f9bff" data-trim="#0a0e1c" data-glow="rgba(120,150,255,0.55)" data-scale="0.62" data-flame="true"></div>
+        </div>
+        <div style="position: absolute; top: 33%; left: 0; transform: scaleX(-1); animation: tc-fly-left 40s linear infinite;">
+          <div style="animation: tc-bob 5s ease-in-out infinite;" data-bot data-primary="#c8b8ff" data-secondary="#8b7bff" data-trim="#0a0e1c" data-glow="rgba(150,120,255,0.5)" data-scale="0.5" data-flame="true"></div>
+        </div>
+        <div style="position: absolute; top: 64%; left: 0; animation: tc-fly-right 52s linear infinite;">
+          <div style="animation: tc-bob 6s ease-in-out infinite;" data-bot data-primary="#a8e8ff" data-secondary="#5ec4e6" data-trim="#0a0e1c" data-glow="rgba(94,196,230,0.45)" data-scale="0.38" data-flame="true"></div>
+        </div>
+      </div>
+
+      <!-- AURORA -->
+      <div class="tc-world is-aurora">
+        <div style="position: absolute; top: -34%; left: -20%; width: 140%; height: 95%; background: linear-gradient(115deg, transparent 22%, rgba(52,224,176,0.30) 42%, rgba(70,160,255,0.22) 56%, transparent 76%); filter: blur(44px); animation: tc-aurora 20s ease-in-out infinite;"></div>
+        <div style="position: absolute; top: -44%; left: -10%; width: 130%; height: 100%; background: linear-gradient(98deg, transparent 30%, rgba(120,255,214,0.2) 50%, transparent 72%); filter: blur(54px); animation: tc-aurora 30s ease-in-out infinite reverse;"></div>
+        <div style="position: absolute; inset: 0; background-image: radial-gradient(1.6px 1.6px at 20% 16%, rgba(255,255,255,0.9), transparent), radial-gradient(1.2px 1.2px at 60% 8%, rgba(255,255,255,0.7), transparent), radial-gradient(1.4px 1.4px at 84% 22%, rgba(255,255,255,0.8), transparent), radial-gradient(1.2px 1.2px at 38% 30%, rgba(255,255,255,0.7), transparent); background-size: 100% 100%;"></div>
+        <div style="position: absolute; inset: 0; background-image: radial-gradient(2px 2px at 20% 20%, rgba(255,255,255,0.8), transparent), radial-gradient(2px 2px at 70% 40%, rgba(255,255,255,0.6), transparent), radial-gradient(1.5px 1.5px at 45% 70%, rgba(255,255,255,0.7), transparent); background-size: 260px 260px, 320px 320px, 200px 200px; animation: tc-snow 24s linear infinite; opacity: 0.7;"></div>
+        <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 200px; background: linear-gradient(180deg, transparent, rgba(6,30,30,0.6)); clip-path: polygon(0 100%, 0 56%, 12% 38%, 24% 60%, 38% 30%, 52% 58%, 66% 26%, 80% 54%, 92% 36%, 100% 56%, 100% 100%);"></div>
+        <div style="position: absolute; top: 38%; left: 0; animation: tc-fly-right 46s linear infinite;">
+          <div style="animation: tc-bob 5.5s ease-in-out infinite;" data-bot data-primary="#a8f0da" data-secondary="#34e0b0" data-trim="#06302a" data-glow="rgba(52,224,176,0.5)" data-scale="0.52" data-flame="true"></div>
+        </div>
+      </div>
+
+      <!-- SANDSTONE -->
+      <div class="tc-world is-sandstone">
+        <div style="position: absolute; top: 12%; right: 16%; width: 130px; height: 130px; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(255,214,150,0.95), rgba(240,170,90,0.5) 60%, transparent 72%); animation: tc-sun 14s ease-in-out infinite;"></div>
+        <div style="position: absolute; inset: 0; background-image: radial-gradient(rgba(120,90,50,0.05) 1px, transparent 1px); background-size: 4px 4px; opacity: 0.7;"></div>
+        <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 200px; background: linear-gradient(180deg, transparent, rgba(206,158,104,0.28)); clip-path: ellipse(75% 100% at 30% 130%);"></div>
+        <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 150px; background: linear-gradient(180deg, transparent, rgba(176,120,68,0.3)); clip-path: ellipse(70% 100% at 80% 140%);"></div>
+        <div style="position: absolute; bottom: 92px; left: 0; animation: tc-sled 56s linear infinite;">
+          <div style="position: relative; animation: tc-bob 6s ease-in-out infinite;">
+            <div data-bot data-primary="#ffd6a7" data-secondary="#ffad60" data-trim="#3a2a1a" data-glow="rgba(192,96,60,0.45)" data-scale="0.5" data-flame="false"></div>
+            <span style="position: absolute; left: -6px; bottom: -6px; width: 52px; height: 7px; border-radius: 6px; background: linear-gradient(90deg, rgba(192,96,60,0.2), #c0603c, rgba(192,96,60,0.2)); box-shadow: 0 6px 14px rgba(192,96,60,0.4);"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- DARK (blueprint workshop) -->
+      <div class="tc-world is-dark">
+        <div style="position: absolute; inset: 0; background-image: linear-gradient(rgba(110,155,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(110,155,255,0.06) 1px, transparent 1px); background-size: 44px 44px;"></div>
+        <div style="position: absolute; left: 0; right: 0; height: 160px; background: linear-gradient(180deg, transparent, rgba(110,155,255,0.06), transparent); animation: tc-scan 11s linear infinite;"></div>
+        <div style="position: absolute; left: 16%; top: 30%; width: 8px; height: 8px; border-radius: 50%; background: rgba(110,155,255,0.5); box-shadow: 0 0 12px rgba(110,155,255,0.6); animation: tc-node 9s ease-in-out infinite;"></div>
+        <div style="position: absolute; left: 24%; top: 46%; width: 6px; height: 6px; border-radius: 50%; background: rgba(110,155,255,0.4); animation: tc-node 12s ease-in-out infinite reverse;"></div>
+        <div style="position: absolute; right: 20%; top: 60%; width: 7px; height: 7px; border-radius: 50%; background: rgba(110,155,255,0.45); animation: tc-node 10s ease-in-out infinite;"></div>
+        <div style="position: absolute; right: 13%; top: 26%; opacity: 0.85; animation: tc-bob 6s ease-in-out infinite;" data-bot data-primary="#9ad8ff" data-secondary="#5aaeff" data-trim="#0a0e16" data-glow="rgba(90,174,255,0.3)" data-scale="0.62" data-flame="false"></div>
+      </div>
+
+      <!-- LIGHT (daylight studio) -->
+      <div class="tc-world is-light">
+        <div style="position: absolute; top: 16%; left: 0; width: 200px; height: 64px; border-radius: 999px; background: radial-gradient(circle at 40% 50%, rgba(255,255,255,0.95), rgba(225,233,245,0.5) 70%, transparent); filter: blur(8px); animation: tc-cloud 70s linear infinite;"></div>
+        <div style="position: absolute; top: 40%; left: 0; width: 150px; height: 52px; border-radius: 999px; background: radial-gradient(circle at 40% 50%, rgba(255,255,255,0.9), rgba(225,233,245,0.4) 70%, transparent); filter: blur(8px); animation: tc-cloud 96s linear infinite; animation-delay: -30s;"></div>
+        <div style="position: absolute; left: 22%; top: 28%; width: 8px; height: 8px; border-radius: 2px; background: rgba(47,107,255,0.5); transform: rotate(45deg); animation: tc-spark 5s ease-in-out infinite;"></div>
+        <div style="position: absolute; left: 70%; top: 34%; width: 6px; height: 6px; border-radius: 2px; background: rgba(47,107,255,0.4); transform: rotate(45deg); animation: tc-spark 6s ease-in-out infinite; animation-delay: -2s;"></div>
+        <div style="position: absolute; right: 14%; top: 24%; animation: tc-hover 5s ease-in-out infinite;" data-bot data-primary="#7db0ff" data-secondary="#2f6bff" data-trim="#16233a" data-glow="rgba(47,107,255,0.28)" data-scale="0.6" data-flame="false"></div>
+      </div>
+    </div>
+
+    <!-- ===================== SIDEBAR ===================== -->
+    <aside class="tc-sidebar" style="position: relative; z-index: 2; flex: 0 0 auto; width: 280px; display: flex; flex-direction: column; background: var(--c-sidebar); border-right: 1px solid var(--c-border); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); transition: margin-left 0.28s cubic-bezier(.4,0,.2,1); margin-left: var(--sidebar-margin, 0);">
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 18px 16px 14px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="width: 30px; height: 30px; border-radius: 9px; background: var(--c-accent); display: grid; place-items: center; box-shadow: 0 0 18px var(--c-accent-soft); flex: 0 0 auto;">
+            <span style="display: flex; gap: 4px;">
+              <span style="width: 5px; height: 6px; border-radius: 1px; background: var(--c-accent-ink);"></span>
+              <span style="width: 5px; height: 6px; border-radius: 1px; background: var(--c-accent-ink);"></span>
+            </span>
+          </span>
+          <span style="font-weight: 800; font-size: 18px; letter-spacing: -0.01em;">Thomas</span>
+        </div>
+        <button id="tc-newchat-top" class="hv-icon" title="New chat" style="width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--c-border); background: transparent; color: var(--c-dim); display: grid; place-items: center; cursor: pointer; transition: all .15s;">
+          <i class="ph ph-pencil-simple-line" style="font-size: 17px;"></i>
+        </button>
+      </div>
+
+      <div style="padding: 0 12px 12px;">
+        <label style="display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-radius: 10px; background: var(--c-surface); border: 1px solid var(--c-border); cursor: text;">
+          <i class="ph ph-magnifying-glass" style="font-size: 15px; color: var(--c-muted);"></i>
+          <input id="tc-search" placeholder="Search chats" style="flex: 1; min-width: 0; background: transparent; border: 0; outline: none; color: var(--c-text); font-family: inherit; font-size: 13.5px;" />
+        </label>
+      </div>
+
+      <nav class="tc-scroll" style="flex: 1; min-height: 0; overflow-y: auto; padding: 4px 12px 12px;">
+        <button id="tc-newchat" class="hv-newchat" style="width: 100%; display: flex; align-items: center; gap: 9px; padding: 9px 11px; margin-bottom: 8px; border-radius: 10px; border: 1px dashed var(--c-border-2); background: transparent; color: var(--c-text); font-family: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: all .15s;">
+          <i class="ph ph-plus" style="font-size: 15px;"></i> New chat
+        </button>
+        <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--c-muted); padding: 10px 6px 6px;">Recent</div>
+        <div id="tc-chats"></div>
+        <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--c-muted); padding: 16px 6px 6px;">Workspaces</div>
+        <div id="tc-workspaces"></div>
+      </nav>
+
+      <div style="padding: 10px 12px; border-top: 1px solid var(--c-border);">
+        <button class="hv-soft" style="width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--c-dim); font-family: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; transition: all .14s;">
+          <i class="ph ph-gear-six" style="font-size: 17px;"></i> Settings
+        </button>
+      </div>
+    </aside>
+
+    <!-- ===================== MAIN ===================== -->
+    <main style="position: relative; z-index: 1; flex: 1; min-width: 0; display: flex; flex-direction: column;">
+      <header style="flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--c-border);">
+        <button id="tc-sidebar-toggle" class="hv-icon" title="Toggle sidebar" style="width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--c-border); background: transparent; color: var(--c-dim); display: grid; place-items: center; cursor: pointer; transition: all .15s;">
+          <i class="ph ph-sidebar-simple" style="font-size: 17px;"></i>
+        </button>
+        <div style="position: relative;" data-model-switch="1">
+          <button id="tc-model-btn" class="hv-pill" title="Switch model" style="display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-family: var(--font-label); font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;">
+            <span style="width: 7px; height: 7px; border-radius: 999px; background: var(--c-accent); box-shadow: 0 0 8px var(--c-accent);"></span>
+            <span id="tc-model">gpt-5.5</span>
+            <i class="ph ph-caret-down" style="font-size: 12px; color: var(--c-muted);"></i>
+          </button>
+          <div id="tc-model-menu" style="display: none; position: absolute; left: 0; top: calc(100% + 8px); z-index: 40; width: 300px; max-height: 60vh; overflow-y: auto; padding: 8px; border-radius: 14px; background: var(--c-menu-bg); border: 1px solid var(--c-border-2); box-shadow: var(--c-shadow);" class="tc-scroll">
+            <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--c-muted); padding: 6px 8px 8px;">Model</div>
+            <div id="tc-model-options"></div>
+          </div>
+        </div>
+        <div style="flex: 1;"></div>
+        <button id="tc-canvas-btn" class="hv-surface" title="Open Thomas Canvas" style="display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--c-accent-line); background: var(--c-accent-soft); color: var(--c-text); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;">
+          <i class="ph ph-chalkboard-simple" style="font-size: 16px; color: var(--c-accent);"></i> Canvas
+        </button>
+        <div style="position: relative;" data-theme-switch="1">
+          <button id="tc-theme-btn" class="hv-pill" title="Switch theme" style="display: flex; align-items: center; gap: 9px; padding: 7px 11px 7px 9px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;">
+            <span style="display: inline-flex; border-radius: 6px; overflow: hidden; border: 1px solid var(--c-border-2);">
+              <span id="tc-sw1" style="width: 11px; height: 18px; background: var(--sw-1);"></span>
+              <span id="tc-sw2" style="width: 11px; height: 18px; background: var(--sw-2);"></span>
+              <span id="tc-sw3" style="width: 11px; height: 18px; background: var(--sw-3);"></span>
+            </span>
+            <span id="tc-theme-name">Nebula Core</span>
+            <i class="ph ph-caret-down" style="font-size: 12px; color: var(--c-muted);"></i>
+          </button>
+          <div id="tc-theme-menu" style="display: none; position: absolute; right: 0; top: calc(100% + 8px); z-index: 40; width: 268px; padding: 8px; border-radius: 14px; background: var(--c-menu-bg); border: 1px solid var(--c-border-2); box-shadow: var(--c-shadow);">
+            <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--c-muted); padding: 6px 8px 8px;">Theme — each its own world</div>
+            <div id="tc-theme-options"></div>
+          </div>
+        </div>
+      </header>
+
+      <!-- body row: chat column + canvas column -->
+      <div style="flex: 1; min-height: 0; display: flex;">
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+          <div id="tc-scroll" class="tc-scroll" style="flex: 1; min-height: 0; overflow-y: auto;">
+            <!-- WELCOME -->
+            <div id="tc-welcome" style="max-width: 720px; margin: 0 auto; padding: clamp(20px, 4vh, 56px) 24px 32px; display: flex; flex-direction: column; align-items: center; text-align: center;">
+              <div style="height: 124px; display: grid; place-items: center; margin-bottom: 2px; animation: tc-hover 4.2s ease-in-out infinite;" data-bot data-primary="var(--bot-primary)" data-secondary="var(--bot-secondary)" data-trim="var(--bot-trim)" data-glow="var(--bot-glow)" data-scale="2.5" data-flame="true"></div>
+              <h1 id="tc-welcome-title" style="margin: 0; font-family: var(--font-head); font-size: clamp(28px, 4vw, 38px); font-weight: 800; letter-spacing: -0.02em;">Where to, Captain?</h1>
+              <p id="tc-welcome-sub" style="margin: 10px 0 0; font-size: 16px; color: var(--c-dim); max-width: 460px; line-height: 1.6;">Thomas takes the ask, hands it to the crew, and reports back from orbit.</p>
+              <div id="tc-cards" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 30px; width: 100%;"></div>
+            </div>
+
+            <!-- THREAD -->
+            <div id="tc-thread" style="display: none; max-width: 768px; margin: 0 auto; padding: 28px 24px 48px; flex-direction: column; gap: 28px;"></div>
+          </div>
+
+          <!-- composer -->
+          <div style="flex: 0 0 auto; padding: 6px 18px 18px;">
+            <div style="max-width: 768px; margin: 0 auto;">
+              <div style="position: relative; display: flex; flex-direction: column; gap: 8px; background: var(--c-composer-bg); border: 1px solid var(--c-border-2); border-radius: var(--r-composer); padding: 12px 14px; box-shadow: var(--c-shadow); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); overflow: hidden;">
+                <div style="position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--composer-accent, transparent);"></div>
+                <textarea id="tc-input" rows="1" placeholder="Message Thomas&hellip;  (try &ldquo;draw how Thomas works&rdquo; or &ldquo;make a PDF&rdquo;)" style="width: 100%; resize: none; border: 0; outline: none; background: transparent; color: var(--c-text); font-family: inherit; font-size: 16px; line-height: 1.55; max-height: 180px; padding: 4px 4px 0; min-height: 26px;"></textarea>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <button class="hv-icon" title="Add files" style="width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--c-border); background: transparent; color: var(--c-dim); display: grid; place-items: center; cursor: pointer; transition: all .15s;"><i class="ph ph-plus" style="font-size: 18px;"></i></button>
+                  <button class="hv-icon" title="Tools" style="display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--c-border); background: transparent; color: var(--c-dim); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;"><i class="ph ph-sliders-horizontal" style="font-size: 16px;"></i> Tools</button>
+                  <div style="flex: 1;"></div>
+                  <button class="hv-icon" title="Voice" style="width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--c-border); background: transparent; color: var(--c-dim); display: grid; place-items: center; cursor: pointer; transition: all .15s;"><i class="ph ph-microphone" style="font-size: 18px;"></i></button>
+                  <button id="tc-send" title="Send" style="width: 40px; height: 40px; border-radius: 12px; border: 0; background: var(--send-bg, var(--c-surface-2)); color: var(--send-ink, var(--c-muted)); display: grid; place-items: center; cursor: var(--send-cursor, default); transition: all .18s; opacity: var(--send-op, 0.85);"><i id="tc-send-icon" class="ph ph-arrow-up" style="font-size: 19px; font-weight: 700;"></i></button>
+                </div>
+              </div>
+              <p style="text-align: center; margin: 9px 0 0; font-size: 11.5px; color: var(--c-muted);">Thomas can make mistakes. Consider verifying important information.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===================== THOMAS CANVAS ===================== -->
+        <aside id="tc-canvas" style="display: none; flex: 0 0 auto; width: clamp(340px, 40vw, 560px); border-left: 1px solid var(--c-border); background: var(--c-sidebar); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); flex-direction: column;">
+          <div style="flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--c-border);">
+            <span style="width: 28px; height: 28px; border-radius: 8px; background: var(--c-accent); display: grid; place-items: center; flex: 0 0 auto;">
+              <span style="display: flex; gap: 3px;"><span style="width: 4px; height: 5px; border-radius: 1px; background: var(--c-accent-ink);"></span><span style="width: 4px; height: 5px; border-radius: 1px; background: var(--c-accent-ink);"></span></span>
+            </span>
+            <div style="flex: 1; min-width: 0;">
+              <div style="font-size: 13.5px; font-weight: 700;">Thomas Canvas</div>
+              <div id="tc-canvas-status" style="font-size: 11px; color: var(--c-muted);">Sketching it out&hellip;</div>
+            </div>
+            <button id="tc-canvas-close" class="hv-icon" title="Close canvas" style="width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--c-border); background: transparent; color: var(--c-dim); display: grid; place-items: center; cursor: pointer;"><i class="ph ph-x" style="font-size: 15px;"></i></button>
+          </div>
+          <div id="tc-tabs" style="flex: 0 0 auto; display: flex; gap: 6px; padding: 10px 12px;"></div>
+          <div id="tc-canvas-body" class="tc-scroll" style="flex: 1; min-height: 0; overflow: auto; padding: 0 16px 16px;"></div>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <script>
+  (function () {
+    "use strict";
+
+    // ---------- Theme data (mirrors the design's THEMES / THEME_META) ----------
+    const THEMES = {
+      nebula: { name: 'Nebula Core', tagline: 'Deep space — planets & flybys', sw: ['#0a0c18', '#1a1d33', '#8b8cff'],
+        vars: { '--c-bg': '#070912', '--c-sidebar': 'rgba(11,14,26,0.72)', '--c-surface': 'rgba(255,255,255,0.04)', '--c-surface-2': 'rgba(255,255,255,0.08)', '--c-hover': 'rgba(255,255,255,0.06)', '--c-border': 'rgba(255,255,255,0.10)', '--c-border-2': 'rgba(255,255,255,0.17)', '--c-text': '#eef0fb', '--c-dim': 'rgba(238,240,251,0.66)', '--c-muted': 'rgba(238,240,251,0.42)', '--c-accent': '#8b8cff', '--c-accent-ink': '#0a0b16', '--c-accent-soft': 'rgba(139,140,255,0.16)', '--c-accent-line': 'rgba(139,140,255,0.45)', '--c-user-bg': 'rgba(124,118,235,0.20)', '--c-user-text': '#eef0fb', '--c-composer-bg': 'rgba(16,19,34,0.86)', '--c-shadow': '0 18px 50px rgba(2,4,12,0.55)' } },
+      dark: { name: 'Dark', tagline: 'Blueprint workshop, mono', sw: ['#16181c', '#23262c', '#6e9bff'],
+        vars: { '--c-bg': '#16181c', '--c-sidebar': '#101216', '--c-surface': 'rgba(255,255,255,0.035)', '--c-surface-2': 'rgba(255,255,255,0.07)', '--c-hover': 'rgba(255,255,255,0.055)', '--c-border': 'rgba(255,255,255,0.09)', '--c-border-2': 'rgba(255,255,255,0.15)', '--c-text': '#e7e9ee', '--c-dim': 'rgba(231,233,238,0.64)', '--c-muted': 'rgba(231,233,238,0.40)', '--c-accent': '#6e9bff', '--c-accent-ink': '#0b1020', '--c-accent-soft': 'rgba(110,155,255,0.14)', '--c-accent-line': 'rgba(110,155,255,0.42)', '--c-user-bg': '#2a2e36', '--c-user-text': '#e7e9ee', '--c-composer-bg': '#1b1e23', '--c-shadow': '0 14px 40px rgba(0,0,0,0.45)' } },
+      light: { name: 'Light', tagline: 'Daylight studio, airy', sw: ['#ffffff', '#eef1f6', '#2f6bff'],
+        vars: { '--c-bg': '#fafbfc', '--c-sidebar': '#f3f5f8', '--c-surface': '#ffffff', '--c-surface-2': '#f3f5f8', '--c-hover': 'rgba(20,30,60,0.05)', '--c-border': 'rgba(20,30,60,0.10)', '--c-border-2': 'rgba(20,30,60,0.16)', '--c-text': '#1c2330', '--c-dim': 'rgba(28,35,48,0.66)', '--c-muted': 'rgba(28,35,48,0.46)', '--c-accent': '#2f6bff', '--c-accent-ink': '#ffffff', '--c-accent-soft': 'rgba(47,107,255,0.10)', '--c-accent-line': 'rgba(47,107,255,0.40)', '--c-user-bg': '#eaeef6', '--c-user-text': '#1c2330', '--c-composer-bg': '#ffffff', '--c-shadow': '0 14px 40px rgba(20,30,60,0.12)' } },
+      aurora: { name: 'Aurora', tagline: 'Tundra night, falling snow', sw: ['#08161a', '#0f2a2a', '#34e0b0'],
+        vars: { '--c-bg': '#08151a', '--c-sidebar': 'rgba(9,22,26,0.78)', '--c-surface': 'rgba(120,255,220,0.04)', '--c-surface-2': 'rgba(120,255,220,0.08)', '--c-hover': 'rgba(120,255,220,0.06)', '--c-border': 'rgba(140,255,225,0.12)', '--c-border-2': 'rgba(140,255,225,0.20)', '--c-text': '#e7f3ef', '--c-dim': 'rgba(231,243,239,0.66)', '--c-muted': 'rgba(231,243,239,0.42)', '--c-accent': '#34e0b0', '--c-accent-ink': '#04211a', '--c-accent-soft': 'rgba(52,224,176,0.14)', '--c-accent-line': 'rgba(52,224,176,0.45)', '--c-user-bg': 'rgba(36,120,100,0.30)', '--c-user-text': '#e7f3ef', '--c-composer-bg': 'rgba(10,28,30,0.88)', '--c-shadow': '0 18px 50px rgba(0,12,10,0.55)' } },
+      sandstone: { name: 'Sandstone', tagline: 'Warm desert, editorial serif', sw: ['#f4ece0', '#e7d9c4', '#c0603c'],
+        vars: { '--c-bg': '#f4ede1', '--c-sidebar': '#efe5d6', '--c-surface': '#fbf6ee', '--c-surface-2': '#f1e7d7', '--c-hover': 'rgba(80,52,28,0.06)', '--c-border': 'rgba(90,62,34,0.16)', '--c-border-2': 'rgba(90,62,34,0.26)', '--c-text': '#2f2a22', '--c-dim': 'rgba(47,42,34,0.70)', '--c-muted': 'rgba(47,42,34,0.48)', '--c-accent': '#c0603c', '--c-accent-ink': '#fdf6ee', '--c-accent-soft': 'rgba(192,96,60,0.12)', '--c-accent-line': 'rgba(192,96,60,0.42)', '--c-user-bg': '#ece0cd', '--c-user-text': '#2f2a22', '--c-composer-bg': '#fbf6ee', '--c-shadow': '0 14px 40px rgba(90,62,34,0.16)' } },
+    };
+
+    const THEME_META = {
+      nebula:    { bot: ['#9ad8ff', '#5aaeff', 'rgba(90,174,255,0.5)'],  trim: '#0d1117', fontHead: "'Manrope', system-ui, sans-serif", fontLabel: "'Manrope', system-ui, sans-serif", rCard: '14px', rComposer: '18px', menuBg: '#15142b', composerAccent: 'linear-gradient(90deg, transparent, rgba(139,140,255,0.7), transparent)', msgRule: '0', welcome: ['Where to, Captain?', 'Thomas takes the ask, hands it to the crew, and reports back from orbit.'] },
+      dark:      { bot: ['#9ad8ff', '#5aaeff', 'rgba(90,174,255,0.30)'], trim: '#0d1117', fontHead: "'Manrope', system-ui, sans-serif", fontLabel: "'JetBrains Mono', ui-monospace, monospace", rCard: '8px', rComposer: '12px', menuBg: '#22252b', composerAccent: 'transparent', msgRule: '0', welcome: ['Ready when you are.', 'Describe the task. Thomas plans it, dispatches a worker, and reports back.'] },
+      light:     { bot: ['#7db0ff', '#2f6bff', 'rgba(47,107,255,0.28)'], trim: '#16233a', fontHead: "'Manrope', system-ui, sans-serif", fontLabel: "'Manrope', system-ui, sans-serif", rCard: '16px', rComposer: '18px', menuBg: '#ffffff', composerAccent: 'transparent', msgRule: '0', welcome: ['How can I help?', 'Ask a question or describe something you want done — Thomas handles the rest.'] },
+      aurora:    { bot: ['#a8f0da', '#34e0b0', 'rgba(52,224,176,0.45)'], trim: '#06302a', fontHead: "'Manrope', system-ui, sans-serif", fontLabel: "'Manrope', system-ui, sans-serif", rCard: '14px', rComposer: '18px', menuBg: '#0c2226', composerAccent: 'linear-gradient(90deg, transparent, rgba(52,224,176,0.7), rgba(70,160,255,0.5), transparent)', msgRule: '0', welcome: ['Good evening.', 'A calm place to think. Thomas takes the ask, hands it off, and reports back.'] },
+      sandstone: { bot: ['#ffd6a7', '#ffad60', 'rgba(192,96,60,0.40)'],  trim: '#3a2a1a', fontHead: "'Newsreader', Georgia, serif", fontLabel: "'Newsreader', Georgia, serif", rCard: '12px', rComposer: '14px', menuBg: '#fbf6ee', composerAccent: 'transparent', msgRule: '2px solid var(--c-accent-line)', welcome: ['What shall we make?', 'An unhurried workspace. Thomas takes the ask, hands it off, and reports back.'] },
+    };
+
+    const responses = [
+      "Got it — I'll take that from here.\n\nHere's how I'd approach it: first I'll scope the request and confirm the inputs, then hand the actual build to a worker so you're not blocked. I'll report back the moment there's something to look at.\n\nWant me to start now, or would you like to adjust anything first?",
+      "Happy to help with that.\n\nA few quick thoughts before I dispatch this:\n• I'll keep the first pass small and reviewable\n• You'll see live progress, not a fabricated \"done\"\n• Nothing ships without your sign-off at this autonomy level\n\nShall I kick it off?",
+      "On it. I read the workspace and I have what I need.\n\nI'll draft the structure first, run it past you, then fill in the details. That keeps us moving fast without committing to the wrong shape early. Give me a moment and I'll bring back a first cut.",
+    ];
+    const canvasReplies = {
+      board: "Easier to show than tell — let me sketch it on the canvas.\n\nI'm drawing it out now on the right. The short version: you ask, I plan and hand off to a worker, and the result reports back here to chat.",
+      pdf: "Sure — I'll pull it together as a document.\n\nIt's opening on the canvas now. Give it a second to format; you'll be able to download or open it full-screen once it's set.",
+      chart: "Good question — let me put the numbers on the canvas.\n\nCharting it now on the right so you can actually see the shape of it rather than read a wall of figures.",
+    };
+    const conversations = {
+      a: { msgs: [ { role: 'user', text: 'Refactor the auth middleware so the rate limiter runs before token validation.' }, { role: 'assistant', text: "Done — I reordered the chain so the limiter short-circuits before any token work.\n\nThat means abusive traffic gets dropped earlier and we stop spending CPU validating tokens for requests we're about to reject anyway. I kept the existing error shapes so nothing downstream has to change.", model: 'gpt-5.5' } ] },
+      b: { msgs: [ { role: 'user', text: 'Help me make a printable birthday invitation for my granddaughter.' }, { role: 'assistant', text: "Lovely — I'd be glad to.\n\nTo make it feel personal, could you tell me her name, the age she's turning, and the date and place? Once I have those I'll hand it to the design worker and bring back a printable card you can review.", model: 'gpt-5.5' } ] },
+      c: { msgs: [ { role: 'user', text: 'Compare the top 3 JavaScript frameworks for a new dashboard.' }, { role: 'assistant', text: "Good one to think through.\n\nI'll research React, Vue, and Svelte in parallel and weigh them on your real constraints — team familiarity, ecosystem, and bundle size — then come back with a recommendation rather than a feature dump. Starting now.", model: 'gpt-5.5' } ] },
+    };
+
+    // ---------- State ----------
+    const state = { theme: loadTheme(), themeMenuOpen: false, input: '', search: '', messages: [], activeChat: null, streaming: false, artifactOpen: false, artifactKind: 'board', sessionId: null, profile: '', modelId: '', modelLabel: '' };
+    let timer = null, respIdx = 0, pending = null, abortController = null;
+    const msgRefs = []; // per-message { bubbleEl } for in-place streaming updates
+    // Sidebar chat list — seeded with the design's demo chats, replaced by GET /api/chats when the real server is up.
+    let chatList = [
+      { id: 'a', title: 'Refactor auth middleware', preview: 'Swapped the token check order', msgs: conversations.a.msgs },
+      { id: 'b', title: 'Birthday invitation', preview: 'A printable card for Saturday', msgs: conversations.b.msgs },
+      { id: 'c', title: 'Compare JS frameworks', preview: 'React vs Vue vs Svelte', msgs: conversations.c.msgs },
+      { id: 'd', title: 'Weekly status digest', preview: 'Pulled from the evolve loop', msgs: [] },
+    ];
+    let profilesData = [];        // model profiles from GET /api/models
+    state.modelMenuOpen = false;
+
+    // ---------- Element refs ----------
+    const shell = document.getElementById('tc-shell');
+    const scrollEl = document.getElementById('tc-scroll');
+    const inputEl = document.getElementById('tc-input');
+    const welcomeEl = document.getElementById('tc-welcome');
+    const threadEl = document.getElementById('tc-thread');
+    const sendIconEl = document.getElementById('tc-send-icon');
+    const canvasEl = document.getElementById('tc-canvas');
+    const canvasBody = document.getElementById('tc-canvas-body');
+    const canvasStatus = document.getElementById('tc-canvas-status');
+
+    function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+    // ---------- Bot mascot (mirrors Bot.dc.html) ----------
+    function botHTML(p) {
+      const flame = (p.flame === true || p.flame === 'true');
+      const trim = p.trim, primary = p.primary, secondary = p.secondary;
+      return `<div style="position: relative; width: 58px; height: 54px; image-rendering: pixelated; transform: scale(${p.scale}); transform-origin: center; filter: drop-shadow(0 8px 16px ${p.glow});">
+        ${flame ? `<span style="position: absolute; top: 22px; left: 1px; width: 8px; height: 16px; background: linear-gradient(180deg, #5a6e8a, #3b4d66); border: 1px solid ${trim}; border-radius: 2px;"></span>
+        <span style="position: absolute; top: 38px; left: -3px; width: 16px; height: 13px; background: radial-gradient(ellipse at 50% 0%, #ffd54f 0%, #ff9800 35%, #ff5722 65%, transparent 100%); border-radius: 0 0 50% 50%; filter: blur(0.6px); transform-origin: 50% 0; animation: bot-flame 0.22s linear infinite;"></span>` : ''}
+        <span style="position: absolute; top: 2px; left: 16px; width: 24px; height: 14px; border: 2px solid ${trim}; background: ${primary};">
+          <span style="position: absolute; top: 3px; left: 4px; width: 4px; height: 4px; background: #0b1726; transform-origin: center; animation: bot-blink 4.6s ease-in-out infinite;"></span>
+          <span style="position: absolute; top: 3px; left: 13px; width: 4px; height: 4px; background: #0b1726; transform-origin: center; animation: bot-blink 4.6s ease-in-out infinite;"></span>
+        </span>
+        <span style="position: absolute; top: 18px; left: 13px; width: 30px; height: 18px; border: 2px solid ${trim}; background: linear-gradient(to bottom, ${primary} 0, ${primary} 44%, ${secondary} 45%, ${secondary} 100%);">
+          <span style="position: absolute; top: 5px; left: 6px; width: 18px; height: 3px; background: rgba(11,23,38,0.5); border-radius: 2px;"></span>
+        </span>
+        <span style="position: absolute; top: 36px; left: 18px; width: 8px; height: 10px; border: 2px solid ${trim}; background: ${secondary};"></span>
+        <span style="position: absolute; top: 36px; left: 32px; width: 8px; height: 10px; border: 2px solid ${trim}; background: ${secondary};"></span>
+      </div>`;
+    }
+    function hydrateBots() {
+      document.querySelectorAll('[data-bot]').forEach(el => {
+        el.innerHTML = botHTML({ primary: el.dataset.primary, secondary: el.dataset.secondary, trim: el.dataset.trim, glow: el.dataset.glow, scale: el.dataset.scale, flame: el.dataset.flame });
+      });
+    }
+
+    // ---------- Avatar (the little accent square with two dots) ----------
+    function avatar(size, radius, dotW, dotH) {
+      return `<span style="width: ${size}px; height: ${size}px; border-radius: ${radius}px; background: var(--c-accent); display: grid; place-items: center; flex: 0 0 auto;">
+        <span style="display: flex; gap: 3px;"><span style="width: ${dotW}px; height: ${dotH}px; border-radius: 1px; background: var(--c-accent-ink);"></span><span style="width: ${dotW}px; height: ${dotH}px; border-radius: 1px; background: var(--c-accent-ink);"></span></span>
+      </span>`;
+    }
+
+    // ---------- Theme ----------
+    function loadTheme() { try { const t = localStorage.getItem('thomas_chat_theme'); if (t && THEMES[t]) return t; } catch (e) {} return 'nebula'; }
+
+    function applyTheme(name) {
+      const t = THEMES[name]; if (!t) return;
+      Object.entries(t.vars).forEach(([k, v]) => shell.style.setProperty(k, v));
+      shell.style.setProperty('--sw-1', t.sw[0]); shell.style.setProperty('--sw-2', t.sw[1]); shell.style.setProperty('--sw-3', t.sw[2]);
+      const m = THEME_META[name];
+      if (m) {
+        shell.style.setProperty('--bot-primary', m.bot[0]); shell.style.setProperty('--bot-secondary', m.bot[1]); shell.style.setProperty('--bot-glow', m.bot[2]); shell.style.setProperty('--bot-trim', m.trim);
+        shell.style.setProperty('--font-head', m.fontHead); shell.style.setProperty('--font-label', m.fontLabel);
+        shell.style.setProperty('--r-card', m.rCard); shell.style.setProperty('--r-composer', m.rComposer);
+        shell.style.setProperty('--c-menu-bg', m.menuBg); shell.style.setProperty('--composer-accent', m.composerAccent); shell.style.setProperty('--msg-rule-on', m.msgRule);
+      }
+      shell.dataset.theme = name;
+      document.getElementById('tc-theme-name').textContent = t.name;
+      if (m) { document.getElementById('tc-welcome-title').textContent = m.welcome[0]; document.getElementById('tc-welcome-sub').textContent = m.welcome[1]; }
+      // re-tint the welcome hero bot (it reads --bot-* vars, so re-render to pick up new values)
+      const heroBot = welcomeEl.querySelector('[data-bot]');
+      if (heroBot) heroBot.innerHTML = botHTML({ primary: 'var(--bot-primary)', secondary: 'var(--bot-secondary)', trim: 'var(--bot-trim)', glow: 'var(--bot-glow)', scale: heroBot.dataset.scale, flame: heroBot.dataset.flame });
+    }
+    function selectTheme(name) {
+      state.theme = name; state.themeMenuOpen = false; applyTheme(name);
+      try { localStorage.setItem('thomas_chat_theme', name); } catch (e) {}
+      renderThemeMenu(); document.getElementById('tc-theme-menu').style.display = 'none';
+    }
+    function toggleThemeMenu() {
+      state.themeMenuOpen = !state.themeMenuOpen;
+      document.getElementById('tc-theme-menu').style.display = state.themeMenuOpen ? 'block' : 'none';
+      if (state.themeMenuOpen) renderThemeMenu();
+    }
+    function renderThemeMenu() {
+      const wrap = document.getElementById('tc-theme-options');
+      wrap.innerHTML = '';
+      Object.keys(THEMES).forEach(key => {
+        const t = THEMES[key], sel = key === state.theme;
+        const b = document.createElement('button');
+        b.className = 'hv-soft';
+        b.style.cssText = `width: 100%; display: flex; align-items: center; gap: 11px; padding: 9px 9px; border-radius: 10px; border: 1px solid ${sel ? 'var(--c-accent-line)' : 'transparent'}; background: ${sel ? 'var(--c-accent-soft)' : 'transparent'}; color: var(--c-text); font-family: inherit; cursor: pointer; text-align: left; transition: all .14s; margin-bottom: 2px;`;
+        b.innerHTML = `<span style="display: inline-flex; border-radius: 7px; overflow: hidden; border: 1px solid var(--c-border-2); flex: 0 0 auto; box-shadow: 0 2px 8px rgba(0,0,0,0.25);">
+            <span style="width: 14px; height: 30px; background: ${t.sw[0]};"></span>
+            <span style="width: 14px; height: 30px; background: ${t.sw[1]};"></span>
+            <span style="width: 14px; height: 30px; background: ${t.sw[2]};"></span>
+          </span>
+          <span style="flex: 1; min-width: 0;">
+            <span style="display: block; font-size: 13.5px; font-weight: 700;">${esc(t.name)}</span>
+            <span style="display: block; font-size: 11.5px; color: var(--c-muted);">${esc(t.tagline)}</span>
+          </span>
+          <i class="ph ph-check" style="font-size: 15px; color: var(--c-accent); opacity: ${sel ? '1' : '0'};"></i>`;
+        b.addEventListener('click', () => selectTheme(key));
+        wrap.appendChild(b);
+      });
+    }
+
+    // ---------- Model selector ----------
+    function setProfile(p) {
+      if (!p) return;
+      state.profile = p.name;
+      state.modelId = p.model || '';
+      state.modelLabel = String(p.model || p.name || 'model').split('/').pop();
+      const el = document.getElementById('tc-model'); if (el) el.textContent = state.modelLabel;
+    }
+    function toggleModelMenu() {
+      state.modelMenuOpen = !state.modelMenuOpen;
+      document.getElementById('tc-model-menu').style.display = state.modelMenuOpen ? 'block' : 'none';
+      if (state.modelMenuOpen) renderModelMenu();
+    }
+    function closeModelMenu() { state.modelMenuOpen = false; document.getElementById('tc-model-menu').style.display = 'none'; }
+    function renderModelMenu() {
+      const wrap = document.getElementById('tc-model-options'); if (!wrap) return;
+      wrap.innerHTML = '';
+      profilesData.forEach(p => {
+        const sel = p.name === state.profile;
+        const usable = !!p.has_api_key || p.provider === 'openai_codex' || p.name === 'local';
+        const b = document.createElement('button');
+        b.className = 'hv-soft';
+        b.style.cssText = `width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 9px; border-radius: 10px; border: 1px solid ${sel ? 'var(--c-accent-line)' : 'transparent'}; background: ${sel ? 'var(--c-accent-soft)' : 'transparent'}; color: var(--c-text); font-family: inherit; cursor: pointer; text-align: left; transition: all .14s; margin-bottom: 2px; opacity: ${usable ? '1' : '0.5'};`;
+        b.innerHTML = `<span style="flex: 1; min-width: 0;">
+            <span style="display: block; font-size: 13px; font-weight: 700;">${esc(String(p.model || p.name).split('/').pop())}</span>
+            <span style="display: block; font-size: 11px; color: var(--c-muted);">${esc(p.name)}${usable ? '' : ' · needs key'}</span>
+          </span>
+          <i class="ph ph-check" style="font-size: 15px; color: var(--c-accent); opacity: ${sel ? '1' : '0'};"></i>`;
+        b.addEventListener('click', () => { setProfile(p); closeModelMenu(); });
+        wrap.appendChild(b);
+      });
+    }
+
+    // ---------- Sidebar lists ----------
+    function renderChats() {
+      const chats = chatList;
+      const wrap = document.getElementById('tc-chats');
+      wrap.innerHTML = '';
+      chats.forEach(c => {
+        const sel = c.id === state.activeChat;
+        const b = document.createElement('button');
+        b.className = 'hv-soft';
+        b.style.cssText = `width: 100%; text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 9px 11px; margin-bottom: 2px; border-radius: 10px; border: 1px solid transparent; background: ${sel ? 'var(--c-surface-2)' : 'transparent'}; color: var(--c-text); font-family: inherit; cursor: pointer; transition: all .14s;`;
+        b.innerHTML = `<span style="font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: ${sel ? '1' : '0.92'};">${esc(c.title)}</span>
+          <span style="font-size: 11.5px; color: var(--c-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${esc(c.preview)}</span>`;
+        b.addEventListener('click', () => selectChat(c.id));
+        wrap.appendChild(b);
+      });
+    }
+    function renderWorkspaces() {
+      const workspaces = [ { icon: 'ph-hammer', label: 'Forge' }, { icon: 'ph-crosshair-simple', label: 'Mission Control' }, { icon: 'ph-buildings', label: 'Virtual Office' }, { icon: 'ph-storefront', label: 'Marketplace' } ];
+      const wrap = document.getElementById('tc-workspaces');
+      wrap.innerHTML = '';
+      workspaces.forEach(w => {
+        const b = document.createElement('button');
+        b.className = 'hv-soft';
+        b.style.cssText = `width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 11px; margin-bottom: 1px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--c-dim); font-family: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; transition: all .14s;`;
+        b.innerHTML = `<i class="ph ${w.icon}" style="font-size: 16px;"></i> ${esc(w.label)}`;
+        wrap.appendChild(b);
+      });
+    }
+
+    // ---------- Welcome action cards ----------
+    function renderCards() {
+      const cards = [
+        { icon: 'ph-scribble-loop', title: 'Draw it on the canvas', desc: 'Watch Thomas sketch a diagram live', prompt: 'Draw a diagram of how Thomas works.' },
+        { icon: 'ph-file-text', title: 'Make a document', desc: 'Thomas drafts a PDF on the canvas', prompt: 'Write a launch note PDF for the new chat UI.' },
+        { icon: 'ph-chart-bar', title: 'Chart some data', desc: 'See the numbers rendered live', prompt: 'Chart the weekly active chats by theme.' },
+        { icon: 'ph-code', title: 'Write & run code', desc: 'Execute real code, debug, build', prompt: 'Write a Python script that summarizes a CSV, then run it.' },
+      ];
+      const wrap = document.getElementById('tc-cards');
+      wrap.innerHTML = '';
+      cards.forEach(c => {
+        const b = document.createElement('button');
+        b.className = 'hv-card';
+        b.style.cssText = `text-align: left; display: flex; flex-direction: column; gap: 8px; padding: 16px 16px; border-radius: var(--r-card); border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-family: inherit; cursor: pointer; transition: all .16s;`;
+        b.innerHTML = `<i class="ph ${c.icon}" style="font-size: 21px; color: var(--c-accent);"></i>
+          <span style="font-size: 14.5px; font-weight: 700;">${esc(c.title)}</span>
+          <span style="font-size: 12.5px; color: var(--c-muted); line-height: 1.5;">${esc(c.desc)}</span>`;
+        b.addEventListener('click', () => fillAndSend(c.prompt));
+        wrap.appendChild(b);
+      });
+    }
+
+    // ---------- Messages ----------
+    function bubbleInner(m) {
+      const isUser = m.role === 'user';
+      const showDots = !isUser && m.streaming && (!m.text || m.text.length === 0);
+      const showCursor = !isUser && m.streaming && m.text && m.text.length > 0;
+      let html = esc(m.text);
+      if (showCursor) html += `<span style="display: inline-block; width: 8px; height: 17px; transform: translateY(2px); margin-left: 2px; background: var(--c-accent); animation: tc-blink 1s step-end infinite;"></span>`;
+      if (showDots) html = `<span style="display: inline-flex; gap: 5px; padding: 4px 0;"><span style="width: 7px; height: 7px; border-radius: 999px; background: var(--c-muted); animation: tc-dot 1.3s ease-in-out infinite;"></span><span style="width: 7px; height: 7px; border-radius: 999px; background: var(--c-muted); animation: tc-dot 1.3s ease-in-out .2s infinite;"></span><span style="width: 7px; height: 7px; border-radius: 999px; background: var(--c-muted); animation: tc-dot 1.3s ease-in-out .4s infinite;"></span></span>`;
+      return html;
+    }
+    function buildMessageNode(m, idx) {
+      const isUser = m.role === 'user';
+      const meta = THEME_META[state.theme];
+      const rule = (meta.msgRule !== '0') ? meta.msgRule : 'none';
+      const wrap = document.createElement('div');
+      const head = isUser ? 'none' : 'flex';
+      const mMax = isUser ? 'min(78%, 540px)' : '100%';
+      const mBg = isUser ? 'var(--c-user-bg)' : 'transparent';
+      const mColor = isUser ? 'var(--c-user-text)' : 'var(--c-text)';
+      const mBorder = isUser ? '1px solid var(--c-border)' : '0';
+      const mRadius = isUser ? '16px 16px 4px 16px' : '0';
+      const mPad = isUser ? '11px 15px' : (meta.msgRule !== '0' ? '2px 0 2px 16px' : '0');
+      wrap.style.cssText = `display: flex; flex-direction: column; gap: 8px; align-items: ${isUser ? 'flex-end' : 'flex-start'}; animation: tc-rise .3s ease both;`;
+
+      let html = '';
+      if (!isUser) {
+        html += `<div style="display: flex; align-items: center; gap: 9px;">
+          ${avatar(26, 8, 4, 5)}
+          <span style="font-size: 13px; font-weight: 700;">Thomas</span>
+          <span style="font-size: 11.5px; color: var(--c-muted); font-family: var(--font-label);">${esc(m.model || 'gpt-5.5')}</span>
+        </div>`;
+      }
+      html += `<div class="tc-bubble" style="max-width: ${mMax}; background: ${mBg}; color: ${mColor}; border: ${mBorder}; border-left: ${rule}; border-radius: ${mRadius}; padding: ${mPad}; font-size: 16px; line-height: 1.72; white-space: pre-wrap; word-wrap: break-word; letter-spacing: 0.003em;">${bubbleInner(m)}</div>`;
+
+      if (m.artifact) {
+        const a = m.artifact;
+        html += `<button class="tc-art hv-surface" style="display: flex; align-items: center; gap: 11px; width: 100%; max-width: 360px; margin-top: 2px; padding: 11px 13px; border-radius: 12px; border: 1px solid var(--c-accent-line); background: var(--c-accent-soft); color: var(--c-text); font-family: inherit; cursor: pointer; text-align: left; transition: all .15s;">
+          <span style="width: 34px; height: 34px; border-radius: 9px; background: var(--c-accent); color: var(--c-accent-ink); display: grid; place-items: center; flex: 0 0 auto;"><i class="ph ${a.icon}" style="font-size: 18px;"></i></span>
+          <span style="flex: 1; min-width: 0;">
+            <span style="display: block; font-size: 13.5px; font-weight: 700;">${esc(a.title)}</span>
+            <span style="display: block; font-size: 11.5px; color: var(--c-muted);">${esc(a.sub)}</span>
+          </span>
+          <i class="ph ph-arrow-right" style="font-size: 15px; color: var(--c-muted);"></i>
+        </button>`;
+      }
+      if (!isUser) {
+        html += `<div style="display: flex; align-items: center; gap: 4px; margin-top: 2px;">
+          ${[{ icon: 'ph-copy', title: 'Copy' }, { icon: 'ph-arrow-clockwise', title: 'Retry' }, { icon: 'ph-thumbs-up', title: 'Good' }].map(act => `<button class="hv-soft" title="${act.title}" style="width: 28px; height: 28px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--c-muted); display: grid; place-items: center; cursor: pointer; transition: all .14s;"><i class="ph ${act.icon}" style="font-size: 15px;"></i></button>`).join('')}
+        </div>`;
+      }
+      wrap.innerHTML = html;
+      const bubbleEl = wrap.querySelector('.tc-bubble');
+      msgRefs[idx] = { bubbleEl };
+      const artBtn = wrap.querySelector('.tc-art');
+      if (artBtn && m.artifact) artBtn.addEventListener('click', () => openCanvas(m.artifact.kind));
+      return wrap;
+    }
+    function appendMessage(m) {
+      const idx = state.messages.length - 1;
+      threadEl.appendChild(buildMessageNode(m, idx));
+    }
+    function updateStreamingBubble(idx) {
+      const ref = msgRefs[idx]; if (!ref) return;
+      ref.bubbleEl.innerHTML = bubbleInner(state.messages[idx]);
+    }
+    function syncView() {
+      const hasMsgs = state.messages.length > 0;
+      welcomeEl.style.display = hasMsgs ? 'none' : 'flex';
+      threadEl.style.display = hasMsgs ? 'flex' : 'none';
+    }
+
+    // ---------- Composer dynamic state (send button) ----------
+    function syncDynamic() {
+      const active = !!(state.input.trim() || state.streaming);
+      shell.style.setProperty('--send-bg', active ? 'var(--c-accent)' : 'var(--c-surface-2)');
+      shell.style.setProperty('--send-ink', active ? 'var(--c-accent-ink)' : 'var(--c-muted)');
+      shell.style.setProperty('--send-op', active ? '1' : '0.85');
+      shell.style.setProperty('--send-cursor', active ? 'pointer' : 'default');
+      sendIconEl.className = 'ph ' + (state.streaming ? 'ph-stop' : 'ph-arrow-up');
+    }
+    function autosize() { inputEl.style.height = 'auto'; inputEl.style.height = Math.min(inputEl.scrollHeight, 180) + 'px'; }
+    function scrollEnd() { requestAnimationFrame(() => { scrollEl.scrollTop = scrollEl.scrollHeight; }); }
+
+    // ---------- Artifact detection (mirrors _detectArtifact) ----------
+    function detectArtifact(text) {
+      const lc = text.toLowerCase();
+      if (/\b(pdf|document|\bdoc\b|report|write[- ]?up|memo|brief|letter|note|draft)\b/.test(lc)) return { kind: 'pdf', title: 'Launch note', sub: 'PDF · 1 page', icon: 'ph-file-text' };
+      if (/\b(chart|graph|plot|data|metrics|numbers|trend|stats|compare|breakdown)\b/.test(lc)) return { kind: 'chart', title: 'Weekly active by theme', sub: 'Chart · live', icon: 'ph-chart-bar' };
+      if (/\b(draw|sketch|diagram|whiteboard|board|flow|map|explain|show me|visual|architecture|wireframe|how .* works)\b/.test(lc)) return { kind: 'board', title: 'How Thomas works', sub: 'Sketch · whiteboard', icon: 'ph-scribble-loop' };
+      return null;
+    }
+
+    // ---------- Send / stream (wired to the real Thomas backend: POST /api/v2/chat, NDJSON) ----------
+    function send() {
+      const text = state.input.trim(); if (!text || state.streaming) return;
+      state.messages.push({ role: 'user', text });
+      state.input = ''; inputEl.value = '';
+      syncView(); appendMessage(state.messages[state.messages.length - 1]);
+      autosize(); syncDynamic(); scrollEnd();
+      streamReal(text);
+    }
+    function chunkText(evt) {
+      if (typeof evt.text === 'string') return evt.text;
+      if (typeof evt.delta === 'string') return evt.delta;
+      if (typeof evt.content === 'string') return evt.content;
+      return '';
+    }
+    async function streamReal(text) {
+      const base = { role: 'assistant', text: '', model: state.modelLabel || 'gpt-5.5', streaming: true };
+      state.messages.push(base);
+      const idx = state.messages.length - 1;
+      state.streaming = true; syncDynamic();
+      appendMessage(base); scrollEnd();
+      abortController = new AbortController();
+      let acc = '', sawText = false;
+      const setText = (t) => { state.messages[idx].text = t; updateStreamingBubble(idx); scrollEnd(); };
+      try {
+        const payload = {
+          message: text,
+          session_id: state.sessionId || undefined,
+          profile: state.profile || undefined,
+          model: state.profile || undefined,
+          model_id: state.modelId || undefined,
+          autonomy_level: 1,            // chatbot-only: talk/answer, no background dispatch
+          file_access: 'workspace',
+          token_economy: 'balanced',
+          thomas_guardrails: 'guarded',
+          docs: [], images: [],
+        };
+        const res = await fetch('/api/v2/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: abortController.signal });
+        if (!res.ok || !res.body) throw new Error('HTTP ' + res.status + (res.ok ? ' — no stream body' : ''));
+        const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
+        while (true) {
+          const { done, value } = await reader.read(); if (done) break;
+          buf += dec.decode(value, { stream: true });
+          const lines = buf.split('\n'); buf = lines.pop();
+          for (const line of lines) {
+            const t = line.trim(); if (!t) continue;
+            let evt; try { evt = JSON.parse(t); } catch (e) { continue; }
+            const type = evt.type;
+            if (type === 'text' || type === 'agent_text' || type === 'delta' || type === 'assistant_delta' || type === 'message_delta') {
+              const c = chunkText(evt); if (c) { acc += c; sawText = true; setText(acc); }
+            } else if (type === 'error') {
+              acc += (acc ? '\n\n' : '') + '⚠ ' + (evt.error || 'error'); setText(acc);
+            } else if (type === 'done') {
+              if (evt.session_id) state.sessionId = evt.session_id;
+              if (!sawText) { const d = chunkText(evt) || evt.final || evt.output_text; if (d) { acc += d; setText(acc); } }
+            }
+          }
+        }
+        if (!acc.trim()) { setText('— (no text returned)'); }
+      } catch (err) {
+        if (err && err.name === 'AbortError') acc += (acc ? '\n\n' : '') + '— [stopped]';
+        else acc += (acc ? '\n\n' : '') + '⚠ ' + ((err && err.message) || 'request failed');
+        setText(acc);
+      } finally {
+        state.messages[idx].streaming = false; state.streaming = false; abortController = null;
+        updateStreamingBubble(idx); syncDynamic(); scrollEnd();
+      }
+    }
+
+    // ---------- Top-level actions ----------
+    function newChat() {
+      if (abortController) { try { abortController.abort(); } catch (e) {} abortController = null; }
+      if (timer) { clearInterval(timer); timer = null; }
+      state.messages = []; state.activeChat = null; state.streaming = false; state.input = ''; state.artifactOpen = false; state.sessionId = null;
+      inputEl.value = ''; threadEl.innerHTML = ''; msgRefs.length = 0;
+      closeCanvas(); renderChats(); syncView(); autosize(); syncDynamic();
+      // ask the backend for a fresh session (harmless 404 on the static preview)
+      fetch('/api/session/new', { method: 'POST' }).then(r => r.ok ? r.json() : null).then(d => { if (d) state.sessionId = d.session_id || (d.data && d.data.session_id) || state.sessionId; }).catch(() => {});
+    }
+    function selectChat(id) {
+      if (abortController) { try { abortController.abort(); } catch (e) {} abortController = null; }
+      if (timer) { clearInterval(timer); timer = null; }
+      const c = chatList.find(x => x.id === id);
+      state.activeChat = id; state.streaming = false; state.input = ''; state.artifactOpen = false;
+      if (c && c.sessionId) state.sessionId = c.sessionId;
+      inputEl.value = ''; threadEl.innerHTML = ''; msgRefs.length = 0;
+      state.messages = c ? c.msgs.map(m => Object.assign({}, m)) : [];
+      closeCanvas(); renderChats(); syncView();
+      state.messages.forEach((m, i) => threadEl.appendChild(buildMessageNode(m, i)));
+      autosize(); syncDynamic(); scrollEnd();
+    }
+    function fillAndSend(text) { state.input = text; inputEl.value = text; autosize(); send(); }
+    function toggleSidebar() {
+      const cur = shell.style.getPropertyValue('--sidebar-margin');
+      shell.style.setProperty('--sidebar-margin', cur === '-280px' ? '0px' : '-280px');
+    }
+
+    // ---------- Thomas Canvas ----------
+    const ART_STATUS = { board: 'Sketching it out…', pdf: 'Drafting document…', chart: 'Plotting data…' };
+    function openCanvas(kind) { state.artifactOpen = true; state.artifactKind = kind || state.artifactKind; canvasEl.style.display = 'flex'; canvasEl.style.animation = 'tc-slide-in .3s cubic-bezier(.4,0,.2,1) both'; renderCanvas(); }
+    function closeCanvas() { state.artifactOpen = false; canvasEl.style.display = 'none'; }
+    function setArtifactKind(kind) { state.artifactKind = kind; renderCanvas(); }
+    function renderCanvas() {
+      canvasStatus.textContent = ART_STATUS[state.artifactKind] || ART_STATUS.board;
+      renderTabs();
+      if (state.artifactKind === 'pdf') canvasBody.innerHTML = pdfHTML();
+      else if (state.artifactKind === 'chart') canvasBody.innerHTML = chartHTML();
+      else canvasBody.innerHTML = boardHTML();
+      hydrateBots(); // canvas board has a bot
+    }
+    function renderTabs() {
+      const tabs = [ { kind: 'board', icon: 'ph-scribble-loop', label: 'Whiteboard' }, { kind: 'pdf', icon: 'ph-file-text', label: 'Document' }, { kind: 'chart', icon: 'ph-chart-bar', label: 'Chart' } ];
+      const wrap = document.getElementById('tc-tabs');
+      wrap.innerHTML = '';
+      tabs.forEach(t => {
+        const sel = t.kind === state.artifactKind;
+        const b = document.createElement('button');
+        b.className = 'hv-soft';
+        b.style.cssText = `flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px; border-radius: 9px; border: 1px solid ${sel ? 'var(--c-accent-line)' : 'var(--c-border)'}; background: ${sel ? 'var(--c-accent-soft)' : 'transparent'}; color: ${sel ? 'var(--c-text)' : 'var(--c-dim)'}; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: all .14s;`;
+        b.innerHTML = `<i class="ph ${t.icon}" style="font-size: 15px;"></i> ${t.label}`;
+        b.addEventListener('click', () => setArtifactKind(t.kind));
+        wrap.appendChild(b);
+      });
+    }
+    function boardHTML() {
+      return `<div style="position: relative; border-radius: 16px; background: linear-gradient(160deg, #14342c, #0c241e); border: 6px solid #6b4a2f; box-shadow: inset 0 0 60px rgba(0,0,0,0.5), 0 14px 30px rgba(0,0,0,0.4); padding: 14px; overflow: hidden;">
+        <div style="font-family: 'Caveat', cursive; font-size: 26px; color: #eafff6; opacity: 0; animation: tc-fade-up .5s ease forwards .1s;">How Thomas works</div>
+        <svg viewBox="0 0 400 250" style="width: 100%; height: auto; margin-top: 4px; overflow: visible;">
+          <g fill="none" stroke="#7fe9c8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="110" y="18" width="180" height="44" rx="10" pathLength="1" style="stroke-dasharray: 1; stroke-dashoffset: 1; animation: tc-draw .7s ease forwards .3s;"></rect>
+            <path d="M200 62 L200 96" pathLength="1" style="stroke-dasharray: 1; stroke-dashoffset: 1; animation: tc-draw .4s ease forwards 1.0s;"></path>
+            <path d="M192 88 L200 98 L208 88" pathLength="1" style="stroke-dasharray: 1; stroke-dashoffset: 1; animation: tc-draw .3s ease forwards 1.3s;"></path>
+            <rect x="110" y="98" width="180" height="44" rx="10" pathLength="1" stroke="#9ad8ff" style="stroke-dasharray: 1; stroke-dashoffset: 1; animation: tc-draw .7s ease forwards 1.5s;"></rect>
+            <path d="M200 142 L200 176" pathLength="1" style="stroke-dasharray: 1; stroke-dashoffset: 1; animation: tc-draw .4s ease forwards 2.2s;"></path>
+            <path d="M192 168 L200 178 L208 168" pathLength="1" style="stroke-dasharray: 1; stroke-dashoffset: 1; animation: tc-draw .3s ease forwards 2.5s;"></path>
+            <rect x="110" y="178" width="180" height="44" rx="10" pathLength="1" stroke="#ffd6a7" style="stroke-dasharray: 1; stroke-dashoffset: 1; animation: tc-draw .7s ease forwards 2.7s;"></rect>
+            <path d="M110 200 C40 200 40 40 108 40" pathLength="1" stroke="#f4a7c8" stroke-dasharray="1" style="stroke-dashoffset: 1; animation: tc-draw 1s ease forwards 3.4s;"></path>
+            <path d="M104 48 L108 38 L116 44" pathLength="1" stroke="#f4a7c8" style="stroke-dasharray: 1; stroke-dashoffset: 1; animation: tc-draw .3s ease forwards 4.3s;"></path>
+          </g>
+          <text x="200" y="45" text-anchor="middle" fill="#eafff6" font-family="Caveat, cursive" font-size="21" style="opacity: 0; animation: tc-fade-up .4s ease forwards 1.0s;">You ask</text>
+          <text x="200" y="125" text-anchor="middle" fill="#eafff6" font-family="Caveat, cursive" font-size="21" style="opacity: 0; animation: tc-fade-up .4s ease forwards 2.2s;">Thomas plans</text>
+          <text x="200" y="205" text-anchor="middle" fill="#eafff6" font-family="Caveat, cursive" font-size="21" style="opacity: 0; animation: tc-fade-up .4s ease forwards 3.4s;">Worker builds it</text>
+          <text x="44" y="125" text-anchor="middle" fill="#f4a7c8" font-family="Caveat, cursive" font-size="17" style="opacity: 0; animation: tc-fade-up .4s ease forwards 4.6s;">reports back</text>
+        </svg>
+        <div style="position: absolute; right: 12px; bottom: 8px;" data-bot data-primary="#9ad8ff" data-secondary="#5aaeff" data-trim="#0a0e1c" data-glow="rgba(90,174,255,0.4)" data-scale="0.7" data-flame="false"></div>
+      </div>
+      <p style="margin: 14px 2px 0; font-size: 13px; color: var(--c-dim); line-height: 1.6;">Thomas sketches the flow live — you ask, he plans, a worker builds it, and the result reports back to chat. He never does the work in the chat thread itself.</p>`;
+    }
+    function pdfHTML() {
+      const pdfLines = [ { w: '100%', delay: '.8s' }, { w: '96%', delay: '.9s' }, { w: '88%', delay: '1.0s' }, { w: '93%', delay: '1.1s' }, { w: '64%', delay: '1.2s' } ];
+      const pdfLines2 = [ { w: '92%', delay: '1.9s' }, { w: '85%', delay: '2.0s' }, { w: '70%', delay: '2.1s' } ];
+      const pdfBars = [ { h: '40%', delay: '1.4s' }, { h: '65%', delay: '1.5s' }, { h: '52%', delay: '1.6s' }, { h: '80%', delay: '1.7s' }, { h: '95%', delay: '1.8s' } ];
+      const line = ln => `<div style="height: 9px; border-radius: 4px; background: rgba(20,30,60,0.10); margin-bottom: 10px; width: ${ln.w}; opacity: 0; animation: tc-fade-up .4s ease forwards ${ln.delay};"></div>`;
+      return `<div style="position: relative; border-radius: 12px; background: #ffffff; color: #1d2330; box-shadow: 0 14px 36px rgba(0,0,0,0.4); overflow: hidden; border: 1px solid rgba(0,0,0,0.1);">
+        <div style="position: absolute; inset: 0; z-index: 3; overflow: hidden; pointer-events: none;"><div style="position: absolute; top: 0; bottom: 0; left: 0; width: 60%; transform: translateX(-120%); background: linear-gradient(100deg, transparent, rgba(120,140,255,0.22), transparent); animation: tc-shimmer 1.3s ease-out forwards;"></div></div>
+        <div style="height: 7px; background: linear-gradient(90deg, #2f6bff, #8b8cff);"></div>
+        <div style="padding: 22px 24px;">
+          <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #2f6bff; opacity: 0; animation: tc-fade-up .4s ease forwards .3s;">Launch Note</div>
+          <h2 style="margin: 6px 0 2px; font-family: var(--font-serif); font-size: 23px; line-height: 1.2; color: #131826; opacity: 0; animation: tc-fade-up .4s ease forwards .45s;">The New Thomas Chat — redesigned</h2>
+          <div style="font-size: 12px; color: #6b7280; opacity: 0; animation: tc-fade-up .4s ease forwards .6s;">Drafted by Thomas · just now · 1 page</div>
+          <div style="height: 1px; background: rgba(0,0,0,0.08); margin: 14px 0; opacity: 0; animation: tc-fade-up .4s ease forwards .7s;"></div>
+          ${pdfLines.map(line).join('')}
+          <div style="display: flex; align-items: flex-end; gap: 10px; height: 90px; margin: 18px 0 6px; padding: 12px; border-radius: 10px; background: #f5f7fb;">
+            ${pdfBars.map(bar => `<div style="flex: 1; height: ${bar.h}; border-radius: 5px 5px 0 0; background: linear-gradient(180deg, #6f9bff, #2f6bff); transform-origin: bottom; transform: scaleY(0); animation: tc-bar .6s cubic-bezier(.2,.8,.2,1) forwards ${bar.delay};"></div>`).join('')}
+          </div>
+          ${pdfLines2.map(line).join('')}
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 14px;">
+        <button class="hv-surface" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 9px; border-radius: 10px; border: 1px solid var(--c-border-2); background: var(--c-surface); color: var(--c-text); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;"><i class="ph ph-download-simple" style="font-size: 15px;"></i> Download</button>
+        <button class="hv-surface" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 9px; border-radius: 10px; border: 1px solid var(--c-border-2); background: var(--c-surface); color: var(--c-text); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;"><i class="ph ph-arrow-square-out" style="font-size: 15px;"></i> Open</button>
+      </div>`;
+    }
+    function chartHTML() {
+      const chartBars = [
+        { label: 'Nebula', h: '88%', color: '#8b8cff', glow: 'rgba(139,140,255,0.4)', delay: '.3s' },
+        { label: 'Dark', h: '62%', color: '#6e9bff', glow: 'rgba(110,155,255,0.35)', delay: '.42s' },
+        { label: 'Light', h: '74%', color: '#2f6bff', glow: 'rgba(47,107,255,0.3)', delay: '.54s' },
+        { label: 'Aurora', h: '53%', color: '#34e0b0', glow: 'rgba(52,224,176,0.4)', delay: '.66s' },
+        { label: 'Sandstone', h: '41%', color: '#c0603c', glow: 'rgba(192,96,60,0.4)', delay: '.78s' },
+      ];
+      return `<div style="border-radius: 14px; background: var(--c-surface); border: 1px solid var(--c-border); padding: 18px;">
+        <div style="font-size: 14px; font-weight: 700; opacity: 0; animation: tc-fade-up .4s ease forwards .2s;">Weekly active chats by theme</div>
+        <div style="font-size: 11.5px; color: var(--c-muted); margin-top: 2px; opacity: 0; animation: tc-fade-up .4s ease forwards .3s;">Live from the workspace · last 7 days</div>
+        <div style="display: flex; align-items: flex-end; gap: 12px; height: 180px; margin-top: 18px; padding-bottom: 26px; position: relative;">
+          <div style="position: absolute; left: 0; right: 0; bottom: 26px; height: 1px; background: var(--c-border);"></div>
+          ${chartBars.map(bar => `<div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 8px;">
+            <div style="width: 100%; max-width: 46px; height: ${bar.h}; border-radius: 7px 7px 0 0; background: ${bar.color}; transform-origin: bottom; transform: scaleY(0); animation: tc-bar .7s cubic-bezier(.2,.8,.2,1) forwards ${bar.delay}; box-shadow: 0 0 18px ${bar.glow};"></div>
+            <span style="font-size: 11px; color: var(--c-dim); white-space: nowrap;">${bar.label}</span>
+          </div>`).join('')}
+        </div>
+      </div>
+      <p style="margin: 14px 2px 0; font-size: 13px; color: var(--c-dim); line-height: 1.6;">Thomas pulls the numbers and renders them on the canvas — no copy-pasting into a spreadsheet.</p>`;
+    }
+
+    // ---------- Wire up ----------
+    inputEl.addEventListener('input', e => { state.input = e.target.value; autosize(); syncDynamic(); });
+    inputEl.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+    document.getElementById('tc-send').addEventListener('click', () => { if (state.streaming) { if (abortController) { try { abortController.abort(); } catch (e) {} } } else { send(); } });
+    document.getElementById('tc-search').addEventListener('input', e => { state.search = e.target.value; });
+    document.getElementById('tc-newchat').addEventListener('click', newChat);
+    document.getElementById('tc-newchat-top').addEventListener('click', newChat);
+    document.getElementById('tc-sidebar-toggle').addEventListener('click', toggleSidebar);
+    document.getElementById('tc-canvas-btn').addEventListener('click', () => openCanvas('board'));
+    document.getElementById('tc-canvas-close').addEventListener('click', closeCanvas);
+    document.getElementById('tc-theme-btn').addEventListener('click', toggleThemeMenu);
+    document.getElementById('tc-model-btn').addEventListener('click', toggleModelMenu);
+    document.addEventListener('mousedown', e => {
+      if (state.themeMenuOpen && !e.target.closest('[data-theme-switch]')) { state.themeMenuOpen = false; document.getElementById('tc-theme-menu').style.display = 'none'; }
+      if (state.modelMenuOpen && !e.target.closest('[data-model-switch]')) { closeModelMenu(); }
+    });
+
+    // ---------- Boot: pull live model + chats + session from the backend ----------
+    function mapRealMessages(list) {
+      return (Array.isArray(list) ? list : []).map(m => ({
+        role: (m.role === 'assistant' ? 'assistant' : 'user'),
+        text: String(m.content != null ? m.content : (m.text || '')),
+        model: (m.role === 'assistant' ? (state.modelLabel || 'gpt-5.5') : ''),
+      }));
+    }
+    async function boot() {
+      // live model → header pill + send payload
+      try {
+        const r = await fetch('/api/models');
+        if (r.ok) {
+          const d = await r.json();
+          profilesData = Array.isArray(d.profiles) ? d.profiles : [];
+          const prefs = d.preferences || {};
+          const active = prefs.active_profile || d.default || '';
+          const usable = (p) => !!p && (!!p.has_api_key || p.provider === 'openai_codex' || p.name === 'local');
+          // Prefer the configured active profile; if it isn't usable (e.g. a keyless
+          // cloud provider, or an unreachable local), fall back to the first profile
+          // that can actually answer (a keyed provider). User can re-pick via the dropdown.
+          let pick = profilesData.find(p => p.name === active);
+          if (!usable(pick)) pick = profilesData.find(p => !!p.has_api_key) || pick || profilesData[0];
+          if (pick) setProfile(pick);
+          renderModelMenu();
+        }
+      } catch (e) {}
+      // real recent chats → sidebar
+      try {
+        const r = await fetch('/api/chats');
+        if (r.ok) {
+          const d = await r.json();
+          const rows = d.chats || (d.data && d.data.chats) || [];
+          if (Array.isArray(rows) && rows.length) {
+            chatList = rows.map(row => {
+              const msgs = mapRealMessages(row.messages);
+              const firstUser = msgs.find(m => m.role === 'user');
+              return { id: String(row.id || row.session_id || ''), title: String(row.title || 'Untitled chat'), preview: String(row.preview || (firstUser ? firstUser.text : '')).slice(0, 60), msgs, sessionId: row.sessionId || row.session_id || null };
+            }).filter(c => c.id);
+            renderChats();
+          }
+        }
+      } catch (e) {}
+      // fresh session id for this tab
+      try {
+        const r = await fetch('/api/session/new', { method: 'POST' });
+        if (r.ok) { const d = await r.json(); state.sessionId = d.session_id || (d.data && d.data.session_id) || state.sessionId; }
+      } catch (e) {}
+    }
+
+    // ---------- Init ----------
+    hydrateBots();
+    renderChats();
+    renderWorkspaces();
+    renderCards();
+    renderThemeMenu();
+    applyTheme(state.theme);
+    syncView();
+    syncDynamic();
+    autosize();
+    boot();
+  })();
+  </script>
+</body>
+</html>

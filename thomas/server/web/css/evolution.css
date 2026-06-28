@@ -1,4 +1,21 @@
-/* Evolution dashboard -- the self-recursive evolve loop cockpit. */
+/* Evolution dashboard -- the self-improvement panel.
+   Cockpit aesthetic: sharp corners, muted instrument accent, dark translucent
+   panels. Plain-English, low-jargon layout for a non-technical operator. */
+
+/* ----------------------------------------------------------------------------
+   TYPE RAMP (UI-1) -- every font-size in this file snaps to this documented
+   scale; no orphan/half-pixel one-offs (no 10.5 / 11.5 / 12.5 / 13.5 / 16.5 /
+   17px). Steps, in px:
+     10  micro labels / language + kind badges
+     11  small mono labels (status, counter labels, tags, diff stat/hunk)
+     12  secondary body / form controls / tool + result + code text
+     13  body prose / subtitles / list + history rows
+     14  card titles
+     16  section / hero / empty-state titles + hero glyph
+     20  page + brand headings
+     24  focal stat numbers
+   Hierarchy is preserved; sizes were only consolidated onto the nearest step.
+   ---------------------------------------------------------------------------- */
 
 .evolution-workspace {
     position: absolute;
@@ -8,18 +25,16 @@
     padding: 72px 18px 18px;
     overflow-y: auto;
     overflow-x: hidden;
-    color: #e6edf3;
+    color: #d6dde6;
     background:
-        radial-gradient(circle at 16% 10%, rgba(122, 162, 247, 0.20), rgba(122, 162, 247, 0) 40%),
-        radial-gradient(circle at 86% 14%, rgba(125, 207, 255, 0.14), rgba(125, 207, 255, 0) 44%),
-        radial-gradient(circle at 52% 88%, rgba(158, 206, 106, 0.10), rgba(158, 206, 106, 0) 36%),
-        linear-gradient(180deg, rgba(6, 11, 21, 0.97), rgba(7, 13, 23, 0.97));
+        radial-gradient(circle at 84% 8%, rgba(76, 200, 154, 0.06), rgba(76, 200, 154, 0) 40%),
+        linear-gradient(180deg, rgba(7, 11, 18, 0.98), rgba(8, 12, 20, 0.98));
 }
 
 .evolution-shell {
     min-height: 100%;
     min-width: 0;
-    max-width: 1180px;
+    max-width: 1100px;
     margin: 0 auto;
     display: flex;
     flex-direction: column;
@@ -34,136 +49,232 @@
 }
 
 .evolution-header h2 {
-    margin: 0 0 4px;
-    font-size: 22px;
+    margin: 0 0 5px;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    color: #eef2f6;
+}
+
+.evo-sub {
+    margin: 0;
+    color: #93a2b5;
+    font-size: 13px;
+    line-height: 1.55;
+    max-width: 660px;
+}
+
+.evo-byline {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 9px;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 11px;
+    color: #6f7e92;
     letter-spacing: 0.2px;
 }
 
-.evolution-header p {
-    margin: 0;
-    color: #9aa7b8;
-    font-size: 13px;
-    max-width: 640px;
+.evo-byline-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #5f6e82;
+    flex: 0 0 auto;
+}
+
+.evo-byline-dot.is-live {
+    background: #4cc89a;
+    animation: evoPulse 1.6s ease-in-out infinite;
 }
 
 .evolution-status-pill {
     flex: 0 0 auto;
-    padding: 6px 14px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: capitalize;
-    border: 1px solid rgba(122, 162, 247, 0.4);
-    background: rgba(122, 162, 247, 0.12);
-    color: #c5d4ff;
+    padding: 5px 12px;
+    border-radius: 3px;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    border: 1px solid rgba(140, 160, 180, 0.35);
+    background: rgba(140, 160, 180, 0.08);
+    color: #aab8c8;
 }
 
 .evolution-status-pill.is-running {
-    border-color: rgba(158, 206, 106, 0.5);
-    background: rgba(158, 206, 106, 0.16);
-    color: #c7f0a4;
+    border-color: rgba(76, 200, 154, 0.5);
+    background: rgba(76, 200, 154, 0.12);
+    color: #7fe0bf;
     animation: evoPulse 1.8s ease-in-out infinite;
+}
+
+.evolution-status-pill.is-attention {
+    border-color: rgba(224, 175, 104, 0.55);
+    background: rgba(224, 175, 104, 0.13);
+    color: #f0cf9a;
 }
 
 .evolution-status-pill.is-error {
     border-color: rgba(247, 118, 142, 0.5);
-    background: rgba(247, 118, 142, 0.16);
+    background: rgba(247, 118, 142, 0.14);
     color: #ffc2cd;
 }
 
 @keyframes evoPulse {
     0%, 100% { opacity: 1; }
-    50% { opacity: 0.55; }
+    50% { opacity: 0.5; }
 }
 
-.evolution-controls {
+/* ---- hero status: the focal point ---- */
+.evo-hero {
+    border: 1px solid rgba(140, 160, 180, 0.16);
+    border-left: 3px solid rgba(76, 200, 154, 0.7);
+    border-radius: 3px;
+    background: rgba(10, 15, 24, 0.66);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 18px 20px;
+}
+
+.evo-hero-row {
     display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    gap: 12px;
-    padding: 14px 16px;
-    border-radius: 14px;
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    background: rgba(13, 19, 31, 0.72);
+    align-items: center;
+    gap: 16px;
 }
 
-.evolution-controls label {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    color: #8aa0bd;
+.evo-hero-main { flex: 1; min-width: 0; }
+
+.evo-hero-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #eef2f6;
 }
 
-.evolution-controls select,
-.evolution-controls input {
-    min-width: 150px;
-    padding: 8px 10px;
-    border-radius: 9px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(7, 12, 21, 0.9);
-    color: #e6edf3;
+.evo-hero-detail {
+    margin-top: 3px;
     font-size: 13px;
+    color: #93a2b5;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
 
-.evolution-controls input[type="number"] {
-    min-width: 86px;
+.evo-hero-icon {
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 700;
 }
 
+.evo-hero-icon.is-check { background: rgba(76, 200, 154, 0.16); color: #4cc89a; }
+.evo-hero-icon.is-check::before { content: "\2713"; }
+.evo-hero-icon.is-wand { background: rgba(140, 160, 180, 0.16); color: #aab8c8; }
+.evo-hero-icon.is-wand::before { content: "\2726"; }
+.evo-hero-icon.is-warn { background: rgba(247, 118, 142, 0.16); color: #f7768e; }
+.evo-hero-icon.is-warn::before { content: "\0021"; }
+
+.evo-hero-spin {
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2.5px solid rgba(76, 200, 154, 0.22);
+    border-top-color: #4cc89a;
+    animation: evoSpin 0.9s linear infinite;
+}
+
+@keyframes evoSpin { to { transform: rotate(360deg); } }
+
+.evo-progress {
+    margin-top: 11px;
+    height: 5px;
+    border-radius: 999px;
+    background: rgba(140, 160, 180, 0.16);
+    overflow: hidden;
+}
+
+.evo-progress-fill {
+    height: 100%;
+    background: #4cc89a;
+    border-radius: 999px;
+    transition: width 0.4s ease;
+}
+
+/* ---- buttons ---- */
 .evo-btn {
     padding: 9px 16px;
-    border-radius: 9px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    background: rgba(255, 255, 255, 0.06);
-    color: #e6edf3;
+    border-radius: 3px;
+    border: 1px solid rgba(140, 160, 180, 0.28);
+    background: rgba(140, 160, 180, 0.06);
+    color: #d6dde6;
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 500;
     cursor: pointer;
+    white-space: nowrap;
     transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
 }
 
-.evo-btn:hover { background: rgba(255, 255, 255, 0.12); }
+.evo-btn:hover { background: rgba(140, 160, 180, 0.14); border-color: rgba(140, 160, 180, 0.45); }
 .evo-btn:active { transform: translateY(1px); }
-
-.evo-btn-primary {
-    border-color: rgba(122, 162, 247, 0.6);
-    background: linear-gradient(180deg, rgba(122, 162, 247, 0.95), rgba(99, 138, 226, 0.95));
-    color: #0a0f1a;
-}
-
-.evo-btn-primary:hover { background: linear-gradient(180deg, rgba(140, 178, 255, 1), rgba(110, 150, 240, 1)); }
 .evo-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
+.evo-btn-primary {
+    border-color: rgba(76, 200, 154, 0.55);
+    background: rgba(76, 200, 154, 0.16);
+    color: #8fe7c8;
+}
+
+.evo-btn-primary:hover { background: rgba(76, 200, 154, 0.26); border-color: rgba(76, 200, 154, 0.7); }
+
+/* ---- stat tiles ---- */
 .evolution-counters {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 10px;
 }
 
 .evo-counter {
-    flex: 1 1 110px;
-    min-width: 110px;
-    padding: 12px 14px;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    background: rgba(13, 19, 31, 0.6);
+    padding: 13px 15px;
+    border-radius: 3px;
+    border: 1px solid rgba(140, 160, 180, 0.12);
+    background: rgba(10, 15, 24, 0.55);
 }
 
-.evo-counter .evo-counter-value {
+.evo-counter-value {
     font-size: 24px;
-    font-weight: 700;
+    font-weight: 600;
     line-height: 1;
+    color: #eef2f6;
 }
 
-.evo-counter .evo-counter-label {
-    margin-top: 5px;
+.evo-counter-value.is-warn { color: #f0cf9a; }
+
+.evo-counter-label {
+    margin-top: 6px;
     font-size: 11px;
     text-transform: uppercase;
-    letter-spacing: 0.4px;
-    color: #8aa0bd;
+    letter-spacing: 0.5px;
+    color: #7f8da0;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
+
+/* ---- section titles ---- */
+.evo-section-title {
+    margin: 0 0 10px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #93a2b5;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+.evo-section-warn { color: #f0cf9a; }
+
+.evo-needs-wrap[hidden] { display: none; }
 
 .evolution-columns {
     display: grid;
@@ -175,88 +286,111 @@
     .evolution-columns { grid-template-columns: 1fr; }
 }
 
-.evolution-col h3,
-.evolution-history h3 {
-    margin: 0 0 10px;
-    font-size: 13px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: #9aa7b8;
-}
-
-.evo-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
+/* ---- cards ---- */
+.evo-list { display: flex; flex-direction: column; gap: 9px; }
 
 .evo-card {
-    padding: 12px 14px;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(13, 19, 31, 0.66);
+    padding: 13px 15px;
+    border-radius: 3px;
+    border: 1px solid rgba(140, 160, 180, 0.13);
+    background: rgba(10, 15, 24, 0.6);
+}
+
+.evo-card-warn {
+    border-color: rgba(224, 175, 104, 0.4);
+    border-left: 3px solid rgba(224, 175, 104, 0.7);
+    background: rgba(28, 22, 12, 0.5);
 }
 
 .evo-card-head {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 9px;
     margin-bottom: 6px;
 }
 
 .evo-card-title {
-    font-size: 13.5px;
+    font-size: 14px;
     font-weight: 600;
     flex: 1;
+    color: #e4eaf1;
 }
 
 .evo-card-why {
     font-size: 12px;
-    color: #9aa7b8;
-    line-height: 1.5;
+    color: #93a2b5;
+    line-height: 1.55;
 }
 
-.evo-chip {
+.evo-safe-note {
+    margin-top: 6px;
+    color: #7fc9aa;
+}
+
+.evo-kind {
     flex: 0 0 auto;
-    font-size: 10.5px;
-    font-weight: 700;
-    text-transform: uppercase;
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: lowercase;
     letter-spacing: 0.3px;
     padding: 3px 8px;
-    border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    color: #cdd9ec;
+    border-radius: 2px;
+    border: 1px solid rgba(140, 160, 180, 0.2);
+    background: rgba(140, 160, 180, 0.07);
+    color: #aab8c8;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
 
-.evo-chip.risk-low { border-color: rgba(158, 206, 106, 0.5); color: #bde6a0; }
-.evo-chip.risk-medium { border-color: rgba(224, 175, 104, 0.5); color: #f0cf9a; }
-.evo-chip.risk-high { border-color: rgba(247, 118, 142, 0.55); color: #ffb3c0; }
+.evo-expand-link {
+    margin-top: 9px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: #79b8ff;
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.evo-expand-link:hover { text-decoration: underline; }
+
+.evo-detail[hidden] { display: none; }
+
+.evo-files {
+    margin: 9px 0 0;
+    padding: 0 0 0 18px;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: #93a2b5;
+    line-height: 1.7;
+}
 
 .evo-card-actions {
     display: flex;
     gap: 8px;
-    margin-top: 10px;
+    margin-top: 12px;
 }
 
-.evo-card-actions .evo-btn { padding: 6px 12px; font-size: 12px; }
+.evo-card-actions .evo-btn { padding: 7px 14px; font-size: 12px; }
 
 .evo-empty {
     padding: 18px;
     text-align: center;
-    color: #7e8ca0;
-    font-size: 12.5px;
-    border: 1px dashed rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
+    color: #6f7e92;
+    font-size: 12px;
+    border: 1px dashed rgba(140, 160, 180, 0.18);
+    border-radius: 3px;
 }
 
+/* ---- recently-done timeline ---- */
 .evo-hist-row {
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 9px 12px;
-    border-radius: 10px;
-    background: rgba(13, 19, 31, 0.5);
-    font-size: 12.5px;
+    border-radius: 3px;
+    background: rgba(10, 15, 24, 0.45);
+    font-size: 13px;
 }
 
 .evo-hist-dot {
@@ -264,76 +398,1540 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #58a6ff;
+    background: #5f6e82;
 }
 
-.evo-hist-dot.is-promote { background: #9ece6a; }
-.evo-hist-dot.is-approve { background: #e0af68; }
-.evo-hist-dot.is-reject { background: #f7768e; }
+.evo-hist-dot.is-done { background: #4cc89a; }
+.evo-hist-dot.is-wait { background: #e0af68; }
+.evo-hist-dot.is-skip { background: #5f6e82; }
 
-/* ---- conversational command bar ("deep chat") ---- */
-.evolution-chat {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 14px 16px;
-    border-radius: 14px;
-    border: 1px solid rgba(122, 162, 247, 0.22);
-    background: rgba(13, 19, 31, 0.72);
+.evo-hist-title { flex: 1; min-width: 0; color: #cdd6e0; }
+
+.evo-hist-tag {
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: #7f8da0;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
 
-.evo-chat-log {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    max-height: 220px;
-    overflow-y: auto;
+/* ---- advanced drawer ---- */
+.evo-advanced {
+    border: 1px solid rgba(140, 160, 180, 0.13);
+    border-radius: 3px;
+    background: rgba(10, 15, 24, 0.5);
+    padding: 12px 15px;
 }
 
-.evo-chat-log:empty {
-    display: none;
-}
-
-.evo-chat-msg {
-    max-width: 80%;
-    padding: 9px 13px;
-    border-radius: 13px;
+.evo-advanced > summary {
+    cursor: pointer;
     font-size: 13px;
-    line-height: 1.45;
+    color: #93a2b5;
+    list-style: none;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+.evo-advanced > summary::before {
+    content: "\002B  ";
+    color: #6f7e92;
+}
+
+.evo-advanced[open] > summary::before { content: "\2212  "; }
+
+.evo-advanced-body {
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+}
+
+.evo-advanced-body label {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 12px;
+    color: #93a2b5;
+}
+
+.evo-advanced-body select,
+.evo-advanced-body input {
+    padding: 8px 10px;
+    border-radius: 3px;
+    border: 1px solid rgba(140, 160, 180, 0.22);
+    background: rgba(7, 12, 21, 0.9);
+    color: #d6dde6;
+    font-size: 13px;
+}
+
+/* ---- Forge shell: the Evolve | Code container ---- */
+.forge-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+.forge-topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.forge-brand {
+    font-size: 20px;
+    font-weight: 600;
+    color: #eef2f6;
+    letter-spacing: 0.3px;
+}
+
+.forge-toggle {
+    display: inline-flex;
+    border: 1px solid rgba(140, 160, 180, 0.3);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.forge-tab {
+    padding: 7px 18px;
+    font-size: 13px;
+    font-weight: 500;
+    background: transparent;
+    color: #93a2b5;
+    border: none;
+    border-left: 1px solid rgba(140, 160, 180, 0.2);
+    cursor: pointer;
+}
+
+.forge-tab:first-child { border-left: none; }
+.forge-tab.is-active { background: rgba(76, 200, 154, 0.16); color: #8fe7c8; }
+.forge-tab:hover:not(.is-active) { background: rgba(140, 160, 180, 0.08); }
+
+.forge-hint {
+    margin-left: auto;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 11px;
+    color: #6f7e92;
+}
+
+.forge-view.is-hidden { display: none; }
+.forge-view .evolution-shell { max-width: none; margin: 0; }
+
+/* Bound the Code surface height so the transcript scrolls INTERNALLY (the chat
+   log can be scrolled up to read history) instead of growing the whole page.
+   min-height:0 down the flex chain lets the inner overflow:auto engage. */
+/* Own a clean stacking context so the translucent transcript/changes never let
+   stale rows from layers behind ghost through, and so the surface composites as
+   one unit. */
+#forgeCode {
+    display: flex;
+    position: relative;
+    z-index: 1;
+    isolation: isolate;
+    min-height: 440px;
+    height: min(78vh, 940px);
+}
+#forgeCode .evo-eng {
+    flex: 1;
+    min-height: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(76, 200, 154, 0.22);
+    border-radius: 3px;
+    background: rgba(10, 15, 24, 0.6);
+}
+#forgeCode .evo-eng-transcript { flex: 1; min-height: 0; max-height: none; }
+/* The wrap clips its own children so the transcript and the changes panel stay
+   inside its rounded bounds -- no row spills past the edges as a ghost. */
+#forgeCode .forge-code-wrap { flex: 1; min-height: 0; overflow: hidden; }
+
+/* ---- clickable stat tiles + expandable detail ---- */
+.evo-counter-click {
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    font: inherit;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+.evo-counter-click:hover { border-color: rgba(76, 200, 154, 0.4); }
+.evo-counter-click.is-active { border-color: rgba(76, 200, 154, 0.6); background: rgba(76, 200, 154, 0.1); }
+
+.evo-tile-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    border: 0.5px solid rgba(140, 160, 180, 0.13);
+    border-radius: 3px;
+    background: rgba(10, 15, 24, 0.4);
+    padding: 12px 14px;
+}
+.evo-tile-detail.is-hidden { display: none; }
+
+/* ============================================================================
+   FORGE CODE — frontier engineering surface
+   Renders a Code conversation in the SAME visual language as the real Thomas
+   chat (proportional prose via .message-row / formatMarkdown), with tool calls
+   as structured cards and edits as real code-review diffs. Everything below is
+   driven by a single Forge token block that chains off the global tokens.css
+   :root scale — no orphan one-off hex/px in the component rules.
+   ============================================================================ */
+
+/* -- Forge token block: one place for color / spacing / radius / type -- */
+.forge-code-wrap {
+    /* surfaces */
+    --fc-bg: rgba(11, 16, 25, 0.55);
+    --fc-surface: rgba(17, 24, 34, 0.78);
+    --fc-surface-2: rgba(9, 13, 21, 0.72);
+    --fc-surface-3: rgba(7, 11, 18, 0.9);
+    /* lines */
+    --fc-border: rgba(148, 163, 184, 0.16);
+    --fc-border-strong: rgba(148, 163, 184, 0.3);
+    --fc-rail: rgba(148, 163, 184, 0.22);
+    /* ink */
+    --fc-ink: var(--text-primary);
+    --fc-ink-2: var(--text-secondary);
+    --fc-ink-3: #8593a8;
+    /* accent + semantics (one accent hue; semantics reserved for meaning) */
+    --fc-accent: #7fb0ff;
+    --fc-accent-soft: rgba(127, 176, 255, 0.14);
+    --fc-mint: var(--accent-mint);
+    --fc-mint-soft: rgba(71, 215, 172, 0.13);
+    --fc-warn: #e9c07a;
+    --fc-warn-soft: rgba(233, 192, 122, 0.12);
+    --fc-danger: #f0867a;
+    --fc-danger-soft: rgba(224, 110, 95, 0.13);
+    /* diff semantics (colorblind-safe: always paired with a gutter sign + rail) */
+    --fc-add-ink: #5fd38a;
+    --fc-add-tint: rgba(63, 185, 80, 0.14);
+    --fc-add-rail: #2ea043;
+    --fc-add-word: rgba(63, 185, 80, 0.4);
+    --fc-del-ink: #f0867a;
+    --fc-del-tint: rgba(248, 81, 73, 0.13);
+    --fc-del-rail: #da3633;
+    --fc-del-word: rgba(248, 81, 73, 0.38);
+    /* type */
+    --fc-mono: var(--font-mono);
+    --fc-code-size: 12px;
+    /* radius (chains off global scale) */
+    --fc-r-sm: var(--radius-sm);
+    --fc-r-md: var(--radius-md);
+    --fc-r-lg: var(--radius-lg);
+    /* diff gutter width (overwritten per-card from the file's max line no.) */
+    --fc-gut: 2.5ch;
+
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    gap: var(--space-3);
+}
+
+/* Light-theme override: the surface stays legible if the app theme flips. */
+body.te-theme-light .forge-code-wrap,
+[data-theme="light"] .forge-code-wrap {
+    --fc-bg: #f6f8fb;
+    --fc-surface: #ffffff;
+    --fc-surface-2: #f1f4f9;
+    --fc-surface-3: #eef1f6;
+    --fc-border: rgba(15, 23, 42, 0.12);
+    --fc-border-strong: rgba(15, 23, 42, 0.2);
+    --fc-rail: rgba(15, 23, 42, 0.16);
+    --fc-ink: #14233b;
+    --fc-ink-2: #3a4a63;
+    --fc-ink-3: #5a6b85;
+    --fc-accent: #1f6feb;
+    --fc-accent-soft: rgba(31, 111, 235, 0.1);
+    --fc-add-ink: #1a7f37;
+    --fc-add-tint: rgba(46, 160, 67, 0.12);
+    --fc-add-word: rgba(46, 160, 67, 0.3);
+    --fc-del-ink: #cf222e;
+    --fc-del-tint: rgba(207, 34, 46, 0.1);
+    --fc-del-word: rgba(207, 34, 46, 0.28);
+}
+
+/* -- layout shell: session-history rail + main column ------------------ */
+/* The wrap is a column; its single child is a flex ROW that places the
+   collapsible history rail beside the main conversation column. The rail is the
+   primary history surface (it replaced the cramped day-grouped <select>). */
+.forge-code-shell {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    gap: var(--space-3);
+    position: relative; /* anchor for the overlay rail at narrow widths */
+}
+
+.forge-code-main {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    gap: var(--space-3);
+    position: relative; /* anchor for the pinned "Jump to latest" affordance */
+}
+
+/* -- the session-history left rail ------------------------------------- */
+.forge-code-rail {
+    flex: 0 0 clamp(220px, 22vw, 300px); /* caps so it stays a rail even at 4K */
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--fc-border);
+    border-radius: var(--fc-r-lg);
+    background: var(--fc-bg);
+}
+
+.fc-rail-top { display: flex; align-items: center; gap: var(--space-2); }
+
+.fc-rail-new {
+    flex: 1 1 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 12px;
+    border-radius: var(--fc-r-sm);
+    border: 1px solid var(--fc-border-strong);
+    background: var(--fc-surface-3);
+    color: var(--fc-ink);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+.fc-rail-new:hover { border-color: var(--fc-accent); background: var(--fc-accent-soft); }
+.fc-rail-new svg { width: 16px; height: 16px; flex: 0 0 auto; }
+
+.fc-rail-collapse,
+.fc-rail-handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: var(--fc-r-sm);
+    border: 1px solid var(--fc-border-strong);
+    background: var(--fc-surface-3);
+    color: var(--fc-ink-2);
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+.fc-rail-collapse:hover,
+.fc-rail-handle:hover { border-color: var(--fc-rail); color: var(--fc-ink); }
+.fc-rail-collapse svg,
+.fc-rail-handle svg { width: 18px; height: 18px; }
+
+/* The collapsed re-open handle takes the rail's place when it is hidden. */
+.fc-rail-handle { display: none; align-self: flex-start; }
+.forge-code-wrap.is-rail-collapsed .forge-code-rail { display: none; }
+.forge-code-wrap.is-rail-collapsed .fc-rail-handle { display: inline-flex; }
+
+.fc-rail-search-wrap { position: relative; display: flex; align-items: center; }
+.fc-rail-search-ic {
+    position: absolute;
+    left: 9px;
+    width: 15px;
+    height: 15px;
+    color: var(--fc-ink-3);
+    pointer-events: none;
+}
+.fc-rail-search {
+    width: 100%;
+    padding: 7px 10px 7px 30px;
+    border-radius: var(--fc-r-sm);
+    border: 1px solid var(--fc-border-strong);
+    background: var(--fc-surface-3);
+    color: var(--fc-ink);
+    font-family: var(--font-sans);
+    font-size: 12px;
+}
+.fc-rail-search:focus-visible { outline: 2px solid var(--fc-accent); outline-offset: 1px; }
+.fc-rail-search::placeholder { color: var(--fc-ink-3); }
+
+.fc-rail-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding-right: 2px;
+}
+.fc-rail-empty {
+    color: var(--fc-ink-3);
+    font-size: 12px;
+    padding: var(--space-3) 4px;
+    text-align: center;
+}
+.fc-rail-group { display: flex; flex-direction: column; gap: 3px; }
+.fc-rail-group-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--fc-ink-3);
+    padding: 2px 4px 4px;
+}
+
+/* one conversation row: title + meta, with rename/delete actions */
+.fc-convo {
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    border-radius: var(--fc-r-sm);
+    border: 1px solid transparent;
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+.fc-convo:hover { background: var(--fc-surface); border-color: var(--fc-border); }
+.fc-convo.is-active { background: var(--fc-accent-soft); border-color: var(--fc-accent); }
+.fc-convo-open {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 7px 9px;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--font-sans);
+}
+.fc-convo-title {
+    font-size: 13px;
+    color: var(--fc-ink);
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.fc-convo.is-active .fc-convo-title { font-weight: 600; }
+.fc-convo-meta {
+    font-size: 11px;
+    color: var(--fc-ink-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* per-row actions revealed on hover/focus; always reachable by keyboard */
+.fc-convo-actions {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    padding-right: 4px;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+.fc-convo:hover .fc-convo-actions,
+.fc-convo:focus-within .fc-convo-actions,
+.fc-convo.is-active .fc-convo-actions { opacity: 1; }
+.fc-convo-act {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--fc-r-sm);
+    background: transparent;
+    color: var(--fc-ink-3);
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+.fc-convo-act:hover { background: var(--fc-surface-2); color: var(--fc-ink); }
+.fc-convo-del:hover { color: var(--fc-danger); }
+.fc-convo-act svg { width: 15px; height: 15px; }
+
+/* inline rename input (replaces the title in place) */
+.fc-convo-rename {
+    width: 100%;
+    padding: 4px 6px;
+    margin: 1px 0;
+    border-radius: var(--fc-r-sm);
+    border: 1px solid var(--fc-accent);
+    background: var(--fc-surface-3);
+    color: var(--fc-ink);
+    font-family: var(--font-sans);
+    font-size: 13px;
+}
+.fc-convo-rename:focus-visible { outline: 2px solid var(--fc-accent); outline-offset: 1px; }
+.forge-code-rail :focus-visible { outline: 2px solid var(--fc-accent); outline-offset: 1px; }
+
+/* -- header: intro + run controls -------------------------------------- */
+.forge-code-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex: 0 0 auto;
+}
+
+.forge-code-head .fc-sub {
+    font-size: 13px;
+    color: var(--fc-ink-2);
+    line-height: 1.55;
+    max-width: 62ch;
+}
+
+.forge-code-run {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.forge-code-run select {
+    padding: 6px 10px;
+    border-radius: var(--fc-r-sm);
+    border: 1px solid var(--fc-border-strong);
+    background: var(--fc-surface-3);
+    color: var(--fc-ink);
+    font-size: 12px;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+}
+
+.forge-code-run select:hover { border-color: var(--fc-rail); }
+.forge-code-run select:focus-visible {
+    outline: 2px solid var(--fc-accent);
+    outline-offset: 1px;
+}
+
+.forge-code-status {
+    font-family: var(--fc-mono);
+    font-size: 11px;
+    color: var(--fc-ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.forge-code-status.working { color: var(--fc-mint); }
+.forge-code-status.working::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--fc-mint);
+    animation: fcPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes fcPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+.forge-code-stop {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 13px;
+    border-radius: var(--fc-r-sm);
+    border: 1px solid var(--fc-danger);
+    background: var(--fc-danger-soft);
+    color: var(--fc-danger);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.forge-code-stop:hover { background: rgba(224, 110, 95, 0.22); }
+.forge-code-stop:focus-visible { outline: 2px solid var(--fc-accent); outline-offset: 1px; }
+
+/* -- "Jump to latest": the return-to-live-edge control (Perf-10 / UX-54) ---
+   Pinned just inside the bottom of the transcript, centered. Hidden (the [hidden]
+   attribute) while following the live edge; the chat JS reveals it once the user
+   scrolls up, optionally with an unread tally. Click re-attaches auto-scroll. */
+.forge-code-jump {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(var(--space-5) + 6px);
+    z-index: 5;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--fc-border);
+    background: var(--fc-accent);
+    color: var(--fc-on-accent, #fff);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+    transition: background 0.15s ease, transform 0.12s ease, opacity 0.15s ease;
+}
+.forge-code-jump[hidden] { display: none; }
+.forge-code-jump:hover { transform: translateX(-50%) translateY(-1px); }
+.forge-code-jump:focus-visible { outline: 2px solid var(--fc-accent); outline-offset: 2px; }
+.forge-code-jump svg { width: 14px; height: 14px; }
+
+/* -- transcript: a real chat surface, not a console log ---------------- */
+.forge-code-transcript {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overflow-anchor: none; /* we manage scroll ourselves; no jump on append */
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-4) var(--space-5);
+    border: 1px solid var(--fc-border);
+    border-radius: var(--fc-r-lg);
+    background: var(--fc-bg);
+    scroll-behavior: smooth;
+    font-family: var(--font-sans);
+}
+
+/* The transcript hosts the REAL chat message rows; tighten their in-Forge
+   spacing a touch (no avatars here) but keep the bubble look identical. */
+.forge-code-transcript .message-row { animation: none; width: 100%; }
+.forge-code-transcript .message-row.is-assistant { padding-right: 0; }
+.forge-code-transcript .message-row.is-user { padding-left: clamp(48px, 9vw, 140px); }
+.forge-code-transcript .message-row.is-assistant .message-stack { gap: var(--space-2); }
+
+/* Message prose is proportional. The #forgeCode ID raises specificity to (1,1,0)
+   and !important beats any equal- or lower-priority monospace base rule that the
+   outer chat cascade might set on .message-content or its block children.
+   Only genuine code/pre elements stay monospace via the explicit rule below. */
+#forgeCode .message-content,
+#forgeCode .message-content :where(p, li, span, h1, h2, h3, blockquote) {
+    font-family: var(--font-sans) !important;
+}
+#forgeCode .message-content code,
+#forgeCode .message-content pre { font-family: var(--fc-mono) !important; }
+
+/* Markdown TABLES in transcript prose had no border / zebra / padding, so a
+   piped table rendered as bare runaway text. Give them the same bordered,
+   zebra-striped, padded grammar as the artifact data table -- driven by the
+   Forge tokens so both themes (dark default + light) stay legible (UI-1/10/44). */
+#forgeCode .message-content table {
+    border-collapse: collapse;
+    width: auto;
+    max-width: 100%;
+    margin: var(--space-2) 0;
+    font-size: 12.5px;
+    border: 1px solid var(--fc-border);
+    border-radius: var(--fc-r-sm);
+    overflow: hidden;
+}
+#forgeCode .message-content th,
+#forgeCode .message-content td {
+    padding: 6px 11px;
+    border: 1px solid var(--fc-border);
+    text-align: left;
+    vertical-align: top;
+}
+#forgeCode .message-content thead th {
+    background: var(--fc-surface-2);
+    color: var(--fc-ink-2);
+    font-weight: 600;
+}
+#forgeCode .message-content tbody tr:nth-child(even) td { background: var(--fc-surface-2); }
+
+/* streaming caret on the live assistant bubble (UI-27) */
+.forge-code-transcript .assistant-bubble.is-streaming::after {
+    content: '';
+    display: inline-block;
+    width: 2px;
+    height: 1.05em;
+    margin-left: 1px;
+    vertical-align: text-bottom;
+    background: var(--fc-accent);
+    animation: fcCaret 1s steps(2, start) infinite;
+}
+
+@keyframes fcCaret { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* empty / first-run state — designed, centered, themed (UI-39) */
+.fc-empty {
+    margin: auto;
+    max-width: 46ch;
+    text-align: center;
+    color: var(--fc-ink-2);
+    font-size: 13px;
+    line-height: 1.65;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.fc-empty .fc-empty-glyph {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--fc-r-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--fc-accent);
+    background: var(--fc-accent-soft);
+    border: 1px solid var(--fc-border);
+}
+
+.fc-empty .fc-empty-glyph svg { width: 22px; height: 22px; }
+.fc-empty .fc-empty-title { font-size: 16px; font-weight: 600; color: var(--fc-ink); }
+
+/* -- tool call cards (UI-12/13/14) ------------------------------------- */
+/* The assistant .message-stack is a CSS grid with justify-items:start, so
+   full-width Forge blocks must justify-self:stretch to fill the column. */
+.fc-tool {
+    justify-self: stretch;
+    width: 100%;
+    max-width: 100%;
+    border: 1px solid var(--fc-border);
+    border-radius: var(--fc-r-md);
+    background: var(--fc-surface-2);
+    overflow: hidden;
+}
+
+.fc-tool-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 7px 11px;
+    font-family: var(--fc-mono);
+    font-size: 12px;
+    min-height: 34px;
+}
+
+.fc-tool-ic {
+    flex: 0 0 auto;
+    display: inline-flex;
+    color: var(--fc-ink-3);
+}
+.fc-tool-ic svg { width: 15px; height: 15px; }
+
+.fc-tool-verb {
+    flex: 0 0 auto;
+    color: var(--fc-accent);
+    font-weight: 600;
+    font-family: var(--font-sans);
+}
+
+.fc-tool.is-run .fc-tool-verb { color: var(--fc-mint); }
+.fc-tool.is-run .fc-tool-ic { color: var(--fc-mint); }
+
+.fc-tool-target {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--fc-ink-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fc-tool-status {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    color: var(--fc-ink-3);
+}
+.fc-tool-status svg { width: 15px; height: 15px; }
+.fc-tool-status[data-state="running"] { color: var(--fc-accent); }
+.fc-tool-status[data-state="running"] svg { animation: fcSpin 0.8s linear infinite; }
+.fc-tool-status[data-state="success"] { color: var(--fc-mint); }
+.fc-tool-status[data-state="error"] { color: var(--fc-danger); }
+
+@keyframes fcSpin { to { transform: rotate(360deg); } }
+
+.fc-tool.is-error { border-color: var(--fc-danger); }
+
+/* collapsible tool output inside the card (progressive disclosure) */
+.fc-tool-body { border-top: 1px solid var(--fc-border); }
+.fc-tool-body > summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 6px 11px;
+    font-family: var(--fc-mono);
+    font-size: 11px;
+    color: var(--fc-ink-3);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.fc-tool-body > summary::-webkit-details-marker { display: none; }
+.fc-tool-body > summary::before {
+    content: '';
+    width: 0; height: 0;
+    border-left: 4px solid currentColor;
+    border-top: 3px solid transparent;
+    border-bottom: 3px solid transparent;
+    transition: transform 0.15s ease;
+}
+.fc-tool-body[open] > summary::before { transform: rotate(90deg); }
+.fc-tool-body.is-error > summary { color: var(--fc-danger); }
+
+.fc-tool-pre {
+    margin: 0;
+    padding: 9px 12px;
+    max-height: 300px;
+    overflow: auto;
+    border-top: 1px solid var(--fc-border);
+    background: var(--fc-surface-3);
+    color: var(--fc-ink-2);
+    font: var(--fc-code-size)/1.55 var(--fc-mono);
+    white-space: pre-wrap;
+    word-break: break-word;
+    tab-size: 4;
+}
+
+/* one-line inline result (short, no expansion needed) */
+.fc-tool-inline {
+    padding: 6px 11px 8px 11px;
+    border-top: 1px solid var(--fc-border);
+    color: var(--fc-ink-3);
+    font: 11px/1.5 var(--fc-mono);
+    overflow-wrap: anywhere;
+}
+.fc-tool-inline.is-error { color: var(--fc-danger); }
+
+/* standalone result (no parent card) */
+.fc-result {
+    justify-self: stretch;
+    width: 100%;
+    max-width: 100%;
+    border: 1px solid var(--fc-border);
+    border-radius: var(--fc-r-md);
+    background: var(--fc-surface-2);
+    overflow: hidden;
+}
+.fc-result > summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 7px 11px;
+    color: var(--fc-ink-3);
+    font: 11px var(--fc-mono);
+}
+.fc-result > summary::-webkit-details-marker { display: none; }
+.fc-result.is-error { border-color: var(--fc-danger); }
+.fc-result.is-error > summary { color: var(--fc-danger); }
+.fc-result-pre {
+    margin: 0;
+    padding: 9px 12px;
+    max-height: 300px;
+    overflow: auto;
+    border-top: 1px solid var(--fc-border);
+    background: var(--fc-surface-3);
+    color: var(--fc-ink-2);
+    font: var(--fc-code-size)/1.55 var(--fc-mono);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.fc-result-line {
+    align-self: flex-start;
+    max-width: 100%;
+    color: var(--fc-ink-3);
+    font: 11px/1.5 var(--fc-mono);
+    overflow-wrap: anywhere;
+}
+.fc-result-line.is-error { color: var(--fc-danger); }
+
+/* -- reasoning: demoted + collapsible (UI-9) --------------------------- */
+.fc-reason { justify-self: stretch; width: 100%; max-width: 100%; }
+.fc-reason > summary {
+    cursor: pointer;
+    list-style: none;
+    color: var(--fc-ink-3);
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0;
+}
+.fc-reason > summary::-webkit-details-marker { display: none; }
+.fc-reason > summary svg { width: 13px; height: 13px; opacity: 0.8; }
+.fc-reason-body {
+    margin: 6px 0 0;
+    padding: 8px 12px;
+    border-left: 2px solid var(--fc-rail);
+    color: var(--fc-ink-3);
+    font-size: 12px;
+    line-height: 1.6;
+    font-style: italic;
+}
+
+/* -- mid-task insight: the model's salient "I'm noticing…" observation --
+   Lighter + visually distinct from the bordered tool/diff cards: a soft
+   accent-tinted inset strip with a subtle bulb, sitting above the live tool
+   activity. Sourced organically from the model's own reasoning stream. */
+.fc-insight {
+    justify-self: stretch;
+    width: 100%;
+    max-width: 100%;
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    padding: 8px 12px;
+    border-left: 2px solid var(--fc-accent);
+    border-radius: var(--fc-r-sm);
+    background: var(--fc-accent-soft);
+    color: var(--fc-ink-2);
+    font-size: 12.5px;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+}
+.fc-insight-ic { color: var(--fc-accent); flex: 0 0 auto; margin-top: 1px; display: inline-flex; }
+.fc-insight-ic svg { width: 15px; height: 15px; }
+.fc-insight-text { font-style: italic; }
+
+/* -- quiet engine status note ------------------------------------------ */
+.fc-status {
+    justify-self: center;
+    color: var(--fc-ink-3);
+    font-size: 11px;
+    letter-spacing: 0.2px;
+}
+
+/* -- designed error surface (UI-20) ------------------------------------ */
+.fc-error {
+    justify-self: stretch;
+    width: 100%;
+    max-width: 100%;
+    display: flex;
+    gap: var(--space-2);
+    padding: 10px 12px;
+    border: 1px solid var(--fc-danger);
+    border-left-width: 3px;
+    border-radius: var(--fc-r-md);
+    background: var(--fc-danger-soft);
+    color: var(--fc-danger);
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+.fc-error svg { width: 16px; height: 16px; flex: 0 0 auto; margin-top: 1px; }
+
+/* Actionable build error: a plain-language CAUSE up top, the raw provider/git/
+   permission detail collapsed but kept available, and a RETRY that re-sends the
+   same turn. Stacks vertically so the cause leads and the detail/retry sit under
+   it. (UI-20, Performance-33/35, UX-25/26/27) */
+.fc-error.is-build {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+}
+.fc-error-head {
+    display: flex;
+    gap: var(--space-2);
+    align-items: flex-start;
+}
+.fc-error-cause { font-weight: 600; }
+.fc-error-detail {
+    font-family: var(--fc-mono);
+    font-size: 11px;
+    color: var(--fc-ink-2);
+}
+.fc-error-detail > summary {
+    cursor: pointer;
+    color: var(--fc-ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    list-style: none;
+}
+.fc-error-detail > summary::-webkit-details-marker { display: none; }
+.fc-error-detail[open] > summary { margin-bottom: 5px; }
+.fc-error-pre {
+    margin: 0;
+    padding: 8px 10px;
+    max-height: 180px;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    border-radius: var(--fc-r-sm);
+    background: var(--fc-surface);
+    color: var(--fc-ink-2);
+    line-height: 1.5;
+}
+.fc-error-actions { display: flex; justify-content: flex-end; }
+.fc-error-retry {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 13px;
+    border-radius: var(--fc-r-sm);
+    border: 1px solid var(--fc-danger);
+    background: transparent;
+    color: var(--fc-danger);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.fc-error-retry svg { width: 14px; height: 14px; margin-top: 0; }
+.fc-error-retry:hover { background: var(--fc-danger-soft); }
+.fc-error-retry:focus-visible { outline: 2px solid var(--fc-accent); outline-offset: 1px; }
+.fc-error-retry:disabled { opacity: 0.5; cursor: default; }
+
+/* Transient "Reconnecting…" strip: shown while a dropped SSE stream is being
+   re-established (bounded attempts), hidden the moment data flows again or the
+   attempts are exhausted. A calm, non-destructive surface — it does NOT imply
+   the build failed; the honest terminal state lands only after the budget runs
+   out. (Performance-33/35, UX-25/26/27) */
+.fc-reconnect {
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0;
+    padding: 7px 12px;
+    border-radius: var(--fc-r-md);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--fc-warn);
+    background: var(--fc-warn-soft);
+    border: 1px solid rgba(233, 192, 122, 0.28);
+}
+.fc-reconnect-ic { width: 15px; height: 15px; flex: 0 0 auto; animation: fcSpin 0.9s linear infinite; }
+@keyframes fcSpin { to { transform: rotate(360deg); } }
+
+/* -- terminal-state pill (done / no-op / failed) ----------------------- */
+.fc-note {
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin: 2px 0;
+    padding: 5px 14px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+}
+.fc-note svg { width: 14px; height: 14px; }
+.fc-note.is-done { color: var(--fc-mint); background: var(--fc-mint-soft); border: 1px solid rgba(71, 215, 172, 0.3); }
+.fc-note.is-warn { color: var(--fc-warn); background: var(--fc-warn-soft); border: 1px solid rgba(233, 192, 122, 0.28); }
+.fc-note.is-err { color: var(--fc-danger); background: var(--fc-danger-soft); border: 1px solid var(--fc-danger); }
+
+/* Mid-run follow-up: a calm, non-destructive "queued" strip with a Cancel.
+   Shown while a build is in flight and the user has typed the next instruction;
+   it auto-clears when the queued message fires or is cancelled. */
+.fc-queued {
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0;
+    padding: 7px 12px;
+    border-radius: var(--fc-r-md);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--fc-warn);
+    background: var(--fc-warn-soft);
+    border: 1px solid rgba(233, 192, 122, 0.28);
+}
+.fc-queued[hidden] { display: none; }
+.fc-queued .fc-queued-ic { width: 14px; height: 14px; flex: 0 0 auto; }
+.fc-queued-text { flex: 1 1 auto; }
+.fc-queued-cancel {
+    flex: 0 0 auto;
+    appearance: none;
+    border: 1px solid var(--fc-border-strong);
+    background: transparent;
+    color: var(--fc-ink-2);
+    font: inherit;
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+}
+.fc-queued-cancel:hover { color: var(--fc-ink); border-color: var(--fc-ink-3); background: var(--fc-surface-2); }
+
+/* ============================================================================
+   Real code-review diff cards (UI-15/16/17/18)
+   ============================================================================ */
+.forge-code-changes {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    flex: 0 0 auto;
+    max-height: 40vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+.forge-code-changes:empty { display: none; }
+
+.fc-diff-card {
+    border: 1px solid var(--fc-border);
+    border-radius: var(--fc-r-md);
+    background: var(--fc-surface);
+    overflow: hidden;
+}
+.fc-diff-card.reverted { opacity: 0.5; }
+.fc-diff-card.kept { border-color: rgba(71, 215, 172, 0.4); }
+
+/* terminal Keep/Revert outcome (UX-11): a stamped badge on the bar makes the
+   result unmistakable, the card dims/tints via the classes above, and the
+   buttons are locked (disabled) so the action can't be re-fired or doubted. */
+.fc-diff-state {
+    flex: 0 0 auto;
+    font: 11px var(--fc-mono);
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: var(--fc-r-sm);
+    border: 1px solid var(--fc-border);
+    color: var(--fc-ink-3);
+    background: var(--fc-surface-3);
+}
+.fc-diff-state.is-kept { color: var(--fc-mint); border-color: rgba(71, 215, 172, 0.45); background: var(--fc-mint-soft); }
+.fc-diff-card.kept .fc-diff-stat { opacity: 0.6; }
+
+/* header bar: icon · path · language badge · +/- stat · actions */
+.fc-diff-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--fc-border);
+    background: var(--fc-surface-2);
+}
+.fc-diff-bar .fc-diff-fic { flex: 0 0 auto; display: inline-flex; color: var(--fc-ink-3); }
+.fc-diff-bar .fc-diff-fic svg { width: 15px; height: 15px; }
+.fc-diff-path {
+    flex: 1 1 auto;
+    min-width: 0;
+    font: 12px var(--fc-mono);
+    color: var(--fc-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    direction: rtl;       /* keep the filename end visible when truncating */
+    text-align: left;
+}
+.fc-diff-lang {
+    flex: 0 0 auto;
+    font: 10px var(--fc-mono);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    padding: 2px 7px;
+    border-radius: var(--fc-r-sm);
+    border: 1px solid var(--fc-border);
+    background: var(--fc-surface-3);
+    color: var(--fc-ink-3);
+    text-transform: uppercase;
+}
+.fc-diff-stat { flex: 0 0 auto; font: 11px var(--fc-mono); display: inline-flex; gap: 7px; }
+.fc-diff-stat .add { color: var(--fc-add-ink); }
+.fc-diff-stat .del { color: var(--fc-del-ink); }
+
+.fc-diff-actions { flex: 0 0 auto; display: inline-flex; gap: 5px; }
+.fc-diff-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-height: 26px;
+    padding: 3px 9px;
+    border-radius: var(--fc-r-sm);
+    border: 1px solid var(--fc-border-strong);
+    background: var(--fc-surface-3);
+    color: var(--fc-ink-2);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.fc-diff-btn svg { width: 13px; height: 13px; }
+.fc-diff-btn:hover { border-color: var(--fc-rail); color: var(--fc-ink); }
+.fc-diff-btn:focus-visible { outline: 2px solid var(--fc-accent); outline-offset: 1px; }
+.fc-diff-btn:disabled { opacity: 0.4; cursor: default; }
+.fc-diff-btn.is-copied { color: var(--fc-mint); border-color: rgba(71, 215, 172, 0.4); }
+
+/* body: bounded, internally scrolling (UI-14/32) */
+.fc-diff-body {
+    margin: 0;
+    max-height: 360px;
+    overflow: auto;
+    background: var(--fc-surface);
+    font: var(--fc-code-size)/1.55 var(--fc-mono);
+    tab-size: 4;
+}
+
+/* windowed (virtualized) body for very large diffs: a full-height sizer holds
+   the scrollbar while only the rows near the viewport are realized inside the
+   transform-positioned window, so a multi-thousand-line diff stays at a small,
+   bounded DOM node count. Small diffs never get this class -> unchanged. */
+.fc-diff-body.fc-diff-virt { position: relative; }
+.fc-diff-sizer { position: relative; width: 100%; }
+.fc-diff-window {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    will-change: transform;
+}
+
+/* one diff row = [old no][new no][sign][code]; fixed gutter never reflows */
+.fc-diff-row {
+    display: grid;
+    grid-template-columns: var(--fc-gut) var(--fc-gut) 1.6ch 1fr;
+    align-items: baseline;
+    min-height: 1.55em;
+}
+.fc-ln {
+    text-align: right;
+    padding: 0 6px;
+    color: var(--fc-ink-3);
+    opacity: 0.65;
+    font-variant-numeric: tabular-nums;
+    user-select: none;
+    white-space: nowrap;
+}
+.fc-sign {
+    text-align: center;
+    user-select: none;
+    font-weight: 700;
+    color: var(--fc-ink-3);
+    opacity: 0.7;
+}
+.fc-code {
+    padding-right: 12px;
+    white-space: pre;
+    overflow-wrap: normal;
+    color: var(--fc-ink);
+}
+
+/* per-line tint + rail + sign, distinguishable without color (UI-16) */
+.fc-diff-row.is-add { background: var(--fc-add-tint); box-shadow: inset 2px 0 0 var(--fc-add-rail); }
+.fc-diff-row.is-add .fc-sign { color: var(--fc-add-ink); opacity: 1; }
+.fc-diff-row.is-del { background: var(--fc-del-tint); box-shadow: inset 2px 0 0 var(--fc-del-rail); }
+.fc-diff-row.is-del .fc-sign { color: var(--fc-del-ink); opacity: 1; }
+
+/* word-level intra-line highlight (UI-15) */
+.fc-dw {
+    border-radius: 2px;
+    padding: 0 1px;
+}
+.fc-diff-row.is-add .fc-dw { background: var(--fc-add-word); }
+.fc-diff-row.is-del .fc-dw { background: var(--fc-del-word); }
+
+/* hunk header / separator */
+.fc-hunk {
+    grid-template-columns: 1fr;
+    background: var(--fc-surface-2);
+    border-top: 1px solid var(--fc-border);
+    border-bottom: 1px solid var(--fc-border);
+}
+.fc-hunk .fc-code {
+    padding-left: 12px;
+    color: var(--fc-ink-3);
+    font-size: 11px;
     white-space: pre-wrap;
 }
+.fc-diff-row:first-child.fc-hunk { border-top: 0; }
 
-.evo-chat-you {
-    align-self: flex-end;
-    background: linear-gradient(180deg, rgba(122, 162, 247, 0.92), rgba(99, 138, 226, 0.92));
-    color: #0a0f1a;
-    border-bottom-right-radius: 4px;
+/* the syntax palette belongs to the surrounding UI: let atom-one-dark spans
+   sit on our diff tints without their own background. */
+.fc-code .hljs,
+.fc-tool-pre .hljs,
+.fc-result-pre .hljs { background: transparent; padding: 0; }
+
+/* Light-theme syntax palette (UI-1/10/44). The global atom-one-DARK hljs sheet
+   (loaded once in index.html) keeps every highlighted token dark, so code blocks
+   are unreadable once the app flips to light. Re-tint the hljs tokens to an
+   atom-one-LIGHT palette under the light theme, scoped to the Forge surface and
+   layered ABOVE atom-one-dark by specificity. Backgrounds stay transparent so the
+   already-light Forge code/diff surface shows through. Dark mode is the default
+   and is never selected by these rules, so it cannot regress. */
+body.te-theme-light .forge-code-wrap .hljs,
+[data-theme="light"] .forge-code-wrap .hljs { color: #383a42; background: transparent; }
+body.te-theme-light .forge-code-wrap .hljs-comment,
+body.te-theme-light .forge-code-wrap .hljs-quote,
+[data-theme="light"] .forge-code-wrap .hljs-comment,
+[data-theme="light"] .forge-code-wrap .hljs-quote { color: #a0a1a7; font-style: italic; }
+body.te-theme-light .forge-code-wrap .hljs-doctag,
+body.te-theme-light .forge-code-wrap .hljs-keyword,
+body.te-theme-light .forge-code-wrap .hljs-formula,
+[data-theme="light"] .forge-code-wrap .hljs-doctag,
+[data-theme="light"] .forge-code-wrap .hljs-keyword,
+[data-theme="light"] .forge-code-wrap .hljs-formula { color: #a626a4; }
+body.te-theme-light .forge-code-wrap .hljs-section,
+body.te-theme-light .forge-code-wrap .hljs-name,
+body.te-theme-light .forge-code-wrap .hljs-selector-tag,
+body.te-theme-light .forge-code-wrap .hljs-deletion,
+body.te-theme-light .forge-code-wrap .hljs-subst,
+[data-theme="light"] .forge-code-wrap .hljs-section,
+[data-theme="light"] .forge-code-wrap .hljs-name,
+[data-theme="light"] .forge-code-wrap .hljs-selector-tag,
+[data-theme="light"] .forge-code-wrap .hljs-deletion,
+[data-theme="light"] .forge-code-wrap .hljs-subst { color: #e45649; }
+body.te-theme-light .forge-code-wrap .hljs-literal,
+[data-theme="light"] .forge-code-wrap .hljs-literal { color: #0184bb; }
+body.te-theme-light .forge-code-wrap .hljs-string,
+body.te-theme-light .forge-code-wrap .hljs-regexp,
+body.te-theme-light .forge-code-wrap .hljs-addition,
+body.te-theme-light .forge-code-wrap .hljs-attribute,
+body.te-theme-light .forge-code-wrap .hljs-meta .hljs-string,
+[data-theme="light"] .forge-code-wrap .hljs-string,
+[data-theme="light"] .forge-code-wrap .hljs-regexp,
+[data-theme="light"] .forge-code-wrap .hljs-addition,
+[data-theme="light"] .forge-code-wrap .hljs-attribute,
+[data-theme="light"] .forge-code-wrap .hljs-meta .hljs-string { color: #50a14f; }
+body.te-theme-light .forge-code-wrap .hljs-attr,
+body.te-theme-light .forge-code-wrap .hljs-variable,
+body.te-theme-light .forge-code-wrap .hljs-template-variable,
+body.te-theme-light .forge-code-wrap .hljs-type,
+body.te-theme-light .forge-code-wrap .hljs-selector-class,
+body.te-theme-light .forge-code-wrap .hljs-selector-attr,
+body.te-theme-light .forge-code-wrap .hljs-selector-pseudo,
+body.te-theme-light .forge-code-wrap .hljs-number,
+[data-theme="light"] .forge-code-wrap .hljs-attr,
+[data-theme="light"] .forge-code-wrap .hljs-variable,
+[data-theme="light"] .forge-code-wrap .hljs-template-variable,
+[data-theme="light"] .forge-code-wrap .hljs-type,
+[data-theme="light"] .forge-code-wrap .hljs-selector-class,
+[data-theme="light"] .forge-code-wrap .hljs-selector-attr,
+[data-theme="light"] .forge-code-wrap .hljs-selector-pseudo,
+[data-theme="light"] .forge-code-wrap .hljs-number { color: #986801; }
+body.te-theme-light .forge-code-wrap .hljs-symbol,
+body.te-theme-light .forge-code-wrap .hljs-bullet,
+body.te-theme-light .forge-code-wrap .hljs-link,
+body.te-theme-light .forge-code-wrap .hljs-meta,
+body.te-theme-light .forge-code-wrap .hljs-selector-id,
+body.te-theme-light .forge-code-wrap .hljs-title,
+[data-theme="light"] .forge-code-wrap .hljs-symbol,
+[data-theme="light"] .forge-code-wrap .hljs-bullet,
+[data-theme="light"] .forge-code-wrap .hljs-link,
+[data-theme="light"] .forge-code-wrap .hljs-meta,
+[data-theme="light"] .forge-code-wrap .hljs-selector-id,
+[data-theme="light"] .forge-code-wrap .hljs-title { color: #4078f2; }
+body.te-theme-light .forge-code-wrap .hljs-built_in,
+body.te-theme-light .forge-code-wrap .hljs-class .hljs-title,
+body.te-theme-light .forge-code-wrap .hljs-title.class_,
+[data-theme="light"] .forge-code-wrap .hljs-built_in,
+[data-theme="light"] .forge-code-wrap .hljs-class .hljs-title,
+[data-theme="light"] .forge-code-wrap .hljs-title.class_ { color: #c18401; }
+body.te-theme-light .forge-code-wrap .hljs-emphasis,
+[data-theme="light"] .forge-code-wrap .hljs-emphasis { font-style: italic; }
+body.te-theme-light .forge-code-wrap .hljs-strong,
+[data-theme="light"] .forge-code-wrap .hljs-strong { font-weight: 700; }
+
+/* ============================================================================
+   Artifact / preview cards -- a build's RENDERABLE output shown inline. Same
+   visual grammar as the diff card (bar + bounded body) so a preview reads as
+   part of the proportional chat, not a console. The body is height-bounded and
+   internally scrolls so a large page/table never blows out the transcript.
+   ============================================================================ */
+.fc-art-card {
+    border: 1px solid var(--fc-border);
+    border-radius: var(--fc-r-md);
+    background: var(--fc-surface);
+    overflow: hidden;
+    margin-top: var(--space-2);
 }
-
-.evo-chat-thomas {
-    align-self: flex-start;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    color: #e6edf3;
-    border-bottom-left-radius: 4px;
-}
-
-.evo-chat-form {
+/* bar: icon · title · kind badge · Open */
+.fc-art-bar {
     display: flex;
-    gap: 10px;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--fc-border);
+    background: var(--fc-surface-2);
+}
+.fc-art-ic { flex: 0 0 auto; display: inline-flex; color: var(--fc-accent); }
+.fc-art-ic svg { width: 15px; height: 15px; }
+.fc-art-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--fc-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.fc-art-kind {
+    flex: 0 0 auto;
+    font: 10px var(--fc-mono);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    padding: 2px 7px;
+    border-radius: var(--fc-r-sm);
+    border: 1px solid var(--fc-border);
+    background: var(--fc-surface-3);
+    color: var(--fc-ink-3);
+    text-transform: uppercase;
+}
+.fc-art-open {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 26px;
+    padding: 3px 9px;
+    border-radius: var(--fc-r-sm);
+    border: 1px solid var(--fc-border-strong);
+    background: var(--fc-surface-3);
+    color: var(--fc-ink-2);
+    font-size: 11px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.fc-art-open svg { width: 13px; height: 13px; }
+.fc-art-open:hover { border-color: var(--fc-accent); color: var(--fc-ink); }
+.fc-art-open:focus-visible { outline: 2px solid var(--fc-accent); outline-offset: 1px; }
+
+/* body: bounded + scrollable; per-kind layout below */
+.fc-art-body {
+    margin: 0;
+    max-height: 460px;
+    overflow: auto;
+    background: var(--fc-surface);
+}
+/* HTML page preview: a checkered, app-neutral backdrop so a transparent page is
+   visible, with the sandboxed iframe filling the frame. */
+.fc-art-html {
+    overflow: hidden;
+    background:
+        repeating-conic-gradient(var(--fc-surface-2) 0% 25%, transparent 0% 50%) 50% / 18px 18px;
+}
+.fc-art-frame {
+    display: block;
+    width: 100%;
+    height: 460px;
+    border: 0;
+    background: #fff;   /* a built page expects an opaque canvas, like a browser tab */
+}
+/* image preview: contained, never overflowing the card width */
+.fc-art-image { display: flex; justify-content: center; padding: var(--space-3); background: var(--fc-surface-3); }
+.fc-art-img { max-width: 100%; height: auto; border-radius: var(--fc-r-sm); }
+/* markdown preview: reuse the chat's markdown body inside a comfortable pad */
+.fc-art-md { padding: var(--space-3) var(--space-4); color: var(--fc-ink); }
+/* data preview: a compact, scrollable table */
+.fc-art-data { padding: 0; }
+.fc-art-table {
+    width: 100%;
+    border-collapse: collapse;
+    font: 11px/1.5 var(--fc-mono);
+    color: var(--fc-ink);
+}
+.fc-art-table th,
+.fc-art-table td {
+    padding: 5px 9px;
+    border-bottom: 1px solid var(--fc-border);
+    border-right: 1px solid var(--fc-border);
+    text-align: left;
+    white-space: nowrap;
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.fc-art-table th {
+    position: sticky;
+    top: 0;
+    background: var(--fc-surface-2);
+    color: var(--fc-ink-2);
+    font-weight: 600;
+    z-index: 1;
+}
+.fc-art-table tr:nth-child(even) td { background: var(--fc-surface-2); }
+.fc-art-json {
+    margin: 0;
+    padding: var(--space-3);
+    font: var(--fc-code-size)/1.55 var(--fc-mono);
+    color: var(--fc-ink);
+    white-space: pre;
+    tab-size: 2;
 }
 
-.evo-chat-form input {
-    flex: 1;
-    padding: 11px 14px;
-    border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    background: rgba(7, 12, 21, 0.9);
-    color: #e6edf3;
-    font-size: 13.5px;
+/* -- focus + reduced motion + responsive ------------------------------- */
+.forge-code-transcript :focus-visible,
+.forge-code-changes :focus-visible { outline: 2px solid var(--fc-accent); outline-offset: 1px; }
+
+/* The primary Send control is the app's shared composer button (#sendBtn);
+   while Forge Code is active it routes the send to the build, so it must show
+   the SAME visible keyboard-focus ring as the Forge selects / Stop / diff
+   buttons (UI-38). Scoped to the active state so it is additive and reverts
+   with the body class. #sendBtn lives outside .forge-code-wrap, so --fc-accent
+   is out of scope here -- the literal fallback supplies the same accent hue. */
+body.forge-code-on #sendBtn:focus-visible {
+    outline: 2px solid var(--fc-accent, #7fb0ff);
+    outline-offset: 2px;
 }
 
-.evo-chat-form input:focus {
-    outline: none;
-    border-color: rgba(122, 162, 247, 0.7);
+/* The reused composer textarea sets `outline:none` with no replacement, so a
+   keyboard user driving a build gets NO focus ring on the very control they type
+   into (UI-38). While Forge is active, restore a visible token-based focus ring
+   that matches the Forge controls' (selects / Stop / diff actions). Additive +
+   reverts with the body class; :focus-visible keeps it keyboard-only so a mouse
+   click never shows a ring. */
+body.forge-code-on .composer-textarea:focus-visible {
+    outline: 2px solid var(--fc-accent, #7fb0ff);
+    outline-offset: 2px;
+    border-radius: 4px;
 }
+
+/* The composer input font was a stray 15px literal (an orphan off the type ramp).
+   While Forge is active, pin it to a named, ramp-relative step (0.9375rem == the
+   same 15px on a 16px root, so there is NO visual jump) sourced from one variable
+   instead of a magic px. Scoped + reversible; the shared composer is not otherwise
+   touched and handleSend is untouched. */
+body.forge-code-on { --fc-compose-size: 0.9375rem; }
+body.forge-code-on .composer-textarea { font-size: var(--fc-compose-size); }
+
+@media (prefers-reduced-motion: reduce) {
+    .forge-code-transcript { scroll-behavior: auto; }
+    .forge-code-transcript .assistant-bubble.is-streaming::after,
+    .forge-code-status.working::before,
+    .fc-reconnect-ic,
+    .fc-tool-status[data-state="running"] svg { animation: none; }
+}
+
+/* Below ~700px the rail auto-collapses (047 sets is-rail-collapsed by viewport),
+   so the 380px-wide main column gets the full width. When the user re-opens it at
+   this size it floats OVER the conversation as an overlay rather than squeezing
+   the column -- the rail handle re-collapses it. */
+@media (max-width: 700px) {
+    .forge-code-rail {
+        position: absolute;
+        z-index: 6;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: clamp(220px, 78vw, 300px);
+        background: var(--fc-surface-3);
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+    }
+}
+
+@media (max-width: 640px) {
+    .forge-code-head { flex-direction: column; }
+    .forge-code-run { justify-content: flex-start; }
+    .fc-diff-bar { flex-wrap: wrap; }
+    .fc-diff-path { flex-basis: 100%; order: -1; }
+}
+
+/* ============================================================================
+   Forge Code active state (body.forge-code-on, set by 047 mirroring
+   window.forgeCodeActive). Forge Code reuses the app's real composer, so two
+   bits of main-chat-only chrome have to step aside while a build is active.
+   Both are additive + reversible: drop the body class and normal chat resumes.
+   ============================================================================ */
+
+/* 1. Hide the main chat's "Try asking" suggestion bubbles -- they don't belong
+   in a build conversation. The composer box + its model/engine/dial controls
+   (siblings of the rail inside .composer-inner) are untouched. */
+body.forge-code-on #assistantSuggestionRail { display: none !important; }
+
+/* 2. The app composer is position:absolute; z-index:20 and floats over the
+   bottom of the z-index:16 evolution workspace. Reserve room beneath the
+   scrolling forge surface so the changes panel clears the composer instead of
+   being overlapped/ghosted by it. */
+body.forge-code-on .evolution-workspace { padding-bottom: clamp(150px, 22vh, 240px); }

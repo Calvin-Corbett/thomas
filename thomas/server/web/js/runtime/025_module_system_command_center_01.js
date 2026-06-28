@@ -895,6 +895,90 @@ function moduleBuildMarketplaceInstalledMap(modulesRaw = []) {
     return out;
 }
 
+function moduleNormalizeInstalledPluginRow(pluginRaw = {}) {
+    const plugin = pluginRaw && typeof pluginRaw === 'object' ? pluginRaw : {};
+    const pluginId = safeString(plugin?.plugin_id || plugin?.id);
+    const modeId = safeString(plugin?.mode_id || plugin?.mode).toLowerCase();
+    return {
+        ...plugin,
+        plugin_id: pluginId,
+        mode_id: modeId,
+        display_name: safeString(plugin?.display_name || plugin?.name) || pluginId || modeId,
+        subtitle: safeString(plugin?.subtitle),
+        description: safeString(plugin?.description),
+        icon: safeString(plugin?.icon),
+        surface_url: safeString(plugin?.surface_url),
+        surface_mode: safeString(plugin?.surface_mode),
+        surface_title: safeString(plugin?.surface?.title || plugin?.surface_title),
+        version: safeString(plugin?.version),
+        installed: plugin?.installed !== false,
+        enabled: Boolean(plugin?.enabled),
+        marketplace_type: safeString(plugin?.marketplace_type) || 'plugin',
+        left_nav_behavior: safeString(plugin?.left_nav_behavior),
+        default_nav_section: safeString(plugin?.default_nav_section),
+        default_nav_order: Number(plugin?.default_nav_order) || 0,
+        workspace_id: safeString(plugin?.workspace_id || modeId),
+        installed_at: safeString(plugin?.installed_at),
+        updated_at: safeString(plugin?.updated_at),
+        publisher_id: safeString(plugin?.publisher_id),
+        publisher_name: safeString(plugin?.publisher_name),
+    };
+}
+
+function moduleSetInstalledPluginRows(rowsRaw = [], { render = true } = {}) {
+    const state = moduleEnsureRuntime();
+    if (!state?.marketplace) return [];
+    const rows = (Array.isArray(rowsRaw) ? rowsRaw : [])
+        .map((plugin) => moduleNormalizeInstalledPluginRow(plugin))
+        .filter((plugin) => plugin.plugin_id && plugin.mode_id);
+    rows.forEach((plugin) => {
+        const modeId = safeString(plugin?.mode_id).toLowerCase();
+        if (modeId) MODULE_NAV_MODE_SET.add(modeId);
+    });
+    state.marketplace.plugins = rows;
+    state.marketplace.modules = rows.map((plugin) => ({
+        module_id: plugin.plugin_id,
+        display_name: plugin.display_name,
+        description: plugin.description || plugin.subtitle,
+        version: plugin.version,
+        status: plugin.enabled ? 'enabled' : 'disabled',
+        installed_at: plugin.installed_at,
+        updated_at: plugin.updated_at,
+    }));
+    if (render) moduleRenderInstalledPluginNav();
+    return rows;
+}
+
+function moduleRefreshInstalledPluginNav({ force = false } = {}) {
+    const state = moduleEnsureRuntime();
+    if (!state?.marketplace) return null;
+    if (!force && state.marketplace.installedRefreshPromise) {
+        return state.marketplace.installedRefreshPromise;
+    }
+    if (!force && Array.isArray(state.marketplace.plugins) && state.marketplace.plugins.length > 0) {
+        moduleRenderInstalledPluginNav();
+        return null;
+    }
+    const refreshPromise = (async () => {
+        try {
+            const payload = await moduleFetchJsonSafe('/api/marketplace/installed');
+            const rows = Array.isArray(payload?.plugins)
+                ? payload.plugins
+                : (Array.isArray(payload?.installed) ? payload.installed : []);
+            moduleSetInstalledPluginRows(rows);
+            state.marketplace.installedError = '';
+        } catch (error) {
+            state.marketplace.installedError = safeString(error?.message) || 'Unable to load installed plugins.';
+            moduleRenderInstalledPluginNav();
+        } finally {
+            state.marketplace.installedRefreshPromise = null;
+            state.marketplace.installedLastRefreshedAt = Date.now();
+        }
+    })();
+    state.marketplace.installedRefreshPromise = refreshPromise;
+    return refreshPromise;
+}
+
 function moduleRefreshMarketplace({ force = false, storeUrl = '' } = {}) {
     const state = moduleEnsureRuntime();
     if (!state) return null;
@@ -926,10 +1010,6 @@ function moduleRefreshMarketplace({ force = false, storeUrl = '' } = {}) {
             const installedPlugins = Array.isArray(syncPayload?.installed)
                 ? syncPayload.installed
                 : plugins.filter((plugin) => Boolean(plugin?.installed));
-            installedPlugins.forEach((plugin) => {
-                const modeId = safeString(plugin?.mode_id).toLowerCase();
-                if (modeId) MODULE_NAV_MODE_SET.add(modeId);
-            });
             state.marketplace.generatedAt = safeString(syncPayload?.generated_at || syncPayload?.synced_at);
             state.marketplace.syncedAt = safeString(syncPayload?.synced_at || syncPayload?.generated_at);
             state.marketplace.sourceLabel = safeString(syncPayload?.source_label);
@@ -939,33 +1019,7 @@ function moduleRefreshMarketplace({ force = false, storeUrl = '' } = {}) {
             state.marketplace.warning = safeString(syncPayload?.warning);
             state.marketplace.syncError = safeString(syncPayload?.sync_error);
             state.marketplace.degraded = Boolean(syncPayload?.degraded);
-            state.marketplace.plugins = installedPlugins.map((plugin) => ({
-                ...plugin,
-                plugin_id: safeString(plugin?.plugin_id),
-                mode_id: safeString(plugin?.mode_id),
-                display_name: safeString(plugin?.display_name),
-                subtitle: safeString(plugin?.subtitle),
-                description: safeString(plugin?.description),
-                icon: safeString(plugin?.icon),
-                surface_url: safeString(plugin?.surface_url),
-                surface_mode: safeString(plugin?.surface_mode),
-                surface_title: safeString(plugin?.surface_title),
-                version: safeString(plugin?.version),
-                enabled: Boolean(plugin?.enabled),
-                installed_at: safeString(plugin?.installed_at),
-                updated_at: safeString(plugin?.updated_at),
-                publisher_id: safeString(plugin?.publisher_id),
-                publisher_name: safeString(plugin?.publisher_name),
-            })).filter((plugin) => plugin.plugin_id && plugin.mode_id);
-            state.marketplace.modules = state.marketplace.plugins.map((plugin) => ({
-                module_id: plugin.plugin_id,
-                display_name: plugin.display_name,
-                description: plugin.description || plugin.subtitle,
-                version: plugin.version,
-                status: plugin.enabled ? 'enabled' : 'disabled',
-                installed_at: plugin.installed_at,
-                updated_at: plugin.updated_at,
-            }));
+            moduleSetInstalledPluginRows(installedPlugins, { render: false });
             state.marketplace.apps = plugins.map((plugin) => {
                 const categoryId = safeString(plugin?.category).toLowerCase() || 'other';
                 const categoryLabel = safeString(plugin?.category_label) || safeString(plugin?.category) || 'Plugin';

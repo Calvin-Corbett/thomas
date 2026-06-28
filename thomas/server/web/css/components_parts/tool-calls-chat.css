@@ -587,6 +587,23 @@
     font-variant-numeric: tabular-nums;
     color: rgba(224, 234, 252, 0.6);
 }
+#chatAgentPresence,
+.chat-agent-presence-layer,
+.chat-agent-presence,
+.chat-robot-world,
+.chat-robot-world-actor,
+.chat-robot-world-route,
+.chat-robot-world-physics,
+.chat-robot-world-ground,
+.chat-robot-world-portal,
+.chat-robot-world-speech {
+    display: none !important;
+}
+
+body.te-nav-chat #officeScene .office-agent {
+    display: none !important;
+}
+
 .chat-agent-presence-layer {
     position: fixed;
     inset: 0;
@@ -1283,23 +1300,37 @@
 .assistant-inline-thinking-status {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     margin-top: 2px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    box-shadow: none;
+    padding: 6px 10px;
+    border: 1px solid rgba(154, 216, 255, 0.24);
+    border-radius: 8px;
+    background: rgba(10, 18, 30, 0.62);
+    box-shadow: 0 8px 20px rgba(2, 6, 23, 0.14);
 }
 .assistant-inline-thinking-copy {
     display: inline-flex;
     align-items: baseline;
     gap: 6px;
 }
-.assistant-inline-thinking-status .chat-robot-saying {
-    color: rgba(233, 240, 255, 0.76);
+.assistant-inline-thinking-copy::before {
+    content: 'Working';
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: rgba(154, 216, 255, 0.84);
 }
+.assistant-inline-thinking-status .assistant-work-status-text,
+.assistant-inline-thinking-status .chat-robot-saying {
+    color: rgba(233, 240, 255, 0.82);
+}
+.assistant-inline-thinking-status .assistant-work-status-timer,
 .assistant-inline-thinking-status .chat-robot-timer {
     color: rgba(233, 240, 255, 0.42);
+}
+.assistant-work-status-text.saying-fade {
+    opacity: 0;
 }
 
 .chat-robot-agent {

@@ -82,6 +82,7 @@ def test_skip_policy_reads_limits_and_protected_hooks_from_config(
     monkeypatch.setenv("THOMAS_SKIP_REASON", "Scoped breakglass for config propagation test.")
     monkeypatch.setattr(skip_gate, "_staged_files", lambda: ["scripts/forge/gates/precommit_skip_policy.py"])
     monkeypatch.setattr(skip_gate, "_run_git", lambda _args: "mock")
+    monkeypatch.setattr(skip_gate, "_quickbuilder_active", lambda: True)
     clear_config_cache()
 
     rc = skip_gate.run(["--audit-log", str(audit_log), "--json"])
@@ -96,6 +97,38 @@ def test_skip_policy_reads_limits_and_protected_hooks_from_config(
 
     assert rc == 1
     assert "max is 1" in payload["error"]
+
+
+def test_skip_policy_quickbuilder_note_is_human_output_only(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config_path = _write_config(
+        tmp_path,
+        """
+        [skip_policy]
+        breakglass_cooldown_minutes = 15
+        protected_hooks = [\"custom-protected-hook\"]
+        """,
+    )
+    audit_log = tmp_path / "skip_audit.jsonl"
+    monkeypatch.setenv("THOMAS_AGENT_SAFETY_CONFIG", str(config_path))
+    monkeypatch.setenv("SKIP", "custom-protected-hook")
+    monkeypatch.setenv("AGENT_ID", "Codex 3")
+    monkeypatch.setenv("THOMAS_SKIP_BREAKGLASS", "1")
+    monkeypatch.setenv("THOMAS_SKIP_TICKET", "OPS-9999")
+    monkeypatch.setenv("THOMAS_SKIP_REASON", "Scoped breakglass for QuickBuilder note test.")
+    monkeypatch.setattr(skip_gate, "_staged_files", lambda: ["scripts/forge/gates/precommit_skip_policy.py"])
+    monkeypatch.setattr(skip_gate, "_run_git", lambda _args: "mock")
+    monkeypatch.setattr(skip_gate, "_quickbuilder_active", lambda: True)
+    clear_config_cache()
+
+    rc = skip_gate.run(["--audit-log", str(audit_log)])
+    output = capsys.readouterr().out
+
+    assert rc == 0
+    assert "QuickBuilder mode: breakglass cooldown waived" in output
 
 
 def test_type_safety_gate_uses_configured_targets_and_args(

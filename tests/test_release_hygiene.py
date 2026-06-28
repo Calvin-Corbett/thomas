@@ -1,6 +1,22 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
 import scripts.forge.gates.release_hygiene as mod
+
+
+@pytest.fixture(autouse=True)
+def isolated_release_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep unit tests focused on mocked gate outcomes, not live release files."""
+    (tmp_path / "thomas").mkdir()
+    (tmp_path / "pyproject.toml").write_text('[project]\nversion = "9.9.9"\n', encoding="utf-8")
+    (tmp_path / "thomas" / "__init__.py").write_text('__version__ = "9.9.9"\n', encoding="utf-8")
+    (tmp_path / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## [Unreleased]\n\n## [9.9.9] - 2099-01-01\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(mod, "ROOT", tmp_path)
 
 
 def _gate_payload(*, ok: bool, errors: list[str] | None = None, warnings: list[str] | None = None) -> dict:
@@ -49,12 +65,15 @@ def test_release_hygiene_fails_when_onboarding_gate_errors(monkeypatch, capsys) 
     )
     monkeypatch.setattr(mod, "run_security_audit", lambda *_args, **_kwargs: _security_audit_payload(ok=True))
 
-    rc = mod.run([])
+    # Onboarding completion is usage telemetry, not code correctness, so an error is
+    # advisory by default (a fresh worktree has 0% completion); --strict-warnings
+    # promotes it to a hard release failure.
+    rc = mod.run(["--enforce-onboarding-gate", "--strict-warnings"])
     out = capsys.readouterr().out
 
     assert rc == 1
     assert "release hygiene: FAIL" in out
-    assert "onboarding outcomes gate failed" in out
+    assert "onboarding outcomes gate" in out
 
 
 def test_release_hygiene_passes_when_onboarding_gate_warns_only(monkeypatch, capsys) -> None:

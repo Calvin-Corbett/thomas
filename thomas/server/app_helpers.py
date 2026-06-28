@@ -107,7 +107,12 @@ def _web_dir() -> Path:
 def _build_tools(config: AppConfig) -> ToolRegistry:
     registry = ToolRegistry()
     sandbox = config.tools.sandbox_path
-    register_filesystem_tools(registry, sandbox, config.tools.max_file_size)
+    register_filesystem_tools(
+        registry,
+        sandbox,
+        config.tools.max_file_size,
+        file_access=getattr(config.tools, "file_access", 1),
+    )
     if config.tools.allow_shell:
         register_shell_tools(
             registry,

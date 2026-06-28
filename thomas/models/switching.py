@@ -82,8 +82,8 @@ def infer_profile_candidates(
     if any(k in low for k in _OPENAI_HINTS):
         if "openai" in profiles:
             add("openai")
-        elif "codex" in profiles:
-            add("codex")
+        elif "openai_codex" in profiles:
+            add("openai_codex")
     if any(k in low for k in _GROK_HINTS) and "xai" in profiles:
         add("xai")
 

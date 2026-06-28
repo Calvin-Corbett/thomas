@@ -104,7 +104,7 @@ async def build_model_catalog_async(
         entries.append(
             entry(
                 profile="",
-                provider="codex",
+                provider="openai_codex",
                 family="openai",
                 model_id=model_id,
                 source="curated",

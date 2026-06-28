@@ -18,7 +18,7 @@ function saveStoredBuilderMode(enabled) {
 
 function humanizeConnectionPath(pathRaw) {
     const path = safeString(pathRaw).toLowerCase();
-    if (path === 'codex') return 'ChatGPT / Codex';
+    if (path === 'codex') return 'ChatGPT (OpenAI)';
     if (path === 'manual') return 'Provider API key';
     if (path === 'local') return 'Local Ollama';
     if (path) return path;
@@ -97,7 +97,9 @@ function ensureConnectionDefaultsShell(builderModeEnabled) {
         modelSetupBtn.title = 'Connection and defaults';
         modelSetupBtn.setAttribute('aria-label', 'Open connection and defaults');
     }
-    if (modelSetupCurrentLabel && safeString(modelSetupCurrentLabel.textContent).toLowerCase() === 'model setup') {
+    if (typeof syncModelSetupCurrentLabel === 'function') {
+        syncModelSetupCurrentLabel();
+    } else if (modelSetupCurrentLabel && new Set(['loading...', 'model setup', 'connection & defaults']).has(safeString(modelSetupCurrentLabel.textContent).toLowerCase())) {
         modelSetupCurrentLabel.textContent = 'Connection & Defaults';
     }
 }

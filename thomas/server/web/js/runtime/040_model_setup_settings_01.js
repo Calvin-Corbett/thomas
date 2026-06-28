@@ -481,6 +481,8 @@ function initModelSetup() {
         }
     };
 
+    syncModelSetupCurrentLabel();
+
     // Open Trigger
     modelSetupBtn.addEventListener('click', () => {
         openModelSetupModal();
@@ -538,6 +540,145 @@ function initModelSetup() {
         activeReasoningEffort = normalizeReasoningEffort(val);
         renderChatComposerSubbar();
     });
+
+    /* ── Guardrails: top-level preset + the 7 detailed per-group toggles ──────
+       Mirrors the composer's quick Guardrails dial; this is the DETAILED surface.
+       The 7 groups match thomas/server/guardrails_state.py. Per-group switching
+       will be PIN-gated in a later phase; v1 persists to localStorage + payload. */
+    const GR_GROUPS = [
+        ['sprawl_guard', 'Sprawl Guard', 'File size & growth caps'],
+        ['clean_hands', 'Clean Hands', 'Commit & worktree hygiene'],
+        ['inspector', 'Inspector', 'Lint, boot & type checks'],
+        ['load_bearing', 'Load-Bearing', 'Architecture & import rules'],
+        ['safety_net', 'Safety Net', 'Tests & exception handling'],
+        ['reach', 'Reach', 'Tools, skills & web access'],
+        ['gatekeeper', 'Gatekeeper', 'Tool-approval thresholds'],
+    ];
+    const GR_MODES = [['strict', 'Strict'], ['standard', 'Standard'], ['permissive', 'Relaxed']];
+    const GR_PRESET_MODE = { open: 'permissive', guarded: 'standard', fortress: 'strict' };
+
+    function grLoadModes() {
+        let stored = {};
+        try { stored = JSON.parse(localStorage.getItem('thomasGuardrailModes') || '{}') || {}; } catch (e) {}
+        let preset = 'guarded';
+        try { preset = localStorage.getItem('thomasGuardrails') || 'guarded'; } catch (e) {}
+        const fallback = GR_PRESET_MODE[preset] || 'standard';
+        const out = {};
+        GR_GROUPS.forEach(([id]) => {
+            out[id] = GR_MODES.some(m => m[0] === stored[id]) ? stored[id] : fallback;
+        });
+        return out;
+    }
+    function grSaveModes(modes) {
+        try { localStorage.setItem('thomasGuardrailModes', JSON.stringify(modes)); } catch (e) {}
+        // Persist server-side so it's the default for runs that don't override per-request.
+        try {
+            fetch('/api/guardrails/policy', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ modes: modes }),
+            }).catch(() => {});
+        } catch (e) {}
+    }
+
+    function grInjectCss() {
+        if (document.getElementById('grDetailCss')) return;
+        const s = document.createElement('style');
+        s.id = 'grDetailCss';
+        s.textContent = '.setup-hint{margin:6px 2px 0;font-size:11.5px;line-height:1.5;color:var(--text-muted,#929bb0)}'
+            + '.setup-hint b{color:var(--text-secondary,#adb3c2);font-weight:600}'
+            + '#setupGuardrailsDetailBtn{margin-top:8px}'
+            + '.guardrail-detail{margin-top:10px;display:flex;flex-direction:column;gap:9px;padding:11px;border:1px solid var(--border-light,rgba(255,255,255,0.12));border-radius:8px;background:rgba(140,160,180,0.045)}'
+            + '.guardrail-detail.hidden{display:none}'
+            + '.gr-row{display:flex;align-items:center;gap:10px;justify-content:space-between}'
+            + '.gr-meta{display:flex;flex-direction:column;min-width:0}'
+            + '.gr-name{font-size:12.5px;font-weight:600;color:var(--text-primary,#ececf1)}'
+            + '.gr-desc{font-size:11px;color:var(--text-muted,#929bb0)}'
+            + '.gr-modes{display:inline-flex;border:1px solid var(--border-light,rgba(255,255,255,0.14));border-radius:7px;overflow:hidden;flex:0 0 auto}'
+            + '.gr-mode{border:0;background:transparent;color:var(--text-muted,#929bb0);font:600 10.5px/1 var(--font-mono,ui-monospace,monospace);padding:5px 9px;cursor:pointer;border-right:1px solid var(--border-light,rgba(255,255,255,0.1))}'
+            + '.gr-mode:last-child{border-right:0}'
+            + '.gr-mode:hover{color:var(--text-secondary,#adb3c2)}'
+            + '.gr-mode.active{background:rgba(140,160,180,0.22);color:var(--text-primary,#ececf1)}'
+            + '.gr-note{margin:3px 0 0;font-size:10.5px;color:var(--text-muted,#929bb0);opacity:.85}';
+        document.head.appendChild(s);
+    }
+
+    function grRenderDetail() {
+        const wrap = document.getElementById('setupGuardrailDetail');
+        if (!wrap) return;
+        const modes = grLoadModes();
+        wrap.innerHTML = GR_GROUPS.map(([id, name, desc]) =>
+            '<div class="gr-row" data-group="' + id + '">'
+            + '<div class="gr-meta"><span class="gr-name">' + name + '</span><span class="gr-desc">' + desc + '</span></div>'
+            + '<div class="gr-modes">' + GR_MODES.map(([mv, ml]) =>
+                '<button type="button" class="gr-mode' + (modes[id] === mv ? ' active' : '') + '" data-mode="' + mv + '">' + ml + '</button>'
+            ).join('') + '</div></div>'
+        ).join('') + '<p class="gr-note">Per-group switching will require your PIN to confirm (coming soon). Safety-critical Vault checks are always on.</p>';
+        wrap.querySelectorAll('.gr-row').forEach((row) => {
+            const gid = row.dataset.group;
+            row.querySelectorAll('.gr-mode').forEach((b) => b.addEventListener('click', () => {
+                const cur = grLoadModes();
+                cur[gid] = b.dataset.mode;
+                grSaveModes(cur);
+                row.querySelectorAll('.gr-mode').forEach((x) => x.classList.remove('active'));
+                b.classList.add('active');
+            }));
+        });
+    }
+
+    function applyGuardrailPreset(preset) {
+        const mode = GR_PRESET_MODE[preset] || 'standard';
+        const modes = {};
+        GR_GROUPS.forEach(([id]) => { modes[id] = mode; });
+        grSaveModes(modes);
+        grRenderDetail();
+    }
+
+    function initGuardrailDetail() {
+        grInjectCss();
+        const btn = document.getElementById('setupGuardrailsDetailBtn');
+        const panel = document.getElementById('setupGuardrailDetail');
+        if (btn && panel && !btn._grWired) {
+            btn._grWired = true;
+            btn.addEventListener('click', () => {
+                const open = !panel.classList.toggle('hidden');
+                btn.setAttribute('aria-expanded', String(open));
+            });
+        }
+        try {
+            const p = localStorage.getItem('thomasGuardrails') || 'guarded';
+            activeGuardrails = p;
+            setSegmentedControlSelection('setupGuardrailsGroup', p);
+        } catch (e) {}
+        grRenderDetail();
+        // Reconcile with the server-persisted policy (source of truth on load).
+        try {
+            fetch('/api/guardrails/policy').then(r => r.ok ? r.json() : null).then((data) => {
+                const modes = data && data.policy && data.policy.modes;
+                if (!modes) return;
+                try { localStorage.setItem('thomasGuardrailModes', JSON.stringify(modes)); } catch (e) {}
+                // If every group shares one mode, reflect the matching preset on the dial.
+                const vals = GR_GROUPS.map(([id]) => modes[id]);
+                const uniform = vals.every(v => v === vals[0]) ? vals[0] : null;
+                const presetForMode = { permissive: 'open', standard: 'guarded', strict: 'fortress' };
+                if (uniform && presetForMode[uniform]) {
+                    activeGuardrails = presetForMode[uniform];
+                    try { localStorage.setItem('thomasGuardrails', activeGuardrails); } catch (e) {}
+                    setSegmentedControlSelection('setupGuardrailsGroup', activeGuardrails);
+                }
+                grRenderDetail();
+                if (typeof renderChatComposerSubbar === 'function') renderChatComposerSubbar();
+            }).catch(() => {});
+        } catch (e) {}
+    }
+
+    bindSegmentedControl('setupGuardrailsGroup', val => {
+        activeGuardrails = val;
+        try { localStorage.setItem('thomasGuardrails', val); } catch (e) {}
+        applyGuardrailPreset(val);
+        renderChatComposerSubbar();
+    });
+    initGuardrailDetail();
 
     if (setupProviderPickerBtn) {
         setupProviderPickerBtn.addEventListener('click', (event) => {
@@ -710,7 +851,7 @@ function initModelSetup() {
         modelSelector.value = selectedProfile;
 
         // 2. Update header label + localStorage backup
-        modelSetupCurrentLabel.textContent = _profileHeaderLabel(selectedProfile);
+        syncModelSetupCurrentLabel({ force: true, profile: selectedProfile });
         try { window.localStorage.setItem('thomas_active_profile', selectedProfile); } catch (_) {}
         try { window.localStorage.setItem('thomas_active_model_id', selectedModel); } catch (_) {}
 
@@ -977,10 +1118,11 @@ function normalizeChatMode(modeRaw) {
 
 function _profileHeaderLabel(profileName) {
     const p = availableModelProfiles.find(m => m.name === profileName);
-    if (!p) return profileName;
+    if (!p) return formatProviderDisplay(profileName) || profileName;
     const activeProfile = activeProfileNameForPersistence();
     const model = (activeProfile === safeString(profileName) ? safeString(activeModelOverride) : '')
         || safeString(p.model).split('/').pop()
+        || formatProviderDisplay(profileName)
         || profileName;
     const activeEffort = activeProfile === safeString(profileName)
         ? normalizeReasoningEffort(activeReasoningEffort)
@@ -989,6 +1131,34 @@ function _profileHeaderLabel(profileName) {
         || getPersistedReasoningEffort(profileName)
         || normalizeReasoningEffort(p.reasoning_effort);
     return effort ? `${model} (${effort})` : model;
+}
+
+function syncModelSetupCurrentLabel({ force = false, profile = '' } = {}) {
+    if (!modelSetupCurrentLabel) return '';
+    const current = safeString(modelSetupCurrentLabel.textContent);
+    const placeholderLabels = new Set(['', 'loading...', 'model setup', 'connection & defaults']);
+    if (!force && current && !placeholderLabels.has(current.toLowerCase())) {
+        return current;
+    }
+
+    const storedProfile = (() => {
+        try { return safeString(window.localStorage.getItem('thomas_active_profile')); } catch (_) { return ''; }
+    })();
+    const targetProfile = safeString(profile)
+        || safeString(modelSelector?.value)
+        || safeString(setupProviderSelector?.value)
+        || safeString(currentPreferences?.advanced?.model?.active_profile)
+        || storedProfile
+        || safeString((availableModelProfiles || []).find((entry) => entry?.has_api_key || entry?.active)?.name)
+        || safeString((availableModelProfiles || [])[0]?.name);
+    const preferredModel = safeString(currentPreferences?.advanced?.model?.model_id)
+        || safeString(activeModelOverride);
+    let label = targetProfile ? _profileHeaderLabel(targetProfile) : '';
+    if (!label || placeholderLabels.has(label.toLowerCase())) {
+        label = preferredModel || (targetProfile ? formatProviderDisplay(targetProfile) : '') || 'Connection & Defaults';
+    }
+    modelSetupCurrentLabel.textContent = label;
+    return label;
 }
 
 function applyProfileSelection(profileRaw, { allowLocalBackup = false } = {}) {
@@ -1017,7 +1187,7 @@ function applyProfileSelection(profileRaw, { allowLocalBackup = false } = {}) {
     } else {
         try { window.localStorage.removeItem('thomas_active_model_id'); } catch (_) {}
     }
-    if (modelSetupCurrentLabel) modelSetupCurrentLabel.textContent = _profileHeaderLabel(profile);
+    syncModelSetupCurrentLabel({ force: true, profile });
     renderChatComposerSubbar();
 }
 

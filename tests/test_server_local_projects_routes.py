@@ -33,9 +33,15 @@ class TestServerLocalProjectsRoutes(AioHTTPTestCase):
         self._tmpdir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self._projects_root = Path(self._tmpdir.name) / "linked-projects"
         self._projects_root.mkdir(parents=True, exist_ok=True)
+        self._task_list_patch = patch.object(local_projects.task_bot_runtime, "list_executions", return_value=[])
+        self._task_get_patch = patch.object(local_projects.task_bot_runtime, "get_execution", return_value=None)
+        self._task_list_patch.start()
+        self._task_get_patch.start()
 
     def tearDown(self) -> None:
         try:
+            self._task_get_patch.stop()
+            self._task_list_patch.stop()
             self._tmpdir.cleanup()
         finally:
             super().tearDown()
@@ -192,6 +198,70 @@ class TestServerLocalProjectsRoutes(AioHTTPTestCase):
         listed_body = await listed.json()
         self.assertEqual(listed_body.get("projects") or [], [])
 
+    async def test_generated_web_deliverables_are_my_stuff_projects(self):
+        execution_id = "exec-generated123"
+        generated_root = Path(self._tmpdir.name) / "generated" / execution_id
+        generated_root.mkdir(parents=True, exist_ok=True)
+        (generated_root / "My Stuff").mkdir(parents=True, exist_ok=True)
+        (generated_root / "My Stuff" / "frontier-demo.html").write_text("<html>demo</html>", encoding="utf-8")
+        record = {
+            "execution_id": execution_id,
+            "state": "completed",
+            "progress_summary": "Created My Stuff/frontier-demo.html.",
+            "created_at": "2026-06-17T20:00:00+00:00",
+            "updated_at": "2026-06-17T20:01:00+00:00",
+            "completed_at": "2026-06-17T20:01:00+00:00",
+        }
+
+        with (
+            patch.object(local_projects.task_bot_runtime, "list_executions", return_value=[record]),
+            patch.object(local_projects.task_bot_runtime, "get_execution", return_value=record),
+            patch("thomas.server.routes.local_projects_aiohttp.deliverable_kind", return_value="web"),
+            patch(
+                "thomas.server.routes.local_projects_aiohttp.deliverable_url",
+                return_value=f"/deliverable/{execution_id}/My%20Stuff/frontier-demo.html",
+            ),
+            patch(
+                "thomas.server.routes.local_projects_aiohttp.deliverable_entry",
+                return_value="My Stuff/frontier-demo.html",
+            ),
+            patch("thomas.server.routes.local_projects_aiohttp._workspace_dir", return_value=generated_root),
+        ):
+            listed = await self.client.get("/api/local/projects")
+            self.assertEqual(listed.status, 200)
+            body = await listed.json()
+            rows = body.get("projects") or []
+            self.assertEqual(len(rows), 1)
+            project = rows[0]
+            self.assertTrue(project.get("generated"))
+            self.assertEqual(project.get("id"), f"generated-{execution_id}")
+            self.assertEqual(project.get("kind"), "generated_deliverable")
+            self.assertEqual(project.get("readiness", {}).get("state"), "open_ready")
+            self.assertEqual(project.get("actions", {}).get("primary"), "open_entry")
+            self.assertEqual(project.get("artifact_kind"), "web")
+
+            detail_resp = await self.client.get(f"/api/local/projects/generated-{execution_id}")
+            self.assertEqual(detail_resp.status, 200)
+            detail_project = (await detail_resp.json()).get("project") or {}
+            self.assertEqual(detail_project.get("artifact_name"), "frontier-demo.html")
+
+            action_resp = await self.client.post(
+                f"/api/local/projects/generated-{execution_id}/action",
+                json={"action": "open_entry"},
+            )
+            self.assertEqual(action_resp.status, 200)
+            result = (await action_resp.json()).get("result") or {}
+            self.assertEqual(result.get("kind"), "open_url")
+            self.assertIn(f"/deliverable/{execution_id}/", str(result.get("url") or ""))
+
+            layout_resp = await self.client.patch(
+                f"/api/local/projects/generated-{execution_id}/layout",
+                json={"x": 320, "y": 180},
+            )
+            self.assertEqual(layout_resp.status, 200)
+            layout_project = (await layout_resp.json()).get("project") or {}
+            self.assertEqual(layout_project.get("board_position"), {"x": 320, "y": 180})
+
 
 def test_my_stuff_surface_is_wired_into_runtime_shell() -> None:
     index_html = _read_text("thomas/server/web/index.html")
@@ -200,7 +270,7 @@ def test_my_stuff_surface_is_wired_into_runtime_shell() -> None:
     my_stuff_script = _read_text("thomas/server/web/static/my_stuff.script01.js")
 
     assert 'data-nav-mode="my_stuff"' in index_html
-    assert "/static/static/my_stuff.html?v=20260318-project-board-3" in primary_runtime
+    assert "/static/my_stuff.html?v=" in primary_runtime
     assert "Project Board" in my_stuff_html
     assert 'id="board"' in my_stuff_html
     assert 'id="detailView"' in my_stuff_html
@@ -208,6 +278,8 @@ def test_my_stuff_surface_is_wired_into_runtime_shell() -> None:
     assert "/api/v2/chat" in my_stuff_script
     assert "/api/local/projects/pick-folder" in my_stuff_script
     assert "/api/local/projects/" in my_stuff_script
+    assert "currentProfile ||" not in primary_runtime
+    assert "appendDelegationResultMessage" in primary_runtime
     assert "Choose Folder" in my_stuff_html
     assert "Drop a repo folder here" in my_stuff_html
 

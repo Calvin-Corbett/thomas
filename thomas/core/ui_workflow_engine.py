@@ -53,7 +53,7 @@ def _env_float(name: str, default: float, *, min_value: float = 0.0, max_value: 
         return float(default)
     try:
         value = float(raw)
-    except Exception:
+    except (TypeError, ValueError):
         return float(default)
     return float(max(min_value, min(max_value, value)))
 
@@ -64,7 +64,7 @@ def _env_int(name: str, default: int, *, min_value: int = 1, max_value: int = 10
         return int(default)
     try:
         value = int(raw)
-    except Exception:
+    except (TypeError, ValueError):
         return int(default)
     return int(max(min_value, min(max_value, value)))
 
@@ -87,7 +87,7 @@ def _now_iso() -> str:
 def _clamp_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:
     try:
         parsed = int(value)
-    except Exception:
+    except (TypeError, ValueError):
         parsed = default
     return max(minimum, min(maximum, parsed))
 
@@ -296,7 +296,7 @@ class UIWorkflowEngine:
                 candidate = self._ui_root.parents[2]
                 if candidate.exists():
                     review_root = candidate
-        except Exception:
+        except (IndexError, OSError, RuntimeError, ValueError):
             review_root = ROOT
         return run_ui_review(
             root=review_root,
@@ -312,7 +312,7 @@ class UIWorkflowEngine:
             time.sleep(self._poll_interval_s)
             try:
                 self._tick()
-            except Exception as exc:
+            except (RuntimeError, OSError, ValueError, TypeError) as exc:
                 log.warning("UIWorkflowEngine tick failed: %s", exc)
 
     def _tick(self) -> None:
@@ -350,7 +350,7 @@ class UIWorkflowEngine:
             report = self._run_cycle(reason=reason)
             self._clear_last_error()
             return report
-        except Exception as exc:  # pragma: no cover - defensive path
+        except (RuntimeError, OSError, ValueError, TypeError, KeyError, AttributeError) as exc:  # pragma: no cover
             return self._error_report(reason=reason, exc=exc, started=started)
 
     def _run_cycle(self, *, reason: str) -> dict[str, Any]:
@@ -381,8 +381,8 @@ class UIWorkflowEngine:
                 warnings = int(report.get("warning_count") or 0)
                 score = int(report.get("score") or 0)
                 self._notify_fn(f"[UIWorkflowEngine] cycle {cycle_id}: score={score} warnings={warnings}")
-            except Exception:
-                pass
+            except (RuntimeError, OSError, ValueError, TypeError) as _notify_exc:
+                log.debug("notify_fn raised during cycle %d: %s", cycle_id, _notify_exc)
 
         return report
 
@@ -409,8 +409,8 @@ class UIWorkflowEngine:
         if self._notify_fn is not None:
             try:
                 self._notify_fn(f"[UIWorkflowEngine] cycle {cycle_id} failed: {type(exc).__name__}: {exc}")
-            except Exception:
-                pass
+            except (RuntimeError, OSError, ValueError, TypeError) as _notify_exc:
+                log.debug("notify_fn raised during error report for cycle %d: %s", cycle_id, _notify_exc)
         return report
 
     def _clear_last_error(self) -> None:
@@ -642,17 +642,19 @@ class UIWorkflowEngine:
                 text = str(getattr(turn, "user_msg", "") or "").strip()
                 if text:
                     return text
-        except Exception:
+        except (ImportError, RuntimeError, OSError, ValueError, TypeError, AttributeError) as exc:
+            log.debug("_infer_recent_intent failed: %s", exc)
             return ""
         return ""
 
     def _read_text(self, path: Path) -> str:
         try:
             return path.read_text(encoding="utf-8")
-        except Exception:
+        except (OSError, UnicodeError):
             try:
                 return path.read_text(encoding="utf-8", errors="ignore")
-            except Exception:
+            except (OSError, UnicodeError) as exc:
+                log.debug("_read_text failed (encoding fallback) for %s: %s", path, exc)
                 return ""
 
     def _search_openverse(self, query: str, *, limit: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -770,13 +772,13 @@ class UIWorkflowEngine:
             return {}, f"http {exc.code}"
         except urllib.error.URLError as exc:
             return {}, f"network error: {exc.reason}"
-        except Exception as exc:
+        except (OSError, TimeoutError, RuntimeError, ValueError) as exc:
             return {}, f"request failed: {type(exc).__name__}: {exc}"
         if len(payload) > max_bytes:
             return {}, "response too large"
         try:
             data = json.loads(payload.decode("utf-8"))
-        except Exception:
+        except (json.JSONDecodeError, UnicodeDecodeError, TypeError):
             return {}, "invalid json response"
         if not isinstance(data, dict):
             return {}, "json payload is not an object"
@@ -787,7 +789,7 @@ class UIWorkflowEngine:
             self._log_path.parent.mkdir(parents=True, exist_ok=True)
             with self._log_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(report, ensure_ascii=False) + "\n")
-        except Exception as exc:
+        except (OSError, TypeError, ValueError) as exc:
             log.debug("UIWorkflowEngine failed to write log: %s", exc)
 
 

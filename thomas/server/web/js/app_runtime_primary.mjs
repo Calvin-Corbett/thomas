@@ -651,6 +651,7 @@ function getEasySetupPhysicsToggle() {
 let activeAutonomyLevel = 1;
 let activeTokenEconomy = 'balanced';
 let activeReasoningEffort = '';
+let activeGuardrails = (() => { try { return localStorage.getItem('thomasGuardrails') || 'guarded'; } catch (e) { return 'guarded'; } })();
 let activeModelOverride = '';
 let activeChatMode = '';
 let autonomyLevelManuallySet = false;
@@ -1301,28 +1302,28 @@ const OFFICE_PERSONA_LIBRARY = {
 //  Chat Robot Status Sayings 
 const CHAT_ROBOT_SAYINGS = {
     thinking: [
-        'Booting response core...',
-        'Checking the queue...',
-        'Routing context...',
-        'Lining up the reply...',
-        'Calibrating output...',
-        'Preparing a clean answer...',
-        'Syncing the workspace...',
-        'Warming up the channel...',
-        'Staging the response...',
-        'Checking what matters...',
+        'Reading the request...',
+        'Gathering context...',
+        'Checking the active workspace...',
+        'Planning the next step...',
+        'Preparing the answer...',
+        'Reviewing constraints...',
+        'Selecting the right tools...',
+        'Checking prior results...',
+        'Structuring the response...',
+        'Validating the route...',
     ],
     working: [
-        'Dispatching workers...',
-        'Moving tasks into queue...',
-        'Checking files and tools...',
-        'Coordinating the task lane...',
-        'Keeping the reply tight...',
-        'Working through the steps...',
-        'Wrapping the handoff...',
-        'Locking in the result...',
-        'Finishing the response...',
-        'Keeping things moving...',
+        'Running the task...',
+        'Using tools...',
+        'Checking outputs...',
+        'Verifying files...',
+        'Tracking progress...',
+        'Preparing the result...',
+        'Reviewing failures...',
+        'Reconciling artifacts...',
+        'Updating the task record...',
+        'Finishing verification...',
     ],
 };
 
@@ -1598,10 +1599,10 @@ function chatMessageTimestampText(valueRaw) {
 
 function robotAmbientStatusText(channel = 'thinking') {
     const normalized = safeString(channel).toLowerCase();
-    if (normalized.includes('memory')) return 'Refreshing memory...';
-    if (normalized.includes('tool')) return 'Checking tools...';
-    if (normalized.includes('delegation') || normalized.includes('background')) return 'Dispatching background work...';
-    if (normalized.includes('route')) return 'Routing the task...';
+    if (normalized.includes('memory')) return 'Reading relevant memory...';
+    if (normalized.includes('tool')) return 'Using tools...';
+    if (normalized.includes('delegation') || normalized.includes('background')) return 'Running background work...';
+    if (normalized.includes('route')) return 'Routing the request...';
     if (normalized.includes('working')) return pickChatSaying('working');
     return pickChatSaying('thinking');
 }
@@ -2118,6 +2119,65 @@ function buildDelegationRuntimeState(delegations, { sessionId = '' } = {}) {
         progressPct: null,
         heartbeat: delegationHeartbeatState(updatedAt, liveAgents.length > 0),
     };
+}
+
+function appendDelegationResultMessage(evt, options = {}) {
+    if (typeof renderMessage !== 'function' || typeof updateMessageTaskStrip !== 'function') return;
+    const executionId = safeString(evt?.execution_id).replace(/[^A-Za-z0-9_-]/g, '');
+    if (!executionId) return;
+    const messageId = `task-result-${executionId}`;
+    if (document.getElementById(messageId)) return;
+    const status = safeString(options.status || evt?.state || evt?.type).toLowerCase();
+    const failed = status.includes('failed') || safeString(evt?.type) === 'delegation_failed';
+    const artifactUrl = safeString(evt?.artifact_url);
+    const artifactName = safeString(evt?.artifact_name);
+    const artifactKind = safeString(evt?.artifact_kind);
+    let summary = safeString(options.summary || evt?.last_progress || evt?.summary || artifactName)
+        .replace(/^\s*\[[^\]]+\]\s*/, '')
+        .trim();
+    summary = summary.replace(/no a first event/gi, 'no first event');
+    const fallback = failed
+        ? 'Thomas could not complete the background task.'
+        : (artifactName ? `Result ready: ${artifactName}.` : 'Task finished.');
+    renderMessage({
+        role: 'assistant',
+        content: failed ? `Task failed: ${summary || fallback}` : `Task finished: ${summary || fallback}`,
+        id: messageId,
+    });
+    updateMessageTaskStrip(messageId, {
+        sessionId: safeString(evt?.session_id),
+        status: failed ? 'failed' : 'completed',
+        summary: summary || artifactName || fallback,
+        checkpoint: failed ? 'Needs review.' : 'Result ready.',
+        artifactUrl,
+        artifactName,
+        artifactKind,
+    });
+    if (typeof syncActiveChatSidebarEntry === 'function') syncActiveChatSidebarEntry();
+    if (typeof persistActiveChat === 'function') void persistActiveChat({ quiet: true });
+}
+
+function appendTerminalDelegationActivityResults(activity) {
+    if (!activity || !Array.isArray(activity.agents)) return;
+    if (typeof appendDelegationResultMessage !== 'function') return;
+    const scopedSessionId = safeString(activity.sessionId || activity.requestedSessionId || taskContinuityLatestSessionId);
+    activity.agents.forEach((row) => {
+        if (!row || typeof row !== 'object') return;
+        const state = safeString(row?.state || row?.status).toLowerCase();
+        if (!chatTaskIsTerminal(state)) return;
+        const executionId = safeString(row?.execution_id);
+        if (!executionId) return;
+        const failed = state === 'failed' || state === 'blocked' || state === 'cancelled' || state === 'dead';
+        const summary = safeString(row?.last_progress || row?.summary || row?.task || row?.current_task);
+        appendDelegationResultMessage({
+            ...row,
+            type: failed ? 'delegation_failed' : 'delegation_completed',
+            session_id: safeString(row?.session_id) || scopedSessionId,
+        }, {
+            status: failed ? 'failed' : 'completed',
+            summary,
+        });
+    });
 }
 
 function missionPreferredSessionId() {
@@ -2722,29 +2782,29 @@ function chatRobotWorldAmbientLine(state) {
     if (safeString(state.kind) === 'primary' && chatRobotWorldTaskIsLive(state)) {
         return 'Coordinating the active run while helpers work.';
     }
-    if (mode === 'sleep') return 'Power nap on floor duty.';
-    if (mode === 'workout') return 'Strength set on standby.';
-    if (mode === 'inspect') return 'Inspecting the chat controls.';
-    if (mode === 'perch') return 'Watching the interface from up here.';
+    if (mode === 'sleep') return 'Idle until the next task starts.';
+    if (mode === 'workout') return 'Ready for a larger task.';
+    if (mode === 'inspect') return 'Checking the chat controls.';
+    if (mode === 'perch') return 'Monitoring the active surface.';
     if (chatTaskIsTerminal(state.status)) {
         return safeString(state.status) === 'failed'
-            ? 'That run went sideways.'
-            : 'Wrapped up and cooling down.';
+            ? 'This run failed; review is needed.'
+            : 'Run complete.';
     }
     if (safeString(state.kind) === 'delegation') {
         return officePick([
-            'On helper patrol.',
-            'Keeping watch nearby.',
-            'Standing by for the next step.',
-            'Checking the floor route.',
-        ]) || 'Standing by for the next step.';
+            'Working the delegated task.',
+            'Waiting for the next tool result.',
+            'Tracking the next step.',
+            'Checking task progress.',
+        ]) || 'Tracking the next step.';
     }
     return officePick([
-        'Standing by.',
-        'Watching the floor.',
-        'Keeping the chat moving.',
-        'Holding position.',
-    ]) || 'Standing by.';
+        'Ready for the next request.',
+        'Monitoring the chat.',
+        'Idle.',
+        'Waiting for input.',
+    ]) || 'Ready for the next request.';
 }
 
 function chatRobotWorldDetailLine(state) {
@@ -6181,6 +6241,7 @@ async function refreshTaskContinuity({ sessionOverride = '', force = false } = {
             taskEvaluation,
             taskDefinitionStatus,
         });
+        appendTerminalDelegationActivityResults(activity);
     } catch (error) {
         const fallbackState = taskContinuityLatestState;
         const fallbackEvents = taskContinuityLatestEvents;
@@ -8582,28 +8643,64 @@ function ensureChatComposerSubbar() {
                 display: flex;
                 flex-wrap: wrap;
                 align-items: center;
-                gap: 6px 10px;
-                padding: 6px 8px 0;
-                border-top: 1px solid var(--border-light, rgba(255,255,255,0.08));
+                gap: 4px 8px;
+                padding: 7px 6px 1px;
+                border-top: 1px solid var(--border-light, rgba(255,255,255,0.07));
                 margin-top: 4px;
+            }
+            .chat-composer-zone {
+                display: flex;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 4px 10px;
+                min-width: 0;
+            }
+            .chat-composer-zone-tag {
+                font-size: 8.5px;
+                font-weight: 800;
+                letter-spacing: 0.14em;
+                text-transform: uppercase;
+                color: var(--text-muted, #6b7280);
+                opacity: 0.7;
+                padding: 2px 6px;
+                border-radius: 999px;
+                border: 1px solid var(--border-light, rgba(255,255,255,0.10));
+                white-space: nowrap;
+            }
+            .chat-composer-zone--thomas .chat-composer-zone-tag {
+                color: var(--accent, #58a6ff);
+                border-color: rgba(88, 166, 255, 0.32);
+                opacity: 0.95;
+            }
+            .chat-composer-divider {
+                display: inline-flex;
+                align-items: center;
+                align-self: stretch;
+                padding: 0 1px;
+            }
+            .chat-composer-divider i {
+                width: 1px;
+                height: 18px;
+                background: var(--border-light, rgba(255,255,255,0.16));
+                display: block;
             }
             .chat-composer-control {
                 display: flex;
                 align-items: center;
-                gap: 6px;
+                gap: 5px;
                 min-width: 0;
             }
             .chat-composer-control[hidden] { display: none !important; }
             .chat-composer-control-label {
-                font-size: 10px;
+                font-size: 9.5px;
                 letter-spacing: 0.08em;
                 text-transform: uppercase;
                 color: var(--text-muted, #929bb0);
                 white-space: nowrap;
             }
             .chat-composer-control-select {
-                min-width: 108px;
-                padding: 5px 8px;
+                min-width: 92px;
+                padding: 4px 7px;
                 border-radius: 8px;
                 border: 1px solid var(--border-light, rgba(255,255,255,0.12));
                 background: rgba(19, 22, 30, 0.82);
@@ -8611,6 +8708,10 @@ function ensureChatComposerSubbar() {
                 font-size: 11px;
                 font-weight: 600;
                 outline: none;
+                cursor: pointer;
+            }
+            .chat-composer-control-select:hover {
+                border-color: var(--accent, #58a6ff);
             }
             .chat-composer-control-select:focus {
                 border-color: var(--accent, #58a6ff);
@@ -8619,8 +8720,15 @@ function ensureChatComposerSubbar() {
             @media (max-width: 760px) {
                 .chat-composer-subbar {
                     align-items: stretch;
-                    gap: 8px;
+                    gap: 6px;
                 }
+                .chat-composer-zone {
+                    width: 100%;
+                    flex-direction: column;
+                    align-items: stretch;
+                    gap: 6px;
+                }
+                .chat-composer-divider { display: none; }
                 .chat-composer-control {
                     width: 100%;
                     justify-content: space-between;
@@ -8664,33 +8772,56 @@ function renderChatComposerSubbar() {
         return `<option value="${escapeHtml(value)}"${selected}>${escapeHtml(label)}</option>`;
     }).join('');
 
+    const tokenDisplayOptions = (tokenOptions.length ? tokenOptions : [
+        { value: 'cheap', label: 'Brisk' },
+        { value: 'balanced', label: 'Diligent' },
+        { value: 'max', label: 'Exhaustive' },
+    ]).map((option) => {
+        const value = safeString(option?.value);
+        const effortLabel = { cheap: 'Brisk', balanced: 'Diligent', optimal: 'Diligent', max: 'Exhaustive' }[value];
+        return effortLabel ? { value, label: effortLabel } : option;
+    });
+
     root.innerHTML = `
-        <div class="chat-composer-control" data-control="reasoning"${reasoningControl?.supported ? '' : ' hidden'}>
-            <span class="chat-composer-control-label">${escapeHtml(safeString(reasoningControl?.label) || 'Reasoning')}</span>
-            <select id="chatComposerReasoningSelect" class="chat-composer-control-select">
-                ${renderOptions(reasoningOptions, normalizeReasoningEffort(activeReasoningEffort))}
-            </select>
+        <div class="chat-composer-zone chat-composer-zone--native">
+            <span class="chat-composer-zone-tag">Native</span>
+            <div class="chat-composer-control" data-control="reasoning"${reasoningControl?.supported ? '' : ' hidden'}>
+                <span class="chat-composer-control-label">${escapeHtml(safeString(reasoningControl?.label) || 'Reasoning')}</span>
+                <select id="chatComposerReasoningSelect" class="chat-composer-control-select">
+                    ${renderOptions(reasoningOptions, normalizeReasoningEffort(activeReasoningEffort))}
+                </select>
+            </div>
         </div>
-        <div class="chat-composer-control" data-control="autonomy">
-            <span class="chat-composer-control-label">${escapeHtml(safeString(autonomyControl?.label) || 'Autonomy')}</span>
-            <select id="chatComposerAutonomySelect" class="chat-composer-control-select">
-                ${renderOptions(autonomyOptions.length ? autonomyOptions : [
-                    { value: '1', label: 'L1 Chat' },
-                    { value: '2', label: 'L2 Assist' },
-                    { value: '3', label: 'L3 Agent' },
-                    { value: '4', label: 'L4 Full Autonomy' },
-                ], String(activeAutonomyLevel || 1))}
-            </select>
-        </div>
-        <div class="chat-composer-control" data-control="token_economy">
-            <span class="chat-composer-control-label">${escapeHtml(safeString(tokenControl?.label) || 'Token Economy')}</span>
-            <select id="chatComposerTokenEconomySelect" class="chat-composer-control-select">
-                ${renderOptions(tokenOptions.length ? tokenOptions : [
-                    { value: 'cheap', label: 'Cheap' },
-                    { value: 'balanced', label: 'Balanced' },
-                    { value: 'max', label: 'Maximum' },
-                ], safeString(activeTokenEconomy) || 'balanced')}
-            </select>
+        <div class="chat-composer-divider" aria-hidden="true"><i></i></div>
+        <div class="chat-composer-zone chat-composer-zone--thomas">
+            <span class="chat-composer-zone-tag">Thomas</span>
+            <div class="chat-composer-control" data-control="autonomy">
+                <span class="chat-composer-control-label">${escapeHtml(safeString(autonomyControl?.label) || 'Autonomy')}</span>
+                <select id="chatComposerAutonomySelect" class="chat-composer-control-select">
+                    ${renderOptions(autonomyOptions.length ? autonomyOptions : [
+                        { value: '1', label: 'L1 Chat' },
+                        { value: '2', label: 'L2 Assist' },
+                        { value: '3', label: 'L3 Agent' },
+                        { value: '4', label: 'L4 Full Autonomy' },
+                    ], String(activeAutonomyLevel || 1))}
+                </select>
+            </div>
+            <div class="chat-composer-control" data-control="token_economy">
+                <span class="chat-composer-control-label">Effort</span>
+                <select id="chatComposerTokenEconomySelect" class="chat-composer-control-select">
+                    ${renderOptions(tokenDisplayOptions, safeString(activeTokenEconomy) || 'balanced')}
+                </select>
+            </div>
+            <div class="chat-composer-control" data-control="guardrails">
+                <span class="chat-composer-control-label">Guardrails</span>
+                <select id="chatComposerGuardrailsSelect" class="chat-composer-control-select">
+                    ${renderOptions([
+                        { value: 'open', label: 'Open' },
+                        { value: 'guarded', label: 'Guarded' },
+                        { value: 'fortress', label: 'Fortress' },
+                    ], safeString(activeGuardrails) || 'guarded')}
+                </select>
+            </div>
         </div>
     `;
 
@@ -8725,6 +8856,15 @@ function renderChatComposerSubbar() {
             if (settingAdvDefaultTokenEconomy) settingAdvDefaultTokenEconomy.value = runtimeValue;
         });
     }
+
+    const guardrailsSelect = document.getElementById('chatComposerGuardrailsSelect');
+    if (guardrailsSelect instanceof HTMLSelectElement) {
+        guardrailsSelect.value = safeString(activeGuardrails) || 'guarded';
+        guardrailsSelect.addEventListener('change', (event) => {
+            activeGuardrails = safeString(event.target.value) || 'guarded';
+            try { localStorage.setItem('thomasGuardrails', activeGuardrails); } catch (e) {}
+        });
+    }
 }
 
 function initChatComposerSubbar() {
@@ -8744,6 +8884,7 @@ function buildChatRequestPayload(message, { docs = [], images = [], systemPrompt
         model_id: resolveActiveModelIdForProfile(profile) || undefined,
         autonomy_level: Math.max(1, parseInt(String(activeAutonomyLevel || 1), 10) || 1),
         token_economy: resolveChatPayloadTokenEconomy(),
+        thomas_guardrails: safeString(activeGuardrails) || 'guarded',
         system_prompt: systemPrompt || undefined,
     };
     const reasoningEffort = resolveChatPayloadReasoningEffort(profile);
@@ -9462,14 +9603,9 @@ function chatGameApplyBotAgentStyle(agentRaw) {
     const palette = officeAgentPalette(agent);
 
     if (chatGameBot) {
-        chatGameBot.classList.remove('costume-cap', 'costume-visor', 'costume-headset', 'costume-bowtie');
-        if (agent.costume && agent.costume !== 'none') {
-            chatGameBot.classList.add(`costume-${agent.costume}`);
-        }
-        chatGameBot.style.setProperty('--agent-primary', palette.primary);
-        chatGameBot.style.setProperty('--agent-secondary', palette.secondary);
-        chatGameBot.style.setProperty('--agent-glow', palette.glow);
-        chatGameBot.style.setProperty('--agent-trim', '#0d1117');
+        chatGameBot.style.setProperty('--player-primary', palette.primary);
+        chatGameBot.style.setProperty('--player-secondary', palette.secondary);
+        chatGameBot.style.setProperty('--player-glow', palette.glow);
     }
     if (chatGameBotWrap) {
         chatGameBotWrap.dataset.agentId = agent.id;
@@ -9879,7 +10015,7 @@ function chatGameSyncScene(state) {
         chatGameBotWrap.classList.toggle('dir-left', Number(state.player?.facing || -1) < 0);
     }
     if (chatGameBot) {
-        chatGameBot.classList.toggle('looking-user', state.mode === 'ready');
+        chatGameBot.classList.toggle('is-ready', state.mode === 'ready');
     }
 }
 
@@ -11305,12 +11441,10 @@ function chatGameClose({ clearMode = false } = {}) {
         chatGameBotWrap.style.removeProperty('--bot-rotate');
     }
     if (chatGameBot) {
-        chatGameBot.classList.remove('looking-user');
-        chatGameBot.classList.remove('costume-cap', 'costume-visor', 'costume-headset', 'costume-bowtie');
-        chatGameBot.style.removeProperty('--agent-primary');
-        chatGameBot.style.removeProperty('--agent-secondary');
-        chatGameBot.style.removeProperty('--agent-glow');
-        chatGameBot.style.removeProperty('--agent-trim');
+        chatGameBot.classList.remove('is-ready');
+        chatGameBot.style.removeProperty('--player-primary');
+        chatGameBot.style.removeProperty('--player-secondary');
+        chatGameBot.style.removeProperty('--player-glow');
     }
     if (chatGameBotName) {
         chatGameBotName.textContent = 'Office Bot';
@@ -11370,7 +11504,7 @@ function chatGameRenderToTextPayload() {
                 costume: safeString(state.selectedAgent?.costume),
                 color: safeString(state.selectedAgent?.color),
             },
-            bot: {
+            actor: {
                 visible: Boolean(state.scene?.botVisible),
                 x: Number((state.scene?.botX || 0).toFixed(2)),
                 y: Number((state.scene?.botY || 0).toFixed(2)),
@@ -11410,7 +11544,7 @@ function chatGameRenderToTextPayload() {
                 costume: safeString(state.selectedAgent?.costume),
                 color: safeString(state.selectedAgent?.color),
             },
-            bot: {
+            actor: {
                 visible: Boolean(state.scene?.botVisible),
                 x: Number((state.scene?.botX || 0).toFixed(2)),
                 y: Number((state.scene?.botY || 0).toFixed(2)),
@@ -11462,7 +11596,7 @@ function chatGameRenderToTextPayload() {
                 costume: safeString(state.selectedAgent?.costume),
                 color: safeString(state.selectedAgent?.color),
             },
-            bot: {
+            actor: {
                 visible: Boolean(state.scene?.botVisible),
                 x: Number((state.scene?.botX || 0).toFixed(2)),
                 y: Number((state.scene?.botY || 0).toFixed(2)),
@@ -11613,6 +11747,20 @@ function chatGameHandleKeyInput(event, pressed) {
     }
 }
 
+function chatGameBootFromUrl() {
+    let gameId = '';
+    try {
+        const params = new URLSearchParams(window.location.search || '');
+        gameId = safeString(params.get('game') || params.get('chat_game')).toLowerCase();
+    } catch (_error) {
+        gameId = '';
+    }
+    if (gameId !== 'cloud_jump' && gameId !== JETPACK_GAME_ID && gameId !== DINO_GAME_ID) return;
+    window.setTimeout(() => {
+        chatGameOpen(gameId);
+    }, 150);
+}
+
 function initChatGame() {
     const best = chatGameGetHighScore();
     if (chatGameScore) chatGameScore.textContent = '0';
@@ -11646,6 +11794,7 @@ function initChatGame() {
     document.addEventListener('keyup', (event) => {
         chatGameHandleKeyInput(event, false);
     });
+    chatGameBootFromUrl();
 }
 
 // 
@@ -12509,7 +12658,11 @@ async function handleSend() {
         const interruptPayload = {
             text: text,
             session_id: sessionId,
-            profile: currentProfile || '',
+            profile: safeString(
+                (typeof modelSelector !== 'undefined' && modelSelector ? modelSelector.value : '')
+                || (typeof setupProviderSelector !== 'undefined' && setupProviderSelector ? setupProviderSelector.value : '')
+                || (typeof currentPreferences !== 'undefined' ? currentPreferences?.advanced?.model?.active_profile : '')
+            ),
             busy_strategy: 'interrupt',
         };
         // Render user message immediately
@@ -13819,48 +13972,9 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
         }
 
         function _syncDelegationWorkerVisual(evt, status, taskText) {
-            if (!officeEnsureState()) return;
-            officeStartLoop();
-            const activityId = _delegationActivityId(evt);
-            const terminal = _delegationIsTerminalState(status);
-            const existingTaskId = safeString(_officeDelegationTaskByActivity.get(activityId));
-            if (!terminal && !existingTaskId) {
-                const preferredIdentity = officeResolveAgentIdentity(evt.bot_name || evt.bot_id || evt.agent_id || evt.specialist_id, activityId);
-                const preferredAgent = officeFindAgentByHandle(preferredIdentity.name);
-                const previewSessionId = safeString(evt?.session_id) || _delegationSessionId || safeString(activeChatId) || 'chat';
-                const queuedTask = officeQueueTask(taskText, {
-                    source: `chat-delegation:${previewSessionId}:${activityId}`,
-                    announce: false,
-                    preferredAgentId: preferredAgent?.id || '',
-                });
-                if (queuedTask?.id) {
-                    _officeDelegationTaskByActivity.set(activityId, queuedTask.id);
-                    chatAgentPresenceSetOfficeContext(activityId, {
-                        taskId: queuedTask.id,
-                        agentId: safeString(queuedTask.assignedAgentId || preferredAgent?.id),
-                        agentName: safeString(preferredAgent?.name || preferredIdentity.name),
-                    });
-                }
-                return;
-            }
-            if (!terminal || !existingTaskId || !officeState) return;
-            const linkedTask = officeState.tasks.find((task) => task.id === existingTaskId);
-            if (!linkedTask) return;
-            linkedTask.status = 'done';
-            linkedTask.completedAt = Date.now();
-            if (linkedTask.assignedAgentId) {
-                const agent = officeGetAgentById(linkedTask.assignedAgentId);
-                if (agent) {
-                    officeBeginTeleportSequence(agent, performance.now());
-                }
-            }
-            officeState.tasksDirty = true;
-            const completedIdentity = officeResolveAgentIdentity(evt.bot_name || evt.bot_id || evt.agent_id || evt.specialist_id, activityId);
-            chatAgentPresenceSetOfficeContext(activityId, {
-                taskId: linkedTask.id,
-                agentId: linkedTask.assignedAgentId,
-                agentName: safeString(linkedTask.assignedAgentId ? officeGetAgentById(linkedTask.assignedAgentId)?.name : '') || completedIdentity.name,
-            });
+            void evt;
+            void status;
+            void taskText;
         }
 
         function _delegationActivityId(evt) {
@@ -13870,7 +13984,11 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             return safeString(evt.bot_name || evt.bot_id || evt.agent_id || evt.specialist_id || evt.backend_type || 'worker');
         }
         function _delegationTask(evt) {
-            const detail = safeString(evt.summary || evt.last_progress || evt.text || evt.task || evt.current_task);
+            const failed = safeString(evt?.type) === 'delegation_failed'
+                || safeString(evt?.state).toLowerCase() === 'failed';
+            const detail = failed
+                ? safeString(evt.last_progress || evt.summary || evt.text || evt.task || evt.current_task)
+                : safeString(evt.summary || evt.last_progress || evt.text || evt.task || evt.current_task);
             const backend = safeString(evt.backend_type);
             if (backend && detail) return `[${backend}] ${detail}`;
             return detail || backend || '';
@@ -13980,19 +14098,35 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                 _setRobotSaying(evtType === 'delegation_started' ? 'delegation-started' : 'delegation-progress');
             }
             if (!alreadySeen) {
-                const prefix = evtType === 'delegation_completed'
-                    ? 'Background task completed'
-                    : evtType === 'delegation_failed'
-                        ? 'Background task failed'
-                        : 'Background task';
+                const stripStatus = _delegationIsTerminalState(status)
+                    ? (safeString(status).toLowerCase() === 'failed' ? 'failed' : 'completed')
+                    : 'executing';
+                // Strip backend tags like "[provider_native]" out of user-facing text.
+                const cleanText = safeString(taskText || label).replace(/^\s*\[[^\]]+\]\s*/, '').trim();
                 updateMessageTaskStrip(bubbleId, {
                     sessionId: safeString(evt?.session_id) || _taskUiSessionId,
-                    status: _taskUiTerminated ? 'completed' : 'executing',
-                    summary: taskText || label,
-                    checkpoint: `${prefix}: ${taskText || label}`,
+                    status: stripStatus,
+                    summary: cleanText,
+                    // Carry the deliverable so the strip can show an inline-open chip /
+                    // right-side live preview - no canned text, no "Open it:" link.
+                    artifactUrl: safeString(evt?.artifact_url),
+                    artifactName: safeString(evt?.artifact_name),
+                    artifactKind: safeString(evt?.artifact_kind),
                 });
-                thinkingText += `\n${prefix}: ${taskText}`;
+                if (_delegationIsTerminalState(status)) {
+                    _taskUiTerminated = true;
+                    const shouldAppendResult = !fromPoll
+                        || _boundExecutionIds.size === 0
+                        || (execId && _boundExecutionIds.has(execId));
+                    if (shouldAppendResult && typeof appendDelegationResultMessage === 'function') {
+                        appendDelegationResultMessage(evt, { status, summary: cleanText });
+                    }
+                }
+                thinkingText += `\n${cleanText}`;
             }
+            // Terminal events append a message-like result card at the bottom of chat.
+            // The task strip still carries the structured artifact chip. This is UI
+            // surfacing, not reported-to-chat bookkeeping.
         }
 
         function _taskContractStatusForEvent(evt) {
@@ -28349,6 +28483,90 @@ function moduleBuildMarketplaceInstalledMap(modulesRaw = []) {
     return out;
 }
 
+function moduleNormalizeInstalledPluginRow(pluginRaw = {}) {
+    const plugin = pluginRaw && typeof pluginRaw === 'object' ? pluginRaw : {};
+    const pluginId = safeString(plugin?.plugin_id || plugin?.id);
+    const modeId = safeString(plugin?.mode_id || plugin?.mode).toLowerCase();
+    return {
+        ...plugin,
+        plugin_id: pluginId,
+        mode_id: modeId,
+        display_name: safeString(plugin?.display_name || plugin?.name) || pluginId || modeId,
+        subtitle: safeString(plugin?.subtitle),
+        description: safeString(plugin?.description),
+        icon: safeString(plugin?.icon),
+        surface_url: safeString(plugin?.surface_url),
+        surface_mode: safeString(plugin?.surface_mode),
+        surface_title: safeString(plugin?.surface?.title || plugin?.surface_title),
+        version: safeString(plugin?.version),
+        installed: plugin?.installed !== false,
+        enabled: Boolean(plugin?.enabled),
+        marketplace_type: safeString(plugin?.marketplace_type) || 'plugin',
+        left_nav_behavior: safeString(plugin?.left_nav_behavior),
+        default_nav_section: safeString(plugin?.default_nav_section),
+        default_nav_order: Number(plugin?.default_nav_order) || 0,
+        workspace_id: safeString(plugin?.workspace_id || modeId),
+        installed_at: safeString(plugin?.installed_at),
+        updated_at: safeString(plugin?.updated_at),
+        publisher_id: safeString(plugin?.publisher_id),
+        publisher_name: safeString(plugin?.publisher_name),
+    };
+}
+
+function moduleSetInstalledPluginRows(rowsRaw = [], { render = true } = {}) {
+    const state = moduleEnsureRuntime();
+    if (!state?.marketplace) return [];
+    const rows = (Array.isArray(rowsRaw) ? rowsRaw : [])
+        .map((plugin) => moduleNormalizeInstalledPluginRow(plugin))
+        .filter((plugin) => plugin.plugin_id && plugin.mode_id);
+    rows.forEach((plugin) => {
+        const modeId = safeString(plugin?.mode_id).toLowerCase();
+        if (modeId) MODULE_NAV_MODE_SET.add(modeId);
+    });
+    state.marketplace.plugins = rows;
+    state.marketplace.modules = rows.map((plugin) => ({
+        module_id: plugin.plugin_id,
+        display_name: plugin.display_name,
+        description: plugin.description || plugin.subtitle,
+        version: plugin.version,
+        status: plugin.enabled ? 'enabled' : 'disabled',
+        installed_at: plugin.installed_at,
+        updated_at: plugin.updated_at,
+    }));
+    if (render) moduleRenderInstalledPluginNav();
+    return rows;
+}
+
+function moduleRefreshInstalledPluginNav({ force = false } = {}) {
+    const state = moduleEnsureRuntime();
+    if (!state?.marketplace) return null;
+    if (!force && state.marketplace.installedRefreshPromise) {
+        return state.marketplace.installedRefreshPromise;
+    }
+    if (!force && Array.isArray(state.marketplace.plugins) && state.marketplace.plugins.length > 0) {
+        moduleRenderInstalledPluginNav();
+        return null;
+    }
+    const refreshPromise = (async () => {
+        try {
+            const payload = await moduleFetchJsonSafe('/api/marketplace/installed');
+            const rows = Array.isArray(payload?.plugins)
+                ? payload.plugins
+                : (Array.isArray(payload?.installed) ? payload.installed : []);
+            moduleSetInstalledPluginRows(rows);
+            state.marketplace.installedError = '';
+        } catch (error) {
+            state.marketplace.installedError = safeString(error?.message) || 'Unable to load installed plugins.';
+            moduleRenderInstalledPluginNav();
+        } finally {
+            state.marketplace.installedRefreshPromise = null;
+            state.marketplace.installedLastRefreshedAt = Date.now();
+        }
+    })();
+    state.marketplace.installedRefreshPromise = refreshPromise;
+    return refreshPromise;
+}
+
 function moduleRefreshMarketplace({ force = false, storeUrl = '' } = {}) {
     const state = moduleEnsureRuntime();
     if (!state) return null;
@@ -28380,10 +28598,6 @@ function moduleRefreshMarketplace({ force = false, storeUrl = '' } = {}) {
             const installedPlugins = Array.isArray(syncPayload?.installed)
                 ? syncPayload.installed
                 : plugins.filter((plugin) => Boolean(plugin?.installed));
-            installedPlugins.forEach((plugin) => {
-                const modeId = safeString(plugin?.mode_id).toLowerCase();
-                if (modeId) MODULE_NAV_MODE_SET.add(modeId);
-            });
             state.marketplace.generatedAt = safeString(syncPayload?.generated_at || syncPayload?.synced_at);
             state.marketplace.syncedAt = safeString(syncPayload?.synced_at || syncPayload?.generated_at);
             state.marketplace.sourceLabel = safeString(syncPayload?.source_label);
@@ -28393,33 +28607,7 @@ function moduleRefreshMarketplace({ force = false, storeUrl = '' } = {}) {
             state.marketplace.warning = safeString(syncPayload?.warning);
             state.marketplace.syncError = safeString(syncPayload?.sync_error);
             state.marketplace.degraded = Boolean(syncPayload?.degraded);
-            state.marketplace.plugins = installedPlugins.map((plugin) => ({
-                ...plugin,
-                plugin_id: safeString(plugin?.plugin_id),
-                mode_id: safeString(plugin?.mode_id),
-                display_name: safeString(plugin?.display_name),
-                subtitle: safeString(plugin?.subtitle),
-                description: safeString(plugin?.description),
-                icon: safeString(plugin?.icon),
-                surface_url: safeString(plugin?.surface_url),
-                surface_mode: safeString(plugin?.surface_mode),
-                surface_title: safeString(plugin?.surface_title),
-                version: safeString(plugin?.version),
-                enabled: Boolean(plugin?.enabled),
-                installed_at: safeString(plugin?.installed_at),
-                updated_at: safeString(plugin?.updated_at),
-                publisher_id: safeString(plugin?.publisher_id),
-                publisher_name: safeString(plugin?.publisher_name),
-            })).filter((plugin) => plugin.plugin_id && plugin.mode_id);
-            state.marketplace.modules = state.marketplace.plugins.map((plugin) => ({
-                module_id: plugin.plugin_id,
-                display_name: plugin.display_name,
-                description: plugin.description || plugin.subtitle,
-                version: plugin.version,
-                status: plugin.enabled ? 'enabled' : 'disabled',
-                installed_at: plugin.installed_at,
-                updated_at: plugin.updated_at,
-            }));
+            moduleSetInstalledPluginRows(installedPlugins, { render: false });
             state.marketplace.apps = plugins.map((plugin) => {
                 const categoryId = safeString(plugin?.category).toLowerCase() || 'other';
                 const categoryLabel = safeString(plugin?.category_label) || safeString(plugin?.category) || 'Plugin';
@@ -39207,7 +39395,7 @@ function moduleRenderMarketplaceCatalogV3(container) {
 const MODULE_SPECIAL_SURFACE_CONFIGS = Object.freeze({
     my_stuff: Object.freeze({
         title: 'Project Board',
-        src: '/static/static/my_stuff.html?v=20260318-project-board-3',
+        src: '/static/my_stuff.html?v=20260618-paper-apps-4',
         surfaceMode: 'immersive',
     }),
 });
@@ -39341,7 +39529,17 @@ function moduleWorkspaceNavOrder(entriesRaw) {
     const appended = moduleWorkspaceNavFallbackOrder(entries)
         .map((entry) => safeString(entry?.workspace_id).toLowerCase())
         .filter((id) => id && !stored.includes(id));
-    return stored.concat(appended);
+    const ordered = stored.concat(appended);
+    const promoteAfter = (id, anchor) => {
+        const itemIndex = ordered.indexOf(id);
+        const anchorIndex = ordered.indexOf(anchor);
+        if (itemIndex < 0 || anchorIndex < 0 || itemIndex === anchorIndex + 1) return;
+        ordered.splice(itemIndex, 1);
+        const nextAnchorIndex = ordered.indexOf(anchor);
+        ordered.splice(nextAnchorIndex + 1, 0, id);
+    };
+    promoteAfter('paper_trading', 'mission');
+    return ordered;
 }
 
 function modulePersistWorkspaceNavOrderFromDom() {
@@ -39919,7 +40117,7 @@ function moduleRenderMyStuffSurface(container) {
     const config = moduleGetSpecialSurfaceConfig('my_stuff');
     return moduleRenderEmbeddedSurface(container, config || {
         title: 'Project Board',
-        src: '/static/static/my_stuff.html?v=20260318-project-board-3',
+        src: '/static/my_stuff.html?v=20260618-paper-apps-4',
         surfaceMode: 'immersive',
     });
 }
@@ -43392,6 +43590,7 @@ function initFeatures() {
     initMissionWorkspace();
     initContentWorkspace();
     initModuleWorkspace();
+    void moduleRefreshInstalledPluginNav({ force: true });
     void moduleRefreshMarketplace({ force: true });
     setDebugDockOpen(false, { recordEvent: false });
     const restoredMode = resolveBootNavMode();
@@ -44897,12 +45096,7 @@ function __thomasBootstrapApp() {
         }
     }
 }
-if (document.readyState === 'loading') {
-    window.addEventListener('DOMContentLoaded', __thomasBootstrapApp, { once: true });
-} else {
-    queueMicrotask(() => __thomasBootstrapApp());
-}
-
+// app_runtime_loader.js starts the app after every split runtime chunk is loaded.
 
 const MODULE_STUDIO_COMFY_STYLE_ID = 'moduleStudioComfyStyles';
 

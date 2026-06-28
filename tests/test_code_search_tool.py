@@ -1,7 +1,19 @@
 import asyncio
 
 import thomas.tools.code_search as code_search
+import thomas.tools.search_code as rag_search
 from thomas.tools.code_search import CodeSearchTool
+
+
+def test_code_search_and_rag_search_modules_have_distinct_contracts() -> None:
+    assert CodeSearchTool.name == "code.search"
+    assert code_search.FindDefinitionTool.name == "code.find_definition"
+
+    assert rag_search.TOOL.name == "rag.search"
+    assert rag_search.TOOL.category == "search"
+
+    assert "Registers the ``code.*`` tools" in code_search.__doc__
+    assert "RAG index-backed repository search adapter" in rag_search.__doc__
 
 
 class _FakeProc:

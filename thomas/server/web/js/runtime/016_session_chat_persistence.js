@@ -36,7 +36,8 @@ function formatSidebarSessionTitle(session) {
 }
 
 function formatSidebarSessionMeta(session) {
-    const model = safeString(session?.model) || activeProfileNameForPersistence();
+    const rawModel = safeString(session?.model) || activeProfileNameForPersistence();
+    const model = rawModel ? formatProviderDisplay(rawModel, { compact: false }) : '';
     const timestamp = safeString(session?.timestamp);
     if (model && timestamp) return `${model} | ${timestamp}`;
     if (model) return model;
@@ -209,22 +210,19 @@ function officeApplyDefaultAgentStyleDiversification(agents, prefsRaw) {
         return;
     }
     const colorPool = [...OFFICE_AGENT_STYLE_COLOR_POOL];
-    const costumePool = [...OFFICE_AGENT_COSTUME_POOL];
     for (let i = colorPool.length - 1; i > 0; i -= 1) {
         const j = Math.floor(Math.random() * (i + 1));
         [colorPool[i], colorPool[j]] = [colorPool[j], colorPool[i]];
-    }
-    for (let i = costumePool.length - 1; i > 0; i -= 1) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [costumePool[i], costumePool[j]] = [costumePool[j], costumePool[i]];
     }
 
     agents.forEach((agent, index) => {
         if (!agent) return;
         const color = colorPool[index % colorPool.length] || agent.color;
-        const costume = costumePool[index % costumePool.length] || agent.costume || 'none';
         agent.color = /^#[0-9a-f]{6}$/i.test(safeString(color)) ? color : agent.color;
-        agent.costume = new Set(OFFICE_AGENT_COSTUME_POOL).has(costume) ? costume : (agent.costume || 'none');
+        // Default agents to no costume — the random cap/visor/bowtie overlays
+        // read as visual noise at office scale. Colour variety stays; users can
+        // still opt into a costume per-agent from the roster panel.
+        agent.costume = 'none';
         agent.tint = officeAgentTintFromColor(agent.color);
     });
 }

@@ -333,8 +333,8 @@ def test_load_config_creates_default_profiles_and_preserves_remote_when_allowed(
     monkeypatch.setenv("THOMAS_SERVER_ACCESS_MODE", "remote")
     monkeypatch.setenv("THOMAS_SERVER_API_TOKEN", "secret")
     cfg = load_config(tmp_path / "missing.toml")
-    assert {"codex", "local"}.issubset(cfg.models.keys())
-    assert cfg.models["codex"].provider == "codex"
+    assert {"openai_codex", "local"}.issubset(cfg.models.keys())
+    assert cfg.models["openai_codex"].provider == "openai_codex"
     assert cfg.server.access_mode == "remote"
 
 

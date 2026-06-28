@@ -174,6 +174,29 @@ async function fetchTaskContinuitySessionActivity(sessionToken) {
     return activity;
 }
 
+function appendTerminalDelegationActivityResults(activity) {
+    if (!activity || !Array.isArray(activity.agents)) return;
+    if (typeof appendDelegationResultMessage !== 'function') return;
+    const scopedSessionId = safeString(activity.sessionId || activity.requestedSessionId || taskContinuityLatestSessionId);
+    activity.agents.forEach((row) => {
+        if (!row || typeof row !== 'object') return;
+        const state = safeString(row?.state || row?.status).toLowerCase();
+        if (!chatTaskIsTerminal(state)) return;
+        const executionId = safeString(row?.execution_id);
+        if (!executionId) return;
+        const failed = state === 'failed' || state === 'blocked' || state === 'cancelled' || state === 'dead';
+        const summary = safeString(row?.last_progress || row?.summary || row?.task || row?.current_task);
+        appendDelegationResultMessage({
+            ...row,
+            type: failed ? 'delegation_failed' : 'delegation_completed',
+            session_id: safeString(row?.session_id) || scopedSessionId,
+        }, {
+            status: failed ? 'failed' : 'completed',
+            summary,
+        });
+    });
+}
+
 // RECOVERED (2026-03-18): Was in dead app_parts/part-002b.js, never made it to live runtime.
 function taskContinuityStatusTone(statusRaw) {
     const status = safeString(statusRaw).toLowerCase();
@@ -620,6 +643,7 @@ async function refreshTaskContinuity({ sessionOverride = '', force = false } = {
             taskEvaluation,
             taskDefinitionStatus,
         });
+        appendTerminalDelegationActivityResults(activity);
     } catch (error) {
         const fallbackState = taskContinuityLatestState;
         const fallbackEvents = taskContinuityLatestEvents;

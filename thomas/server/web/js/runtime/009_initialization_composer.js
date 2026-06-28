@@ -169,6 +169,13 @@ function chatGameSetStatusText(text) {
     }
 }
 
+function chatGameSetControlsOpen(open) {
+    const shouldOpen = Boolean(open);
+    if (!chatGameControls) return;
+    chatGameControls.classList.toggle('hidden', !shouldOpen);
+    chatGameControls.setAttribute('aria-hidden', shouldOpen ? 'false' : 'true');
+}
+
 function chatGameSetPanelOpen(open) {
     const shouldOpen = Boolean(open);
     if (chatGamePanel) {
@@ -293,7 +300,7 @@ function chatGameNormalizeOfficeAgent(agentRaw, fallbackId = 'agent-game') {
     const fallbackColor = '#9ad8ff';
     const candidate = agentRaw && typeof agentRaw === 'object' ? agentRaw : {};
     const id = safeString(candidate.id) || safeString(fallbackId) || 'agent-game';
-    const resolvedName = normalizeAgentName(safeString(candidate.name) || 'Office Bot');
+    const resolvedName = normalizeAgentName(safeString(candidate.name) || 'Player');
     const colorRaw = safeString(candidate.color);
     const color = /^#[0-9a-f]{6}$/i.test(colorRaw) ? colorRaw : fallbackColor;
     const costumeRaw = safeString(candidate.costume || 'none').toLowerCase();
@@ -301,7 +308,7 @@ function chatGameNormalizeOfficeAgent(agentRaw, fallbackId = 'agent-game') {
     const tintRaw = safeString(candidate.tint).toLowerCase();
     return {
         id,
-        name: resolvedName || 'Office Bot',
+        name: resolvedName || 'Player',
         color,
         costume,
         tint: tintRaw || officeAgentTintFromColor(color),
@@ -329,7 +336,7 @@ function chatGameCollectOfficeAgentRoster() {
 function chatGamePickOfficeAgentForRun() {
     const roster = chatGameCollectOfficeAgentRoster();
     if (!roster.length) {
-        return chatGameNormalizeOfficeAgent({ name: 'Office Bot', costume: 'headset', color: '#9ad8ff' });
+        return chatGameNormalizeOfficeAgent({ name: 'Player', costume: 'headset', color: '#9ad8ff' });
     }
     const pickIndex = Math.floor(Math.random() * roster.length);
     return chatGameNormalizeOfficeAgent(roster[pickIndex], `agent-pick-${pickIndex + 1}`);
@@ -340,14 +347,9 @@ function chatGameApplyBotAgentStyle(agentRaw) {
     const palette = officeAgentPalette(agent);
 
     if (chatGameBot) {
-        chatGameBot.classList.remove('costume-cap', 'costume-visor', 'costume-headset', 'costume-bowtie');
-        if (agent.costume && agent.costume !== 'none') {
-            chatGameBot.classList.add(`costume-${agent.costume}`);
-        }
-        chatGameBot.style.setProperty('--agent-primary', palette.primary);
-        chatGameBot.style.setProperty('--agent-secondary', palette.secondary);
-        chatGameBot.style.setProperty('--agent-glow', palette.glow);
-        chatGameBot.style.setProperty('--agent-trim', '#0d1117');
+        chatGameBot.style.setProperty('--player-primary', palette.primary);
+        chatGameBot.style.setProperty('--player-secondary', palette.secondary);
+        chatGameBot.style.setProperty('--player-glow', palette.glow);
     }
     if (chatGameBotWrap) {
         chatGameBotWrap.dataset.agentId = agent.id;
@@ -757,7 +759,7 @@ function chatGameSyncScene(state) {
         chatGameBotWrap.classList.toggle('dir-left', Number(state.player?.facing || -1) < 0);
     }
     if (chatGameBot) {
-        chatGameBot.classList.toggle('looking-user', state.mode === 'ready');
+        chatGameBot.classList.toggle('is-ready', state.mode === 'ready');
     }
 }
 

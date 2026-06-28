@@ -2,6 +2,40 @@
   "generated_at": "2026-02-21T00:00:00Z",
   "packs": [
     {
+      "id": "paper-trading",
+      "name": "Paper Trading",
+      "version": "1.0.0",
+      "category": "finance",
+      "target": "desktop",
+      "mode": "paper_trading",
+      "entrypoint": "hooks.py",
+      "capabilities": [
+        "paper_trading.market_data",
+        "paper_trading.proposals",
+        "paper_trading.execution",
+        "paper_trading.journal",
+        "healthcheck"
+      ],
+      "description": "Propose, approve, and execute simulated stock/ETF trades on a free Alpaca paper account, with a thesis-and-score learning loop.",
+      "categories": [
+        "finance",
+        "automation"
+      ],
+      "tags": [
+        "finance",
+        "trading",
+        "paper",
+        "command_center",
+        "workspace",
+        "official"
+      ],
+      "marketplace_type": "command_center",
+      "requires": [],
+      "left_nav_behavior": "workspace",
+      "default_nav_section": "command_centers",
+      "default_nav_order": 530
+    },
+    {
       "id": "life-manager",
       "name": "Life Manager",
       "version": "1.0.0",
@@ -23,16 +57,51 @@
       "tags": [
         "productivity",
         "automation",
-        "command_center",
+        "app",
         "workspace"
       ],
-      "marketplace_type": "command_center",
+      "marketplace_type": "app",
       "requires": [
         "life-manager-foundation"
       ],
       "left_nav_behavior": "workspace",
-      "default_nav_section": "command_centers",
+      "default_nav_section": "apps",
       "default_nav_order": 520
+    },
+    {
+      "id": "inkwell",
+      "name": "Inkwell",
+      "version": "1.0.0",
+      "category": "productivity",
+      "target": "desktop",
+      "mode": "inkwell",
+      "entrypoint": "hooks.py",
+      "capabilities": [
+        "inkwell.notes",
+        "inkwell.sketch",
+        "inkwell.reminders",
+        "inkwell.smart_analysis"
+      ],
+      "description": "Smart notepad: sketch with your mouse, drop text anywhere, dictate by voice, and let Thomas turn your notes into reminders with alert sounds.",
+      "categories": [
+        "productivity",
+        "notes",
+        "automation"
+      ],
+      "tags": [
+        "productivity",
+        "notes",
+        "sketch",
+        "voice",
+        "reminders",
+        "app",
+        "workspace"
+      ],
+      "marketplace_type": "app",
+      "requires": [],
+      "left_nav_behavior": "workspace",
+      "default_nav_section": "apps",
+      "default_nav_order": 530
     },
     {
       "id": "life-manager-foundation",
@@ -7764,17 +7833,17 @@
         "desktop.verify"
       ],
       "description": "Secure desktop sessions for allowlisted apps with local-VM isolation, quiet guardrails, verification, and recovery.",
-      "marketplace_type": "command_center",
+      "marketplace_type": "app",
       "tags": [
         "desktop",
         "automation",
-        "command_center",
+        "app",
         "workspace",
         "official"
       ],
       "requires": [],
       "left_nav_behavior": "workspace",
-      "default_nav_section": "command_centers",
+      "default_nav_section": "apps",
       "default_nav_order": 560
     }
   ]

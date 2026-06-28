@@ -75,6 +75,100 @@ def test_focus_boosts_matching_category_to_the_top(tmp_path):
     assert focused.top.category == "security"
 
 
+def test_security_detector_ignores_comments_strings_and_nosec_annotations(tmp_path):
+    thomas = tmp_path / "thomas"
+    thomas.mkdir()
+    (thomas / "noisy.py").write_text(
+        "# shell=True verify=False eval( pickle.loads yaml.load( md5( # nosec\n"
+        "PATTERN = 'subprocess.run(cmd, shell=True) eval(value) verify=False md5('\n"
+        "REGEX = r'^[^#]*eval\\s*\\('\n"
+        "def ok():\n"
+        "    return PATTERN\n",
+        encoding="utf-8",
+    )
+
+    backlog = plan_backlog(tmp_path, categories={"security"}, limit=20)
+
+    assert backlog.goals == []
+    assert backlog.signals["security_markers"] == 0
+    assert backlog.signals["editable_security_markers"] == 0
+
+
+def test_security_detector_counts_real_ast_risk_constructs(tmp_path):
+    thomas = tmp_path / "thomas"
+    thomas.mkdir()
+    (thomas / "risky.py").write_text(
+        "import hashlib, pickle, requests, subprocess, yaml\n"
+        "subprocess.run(cmd, shell=True)\n"
+        "eval(expr)\n"
+        "requests.get(url, verify=False)\n"
+        "pickle.loads(blob)\n"
+        "yaml.load(text)\n"
+        "hashlib.md5(data)\n"
+        "hashlib.md5(cache_key, usedforsecurity=False)\n",
+        encoding="utf-8",
+    )
+
+    backlog = plan_backlog(tmp_path, categories={"security"}, limit=20)
+    targets = {path for goal in backlog.goals for path in goal.target_paths}
+
+    assert backlog.signals["security_markers"] == 6
+    assert backlog.signals["editable_security_markers"] == 6
+    assert "thomas/risky.py" in targets
+
+
+def test_security_detector_counts_builtins_eval_alias(tmp_path):
+    thomas = tmp_path / "thomas"
+    thomas.mkdir()
+    (thomas / "aliased_eval.py").write_text(
+        "from builtins import eval as run_eval\nrun_eval(expr)\n",
+        encoding="utf-8",
+    )
+
+    backlog = plan_backlog(tmp_path, categories={"security"}, limit=20)
+    targets = {path for goal in backlog.goals for path in goal.target_paths}
+
+    assert backlog.signals["security_markers"] == 1
+    assert backlog.signals["editable_security_markers"] == 1
+    assert "thomas/aliased_eval.py" in targets
+
+
+def test_security_detector_counts_getattr_builtins_eval_aliases(tmp_path):
+    thomas = tmp_path / "thomas"
+    thomas.mkdir()
+    (thomas / "getattr_eval.py").write_text(
+        "import builtins\n"
+        "import builtins as bi\n"
+        "getattr(builtins, 'eval')(expr)\n"
+        "getattr(bi, 'eval')(expr)\n"
+        "getattr(__import__('builtins'), 'eval')(expr)\n",
+        encoding="utf-8",
+    )
+
+    backlog = plan_backlog(tmp_path, categories={"security"}, limit=20)
+    targets = {path for goal in backlog.goals for path in goal.target_paths}
+
+    assert backlog.signals["security_markers"] == 3
+    assert backlog.signals["editable_security_markers"] == 3
+    assert "thomas/getattr_eval.py" in targets
+
+
+def test_security_detector_counts_dunder_builtins_eval_aliases(tmp_path):
+    thomas = tmp_path / "thomas"
+    thomas.mkdir()
+    (thomas / "dunder_builtins_eval.py").write_text(
+        "getattr(__builtins__, 'eval')(expr)\n__builtins__['eval'](expr)\n",
+        encoding="utf-8",
+    )
+
+    backlog = plan_backlog(tmp_path, categories={"security"}, limit=20)
+    targets = {path for goal in backlog.goals for path in goal.target_paths}
+
+    assert backlog.signals["security_markers"] == 2
+    assert backlog.signals["editable_security_markers"] == 2
+    assert "thomas/dunder_builtins_eval.py" in targets
+
+
 def test_category_allowlist_filters_backlog(tmp_path):
     root = _scaffold_repo(tmp_path)
     only_refactor = plan_backlog(root, categories={"refactor"}, limit=20)
@@ -90,6 +184,57 @@ def test_goals_carry_actionable_prompts_and_targets(tmp_path):
         assert goal.id and ":" in goal.id
         assert goal.risk_tier in ("low", "medium", "high")
         assert 0.0 <= goal.leverage <= 1.0
+
+
+def test_planner_skips_pre_supervisor_blocked_targets(tmp_path):
+    root = _scaffold_repo(tmp_path)
+    thomas = root / "thomas"
+    editable = ["def g():"]
+    for i in range(9):
+        editable += ["    try:", f"        editable_{i}()", "    except Exception:", "        pass"]
+    (thomas / "editable_flaky.py").write_text("\n".join(editable), encoding="utf-8")
+    (root / "agent_safety.toml").write_text(
+        (
+            'test_dirs = ["tests/"]\n\n'
+            "[protected]\n"
+            "policy_files=[]\n"
+            "guardrails_files=[]\n"
+            'enforcement_files=["thomas/_architecture.py"]\n'
+            'enforcement_scripts=["thomas/flaky.py"]\n'
+        ),
+        encoding="utf-8",
+    )
+
+    backlog = plan_backlog(root, limit=20)
+    targets = {path for goal in backlog.goals for path in goal.target_paths}
+
+    assert "thomas/flaky.py" not in targets
+    assert "thomas/_architecture.py" not in targets
+    assert not any(path.startswith("tests/") for path in targets)
+    assert any(path == "thomas/editable_flaky.py" for path in targets)
+    assert "tests" not in {goal.category for goal in backlog.goals}
+    assert backlog.signals["xfail_markers"] == 5
+    assert backlog.signals["editable_xfail_markers"] == 0
+
+
+def test_planner_can_target_existing_non_supervisor_loop_files(tmp_path):
+    root = tmp_path
+    loop_dir = root / "thomas" / "forge" / "anvil"
+    loop_dir.mkdir(parents=True)
+    (root / "tests").mkdir()
+    editable = ["def editable():"]
+    blocked = ["def blocked():"]
+    for i in range(9):
+        editable += ["    try:", f"        editable_{i}()", "    except Exception:", "        pass"]
+        blocked += ["    try:", f"        blocked_{i}()", "    except Exception:", "        pass"]
+    (loop_dir / "evolve_planner_detectors.py").write_text("\n".join(editable), encoding="utf-8")
+    (loop_dir / "evolve.py").write_text("\n".join(blocked), encoding="utf-8")
+
+    backlog = plan_backlog(root, categories={"reliability"}, limit=20)
+    targets = {path for goal in backlog.goals for path in goal.target_paths}
+
+    assert "thomas/forge/anvil/evolve_planner_detectors.py" in targets
+    assert "thomas/forge/anvil/evolve.py" not in targets
 
 
 def test_normalize_focus_maps_aliases():

@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WEB_INDEX_PATH = ROOT / "thomas" / "server" / "web" / "index.html"
 RUNTIME_DIR = ROOT / "thomas" / "server" / "web" / "js" / "runtime"
+COMPOSER_CONTROLS_PATH = ROOT / "thomas" / "server" / "web" / "js" / "composer_controls.js"
 
 
 def _read(path: Path) -> str:
@@ -103,7 +104,7 @@ def test_chat_runtime_provider_picker_expands_inline_and_routes_inactive_profile
         "provider === 'local' || provider === 'ollama' || profileKey === 'local' || profileKey.includes('ollama')"
         in text
     )
-    assert "ChatGPT / Codex selected. Run connection test." in text
+    assert "ChatGPT (OpenAI) selected. Run connection test." in text
     assert "Ready now" not in text
     assert "Needs connection" not in text
     assert (
@@ -113,7 +114,7 @@ def test_chat_runtime_provider_picker_expands_inline_and_routes_inactive_profile
 
 
 def test_chat_runtime_uses_profile_aware_composer_subbar_and_payload_helper() -> None:
-    text = _read_all_runtime_js()
+    text = _read_all_runtime_js() + "\n" + _read(COMPOSER_CONTROLS_PATH)
     assert "initChatComposerSubbar();" in text
     assert "function ensureChatComposerSubbar() {" in text
     assert (
@@ -163,7 +164,7 @@ def test_chat_runtime_renders_hover_timestamps_and_inline_edit_panel() -> None:
     )
 
 
-def test_chat_runtime_uses_ambient_robot_status_and_office_delegation_bridge() -> None:
+def test_chat_runtime_uses_task_strip_without_office_delegation_bridge() -> None:
     text = _read_all_runtime_js()
     assert "const CHAT_THINKING_UI_ENABLED = false;" in text
     assert "function robotAmbientStatusText(channel = 'thinking') {" in text
@@ -177,15 +178,15 @@ def test_chat_runtime_uses_ambient_robot_status_and_office_delegation_bridge() -
     assert "chat-robot-thinking-toggle" not in create_robot_block
     assert "chat-robot-thinking-details" not in create_robot_block
     assert "function _syncDelegationWorkerVisual(evt, status, taskText) {" in text
-    assert "officeQueueTask(taskText, {" in text
-    assert (
-        "const previewSessionId = safeString(evt?.session_id) || _delegationSessionId || safeString(activeChatId) || 'chat';"
-        in text
-    )
-    assert "source: `chat-delegation:${previewSessionId}:${activityId}`," in text
-    assert "const previewScoped = Boolean(officeWorkspace?.classList.contains('chat-preview-active'));" in text
-    assert "officeState.tasks.filter((task) => officeTaskMatchesChatPreview(task))" in text
-    assert "officeBeginTeleportSequence(agent, performance.now());" in text
+    sync_start = text.index("function _syncDelegationWorkerVisual(evt, status, taskText) {")
+    sync_end = text.index("function _delegationActivityId(evt) {", sync_start)
+    sync_block = text[sync_start:sync_end]
+    assert "void evt;" in sync_block
+    assert "void status;" in sync_block
+    assert "void taskText;" in sync_block
+    assert "officeQueueTask(" not in sync_block
+    assert "officeBeginTeleportSequence(" not in sync_block
+    assert "_syncDelegationWorkerVisual(evt, status, taskText);" in text
 
 
 def test_chat_css_supports_footer_actions_settings_scroll_and_new_robot_idles() -> None:

@@ -93,92 +93,15 @@ body.te-space-active .welcome-card i {
     color: #c8cdd3 !important;
 }
 
-/* ── Composer container — cockpit command line ─────────────────── */
-body.te-space-active .composer-container {
-    background: linear-gradient(180deg,
-        rgba(5, 6, 8, 0) 0%,
-        rgba(5, 6, 8, 0.55) 40%,
-        rgba(5, 6, 8, 0.88) 100%) !important;
-}
 
-/* ── Composer box — primary command input ──────────────────────── */
-body.te-space-active .composer-box {
-    background: rgba(8, 12, 20, 0.88) !important;
-    border: 1px solid rgba(140, 160, 180, 0.25) !important;
-    border-radius: 6px !important;
-    box-shadow:
-        0 0 1px rgba(140, 160, 180, 0.30),
-        0 0 12px rgba(140, 160, 180, 0.06),
-        0 8px 28px rgba(0, 0, 0, 0.55) !important;
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-}
-body.te-space-active .composer-box:focus-within {
-    border-color: rgba(140, 160, 180, 0.45) !important;
-    box-shadow:
-        0 0 1px rgba(140, 160, 180, 0.50),
-        0 0 24px rgba(140, 160, 180, 0.10),
-        0 8px 28px rgba(0, 0, 0, 0.55) !important;
-}
+/* ── Composer ─────────────────────────────────────────────────────
+   The general-chat composer look is owned ENTIRELY by css/composer.css
+   (loaded last, plain selectors, achromatic white-alpha only). All
+   body.te-space-active / te-theme-light / te-theme-dark composer-scoped rules
+   were removed in the ground-up rebuild so no high-specificity !important rule
+   can reintroduce a hued (green-reading) hairline. Do NOT re-add composer rules
+   here — put them in composer.css. */
 
-/* Composer textarea / input — clearly visible monospace */
-body.te-space-active .composer-box textarea,
-body.te-space-active .composer-box input[type="text"],
-body.te-space-active .composer-box .ql-editor,
-body.te-space-active #chatInput {
-    color: #ececf1 !important;
-    caret-color: #c8cdd3 !important;
-    font-size: 14px !important;
-}
-body.te-space-active .composer-box textarea::placeholder,
-body.te-space-active #chatInput::placeholder {
-    color: rgba(236, 236, 241, 0.28) !important;
-    font-style: normal !important;
-    letter-spacing: 0.02em !important;
-}
-
-/* Composer action buttons */
-body.te-space-active .composer-box button,
-body.te-space-active .composer-box .composer-action-btn {
-    color: rgba(236, 236, 241, 0.55) !important;
-    border-radius: 4px !important;
-}
-body.te-space-active .composer-box button:hover,
-body.te-space-active .composer-box .composer-action-btn:hover {
-    color: #c8cdd3 !important;
-    background: rgba(140, 160, 180, 0.10) !important;
-}
-
-/* Send button — bright accent */
-body.te-space-active .composer-box .send-btn,
-body.te-space-active .composer-box button[aria-label="Send"],
-body.te-space-active .composer-box button.primary {
-    background: rgba(140, 160, 180, 0.15) !important;
-    border: 1px solid rgba(140, 160, 180, 0.35) !important;
-    color: #c8cdd3 !important;
-}
-body.te-space-active .composer-box .send-btn:hover,
-body.te-space-active .composer-box button[aria-label="Send"]:hover,
-body.te-space-active .composer-box button.primary:hover {
-    background: rgba(140, 160, 180, 0.25) !important;
-    border-color: rgba(140, 160, 180, 0.55) !important;
-    box-shadow: 0 0 12px rgba(140, 160, 180, 0.15) !important;
-}
-
-/* Composer status bar */
-body.te-space-active .composer-status-bar {
-    color: rgba(140, 160, 180, 0.45) !important;
-    font-size: 10px !important;
-    letter-spacing: 0.08em !important;
-    text-transform: uppercase !important;
-}
-
-/* Disclaimer text */
-body.te-space-active .disclaimer {
-    color: rgba(236, 236, 241, 0.20) !important;
-    font-size: 10px !important;
-    letter-spacing: 0.04em !important;
-}
 
 /* ── Chat message bubbles — instrument readout panels ─────────── */
 
@@ -486,8 +409,8 @@ body.te-space-active #settingsModal textarea {
 
 /* ── Attachment chips ─────────────────────────────────────────── */
 body.te-space-active .attachment-chip {
-    background: rgba(8, 12, 20, 0.70) !important;
-    border: 1px solid rgba(140, 160, 180, 0.18) !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(150, 160, 175, 0.20) !important;
     color: rgba(236, 236, 241, 0.75) !important;
     border-radius: 3px !important;
 }
@@ -556,24 +479,11 @@ body.te-space-active #micBtn:hover,
 body.te-space-active #thinkingEffortBtn:hover,
 body.te-space-active .btn-icon:hover {
     color: #c8cdd3 !important;
-    background: rgba(140, 160, 180, 0.08) !important;
-    border-color: rgba(140, 160, 180, 0.15) !important;
+    /* Achromatic hover wash — no blue-gray tint that could read teal. */
+    background: rgba(255, 255, 255, 0.07) !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
 }
 
-/* ── Send button — primary action glow ────────────────────────── */
-body.te-space-active #sendBtn {
-    color: #c8cdd3 !important;
-    background: rgba(140, 160, 180, 0.10) !important;
-    border: 1px solid rgba(140, 160, 180, 0.30) !important;
-    border-radius: 4px !important;
-    transition: all 0.2s ease !important;
-}
-body.te-space-active #sendBtn:hover {
-    color: #e0e4e8 !important;
-    background: rgba(140, 160, 180, 0.20) !important;
-    border-color: rgba(140, 160, 180, 0.50) !important;
-    box-shadow: 0 0 14px rgba(140, 160, 180, 0.18) !important;
-}
 
 /* ── New Chat button — special cockpit button ─────────────────── */
 body.te-space-active #newChatSidebar {
@@ -602,37 +512,6 @@ body.te-space-active #newChatSidebar:hover::after {
     left: 100%;
 }
 
-/* ── Composer action popover — cockpit menu ───────────────────── */
-body.te-space-active .composer-action-popover {
-    background: rgba(6, 10, 18, 0.95) !important;
-    border: 1px solid rgba(140, 160, 180, 0.18) !important;
-    border-radius: 6px !important;
-    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.60), 0 0 1px rgba(140, 160, 180, 0.20) !important;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-}
-body.te-space-active .composer-action-btn,
-body.te-space-active .composer-game-btn {
-    color: rgba(236, 236, 241, 0.65) !important;
-    border-radius: 4px !important;
-    font-size: 12px !important;
-    letter-spacing: 0.02em !important;
-}
-body.te-space-active .composer-action-btn:hover,
-body.te-space-active .composer-game-btn:hover {
-    background: rgba(140, 160, 180, 0.12) !important;
-    border-color: rgba(140, 160, 180, 0.30) !important;
-    color: #c8cdd3 !important;
-}
-body.te-space-active .composer-games-title {
-    color: rgba(140, 160, 180, 0.50) !important;
-    font-size: 9px !important;
-    letter-spacing: 0.12em !important;
-    text-transform: uppercase !important;
-}
-body.te-space-active .composer-games-column {
-    border-left-color: rgba(140, 160, 180, 0.10) !important;
-}
 
 /* ── Nav button labels — TE style ─────────────────────────────── */
 body.te-space-active #navChatBtn,
@@ -693,6 +572,15 @@ body:not(.te-nav-chat) #te-idle-thomas {
     pointer-events: none !important;
 }
 
+#te-idle-thomas,
+.te-ambient-bot,
+body.te-space-active .te-floater,
+body.te-space-active .robot-alert-stage {
+    display: none !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
 /* Speech bubble — floats to the LEFT of Thomas (viewer's right) */
 #te-idle-thomas .te-idle-speech {
     position: absolute;
@@ -728,7 +616,7 @@ body:not(.te-nav-chat) #te-idle-thomas {
 }
 
 /* ── Hide the small chat-robot-world presence actors ────────────── */
-.chat-robot-world-actor {
+body.te-screensaver-active .chat-robot-world-actor {
     display: none !important;
 }
 
@@ -1005,77 +893,6 @@ body.te-theme-light .chat-robot-world-bubble-meta * {
     color: #7a6b58 !important;
 }
 
-/* ── COMPOSER — bottom of the notebook page ───────────────────── */
-body.te-theme-light .composer-container {
-    background: #e3dbd0 !important;
-    border-top: 1px solid #c8bfab !important;
-}
-body.te-theme-light .composer-box {
-    background: #f2ede4 !important;
-    border: 1px solid #c8bca8 !important;
-    border-radius: 2px !important;
-}
-body.te-theme-light .composer-box textarea,
-body.te-theme-light .composer-box input[type="text"],
-body.te-theme-light .composer-box .ql-editor {
-    background: transparent !important;
-    color: #2c2420 !important;
-    border: none !important;
-}
-body.te-theme-light .composer-box textarea::placeholder,
-body.te-theme-light textarea::placeholder {
-    color: #a0907a !important;
-    font-style: italic !important;
-}
-/* Composer buttons — pen/paper feel */
-body.te-theme-light .composer-box .btn-send,
-body.te-theme-light #sendBtn {
-    background: #5c4a35 !important;
-    color: #f5f0e8 !important;
-    border: none !important;
-    border-radius: 2px !important;
-}
-body.te-theme-light .composer-box .btn-send:hover,
-body.te-theme-light #sendBtn:hover {
-    background: #4a3a28 !important;
-}
-body.te-theme-light .composer-box .btn-icon,
-body.te-theme-light #attachBtn,
-body.te-theme-light #micBtn {
-    color: #7a6b58 !important;
-    background: transparent !important;
-    border: none !important;
-}
-body.te-theme-light #attachBtn:hover,
-body.te-theme-light #micBtn:hover {
-    color: #4a3d30 !important;
-}
-/* -- LIGHT THEME ICON OVERRIDES -- */
-/* The base CSS uses mask-image SVGs. Override with journal-style icons. */
-
-/* SEND — quill / fountain pen nib */
-body.te-theme-light #sendBtn:not(.stop-state) i::before {
-    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M13 1.5L6.5 8l-1 3.5L9 10.5l6.5-6.5c0 0-1-1.5-2.5-2.5z' fill='black'/%3E%3Cpath d='M5.5 11.5L2 14' stroke='black' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E") !important;
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M13 1.5L6.5 8l-1 3.5L9 10.5l6.5-6.5c0 0-1-1.5-2.5-2.5z' fill='black'/%3E%3Cpath d='M5.5 11.5L2 14' stroke='black' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E") !important;
-}
-
-/* ATTACH — paperclip */
-body.te-theme-light #attachBtn i::before {
-    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8.5 3.5v7c0 1.4-1.1 2.5-2.5 2.5s-2.5-1.1-2.5-2.5V4c0-2 1.5-3 3-3s3 1 3 3v7.5c0 .8-.7 1.5-1.5 1.5s-1.5-.7-1.5-1.5V5' stroke='black' stroke-width='1.4' stroke-linecap='round' fill='none'/%3E%3C/svg%3E") !important;
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8.5 3.5v7c0 1.4-1.1 2.5-2.5 2.5s-2.5-1.1-2.5-2.5V4c0-2 1.5-3 3-3s3 1 3 3v7.5c0 .8-.7 1.5-1.5 1.5s-1.5-.7-1.5-1.5V5' stroke='black' stroke-width='1.4' stroke-linecap='round' fill='none'/%3E%3C/svg%3E") !important;
-}
-
-/* MIC — audio waveform bars (clearly a sound/audio icon) */
-body.te-theme-light #micBtn i::before {
-    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 6.5v3' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3Cpath d='M5.5 4.5v7' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3Cpath d='M8 2.5v11' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3Cpath d='M10.5 4.5v7' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3Cpath d='M13 6.5v3' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E") !important;
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 6.5v3' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3Cpath d='M5.5 4.5v7' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3Cpath d='M8 2.5v11' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3Cpath d='M10.5 4.5v7' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3Cpath d='M13 6.5v3' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E") !important;
-}
-
-/* NEW CHAT — quill feather pen */
-body.te-theme-light #newChatSidebar i::before {
-    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M13.5 1C10 2 7 5.5 5.5 8.5L4.5 12l1.5-.5c1-1.5 2-3 4-5' stroke='black' stroke-width='1.3' fill='none' stroke-linecap='round'/%3E%3Cpath d='M4.5 12L2 14.5' stroke='black' stroke-width='1.4' stroke-linecap='round'/%3E%3Cpath d='M6 11.5c-1 .2-2.5-.5-3-2' stroke='black' stroke-width='1' stroke-linecap='round' fill='none'/%3E%3C/svg%3E") !important;
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M13.5 1C10 2 7 5.5 5.5 8.5L4.5 12l1.5-.5c1-1.5 2-3 4-5' stroke='black' stroke-width='1.3' fill='none' stroke-linecap='round'/%3E%3Cpath d='M4.5 12L2 14.5' stroke='black' stroke-width='1.4' stroke-linecap='round'/%3E%3Cpath d='M6 11.5c-1 .2-2.5-.5-3-2' stroke='black' stroke-width='1' stroke-linecap='round' fill='none'/%3E%3C/svg%3E") !important;
-}
 
 /* -- WORKSPACE NAV ICONS — journal / analog style overrides -- */
 /* For icons using the mask system, override the mask-image.
@@ -1183,16 +1000,19 @@ body.te-theme-light .composer-status-bar {
     border-top: 1px solid #d0c4b0 !important;
 }
 body.te-theme-light .composer-status-bar *,
-body.te-theme-light .chat-composer-control-label {
+body.te-theme-light .composer-control-label,
+body.te-theme-light .composer-controls-title,
+body.te-theme-light .composer-controls-model {
     color: #8a7a65 !important;
 }
-body.te-theme-light .chat-composer-control-select {
+body.te-theme-light .composer-control-select {
     background: #e8e2d6 !important;
     border: 1px solid #c8bca8 !important;
     color: #4a3d30 !important;
     border-radius: 2px !important;
 }
-body.te-theme-light .composer-action-popover {
+body.te-theme-light .composer-action-popover,
+body.te-theme-light .composer-controls-popover {
     background: #f0ebe2 !important;
     border: 1px solid #c8bca8 !important;
 }
@@ -2181,14 +2001,10 @@ body.te-theme-dark .message-author {
 body.te-theme-dark .message-meta {
     color: #666 !important;
 }
-/* Composer */
-body.te-theme-dark .composer-container {
-    background: #0e0e0e !important;
-    border-top: 1px solid #222 !important;
-}
-body.te-theme-dark textarea,
-body.te-theme-dark .composer-input,
-body.te-theme-dark .composer-textarea {
+/* Composer look is owned by css/composer.css (achromatic). Composer-scoped
+   te-theme-dark rules removed in the rebuild; the generic textarea rule below
+   keeps non-composer dark inputs intact. */
+body.te-theme-dark textarea {
     background: #141414 !important;
     color: #e8e8e8 !important;
     border: 1px solid #333 !important;

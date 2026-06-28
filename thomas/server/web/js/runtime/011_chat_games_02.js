@@ -119,6 +119,20 @@ function chatGameHandleKeyInput(event, pressed) {
     }
 }
 
+function chatGameBootFromUrl() {
+    let gameId = '';
+    try {
+        const params = new URLSearchParams(window.location.search || '');
+        gameId = safeString(params.get('game') || params.get('chat_game')).toLowerCase();
+    } catch (_error) {
+        gameId = '';
+    }
+    if (gameId !== 'cloud_jump' && gameId !== JETPACK_GAME_ID && gameId !== DINO_GAME_ID) return;
+    window.setTimeout(() => {
+        chatGameOpen(gameId);
+    }, 150);
+}
+
 function initChatGame() {
     const best = chatGameGetHighScore();
     if (chatGameScore) chatGameScore.textContent = '0';
@@ -152,6 +166,7 @@ function initChatGame() {
     document.addEventListener('keyup', (event) => {
         chatGameHandleKeyInput(event, false);
     });
+    chatGameBootFromUrl();
 }
 
 // 
@@ -565,14 +580,14 @@ function initActions() {
         micBaseText = safeString(composerTextarea.value);
         micPendingSend = false;
 
-        if (micPreferServerCapture && navigator.mediaDevices?.getUserMedia && typeof window.MediaRecorder !== 'undefined') {
-            const started = await startServerMicCapture();
-            if (started) return;
-        }
-
         if (recognition) {
             startSpeechRecognitionCapture();
             return;
+        }
+
+        if (micPreferServerCapture && navigator.mediaDevices?.getUserMedia && typeof window.MediaRecorder !== 'undefined') {
+            const started = await startServerMicCapture();
+            if (started) return;
         }
 
         notifyUser("Speech recognition isn't supported in this browser.", {
@@ -866,16 +881,22 @@ async function runChatSendJob(sendJob) {
     }
 
     // Build user message content once for both display and history.
+    // Attachments now render as real thumbnails / file badges below the text
+    // (see buildMessageAttachments in renderMessage), so we no longer inject
+    // the old "(Attached N …)" placeholder text into the bubble.
     let userContent = safeString(text);
-    if (docsToSend.length > 0) userContent += `\n\n*(Attached ${docsToSend.length} document(s))*`;
-    if (imagesToSend.length > 0) userContent += `\n\n*(Attached ${imagesToSend.length} image(s))*`;
-    userContent = userContent || (queuedModeId === 'evolve' ? '(Evolve Thomas)' : '(Sent Attachments)');
+    if (!userContent && docsToSend.length === 0 && imagesToSend.length === 0) {
+        userContent = (queuedModeId === 'evolve' ? '(Evolve Thomas)' : '(Sent Attachments)');
+    }
+    const attachmentMeta = {};
+    if (imagesToSend.length > 0) attachmentMeta.images = imagesToSend;
+    if (docsToSend.length > 0) attachmentMeta.docs = docsToSend;
 
     // Skip rendering if already shown when queued
     if (!sendJob._alreadyRendered) {
         const existingUserRow = document.getElementById(clientMessageId);
         if (!existingUserRow) {
-            renderMessage({ role: 'user', content: userContent, id: clientMessageId });
+            renderMessage({ role: 'user', content: userContent, id: clientMessageId, ...attachmentMeta });
         }
     }
     if (!safeString(activeChatId)) {
@@ -888,6 +909,7 @@ async function runChatSendJob(sendJob) {
         createdAt: Date.now(),
         status: 'complete',
         toolCalls: [],
+        ...attachmentMeta,
     });
     syncActiveChatSidebarEntry();
     void persistActiveChat({ quiet: true });
@@ -1015,7 +1037,11 @@ async function handleSend() {
         const interruptPayload = {
             text: text,
             session_id: sessionId,
-            profile: currentProfile || '',
+            profile: safeString(
+                (typeof modelSelector !== 'undefined' && modelSelector ? modelSelector.value : '')
+                || (typeof setupProviderSelector !== 'undefined' && setupProviderSelector ? setupProviderSelector.value : '')
+                || (typeof currentPreferences !== 'undefined' ? currentPreferences?.advanced?.model?.active_profile : '')
+            ),
             busy_strategy: 'interrupt',
         };
         // Render user message immediately

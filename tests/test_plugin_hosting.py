@@ -208,7 +208,7 @@ class TestPluginHostingRoutes(AioHTTPTestCase):
         self.assertEqual(len(plugins), 1)
         plugin = plugins[0]
         self.assertEqual(plugin.get("id"), "life-manager")
-        self.assertEqual(plugin.get("marketplace_type"), "command_center")
+        self.assertEqual(plugin.get("marketplace_type"), "app")
         self.assertEqual(plugin.get("left_nav_behavior"), "workspace")
         self.assertEqual(plugin.get("requires"), ["life-manager-foundation"])
         self.assertTrue(
@@ -227,7 +227,7 @@ class TestPluginHostingRoutes(AioHTTPTestCase):
         resp = await self.client.get("/api/v1/plugins/life-manager")
         self.assertEqual(resp.status, 200)
         plugin = await resp.json()
-        self.assertEqual(plugin.get("marketplace_type"), "command_center")
+        self.assertEqual(plugin.get("marketplace_type"), "app")
         self.assertEqual(plugin.get("categories"), ["productivity", "automation"])
         self.assertEqual(plugin.get("requires"), ["life-manager-foundation"])
         self.assertTrue(

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import scripts.crew.workboard.message as message_tool
 import scripts.crew.workboard.worker as mod
 import scripts.forge.gates.workboard_claims as gate
 
@@ -41,6 +42,67 @@ def _write_workboard(
         encoding="utf-8",
     )
     return path
+
+
+def test_worker_stops_before_task_when_inbox_has_unread_message(tmp_path: Path, monkeypatch, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        claims_block="- agent=Worker 1; scope=scripts/forge/gates/plan_structure_gate.py; task=[WIP] automation lane",
+        active_tasks_block=(
+            "- task_id=task-a; agent=Worker 1; scope=scripts/forge/gates/plan_structure_gate.py; "
+            "summary=[P1][NEXT] run automation lane; status=active"
+        ),
+    )
+    catalog = tmp_path / "catalog.json"
+    catalog.write_text(json.dumps({"tasks": {"task-a": ["python -c \"print('should not run')\""]}}, indent=2), encoding="utf-8")
+
+    ok_send, send_payload = message_tool.send_message(
+        workboard,
+        sender="Coordinator",
+        recipient="Worker 1",
+        task_id="task-a",
+        kind="blocker",
+        priority="p0",
+        summary="Stop and read this first",
+        requested_action="Ack/respond before continuing.",
+    )
+    assert ok_send, send_payload
+
+    def _unexpected_run(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise AssertionError("worker executed a task command before clearing unread inbox messages")
+
+    monkeypatch.setattr(mod.subprocess, "run", _unexpected_run)
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--agent",
+            "Worker 1",
+            "--task-manager-agent",
+            "task-manager-agent",
+            "--catalog",
+            str(catalog),
+            "--cycles",
+            "1",
+            "--poll-seconds",
+            "0",
+            "--idle-heartbeat-seconds",
+            "0",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    text = workboard.read_text(encoding="utf-8")
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["completed_count"] == 0
+    assert payload["failure_count"] == 0
+    assert payload["inbox_blocked_count"] == 1
+    assert payload["last_inbox_message_ids"] == [send_payload["message"]["msg_id"]]
+    assert "task_id=task-a; agent=Worker 1;" in text
+    assert "worker paused: `Worker 1` has 1 unread workboard message(s)" in text
 
 
 def test_worker_executes_assigned_task_and_releases_on_success(tmp_path: Path, monkeypatch, capsys) -> None:

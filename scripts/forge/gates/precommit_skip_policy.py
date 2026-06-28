@@ -104,6 +104,9 @@ PROTECTED_SKIP_HOOKS: tuple[str, ...] = (
     "thomas-workboard-agent-claim-gate",
     "thomas-workboard-issue-tool-smoke",
     "thomas-workboard-problem-record-smoke",
+    "thomas-workboard-inbox-gate",
+    "thomas-workboard-inbox-final-gate",
+    "thomas-workboard-inbox-commit-msg-gate",
     "thomas-bulk-commit-guard",
     "thomas-commit-growth-guard",
     "thomas-monolith-guard",
@@ -619,7 +622,8 @@ def run(argv: Sequence[str] | None = None) -> int:
             # QuickBuilder mode (human-activated, signed flag) waives the cooldown
             # so protected-file edits can land back-to-back. The native-auth tap
             # itself is still required above; only the rate-limit is relaxed.
-            print("  (QuickBuilder mode: breakglass cooldown waived)")
+            if not args.json:
+                print("  (QuickBuilder mode: breakglass cooldown waived)")
             cooldown_minutes = 0
         if cooldown_minutes > 0 and history:
             latest = history[-1]

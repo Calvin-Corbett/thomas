@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
+import platform as _platform
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -10,104 +10,201 @@ from typing import Any
 from thomas.agent.chat_dispatcher import dispatch_async
 from thomas.agent.dispatch import should_dispatch
 from thomas.core import task_bot_runtime
+from thomas.core.file_access import PROJECT, clamp_file_access_level, file_access_spec
 from thomas.core.task_titling import derive_task_title
 from thomas.marketplace.orchestrator.bot_roster import pick_bot_for_specialist
+from thomas.server import chat_delegation_live_repo as _live_repo_module
+from thomas.server import chat_delegation_runner as _runner_module
+from thomas.server.chat_delegation_canvas import canvas_start, is_canvas_task, run_canvas_worker
+
+# Re-export every deliverable helper that external callers may import from this module.
+# (Tests and routes do `from thomas.server.chat_delegation import _build_result_summary`
+# etc., so these must stay at module scope as visible attributes.)
+from thomas.server.chat_delegation_deliverable import (  # noqa: F401
+    _FAILURE_LANGUAGE_RE,
+    _artifacts_from_created,
+    _build_result_summary,
+    _claimed_filenames,
+    _claims_action_success,
+    _claims_file_creation,
+    _files_changed_since,
+    _handoff_block,
+    _resolve_created,
+    _snapshot_workspace_files,
+    _worker_summary_line,
+    _WorkerFatal,
+    _WorkerRetry,
+    _workspace_mtimes,
+    executability_warning,
+    prompt_needs_handoff,
+    quality_tier_clause,
+    render_report_pdfs,
+    runtime_executability_warning,
+)
+from thomas.server.chat_delegation_emitter import _DelegationEmitter
+from thomas.server.chat_delegation_live_repo import (  # noqa: F401
+    _live_repo_files_changed_since,
+    _live_repo_workspace_mtimes,
+    _prompt_targets_live_thomas_repo,
+    _with_live_repo_change_requirement,
+)
+from thomas.server.chat_delegation_runner import (  # noqa: F401
+    _next_worker_event,
+)
+from thomas.server.chat_delegation_session import (  # noqa: F401
+    _TERMINAL_TASK_STATES,
+    _heartbeat_age_s,
+    _normalize_record,
+    _resolve_repo_root,
+    _worker_has_started_progress,
+    session_active_delegations,
+)
+from thomas.server.chat_delegation_worker_config import (  # noqa: F401
+    _WORKER_FIRST_EVENT_TIMEOUT_S,
+    _WORKER_IDLE_EVENT_TIMEOUT_S,
+    PROVIDER_NATIVE_BACKEND,
+    TASK_MANAGER_BACKEND,
+    _agent_worker_runtime_profile,
+    _helper_prompt,
+    _infer_specialist,
+    _replan_prompt,
+    _requested_delegate_count,
+    _self_recovery_attempts,
+)
 from thomas.server.worker_runtime import run_agent_worker_events
 
 log = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[2]
-TASK_MANAGER_BACKEND = "task_manager"
-PROVIDER_NATIVE_BACKEND = "provider_native"
-_COUNT_WORDS = {
-    "one": 1,
-    "two": 2,
-    "three": 3,
-    "four": 4,
-    "five": 5,
-    "couple": 2,
-    "few": 3,
-}
-_MULTI_AGENT_COUNT_RE = re.compile(
-    r"(?:spawn|start|launch|run|create|use)\s+"
-    r"(?:exactly\s+)?(?:a\s+)?(?P<count>\d+|one|two|three|four|five|couple|few)\s+"
-    r"(?:real\s+|live\s+|tiny\s+|distinct\s+|lightweight\s+|small\s+|task\s+)*"
-    r"(?:sub[- ]?agents?|agents?|helpers?|workers?)",
-    re.I,
-)
 
 
-class _DelegationEmitter:
-    def __init__(self, emit_event: Callable[[dict[str, Any]], Awaitable[None]]) -> None:
-        self._emit_event = emit_event
-
-    async def started(self, record: dict[str, Any], *, specialist_id: str, bot: Any) -> None:
-        await self._emit_event(
-            {
-                "type": "delegation_started",
-                "execution_id": record.get("execution_id", ""),
-                "task_id": record.get("task_id", ""),
-                "session_id": record.get("session_id", ""),
-                "backend_type": record.get("backend_type", ""),
-                "state": record.get("state", "queued"),
-                "summary": record.get("summary", ""),
-                "last_progress": record.get("last_progress", ""),
-                "specialist_id": specialist_id,
-                **bot.to_event_dict(),
-            }
-        )
-
-    async def progress(self, record: dict[str, Any], *, specialist_id: str, bot: Any, text: str) -> None:
-        await self._emit_event(
-            {
-                "type": "delegation_progress",
-                "execution_id": record.get("execution_id", ""),
-                "task_id": record.get("task_id", ""),
-                "session_id": record.get("session_id", ""),
-                "backend_type": record.get("backend_type", ""),
-                "state": record.get("state", "executing"),
-                "summary": record.get("summary", ""),
-                "last_progress": text or record.get("last_progress", ""),
-                "specialist_id": specialist_id,
-                **bot.to_event_dict(),
-            }
-        )
-
-    async def completed(self, record: dict[str, Any], *, specialist_id: str, bot: Any, text: str = "") -> None:
-        await self._emit_event(
-            {
-                "type": "delegation_completed",
-                "execution_id": record.get("execution_id", ""),
-                "task_id": record.get("task_id", ""),
-                "session_id": record.get("session_id", ""),
-                "backend_type": record.get("backend_type", ""),
-                "state": "completed",
-                "summary": record.get("summary", ""),
-                "last_progress": text or record.get("last_progress", ""),
-                "specialist_id": specialist_id,
-                **bot.to_event_dict(),
-            }
-        )
-
-    async def failed(self, record: dict[str, Any], *, specialist_id: str, bot: Any, text: str) -> None:
-        await self._emit_event(
-            {
-                "type": "delegation_failed",
-                "execution_id": record.get("execution_id", ""),
-                "task_id": record.get("task_id", ""),
-                "session_id": record.get("session_id", ""),
-                "backend_type": record.get("backend_type", ""),
-                "state": "failed",
-                "summary": record.get("summary", ""),
-                "last_progress": text,
-                "specialist_id": specialist_id,
-                **bot.to_event_dict(),
-            }
-        )
+def _sync_runner_legacy_globals() -> None:
+    """Keep old chat_delegation monkeypatch surfaces effective after the module split."""
+    _runner_module.run_agent_worker_events = run_agent_worker_events
+    _runner_module._WORKER_FIRST_EVENT_TIMEOUT_S = _WORKER_FIRST_EVENT_TIMEOUT_S
+    _runner_module._WORKER_IDLE_EVENT_TIMEOUT_S = _WORKER_IDLE_EVENT_TIMEOUT_S
+    _runner_module._replan_prompt = _replan_prompt
+    _runner_module._self_recovery_attempts = _self_recovery_attempts
+    _runner_module._workspace_mtimes = _workspace_mtimes
+    _live_repo_module._workspace_mtimes = _workspace_mtimes
+    _runner_module._live_repo_workspace_mtimes = _live_repo_module._live_repo_workspace_mtimes
 
 
-def _resolve_repo_root(repo_root: str | Path | None = None) -> Path:
-    return (Path(repo_root).expanduser() if repo_root is not None else ROOT).resolve()
+async def _run_agent_worker(*args: Any, **kwargs: Any) -> None:
+    _sync_runner_legacy_globals()
+    return await _runner_module._run_agent_worker(*args, **kwargs)
+
+
+async def _run_agent_worker_supervised(*args: Any, **kwargs: Any) -> None:
+    _sync_runner_legacy_globals()
+    return await _runner_module._run_agent_worker_supervised(*args, **kwargs)
+
+
+async def _run_exhaustive_worker(*args: Any, **kwargs: Any) -> None:
+    _sync_runner_legacy_globals()
+    return await _runner_module._run_exhaustive_worker(*args, **kwargs)
+
+
+def build_active_task_digest(
+    session_id: str,
+    *,
+    repo_root: str | Path | None = None,
+    limit: int = 3,
+) -> str:
+    rows = session_active_delegations(session_id, repo_root=repo_root)
+    if not rows:
+        return ""
+    lines = ["Background work in this chat: to change or stop a RUNNING one, call update_task with its [task <ref>]:"]
+    for row in rows[: max(1, int(limit or 1))]:
+        bot = str(row.get("bot_id") or "worker").strip() or "worker"
+        state = str(row.get("state") or "requested").replace("_", " ")
+        backend = str(row.get("backend_type") or TASK_MANAGER_BACKEND).replace("_", " ")
+        ref = str(row.get("execution_id") or "").strip()
+        # Lead with WHAT the task is (its subject) so the model can match the user's
+        # reference ("cancel the jazz report") to the right task. The subject lives in
+        # `summary` (the task request); `last_progress` is only a status line and must
+        # NOT replace it — burying the subject left the model unable to tell which task
+        # the user meant. (chat sweep, 2026-06-27)
+        subject = str(row.get("summary") or row.get("title") or "").strip()
+        progress = str(row.get("last_progress") or "").strip()
+        if subject and progress and progress.lower() not in subject.lower():
+            detail = f"{subject} (status: {progress})"
+        else:
+            detail = subject or progress or "starting up"
+        lines.append(f"- [task {ref}] {bot} [{state} via {backend}]: {detail}")
+    return "\n".join(lines)
+
+
+def resolve_active_task_ref(
+    session_id: str,
+    task_ref: str,
+    *,
+    repo_root: str | Path | None = None,
+) -> str | None:
+    ref = str(task_ref or "").strip().lower().replace("[", "").replace("]", "")
+    for token in ("task", "ref", "#", ":"):
+        ref = ref.replace(token, "")
+    ref = ref.strip()
+    if not ref:
+        return None
+    rows = session_active_delegations(session_id, repo_root=repo_root)
+    matches: list[tuple[str, bool]] = []
+    for row in rows:
+        eid = str(row.get("execution_id") or "").lower()
+        if not eid:
+            continue
+        terminal = str(row.get("state") or "").lower() in _TERMINAL_TASK_STATES
+        if eid == ref or eid.endswith(ref) or ref.endswith(eid) or (len(ref) >= 4 and ref in eid):
+            matches.append((str(row.get("execution_id") or ""), terminal))
+    for eid, terminal in matches:
+        if not terminal:
+            return eid
+    if matches:
+        return matches[0][0]
+    # The model often references a task by a loose ref the opaque exec-id doesn't
+    # contain. These are PLAUSIBLE interpretations of what it copied from the digest,
+    # not blind guesses (an unrelated ref still resolves to None):
+    #   (a) a pure ordinal ('[task 1]' -> '1') maps to the Nth task in digest order;
+    #   (b) otherwise the ref's words are matched against each task's subject
+    #       ('cancel the jazz report' -> the task whose summary mentions jazz).
+    # (chat sweep, 2026-06-27)
+    digits = "".join(ch for ch in ref if ch.isdigit())
+    if digits and digits == ref and 1 <= int(digits) <= len(rows):
+        return str(rows[int(digits) - 1].get("execution_id") or "") or None
+    ref_words = [w for w in ref.replace("-", " ").replace("_", " ").split() if len(w) >= 3]
+    if ref_words:
+        for r in rows:
+            subject = str(r.get("summary") or r.get("title") or "").lower()
+            if subject and any(w in subject for w in ref_words):
+                return str(r.get("execution_id") or "") or None
+    return None
+
+
+def apply_task_update(
+    session_id: str,
+    task_ref: str,
+    update: str = "",
+    *,
+    cancel: bool = False,
+    repo_root: str | Path | None = None,
+) -> dict[str, Any]:
+    eid = resolve_active_task_ref(session_id, task_ref, repo_root=repo_root)
+    if not eid:
+        return {"ok": False, "error": f"No running task matches reference '{task_ref}'."}
+    root = _resolve_repo_root(repo_root)
+    try:
+        if cancel:
+            task_bot_runtime.request_cancel(eid, actor="user", repo_root=root)
+            return {"ok": True, "execution_id": eid, "action": "cancel"}
+        text = str(update or "").strip()
+        if not text:
+            return {"ok": False, "error": "No update instruction was provided."}
+        task_bot_runtime.steer_execution(eid, text, actor="user", repo_root=root)
+        return {"ok": True, "execution_id": eid, "action": "steer"}
+    except ValueError as exc:
+        return {"ok": False, "execution_id": eid, "error": str(exc)}
+    except FileNotFoundError as exc:
+        return {"ok": False, "error": str(exc)}
 
 
 def _ensure_task_workspace(execution_id: str) -> Path:
@@ -120,144 +217,11 @@ def _ensure_task_workspace(execution_id: str) -> Path:
     base = Path.home() / ".thomas" / "workspaces" / safe_id
     try:
         base.mkdir(parents=True, exist_ok=True)
-    except Exception:
+    except OSError:
         # Fall back to a repo-local runtime dir if home isn't writable.
         base = (ROOT / "runtime" / "workspaces" / safe_id).resolve()
         base.mkdir(parents=True, exist_ok=True)
     return base
-
-
-def _build_result_summary(result_text_parts: list[str], tools_used: list[str]) -> str:
-    """Condense a background worker's actual output into a result line for chat.
-
-    Prefers the worker's own final words (what it reports it did / produced). Falls
-    back to naming the tools it ran, then to a generic completion line. This is what
-    the user sees as the finished-task result, so it must reflect real output — never
-    a fabricated success.
-    """
-    raw = "".join(result_text_parts).strip()
-    if raw:
-        # Show the worker's FINAL one-line summary (it is instructed to end with one),
-        # NOT its full chain-of-thought. Otherwise the worker's reasoning leaks onto
-        # the user-facing task card ("I'll use the web-game workflow... the workspace
-        # is empty, so I'm going to add snake.html plus the required progress...").
-        # The user should see the result, not the thinking.
-        lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
-        summary = " ".join((lines[-1] if lines else raw).split())
-        if len(summary) > 300:
-            summary = summary[:297] + "..."
-        return summary
-    if tools_used:
-        names = ", ".join(tools_used[:5])
-        return f"Done. Worked the task using: {names}."
-    return "Background execution completed."
-
-
-def _infer_specialist(prompt: str) -> str:
-    text = str(prompt or "").lower()
-    if any(token in text for token in ("code", "bug", "endpoint", "api", "test", "refactor", "implement")):
-        return "coding"
-    if any(token in text for token in ("research", "find", "look up", "compare", "investigate")):
-        return "research"
-    if any(token in text for token in ("tool", "command", "run ", "install", "configure", "setup", "set up")):
-        return "tools"
-    return "reasoning"
-
-
-def _requested_delegate_count(prompt: str) -> int:
-    text = str(prompt or "").strip().lower()
-    if not text:
-        return 1
-    match = _MULTI_AGENT_COUNT_RE.search(text)
-    if not match:
-        return 1
-    raw = str(match.group("count") or "").strip().lower()
-    if raw.isdigit():
-        value = int(raw)
-    else:
-        value = _COUNT_WORDS.get(raw, 1)
-    return max(1, min(5, int(value or 1)))
-
-
-def _helper_prompt(prompt: str, *, helper_index: int, helper_count: int, bot_name: str) -> str:
-    if helper_count <= 1:
-        return prompt
-    return (
-        f"{prompt.rstrip()}\n\n"
-        f"[Helper assignment]\n"
-        f"You are helper {helper_index} of {helper_count} ({bot_name}). "
-        f"Take a distinct slice of the work from the other helpers, avoid duplicating them, "
-        f"and report concise progress."
-    ).strip()
-
-
-def _normalize_record(payload: dict[str, Any] | None) -> dict[str, Any]:
-    row = dict(payload or {})
-    summary = str(row.get("summary") or row.get("progress_summary") or "").strip()
-    progress = str(row.get("progress_summary") or summary).strip()
-    bot_id = str(row.get("bot_id") or "").strip()
-    bot_name = str(row.get("bot_name") or "").strip() or (bot_id[:1].upper() + bot_id[1:] if bot_id else "")
-    execution_id = str(row.get("execution_id") or "")
-    # If the worker built a playable web artifact in its isolated workspace, expose a
-    # one-click URL so the task card can offer "Play". Empty when there's nothing to open.
-    artifact_url = ""
-    try:
-        from thomas.server.routes.deliverable_aiohttp import deliverable_url
-
-        artifact_url = deliverable_url(execution_id)
-    except Exception:
-        artifact_url = ""
-    return {
-        "execution_id": execution_id,
-        "task_id": str(row.get("task_id") or ""),
-        "session_id": str(row.get("conversation_id") or row.get("thread_id") or ""),
-        "backend_type": str(row.get("backend_type") or TASK_MANAGER_BACKEND),
-        "state": str(row.get("state") or "requested"),
-        "summary": summary,
-        "last_progress": progress,
-        "artifact_url": artifact_url,
-        "bot_id": bot_id,
-        "bot_name": bot_name,
-        "created_at": str(row.get("created_at") or ""),
-        "updated_at": str(row.get("updated_at") or ""),
-    }
-
-
-def session_active_delegations(
-    session_id: str,
-    *,
-    repo_root: str | Path | None = None,
-) -> list[dict[str, Any]]:
-    root = _resolve_repo_root(repo_root)
-    rows = task_bot_runtime.list_executions(root, refresh=True)
-    session_rows: list[dict[str, Any]] = []
-    for row in rows:
-        if str(row.get("conversation_id") or "") != str(session_id or ""):
-            continue
-        execution_id = str(row.get("execution_id") or "")
-        full = task_bot_runtime.get_execution(execution_id, root)
-        session_rows.append(_normalize_record(full if isinstance(full, dict) else row))
-    session_rows.sort(key=lambda item: (item.get("updated_at", ""), item.get("execution_id", "")), reverse=True)
-    return session_rows
-
-
-def build_active_task_digest(
-    session_id: str,
-    *,
-    repo_root: str | Path | None = None,
-    limit: int = 3,
-) -> str:
-    rows = session_active_delegations(session_id, repo_root=repo_root)
-    if not rows:
-        return ""
-    lines = ["Background work in this chat:"]
-    for row in rows[: max(1, int(limit or 1))]:
-        bot = str(row.get("bot_id") or "worker").strip() or "worker"
-        state = str(row.get("state") or "requested").replace("_", " ")
-        backend = str(row.get("backend_type") or TASK_MANAGER_BACKEND).replace("_", " ")
-        detail = str(row.get("last_progress") or row.get("summary") or "").strip()
-        lines.append(f"- {bot} [{state} via {backend}]: {detail}")
-    return "\n".join(lines)
 
 
 async def start_background_delegation(
@@ -270,8 +234,14 @@ async def start_background_delegation(
     emit_event: Callable[[dict[str, Any]], Awaitable[None]],
     repo_root: str | Path | None = None,
     force: bool = False,
+    autonomy_level: int = 4,
+    file_access: int | None = None,
     profile: str | None = None,
     effort: str = "diligent",
+    guardrails: str = "",
+    guardrail_modes: dict[str, str] | None = None,
+    session_llm: Any = None,
+    surface: str | None = None,
 ) -> dict[str, Any] | None:
     normalized_mode = str(mode or "").strip().lower()
     forced = bool(force)
@@ -318,6 +288,33 @@ async def start_background_delegation(
 
     bot = pick_bot_for_specialist(specialist_id)
 
+    # Engine choice is the MODEL's call, declared via send_task(surface=...) — organic
+    # routing, NOT a keyword regex (Calvin's law). 'canvas' -> fast streaming watch-it-draw
+    # worker; 'task' -> capable agent worker. Only when the model declared NOTHING (the
+    # narration-backstop / forced-launch paths) do we fall back to the tightened is_canvas_task
+    # hint. Falls back to the agent worker on any canvas-worker error.
+    _declared = str(surface or "").strip().lower()
+    if _declared == "canvas":
+        _want_canvas = True
+    elif _declared == "task":
+        _want_canvas = False
+    else:
+        _want_canvas = is_canvas_task(prompt)
+    if _want_canvas:
+        try:
+            return await _start_canvas_worker_delegation(
+                session_id=session_id,
+                prompt=prompt,
+                specialist_id=specialist_id,
+                bot=bot,
+                emitter=emitter,
+                repo_root=repo_root,
+                profile=profile,
+                session_llm=session_llm,
+            )
+        except (RuntimeError, OSError, ValueError, TypeError) as exc:
+            log.warning("Canvas worker failed, falling back to agent worker: %s", exc, exc_info=True)
+
     try:
         return await _start_agent_worker_delegation(
             app,
@@ -327,10 +324,15 @@ async def start_background_delegation(
             bot=bot,
             emitter=emitter,
             repo_root=repo_root,
+            autonomy_level=autonomy_level,
+            file_access=file_access,
+            recent_messages=recent_messages,
             profile=profile,
             effort=effort,
+            guardrails=guardrails,
+            guardrail_modes=guardrail_modes,
         )
-    except Exception as exc:
+    except (RuntimeError, OSError, ValueError, TypeError) as exc:
         log.warning("Agent worker delegation failed, falling back to task manager: %s", exc, exc_info=True)
 
     return await _start_task_manager_delegation(
@@ -388,6 +390,101 @@ async def _start_task_manager_delegation(
     return record
 
 
+async def _start_canvas_worker_delegation(
+    *,
+    session_id: str,
+    prompt: str,
+    specialist_id: str,
+    bot: Any,
+    emitter: _DelegationEmitter,
+    repo_root: str | Path | None,
+    profile: str | None = None,
+    session_llm: Any = None,
+) -> dict[str, Any]:
+    """Fast streaming visual worker: streams a self-contained HTML document to the
+    Canvas (the per-execution store), then writes it as a downloadable deliverable."""
+    root = _resolve_repo_root(repo_root)
+    execution = task_bot_runtime.create_execution(
+        session_id=session_id,
+        summary=derive_task_title(prompt),
+        intent="chat_task",
+        scope=[specialist_id],
+        visibility="background",
+        bot_id=bot.id,
+        actor="thomas-canvas",
+        backend_type=PROVIDER_NATIVE_BACKEND,
+        runtime_profile={"backend_type": PROVIDER_NATIVE_BACKEND, "canvas": True},
+        repo_root=root,
+    )
+    execution_id = str(execution.get("execution_id") or "")
+    # Register the canvas store NOW (before the started event) so the very first
+    # delegation_started already carries is_canvas=True and the Canvas opens instantly.
+    canvas_start(execution_id, title=derive_task_title(prompt))
+    task_bot_runtime.update_execution(
+        execution_id,
+        state="executing",
+        claimed_owner=bot.name,
+        progress_summary="Drawing it on the canvas…",
+        actor=bot.name,
+        repo_root=root,
+        force=True,
+    )
+    record = _normalize_record(task_bot_runtime.get_execution(execution_id, root))
+    await emitter.started(record, specialist_id=specialist_id, bot=bot)
+
+    async def _progress(text: str) -> None:
+        task_bot_runtime.update_execution(
+            execution_id, progress_summary=text, actor=bot.name, repo_root=root, force=True
+        )
+        rec = _normalize_record(task_bot_runtime.get_execution(execution_id, root))
+        await emitter.progress(rec, specialist_id=specialist_id, bot=bot, text=text)
+
+    async def _run() -> None:
+        # Generate in the BACKGROUND so the chat turn returns immediately and the
+        # Canvas streams via the /delegations poll (no shared-LLM-lock deadlock and
+        # no turn-blocking). The per-execution canvas store grows live for the poll.
+        try:
+            html = await run_canvas_worker(
+                execution_id=execution_id,
+                prompt=prompt,
+                root=root,
+                profile=profile,
+                emit_progress=_progress,
+                session_llm=session_llm,
+            )
+        except Exception as exc:  # noqa: BLE001 - surface as a failed card, don't crash anything
+            task_bot_runtime.fail_execution(
+                execution_id,
+                actor=bot.name,
+                summary=f"Canvas worker failed: {exc}",
+                blocker="canvas_failed",
+                repo_root=root,
+            )
+            rec = _normalize_record(task_bot_runtime.get_execution(execution_id, root))
+            await emitter.failed(rec, specialist_id=specialist_id, bot=bot, text=str(exc))
+            return
+        # Persist the final HTML as a real downloadable deliverable.
+        try:
+            work_dir = _ensure_task_workspace(execution_id)
+            (Path(work_dir) / "index.html").write_text(html or "", encoding="utf-8")
+        except OSError:
+            log.debug("canvas deliverable write failed for %s", execution_id, exc_info=True)
+        task_bot_runtime.update_execution(
+            execution_id,
+            state="completed",
+            proof_status="verified",
+            progress_summary="Rendered on the canvas.",
+            actor=bot.name,
+            repo_root=root,
+            force=True,
+        )
+        rec = _normalize_record(task_bot_runtime.get_execution(execution_id, root))
+        await emitter.completed(rec, specialist_id=specialist_id, bot=bot, text="Rendered on the canvas.")
+
+    asyncio.create_task(_run())
+    return record
+
+
 async def _start_agent_worker_delegation(
     app: Any,
     *,
@@ -397,14 +494,27 @@ async def _start_agent_worker_delegation(
     bot: Any,
     emitter: _DelegationEmitter,
     repo_root: str | Path | None,
+    autonomy_level: int = 4,
+    file_access: int | None = None,
+    recent_messages: list[dict[str, Any]] | None = None,
     profile: str | None = None,
     effort: str = "diligent",
+    guardrails: str = "",
+    guardrail_modes: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     root = _resolve_repo_root(repo_root)
+    targets_live_repo = _prompt_targets_live_thomas_repo(prompt)
+    effective_file_access = clamp_file_access_level(file_access if file_access is not None else 1)
+    runtime_profile = _agent_worker_runtime_profile(
+        autonomy_level=autonomy_level,
+        file_access=file_access,
+        effort=effort,
+        guardrails=guardrails,
+        requires_live_repo_change=targets_live_repo,
+    )
     execution = task_bot_runtime.create_execution(
         session_id=session_id,
-        # Display title for the task card — a real name for the work, not a raw
-        # prompt truncation. The worker still receives the full `prompt` below.
+        # Display title for the task card — a real name for the work, not a raw prompt truncation.
         summary=derive_task_title(prompt),
         intent="chat_task",
         scope=[specialist_id],
@@ -412,6 +522,7 @@ async def _start_agent_worker_delegation(
         bot_id=bot.id,
         actor="thomas-worker",
         backend_type=PROVIDER_NATIVE_BACKEND,
+        runtime_profile=runtime_profile,
         repo_root=root,
     )
     execution_id = str(execution.get("execution_id") or "")
@@ -446,243 +557,111 @@ async def _start_agent_worker_delegation(
     record = _normalize_record(task_bot_runtime.get_execution(execution_id, root))
     await emitter.started(record, specialist_id=specialist_id, bot=bot)
 
-    # Run the worker in a CLEAN per-task workspace OUTSIDE the Thomas source repo.
-    # Running in the repo root made the worker trip Thomas's own dev guardrails
-    # (startup router / "worktree is dirty" / shell rejecting reads), so user
-    # deliverables like "make me a pac-man game" could never write files. A fresh
-    # empty directory has no AGENTS.md/CLAUDE.md/git, so the worker just builds.
-    work_dir = _ensure_task_workspace(execution_id)
+    if targets_live_repo and effective_file_access < PROJECT:
+        spec = file_access_spec(effective_file_access)
+        summary = (
+            "This task targets Thomas's live repo, but file access is "
+            f"'{spec.ui_label}'. Raise the file-access dial to Project or higher, "
+            "then retry so Thomas can work on the live checkout instead of a sandbox."
+        )
+        task_bot_runtime.fail_execution(
+            execution_id,
+            actor=bot.name,
+            summary=summary,
+            blocker="file_access_too_low_for_self_development",
+            repo_root=root,
+        )
+        record = _normalize_record(task_bot_runtime.get_execution(execution_id, root))
+        await emitter.failed(record, specialist_id=specialist_id, bot=bot, text=summary)
+        return record
 
+    # Normal deliverables run in a clean per-task workspace; self-development uses the
+    # live checkout directly and is gated later on actual source-file changes.
+    work_dir = root if targets_live_repo else _ensure_task_workspace(execution_id)
+
+    _os_name = _platform.system() or "this"
+    _shell_hint = (
+        "Windows (shell commands run in cmd.exe / PowerShell — do NOT use Unix-only "
+        "commands like printf, touch, or cat)"
+        if _os_name.lower().startswith("win")
+        else _os_name
+    )
     instructions = (
         "You are a background worker building a deliverable for the user. "
         f"Your working directory is a fresh, empty workspace: {work_dir}. "
         "It is NOT a source repository — there are no repo rules, startup routers, "
         "or coordination checks to run here, so do not look for them. Just build "
         "what was asked directly: create whatever files are needed in this folder. "
-        "Use tools as needed. Do not address the user conversationally. "
+        f"You are running on {_shell_hint}. "
+        "HARD RULE — creating or editing files: you MUST use the `fs.write_file` "
+        "tool (pass `path` and `content`); writing to a nested path creates the "
+        "folders for you. Use `fs.list_dir` to inspect and `fs.read_file` to read. "
+        "NEVER use shell commands such as printf, echo, touch, cat, tee, or heredocs "
+        "to create or write files — they are unreliable and fail on this OS. Reserve "
+        "the `shell.exec` tool ONLY for running programs/builds, and when you do, use "
+        "commands valid for the OS above. Use relative paths inside the workspace. "
+        "Do not address the user conversationally. "
         "When done, end with a one-line summary of what you built and the main file "
-        "name(s) so it can be shown back in chat."
+        "name(s) so it can be shown back in chat. " + quality_tier_clause(effort, autonomy_level)
     )
+    if targets_live_repo:
+        instructions = (
+            "You are a background worker doing Thomas self-development in the live "
+            f"Thomas repo: {work_dir}. This IS a source repository. Inspect the live "
+            "code before changing it, keep edits tightly scoped, and do not claim "
+            "success unless live repo files were actually changed and verified. "
+            f"You are running on {_shell_hint}. "
+            "HARD RULE - creating or editing files: use `fs.write_file` for ordinary "
+            "project files. For protected Thomas runtime paths, use "
+            "`fs.write_protected_file` with a clear reason; if native authorization is "
+            "unavailable or denied, report that blocker honestly instead of writing a "
+            "sandbox substitute. NEVER use shell commands such as printf, echo, touch, "
+            "cat, tee, redirection, or heredocs to create or edit files. Reserve "
+            "`shell.exec` ONLY for read-only inspection commands and tests/builds. "
+            "If you cannot modify the live repo, create "
+            f"`runtime/self_development/{execution_id}/SELF_DEVELOPMENT_REPORT.md` "
+            "explaining the blocker, but do not say the requested fix is done. "
+            "Do not address the user conversationally. End with a one-line summary of "
+            "the live files changed and verification run, or the blocker encountered. "
+            + quality_tier_clause(effort, autonomy_level)
+        )
+
+    # Forward a curated slice of chat only when the task leans on prior dialogue
+    # ("make it blue"). Self-contained requests get no handoff — feeding earlier turns
+    # made the worker build the wrong thing (a Pong request produced a starfield).
+    handoff = _handoff_block(recent_messages) if prompt_needs_handoff(prompt) else ""
+    if handoff:
+        instructions = f"{instructions}\n\n{handoff}"
 
     from thomas.server.exhaustive_runtime import is_exhaustive
 
-    # Exhaustive Effort runs the full quality pipeline; everything else runs the
-    # ordinary single worker.
     runner = _run_exhaustive_worker if is_exhaustive(effort) else _run_agent_worker
+    worker_kwargs: dict[str, Any] = {
+        "execution_id": execution_id,
+        "prompt": prompt,
+        "specialist_id": specialist_id,
+        "bot": bot,
+        "instructions": instructions,
+        "repo_root": root,
+        "work_dir": work_dir,
+        "requires_live_repo_change": targets_live_repo,
+        "profile": profile,
+        "effort": effort,
+        "autonomy_level": autonomy_level,
+        "file_access": file_access,
+        "guardrails": guardrails,
+        "guardrail_modes": guardrail_modes,
+    }
     asyncio.create_task(
-        runner(
+        _run_agent_worker_supervised(
+            runner,
             app,
             execution_id=execution_id,
-            prompt=prompt,
             specialist_id=specialist_id,
             bot=bot,
             emitter=emitter,
-            instructions=instructions,
             repo_root=root,
-            work_dir=work_dir,
-            profile=profile,
-            effort=effort,
+            worker_kwargs=worker_kwargs,
         )
     )
     return record
-
-
-async def _run_agent_worker(
-    app: Any,
-    *,
-    execution_id: str,
-    prompt: str,
-    specialist_id: str,
-    bot: Any,
-    emitter: _DelegationEmitter,
-    instructions: str,
-    repo_root: Path,
-    work_dir: Path | None = None,
-    profile: str | None = None,
-    effort: str = "diligent",
-) -> None:
-    # Accumulate the worker's actual output text and the tools it used so the
-    # completed task carries a REAL result (what the bot did / produced) instead
-    # of a generic "Background execution completed." The chat surfaces this back
-    # to the user — both on the live task card (frontend polls delegations) and
-    # in the next-turn context digest so Thomas reports the finished work.
-    result_text_parts: list[str] = []
-    tools_used: list[str] = []
-    try:
-        async for event in run_agent_worker_events(
-            app,
-            prompt=prompt,
-            instructions=instructions,
-            work_dir=work_dir or repo_root,
-            profile=profile,
-            effort=effort,
-            role=specialist_id,
-            session_id=execution_id,
-            execution_id=execution_id,
-        ):
-            event_type = str(event.get("type") or "").strip()
-            if event_type == "text":
-                chunk = str(event.get("text") or "")
-                if chunk:
-                    result_text_parts.append(chunk)
-            elif event_type == "tool_start":
-                tool_name = str(event.get("name") or "tool").strip() or "tool"
-                if tool_name not in tools_used:
-                    tools_used.append(tool_name)
-                progress = f"Using {tool_name}…"
-                task_bot_runtime.update_execution(
-                    execution_id,
-                    progress_summary=progress,
-                    actor=bot.name,
-                    repo_root=repo_root,
-                    force=True,
-                )
-                record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
-                await emitter.progress(record, specialist_id=specialist_id, bot=bot, text=progress)
-            elif event_type == "tool_output":
-                last_tool = tools_used[-1] if tools_used else "tool"
-                progress = f"Finished {last_tool}; continuing."
-                task_bot_runtime.update_execution(
-                    execution_id,
-                    progress_summary=progress,
-                    actor=bot.name,
-                    repo_root=repo_root,
-                    force=True,
-                )
-                record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
-                await emitter.progress(record, specialist_id=specialist_id, bot=bot, text=progress)
-            elif event_type == "error":
-                raise RuntimeError(str(event.get("error") or "provider-native delegation failed"))
-            elif event_type == "done":
-                result_summary = _build_result_summary(result_text_parts, tools_used)
-                task_bot_runtime.complete_execution(
-                    execution_id,
-                    actor=bot.name,
-                    summary=result_summary,
-                    repo_root=repo_root,
-                )
-                record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
-                await emitter.completed(
-                    record,
-                    specialist_id=specialist_id,
-                    bot=bot,
-                    text=result_summary,
-                )
-                return
-
-        result_summary = _build_result_summary(result_text_parts, tools_used)
-        task_bot_runtime.complete_execution(
-            execution_id,
-            actor=bot.name,
-            summary=result_summary,
-            repo_root=repo_root,
-        )
-        record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
-        await emitter.completed(record, specialist_id=specialist_id, bot=bot, text=result_summary)
-    except asyncio.CancelledError:
-        # Server shutdown / connection loss cancels this background task.
-        # CancelledError is NOT an Exception subclass, so mark the execution so it
-        # is not stranded mid-run, then propagate the cancellation.
-        task_bot_runtime.fail_execution(
-            execution_id,
-            actor=bot.name,
-            summary="Background execution cancelled.",
-            blocker="cancelled",
-            repo_root=repo_root,
-        )
-        raise
-    except Exception as exc:
-        task_bot_runtime.fail_execution(
-            execution_id,
-            actor=bot.name,
-            summary=f"Background execution failed: {exc}",
-            blocker="provider_native_failed",
-            repo_root=repo_root,
-        )
-        record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
-        await emitter.failed(record, specialist_id=specialist_id, bot=bot, text=f"Background execution failed: {exc}")
-
-
-async def _run_exhaustive_worker(
-    app: Any,
-    *,
-    execution_id: str,
-    prompt: str,
-    specialist_id: str,
-    bot: Any,
-    emitter: _DelegationEmitter,
-    instructions: str,
-    repo_root: Path,
-    work_dir: Path | None = None,
-    profile: str | None = None,
-    effort: str = "exhaustive",
-) -> None:
-    """Run a task at Exhaustive Effort through the full pipeline (build -> verify ->
-    adversarial review -> bounded remediation), emitting stage progress. Falls back
-    to the single worker on any pipeline error so the user still gets a result.
-    """
-    from thomas.server.exhaustive_runtime import run_exhaustive_pipeline
-
-    tools_used: list[str] = []
-    work = work_dir or repo_root
-
-    async def _on_tool(name: str) -> None:
-        if name not in tools_used:
-            tools_used.append(name)
-        progress = f"Using {name}…"
-        task_bot_runtime.update_execution(
-            execution_id, progress_summary=progress, actor=bot.name, repo_root=repo_root, force=True
-        )
-        record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
-        await emitter.progress(record, specialist_id=specialist_id, bot=bot, text=progress)
-
-    async def _on_stage(event: dict[str, Any]) -> None:
-        progress = f"Exhaustive: {str(event.get('stage') or '').replace('_', ' ')}…"
-        task_bot_runtime.update_execution(
-            execution_id, progress_summary=progress, actor=bot.name, repo_root=repo_root, force=True
-        )
-        record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
-        await emitter.progress(record, specialist_id=specialist_id, bot=bot, text=progress)
-
-    try:
-        ctx = await run_exhaustive_pipeline(
-            app,
-            prompt=prompt,
-            instructions=instructions,
-            work_dir=work,
-            profile=profile,
-            effort=effort,
-            specialist_id=specialist_id,
-            emit_stage=_on_stage,
-            on_tool=_on_tool,
-        )
-        if ctx.aborted:
-            raise RuntimeError(f"exhaustive pipeline aborted: {ctx.aborted}")
-        result_summary = _build_result_summary([ctx.result], tools_used)
-        task_bot_runtime.complete_execution(execution_id, actor=bot.name, summary=result_summary, repo_root=repo_root)
-        record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
-        await emitter.completed(record, specialist_id=specialist_id, bot=bot, text=result_summary)
-    except asyncio.CancelledError:
-        task_bot_runtime.fail_execution(
-            execution_id,
-            actor=bot.name,
-            summary="Background execution cancelled.",
-            blocker="cancelled",
-            repo_root=repo_root,
-        )
-        raise
-    except Exception as exc:
-        log.warning("Exhaustive pipeline failed; falling back to single worker: %s", exc, exc_info=True)
-        await _run_agent_worker(
-            app,
-            execution_id=execution_id,
-            prompt=prompt,
-            specialist_id=specialist_id,
-            bot=bot,
-            emitter=emitter,
-            instructions=instructions,
-            repo_root=repo_root,
-            work_dir=work_dir,
-            profile=profile,
-            effort=effort,
-        )

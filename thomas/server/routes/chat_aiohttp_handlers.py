@@ -80,20 +80,29 @@ def register_chat_routes(
             wants_fork = busy_strategy in {"fork", "parallel", "branch"}
 
             if wants_interrupt:
-                q = _SESSION_MSG_QUEUES.get(request_sid)
-                if q is None:
-                    raise web.HTTPConflict(
-                        text="session is already processing another request (interrupt queue not ready)"
-                    )
                 if not msg_text:
                     raise web.HTTPBadRequest(text="message text is required when queueing interrupt input")
+                # Rapid follow-ups must NEVER fail with a 409. Two former failure modes
+                # are closed here: (1) RACE — the run marked the session busy before its
+                # interrupt queue existed, so a fast follow-up found None -> create one
+                # on demand (the active run reuses it via setdefault). (2) SATURATION —
+                # a full queue raised QueueFull -> coalesce by dropping the oldest queued
+                # message and keeping the newest, so a burst is merged, not rejected.
+                q = _SESSION_MSG_QUEUES.get(request_sid)
+                if q is None:
+                    q = asyncio.Queue(maxsize=64)
+                    _SESSION_MSG_QUEUES[request_sid] = q
                 try:
                     q.put_nowait(msg_text)
-                except asyncio.QueueFull as queue_err:
-                    log.warning("Interrupt queue full for session %s: %s", request_sid[:12], queue_err)
-                    raise web.HTTPConflict(
-                        text="session is already processing another request (interrupt queue is full)"
-                    ) from queue_err
+                except asyncio.QueueFull:
+                    try:
+                        q.get_nowait()  # drop oldest, keep the most recent instruction
+                    except asyncio.QueueEmpty:
+                        pass
+                    try:
+                        q.put_nowait(msg_text)
+                    except asyncio.QueueFull:
+                        log.warning("Interrupt queue still full after coalesce for session %s", request_sid[:12])
 
                 deps.task_ledger_update(
                     request_sid,

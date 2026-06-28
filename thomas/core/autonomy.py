@@ -117,6 +117,56 @@ def autonomy_system_directive(level: object) -> str:
     return autonomy_spec(level).system_directive
 
 
+def chat_delegation_directive(level: object) -> str:
+    """Autonomy-aware instruction for the CHATBOT on whether to ask before handing
+    work to the task manager.
+
+    This does NOT change Thomas's identity (he still never does the work himself —
+    the worker does). It governs only the ask-vs-hand-off posture, which the
+    chatbot-only law explicitly says autonomy may vary ("how much asks for approval
+    first"). Without this, the static system prompt told Thomas to ask at every
+    level, so "Max autonomy" still asked permission. Appended to the chatbot system
+    prompt at runtime, keyed off the user's autonomy level.
+    """
+    lv = clamp_autonomy_level(level)
+    if lv <= 1:
+        return (
+            "AUTONOMY (Level 1 — Chat): conversation only. You have no way to hand "
+            "work off at this level; if the user wants something done, let them know "
+            "they can raise the autonomy level so you can hand it to the task manager."
+        )
+    if lv == 2:
+        return (
+            "AUTONOMY (Level 2 — Assist): before handing work to the task manager, "
+            "confirm with the user first — say what you'd hand off and ask if they "
+            "want you to. The 'offer and ask first' guidance is the operative one at "
+            "this level."
+        )
+    if lv == 3:
+        return (
+            "AUTONOMY (Level 3 — Agent): when the user asks for something actionable, "
+            "hand it to the task manager immediately via your send_task tool. Do NOT "
+            "ask permission first — that 'want me to hand this off?' question does not "
+            "apply at this level. Just hand it off and tell them you've done so. Only "
+            "pause to ask if the request is genuinely ambiguous."
+        )
+    return (
+        "AUTONOMY (Level 4 — Full Autonomy / Max): the user wants autopilot. Hand any "
+        "actionable request to the task manager immediately and WITHOUT asking — never "
+        "say 'want me to hand this off?' at this level. Hand it off via send_task and "
+        "then tell them you've done so. Only pause if the request is genuinely "
+        "ambiguous; do not seek routine confirmation. "
+        "CAPABILITY GAPS — this is the whole point of Full Autonomy: if the user asks "
+        "for something you cannot currently do because a tool or capability is missing "
+        "(for example live web search, an integration, or an action you have no tool "
+        "for), do NOT just decline and stop. Acknowledge it isn't wired up yet, then "
+        "IMMEDIATELY hand the job of BUILDING that capability to the task manager via "
+        "send_task — the worker crew can add it. Your organic response should be 'I "
+        "can't do that yet — but I'm building it now' followed by an actual hand-off, "
+        "never a dead-end 'I don't have that.' Extend yourself to meet the request."
+    )
+
+
 def parse_autonomy_level(value: object, *, default: int = DEFAULT_AUTONOMY_LEVEL) -> int:
     """Parse autonomy level from any format: int, 'L1'-'L4', '1'-'4', etc.
 

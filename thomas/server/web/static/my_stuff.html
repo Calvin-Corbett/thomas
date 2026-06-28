@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Thomas Project Board</title>
     <link rel="stylesheet" href="/static/css/tokens.css">
-    <link rel="stylesheet" href="/static/static/my_stuff.style01.css?v=20260318-project-board-3">
-    <script src="/static/static/my_stuff.script01.js?v=20260318-project-board-3" defer></script>
+    <link rel="stylesheet" href="/static/static/my_stuff.style01.css?v=20260624-forge-builds-1">
+    <script src="/static/static/my_stuff.script01.js?v=20260624-forge-builds-1" defer></script>
 </head>
 <body>
     <main class="stuff-shell">
@@ -31,6 +31,13 @@
             <div class="stuff-board-frame">
                 <div class="stuff-board" id="board" aria-label="Project board"></div>
             </div>
+            <section class="stuff-forge-builds hidden" id="forgeBuilds" aria-label="Forge Code builds">
+                <div class="stuff-forge-builds-head">
+                    <h2>Forge Builds</h2>
+                    <p>Deliverables Thomas Code built for you. Open the result, or jump back to the conversation that made it.</p>
+                </div>
+                <div class="stuff-forge-grid" id="forgeBuildsGrid"></div>
+            </section>
         </section>
 
         <section class="stuff-detail-view hidden" id="detailView" aria-live="polite">

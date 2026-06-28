@@ -102,7 +102,7 @@ function moduleRenderMarketplaceSurface(container) {
 
     const isWorkspaceModule = (app) => (
         safeString(app?.left_nav_behavior).toLowerCase() === 'workspace'
-        || safeString(app?.marketplace_type).toLowerCase() === 'command_center'
+        || ['app', 'command_center'].includes(safeString(app?.marketplace_type).toLowerCase())
     );
 
     const installBehaviorLabel = (app) => {
@@ -340,7 +340,7 @@ function moduleRenderMyStuffSurface(container) {
     const config = moduleGetSpecialSurfaceConfig('my_stuff');
     return moduleRenderEmbeddedSurface(container, config || {
         title: 'Project Board',
-        src: '/static/static/my_stuff.html?v=20260318-project-board-3',
+        src: '/static/my_stuff.html?v=20260618-paper-apps-4',
         surfaceMode: 'immersive',
     });
 }

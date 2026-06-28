@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import time
@@ -28,6 +29,7 @@ from thomas.core.llm import LLMError
 from thomas.core.rules_of_road import build_remediation_prompt, evaluate_rules
 from thomas.core.token_economy import (
     build_token_economy_meta,
+    coerce_base_iterations,
     loop_context_budgets,
     loop_iteration_prompt_caps,
     loop_tool_spec_budgets,
@@ -62,6 +64,86 @@ _TPM_WINDOW_SECONDS = 60.0
 _TPM_MAX_AUTO_WAIT_S = 20.0
 _REPLY_FIRST_ROUTE_PATHS = frozenset({"casual_chat", "personal_context", "assistant_meta", "general", "planning"})
 _STREAM_HOLDBACK_CHARS = 32
+
+
+def _extract_json_objects(text: str) -> list[tuple[int, int, Any]]:
+    """Pull top-level JSON objects out of free text by scanning balanced braces
+    (string-aware, so braces inside string values don't confuse it). Returns
+    (start, end, parsed) tuples for each object that parsed cleanly."""
+    objs: list[tuple[int, int, Any]] = []
+    depth = 0
+    start = -1
+    in_str = False
+    esc = False
+    for i, ch in enumerate(text):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start >= 0:
+                    try:
+                        objs.append((start, i + 1, json.loads(text[start : i + 1])))
+                    except Exception:
+                        pass
+                    start = -1
+    return objs
+
+
+def _recover_text_tool_calls(text: str, tools: Any) -> tuple[list[dict[str, str]], str]:
+    """gpt-5.x / codex sometimes write a tool CALL as plain text in the content channel
+    — ``{"name": "fs_write_file", "arguments": {...}}`` — instead of a real
+    function_call. The loop then never runs it, so the file/action is silently skipped
+    and the JSON becomes a fake "done" answer (THE reason workers report completed with
+    no deliverable). Recover any such literal into real tool calls, validated against
+    the registry so genuine ``{name, arguments}`` data is never mistaken for a call.
+    Returns (tool_calls, cleaned_text). (worker fix, 2026-06-28)"""
+    raw = str(text or "")
+    if '"name"' not in raw or ('"arguments"' not in raw and '"parameters"' not in raw):
+        return [], text
+    # Unwrap a single ```json ... ``` fence if the whole answer is fenced.
+    scan = raw.strip()
+    if scan.startswith("```"):
+        nl = scan.find("\n")
+        scan = scan[nl + 1 :] if nl != -1 else scan
+        if scan.rstrip().endswith("```"):
+            scan = scan.rstrip()[:-3]
+    recovered: list[dict[str, str]] = []
+    spans: list[tuple[int, int]] = []
+    for s, e, obj in _extract_json_objects(scan):
+        if not isinstance(obj, dict):
+            continue
+        name = obj.get("name")
+        args = obj.get("arguments", obj.get("parameters"))
+        if not isinstance(name, str) or not name.strip() or args is None:
+            continue
+        # Only recover REAL tools — never random {name, arguments} content.
+        if tools is None or tools.get(name.strip()) is None:
+            continue
+        args_str = args if isinstance(args, str) else json.dumps(args)
+        recovered.append({"id": f"textcall-{len(recovered)}", "name": name.strip(), "arguments": args_str})
+        spans.append((s, e))
+    if not recovered:
+        return [], text
+    cleaned_parts: list[str] = []
+    last = 0
+    for s, e in spans:
+        cleaned_parts.append(scan[last:s])
+        last = e
+    cleaned_parts.append(scan[last:])
+    return recovered, "".join(cleaned_parts).strip()
 
 
 def _is_reply_first_route(*, route_path: str, project_related: bool, explicit_action: bool) -> bool:
@@ -113,6 +195,22 @@ async def _agent_loop_run(
                 prompt_text += str(part.get("text", "")) + "\n"
         prompt_text = prompt_text.strip()
     benchmark_mode = str(job_type or "").strip().lower() == "benchmark"
+    current_job_type = str(job_type or "").strip().lower()
+    raw_write_guard_limit = str(os.environ.get("THOMAS_SELF_DEVELOPMENT_WRITE_GUARD_LIMIT") or "6").strip()
+    try:
+        write_guard_limit = int(raw_write_guard_limit)
+    except (TypeError, ValueError, OverflowError):
+        write_guard_limit = 6
+    self._current_job_type = current_job_type
+    self._self_development_write_guard = (
+        {
+            "inspection_count": 0,
+            "write_seen": False,
+            "limit": max(0, min(write_guard_limit, 50)),
+        }
+        if current_job_type == "self_development"
+        else None
+    )
 
     # Suspicious prompt gate: if the prompt matches jailbreak/extraction patterns,
     # require Windows PIN before continuing. Abort if denied.
@@ -417,23 +515,24 @@ async def _agent_loop_run(
         return
 
     # Mode presets (the caller can still override with max_iterations).
+    configured_max_iter = coerce_base_iterations(getattr(self.config, "max_agent_iterations", None))
     if max_iterations is not None:
-        max_iter = max_iterations
+        max_iter = coerce_base_iterations(max_iterations)
     elif effective_mode == "fast":
         # Fast mode should not truncate task completion. Keep the same loop
         # budget as normal mode; "fast" is handled by lighter behavior/budgets.
-        max_iter = self.config.max_agent_iterations
+        max_iter = configured_max_iter
     elif effective_mode == "thinking":
-        max_iter = min(self.config.max_agent_iterations * 2, 25)
+        max_iter = min(configured_max_iter * 2, 25)
     else:
-        max_iter = self.config.max_agent_iterations
+        max_iter = configured_max_iter
     if max_iterations is None and autonomy.prefers_extended_iterations:
         if effective_mode == "fast":
             # Fast mode still needs enough room for at least one tool turn + follow-up,
             # but should not inherit very long full-auto iteration budgets.
-            max_iter = max(max_iter, min(max(self.config.max_agent_iterations, 2), 6))
+            max_iter = max(max_iter, min(max(configured_max_iter, 2), 6))
         else:
-            max_iter = max(max_iter, min(self.config.max_agent_iterations * 3, 32))
+            max_iter = max(max_iter, min(configured_max_iter * 3, 32))
     action_route = route_path in ("coding_task", "debug_audit", "planning", "research")
     full_auto_action_turn = bool(
         int(self._autonomy_level) == 4 and (project_related or explicit_action or action_route)
@@ -532,10 +631,18 @@ async def _agent_loop_run(
         _budget_economy,
         effective_mode,
     )
-    provider_tpm_limit = self._provider_tpm_limit()
+    try:
+        provider_tpm_limit = int(self._provider_tpm_limit() or 0)
+    except (TypeError, ValueError):
+        provider_tpm_limit = 0
     provider_tpm_budget = 0
     if provider_tpm_limit > 0:
-        provider_tpm_budget = max(1, int(provider_tpm_limit * self._provider_tpm_headroom()))
+        try:
+            provider_tpm_headroom = float(self._provider_tpm_headroom() or 0.90)
+        except (TypeError, ValueError):
+            provider_tpm_headroom = 0.90
+        provider_tpm_headroom = max(0.5, min(provider_tpm_headroom, 1.0))
+        provider_tpm_budget = max(1, int(provider_tpm_limit * provider_tpm_headroom))
     provider_prompt_window: list[tuple[float, int]] = []
     provider_tpm_wait_events = 0
     provider_tpm_wait_seconds = 0.0
@@ -700,6 +807,7 @@ async def _agent_loop_run(
                 mem = (mem + "\n\n" + test_visibility_hint).strip() if mem else test_visibility_hint
             if library_text:
                 mem = (mem + "\n\n" + library_text).strip() if mem else library_text
+        self_development_job = current_job_type == "self_development"
         messages = self._build_messages(
             state,
             memory_text=mem,
@@ -711,7 +819,7 @@ async def _agent_loop_run(
             route_path=str(route.path or ""),
             skills_context=runtime_skills_context,
             include_autonomy_profile=bool(overhead_policy.include_autonomy_profile),
-            include_editing_policy=bool(overhead_policy.include_editing_policy),
+            include_editing_policy=bool(overhead_policy.include_editing_policy) and not self_development_job,
             include_project_instructions=bool(overhead_policy.include_project_instructions),
         )
         iter_token_estimates.append(int(state.token_estimate))
@@ -831,71 +939,6 @@ async def _agent_loop_run(
                         yield AgentEvent.tool_call_args_delta(tc_id, delta, iteration=iteration)
 
                 elif event.type == "tool_call_end":
-                    # Codex app-server executes tools itself; treat tool_call_end as a tool result
-                    # passthrough (do not execute via Thomas's tool registry).
-                    if self.llm.config.provider == "codex" and "output" in event.data:
-                        tc_id = str(event.data.get("id", ""))
-                        tc_name = str(event.data.get("name", ""))
-                        output = str(event.data.get("output", ""))
-                        exit_code = event.data.get("exit_code")
-                        tool_chars_total += len(output)
-                        tool_chars_kept += len(output)
-
-                        ok = True
-                        if exit_code is not None:
-                            try:
-                                ok = int(exit_code) == 0
-                            except (ValueError, TypeError):
-                                ok = False
-
-                        await self._audit_action(
-                            kind="tool_action_result",
-                            tool_call_id=tc_id,
-                            tool_name=tc_name,
-                            decision="EXECUTED" if ok else "FAILED",
-                            payload={
-                                "provider": "codex",
-                                "ok": ok,
-                                "exit_code": exit_code,
-                                "output_preview": output[:1000],
-                            },
-                        )
-
-                        yield AgentEvent.tool_call_end(tc_id, iteration=iteration)
-                        yield AgentEvent(
-                            type=EventType.TOOL_RESULT,
-                            data={
-                                "tool_id": tc_id,
-                                "tool_name": tc_name,
-                                "result": output[:4000],  # summary for event consumers
-                                "result_text": output,  # full text (not fed back to LLM)
-                                "ok": ok,
-                                "duration_ms": 0,
-                            },
-                            iteration=iteration,
-                        )
-                        quality_command = ""
-                        quality_path = ""
-                        if not tc_name.lower().startswith("edit:"):
-                            quality_command = tc_name
-                        else:
-                            quality_path = tc_name.split(":", 1)[1].strip()
-                        if (not quality_path or quality_path == "?") and output.startswith("File changed:"):
-                            quality_path = output.split(":", 1)[1].strip()
-                        if quality_path == "?":
-                            quality_path = ""
-                        quality_tool_events.append(
-                            {
-                                "name": tc_name,
-                                "ok": ok,
-                                "command": quality_command,
-                                "path": quality_path,
-                                "output_preview": output[:2000],
-                            }
-                        )
-                        state.total_tool_calls += 1
-                        continue
-
                     tc_data = {
                         "id": event.data.get("id", ""),
                         "name": event.data.get("name", ""),
@@ -905,7 +948,7 @@ async def _agent_loop_run(
                     yield AgentEvent.tool_call_end(tc_data["id"], iteration=iteration)
 
                 elif event.type == "error":
-                    # Some providers (e.g. Codex bridge) surface errors as events.
+                    # Some providers surface errors as stream events.
                     err = str(event.data.get("error", "")).strip() or "LLM error"
                     llm_stream_error = err
                     yield AgentEvent.agent_error(err, iteration=iteration)
@@ -964,6 +1007,20 @@ async def _agent_loop_run(
             thought_leak_suppressed_count += 1
         if iter_text.strip() == "Understood. How can I assist you further?":
             iter_text = "I didn't answer that. Please ask a specific question."
+
+        # Recover a tool call the model wrote as TEXT instead of a real function_call
+        # (gpt-5.x/codex quirk: the {"name": ..., "arguments": ...} JSON lands in the
+        # content channel, so the loop never runs it and the requested file/action is
+        # silently skipped — the JSON masquerades as a finished answer). Turn it into
+        # real pending tool calls so the work actually happens, and strip the JSON from
+        # the visible text. Workers buffer text (not yet emitted), so nothing leaks.
+        if not pending_tool_calls and iter_text:
+            _recovered_calls, _cleaned_text = _recover_text_tool_calls(iter_text, self.tools)
+            if _recovered_calls:
+                pending_tool_calls = _recovered_calls
+                iter_text = _cleaned_text
+                for _rc in _recovered_calls:
+                    yield AgentEvent.tool_call_start(_rc["id"], _rc["name"], iteration=iteration)
 
         # Clarification budget guardrail for action turns: avoid repeated
         # ask-back loops when the model can proceed with sensible defaults.
@@ -1226,6 +1283,8 @@ async def _agent_loop_run(
         if (
             _HAS_COMPACTION
             and iteration >= 2
+            and hard_context_budget is not None
+            and int(hard_context_budget) > 0
             and cumulative_context_tokens >= int(hard_context_budget * 0.80)
             and cumulative_context_tokens < hard_context_budget
         ):
@@ -1248,7 +1307,12 @@ async def _agent_loop_run(
 
         # Runaway guard: if context is getting too big and we're doing tool loops,
         # proactively stop before we hit hard limits.
-        if iteration >= 2 and cumulative_context_tokens >= hard_context_budget:
+        if (
+            iteration >= 2
+            and hard_context_budget is not None
+            and int(hard_context_budget) > 0
+            and cumulative_context_tokens >= hard_context_budget
+        ):
             runaway_guard_reason = (
                 f"Stopped after iteration {iteration + 1}: context approaching hard limit "
                 f"({cumulative_context_tokens:,} / {hard_context_budget:,} tokens). "

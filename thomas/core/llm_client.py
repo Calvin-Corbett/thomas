@@ -109,7 +109,6 @@ class LLMClient:
         self._client: httpx.AsyncClient | None = None
         self._anthropic_tool_name_map: dict[str, str] = {}  # sanitized→original
         self._openai_tool_name_map: dict[str, str] = {}  # sanitized→original
-        self._codex_provider: Any | None = None  # lazy CodexProvider
         self._fallback_configs = list(fallback_configs or [])
         self._failover_enabled = bool(failover_enabled) and len(self._fallback_configs) > 0
         self._failover_cooldown_s = max(0, int(failover_cooldown_s))
@@ -147,9 +146,6 @@ class LLMClient:
         return self._client
 
     async def close(self) -> None:
-        if self._codex_provider is not None:
-            await self._codex_provider.close()
-            self._codex_provider = None
         if self._client and not self._client.is_closed:
             await self._client.aclose()
             self._client = None
@@ -514,13 +510,6 @@ class LLMClient:
                 continue
         return out
 
-    async def _get_codex_provider(self) -> Any:
-        if self._codex_provider is None:
-            from thomas.marketplace.codex.provider import CodexProvider
-
-            self._codex_provider = CodexProvider(self.config)
-        return self._codex_provider
-
     async def stream_chat(
         self,
         messages: list[dict[str, Any]],
@@ -667,15 +656,7 @@ class LLMClient:
         tools: list[dict[str, Any]] | None = None,
     ) -> AsyncIterator[StreamEvent]:
         provider_name = str(self.config.provider or "").strip().lower().replace("-", "_")
-        if provider_name == "codex":
-            provider = await self._get_codex_provider()
-            stream_obj = await _coerce_async_iterator(
-                provider.stream_chat(messages, tools),
-                source="provider.stream_chat",
-            )
-            async for event in stream_obj:
-                yield event
-        elif provider_name == "openai_codex":
+        if provider_name == "openai_codex":
             stream_obj = await _coerce_async_iterator(
                 self._stream_openai_codex(messages, tools),
                 source="stream_openai_codex",

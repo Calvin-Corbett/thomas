@@ -30,6 +30,27 @@ def build_page_handlers(
     from aiohttp import web
 
     async def index(request: web.Request) -> web.StreamResponse:
+        # The chat UI is now the "Thomas Chat" design (chat.html). The legacy SPA
+        # (index.html) still hosts every workspace and is served at /classic; the
+        # new sidebar deep-links into it.
+        try:
+            html = await asyncio.to_thread(
+                lambda: (web_dir / "chat.html").read_text(encoding="utf-8", errors="replace")
+            )
+            web_build = web_build_fingerprint("chat.html")
+            html = html.replace("__THOMAS_VERSION__", THOMAS_VERSION)
+            html = html.replace("__THOMAS_WEB_BUILD__", web_build)
+            return web.Response(
+                text=html,
+                content_type="text/html",
+                headers={"Cache-Control": "no-store"},
+            )
+        except (OSError, UnicodeDecodeError):
+            return web.FileResponse(web_dir / "chat.html")
+
+    async def classic(request: web.Request) -> web.StreamResponse:
+        # Legacy full SPA — workspace host. Reached from the new chat UI's sidebar
+        # (deep-linked via ?nav=<mode>).
         try:
             html = await asyncio.to_thread(
                 lambda: (web_dir / "index.html").read_text(encoding="utf-8", errors="replace")
@@ -104,6 +125,7 @@ def build_page_handlers(
 
     return {
         "index": index,
+        "classic": classic,
         "settings": settings,
         "companion": companion,
         "landing": landing,

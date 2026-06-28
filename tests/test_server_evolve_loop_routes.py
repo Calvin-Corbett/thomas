@@ -51,13 +51,32 @@ class TestEvolveLoopRoutes(unittest.IsolatedAsyncioTestCase):
             root = Path(tmp)
             save_loop_state(root, EvolveLoopState(status="running", posture="auto_safe"))
             app = web.Application()
+            # A genuinely-live loop task, so the status route reports the persisted
+            # "running" verbatim. (Without a live task the route reconciles a stale
+            # "running" down to "idle" — see test_status_reconciles_stale_running.)
+            app[APP_EVOLVE_TASK] = _FakeRunningTask()
             handlers = _handlers(app, root)
             resp = await handlers["status"](_FakeRequest())
             payload = _body(resp)
             assert payload["ok"] is True
             assert payload["state"]["status"] == "running"
             assert payload["state"]["posture"] == "auto_safe"
+            assert payload["state"]["running_task"] is True
+
+    async def test_status_reconciles_stale_running(self):
+        # A persisted "running" with no live subprocess is a crash-orphaned state;
+        # the route must report idle so the UI re-enables "Start evolving".
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            save_loop_state(root, EvolveLoopState(status="running", posture="auto_safe"))
+            app = web.Application()
+            handlers = _handlers(app, root)
+            resp = await handlers["status"](_FakeRequest())
+            payload = _body(resp)
+            assert payload["state"]["status"] == "idle"
+            assert payload["state"]["stale_run"] is True
             assert payload["state"]["running_task"] is False
+            assert payload["state"]["posture"] == "auto_safe"
 
     async def test_status_is_idle_without_a_state_file(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -76,6 +95,54 @@ class TestEvolveLoopRoutes(unittest.IsolatedAsyncioTestCase):
             resp = await handlers["start"](_FakeRequest(json_body={"posture": "auto_safe"}))
             assert resp.status == 409
             assert _body(resp)["ok"] is False
+
+    async def test_orchestration_status_uses_cli_boundary(self):
+        import thomas.server.routes.evolve_loop_routes as mod
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            calls = []
+            original = mod._run_evolve_cli
+
+            async def fake_cli(cli_root, args):
+                calls.append((cli_root, args))
+                return {"ok": True, "recipes": [{"id": "senior-council-integration"}], "active_workers": []}
+
+            mod._run_evolve_cli = fake_cli
+            try:
+                app = web.Application()
+                handlers = _handlers(app, root)
+                resp = await handlers["orchestration_status"](_FakeRequest())
+                payload = _body(resp)
+                assert payload["ok"] is True
+                assert payload["orchestration"]["recipes"][0]["id"] == "senior-council-integration"
+                assert calls == [(root, ["orchestration", "status", "--json"])]
+            finally:
+                mod._run_evolve_cli = original
+
+    async def test_orchestration_plan_passes_recipe_query(self):
+        import thomas.server.routes.evolve_loop_routes as mod
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            calls = []
+            original = mod._run_evolve_cli
+
+            async def fake_cli(cli_root, args):
+                calls.append((cli_root, args))
+                return {"ok": True, "recipe": {"id": "custom"}, "run": {"dry_run": True}}
+
+            mod._run_evolve_cli = fake_cli
+            try:
+                app = web.Application()
+                handlers = _handlers(app, root)
+                resp = await handlers["orchestration_plan"](_FakeRequest(query={"recipe": "custom"}))
+                payload = _body(resp)
+                assert payload["ok"] is True
+                assert payload["orchestration"]["run"]["dry_run"] is True
+                assert calls == [(root, ["orchestration", "plan", "--json", "--recipe", "custom"])]
+            finally:
+                mod._run_evolve_cli = original
 
     async def test_pause_writes_cross_process_control_flag(self):
         with tempfile.TemporaryDirectory() as tmp:

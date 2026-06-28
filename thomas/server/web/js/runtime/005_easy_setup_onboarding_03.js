@@ -263,9 +263,7 @@ function chatRobotWorldEnsurePrimaryState() {
         debugPropPhase: '',
         physicsNeedsSnap: true,
     };
-    chatPrimaryPresenceState.element = chatRobotWorldCreateActorElement('primary', chatPrimaryPresenceState);
-    chatWorldSyncRootVisibility();
-    chatRobotWorldEnsureLoop();
+    chatPrimaryPresenceState.element = null;
     return chatPrimaryPresenceState;
 }
 
@@ -1084,4 +1082,3 @@ function missionRuntimeStatusText(runtime) {
     ].filter(Boolean);
     return bits.join(' | ');
 }
-

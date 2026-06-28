@@ -112,6 +112,8 @@ _RUNTIME_OVERHEAD_POLICIES: dict[str, RuntimeOverheadPolicy] = {
 
 def normalize_token_economy_level(raw: Any) -> str:
     level = str(raw or "").strip().lower()
+    if not level:
+        return "optimal"
     if level in TOKEN_ECONOMY_ALIASES:
         level = TOKEN_ECONOMY_ALIASES[level]
     if level in TOKEN_ECONOMY_LEVELS:
@@ -124,6 +126,15 @@ def normalize_mode(raw: Any, *, default: str = "auto") -> str:
     if mode in RUN_MODES:
         return mode
     return str(default or "auto").strip().lower() or "auto"
+
+
+def coerce_base_iterations(value: Any, *, default: int = 10) -> int:
+    """Return a usable max-iteration base for runtime scaling."""
+    try:
+        base = int(value or default)
+    except (TypeError, ValueError):
+        base = int(default)
+    return max(1, base)
 
 
 def build_token_economy_meta(requested_level: Any, applied_level: str | None = None) -> dict[str, str]:
@@ -141,19 +152,21 @@ def runtime_overhead_policy(level: Any) -> RuntimeOverheadPolicy:
     return _RUNTIME_OVERHEAD_POLICIES[applied]
 
 
-def compute_max_passes(level: Any, base_iterations: int) -> int:
+def compute_max_passes(level: Any, base_iterations: int | None) -> int:
     """Compute the max iterations (passes) for a given economy level.
 
     Args:
         level: Token economy level (cheap/optimal/max).
-        base_iterations: The base max_agent_iterations from config.
+        base_iterations: The base max_agent_iterations from config. Missing,
+            zero, or invalid values fall back to the AppConfig default.
 
     Returns:
         Clamped number of passes.
     """
     applied = normalize_token_economy_level(level)
     multiplier = _PASS_MULTIPLIERS[applied]
-    raw = int(base_iterations * multiplier)
+    base = coerce_base_iterations(base_iterations)
+    raw = int(base * multiplier)
     return max(_MIN_PASSES[applied], min(_MAX_PASSES[applied], raw))
 
 

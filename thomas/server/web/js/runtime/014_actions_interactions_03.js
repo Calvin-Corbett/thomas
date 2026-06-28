@@ -88,8 +88,20 @@ function renderAttachmentsPreview() {
     all.forEach((item, index) => {
         const chip = document.createElement('div');
         chip.className = 'attachment-chip';
-        const icon = document.createElement('i');
-        icon.className = `ph ${item.type === 'img' ? 'ph-image' : 'ph-file-text'}`;
+
+        const imgSrc = String(item.data_url || '');
+        if (item.type === 'img' && imgSrc.startsWith('data:image/')) {
+            const thumb = document.createElement('img');
+            thumb.className = 'attachment-chip-thumb';
+            thumb.src = imgSrc;
+            thumb.alt = String(item.name || 'image');
+            chip.appendChild(thumb);
+        } else {
+            const icon = document.createElement('i');
+            const isPdf = /\.pdf$/i.test(String(item.name || ''));
+            icon.className = `ph ${item.type === 'img' ? 'ph-image' : (isPdf ? 'ph-file-pdf' : 'ph-file-text')}`;
+            chip.appendChild(icon);
+        }
 
         const label = document.createElement('span');
         label.textContent = String(item.name || '');
@@ -99,7 +111,6 @@ function renderAttachmentsPreview() {
         remove.dataset.index = String(index);
         remove.dataset.type = item.type;
 
-        chip.appendChild(icon);
         chip.appendChild(label);
         chip.appendChild(remove);
         attachmentsPreview.appendChild(chip);
@@ -152,6 +163,76 @@ function addCodeBlockControls(container) {
         wrapper.appendChild(header);
         wrapper.appendChild(pre);
     });
+}
+
+/**
+ * Build the attachment visuals (image thumbnails + document badges) for a
+ * message. Returns null when there are no attachments. Nodes are created
+ * directly here (not via the markdown sanitizer); the data URLs come from the
+ * user's own picked files, so they are trusted local content.
+ */
+function buildMessageAttachments(msg) {
+    const images = Array.isArray(msg && msg.images) ? msg.images : [];
+    const docs = Array.isArray(msg && msg.docs) ? msg.docs : [];
+    if (images.length === 0 && docs.length === 0) return null;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'message-attachments';
+
+    images.forEach((img) => {
+        const src = safeString(img && img.data_url);
+        if (!src.startsWith('data:image/')) return;
+        const name = safeString(img && img.name) || 'image';
+        const tile = document.createElement('button');
+        tile.type = 'button';
+        tile.className = 'message-attachment-thumb';
+        tile.title = name;
+        const el = document.createElement('img');
+        el.src = src;
+        el.alt = name;
+        el.loading = 'lazy';
+        tile.appendChild(el);
+        tile.addEventListener('click', () => openAttachmentLightbox(src, name));
+        wrap.appendChild(tile);
+    });
+
+    docs.forEach((doc) => {
+        const name = safeString(doc && doc.name) || 'document';
+        const isPdf = /\.pdf$/i.test(name);
+        const badge = document.createElement('div');
+        badge.className = 'message-attachment-doc';
+        const icon = document.createElement('i');
+        icon.className = `ph ${isPdf ? 'ph-file-pdf' : 'ph-file-text'}`;
+        const label = document.createElement('span');
+        label.textContent = name;
+        badge.appendChild(icon);
+        badge.appendChild(label);
+        wrap.appendChild(badge);
+    });
+
+    return wrap;
+}
+
+/**
+ * Full-screen preview of an attached image. Click anywhere (or press Esc) to close.
+ */
+function openAttachmentLightbox(src, name) {
+    const existing = document.getElementById('attachmentLightbox');
+    if (existing) existing.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'attachmentLightbox';
+    overlay.className = 'attachment-lightbox';
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = safeString(name) || 'attachment';
+    overlay.appendChild(img);
+    const close = () => overlay.remove();
+    overlay.addEventListener('click', close);
+    const onKey = (e) => {
+        if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); }
+    };
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(overlay);
 }
 
 /**
@@ -213,6 +294,11 @@ function renderMessage(msg) {
     content.setAttribute('data-message-timestamp', chatMessageTimestampText(createdAt));
 
     stack.appendChild(content);
+
+    const attachmentsEl = buildMessageAttachments(msg);
+    if (attachmentsEl) {
+        stack.appendChild(attachmentsEl);
+    }
 
     const footer = document.createElement('div');
     footer.className = 'message-footer';
@@ -476,7 +562,12 @@ function isSetupProviderProfileActive(profile) {
 
 function classifySetupProviderProfiles() {
     const profiles = Array.isArray(availableModelProfiles)
-        ? availableModelProfiles.filter((profile) => Boolean(safeString(profile?.name)))
+        ? availableModelProfiles.filter((profile) => {
+            const name = safeString(profile?.name);
+            // Drop the legacy "codex" profile from the picker entirely — the
+            // ChatGPT OAuth path lives on the "openai_codex" profile.
+            return Boolean(name) && name.toLowerCase() !== 'codex';
+        })
         : [];
     return {
         active: profiles.filter((profile) => isSetupProviderProfileActive(profile)),
@@ -489,7 +580,9 @@ function updateSetupProviderPickerButton(profileName = '') {
     const selectedProfile = safeString(profileName) || safeString(setupProviderSelector?.value);
     const profile = findSetupProviderProfile(selectedProfile);
     const isConnected = isSetupProviderProfileActive(profile);
-    setupProviderPickerLabel.textContent = selectedProfile || 'Select provider';
+    setupProviderPickerLabel.textContent = selectedProfile
+        ? formatProviderDisplay(selectedProfile)
+        : 'Select provider';
     setupProviderPickerBtn.dataset.state = isConnected ? 'connected' : (profile ? 'inactive' : 'idle');
     if (setupProviderPickerState) setupProviderPickerState.textContent = '';
 }
@@ -516,7 +609,7 @@ function createSetupProviderOptionButton(profile, selectedProfile = '') {
 
     const name = document.createElement('span');
     name.className = 'setup-provider-option-name';
-    name.textContent = profileName;
+    name.textContent = formatProviderDisplay(profileName) || profileName;
 
     button.append(name);
     return button;
@@ -558,8 +651,8 @@ async function handoffInactiveProviderToEasySetup(profileName = '') {
     primeEasySetupProfileSelection(selectedProfile, path);
     if (easySetupConnectionStatus) {
         const statusMessage = path === 'codex'
-            ? 'ChatGPT / Codex selected. Run connection test.'
-            : `Selected ${selectedProfile}. Run connection test.`;
+            ? 'ChatGPT (OpenAI) selected. Run connection test.'
+            : `Selected ${formatProviderDisplay(selectedProfile) || selectedProfile}. Run connection test.`;
         setEasySetupStatus(easySetupConnectionStatus, statusMessage);
     }
 }

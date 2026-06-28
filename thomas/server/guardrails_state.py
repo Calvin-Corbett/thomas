@@ -62,3 +62,71 @@ def normalize_state(raw: dict | None) -> GuardrailsState:
     except (TypeError, ValueError):
         cap = 0
     return GuardrailsState(modes=modes, spend_cap_tokens=cap)
+
+
+# ── Enforcement layer ──────────────────────────────────────────────────────
+# Which groups are enforceable at RUN TIME vs COMMIT TIME:
+#   reach      -> tool access (deny external/network tools)        [runtime]
+#   gatekeeper -> tool-approval / risk posture (no_human_mode)      [runtime]
+#   sprawl_guard / clean_hands / inspector / load_bearing / safety_net
+#              -> code-quality gates honored by the commit/CI gate  [commit-time]
+# The commit-time groups are exported as env (see modes_env) so the gate
+# subsystem can read them; the runtime groups are applied directly below.
+
+# reach mode -> tool deny tokens (matched by name / dotted-prefix / category).
+# Local tools (shell, fs, git, code) stay available so coding tasks still work;
+# `reach` only governs how far Thomas reaches OUT (web / http / remote / browser).
+_REACH_DENY: dict[str, frozenset[str]] = {
+    "strict": frozenset({"web", "http", "browser", "remote", "eng.web_extract"}),
+    "standard": frozenset({"remote"}),
+    "permissive": frozenset(),
+}
+
+
+def reach_deny_set(mode: str) -> frozenset[str]:
+    """Tools/categories to drop from the registry for a given `reach` mode."""
+    return _REACH_DENY.get(str(mode or "standard").strip().lower(), _REACH_DENY["standard"])
+
+
+def gatekeeper_no_human_mode(mode: str, base: str | None) -> str | None:
+    """How `gatekeeper` modulates the run's no-human approval posture.
+
+    strict      -> "deny": approval-requiring tools (shell, push, out-of-sandbox
+                   writes) are auto-denied, keeping an unattended run sandboxed.
+    standard    -> unchanged (the autonomy-derived `base`).
+    permissive  -> "allow": escalate to native-auth so the run isn't blocked.
+    """
+    m = str(mode or "standard").strip().lower()
+    if m == "strict":
+        return "deny"
+    if m == "permissive":
+        return "allow"
+    return base
+
+
+def build_effective_guardrails(preset: str = "", modes: dict | None = None) -> GuardrailsState:
+    """Resolve the effective policy for a run.
+
+    Precedence: explicit per-group `modes` -> a top-level `preset` -> the
+    server-persisted policy -> all-standard default.
+    """
+    if modes:
+        return normalize_state({"modes": modes})
+    p = str(preset or "").strip().lower()
+    if p in PRESETS:
+        return from_preset(p)
+    try:
+        from thomas.server.guardrails_policy_store import load_guardrails_policy
+
+        return load_guardrails_policy()
+    except Exception:
+        return GuardrailsState()
+
+
+def modes_env(state: GuardrailsState) -> dict[str, str]:
+    """Env vars the commit/CI gate subsystem can read to honor per-group modes."""
+    env = {f"THOMAS_GUARDRAIL_{g.upper()}": state.mode_for(g) for g in GUARDRAIL_GROUPS}
+    import json as _json
+
+    env["THOMAS_GUARDRAIL_MODES"] = _json.dumps(state.modes, separators=(",", ":"))
+    return env

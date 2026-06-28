@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import time
+from pathlib import Path
 from typing import Any
 
 try:
@@ -212,6 +214,10 @@ def access_token_from_store(secret_store: Any, profile: str | None = None) -> st
 def _default_secret_store() -> Any:
     from thomas.core.config import load_config
     from thomas.server.secrets import SecretStore
+
+    secret_root = str(os.environ.get("THOMAS_SECRET_ROOT") or "").strip()
+    if secret_root:
+        return SecretStore(Path(secret_root).expanduser().resolve())
 
     config = load_config()
     return SecretStore(config.memory.root_path / ".thomas")

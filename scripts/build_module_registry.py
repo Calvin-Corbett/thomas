@@ -2,20 +2,23 @@
 """
 scripts/build_module_registry.py
 ────────────────────────────────
-Scans every directory under thomas/ and generates MODULE_REGISTRY.md at the
-repo root.  For each module it reports:
+Scans every directory under thomas/ and generates a module registry. For each
+module it reports:
 
   - Whether a STATUS.md exists (and extracts its status + last-assessed date)
   - File count and total lines of Python code
   - Most recently modified .py file and its timestamp
 
-Run:  python scripts/build_module_registry.py
+Run:  python scripts/build_module_registry.py --write
 
-This is safe to re-run at any time.  It overwrites MODULE_REGISTRY.md.
+The default output is MODULE_REGISTRY.md at the repo root. This is safe to
+re-run intentionally, but command discovery such as --help does not write.
 """
 
 from __future__ import annotations
 
+import argparse
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -90,7 +93,7 @@ def _scan_module(mod_path: Path) -> dict:
     }
 
 
-def main() -> None:
+def _build_registry_lines() -> tuple[list[str], int, int]:
     modules = []
     for entry in sorted(THOMAS_DIR.iterdir()):
         if not entry.is_dir():
@@ -147,9 +150,42 @@ def main() -> None:
     lines.append("   to keep the registry current.")
     lines.append("")
 
-    OUTPUT.write_text("\n".join(lines), encoding="utf-8")
-    print(f"Wrote {OUTPUT} ({total_count} modules, {has_status_count} with STATUS.md)")
+    return lines, total_count, has_status_count
+
+
+def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Generate a Markdown module registry from the current thomas/ tree. "
+            "With no arguments, preserves the historical behavior and writes "
+            "MODULE_REGISTRY.md at the repo root."
+        )
+    )
+    parser.add_argument(
+        "--write",
+        action="store_true",
+        help="Write the registry output. This is also the default when no arguments are provided.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=OUTPUT,
+        help="Output Markdown file (default: repo-root MODULE_REGISTRY.md).",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _parse_args(argv)
+    output = args.output
+    if not output.is_absolute():
+        output = REPO_ROOT / output
+
+    lines, total_count, has_status_count = _build_registry_lines()
+    output.write_text("\n".join(lines), encoding="utf-8")
+    print(f"Wrote {output} ({total_count} modules, {has_status_count} with STATUS.md)")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

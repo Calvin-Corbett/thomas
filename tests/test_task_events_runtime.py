@@ -41,6 +41,7 @@ async def test_watch_task_prefers_runtime_execution_state(tmp_path, monkeypatch)
         actor="worker-1",
         summary="Task is complete.",
         repo_root=tmp_path,
+        verified_success=True,
     )
 
     monkeypatch.setattr(mod, "_ROOT", tmp_path)

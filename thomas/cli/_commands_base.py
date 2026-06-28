@@ -259,7 +259,31 @@ def _build_tools(config: AppConfig) -> ToolRegistry:
     except ImportError:
         pass
 
+    # Honor THOMAS_TOOL_DENYLIST (set e.g. by the evolve green sandbox via
+    # _merge_tool_denylist) so exec primitives like shell.exec / ssh.exec are
+    # actually stripped from the registry the agent sees. Matches by exact name,
+    # dotted-prefix, or tool category.
+    _apply_env_tool_denylist(registry)
+
     return registry
+
+
+def _apply_env_tool_denylist(registry: ToolRegistry) -> None:
+    """Drop tools named in THOMAS_TOOL_DENYLIST (name, dotted-prefix, or category)."""
+    deny = {tok.strip() for tok in os.environ.get("THOMAS_TOOL_DENYLIST", "").split(",") if tok.strip()}
+    if not deny:
+        return
+    registered = getattr(registry, "_tools", None)
+    if not isinstance(registered, dict):
+        return
+    for name, tool in list(registered.items()):
+        category = str(getattr(tool, "category", "") or "")
+        if any(name == tok or name.startswith(f"{tok}.") or category == tok for tok in deny):
+            try:
+                registry.unregister(name)
+            except Exception:  # pragma: no cover - best-effort pruning
+                # Broad catch: unregister() signatures vary across ToolRegistry versions; denylist pruning is advisory.
+                log.debug("Failed to unregister denylist tool %r; skipping.", name, exc_info=True)
 
 
 def _build_memory(config: AppConfig):

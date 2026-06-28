@@ -13,6 +13,7 @@ from pathlib import Path
 
 from thomas.forge.anvil.evolve import (
     DEFAULT_VERIFY_COMMANDS,
+    MAX_BLAST_RADIUS_TEST_FILES,
     EvolveCharter,
     _blast_radius_tests,
     _build_verify_commands,
@@ -36,6 +37,38 @@ def test_blast_radius_is_empty_for_non_thomas_changes():
     # Docs / non-python changes have no behavioural blast radius.
     assert _blast_radius_tests(["README.md", "CHANGELOG.md"], REPO) == []
     assert _blast_radius_tests([], REPO) == []
+
+
+def test_blast_radius_caps_broad_shared_module_hits():
+    hits = _blast_radius_tests(["thomas/core/token_economy.py"], REPO)
+    assert len(hits) <= MAX_BLAST_RADIUS_TEST_FILES
+    assert "tests/test_effort_dial.py" in hits
+
+
+def test_blast_radius_ignores_name_only_spoof_without_import(tmp_path):
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_fake_backdoor.py").write_text(
+        'def test_mentions_module_name_only():\n    assert "thomas.core.backdoor" == "thomas.core.backdoor"\n',
+        encoding="utf-8",
+    )
+
+    hits = _blast_radius_tests(["thomas/core/backdoor.py"], tmp_path)
+
+    assert hits == []
+
+
+def test_blast_radius_requires_real_import_reference(tmp_path):
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_backdoor.py").write_text(
+        "from thomas.core import backdoor\n\n\ndef test_backdoor_value():\n    assert backdoor.VALUE\n",
+        encoding="utf-8",
+    )
+
+    hits = _blast_radius_tests(["thomas/core/backdoor.py"], tmp_path)
+
+    assert hits == ["tests/test_backdoor.py"]
 
 
 def test_build_verify_commands_adds_blast_radius_AND_keeps_architecture():

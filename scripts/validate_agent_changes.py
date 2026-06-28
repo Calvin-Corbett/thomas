@@ -89,8 +89,11 @@ def check_javascript_syntax(staged_files: list[str]) -> tuple[bool, list[str]]:
         return True, []
 
     try:
-        # Check runtime files and loader
-        files_to_check = runtime_files + ([loader_file] if loader_file in staged_files else [])
+        # Check runtime files and loader, skipping files DELETED in this commit -- a
+        # staged deletion has no syntax to validate and `node --check` on a missing path
+        # errors with "Cannot find module" (exit 1). Mirrors check_python_syntax:132.
+        candidates = runtime_files + ([loader_file] if loader_file in staged_files else [])
+        files_to_check = [f for f in candidates if Path(f).exists()]
         for js_file in files_to_check:
             result = subprocess.run(["node", "--check", js_file], capture_output=True, text=True, timeout=5)
             if result.returncode != 0:

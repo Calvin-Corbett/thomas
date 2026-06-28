@@ -160,6 +160,10 @@ async def run_agent_worker_events(
     session_id: str | None = None,
     execution_id: str | None = None,
     autonomy_level: int = 4,
+    file_access: int | None = None,
+    guardrails: str = "",
+    guardrail_modes: dict[str, str] | None = None,
+    job_type: str | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Run the standard ``AgentLoop`` (full tools, workspace-confined) and yield
     bridge-style event dicts.
@@ -169,6 +173,8 @@ async def run_agent_worker_events(
     land in the workspace and escapes are blocked WITHOUT an ``os.chdir`` (which is
     process-global and would race across concurrent workers).
     """
+    yield {"type": "progress", "text": "Provider-native worker is initializing."}
+
     cfg: AppConfig = app[APP_CONFIG]
     secret_store = app.get(APP_SECRETS)
     memory = app.get(APP_MEMORY)
@@ -193,15 +199,34 @@ async def run_agent_worker_events(
         for fc in cfg.failover_chain(resolved_profile)
     ]
 
-    # FULL tool surface confined to the per-task workspace (see docstring).
+    # FULL tool surface confined to the per-task workspace (see docstring). The
+    # file-access ladder defaults to the config level, but a per-request override
+    # (from the chat payload / UI toggle) wins when provided — so the user can dial
+    # "let Thomas write to my PC" per session without editing config.
+    effective_file_access = cfg.tools.file_access if file_access is None else int(file_access)
     run_cfg = dataclasses.replace(
         cfg,
-        tools=dataclasses.replace(cfg.tools, sandbox_root=str(work_dir), allow_shell=True),
+        tools=dataclasses.replace(
+            cfg.tools, sandbox_root=str(work_dir), allow_shell=True, file_access=effective_file_access
+        ),
     )
     from thomas.server.app_helpers import _build_tools  # lazy: avoid any app-bootstrap import cycle
 
     tools = _build_tools(run_cfg)
     _apply_tool_deny(tools, override.tool_deny)
+
+    # Guardrails: resolve the effective policy (payload modes -> preset -> saved),
+    # then enforce the two runtime-meaningful groups. `reach` prunes external tools;
+    # `gatekeeper` (applied to the loop below) sets the approval posture. The other
+    # five groups are code-quality gates honored at commit time via the saved policy.
+    from thomas.server.guardrails_state import (
+        build_effective_guardrails,
+        gatekeeper_no_human_mode,
+        reach_deny_set,
+    )
+
+    guardrails_state_eff = build_effective_guardrails(guardrails, guardrail_modes)
+    _apply_tool_deny(tools, reach_deny_set(guardrails_state_eff.mode_for("reach")))
 
     system_prompt = f"{instructions}{override.prompt_suffix or ''}"
 
@@ -229,19 +254,42 @@ async def run_agent_worker_events(
         autonomy_level=autonomy_level,
     )
 
+    # Guardrails `gatekeeper` pins the approval posture for this run (strict = deny
+    # risky tools unattended; standard = autonomy-derived; permissive = escalate).
+    _base_nhm = "allow" if int(autonomy_level or 0) >= 4 else None
+    agent._no_human_mode_override = gatekeeper_no_human_mode(guardrails_state_eff.mode_for("gatekeeper"), _base_nhm)
+    yield {"type": "progress", "text": "Provider-native worker entered the agent loop."}
+
     # Effort x Autonomy drives the pass budget; a per-model override can still cap it.
     applied_effort = effective_effort(effort, autonomy_level)
     effort_passes = compute_max_passes(applied_effort, run_cfg.max_agent_iterations)
     max_iters = effort_passes if override.max_iterations is None else min(effort_passes, override.max_iterations)
 
+    # The system prompt carries the file-tool rule, but models weight the user
+    # turn more heavily (observed: gpt-5.x ignores the system rule and reaches for
+    # Unix shell builtins like `printf`/`mkdir -p`, which fail on Windows cmd.exe).
+    # Restating the hard rule at the top of the task prompt makes it stick.
+    task_prompt = (
+        "Reminder: create and write files ONLY with the `fs.write_file` tool "
+        "(write to a nested path to make folders); never use shell commands like "
+        "printf, echo, touch, cat, or mkdir for files. Use `fs.list_dir` to list. "
+        "CRITICAL: when the task is to produce a file, document, game, script, or app, "
+        "you MUST actually CALL `fs.write_file` with the full contents. Do NOT paste the "
+        "code or text into your reply and tell the user to save it — pasting it does NOT "
+        "create the file, so the deliverable would not exist. The tool call is the only "
+        "thing that creates it; write the file first, then briefly say what you made.\n\n"
+        f"{prompt}"
+    )
+
     streamed_text = False
     try:
         async for event in agent.run(
-            prompt,
+            task_prompt,
             mode="auto",
             tools_policy="auto",
             token_economy=applied_effort,
             max_iterations=max_iters,
+            job_type=job_type,
         ):
             etype = event.type
             if etype == EventType.TEXT_DELTA:
@@ -254,9 +302,24 @@ async def run_agent_worker_events(
                 yield {"type": "tool_start", "name": name}
             elif etype == EventType.TOOL_RESULT:
                 name = str(event.data.get("tool_name") or "tool")
-                yield {"type": "tool_output", "name": name}
+                # Preserve the tool's SUCCESS signal — previously dropped, so a tool
+                # that errored looked identical to one that succeeded and a failed
+                # action ("send the email") could still be reported as done. Default
+                # to ok unless an explicit error/failure signal is present.
+                err = event.data.get("error") or event.data.get("is_error")
+                ok_field = event.data.get("ok")
+                success_field = event.data.get("success")
+                ok = True
+                if err:
+                    ok = False
+                elif ok_field is not None:
+                    ok = bool(ok_field)
+                elif success_field is not None:
+                    ok = bool(success_field)
+                yield {"type": "tool_output", "name": name, "ok": ok, "error": str(err or "")}
             elif etype == EventType.AGENT_ERROR:
-                yield {"type": "error", "error": str(event.data.get("error") or "worker failed")}
+                # Transient/agent error — the delegation layer may retry this at L4.
+                yield {"type": "error", "error": str(event.data.get("error") or "worker failed"), "retryable": True}
                 return
             elif etype == EventType.AGENT_END:
                 # Abnormal terminal state (user interruption, or a denied /
@@ -267,7 +330,11 @@ async def run_agent_worker_events(
                 reason = str(
                     event.data.get("message") or event.data.get("reason") or "worker ended before completing the task"
                 )
-                yield {"type": "error", "error": reason}
+                # Deterministic terminal state (interruption / suspicious-prompt denial):
+                # NOT retryable — replaying the same prompt would just hit it again, so
+                # the delegation layer should fail immediately instead of burning the
+                # self-recovery budget.
+                yield {"type": "error", "error": reason, "retryable": False}
                 return
             elif etype == EventType.AGENT_DONE:
                 final = str(event.data.get("text") or "").strip()

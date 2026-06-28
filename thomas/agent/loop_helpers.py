@@ -229,9 +229,6 @@ async def _ensure_llm_hardened_client(llm: Any) -> None:
         return
 
     provider = str(getattr(llm.config, "provider", "") or "").lower()
-    if provider == "codex":
-        return
-
     base_url = str(getattr(llm.config, "base_url", "") or "").strip()
     if not base_url:
         return

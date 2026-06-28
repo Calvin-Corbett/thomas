@@ -26,8 +26,6 @@ def provider_family(cfg: ModelConfig) -> str:
     base_url = str(getattr(cfg, "base_url", "") or "").strip().lower()
     model = str(getattr(cfg, "model", "") or "").strip().lower()
     text = " ".join((provider, base_url, model))
-    if provider == "codex":
-        return "openai"
     # Match the OpenAI API host on the parsed URL hostname (exact / suffix on a
     # dot boundary) instead of a bare substring, so look-alike hosts such as
     # "api.openai.com.evil.example" cannot spoof the openai family.
@@ -147,7 +145,7 @@ def _infer_capabilities(*, model_id: str, provider: str, family: str) -> dict[st
     reasoning = fam == "openai" and mid.startswith("gpt-5")
     return {
         "chat": True,
-        "tools": prov == "codex" or fam in {"openai", "anthropic", "google", "xai", "deepseek"},
+        "tools": fam in {"openai", "anthropic", "google", "xai", "deepseek"},
         "streaming": True,
         "reasoning_efforts": ["low", "medium", "high", "xhigh"] if reasoning else [],
         "frontier": _is_frontier_candidate(mid),

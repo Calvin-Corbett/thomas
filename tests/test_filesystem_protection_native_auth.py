@@ -22,7 +22,7 @@ def test_write_protected_file_refused_without_auth(sandbox: Path, monkeypatch: p
         "thomas.tools.native_auth.request_native_authorization",
         lambda action, reason: False,
     )
-    tool = WriteProtectedFileTool(sandbox)
+    tool = WriteProtectedFileTool(sandbox, project_root=sandbox)
     target = "thomas/tools/evil.py"
     result = _run(tool, {"path": target, "content": "x = 1", "reason": "test"})
     assert result.ok is False
@@ -41,7 +41,7 @@ def test_write_protected_file_allowed_with_auth(sandbox: Path, monkeypatch: pyte
 
     monkeypatch.setattr("thomas.tools.native_auth.request_native_authorization", _approve)
 
-    tool = WriteProtectedFileTool(sandbox)
+    tool = WriteProtectedFileTool(sandbox, project_root=sandbox)
     target = "thomas/tools/evil.py"
     result = _run(
         tool,
@@ -58,7 +58,7 @@ def test_write_protected_file_allowed_with_auth(sandbox: Path, monkeypatch: pyte
 
 
 def test_write_protected_file_requires_reason(sandbox: Path) -> None:
-    tool = WriteProtectedFileTool(sandbox)
+    tool = WriteProtectedFileTool(sandbox, project_root=sandbox)
     result = _run(tool, {"path": "thomas/tools/x.py", "content": "x", "reason": ""})
     assert result.ok is False
     assert result.error is not None
@@ -76,7 +76,7 @@ def test_write_protected_file_works_for_unprotected_path_no_prompt(
 
     monkeypatch.setattr("thomas.tools.native_auth.request_native_authorization", _track)
 
-    tool = WriteProtectedFileTool(sandbox)
+    tool = WriteProtectedFileTool(sandbox, project_root=sandbox)
     result = _run(tool, {"path": "src/regular.py", "content": "ok", "reason": "no-op"})
     assert result.ok is True
     assert calls["n"] == 0
@@ -87,7 +87,7 @@ def test_write_protected_file_can_be_used_to_clear_the_flag(sandbox: Path, monke
         "thomas.tools.native_auth.request_native_authorization",
         lambda action, reason: True,
     )
-    tool = WriteProtectedFileTool(sandbox)
+    tool = WriteProtectedFileTool(sandbox, project_root=sandbox)
     result = _run(
         tool,
         {

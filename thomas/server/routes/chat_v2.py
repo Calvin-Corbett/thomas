@@ -23,6 +23,7 @@ from thomas.chat.conversation import ConversationManager
 from thomas.chat.event_stream import EventDispatcher
 from thomas.chat.session_store import SessionMeta, SessionStore
 from thomas.core.autonomy import DEFAULT_AUTONOMY_LEVEL
+from thomas.core.file_access import parse_file_access_level
 from thomas.core.llm import LLMClient
 from thomas.marketplace.orchestrator.brain import OrchestratorBrain
 from thomas.marketplace.orchestrator.registry import SpecialistRegistry
@@ -32,6 +33,8 @@ from thomas.marketplace.specialists.research import ResearchSpecialist
 from thomas.marketplace.specialists.synthesis import SynthesisSpecialist
 from thomas.marketplace.specialists.tools import ToolSpecialist
 from thomas.server.chat_delegation import (
+    _prompt_targets_live_thomas_repo,
+    apply_task_update,
     build_active_task_digest,
     session_active_delegations,
     start_background_delegation,
@@ -48,8 +51,6 @@ log = logging.getLogger(__name__)
 APP_SESSION_STORE = web.AppKey("chat_v2_session_store", SessionStore)
 APP_SPECIALIST_REGISTRY = web.AppKey("chat_v2_specialist_registry", SpecialistRegistry)
 APP_SESSION_LLM_CACHE = web.AppKey("chat_v2_session_llm_cache", dict)
-APP_WARM_CODEX_POOL = web.AppKey("chat_v2_warm_codex_pool", dict)
-APP_WARM_CODEX_TASKS = web.AppKey("chat_v2_warm_codex_tasks", dict)
 APP_VOICE_BRIDGE = web.AppKey("chat_v2_voice_bridge", VoiceBridge)
 
 _MAX_TRANSCRIBE_BYTES = 10 * 1024 * 1024
@@ -210,87 +211,6 @@ def _llm_signature(model_cfg: Any) -> tuple[str, str, str, str, str]:
     )
 
 
-def _warm_codex_pool_key(model_cfg: Any) -> tuple[str, str, str, str, str, str]:
-    return (
-        str(getattr(model_cfg, "provider", "") or "").strip().lower(),
-        str(getattr(model_cfg, "model", "") or "").strip(),
-        str(getattr(model_cfg, "base_url", "") or "").strip(),
-        str(getattr(model_cfg, "api_key", "") or "").strip(),
-        str(getattr(model_cfg, "api_key_header", "") or "").strip(),
-        str(getattr(model_cfg, "api_key_prefix", "") or "").strip(),
-    )
-
-
-def _is_codex_model_cfg(model_cfg: Any) -> bool:
-    return str(getattr(model_cfg, "provider", "") or "").strip().lower() == "codex"
-
-
-async def _warm_codex_provider(model_cfg: Any) -> Any:
-    from thomas.marketplace.codex.provider import CodexProvider
-
-    provider = CodexProvider(model_cfg)
-    messages = [
-        {
-            "role": "system",
-            "content": "You are Thomas. This is an internal warmup turn. Reply with exactly OK.",
-        },
-        {
-            "role": "user",
-            "content": "Internal warmup ping. This is not part of any user conversation. Reply with exactly OK.",
-        },
-    ]
-    async for _event in provider.stream_chat(messages=messages, tools=None):
-        pass
-    return provider
-
-
-def _schedule_codex_prewarm(app: web.Application, model_cfg: Any) -> None:
-    if not _is_codex_model_cfg(model_cfg):
-        return
-    pool = app.get(APP_WARM_CODEX_POOL)
-    tasks = app.get(APP_WARM_CODEX_TASKS)
-    if not isinstance(pool, dict) or not isinstance(tasks, dict):
-        return
-    key = _warm_codex_pool_key(model_cfg)
-    if key in pool:
-        return
-    task = tasks.get(key)
-    if task is not None and not task.done():
-        return
-
-    async def _runner() -> None:
-        provider = None
-        try:
-            provider = await _warm_codex_provider(model_cfg)
-            active_pool = app.get(APP_WARM_CODEX_POOL)
-            if isinstance(active_pool, dict) and key not in active_pool:
-                active_pool[key] = provider
-                provider = None
-        except Exception as exc:
-            log.warning("Codex prewarm failed for %s: %s", str(getattr(model_cfg, "model", "") or "codex"), exc)
-        finally:
-            active_tasks = app.get(APP_WARM_CODEX_TASKS)
-            if isinstance(active_tasks, dict):
-                active_tasks.pop(key, None)
-            if provider is not None:
-                with contextlib.suppress(Exception):
-                    await provider.close()
-
-    tasks[key] = asyncio.create_task(_runner())
-
-
-def _take_warm_codex_provider(app: web.Application, model_cfg: Any) -> Any | None:
-    if not _is_codex_model_cfg(model_cfg):
-        return None
-    pool = app.get(APP_WARM_CODEX_POOL)
-    if not isinstance(pool, dict):
-        return None
-    key = _warm_codex_pool_key(model_cfg)
-    provider = pool.pop(key, None)
-    _schedule_codex_prewarm(app, model_cfg)
-    return provider
-
-
 def _refresh_cached_llm(
     entry: _CachedSessionLLM,
     *,
@@ -306,9 +226,6 @@ def _refresh_cached_llm(
         llm._fallback_configs = list(fallback_cfgs or [])
     if hasattr(llm, "_failover_enabled"):
         llm._failover_enabled = bool(failover_enabled and fallback_cfgs)
-    if hasattr(llm, "_codex_provider") and getattr(llm, "_codex_provider", None) is not None:
-        with contextlib.suppress(Exception):
-            llm._codex_provider.config = model_cfg
     return llm
 
 
@@ -347,9 +264,6 @@ async def _get_or_create_session_llm(
         fallback_configs=fallback_cfgs,
         failover_enabled=failover_enabled,
     )
-    warm_provider = _take_warm_codex_provider(app, model_cfg)
-    if warm_provider is not None and hasattr(llm, "_codex_provider"):
-        llm._codex_provider = warm_provider
     new_entry = _CachedSessionLLM(llm=llm, signature=signature, lock=preserved_lock)
     cache[session_id] = new_entry
     return _refresh_cached_llm(
@@ -378,22 +292,6 @@ async def _cleanup_cached_session_llms(app: web.Application) -> None:
             await _close_cached_llm(entry.llm)
 
 
-async def _cleanup_warm_codex_pool(app: web.Application) -> None:
-    pool = app.get(APP_WARM_CODEX_POOL) or {}
-    providers = list(pool.values())
-    pool.clear()
-    tasks = app.get(APP_WARM_CODEX_TASKS) or {}
-    running = list(tasks.values())
-    tasks.clear()
-    for task in running:
-        task.cancel()
-        with contextlib.suppress(asyncio.CancelledError, Exception):
-            await task
-    for provider in providers:
-        with contextlib.suppress(Exception):
-            await provider.close()
-
-
 def register_chat_v2_routes(
     app: web.Application,
     *,
@@ -407,23 +305,8 @@ def register_chat_v2_routes(
     session_store = SessionStore(store_dir)
     app[APP_SESSION_STORE] = session_store
     app[APP_SESSION_LLM_CACHE] = {}
-    app[APP_WARM_CODEX_POOL] = {}
-    app[APP_WARM_CODEX_TASKS] = {}
     app[APP_VOICE_BRIDGE] = VoiceBridge()
     app.on_cleanup.append(_cleanup_cached_session_llms)
-    app.on_cleanup.append(_cleanup_warm_codex_pool)
-
-    if config is not None and getattr(config, "models", None):
-
-        async def _startup_prewarm(app_ref: web.Application) -> None:
-            for profile_name, model_cfg in list(getattr(config, "models", {}).items()):
-                try:
-                    resolved_cfg = config.get_model(profile_name) if hasattr(config, "get_model") else model_cfg
-                except Exception:
-                    resolved_cfg = model_cfg
-                _schedule_codex_prewarm(app_ref, resolved_cfg)
-
-        app.on_startup.append(_startup_prewarm)
 
     registry = SpecialistRegistry()
     for specialist_cls in [
@@ -444,6 +327,14 @@ def register_chat_v2_routes(
     app.router.add_post("/api/v2/chat/transcribe", handle_chat_transcribe)
     app.router.add_get("/api/v2/chat/session/{session_id}", handle_session_get)
     app.router.add_get("/api/v2/chat/session/{session_id}/delegations", handle_session_delegations)
+    app.router.add_post(
+        "/api/v2/chat/session/{session_id}/delegations/{execution_id}/reported",
+        handle_mark_delegation_reported,
+    )
+    app.router.add_post(
+        "/api/v2/chat/session/{session_id}/delegations/{execution_id}/announce",
+        handle_announce_delegation,
+    )
     app.router.add_delete("/api/v2/chat/session/{session_id}", handle_session_delete)
     app.router.add_get("/api/v2/chat/specialists", handle_specialists_list)
 
@@ -489,7 +380,15 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
     sid = str(payload.get("session_id", "") or secrets.token_urlsafe(18))
     mode = str(payload.get("mode", "auto"))
     autonomy_level = int(payload.get("autonomy_level", DEFAULT_AUTONOMY_LEVEL))
+    # File-access ladder (read_only/workspace/project/pc/full) — the "let Thomas write
+    # to my PC" toggle. None = inherit the configured default; a value overrides it for
+    # this session. See thomas/core/file_access.py.
+    _fa_raw = payload.get("file_access")
+    file_access = parse_file_access_level(_fa_raw) if _fa_raw is not None else None
     token_economy = str(payload.get("token_economy", "optimal") or "optimal")
+    thomas_guardrails = str(payload.get("thomas_guardrails", "") or "")
+    _grm = payload.get("thomas_guardrail_modes")
+    thomas_guardrail_modes = _grm if isinstance(_grm, dict) else None
 
     session_store: SessionStore = request.app[APP_SESSION_STORE]
     registry: SpecialistRegistry = request.app[APP_SPECIALIST_REGISTRY]
@@ -522,6 +421,9 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
             if not model_profile or not hasattr(app_config, "models") or model_profile not in app_config.models:
                 model_profile = getattr(app_config, "default_model", "")
             model_cfg = app_config.get_model(model_profile)
+            requested_model_id = str(payload.get("model_id", "") or "").strip()
+            if requested_model_id:
+                model_cfg = replace(model_cfg, model=requested_model_id)
             requested_reasoning_effort = _normalize_reasoning_effort(str(payload.get("reasoning_effort", "") or ""))
             if requested_reasoning_effort:
                 model_cfg = replace(model_cfg, reasoning_effort=requested_reasoning_effort)
@@ -567,7 +469,8 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
     recent_messages = conversation.get_context_window(max_tokens=8_000)
     current_active_tasks = session_active_delegations(sid)
     launcher_task: asyncio.Task[Any] | None = None
-    dispatch_inline_actionable = _requires_inline_tool_execution(prompt)
+    live_repo_background = bool(autonomy_level >= 3 and _prompt_targets_live_thomas_repo(prompt))
+    dispatch_inline_actionable = False if live_repo_background else _requires_inline_tool_execution(prompt)
     reply_first_background = bool(mode == "auto" and _requests_reply_first_background(prompt))
     explicit_delegation = bool(autonomy_level >= 4 and _requests_explicit_delegation(prompt))
     # No-regex dispatch: the old `should_dispatch` regex that GUESSED whether a
@@ -576,13 +479,14 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
     # (wired below). Autonomy still governs it: the tool is only offered at L3+
     # (Agent/Full), so at L1/L2 Thomas talks/offers and never dispatches on its own.
     auto_actionable_background = False
-    launch_background = bool(mode == "max" or reply_first_background or explicit_delegation)
-    force_background = bool(reply_first_background or explicit_delegation)
+    launch_background = bool(mode == "max" or reply_first_background or explicit_delegation or live_repo_background)
+    force_background = bool(reply_first_background or explicit_delegation or live_repo_background)
     background_ack_only = False
     visible_prompt = _foreground_reply_prompt(prompt) if reply_first_background else prompt
 
-    async def _send_task(*, title: str, instructions: str) -> None:
-        """Organic dispatch: the model calls this to hand work to the task manager."""
+    async def _send_task(*, title: str, instructions: str, surface: str = "") -> None:
+        """Organic dispatch: the model calls this to hand work to the task manager.
+        surface ('canvas'|'task'|'') is the MODEL's choice of where the work appears."""
         await start_background_delegation(
             request.app,
             session_id=sid,
@@ -591,11 +495,27 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
             recent_messages=recent_messages,
             emit_event=dispatcher.emit,
             force=True,
+            autonomy_level=autonomy_level,
+            file_access=file_access,
             profile=model_profile or None,
             effort=token_economy,
+            guardrails=thomas_guardrails,
+            guardrail_modes=thomas_guardrail_modes,
+            session_llm=llm,
+            surface=surface,
         )
 
-    send_task_cb = _send_task if autonomy_level >= 3 else None
+    # A turn that force-launches in the background must NOT also hand the model the tool
+    # (that double-dispatch hole was the "multiple tasks"): offer the tool only when nothing
+    # else is auto-launching this turn.
+    send_task_cb = _send_task if (autonomy_level >= 3 and not launch_background) else None
+
+    async def _update_task(*, task_ref: str, update: str = "", cancel: bool = False) -> dict[str, Any]:
+        """Organic re-direct: the model steers or cancels a RUNNING background task,
+        choosing the right one by ref from the digest instead of a blind heuristic."""
+        return apply_task_update(sid, task_ref, update, cancel=bool(cancel))
+
+    update_task_cb = _update_task if autonomy_level >= 3 else None
 
     try:
         if launch_background:
@@ -608,8 +528,13 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
                     recent_messages=recent_messages,
                     emit_event=dispatcher.emit,
                     force=force_background,
+                    autonomy_level=autonomy_level,
+                    file_access=file_access,
                     profile=model_profile or None,
                     effort=token_economy,
+                    guardrails=thomas_guardrails,
+                    guardrail_modes=thomas_guardrail_modes,
+                    session_llm=llm,
                 )
             )
             await asyncio.sleep(0)
@@ -633,6 +558,7 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
                 dispatch_actionable=dispatch_inline_actionable,
                 background_ack_only=background_ack_only,
                 send_task=send_task_cb,
+                update_task=update_task_cb,
             )
 
         if llm_lock is not None:
@@ -753,6 +679,175 @@ async def handle_session_delegations(request: web.Request) -> web.Response:
     sid = request.match_info["session_id"]
     delegations = session_active_delegations(sid)
     return web.json_response({"session_id": sid, "delegations": delegations})
+
+
+async def handle_mark_delegation_reported(request: web.Request) -> web.Response:
+    """Mark a finished delegation as already announced in chat, so the in-thread
+    completion bubble (frontend) and the next-turn brain note do not BOTH report the
+    same completion. Whichever surface delivers it first sets this durable flag; the
+    other then skips. Best-effort: a write failure is non-fatal."""
+    sid = str(request.match_info.get("session_id", "") or "").strip()
+    exec_id = str(request.match_info.get("execution_id", "") or "").strip()
+    ok = False
+    if exec_id:
+        try:
+            from datetime import datetime, timezone
+
+            from thomas.core import task_bot_runtime
+
+            # Session-scope the mark: a session may only flag its OWN delegations. Fail
+            # OPEN — if the row is unknown or carries no conversation id, fall through to
+            # the write (preserves behavior for rows predating the field). Only a row that
+            # belongs to a DIFFERENT conversation is rejected.
+            row = task_bot_runtime.get_execution(exec_id) or {}
+            owner = str(row.get("conversation_id") or "").strip()
+            if sid and owner and owner != sid:
+                return web.json_response(
+                    {"session_id": sid, "execution_id": exec_id, "ok": False, "error": "session_mismatch"},
+                    status=403,
+                )
+            task_bot_runtime.update_execution(
+                exec_id,
+                reported_to_chat_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+            )
+            ok = True
+        except Exception:
+            log.debug("mark-reported failed for execution %s", exec_id, exc_info=True)
+    return web.json_response({"session_id": sid, "execution_id": exec_id, "ok": ok})
+
+
+def _announce_llm(app: web.Application, sid: str) -> Any | None:
+    """Reuse the session's already-warm LLM client (the chat built it for this session);
+    fall back to a default-model client if none is cached."""
+    cache = app.get(APP_SESSION_LLM_CACHE) or {}
+    entry = cache.get(sid)
+    if entry is not None and getattr(entry, "llm", None) is not None:
+        return entry.llm
+    cfg = app.get(APP_CONFIG) if APP_CONFIG is not None else None
+    if cfg is None:
+        return None
+    try:
+        from thomas.core.llm_client import LLMClient
+
+        model_cfg = cfg.get_model(getattr(cfg, "default_model", "") or None)
+        return LLMClient(model_cfg)
+    except (AttributeError, ImportError, LookupError, RuntimeError, TypeError, ValueError) as exc:
+        log.debug("announce LLM lookup failed for session %s: %s", sid, exc, exc_info=True)
+        return None
+
+
+async def _generate_note(llm: Any, system: str, user: str, timeout_s: float = 30.0) -> str:
+    """Collect a short non-streamed completion. Bounded so a provider stall can't hang."""
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+    parts: list[str] = []
+
+    async def _run() -> None:
+        aiter = llm.stream_chat(messages=messages, tools=None).__aiter__()
+        while True:
+            try:
+                ev = await aiter.__anext__()
+            except StopAsyncIteration:
+                break
+            etype = str(getattr(ev, "type", "") or "")
+            if etype == "token":
+                t = str((getattr(ev, "data", {}) or {}).get("text") or "")
+                if t:
+                    parts.append(t)
+            elif etype == "error":
+                break
+
+    try:
+        await asyncio.wait_for(_run(), timeout=timeout_s)
+    except asyncio.TimeoutError:
+        pass
+    except (AttributeError, RuntimeError, OSError, TypeError, ValueError) as exc:
+        log.debug("announce note generation failed: %s", exc, exc_info=True)
+    return "".join(parts).strip()
+
+
+async def handle_announce_delegation(request: web.Request) -> web.Response:
+    """Proactively VOICE a finished delegation: a brief, model-authored 'it's done' note in
+    Thomas's own voice, persisted as an assistant turn and marked reported so the next user
+    turn doesn't repeat it. Fires once — an already-reported or non-terminal row is skipped.
+    This is the in-thread completion bubble the reported-flag was built to coordinate."""
+    app = request.app
+    sid = str(request.match_info.get("session_id", "") or "").strip()
+    exec_id = str(request.match_info.get("execution_id", "") or "").strip()
+    if not sid or not exec_id:
+        return web.json_response({"ok": False, "error": "missing_ids"}, status=400)
+    try:
+        from datetime import datetime, timezone
+
+        from thomas.core import task_bot_runtime
+
+        row = task_bot_runtime.get_execution(exec_id) or {}
+        owner = str(row.get("conversation_id") or "").strip()
+        if owner and owner != sid:
+            return web.json_response({"ok": False, "error": "session_mismatch"}, status=403)
+        if str(row.get("reported_to_chat_at") or "").strip():
+            return web.json_response({"ok": True, "skipped": "already_reported"})
+        state = str(row.get("state") or "").lower()
+        if state not in {"completed", "done", "verified", "succeeded", "passed", "failed", "blocked", "error"}:
+            return web.json_response({"ok": True, "skipped": "not_terminal"})
+        failed = state in {"failed", "blocked", "error"}
+
+        session_store: SessionStore = app[APP_SESSION_STORE]
+        conversation = await session_store.load(sid)
+        if conversation is None:
+            conversation = ConversationManager()
+        last_user = ""
+        for m in reversed(conversation.get_context_window(max_tokens=2000)):
+            if str(m.get("role")) == "user":
+                last_user = str(m.get("content") or "")
+                break
+        summary = str(row.get("progress_summary") or row.get("summary") or "").strip()
+        bot = str(row.get("bot_name") or row.get("bot_id") or "a worker").strip() or "a worker"
+        artifact = ""
+        try:
+            from thomas.server.routes.deliverable_aiohttp import deliverable_entry
+
+            ent = deliverable_entry(exec_id) or ""
+            artifact = ent.rsplit("/", 1)[-1] if ent else ""
+        except (AttributeError, ImportError, LookupError, RuntimeError, OSError, TypeError, ValueError):
+            artifact = ""
+
+        llm = _announce_llm(app, sid)
+        if llm is None or not hasattr(llm, "stream_chat"):
+            return web.json_response({"ok": False, "error": "no_llm"}, status=503)
+
+        system = (
+            "You are Thomas, the user's warm, capable assistant. Reply in your own natural voice — "
+            "brief, human, first person, no preamble, no 'as an AI'."
+        )
+        bits = [
+            f"A task you handed to {bot} "
+            + ("ran into a problem and could not finish." if failed else "just finished.")
+        ]
+        if last_user:
+            bits.append(f'The user had asked: "{last_user[:300]}".')
+        if summary:
+            bits.append(f"Result: {summary[:300]}.")
+        if artifact and not failed:
+            bits.append(f"It produced a deliverable: {artifact}.")
+        bits.append(
+            "In one or two short sentences, proactively let the user know it's done and what you've "
+            "got for them — like you're telling them the moment it landed; they didn't have to ask."
+            if not failed
+            else "In one or two short sentences, let the user know it didn't finish and offer to take another run at it."
+        )
+        note = await _generate_note(llm, system, " ".join(bits))
+        if not note:
+            return web.json_response({"ok": False, "error": "empty_note"}, status=502)
+
+        conversation = conversation.append_message("assistant", note, metadata={"announce": exec_id})
+        await session_store.save(sid, conversation, SessionMeta(session_id=sid), force=True)
+        task_bot_runtime.update_execution(
+            exec_id, reported_to_chat_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        )
+        return web.json_response({"ok": True, "message": note})
+    except (KeyError, LookupError, RuntimeError, OSError, TypeError, ValueError) as exc:
+        log.debug("announce failed for %s/%s: %s", sid, exec_id, exc, exc_info=True)
+        return web.json_response({"ok": False, "error": "exception"}, status=500)
 
 
 async def handle_specialists_list(request: web.Request) -> web.Response:

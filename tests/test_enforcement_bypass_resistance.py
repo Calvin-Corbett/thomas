@@ -105,6 +105,15 @@ def test_protected_files_gate_supports_diff_range(monkeypatch, capsys) -> None:
     assert payload["approved_protected_files"] is False
 
 
+def test_protected_files_gate_supports_protected_prefixes() -> None:
+    protected = {"evolve_corpus/"}
+
+    assert protected_files_gate._is_protected_path("evolve_corpus/LOCK.json", protected) is True
+    assert protected_files_gate._is_protected_path("evolve_corpus/cases/new.json", protected) is True
+    assert protected_files_gate._is_protected_path("evolve_corpus", protected) is False
+    assert protected_files_gate._is_protected_path("thomas/core/example.py", protected) is False
+
+
 def test_protected_files_gate_diff_range_requires_non_empty_approval(monkeypatch, capsys) -> None:
     monkeypatch.setattr(protected_files_gate, "_runtime_protection_disabled", lambda: False)
     monkeypatch.setattr(

@@ -117,8 +117,6 @@ async def handshake_models_async(
     This is stricter than discover_models_async: it returns auth/offline errors so the UI can
     clearly show whether a cloud provider is actually usable.
     """
-    if cfg.provider == "codex":
-        return await _handshake_codex_async(cfg, timeout_s=timeout_s, max_results=max_results)
     if is_openai_codex_provider(cfg.provider):
         return _handshake_openai_codex(cfg, max_results=max_results)
 
@@ -192,79 +190,6 @@ async def handshake_models_async(
         return ModelsHandshake(ok=False, status="error", url=url, http_status=status, error=msg, models=[])
 
 
-async def _handshake_codex_async(
-    cfg: ModelConfig,
-    *,
-    timeout_s: float = 2.0,
-    max_results: int = 200,
-) -> ModelsHandshake:
-    """Handshake for the Codex app-server provider (no HTTP /models)."""
-    # Starting the app-server can take longer than an HTTP probe; allow a floor.
-    timeout = max(float(timeout_s), 8.0)
-
-    async def _run() -> ModelsHandshake:
-        try:
-            from thomas.codex.bridge import CodexBridge, CodexBridgeError
-        except Exception as e:
-            return ModelsHandshake(
-                ok=False,
-                status="unsupported",
-                url="codex:app-server",
-                error=f"Codex integration unavailable: {type(e).__name__}: {e}",
-                models=[],
-            )
-
-        bridge = CodexBridge(cwd=None)
-        try:
-            await bridge.start()
-
-            acct = await bridge.check_auth()
-            if not acct.logged_in:
-                return ModelsHandshake(
-                    ok=False,
-                    status="auth_error",
-                    url="codex:app-server",
-                    error="Not logged in to ChatGPT. Select the Codex profile and send a message to start the sign-in flow.",
-                    models=[],
-                )
-
-            models = await bridge.list_models()
-            ids: list[str] = [m.id for m in models if m.id][:max_results]
-            # De-dupe while preserving order.
-            seen: set[str] = set()
-            ids = [x for x in ids if not (x in seen or seen.add(x))]
-            return ModelsHandshake(ok=True, status="ok", url="codex:app-server", http_status=None, models=ids)
-
-        except CodexBridgeError as e:
-            msg = str(e).strip() or "Codex error"
-            status = "auth_error" if "login" in msg.lower() or "auth" in msg.lower() else "error"
-            return ModelsHandshake(ok=False, status=status, url="codex:app-server", error=msg, models=[])
-        except Exception as e:
-            return ModelsHandshake(
-                ok=False,
-                status="error",
-                url="codex:app-server",
-                error=f"{type(e).__name__}: {e}",
-                models=[],
-            )
-        finally:
-            try:
-                await bridge.stop()
-            except Exception as e:
-                log.debug("Failed to stop Codex bridge after handshake: %s", e)
-
-    try:
-        return await asyncio.wait_for(_run(), timeout=timeout)
-    except asyncio.TimeoutError:
-        return ModelsHandshake(
-            ok=False,
-            status="offline",
-            url="codex:app-server",
-            error=f"Timed out starting Codex app-server after {timeout:.1f}s",
-            models=[],
-        )
-
-
 async def discover_models_async(
     cfg: ModelConfig,
     *,
@@ -277,11 +202,6 @@ async def discover_models_async(
     1. OpenAI-compatible: GET {base_url}{models_path} expecting {"data":[{"id":...},...]}.
     2. Ollama fallback: GET {base_without_/v1}/api/tags expecting {"models":[{"name":...},...]}.
     """
-    if cfg.provider == "codex":
-        hs = await _handshake_codex_async(cfg, timeout_s=timeout_s, max_results=max_results)
-        if hs.ok and hs.models:
-            return [DiscoveredModel(id=m, raw={}) for m in (hs.models or [])]
-        return []
     if is_openai_codex_provider(cfg.provider):
         hs = _handshake_openai_codex(cfg, max_results=max_results)
         if hs.ok and hs.models:

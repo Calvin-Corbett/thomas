@@ -554,6 +554,13 @@ def _query_process_records(repo_root: Path) -> list[dict[str, Any]]:
         family = _classify_process_family(name, command)
         repo_related = repo_token in combined or (repo_name in combined and (family or "thomas" in combined))
         role = _classify_process_role(name, command, family)
+        # A packaged desktop GUI app (Microsoft Store / WindowsApps — e.g. the OpenAI
+        # Codex, Claude, or Gemini desktop apps the user simply has open) is NOT a Thomas
+        # worker bot editing the repo. Demote it to "app" so it never reads as a concurrent
+        # agent and false-positive-blocks commits. Real workers run from the repo .venv /
+        # node CLI, never from WindowsApps.
+        if "/windowsapps/" in combined:
+            role = "app"
         if not (family or repo_related or role in {"service", "tool"}):
             continue
         out.append(
@@ -590,12 +597,23 @@ def _family_from_agent_label(label: str) -> str:
 
 def _global_agent_presence(repo_root: Path) -> dict[str, dict[str, Any]]:
     presence: dict[str, dict[str, Any]] = {}
-    for row in _query_process_records(repo_root):
+    records = _query_process_records(repo_root)
+    own_tree = _own_commit_tree_pids(records)
+    for row in records:
         family = str(row.get("family") or "").strip()
         if not family:
             continue
         role = str(row.get("role") or "")
         if role != "agent":
+            continue
+        # Mirror _list_processes: the GLOBAL signal must be repo-scoped too. A family
+        # process that isn't related to THIS repo (e.g. a Codex.exe desktop app running
+        # for some other reason) is not "another agent working here". And never count the
+        # committing agent's own process tree / commit machinery as a rival presence —
+        # that self-false-positive blocked legit commits that merely touched codex paths.
+        if not bool(row.get("repo_related")):
+            continue
+        if int(row.get("pid") or 0) in own_tree or _is_commit_machinery(str(row.get("command") or "")):
             continue
         item = presence.setdefault(family, {"family": family, "pids": [], "commands": []})
         item["pids"] = _dedupe([*list(item.get("pids") or []), str(int(row.get("pid") or 0))])

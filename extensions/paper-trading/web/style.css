@@ -1,0 +1,127 @@
+:root {
+  --bg: #0b0e14;
+  --panel: #121723;
+  --panel-2: #182030;
+  --line: #232c3d;
+  --text: #e6ebf5;
+  --muted: #8a97ad;
+  --accent: #4da3ff;
+  --pos: #3ad29f;
+  --neg: #ff6b6b;
+  --warn: #ffb84d;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+}
+
+.pt-app { display: flex; flex-direction: column; min-height: 100vh; }
+
+.pt-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 22px; border-bottom: 1px solid var(--line);
+  background: var(--panel); position: sticky; top: 0; z-index: 5;
+}
+.pt-title { display: flex; align-items: center; gap: 10px; }
+.pt-title h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: .2px; }
+.pt-logo { color: var(--accent); font-size: 18px; }
+.pt-account { display: flex; align-items: center; gap: 22px; }
+.pt-stat { display: flex; flex-direction: column; align-items: flex-end; }
+.pt-stat span { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .4px; }
+.pt-stat strong { font-size: 16px; font-variant-numeric: tabular-nums; }
+
+.pt-badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+.pt-badge-sim { background: rgba(255,184,77,.15); color: var(--warn); }
+.pt-badge-live { background: rgba(58,210,159,.15); color: var(--pos); }
+.pt-badge-muted { background: var(--panel-2); color: var(--muted); }
+
+.pt-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 10px 22px; background: rgba(255,184,77,.08);
+  border-bottom: 1px solid var(--line); color: var(--text); flex-wrap: wrap;
+}
+.pt-cred-form { display: flex; gap: 8px; }
+.pt-cred-form input { width: 160px; }
+
+.pt-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
+  padding: 18px 22px; flex: 1; align-items: start;
+}
+@media (max-width: 900px) { .pt-grid { grid-template-columns: 1fr; } }
+.pt-col { display: flex; flex-direction: column; gap: 18px; }
+
+.pt-card {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; padding: 16px;
+}
+.pt-card h2 { margin: 0 0 12px; font-size: 14px; font-weight: 600; }
+.pt-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.pt-card-head h2 { margin: 0; }
+
+input, select, textarea {
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+  border-radius: 7px; padding: 9px 11px; font-size: 13px; font-family: inherit; width: 100%;
+}
+textarea { min-height: 52px; resize: vertical; margin-bottom: 10px; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+
+.pt-form { display: flex; flex-direction: column; }
+.pt-row { display: flex; gap: 10px; margin-bottom: 10px; }
+
+.pt-btn {
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+  border-radius: 7px; padding: 9px 14px; font-size: 13px; font-weight: 600;
+  cursor: pointer; white-space: nowrap; transition: filter .15s, border-color .15s;
+}
+.pt-btn:hover { filter: brightness(1.15); }
+.pt-btn-primary { background: var(--accent); border-color: var(--accent); color: #04121f; }
+.pt-btn-danger { background: transparent; border-color: var(--neg); color: var(--neg); }
+.pt-btn-ghost { background: transparent; }
+.pt-hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+.pt-empty { color: var(--muted); font-size: 13px; margin: 6px 0; }
+
+.pt-proposals { display: flex; flex-direction: column; gap: 12px; }
+.pt-proposal { border: 1px solid var(--line); border-radius: 9px; padding: 12px; background: var(--panel-2); }
+.pt-proposal.pt-status-blocked_by_risk { border-color: rgba(255,107,107,.45); }
+.pt-proposal.pt-status-filled, .pt-proposal.pt-status-submitted { border-color: rgba(58,210,159,.35); }
+.pt-prop-top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.pt-side { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px; }
+.pt-side-buy { background: rgba(58,210,159,.16); color: var(--pos); }
+.pt-side-sell { background: rgba(255,107,107,.16); color: var(--neg); }
+.pt-sym { font-size: 15px; }
+.pt-prop-size { color: var(--muted); font-size: 12px; }
+.pt-statusbadge { margin-left: auto; font-size: 11px; color: var(--muted); border: 1px solid var(--line); padding: 2px 8px; border-radius: 999px; }
+.pt-thesis { font-size: 12.5px; margin: 4px 0; color: var(--text); }
+.pt-thesis span { color: var(--muted); text-transform: uppercase; font-size: 10px; letter-spacing: .4px; margin-right: 6px; }
+.pt-violations { color: var(--neg); font-size: 12px; margin-top: 6px; }
+.pt-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+.pt-track-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.pt-tstat { background: var(--panel-2); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; }
+.pt-tstat span { color: var(--muted); font-size: 11px; }
+.pt-tstat strong { font-size: 16px; font-variant-numeric: tabular-nums; }
+.pt-lessons { margin: 12px 0 0; padding-left: 18px; color: var(--muted); font-size: 12px; }
+.pt-lessons li { margin-bottom: 5px; }
+
+.pt-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.pt-table th { text-align: left; color: var(--muted); font-weight: 500; font-size: 11px; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.pt-table td { padding: 6px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.pt-pos { color: var(--pos); } .pt-neg { color: var(--neg); }
+
+.pt-quote { margin-top: 10px; font-size: 15px; }
+
+.pt-toast {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+  padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 50;
+  box-shadow: 0 8px 30px rgba(0,0,0,.4);
+}
+.pt-toast-ok { border-color: var(--pos); }
+.pt-toast-error { border-color: var(--neg); }
+.pt-toast-muted { color: var(--muted); }

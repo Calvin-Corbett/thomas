@@ -98,55 +98,41 @@
     opacity: 0;
 }
 
-.chat-game-bot-wrap.dir-left .office-pixel-agent {
-    transform: scale(0.63) scaleX(-1);
-    transform-origin: center top;
+.chat-game-bot-wrap.dir-left .chat-game-player-avatar {
+    transform: scaleX(-1);
+    transform-origin: center center;
 }
 
-.chat-game-bot-wrap .office-agent-jetpack-shell,
-.chat-game-bot-wrap .office-agent-jetpack-flame {
-    position: absolute;
-    pointer-events: none;
-    opacity: 0;
+.chat-game-bot-wrap.dino-ride.dir-left .chat-game-player-avatar {
+    transform: scale(0.42) scaleX(-1);
 }
 
-.chat-game-bot-wrap .office-agent-jetpack-shell {
-    top: 17px;
-    left: 8px;
-    width: 8px;
-    height: 16px;
+.chat-game-bot-wrap .chat-game-player-pack {
+    top: 12px;
+    left: 3px;
+    width: 7px;
+    height: 15px;
     border: 2px solid rgba(13, 17, 23, 0.92);
     background: linear-gradient(180deg, rgba(152, 214, 255, 0.95), rgba(89, 171, 255, 0.95));
-    box-shadow: 12px 0 0 0 rgba(89, 171, 255, 0.95);
+    border-radius: 3px;
     z-index: 1;
 }
 
-.chat-game-bot-wrap .office-agent-jetpack-shell::before {
-    content: '';
-    position: absolute;
-    top: -3px;
-    left: -1px;
-    width: 12px;
-    height: 4px;
-    background: rgba(18, 25, 38, 0.86);
-    box-shadow: 12px 0 0 0 rgba(18, 25, 38, 0.86);
-}
-
-.chat-game-bot-wrap .office-agent-jetpack-shell::after {
+.chat-game-bot-wrap .chat-game-player-pack::before {
     content: '';
     position: absolute;
     top: 3px;
-    left: 4px;
-    width: 12px;
-    height: 9px;
-    border-top: 2px solid rgba(18, 24, 36, 0.92);
-    border-bottom: 2px solid rgba(18, 24, 36, 0.92);
+    left: -4px;
+    width: 14px;
+    height: 5px;
+    border-radius: 999px;
+    background: rgba(18, 25, 38, 0.86);
 }
 
-.chat-game-bot-wrap .office-agent-jetpack-flame {
-    top: 30px;
-    left: 8px;
-    width: 20px;
+.chat-game-bot-wrap .chat-game-player-flame {
+    top: 25px;
+    left: 0;
+    width: 16px;
     height: 18px;
     border-radius: 50% 50% 60% 60%;
     background: radial-gradient(circle at 50% 2%, rgba(255, 247, 203, 0.98), rgba(255, 198, 114, 0.86) 42%, rgba(255, 120, 76, 0.2) 100%);
@@ -155,34 +141,32 @@
     animation: chatGameJetpackFlame 180ms linear infinite;
 }
 
-.chat-game-bot-wrap.jetpack-on .office-agent-jetpack-shell,
-.chat-game-bot-wrap.jetpack-on .office-agent-jetpack-flame {
+.chat-game-bot-wrap .chat-game-player-trail {
+    left: -10px;
+    top: 16px;
+    width: 18px;
+    height: 6px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(95, 185, 255, 0), rgba(95, 185, 255, 0.5));
+    filter: blur(0.6px);
+}
+
+.chat-game-bot-wrap.jetpack-on .chat-game-player-pack,
+.chat-game-bot-wrap.jetpack-on .chat-game-player-flame,
+.chat-game-bot-wrap.jetpack-on .chat-game-player-trail {
     opacity: 1;
 }
 
-.chat-game-bot-wrap.is-running .office-agent-leg-left {
-    animation: chatGameBotStepLeft 0.28s steps(2) infinite;
+.chat-game-bot-wrap.is-running .chat-game-player-avatar {
+    animation: chatGameAvatarRun 0.28s steps(2) infinite;
 }
 
-.chat-game-bot-wrap.is-running .office-agent-leg-right {
-    animation: chatGameBotStepRight 0.28s steps(2) infinite;
-}
-
-@keyframes chatGameBotStepLeft {
+@keyframes chatGameAvatarRun {
     0%, 100% {
-        transform: translateY(0);
+        translate: 0 0;
     }
     50% {
-        transform: translateY(1px);
-    }
-}
-
-@keyframes chatGameBotStepRight {
-    0%, 100% {
-        transform: translateY(1px);
-    }
-    50% {
-        transform: translateY(0);
+        translate: 0 1px;
     }
 }
 

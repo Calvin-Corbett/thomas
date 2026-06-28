@@ -1,1 +1,1 @@
-"""Scaffold package for accelerated catch-up work."""
+"""Node host models, lifecycle services, CLI commands, and registry support."""

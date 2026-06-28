@@ -8,6 +8,8 @@ import logging
 
 _log = logging.getLogger(__name__)
 
+_OPTIONAL_TOOL_LOW_LOAD_WARNING_THRESHOLD = 100
+
 _OPTIONAL_TOOL_MODULES = [
     ("thomas.tools.engineering", "register_engineering_tools"),
     ("thomas.api_gateway.tools", "register_api_gateway_tools"),
@@ -148,6 +150,7 @@ _OPTIONAL_TOOL_MODULES = [
     ("thomas.webhooks.tools", "register_webhooks_tools"),
     ("thomas.webrtc.tools", "register_webrtc_tools"),
     ("thomas.workflow_v2.tools", "register_workflow_v2_tools"),
+    ("thomas.marketplace.paper_trading.tools", "register_paper_trading_tools"),
 ]
 
 
@@ -162,6 +165,72 @@ def _try_import(module_path: str, func_name: str):
         return None
 
 
+def _register_self_extend(registry) -> None:
+    """Always register the self-extension tool (create_skill).
+
+    This is a first-class capability, not an optional domain module: it lets
+    Thomas scaffold new skills at runtime when it hits a request it cannot
+    fulfill with its current tools. Registered into the same registry that the
+    worker and chat agent build, so both can call it.
+    """
+    try:
+        from thomas.tools.self_extend import register_self_extend_tools
+
+        register_self_extend_tools(registry)
+    except Exception as exc:  # pragma: no cover - defensive: never break startup
+        _log.debug("Skipping self_extend tools: %s", exc)
+
+
+def _register_email_calendar(registry) -> None:
+    """Register the email/calendar tools (email.send, email.read, calendar.*).
+
+    These tool classes use the legacy ``run(ctx, **params)`` / ``params_schema``
+    interface, so they are wrapped in a thin adapter to the registry's
+    ``Tool.execute(args)`` contract. The tools are always *registered* (so the
+    model can see and call them); they fail with a clear, actionable error at
+    execution time if email credentials are not configured.
+    """
+    try:
+        from thomas.tools.base import Tool, ToolResult
+        from thomas.tools.email_calendar import get_tools as _email_get_tools
+    except Exception as exc:  # pragma: no cover - defensive
+        _log.debug("Skipping email/calendar tools: %s", exc)
+        return
+
+    class _LegacyToolAdapter(Tool):
+        """Adapt a legacy ``run()``/``params_schema`` tool to the registry."""
+
+        category = "email_calendar"
+
+        def __init__(self, legacy) -> None:
+            self._legacy = legacy
+            self.name = str(getattr(legacy, "name", "") or "")
+            self.description = str(getattr(legacy, "description", "") or "")
+            self.parameters = dict(getattr(legacy, "params_schema", {}) or {})
+
+        async def execute(self, args: dict) -> "ToolResult":
+            try:
+                data = await self._legacy.run(None, **(args or {}))
+            except Exception as exc:
+                # ToolError (missing creds, API failures) surfaces as a clear
+                # actionable message rather than a silent failure.
+                return ToolResult(ok=False, error=f"{type(exc).__name__}: {exc}")
+            return ToolResult(ok=True, data=data)
+
+    registered = 0
+    for legacy_tool in _email_get_tools():
+        name = str(getattr(legacy_tool, "name", "") or "")
+        if not name:
+            continue
+        try:
+            registry.register(_LegacyToolAdapter(legacy_tool))
+            registered += 1
+        except Exception as exc:  # pragma: no cover - defensive
+            _log.debug("Skipping email tool %s: %s", name, exc)
+    if registered:
+        _log.info("Registered %d email/calendar tools", registered)
+
+
 def register_all_optional_tools(registry) -> int:
     """Register all optional domain tools. Returns count of successfully registered modules."""
     count = 0
@@ -173,5 +242,19 @@ def register_all_optional_tools(registry) -> int:
                 count += 1
             except Exception as exc:
                 _log.debug("Skipping %s: %s", func_name, exc)
+
+    # First-class capabilities (always registered, independent of the optional
+    # module table above).
+    _register_self_extend(registry)
+    _register_email_calendar(registry)
+
     _log.info("Loaded %d/%d optional tool modules", count, len(_OPTIONAL_TOOL_MODULES))
+    if count < _OPTIONAL_TOOL_LOW_LOAD_WARNING_THRESHOLD:
+        _log.warning(
+            "Loaded only %d/%d optional tool modules; expected at least %d. "
+            "This may indicate registry drift or a broken Thomas install.",
+            count,
+            len(_OPTIONAL_TOOL_MODULES),
+            _OPTIONAL_TOOL_LOW_LOAD_WARNING_THRESHOLD,
+        )
     return count

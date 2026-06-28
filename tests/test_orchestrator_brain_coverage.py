@@ -388,7 +388,18 @@ def test_background_status_helpers_cover_active_failed_and_mixed_states() -> Non
             {"state": "paused", "summary": "Three"},
         ]
     )
-    assert "mixed outcomes" in mixed.lower()
+    # Round-4 M1 guard: EVERY bucket is surfaced — the paused ("other") row is not
+    # dropped just because completed/failed rows coexist (the old early-return did).
+    assert "One" in mixed and "(completed)" in mixed
+    assert "Two" in mixed and "finished with issues" in mixed.lower()
+    assert "Three" in mixed and "needs attention" in mixed.lower()
+
+    # Only non-terminal/odd states present -> the mixed-outcomes label still applies.
+    only_other = brain_mod._summarize_background_status(
+        [{"state": "blocked", "summary": "Stuck"}, {"state": "awaiting_proof", "summary": "Pending"}]
+    )
+    assert "mixed outcomes" in only_other.lower()
+    assert "Stuck" in only_other and "Pending" in only_other
 
 
 def test_code_phrase_recall_prefers_visible_memory_fact() -> None:

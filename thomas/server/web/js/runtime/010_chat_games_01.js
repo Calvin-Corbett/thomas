@@ -948,6 +948,7 @@ function chatGameOpen(gameId = 'cloud_jump') {
     const isDino = gameKey === DINO_GAME_ID;
     chatGameSetPanelOpen(!isDino);
     chatGameSetDinoSurfaceOpen(isDino);
+    chatGameSetControlsOpen(true);
     if (chatGamePanel) {
         chatGamePanel.classList.toggle('jetpack-mode', gameKey === JETPACK_GAME_ID);
     }
@@ -978,6 +979,7 @@ function chatGameClose({ clearMode = false } = {}) {
     chatGameRuntime.input.thrust = false;
     chatGameSetPanelOpen(false);
     chatGameSetDinoSurfaceOpen(false);
+    chatGameSetControlsOpen(false);
     chatGameSetCenterMuted(false);
     chatGameSetPhaseClass('');
     if (chatGamePanel) {
@@ -1002,16 +1004,14 @@ function chatGameClose({ clearMode = false } = {}) {
         chatGameBotWrap.style.removeProperty('--bot-rotate');
     }
     if (chatGameBot) {
-        chatGameBot.classList.remove('looking-user');
-        chatGameBot.classList.remove('costume-cap', 'costume-visor', 'costume-headset', 'costume-bowtie');
-        chatGameBot.style.removeProperty('--agent-primary');
-        chatGameBot.style.removeProperty('--agent-secondary');
-        chatGameBot.style.removeProperty('--agent-glow');
-        chatGameBot.style.removeProperty('--agent-trim');
+        chatGameBot.classList.remove('is-ready');
+        chatGameBot.style.removeProperty('--player-primary');
+        chatGameBot.style.removeProperty('--player-secondary');
+        chatGameBot.style.removeProperty('--player-glow');
     }
     if (chatGameBotName) {
-        chatGameBotName.textContent = 'Office Bot';
-        chatGameBotName.title = 'Office Bot';
+        chatGameBotName.textContent = 'Player';
+        chatGameBotName.title = 'Player';
     }
     const best = chatGameGetHighScore(closingGameId);
     if (chatGameScore) chatGameScore.textContent = '0';
@@ -1067,7 +1067,7 @@ function chatGameRenderToTextPayload() {
                 costume: safeString(state.selectedAgent?.costume),
                 color: safeString(state.selectedAgent?.color),
             },
-            bot: {
+            actor: {
                 visible: Boolean(state.scene?.botVisible),
                 x: Number((state.scene?.botX || 0).toFixed(2)),
                 y: Number((state.scene?.botY || 0).toFixed(2)),
@@ -1107,7 +1107,7 @@ function chatGameRenderToTextPayload() {
                 costume: safeString(state.selectedAgent?.costume),
                 color: safeString(state.selectedAgent?.color),
             },
-            bot: {
+            actor: {
                 visible: Boolean(state.scene?.botVisible),
                 x: Number((state.scene?.botX || 0).toFixed(2)),
                 y: Number((state.scene?.botY || 0).toFixed(2)),
@@ -1159,7 +1159,7 @@ function chatGameRenderToTextPayload() {
                 costume: safeString(state.selectedAgent?.costume),
                 color: safeString(state.selectedAgent?.color),
             },
-            bot: {
+            actor: {
                 visible: Boolean(state.scene?.botVisible),
                 x: Number((state.scene?.botX || 0).toFixed(2)),
                 y: Number((state.scene?.botY || 0).toFixed(2)),
@@ -1188,4 +1188,3 @@ function chatGameRenderToTextPayload() {
     }
     return JSON.stringify(base);
 }
-

@@ -21,7 +21,6 @@
     "chatbot": {"status": "marketplace-inventory", "do_not_modify": true},
     "climate": {"status": "marketplace-inventory", "do_not_modify": true},
     "codegen": {"status": "marketplace-inventory", "do_not_modify": true},
-    "codex": {"status": "marketplace-inventory", "do_not_modify": true},
     "columnar": {"status": "marketplace-inventory", "do_not_modify": true},
     "companion": {"status": "marketplace-inventory", "do_not_modify": true},
     "compiler_infra": {"status": "marketplace-inventory", "do_not_modify": true},

@@ -129,5 +129,5 @@ class TestMarketplaceRoutePolicy(AioHTTPTestCase):
 
         rows = body.get("plugins") or []
         ids = [str(row.get("id") or "") for row in rows]
-        self.assertEqual(ids, ["life-manager", "catalog-only-pack"])
-        self.assertEqual(body.get("total"), 2)
+        self.assertEqual(ids, ["catalog-only-pack"])
+        self.assertEqual(body.get("total"), 1)

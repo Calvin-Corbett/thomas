@@ -202,6 +202,230 @@ function chatShouldSeedTaskUi(promptRaw) {
     return highAutonomy && chatPromptLooksTaskLike(promptRaw);
 }
 
+function _ensureArtifactStyles() {
+    if (document.getElementById('thomasArtifactStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'thomasArtifactStyles';
+    style.textContent = `
+    .message-task-artifact { margin-top: 8px; }
+    .message-task-artifact-chip { display:inline-flex; align-items:center; gap:6px; padding:6px 12px;
+        border-radius:8px; border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.06);
+        color:inherit; font-size:13px; cursor:pointer; text-decoration:none; }
+    .message-task-artifact-chip:hover { background:rgba(255,255,255,.12); }
+    .message-task-artifact-view { margin-top:8px; border-radius:8px; overflow:hidden; border:1px solid rgba(255,255,255,.12); }
+    .message-task-artifact-view.hidden, .message-task-artifact.hidden { display:none; }
+    .artifact-inline-frame { width:100%; height:460px; border:0; background:#fff; display:block; }
+    .artifact-inline-img { max-width:100%; display:block; }
+    .artifact-inline-text { margin:0; padding:12px; max-height:420px; overflow:auto; white-space:pre-wrap;
+        font-family:var(--font-mono,monospace); font-size:12px; background:rgba(0,0,0,.25); }
+    .thomas-preview-pane { position:fixed; top:0; right:0; width:42vw; min-width:360px; max-width:760px;
+        height:100vh; background:#0d0f14; border-left:1px solid rgba(255,255,255,.14); z-index:9000;
+        transform:translateX(100%); transition:transform .22s ease; display:flex; flex-direction:column;
+        box-shadow:-12px 0 40px rgba(0,0,0,.45); }
+    .thomas-preview-pane.open { transform:translateX(0); }
+    .thomas-preview-head { display:flex; align-items:center; gap:10px; padding:10px 12px;
+        border-bottom:1px solid rgba(255,255,255,.12); color:#e8e9ee; font-size:13px; }
+    .thomas-preview-title { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .thomas-preview-newtab, .thomas-preview-close { color:#cfd2da; text-decoration:none; cursor:pointer;
+        background:none; border:0; font-size:15px; padding:2px 6px; border-radius:6px; }
+    .thomas-preview-newtab:hover, .thomas-preview-close:hover { background:rgba(255,255,255,.12); }
+    .thomas-preview-frame { flex:1; width:100%; border:0; background:#fff; }
+    .session-deliverables { margin:14px 0 6px; padding:10px 12px; border-radius:10px;
+        border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.03); }
+    .session-deliverables-head { font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+        opacity:.6; margin-bottom:8px; }
+    .session-deliverable { margin:6px 0; }
+    .session-deliverable-title { display:block; font-size:12px; opacity:.78; margin-bottom:4px; }
+    `;
+    document.head.appendChild(style);
+}
+
+// Right-side LIVE PREVIEW pane for web deliverables (apps/games): an iframe onto the
+// loopback /deliverable URL so the user can actually watch the site/game the worker
+// built — in-app, not a new tab. (Calvin: "a web browser thing that pops up on the
+// right side so you can pull up the URL and show them their website/game.")
+function openWebPreviewPane(url, title) {
+    _ensureArtifactStyles();
+    let pane = document.getElementById('thomasPreviewPane');
+    if (!pane) {
+        pane = document.createElement('div');
+        pane.id = 'thomasPreviewPane';
+        pane.className = 'thomas-preview-pane';
+        pane.innerHTML =
+            '<div class="thomas-preview-head">' +
+            '<span class="thomas-preview-title" data-role="title"></span>' +
+            '<a class="thomas-preview-newtab" data-role="newtab" target="_blank" rel="noopener" title="Open in new tab">↗</a>' +
+            '<button type="button" class="thomas-preview-close" data-role="close" aria-label="Close preview">✕</button>' +
+            '</div>' +
+            // Worker-built deliverables are UNTRUSTED generated content served same-origin
+            // (/deliverable/...). `allow-scripts` lets the game/app run; we deliberately do
+            // NOT grant `allow-same-origin` — with it, the framed script would share Thomas's
+            // origin and could read the parent app's cookies/localStorage and call its APIs as
+            // the user. Without it the deliverable runs in an opaque origin: scripts execute,
+            // but it is walled off from the host app. (Adversarial review 2026-06-17.)
+            '<iframe class="thomas-preview-frame" data-role="frame" title="Live preview" ' +
+            'sandbox="allow-scripts allow-forms"></iframe>';
+        document.body.appendChild(pane);
+        const closeBtn = pane.querySelector('[data-role="close"]');
+        if (closeBtn) closeBtn.addEventListener('click', () => {
+            pane.classList.remove('open');
+            const f = pane.querySelector('[data-role="frame"]');
+            if (f) f.setAttribute('src', 'about:blank');
+        });
+    }
+    const frame = pane.querySelector('[data-role="frame"]');
+    const titleEl = pane.querySelector('[data-role="title"]');
+    const newtab = pane.querySelector('[data-role="newtab"]');
+    if (titleEl) titleEl.textContent = title || 'Live preview';
+    if (newtab) newtab.setAttribute('href', url);
+    if (frame) frame.setAttribute('src', url);
+    pane.classList.add('open');
+}
+
+// Toggle an INLINE viewer (pdf/image/text) inside a chat artifact card — opens IN chat,
+// the way a frontier model presents a result. Clicking again collapses it.
+function toggleInlineArtifact(view, url, kind, name) {
+    if (!(view instanceof HTMLElement)) return;
+    _ensureArtifactStyles();
+    if (!view.classList.contains('hidden') && view.dataset.url === url) {
+        view.classList.add('hidden');
+        view.innerHTML = '';
+        view.dataset.url = '';
+        return;
+    }
+    view.dataset.url = url;
+    if (kind === 'pdf') {
+        // Same isolation invariant as the preview pane: worker output is untrusted and
+        // served same-origin (/deliverable/...), so the inline viewer MUST be sandboxed
+        // WITHOUT allow-same-origin or it could reach the host app's cookies/storage.
+        // allow-scripts keeps the browser PDF viewer working. (Adversarial review 2026-06-17.)
+        view.innerHTML = `<iframe class="artifact-inline-frame" src="${escapeHtml(url)}#toolbar=1" title="${escapeHtml(name)}" sandbox="allow-scripts allow-forms"></iframe>`;
+    } else if (kind === 'image') {
+        view.innerHTML = `<img class="artifact-inline-img" src="${escapeHtml(url)}" alt="${escapeHtml(name)}">`;
+    } else {
+        view.innerHTML = '<pre class="artifact-inline-text" data-role="text">Loading…</pre>';
+        fetch(url)
+            .then((r) => r.text())
+            .then((t) => { const pre = view.querySelector('[data-role="text"]'); if (pre) pre.textContent = String(t).slice(0, 20000); })
+            .catch(() => { const pre = view.querySelector('[data-role="text"]'); if (pre) pre.textContent = '(could not load this file)'; });
+    }
+    view.classList.remove('hidden');
+}
+
+// Reconcile-on-load: a task strip's artifact chip lives only in in-memory state, so a
+// reload or chat-switch wiped every chip ("the badges disappear, I don't see a PDF").
+// The completed deliverables ARE durable in the task ledger, so on load we rebuild a
+// "Results in this chat" block from /delegations — the chips survive reloads and the
+// user can always find what was built. (Calvin's "My Stuff" direction.)
+async function reconcileSessionDeliverables(sid) {
+    const sessionId = safeString(sid);
+    // Idempotent: drop any prior block so switching chats never stacks duplicates.
+    const prior = document.getElementById('thomasSessionDeliverables');
+    if (prior) prior.remove();
+    if (!sessionId || typeof fetchJsonSafe !== 'function') return;
+    let resp;
+    try {
+        resp = await fetchJsonSafe(`/api/v2/chat/session/${encodeURIComponent(sessionId)}/delegations`);
+    } catch (error) {
+        return;
+    }
+    if (!resp || !resp.ok || !resp.data || typeof resp.data !== 'object') return;
+    const dels = Array.isArray(resp.data.delegations) ? resp.data.delegations : [];
+    const seen = new Set();
+    const items = [];
+    for (const d of dels) {
+        if (!d || typeof d !== 'object') continue;
+        const url = safeString(d.artifact_url);
+        if (!url || seen.has(url)) continue;
+        const state = safeString(d.state).toLowerCase();
+        if (state !== 'completed' && state !== 'verified' && state !== 'done') continue;
+        seen.add(url);
+        items.push({
+            url,
+            kind: safeString(d.artifact_kind) || 'file',
+            name: safeString(d.artifact_name) || 'result',
+            summary: safeString(d.summary) || safeString(d.last_progress) || '',
+        });
+    }
+    if (items.length) renderSessionDeliverablesStrip(items);
+}
+
+function renderSessionDeliverablesStrip(items) {
+    if (typeof chatMessagesInner === 'undefined' || !chatMessagesInner) return;
+    _ensureArtifactStyles();
+    const block = document.createElement('div');
+    block.id = 'thomasSessionDeliverables';
+    block.className = 'session-deliverables';
+    const rows = items.map((it) => {
+        const openable = it.url && it.kind && it.kind !== 'file';
+        const label = it.kind === 'web'
+            ? 'Open live preview'
+            : (it.kind === 'image' ? `View ${it.name}` : `Open ${it.name}`);
+        const action = openable
+            ? `<button type="button" class="message-task-artifact-chip" data-art-url="${escapeHtml(it.url)}" `
+                + `data-art-kind="${escapeHtml(it.kind)}" data-art-name="${escapeHtml(it.name)}">${escapeHtml(label)}</button>`
+            : `<a class="message-task-artifact-chip" href="${escapeHtml(it.url)}" download>Download ${escapeHtml(it.name)}</a>`;
+        const title = it.summary ? `<span class="session-deliverable-title">${escapeHtml(it.summary)}</span>` : '';
+        return `<div class="session-deliverable" data-role="artifact">${title}${action}`
+            + `<div class="message-task-artifact-view hidden" data-role="artifact-view"></div></div>`;
+    }).join('');
+    block.innerHTML = `<div class="session-deliverables-head">Results in this chat</div>${rows}`;
+    chatMessagesInner.appendChild(block);
+    // Same open behavior as the per-message strip chips (web -> right pane; else inline).
+    block.querySelectorAll('[data-role="artifact"]').forEach((artifact) => {
+        artifact.addEventListener('click', (ev) => {
+            const chip = ev.target instanceof Element ? ev.target.closest('[data-art-url]') : null;
+            if (!chip) return;
+            const url = safeString(chip.getAttribute('data-art-url'));
+            const kind = safeString(chip.getAttribute('data-art-kind'));
+            const name = safeString(chip.getAttribute('data-art-name')) || 'result';
+            if (!url) return;
+            if (kind === 'web') {
+                openWebPreviewPane(url, name);
+            } else {
+                const view = artifact.querySelector('[data-role="artifact-view"]');
+                if (view instanceof HTMLElement) toggleInlineArtifact(view, url, kind, name);
+            }
+        });
+    });
+}
+
+function appendDelegationResultMessage(evt, options = {}) {
+    if (typeof renderMessage !== 'function' || typeof updateMessageTaskStrip !== 'function') return;
+    const executionId = safeString(evt?.execution_id).replace(/[^A-Za-z0-9_-]/g, '');
+    if (!executionId) return;
+    const messageId = `task-result-${executionId}`;
+    if (document.getElementById(messageId)) return;
+    const status = safeString(options.status || evt?.state || evt?.type).toLowerCase();
+    const failed = status.includes('failed') || safeString(evt?.type) === 'delegation_failed';
+    const artifactUrl = safeString(evt?.artifact_url);
+    const artifactName = safeString(evt?.artifact_name);
+    const artifactKind = safeString(evt?.artifact_kind);
+    let summary = safeString(options.summary || evt?.last_progress || evt?.summary || artifactName)
+        .replace(/^\s*\[[^\]]+\]\s*/, '')
+        .trim();
+    summary = summary.replace(/no a first event/gi, 'no first event');
+    const fallback = failed
+        ? 'Thomas could not complete the background task.'
+        : (artifactName ? `Result ready: ${artifactName}.` : 'Task finished.');
+    renderMessage({
+        role: 'assistant',
+        content: failed ? `Task failed: ${summary || fallback}` : `Task finished: ${summary || fallback}`,
+        id: messageId,
+    });
+    updateMessageTaskStrip(messageId, {
+        sessionId: safeString(evt?.session_id),
+        status: failed ? 'failed' : 'completed',
+        summary: summary || artifactName || fallback,
+        checkpoint: failed ? 'Needs review.' : 'Result ready.',
+        artifactUrl,
+        artifactName,
+        artifactKind,
+    });
+    if (typeof syncActiveChatSidebarEntry === 'function') syncActiveChatSidebarEntry();
+    if (typeof persistActiveChat === 'function') void persistActiveChat({ quiet: true });
+}
+
 function chatTaskStripState(messageId) {
     const normalizedId = safeString(messageId);
     if (!normalizedId) return null;
@@ -216,12 +440,15 @@ function chatTaskStripState(messageId) {
             startedAt: 0,
             endedAt: 0,
             artifactUrl: '',
+            artifactName: '',
+            artifactKind: '',
         });
     }
     return chatTaskStripStateByMessageId.get(normalizedId) || null;
 }
 
 function ensureMessageTaskStrip(messageId) {
+    _ensureArtifactStyles();
     const row = document.getElementById(safeString(messageId));
     if (!(row instanceof HTMLElement)) return null;
     const stack = row.querySelector('.message-stack');
@@ -236,11 +463,11 @@ function ensureMessageTaskStrip(messageId) {
                 <span class="message-task-strip-badge" data-role="badge">Running</span>
                 <span class="message-task-strip-elapsed" data-role="elapsed">--</span>
                 <button type="button" class="message-task-strip-open" data-role="open">Open Office</button>
-                <button type="button" class="message-task-strip-play hidden" data-role="play">▶ Play</button>
             </div>
             <p class="message-task-strip-summary" data-role="summary"></p>
             <p class="message-task-strip-latest" data-role="latest"></p>
             <ul class="message-task-strip-checkpoints" data-role="checkpoints"></ul>
+            <div class="message-task-artifact hidden" data-role="artifact"></div>
         `;
         const footer = stack.querySelector('.message-footer');
         if (footer instanceof HTMLElement) {
@@ -259,15 +486,24 @@ function ensureMessageTaskStrip(messageId) {
                 });
             });
         }
-        // "Play" opens the worker's built deliverable (e.g. a generated game) in a new
-        // tab. The URL is served by the loopback-only /deliverable/<id>/ route and is
-        // surfaced on the delegation record as artifact_url once the build exists.
-        const playBtn = strip.querySelector('[data-role="play"]');
-        if (playBtn instanceof HTMLButtonElement) {
-            playBtn.addEventListener('click', () => {
-                const state = chatTaskStripState(messageId);
-                const url = state && safeString(state.artifactUrl);
-                if (url) window.open(url, '_blank', 'noopener');
+        // Artifact actions (delegated, so re-rendered chips stay wired). The deliverable
+        // opens INLINE in chat (pdf/image/text) or, for a web app/game, in the right-side
+        // live preview pane — never a new tab, never the old "▶ Play" button.
+        const artifact = strip.querySelector('[data-role="artifact"]');
+        if (artifact instanceof HTMLElement) {
+            artifact.addEventListener('click', (ev) => {
+                const chip = ev.target instanceof Element ? ev.target.closest('[data-art-url]') : null;
+                if (!chip) return;
+                const url = safeString(chip.getAttribute('data-art-url'));
+                const kind = safeString(chip.getAttribute('data-art-kind'));
+                const name = safeString(chip.getAttribute('data-art-name')) || 'result';
+                if (!url) return;
+                if (kind === 'web') {
+                    openWebPreviewPane(url, name);
+                } else {
+                    const view = artifact.querySelector('[data-role="artifact-view"]');
+                    if (view instanceof HTMLElement) toggleInlineArtifact(view, url, kind, name);
+                }
             });
         }
     }
@@ -279,7 +515,7 @@ function ensureMessageTaskStrip(messageId) {
         summary: strip.querySelector('[data-role="summary"]'),
         latest: strip.querySelector('[data-role="latest"]'),
         checkpoints: strip.querySelector('[data-role="checkpoints"]'),
-        play: strip.querySelector('[data-role="play"]'),
+        artifact: strip.querySelector('[data-role="artifact"]'),
     };
 }
 
@@ -312,10 +548,35 @@ function renderMessageTaskStrip(messageId) {
     if (ui.latest instanceof HTMLElement) {
         ui.latest.textContent = latestText;
     }
-    if (ui.play instanceof HTMLElement) {
-        // Show "Play" only once the worker has actually produced a playable artifact.
-        const playUrl = safeString(state.artifactUrl);
-        ui.play.classList.toggle('hidden', !playUrl);
+    if (ui.artifact instanceof HTMLElement) {
+        // Surface the deliverable as a clickable chip: web apps/games open in the
+        // right-side live preview; pdf/image/text open INLINE in chat; other files get a
+        // download. Replaces the old new-tab "▶ Play" button.
+        const url = safeString(state.artifactUrl);
+        const kind = safeString(state.artifactKind);
+        const name = safeString(state.artifactName) || 'result';
+        if (url && kind && kind !== 'file') {
+            const label = kind === 'web'
+                ? 'Open live preview'
+                : (kind === 'image' ? `View ${name}` : `Open ${name}`);
+            const existing = ui.artifact.querySelector('[data-art-url]');
+            // Rebuild the chip only when the artifact changed, so an opened inline view
+            // is not clobbered on every status re-render.
+            if (!existing || existing.getAttribute('data-art-url') !== url) {
+                ui.artifact.innerHTML =
+                    `<button type="button" class="message-task-artifact-chip" data-art-url="${escapeHtml(url)}" ` +
+                    `data-art-kind="${escapeHtml(kind)}" data-art-name="${escapeHtml(name)}">${escapeHtml(label)}</button>` +
+                    `<div class="message-task-artifact-view hidden" data-role="artifact-view"></div>`;
+            }
+            ui.artifact.classList.remove('hidden');
+        } else if (url) {
+            ui.artifact.innerHTML =
+                `<a class="message-task-artifact-chip" href="${escapeHtml(url)}" download>Download ${escapeHtml(name)}</a>`;
+            ui.artifact.classList.remove('hidden');
+        } else {
+            ui.artifact.classList.add('hidden');
+            ui.artifact.innerHTML = '';
+        }
     }
     if (ui.checkpoints instanceof HTMLElement) {
         const points = Array.isArray(state.checkpoints) ? state.checkpoints.slice(-3) : [];
@@ -338,6 +599,12 @@ function updateMessageTaskStrip(messageId, patch = {}) {
     }
     if (safeString(patch.artifactUrl)) {
         state.artifactUrl = safeString(patch.artifactUrl);
+    }
+    if (safeString(patch.artifactName)) {
+        state.artifactName = safeString(patch.artifactName);
+    }
+    if (safeString(patch.artifactKind)) {
+        state.artifactKind = safeString(patch.artifactKind);
     }
     const nextStatus = safeString(patch.status || state.status || 'running').toLowerCase() || 'running';
     state.status = nextStatus;
@@ -373,10 +640,11 @@ function updateMessageTaskStrip(messageId, patch = {}) {
     return state;
 }
 
-function officePixelAgentMarkup(extraClass = '') {
+function officePixelAgentMarkup(extraClass = '', inlineStyle = '') {
     const classSuffix = safeString(extraClass).trim();
+    const styleText = safeString(inlineStyle).trim();
     return `
-        <span class="office-pixel-agent${classSuffix ? ` ${escapeHtml(classSuffix)}` : ''}">
+        <span class="office-pixel-agent${classSuffix ? ` ${escapeHtml(classSuffix)}` : ''}"${styleText ? ` style="${escapeHtml(styleText)}"` : ''}>
             <span class="office-agent-head">
                 <span class="office-agent-eye office-agent-eye-left"></span>
                 <span class="office-agent-eye office-agent-eye-right"></span>
@@ -389,47 +657,47 @@ function officePixelAgentMarkup(extraClass = '') {
 }
 
 function chatTaskRobotAgentMarkup() {
-    return `
-        <span class="chat-robot-agent chat-robot-world-agent">
-            ${officePixelAgentMarkup()}
-        </span>
-    `;
+    return '';
 }
 
 function chatAgentPresenceSyncRootVisibility() {
-    chatWorldSyncRootVisibility();
+    removeChatAgentPresenceUi();
 }
 
 function chatAgentPresenceRemove(activityId, { immediate = false } = {}) {
-    chatWorldRemoveHelperPublic(activityId, { immediate });
+    void immediate;
+    chatAgentPresenceStateByActivityId.delete(safeString(activityId));
+    removeChatAgentPresenceUi();
 }
 
 function removeChatAgentPresenceUi() {
-    chatWorldRemoveAllHelpers();
+    if (chatRobotWorldRaf) {
+        window.cancelAnimationFrame(chatRobotWorldRaf);
+        chatRobotWorldRaf = 0;
+    }
+    chatAgentPresenceStateByActivityId.clear();
+    chatPrimaryPresenceState = null;
+    try {
+        chatPhysicsWorldDestroy();
+    } catch (_) {}
+    const root = document.getElementById('chatAgentPresence');
+    if (root instanceof HTMLElement) root.remove();
+    const legacyDock = document.getElementById(CHAT_ROBOT_DOCK_ID);
+    if (legacyDock instanceof HTMLElement) legacyDock.remove();
 }
 
 function chatWorldEnsureUi() {
-    let root = document.getElementById('chatAgentPresence');
-    if (!(root instanceof HTMLElement)) {
-        root = document.createElement('div');
-        root.id = 'chatAgentPresence';
-        root.className = 'chat-robot-world is-hidden';
-        root.innerHTML = `
-            <div class="chat-robot-world-physics hidden" data-role="physics"></div>
-            <div class="chat-robot-world-stage" data-role="stage"></div>
-            <div class="chat-robot-world-ground" aria-hidden="true"></div>
-        `;
-        document.body.appendChild(root);
-    }
-    return root;
+    removeChatAgentPresenceUi();
+    return null;
 }
 
 function chatAgentPresenceShouldBeVisible() {
-    return sidebarNavMode === 'chat' || sidebarNavMode === 'search';
+    return false;
 }
 
 function chatAgentPresenceSetOfficeContext(activityId, context = {}) {
-    chatWorldSetOfficeContext(activityId, context);
+    void activityId;
+    void context;
 }
 
 function openOfficeForTaskContext(context = {}) {
@@ -438,15 +706,21 @@ function openOfficeForTaskContext(context = {}) {
 }
 
 function chatAgentPresenceRender(state) {
-    chatWorldRenderPresence(state);
+    void state;
 }
 
 function chatAgentPresenceUpsert(activityId, patch = {}) {
-    return chatWorldUpsertPresence(activityId, patch);
+    void activityId;
+    void patch;
+    return null;
 }
 
 function chatTaskRuntimeTick() {
-    chatWorldTaskRuntimeTick();
+    chatTaskStripStateByMessageId.forEach((state, messageId) => {
+        if (!state) return;
+        renderMessageTaskStrip(messageId);
+    });
+    chatTaskRuntimeStopIfIdle();
 }
 
 function chatTaskRuntimeEnsureTick() {
@@ -457,15 +731,21 @@ function chatTaskRuntimeEnsureTick() {
 }
 
 function chatTaskRuntimeStopIfIdle() {
-    chatWorldTaskRuntimeStopIfIdle();
+    const hasLiveStrip = [...chatTaskStripStateByMessageId.values()].some((state) => state && !chatTaskIsTerminal(state.status));
+    if (hasLiveStrip) return;
+    if (chatTaskRuntimeTimer) {
+        window.clearInterval(chatTaskRuntimeTimer);
+        chatTaskRuntimeTimer = 0;
+    }
 }
 
 function setChatAgentPresence(activity) {
-    chatWorldSetPresence(activity);
+    void activity;
+    removeChatAgentPresenceUi();
 }
 
 function chatRobotWorldShouldBeVisible() {
-    return sidebarNavMode === 'chat' || sidebarNavMode === 'search';
+    return false;
 }
 
 function chatRobotWorldAmbientLine(state) {
@@ -474,29 +754,29 @@ function chatRobotWorldAmbientLine(state) {
     if (safeString(state.kind) === 'primary' && chatRobotWorldTaskIsLive(state)) {
         return 'Coordinating the active run while helpers work.';
     }
-    if (mode === 'sleep') return 'Power nap on floor duty.';
-    if (mode === 'workout') return 'Strength set on standby.';
-    if (mode === 'inspect') return 'Inspecting the chat controls.';
-    if (mode === 'perch') return 'Watching the interface from up here.';
+    if (mode === 'sleep') return 'Idle until the next task starts.';
+    if (mode === 'workout') return 'Ready for a larger task.';
+    if (mode === 'inspect') return 'Checking the chat controls.';
+    if (mode === 'perch') return 'Monitoring the active surface.';
     if (chatTaskIsTerminal(state.status)) {
         return safeString(state.status) === 'failed'
-            ? 'That run went sideways.'
-            : 'Wrapped up and cooling down.';
+            ? 'This run failed; review is needed.'
+            : 'Run complete.';
     }
     if (safeString(state.kind) === 'delegation') {
         return officePick([
-            'On helper patrol.',
-            'Keeping watch nearby.',
-            'Standing by for the next step.',
-            'Checking the floor route.',
-        ]) || 'Standing by for the next step.';
+            'Working the delegated task.',
+            'Waiting for the next tool result.',
+            'Tracking the next step.',
+            'Checking task progress.',
+        ]) || 'Tracking the next step.';
     }
     return officePick([
-        'Standing by.',
-        'Watching the floor.',
-        'Keeping the chat moving.',
-        'Holding position.',
-    ]) || 'Standing by.';
+        'Ready for the next request.',
+        'Monitoring the chat.',
+        'Idle.',
+        'Waiting for input.',
+    ]) || 'Ready for the next request.';
 }
 
 function chatRobotWorldDetailLine(state) {
@@ -860,11 +1140,13 @@ function chatWorldCurrentMode(interfacePrefs = currentPreferences?.advanced?.int
 
 function chatRobotWorldStage() {
     const root = chatWorldEnsureUi();
+    if (!(root instanceof HTMLElement)) return null;
     return root.querySelector('[data-role="stage"]');
 }
 
 function chatRobotWorldPhysicsLayer() {
     const root = chatWorldEnsureUi();
+    if (!(root instanceof HTMLElement)) return null;
     return root.querySelector('[data-role="physics"]');
 }
 

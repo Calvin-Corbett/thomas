@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 
 from thomas.core.config import AppConfig, load_config
 
-NO_KEY_PROVIDERS = {"", "local", "ollama", "codex"}
+NO_KEY_PROVIDERS = {"", "local", "ollama", "openai_codex"}
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 TRUE_ENV_VALUES = {"1", "true", "yes", "on"}
 FALSE_ENV_VALUES = {"0", "false", "no", "off"}

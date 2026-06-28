@@ -71,6 +71,13 @@ async def serve_async(
             )
             await asyncio.sleep(delay)
 
+    # Keep the dedicated canvas LLM connection warm so design/canvas requests never
+    # cold-start (an idle gpt-5.5 OAuth stream stalls on its next first token).
+    with contextlib.suppress(Exception):
+        from thomas.server.chat_delegation_canvas import start_canvas_keepalive
+
+        start_canvas_keepalive()
+
     # ── Startup summary ──
     diag = app.get(APP_DIAGNOSTICS, {})
     boot_dur = app.get("APP_BOOT_DURATION", 0)

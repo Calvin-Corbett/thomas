@@ -198,6 +198,7 @@ def _new_record(
     backend_type: str,
     actor: str,
     created_at: str,
+    runtime_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "execution_id": execution_id,
@@ -209,6 +210,7 @@ def _new_record(
         "execution_intent": str(intent or "").strip() or "task",
         "visibility": str(visibility or "").strip() or "background",
         "backend_type": str(backend_type or "").strip() or "task_manager",
+        "runtime_profile": dict(runtime_profile or {}),
         "bot_id": str(bot_id or "").strip(),
         "scope": list(scope),
         "claimed_owner": "",
@@ -222,6 +224,11 @@ def _new_record(
         "completed_at": "",
         "failed_at": "",
         "abandoned_at": "",
+        # In-flight steerability: a follow-up message can queue new instructions for
+        # a RUNNING background task (the worker drains them between steps), or request
+        # cancellation. Previously a dispatched task could not be edited or stopped.
+        "pending_instructions": [],
+        "cancel_requested": False,
         "proof": _empty_proof(),
         "transitions": [
             _transition_entry(
@@ -266,10 +273,12 @@ def _summary_row(record: dict[str, Any], *, stale_after_minutes: float) -> dict[
         "progress_summary": str(record.get("progress_summary") or ""),
         "proof_status": str(record.get("proof_status") or ""),
         "blocker": str(record.get("blocker") or ""),
+        "reported_to_chat_at": str(record.get("reported_to_chat_at") or ""),
         "created_at": str(record.get("created_at") or ""),
         "updated_at": str(record.get("updated_at") or ""),
         "last_heartbeat_at": str(record.get("last_heartbeat_at") or ""),
         "completed_at": str(record.get("completed_at") or ""),
+        "runtime_profile": dict(record.get("runtime_profile") or {}),
         "stale": bool(stale),
     }
 
@@ -349,6 +358,7 @@ def create_execution(
     parent_execution_id: str = "",
     bot_id: str = "",
     backend_type: str = "task_manager",
+    runtime_profile: dict[str, Any] | None = None,
     actor: str = "task-manager",
     repo_root: str | Path | None = None,
 ) -> dict[str, Any]:
@@ -367,6 +377,7 @@ def create_execution(
         backend_type=backend_type,
         actor=str(actor or "").strip(),
         created_at=created_at,
+        runtime_profile=runtime_profile,
     )
     _write_json(execution_path(execution_id, repo_root), payload)
     _write_summary(repo_root)
@@ -393,8 +404,10 @@ def update_execution(
     progress_summary: str | None = None,
     blocker: str | None = None,
     proof_status: str | None = None,
+    reported_to_chat_at: str | None = None,
     bot_id: str | None = None,
     backend_type: str | None = None,
+    runtime_profile: dict[str, Any] | None = None,
     visibility: str | None = None,
     heartbeat: bool = False,
     actor: str = "",
@@ -424,10 +437,17 @@ def update_execution(
         payload["progress_summary"] = str(progress_summary or "").strip()
     if blocker is not None:
         payload["blocker"] = str(blocker or "").strip()
+    if reported_to_chat_at is not None:
+        # Durable "this completion was already announced in chat" marker, so a
+        # finished task is not re-announced after a server restart (replaces the
+        # old process-local in-memory dedup set in the orchestrator brain).
+        payload["reported_to_chat_at"] = str(reported_to_chat_at or "").strip()
     if bot_id is not None:
         payload["bot_id"] = str(bot_id or "").strip()
     if backend_type is not None:
         payload["backend_type"] = str(backend_type or "").strip() or "task_manager"
+    if runtime_profile is not None:
+        payload["runtime_profile"] = dict(runtime_profile)
     if visibility is not None:
         payload["visibility"] = str(visibility or "").strip() or "background"
 
@@ -437,13 +457,29 @@ def update_execution(
     payload["state"] = next_state
     payload["proof_status"] = normalized_proof_status
     payload["updated_at"] = now_iso
-    if heartbeat or next_state not in TERMINAL_STATES:
+    transitioned = next_state != current_state
+    # A pure "mark reported" write (only reported_to_chat_at; no state/progress/heartbeat/
+    # transition) is chat-side bookkeeping, NOT worker liveness — it must not refresh the
+    # staleness clock on a finished/verified row. EVERY other non-terminal update — including
+    # the worker's own progress writes (progress_summary set, no state) — IS a sign of life
+    # and refreshes the heartbeat, so an actively-building worker never goes falsely stale
+    # and vanishes from Mission Control.
+    pure_reported_write = (
+        reported_to_chat_at is not None
+        and state is None
+        and progress_summary is None
+        and not heartbeat
+        and not transitioned
+    )
+    if (heartbeat or next_state not in TERMINAL_STATES) and not pure_reported_write:
         payload["last_heartbeat_at"] = now_iso
-    if next_state == "completed":
+    # Stamp terminal timestamps only on an ACTUAL transition into that state — never on a
+    # post-completion metadata write (which would falsify completed_at / frozen-elapsed).
+    if next_state == "completed" and transitioned:
         payload["completed_at"] = now_iso
-    if next_state == "failed":
+    if next_state == "failed" and transitioned:
         payload["failed_at"] = now_iso
-    if next_state == "abandoned":
+    if next_state == "abandoned" and transitioned:
         payload["abandoned_at"] = now_iso
 
     transitions = list(payload.get("transitions") or [])
@@ -586,10 +622,37 @@ def complete_execution(
     actor: str = "",
     summary: str = "",
     repo_root: str | Path | None = None,
+    verified_success: bool = False,
 ) -> dict[str, Any]:
+    """Mark an execution completed — but ONLY when there is evidence.
+
+    A completion claim must be backed by EITHER a produced artifact
+    (``proof.artifacts`` non-empty, attached via ``attach_proof``) OR an explicit
+    confirmed success signal (``verified_success=True`` — e.g. the worker observed a
+    real tool succeed). Without evidence the task is marked ``failed`` instead of
+    being stamped completed/verified. This closes the "verified without verification"
+    hole: a no-op run, or one whose summary says "no tools were executed", can no
+    longer surface to the user as a green completion.
+    """
     payload = get_execution(execution_id, repo_root)
     if payload is None:
         raise FileNotFoundError(f"execution `{execution_id}` not found")
+    proof = payload.get("proof") or {}
+    has_artifacts = bool(proof.get("artifacts"))
+    if not (has_artifacts or verified_success):
+        return update_execution(
+            execution_id,
+            state="failed",
+            proof_status="failed",
+            progress_summary=(
+                summary or "No verifiable result: nothing was produced and no tool success was confirmed."
+            ),
+            blocker="no_evidence",
+            heartbeat=False,
+            actor=actor,
+            repo_root=repo_root,
+            force=True,
+        )
     current_state = _normalize_state(str(payload.get("state") or "requested"))
     if current_state not in {"verified", "completed"}:
         payload = mark_verified(
@@ -630,6 +693,87 @@ def fail_execution(
         repo_root=repo_root,
         force=True,
     )
+
+
+# ── In-flight steerability ────────────────────────────────────────────────────
+# A dispatched background task is not frozen: the user can send a follow-up that
+# revises its goal, or cancel it. The chat layer calls steer_execution / request_cancel;
+# the worker drains take_pending_instructions and checks is_cancel_requested between
+# steps. This is the "just send a message to the task manager" capability that was
+# missing — steering a RUNNING task, not only the synchronous chat turn.
+
+
+def steer_execution(
+    execution_id: str,
+    instruction: str,
+    *,
+    actor: str = "",
+    repo_root: str | Path | None = None,
+) -> dict[str, Any]:
+    """Queue an additional instruction for a running execution (the worker picks it
+    up between steps). Refuses once the task is terminal."""
+    payload = get_execution(execution_id, repo_root)
+    if payload is None:
+        raise FileNotFoundError(f"execution `{execution_id}` not found")
+    text = str(instruction or "").strip()
+    if not text:
+        return payload
+    if _normalize_state(str(payload.get("state") or "")) in TERMINAL_STATES:
+        raise ValueError(f"execution `{execution_id}` is already terminal; cannot steer it")
+    pending = list(payload.get("pending_instructions") or [])
+    pending.append(text)
+    payload["pending_instructions"] = pending
+    _write_json(execution_path(execution_id, repo_root), payload)
+    return update_execution(
+        execution_id,
+        progress_summary=f"New instruction from user: {text[:160]}",
+        heartbeat=True,
+        actor=actor or "user",
+        repo_root=repo_root,
+        force=True,
+    )
+
+
+def take_pending_instructions(execution_id: str, *, repo_root: str | Path | None = None) -> list[str]:
+    """Return and CLEAR the queued follow-up instructions (worker-side consume)."""
+    payload = get_execution(execution_id, repo_root)
+    if payload is None:
+        return []
+    pending = [str(p) for p in (payload.get("pending_instructions") or []) if str(p).strip()]
+    if pending:
+        payload["pending_instructions"] = []
+        _write_json(execution_path(execution_id, repo_root), payload)
+    return pending
+
+
+def request_cancel(
+    execution_id: str,
+    *,
+    actor: str = "",
+    repo_root: str | Path | None = None,
+) -> dict[str, Any]:
+    """Mark that the user asked to cancel a running execution. The worker checks
+    is_cancel_requested between steps and stops; if already terminal this is a no-op."""
+    payload = get_execution(execution_id, repo_root)
+    if payload is None:
+        raise FileNotFoundError(f"execution `{execution_id}` not found")
+    if _normalize_state(str(payload.get("state") or "")) in TERMINAL_STATES:
+        return payload
+    payload["cancel_requested"] = True
+    _write_json(execution_path(execution_id, repo_root), payload)
+    return update_execution(
+        execution_id,
+        progress_summary="Cancellation requested by user.",
+        heartbeat=True,
+        actor=actor or "user",
+        repo_root=repo_root,
+        force=True,
+    )
+
+
+def is_cancel_requested(execution_id: str, *, repo_root: str | Path | None = None) -> bool:
+    payload = get_execution(execution_id, repo_root)
+    return bool(payload and payload.get("cancel_requested"))
 
 
 def mark_abandoned(

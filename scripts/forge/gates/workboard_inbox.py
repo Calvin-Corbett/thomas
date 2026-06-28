@@ -70,7 +70,7 @@ def evaluate(
         "unread_count": len(unread),
         "unread_messages": unread,
         "next_step": (
-            f"Read and ack inbox: python scripts/crew/workboard/message.py --list --agent {actor}" if unread else ""
+            f"Read and ack inbox: python scripts/crew/workboard/message.py --inbox --agent {actor}" if unread else ""
         ),
     }
 

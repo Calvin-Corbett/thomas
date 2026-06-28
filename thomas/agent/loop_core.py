@@ -113,6 +113,8 @@ def _load_purpose_text() -> str:
     try:
         return load_cached_purpose_brief()
     except Exception:  # REVIEWED: swallow — optional feature, fallback to empty string
+        # Broad catch: purpose brief is decorative context; any load failure must not break agent startup.
+        log.debug("Purpose brief load failed; continuing without it.", exc_info=True)
         return ""
 
 
@@ -359,7 +361,8 @@ class AgentLoop:
                 if project_content:
                     prompt = prompt.rstrip() + "\n\n" + format_project_instructions(project_content)
             except Exception:
-                pass  # Best-effort: project instructions are optional
+                # Broad catch: project instruction discovery is best-effort and must not block a turn.
+                log.debug("Project instructions discovery failed; skipping.", exc_info=True)
 
         if skills_context:
             prompt = prompt.rstrip() + "\n\n" + str(skills_context).strip()
@@ -566,7 +569,10 @@ class AgentLoop:
             except ValueError:
                 continue
         provider = str(getattr(cfg, "provider", "") or "").strip().lower()
-        return int(_PROVIDER_DEFAULT_TPM_LIMITS.get(provider, 0))
+        try:
+            return int(_PROVIDER_DEFAULT_TPM_LIMITS.get(provider, 0) or 0)
+        except (TypeError, ValueError):
+            return 0
 
     def _provider_tpm_headroom(self) -> float:
         """Get TPM headroom multiplier from env or default."""
@@ -577,7 +583,11 @@ class AgentLoop:
                 return max(0.5, min(parsed, 1.0))
             except ValueError:
                 pass
-        return float(_TPM_HEADROOM_DEFAULT)
+        try:
+            parsed_default = float(_TPM_HEADROOM_DEFAULT or 0.90)
+        except (TypeError, ValueError):
+            parsed_default = 0.90
+        return max(0.5, min(parsed_default, 1.0))
 
     @staticmethod
     def _has_explicit_action_intent(prompt: str) -> bool:

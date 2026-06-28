@@ -353,7 +353,7 @@ def test_web_nav_chat_robot_uses_website_pixel_agent_contract() -> None:
     site_markup = (root / "apps/site/src/components/pixel-agents.tsx").read_text(encoding="utf-8")
     site_css = (root / "apps/site/src/app/globals.css").read_text(encoding="utf-8")
     web_index = (root / "thomas/server/web/index.html").read_text(encoding="utf-8")
-    web_css = (root / "thomas/server/web/css/components_parts/composer-attachments.css").read_text(encoding="utf-8")
+    web_css = (root / "thomas/server/web/css/component_styles/composer-attachments.css").read_text(encoding="utf-8")
 
     # Read all split runtime files
     runtime_dir = root / "thomas/server/web/js/runtime"

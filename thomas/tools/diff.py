@@ -7,6 +7,7 @@ exact string and replaces it, similar to Claude Code's Edit tool.
 from __future__ import annotations
 
 import difflib
+import re
 from pathlib import Path
 from typing import Any
 
@@ -18,13 +19,22 @@ from thomas.tools.filesystem import _is_protected_runtime_path, _safe_path
 # ---------------------------------------------------------------------------
 
 
+_READ_FILE_LINE_PREFIX_RE = re.compile(r"^[ \t]*\d{1,7}\t")
+
+
+def _strip_read_file_line_numbers(text: str) -> str:
+    """Remove prefixes added by fs.read_file numbered output."""
+    return "".join(_READ_FILE_LINE_PREFIX_RE.sub("", line) for line in str(text or "").splitlines(keepends=True))
+
+
 class CreateDiffTool(Tool):
     name = "diff.create"
     category = "diff"
     description = (
         "Make a targeted edit to a file by replacing exact text. "
         "Provide the exact string to find (old_str) and its replacement (new_str). "
-        "The old_str must match exactly one location, including whitespace and indentation."
+        "The old_str must match exactly one location, including whitespace and indentation. "
+        "Snippets copied from fs.read_file numbered output are accepted."
     )
     parameters = {
         "type": "object",
@@ -72,6 +82,12 @@ class CreateDiffTool(Tool):
             content = path.read_text(encoding="utf-8", errors="replace")
         except OSError as e:
             return ToolResult(ok=False, error=f"Cannot read file: {e}")
+
+        if old_str not in content:
+            normalized_old = _strip_read_file_line_numbers(old_str)
+            if normalized_old != old_str and normalized_old in content:
+                old_str = normalized_old
+                new_str = _strip_read_file_line_numbers(new_str)
 
         if old_str not in content:
             return ToolResult(

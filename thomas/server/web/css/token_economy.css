@@ -1,3 +1,12 @@
-/* token_economy.css — import wrapper (split for monolith compliance) */
-@import url("./token_economy_widget.css?v=20260402-fix11");
-@import url("./token_economy_space_theme.css?v=20260402-fix11");
+/* token_economy.css — import wrapper (split for monolith compliance)
+ *
+ * The widget + space-theme sheets used to be pulled in here via @import with a
+ * HARD-CODED version-query cache-bust. Static CSS is served as a raw
+ * FileResponse (no __THOMAS_*__ substitution — that only runs on the HTML page
+ * handlers), so that literal could never change: the browser served a stale
+ * copy of the space theme FOREVER and every composer fix was invisible.
+ *
+ * Those two sheets are now linked directly from index.html with
+ * ?v=__THOMAS_WEB_BUILD__ (the content fingerprint that already busts every
+ * other frontend asset), so any edit to them loads immediately. Keep this file
+ * import-free so no frozen ?v= can reappear here. */

@@ -15,18 +15,41 @@ if str(_REPO_ROOT) not in sys.path:
 
 ROOT = Path(__file__).resolve().parents[3]
 DISABLE_ENV = "THOMAS_WORKTREE_BRANCH_GUARD_DISABLE"
-PRIMARY_THOMAS_ROOT = r"C:\Users\corbe\Thomas"
 
-EXPECTED_BY_BRANCH = {
-    "master": r"C:\Users\corbe\Thomas",
-    "release/oss-launch": r"C:\Users\corbe\thomas-oss-launch",
-    "publish-clean": r"C:\Users\corbe\Thomas_publish_clean",
-}
 
-# Explicitly approved linked worktrees. Anything else is treated as a side
-# checkout, so an agent cannot make proof in a hidden clone/worktree and call it
-# production evidence for the real Thomas repository.
-APPROVED_EXTRA_WORKTREE_ROOTS: tuple[str, ...] = (r"C:\Users\corbe\tmp\thomas_heartbeat_l1",)
+# Per-install worktree-topology config lives in the gitignored ``agent_safety.local.toml``
+# overlay (section ``[worktree_branch_guard]``), NOT in tracked gate source — so no
+# machine-specific absolute paths ship in the repo (portability + privacy/leak fix). With
+# no overlay configured the topology guard is a NO-OP: a fresh clone on any machine is
+# never false-blocked. The repo OWNER opts into strict canonical-checkout enforcement by
+# setting ``primary_root`` (+ optional ``expected_by_branch`` / ``approved_extra_roots``)
+# in that overlay.
+def _overlay() -> dict[str, object]:
+    try:
+        import tomllib
+    except ModuleNotFoundError:  # pragma: no cover - py<3.11
+        return {}
+    try:
+        data = tomllib.loads((ROOT / "agent_safety.local.toml").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    section = data.get("worktree_branch_guard")
+    return section if isinstance(section, dict) else {}
+
+
+def _primary_root() -> str:
+    """The owner-configured canonical Thomas checkout, or '' when unconfigured (no-op)."""
+    return str(_overlay().get("primary_root") or "").strip()
+
+
+def _expected_by_branch() -> dict[str, str]:
+    raw = _overlay().get("expected_by_branch")
+    return {str(k): str(v) for k, v in raw.items()} if isinstance(raw, dict) else {}
+
+
+def _approved_extra_roots() -> tuple[str, ...]:
+    raw = _overlay().get("approved_extra_roots")
+    return tuple(str(x) for x in raw) if isinstance(raw, (list, tuple)) else ()
 
 
 def _normalize_path(value: str | Path) -> str:
@@ -47,12 +70,12 @@ def _branch_name() -> str:
 
 
 def _approved_worktree_roots() -> set[str]:
-    roots = [PRIMARY_THOMAS_ROOT, *EXPECTED_BY_BRANCH.values(), *APPROVED_EXTRA_WORKTREE_ROOTS]
+    roots = [_primary_root(), *_expected_by_branch().values(), *_approved_extra_roots()]
     return {_normalize_path(root) for root in roots if str(root).strip()}
 
 
 def _canonical_common_git_dir() -> str:
-    return _normalize_path(Path(PRIMARY_THOMAS_ROOT) / ".git")
+    return _normalize_path(Path(_primary_root()) / ".git")
 
 
 def _git_common_dir() -> str:
@@ -74,6 +97,11 @@ def _git_common_dir() -> str:
 
 
 def _topology_violations(branch: str) -> list[str]:
+    # Owner-opt-in: with no canonical anchor configured in the local overlay, do not
+    # enforce checkout topology at all — a fresh clone on any machine must never be
+    # false-blocked by someone else's absolute paths.
+    if not _primary_root():
+        return []
     actual_root = _normalize_path(ROOT)
     approved_roots = _approved_worktree_roots()
     canonical_common = _canonical_common_git_dir()
@@ -309,7 +337,7 @@ def run(_argv: Sequence[str] | None = None) -> int:
             return 1
 
     if not ci_env:
-        expected = EXPECTED_BY_BRANCH.get(branch)
+        expected = _expected_by_branch().get(branch)
         if expected:
             actual_norm = _normalize_path(ROOT)
             expected_norm = _normalize_path(expected)

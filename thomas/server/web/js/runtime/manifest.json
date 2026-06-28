@@ -43,5 +43,8 @@
   "042_model_setup_settings_03.js",
   "043_model_setup_settings_04.js",
   "044_model_setup_settings_05.js",
-  "045_model_setup_settings_06.js"
+  "045_model_setup_settings_06.js",
+  "046_evolution_dashboard.js",
+  "047_evolve_agent_chat.js",
+  "048_ui_studio_canvas.js"
 ]

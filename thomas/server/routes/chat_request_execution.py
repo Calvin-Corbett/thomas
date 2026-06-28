@@ -205,9 +205,15 @@ async def execute_agent_loop(
         "base_url": str(llm.config.base_url or ""),
     }
 
-    # Create per-run message queue for mid-run interruption support.
-    msg_queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=4)
-    _SESSION_MSG_QUEUES[sid] = msg_queue
+    # Per-run message queue for mid-run interruption support. REUSE one the request
+    # handler may have created on-demand for a rapid follow-up that arrived before this
+    # point (closes the race where the queue didn't exist yet -> 409). Generous bound
+    # (was 4) plus coalescing in the handler means rapid messages are merged, not
+    # rejected with an error the user sees as a failed task.
+    msg_queue = _SESSION_MSG_QUEUES.get(sid)
+    if msg_queue is None:
+        msg_queue = asyncio.Queue(maxsize=64)
+        _SESSION_MSG_QUEUES[sid] = msg_queue
 
     guardrails_enabled = bool(_resolve_app_value(request.app, APP_GUARDRAILS_ENABLED, default=False))
     guarded_runner = _resolve_app_value(request.app, APP_GUARDED_TOOL_RUNNER) if guardrails_enabled else None

@@ -94,12 +94,17 @@ class _FakeDelegationStarter:
         emit_event,
         repo_root=None,
         force=False,
+        autonomy_level=4,
         profile=None,
         effort="diligent",
+        file_access=None,
+        guardrails="",
+        guardrail_modes=None,
     ):  # noqa: ANN001
         _ = app
         _ = repo_root
-        _ = force
+        _ = guardrails
+        _ = guardrail_modes
         _FakeDelegationStarter.calls.append(
             {
                 "session_id": session_id,
@@ -108,6 +113,9 @@ class _FakeDelegationStarter:
                 "recent_messages": list(recent_messages or []),
                 "profile": profile,
                 "effort": effort,
+                "file_access": file_access,
+                "force": force,
+                "autonomy_level": autonomy_level,
             }
         )
         await emit_event(
@@ -281,6 +289,43 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         # No canned background-ack path; the prompt is unmodified (no visible-reply hack).
         self.assertFalse(bool(_FakeBrain.calls[0].get("background_ack_only", False)))
         self.assertEqual(str(_FakeBrain.calls[0].get("prompt") or ""), "please implement this plan")
+
+    async def test_auto_mode_forces_live_repo_self_development_to_background(self):
+        _FakeBrain.calls = []
+        _FakeDelegationStarter.calls = []
+        prompt = (
+            "Development task. Work in the live Thomas repo. Locally uninstall these "
+            "marketplace modules: Life Manager, Brownies, Smart Home, and Telegram Channel. "
+            "Use your file tools for repo edits."
+        )
+        with (
+            patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain),
+            patch("thomas.server.routes.chat_v2.start_background_delegation", _FakeDelegationStarter.start),
+        ):
+            resp = await self.client.post(
+                "/api/v2/chat",
+                json={
+                    "session_id": "sess-auto-live-repo",
+                    "profile": "local",
+                    "mode": "auto",
+                    "autonomy_level": 3,
+                    "file_access": "project",
+                    "message": prompt,
+                },
+            )
+
+        self.assertEqual(resp.status, 200)
+        events = _parse_ndjson(await resp.text())
+        event_types = [str(evt.get("type") or "") for evt in events]
+        self.assertIn("delegation_started", event_types)
+        self.assertEqual(len(_FakeDelegationStarter.calls), 1)
+        self.assertEqual(_FakeDelegationStarter.calls[0]["prompt"], prompt)
+        self.assertEqual(_FakeDelegationStarter.calls[0]["file_access"], 2)
+        self.assertTrue(_FakeDelegationStarter.calls[0]["force"])
+        self.assertEqual(_FakeDelegationStarter.calls[0]["autonomy_level"], 3)
+        self.assertEqual(len(_FakeBrain.calls), 1)
+        self.assertFalse(bool(_FakeBrain.calls[0].get("dispatch_actionable", True)))
+        self.assertIsNone(_FakeBrain.calls[0].get("send_task"))
 
     async def test_auto_mode_low_autonomy_keeps_actionable_request_inline(self):
         _FakeBrain.calls = []
@@ -480,6 +525,30 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertTrue(_FakeLLMClient.calls)
         self.assertEqual(_FakeLLMClient.calls[-1]["reasoning_effort"], "low")
 
+    async def test_chat_v2_applies_model_id_from_payload(self):
+        _FakeBrain.calls = []
+        _FakeDelegationStarter.calls = []
+        _FakeLLMClient.calls = []
+        with (
+            patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain),
+            patch("thomas.server.routes.chat_v2.LLMClient", _FakeLLMClient),
+            patch("thomas.server.routes.chat_v2.start_background_delegation", _FakeDelegationStarter.start),
+        ):
+            resp = await self.client.post(
+                "/api/v2/chat",
+                json={
+                    "session_id": "sess-model-override",
+                    "profile": "local",
+                    "mode": "auto",
+                    "model_id": "office-chat-model",
+                    "message": "Say only hello.",
+                },
+            )
+
+        self.assertEqual(resp.status, 200)
+        self.assertTrue(_FakeLLMClient.calls)
+        self.assertEqual(_FakeLLMClient.calls[-1]["model"], "office-chat-model")
+
     async def test_chat_v2_reuses_cached_llm_for_same_session(self):
         _FakeBrain.calls = []
         _FakeDelegationStarter.calls = []
@@ -551,33 +620,6 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         cache = self.app[chat_v2_routes.APP_SESSION_LLM_CACHE]
         entry = cache["sess-cache-refresh"]
         self.assertEqual(getattr(entry.llm.config, "reasoning_effort", ""), "high")
-
-    async def test_get_or_create_session_llm_uses_warm_codex_provider(self):
-        _FakeLLMClient.calls = []
-        _FakeLLMClient.closed = []
-        warm_provider = object()
-        model_cfg = ModelConfig(name="codex", provider="codex", model="gpt-5.4")
-        pool_key = chat_v2_routes._warm_codex_pool_key(model_cfg)
-        self.app[chat_v2_routes.APP_SESSION_LLM_CACHE].clear()
-        self.app[chat_v2_routes.APP_WARM_CODEX_POOL].clear()
-        self.app[chat_v2_routes.APP_WARM_CODEX_TASKS].clear()
-        self.app[chat_v2_routes.APP_WARM_CODEX_POOL][pool_key] = warm_provider
-
-        with (
-            patch("thomas.server.routes.chat_v2.LLMClient", _FakeLLMClient),
-            patch("thomas.server.routes.chat_v2._schedule_codex_prewarm", lambda app, cfg: None),
-        ):
-            llm, _lock = await chat_v2_routes._get_or_create_session_llm(
-                self.app,
-                session_id="sess-warm-provider",
-                model_cfg=model_cfg,
-                fallback_cfgs=[],
-                failover_enabled=False,
-            )
-
-        self.assertEqual(len(_FakeLLMClient.calls), 1)
-        self.assertIs(getattr(llm, "_codex_provider", None), warm_provider)
-        self.assertNotIn(pool_key, self.app[chat_v2_routes.APP_WARM_CODEX_POOL])
 
     async def test_chat_v2_session_delete_evicts_cached_llm(self):
         _FakeBrain.calls = []

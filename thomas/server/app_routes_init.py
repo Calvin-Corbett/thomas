@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import mimetypes
 import re
@@ -14,7 +15,6 @@ from typing import TYPE_CHECKING, Any
 
 from thomas.core.config import AppConfig
 from thomas.server.app_keys import (
-    APP_CODEX_BRIDGE,
     APP_ENGINE_MANAGER,
     APP_MEMORY,
     APP_MUTATING_ROUTE_POLICY_SNAPSHOT,
@@ -38,6 +38,67 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 _RUN_STORE_JANITOR_INTERVAL_SECONDS = 120
 _RUN_STORE_STALE_IDLE_SECONDS = 10 * 60
+
+
+def _v2_sessions_as_chats(sessions_dir: Path, *, limit: int = 300) -> list[dict[str, Any]]:
+    """Convert the LIVE v2 session store (``.thomas/sessions_v2/chat_*.json`` — where
+    every chat conducted through /api/v2/chat is saved) into the sidebar's chat-list
+    schema. GET /api/chats historically read ONLY the legacy ``.thomas/chats`` directory
+    (written by the old SPA's PUT /api/chats), which the current chat UI never writes —
+    so brand-new chats never showed up in Recent (no entry, no date). This bridges the
+    two so real, current chats appear with their dates. (chat history fix, 2026-06-28)"""
+    out: list[dict[str, Any]] = []
+    try:
+        files = list(sessions_dir.glob("chat_*.json"))
+    except OSError:
+        return out
+
+    def _mtime(path: Path) -> float:
+        try:
+            return path.stat().st_mtime
+        except OSError:
+            return 0.0
+
+    files.sort(key=_mtime, reverse=True)
+    for path in files[: max(1, int(limit))]:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        sid = str(data.get("session_id") or "").strip()
+        if not sid:
+            continue
+        conv = data.get("conversation") if isinstance(data.get("conversation"), dict) else {}
+        msgs: list[dict[str, Any]] = []
+        for msg in conv.get("messages") or []:
+            if not isinstance(msg, dict):
+                continue
+            role = str(msg.get("role") or "")
+            content = msg.get("content")
+            if role in ("user", "assistant") and isinstance(content, str) and content.strip():
+                msgs.append({"role": role, "content": content})
+        if not msgs:
+            continue  # empty / system-only session — nothing to show in the sidebar
+        first_user = next((m["content"] for m in msgs if m["role"] == "user"), "")
+        title = (first_user.strip().splitlines()[0][:60] if first_user.strip() else "New chat") or "New chat"
+        saved_at = data.get("saved_at")
+        updated_ms = int(float(saved_at) * 1000) if isinstance(saved_at, (int, float)) else int(_mtime(path) * 1000)
+        meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+        out.append(
+            {
+                "id": sid,
+                "sessionId": sid,
+                "title": title,
+                "model": str(meta.get("model_id") or ""),
+                "messages": msgs,
+                "createdAt": updated_ms,
+                "updatedAt": updated_ms,
+                "pinned": False,
+            }
+        )
+    return out
 
 
 def _setup_routes_and_handlers(
@@ -82,6 +143,7 @@ def _setup_routes_and_handlers(
     _read_chat_from_disk = locals_dict.get("_read_chat_from_disk")
     _build_tools = locals_dict.get("_build_tools")
     index = locals_dict.get("index")
+    classic = locals_dict.get("classic")
     settings = locals_dict.get("settings")
     companion = locals_dict.get("companion")
     landing = locals_dict.get("landing")
@@ -226,9 +288,33 @@ def _setup_routes_and_handlers(
 
     # Chat storage routes
     async def api_chats(request: web.Request) -> web.Response:
-        """List all chats from disk storage."""
+        """List all chats from disk storage.
+
+        Merges the legacy ``.thomas/chats`` store (old SPA's PUT /api/chats) with the
+        LIVE ``.thomas/sessions_v2`` store (every chat from the current /api/v2/chat
+        flow). Before this merge the sidebar only saw the legacy store, so new chats
+        never appeared in Recent. Dedup by id; the newer ``updatedAt`` wins.
+        """
         _require_api_access(request)
-        chats = await _load_all_chats_from_disk()
+        legacy = await _load_all_chats_from_disk()
+        sessions_dir = config.memory.root_path / ".thomas" / "sessions_v2"
+        live = await asyncio.to_thread(_v2_sessions_as_chats, sessions_dir)
+
+        def _ms(chat: dict[str, Any]) -> int:
+            try:
+                return int(chat.get("updatedAt") or 0)
+            except (TypeError, ValueError):
+                return 0
+
+        by_id: dict[str, dict[str, Any]] = {}
+        for chat in [*legacy, *live]:
+            cid = str(chat.get("id") or chat.get("sessionId") or "").strip()
+            if not cid:
+                continue
+            prev = by_id.get(cid)
+            if prev is None or _ms(chat) >= _ms(prev):
+                by_id[cid] = chat
+        chats = sorted(by_id.values(), key=_ms, reverse=True)
         return web.json_response({"chats": chats})
 
     async def api_chat_put(request: web.Request) -> web.Response:
@@ -578,6 +664,30 @@ def _setup_routes_and_handlers(
 
     _register_search_routes(app)
 
+    def _register_canvas_studio_routes(app_ref: web.Application) -> None:
+        """Register the UI Studio design-canvas API (/api/canvas/*).
+
+        The client surface is the UI Editor's coordinate canvas
+        (runtime/048_ui_studio_canvas.js). These routes power the AI Template
+        (prompt -> layout) and sketch-import (photo -> layout) helpers; the
+        core draw -> code path is client-side, so the routes are inert without
+        a caller and safe to register additively.
+        """
+        if not callable(_require_api_access):
+            log.warning("UI Studio route registration skipped: missing runtime dependencies")
+            return
+        try:
+            from thomas.server.routes.canvas_studio_routes import register_canvas_studio_routes
+
+            register_canvas_studio_routes(
+                app_ref,
+                require_api_access=_require_api_access,
+            )
+        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError, ValueError) as e:
+            log.warning("UI Studio routes unavailable: %s", e)
+
+    _register_canvas_studio_routes(app)
+
     def _register_discord_channels_routes(app_ref: web.Application, cfg_ref: AppConfig) -> None:
         """Register Thomas-owned Discord bridge lifecycle and history APIs."""
         if not callable(_require_api_access) or not callable(_read_json):
@@ -758,9 +868,12 @@ def _setup_routes_and_handlers(
             log.warning("Marketplace route registration skipped: missing runtime dependencies")
             return
         try:
+            from thomas.server.routes.inkwell_aiohttp import register_inkwell_routes
             from thomas.server.routes.life_manager_aiohttp import register_life_manager_routes
             from thomas.server.routes.marketplace_catalog_aiohttp import register_marketplace_catalog_routes
+            from thomas.server.routes.paper_trading_aiohttp import register_paper_trading_routes
             from thomas.server.routes.plugin_hosting import register_plugin_hosting_routes
+            from thomas.server.routes.standalone_app_aiohttp import register_standalone_app_routes
 
             register_marketplace_catalog_routes(
                 app_ref,
@@ -771,28 +884,22 @@ def _setup_routes_and_handlers(
                 app_ref,
                 require_api_access=_require_api_access,
             )
+            register_inkwell_routes(
+                app_ref,
+                require_api_access=_require_api_access,
+            )
+            register_standalone_app_routes(
+                app_ref,
+                require_api_access=_require_api_access,
+            )
+            register_paper_trading_routes(
+                app_ref,
+                require_api_access=_require_api_access,
+            )
         except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
             log.warning("Marketplace routes unavailable: %s", e)
 
     _register_marketplace_routes(app)
-
-    def _register_codex_routes(app_ref: web.Application) -> None:
-        """Register Codex bridge APIs used by onboarding and identity UI."""
-        if not callable(_require_api_access):
-            log.warning("Codex route registration skipped: missing runtime dependencies")
-            return
-        try:
-            from thomas.server.routes.codex_aiohttp import register_codex_routes
-
-            register_codex_routes(
-                app_ref,
-                require_api_access=_require_api_access,
-                codex_bridge_key=APP_CODEX_BRIDGE,
-            )
-        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
-            log.warning("Codex routes unavailable: %s", e)
-
-    _register_codex_routes(app)
 
     def _register_openai_codex_routes(app_ref: web.Application) -> None:
         """Register native ChatGPT/Codex OAuth APIs used by onboarding and model setup."""
@@ -901,10 +1008,25 @@ def _setup_routes_and_handlers(
     # Register routes
     app.router.add_post("/api/server/restart", api_server_restart)
     app.router.add_get("/", index)
+    if classic is not None:
+        app.router.add_get("/classic", classic)
     app.router.add_get("/mission", index)
     app.router.add_get("/settings", settings)
     app.router.add_get("/companion", companion)
     app.router.add_get("/landing", landing)
+
+    async def my_stuff_page(request: web.Request) -> web.StreamResponse:
+        _ = request
+        my_stuff_html = (web_dir / "static" / "my_stuff.html").resolve()
+        static_root = (web_dir / "static").resolve()
+        if not my_stuff_html.is_relative_to(static_root) or not my_stuff_html.is_file():
+            raise web.HTTPNotFound()
+        return web.FileResponse(my_stuff_html)
+
+    app.router.add_get("/my-stuff", my_stuff_page)
+    app.router.add_get("/my-stuff/", my_stuff_page)
+    app.router.add_get("/my_stuff", my_stuff_page)
+    app.router.add_get("/my_stuff/", my_stuff_page)
 
     app.router.add_get("/api/task_ledger/current", api_task_ledger_current)
     app.router.add_get("/api/task-ledger/current", api_task_ledger_current)

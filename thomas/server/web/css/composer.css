@@ -1,0 +1,574 @@
+/* ============================================================================
+ * composer.css — the ONE stylesheet for the general chat composer.
+ *
+ * Ground-up rebuild (COMPOSER_REBUILD_SPEC.md). This file is loaded LAST among
+ * the composer-relevant sheets (after token_economy_space_theme.css) so plain,
+ * normal-specificity selectors win on source order alone — NO !important wars.
+ *
+ * THE ONE COLOR RULE: every border, ring, separator and divider is ACHROMATIC
+ * white-alpha — rgba(255,255,255,a) with EQUAL r/g/b channels. Zero hue. This is
+ * the root-cause fix for the persistent "green line": a hued low-alpha hairline
+ * on a near-black field reads green via simultaneous contrast. White-alpha
+ * physically cannot tint, so the line cannot read green.
+ *
+ * This file owns the composer LOOK only. The send/dispatch path, the 5 dials'
+ * ids/handlers, autosize, attachments, voice and shortcuts all live in JS and
+ * are untouched.
+ * ==========================================================================*/
+
+/* --- Wrapper ------------------------------------------------------------- */
+.composer-container {
+    background: linear-gradient(180deg,
+        rgba(10, 12, 16, 0) 0%,
+        rgba(10, 12, 16, 0.82) 44%,
+        rgba(10, 12, 16, 0.96) 100%);
+    padding: clamp(10px, 1.4vw, 14px) clamp(12px, 2vw, 20px)
+             calc(12px + env(safe-area-inset-bottom));
+}
+
+.composer-inner {
+    width: min(100%, 800px);
+    max-width: 800px;
+    padding: 0 clamp(4px, 1.2vw, 12px);
+}
+
+/* --- The ONE unified input surface -------------------------------------- */
+.composer-box {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: #101216;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    padding: 12px 14px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    overflow: visible;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+/* One outer ACHROMATIC focus ring — no inner frame, surface steps up a notch. */
+.composer-box:focus-within {
+    background: #14161b;
+    border-color: rgba(255, 255, 255, 0.22);
+    box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 0.08),
+        0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+/* When a dial inside the controls popover is focused, the box ring yields so
+   only one ring is ever lit. */
+.composer-box:focus-within:has(.composer-control-select:focus) {
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+/* --- Input row ---------------------------------------------------------- */
+.composer-input-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    width: 100%;
+    min-height: 24px;
+}
+
+/* The textarea IS the field — borderless, transparent, never a box-in-a-box. */
+.composer-textarea {
+    flex: 1 1 auto;
+    min-width: 0;
+    align-self: center;
+    background: transparent;
+    border: 0;
+    outline: none;
+    box-shadow: none;
+    color: #ececf1;
+    caret-color: #c8cdd3;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.55;
+    letter-spacing: 0.15px;
+    resize: none;
+    max-height: 160px;
+    overflow-y: auto;
+    padding: 4px 2px;
+    min-height: 22px;
+}
+
+.composer-textarea::placeholder {
+    color: rgba(236, 236, 241, 0.30);
+    font-style: normal;
+    letter-spacing: 0.02em;
+}
+
+/* --- Right cluster: controls, mic, send --------------------------------- */
+.composer-right-cluster {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+}
+
+/* Icon buttons — scoped to the composer so the global .btn-icon (sidebar/nav)
+   is undisturbed. Achromatic only. */
+.composer-box .btn-icon {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: rgba(236, 236, 241, 0.55);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex: 0 0 auto;
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.composer-box .btn-icon:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.16);
+    color: #c8cdd3;
+}
+
+.composer-box .btn-icon i {
+    font-size: 16px;
+}
+
+/* Active / open state on the controls + actions triggers (achromatic — was the
+   old blue rgba(88,166,255,0.2)). */
+.composer-box #composerControlsBtn.active,
+.composer-box #attachBtn.active {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.16);
+    color: #e7e9ec;
+}
+
+/* --- Send button — the single accent ------------------------------------ */
+.composer-box #sendBtn,
+.composer-box .btn-send {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    min-height: 38px;
+    border-radius: 4px;
+    border: 1px solid #e7e9ec;
+    background: #e7e9ec;
+    color: #0b0f16;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex: 0 0 auto;
+    transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+}
+
+.composer-box #sendBtn i {
+    font-size: 17px;
+}
+
+.composer-box #sendBtn:hover:not(:disabled) {
+    background: #f4f5f6;
+    border-color: #f4f5f6;
+    box-shadow: 0 0 14px rgba(255, 255, 255, 0.16);
+}
+
+.composer-box #sendBtn:disabled {
+    opacity: 0.30;
+    cursor: not-allowed;
+}
+
+/* Send → Stop morph: transparent with a quiet achromatic outline. */
+.composer-box #sendBtn.stop-state {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.30);
+    color: #ececf1;
+    box-shadow: none;
+}
+
+/* --- Mode chip ---------------------------------------------------------- */
+.composer-mode-chip {
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 188px;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.05);
+    color: #ececf1;
+    border-radius: 4px;
+    padding: 2px 6px 2px 8px;
+    flex: 0 0 auto;
+}
+
+.composer-mode-chip.hidden { display: none; }
+
+.composer-mode-chip-label {
+    display: inline-block;
+    max-width: 138px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    line-height: 1.3;
+}
+
+.composer-mode-chip-close {
+    width: 16px;
+    height: 16px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: rgba(236, 236, 241, 0.6);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: color 0.15s ease, background 0.15s ease;
+}
+
+.composer-mode-chip-close:hover {
+    color: #ececf1;
+    background: rgba(255, 255, 255, 0.10);
+}
+
+.composer-mode-chip-close i { font-size: 10px; }
+
+/* --- Status bar --------------------------------------------------------- */
+.composer-status-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 1px 4px 0;
+    min-height: 0;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.45);
+    overflow: hidden;
+}
+
+.composer-status-bar:empty { display: none; }
+
+.composer-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.55);
+    white-space: nowrap;
+    line-height: 1.4;
+}
+
+/* --- Controls popover (the 5 dials, tucked behind one button) ----------- */
+.composer-controls-popover {
+    position: absolute;
+    right: 8px;
+    bottom: calc(100% + 8px);
+    z-index: 36;
+    width: min(300px, calc(100vw - 24px));
+    padding: 10px;
+    background: #14161b;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 4px;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.05),
+        0 16px 36px rgba(0, 0, 0, 0.55);
+}
+
+.composer-controls-popover.hidden { display: none; }
+
+.composer-controls-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.composer-controls-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding-bottom: 8px;
+    margin-bottom: 2px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.composer-controls-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: rgba(236, 236, 241, 0.55);
+}
+
+.composer-controls-model {
+    font-size: 10px;
+    color: rgba(236, 236, 241, 0.45);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
+}
+
+.composer-control-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.composer-control-row[hidden] { display: none; }
+
+.composer-control-label {
+    font-size: 12px;
+    color: rgba(236, 236, 241, 0.55);
+    white-space: nowrap;
+}
+
+.composer-control-row.is-active .composer-control-label {
+    color: rgba(236, 236, 241, 0.88);
+}
+
+.composer-control-select {
+    flex: 0 1 150px;
+    min-width: 0;
+    max-width: 160px;
+    padding: 5px 8px;
+    font-size: 12px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: #1d2127;
+    color: rgba(236, 236, 241, 0.86);
+    cursor: pointer;
+}
+
+.composer-control-select:hover {
+    border-color: rgba(255, 255, 255, 0.24);
+}
+
+.composer-control-select:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.32);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.10);
+}
+
+/* --- Actions menu popover ----------------------------------------------- */
+.composer-action-popover {
+    position: absolute;
+    left: 6px;
+    bottom: calc(100% + 8px);
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    z-index: 35;
+    min-width: 0;
+    width: min(260px, calc(100vw - 24px));
+    padding: 8px;
+    background: #14161b;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 4px;
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55);
+}
+
+.composer-action-popover.hidden { display: none; }
+
+.composer-action-column,
+.composer-games-column {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    width: 100%;
+}
+
+.composer-games-column {
+    border-left: 1px solid rgba(255, 255, 255, 0.12);
+    padding-left: 8px;
+}
+
+.composer-games-column.hidden { display: none; }
+
+.composer-games-title {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgba(255, 255, 255, 0.45);
+    padding: 6px 8px 4px;
+}
+
+.composer-games-empty {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.40);
+    line-height: 1.4;
+    padding: 8px 10px;
+}
+
+.composer-action-btn,
+.composer-game-btn {
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    color: rgba(236, 236, 241, 0.65);
+    text-align: left;
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    padding: 9px 10px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.composer-action-btn:hover,
+.composer-game-btn:hover,
+.composer-action-btn.active {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.16);
+    color: #c8cdd3;
+}
+
+.composer-action-btn.has-submenu i {
+    font-size: 12px;
+    opacity: 0.85;
+}
+
+@media (max-width: 760px) {
+    .composer-controls-popover {
+        left: 8px;
+        right: 8px;
+        width: auto;
+    }
+    .composer-action-popover {
+        left: 6px;
+        right: 6px;
+        min-width: 0;
+        flex-direction: column;
+    }
+    .composer-action-column,
+    .composer-games-column {
+        min-width: 0;
+        width: 100%;
+    }
+    .composer-games-column {
+        border-left: none;
+        border-top: 1px solid rgba(255, 255, 255, 0.12);
+        padding-left: 0;
+        padding-top: 8px;
+    }
+    .composer-mode-chip { max-width: 160px; }
+    .composer-mode-chip-label { max-width: 122px; }
+}
+
+/* --- Drag & drop overlay (created by initComposer in the runtime) -------- */
+.composer-drop-overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+    background: rgba(255, 255, 255, 0.06);
+    border: 2px dashed rgba(255, 255, 255, 0.30);
+    border-radius: 4px;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.composer-drop-overlay.visible { display: flex; }
+
+.composer-drop-overlay span {
+    font-size: 14px;
+    font-weight: 500;
+    color: rgba(236, 236, 241, 0.85);
+}
+
+/* --- Attachments preview ------------------------------------------------ */
+.attachments-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2, 8px);
+    margin-bottom: 0;
+}
+
+.attachments-preview:empty { display: none; }
+
+.attachment-chip {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    color: rgba(236, 236, 241, 0.75);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.attachment-chip .remove-btn {
+    cursor: pointer;
+    color: rgba(236, 236, 241, 0.5);
+}
+
+.attachment-chip .remove-btn:hover { color: #ececf1; }
+
+.attachment-chip-thumb {
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    object-fit: cover;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    flex-shrink: 0;
+}
+
+/* --- Suggestions rail (above the box, calm) ----------------------------- */
+.assistant-suggestion-rail.hidden { display: none; }
+
+.assistant-suggestion-chip {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: rgba(236, 236, 241, 0.82);
+}
+
+.assistant-suggestion-chip:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.20);
+}
+
+.assistant-suggestion-dismiss {
+    color: rgba(236, 236, 241, 0.5);
+}
+
+.assistant-suggestion-dismiss:hover { color: #ececf1; }
+
+/* --- Disclaimer --------------------------------------------------------- */
+.disclaimer {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.20);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    margin-top: 6px;
+    font-weight: 400;
+}
+
+/* --- Dino game overlay (keep the open animation; recolor to achromatic) -- */
+.composer-dino-shell {
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: linear-gradient(180deg, rgba(9, 11, 14, 0.88), rgba(7, 9, 12, 0.90));
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+        0 16px 24px rgba(0, 0, 0, 0.30);
+    border-radius: 4px;
+}

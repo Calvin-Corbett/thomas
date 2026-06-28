@@ -495,7 +495,11 @@ def build_token_report(
         )
         suggestions.append("Request narrower file ranges and more targeted tool outputs.")
 
-    if peak_context_tokens >= int(agent._context_window * 0.85):
+    try:
+        context_window = int(getattr(agent, "_context_window", 0) or 0)
+    except (TypeError, ValueError):
+        context_window = 0
+    if context_window > 0 and peak_context_tokens >= int(context_window * 0.85):
         flags.append(
             {
                 "kind": "context_pressure",

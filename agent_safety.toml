@@ -60,6 +60,8 @@ policy_files = [
     "agent_safety.toml",
     "thomas.toml",
     "thomas.prod.toml",
+    "evolve_governor.toml",
+    "evolve_corpus/",
     "pyproject.toml",
     "docker-compose.yml",
     "docker-compose.dev.yml",
@@ -108,6 +110,9 @@ enforcement_scripts = [
     "scripts/commit_guarded.py",
     "scripts/forge/gates/enforcement_integrity.py",
     "scripts/forge/gates/_runtime_guard.py",
+    # Every local gate now re-execs through this venv-pinning shim, so it is a keystone:
+    # an agent that rewrote it to fall back to PATH python would silently un-pin all gates.
+    "scripts/_gate_python.py",
     "thomas/core/rules_of_road.py",
     "thomas/tools/shell.py",
     "thomas/agent/skills_runtime.py",
@@ -300,6 +305,9 @@ protected_hooks = [
     "thomas-workboard-agent-claim-gate",
     "thomas-workboard-issue-tool-smoke",
     "thomas-workboard-problem-record-smoke",
+    "thomas-workboard-inbox-gate",
+    "thomas-workboard-inbox-final-gate",
+    "thomas-workboard-inbox-commit-msg-gate",
     "thomas-bulk-commit-guard",
     "thomas-commit-growth-guard",
     "thomas-monolith-guard",
@@ -348,6 +356,8 @@ protected_dirs = [
     "thomas/core/",
     "thomas/server/",
     "scripts/",
+    "evolve_supervisor/",
+    "evolve_corpus/",
 ]
 
 # Top-level policy files that define agent behavior.

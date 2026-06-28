@@ -182,6 +182,22 @@ def build_evolve_loop_handlers(
         backlog = data if isinstance(data, dict) else {"goals": [], "signals": {}, "count": 0}
         return web.json_response({"ok": True, "backlog": backlog})
 
+    async def orchestration_status(request: web.Request) -> web.Response:
+        require_api_access(request)
+        data = await _run_evolve_cli(_root(), ["orchestration", "status", "--json"])
+        payload = data if isinstance(data, dict) else {"ok": False, "recipes": [], "active_workers": [], "runs": []}
+        return web.json_response({"ok": bool(payload.get("ok")), "orchestration": payload})
+
+    async def orchestration_plan(request: web.Request) -> web.Response:
+        require_api_access(request)
+        recipe = str(request.query.get("recipe", "")).strip()
+        args = ["orchestration", "plan", "--json"]
+        if recipe:
+            args += ["--recipe", recipe]
+        data = await _run_evolve_cli(_root(), args)
+        payload = data if isinstance(data, dict) else {"ok": False, "recipe": None, "run": None}
+        return web.json_response({"ok": bool(payload.get("ok")), "orchestration": payload})
+
     async def start(request: web.Request) -> web.Response:
         require_api_access(request)
         if _task_running(app.get(APP_EVOLVE_TASK)):
@@ -189,7 +205,11 @@ def build_evolve_loop_handlers(
         body = await _json_body(request)
         posture = str(body.get("posture") or "auto_safe")
         focus = str(body.get("focus") or "")
-        args = ["loop", "--json", "--posture", posture]
+        # Per-goal engine: "classic" single-pass, or "funnel" (multi-agent convergence).
+        mode = str(body.get("mode") or "classic").strip().lower()
+        if mode not in ("classic", "funnel"):
+            mode = "classic"
+        args = ["loop", "--json", "--posture", posture, "--mode", mode]
         if focus:
             args += ["--focus", focus]
         args += ["--max-iterations", str(int(body.get("max_iterations") or 6))]
@@ -199,7 +219,7 @@ def build_evolve_loop_handlers(
         if body.get("profile"):
             args += ["--profile", str(body["profile"])]
         app[APP_EVOLVE_TASK] = await _spawn_evolve_cli(_root(), args)
-        return web.json_response({"ok": True, "started": True, "posture": posture, "focus": focus})
+        return web.json_response({"ok": True, "started": True, "posture": posture, "focus": focus, "mode": mode})
 
     async def pause(request: web.Request) -> web.Response:
         require_api_access(request)
@@ -262,6 +282,8 @@ def build_evolve_loop_handlers(
     return {
         "status": status,
         "plan": plan,
+        "orchestration_status": orchestration_status,
+        "orchestration_plan": orchestration_plan,
         "start": start,
         "pause": pause,
         "approve": approve,
@@ -280,6 +302,8 @@ def register_evolve_loop_routes(
     handlers = build_evolve_loop_handlers(app, require_api_access=require_api_access, root_resolver=root_resolver)
     app.router.add_get("/api/evolve/loop/status", handlers["status"])
     app.router.add_get("/api/evolve/loop/plan", handlers["plan"])
+    app.router.add_get("/api/evolve/orchestration/status", handlers["orchestration_status"])
+    app.router.add_get("/api/evolve/orchestration/plan", handlers["orchestration_plan"])
     app.router.add_post("/api/evolve/loop/start", handlers["start"])
     app.router.add_post("/api/evolve/loop/pause", handlers["pause"])
     app.router.add_post("/api/evolve/loop/approve/{approval_id}", handlers["approve"])

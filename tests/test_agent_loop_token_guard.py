@@ -1,6 +1,7 @@
 import asyncio
 
 from thomas.agent.loop import AgentLoop
+from thomas.agent.loop_streaming import build_token_report
 from thomas.core.config import AppConfig, ModelConfig, QualityConfig
 from thomas.core.events import EventType
 from thomas.core.llm import StreamEvent
@@ -305,6 +306,129 @@ def test_token_economy_budget_metadata_is_reported() -> None:
     run_budget = token_report.get("run_budget") or {}
     assert str(run_budget.get("token_economy") or "") == "cheap"
     assert int(run_budget.get("hard_context_budget") or 0) == 250_000
+
+
+def test_missing_provider_tpm_limit_disables_local_throttle(monkeypatch) -> None:  # noqa: ANN001
+    cfg = AppConfig(
+        models={"local": ModelConfig(name="local", model="dummy")},
+        default_model="local",
+        max_agent_iterations=10,
+        quality=QualityConfig(enabled=False, enforce=False),
+    )
+    tools = ToolRegistry()
+    tools.register(_NoopTool())
+    llm = _ToolThenAnswerFastLLM()
+    agent = AgentLoop(cfg, llm, tools, conversation=[], autonomy_level=4)
+    monkeypatch.setattr(agent, "_provider_tpm_limit", lambda: None)
+
+    async def run_once():
+        events = []
+        async for ev in agent.run(
+            "run a quick command and summarize",
+            tools_policy="always",
+            mode="fast",
+        ):
+            events.append(ev)
+        return events
+
+    events = asyncio.run(run_once())
+    errors = [e for e in events if e.type == EventType.AGENT_ERROR]
+    assert not any("NoneType" in str(e.data.get("error") or "") for e in errors)
+    done = next((e for e in events if e.type == EventType.AGENT_DONE), None)
+    assert done is not None
+    run_budget = (done.data.get("token_report") or {}).get("run_budget") or {}
+    assert run_budget.get("provider_tpm_limit") is None
+    assert run_budget.get("provider_tpm_budget") is None
+
+
+def test_missing_provider_tpm_headroom_uses_safe_default(monkeypatch) -> None:  # noqa: ANN001
+    cfg = AppConfig(
+        models={"local": ModelConfig(name="local", model="dummy")},
+        default_model="local",
+        max_agent_iterations=10,
+        quality=QualityConfig(enabled=False, enforce=False),
+    )
+    tools = ToolRegistry()
+    tools.register(_NoopTool())
+    llm = _ToolThenAnswerFastLLM()
+    agent = AgentLoop(cfg, llm, tools, conversation=[], autonomy_level=4)
+    monkeypatch.setattr(agent, "_provider_tpm_limit", lambda: 30_000)
+    monkeypatch.setattr(agent, "_provider_tpm_headroom", lambda: None)
+
+    async def run_once():
+        events = []
+        async for ev in agent.run(
+            "run a quick command and summarize",
+            tools_policy="always",
+            mode="fast",
+        ):
+            events.append(ev)
+        return events
+
+    events = asyncio.run(run_once())
+    errors = [e for e in events if e.type == EventType.AGENT_ERROR]
+    assert not any("NoneType" in str(e.data.get("error") or "") for e in errors)
+    done = next((e for e in events if e.type == EventType.AGENT_DONE), None)
+    assert done is not None
+    run_budget = (done.data.get("token_report") or {}).get("run_budget") or {}
+    assert int(run_budget.get("provider_tpm_limit") or 0) == 30_000
+    assert int(run_budget.get("provider_tpm_budget") or 0) == 27_000
+
+
+def test_token_report_tolerates_missing_context_window() -> None:
+    class AgentStub:
+        _context_window = None
+
+    report = build_token_report(
+        AgentStub(),  # type: ignore[arg-type]
+        prompt_text="summarize",
+        usage_obj={"prompt_tokens": 1000, "completion_tokens": 100, "total_tokens": 1100},
+        mode="auto",
+        iterations=1,
+        peak_context_tokens=1000,
+        avg_context_tokens=1000,
+        memory_tokens=0,
+        tool_chars_total=0,
+        tool_chars_kept=0,
+    )
+
+    assert report["total_tokens"] == 1100
+    assert not any(flag.get("kind") == "context_pressure" for flag in report["flags"])
+
+
+def test_max_effort_tool_loop_has_no_hard_context_budget_crash(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.delenv("THOMAS_PROVIDER_TPM_LIMIT", raising=False)
+    monkeypatch.delenv("THOMAS_PROVIDER_TPM_HEADROOM", raising=False)
+    monkeypatch.delenv("THOMAS_PROVIDER_TPM_LIMIT_OPENAI_COMPAT", raising=False)
+    cfg = AppConfig(
+        models={"local": ModelConfig(name="local", model="dummy")},
+        default_model="local",
+        max_agent_iterations=4,
+        quality=QualityConfig(enabled=False, enforce=False),
+    )
+    tools = ToolRegistry()
+    tools.register(_NoopTool())
+    llm = _UsageHeavyOpenAICompatLLM(prompt_tokens_per_call=1_000)
+    agent = AgentLoop(cfg, llm, tools, conversation=[], autonomy_level=4)
+
+    async def run_once():
+        events = []
+        async for ev in agent.run(
+            "keep using the tool for a few passes",
+            tools_policy="always",
+            mode="auto",
+            token_economy="max",
+        ):
+            events.append(ev)
+        return events
+
+    events = asyncio.run(run_once())
+    errors = [e for e in events if e.type == EventType.AGENT_ERROR]
+    assert not any("NoneType" in str(e.data.get("error") or "") for e in errors)
+    done = next((e for e in events if e.type == EventType.AGENT_DONE), None)
+    assert done is not None
+    run_budget = (done.data.get("token_report") or {}).get("run_budget") or {}
+    assert run_budget.get("hard_context_budget") is None
 
 
 def test_fast_mode_allows_tool_then_answer_completion() -> None:

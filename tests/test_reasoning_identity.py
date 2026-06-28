@@ -14,16 +14,18 @@ from thomas.marketplace.specialists.reasoning import THOMAS_CHATBOT_SYSTEM_PROMP
 class TestThomasIdentity(unittest.TestCase):
     def test_declares_chatbot_only(self):
         low = THOMAS_CHATBOT_SYSTEM_PROMPT.lower()
-        self.assertIn("chatbot", low)
+        # Positive framing (Calvin, 2026-06-26: "say your role, not what you can't do"):
+        # he ASSISTS and hands the real work off; he doesn't do the hands-on building.
         self.assertIn("your entire job", low)
+        self.assertIn("you assist the user", low)
+        self.assertIn("do the hands-on building inside this chat", low)
 
     def test_states_cannot_do_work_or_plan(self):
         low = THOMAS_CHATBOT_SYSTEM_PROMPT.lower()
-        self.assertIn("cannot build", low)
-        # He does not plan/design/architect the work either — that's task-manager work.
-        self.assertIn("architect the work", low)
-        # By design, not an apology-worthy limitation.
-        self.assertIn("by design", low)
+        # He does not do the hands-on work...
+        self.assertIn("do the hands-on building inside this chat", low)
+        # ...nor scope/plan/design it — that's the worker's job (positive framing).
+        self.assertIn("you don't scope, plan, or design the work yourself", low)
 
     def test_allows_read_to_inform_and_report(self):
         low = THOMAS_CHATBOT_SYSTEM_PROMPT.lower()
@@ -51,12 +53,13 @@ class TestThomasIdentity(unittest.TestCase):
         self.assertIn("never claim", low)
 
     def test_forbids_claiming_work_started_and_offers_instead(self):
-        # The chat agent must not assert work began ("I'll get that started" /
-        # "a task card has been created") when it can't know that — it offers to
-        # hand off instead. Guards the live "logic doesn't add up" dishonesty.
+        # The chat agent must not assert work began ("on it" / "I've handed that off")
+        # when it never called send_task — that's a false claim. Guards the live
+        # "logic doesn't add up" dishonesty (positive framing, 2026-06-26).
         low = THOMAS_CHATBOT_SYSTEM_PROMPT.lower()
-        self.assertIn("a task card has been created", low)  # named as a forbidden phrase
-        self.assertIn("offer to hand it to the task manager", low)
+        self.assertIn("without calling send_task does nothing", low)
+        self.assertIn("false claim", low)
+        self.assertIn("never tell the user you handed something off unless you actually called the tool", low)
 
 
 if __name__ == "__main__":

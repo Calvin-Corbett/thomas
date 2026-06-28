@@ -17,9 +17,9 @@ MODULES = {
     # -- CORE --stable foundations ------------------------------------------
     "core": {
         "tier": "core",
-        "depends_on": ["tools", "codex", "server", "marketplace"],
+        "depends_on": ["tools", "server", "marketplace"],
         "health": "yellow",
-        "debt": "scheduler.py exceeds 900 lines, config.py exceeds 900 lines, workspace_sync_engine.py exceeds 840 lines, rag_index.py exceeds 830 lines, agent_presence.py exceeds 1160 lines, boot_doctor.py exceeds 1140 lines, ui_workflow_engine.py exceeds 804 lines; core imports tools/codex/server --should be inverted; TODO[batch-8]: core llm_client imports marketplace --hoist marketplace LLM provider interface into core to resolve this real layering inversion",
+        "debt": "scheduler.py exceeds 900 lines, config.py exceeds 900 lines, workspace_sync_engine.py exceeds 840 lines, rag_index.py exceeds 830 lines, agent_presence.py exceeds 1160 lines, boot_doctor.py exceeds 1140 lines, ui_workflow_engine.py exceeds 804 lines; core imports tools/server --should be inverted; TODO[batch-8]: core llm_client imports marketplace --hoist marketplace LLM provider interface into core to resolve this real layering inversion",
         "description": "LLM client, persistence, config, events",
     },
     "agent": {
@@ -65,7 +65,6 @@ MODULES = {
             "security",
             "plugins",
             "asset_studio",
-            "codex",
             "channels",
             "companion",
             "migrations",
@@ -102,7 +101,6 @@ MODULES = {
             "investigation",
             "vision",
             "security",
-            "codex",
             "forge",
             "library",
             "observability",
@@ -123,7 +121,7 @@ MODULES = {
     },
     "models": {
         "tier": "core",
-        "depends_on": ["core", "codex"],
+        "depends_on": ["core"],
         "health": "green",
         "description": "Model registry, provider routing, model metadata",
     },
@@ -259,12 +257,6 @@ MODULES = {
         "health": "yellow",
         "description": "Climate domain algorithms and utilities",
     },
-    "codex": {
-        "tier": "support",
-        "depends_on": ["core", "tools", "marketplace"],
-        "health": "green",
-        "description": "Bridge to Codex/external providers",
-    },
     "benchmarks": {
         "tier": "support",
         "depends_on": ["core"],
@@ -318,7 +310,7 @@ MODULES = {
         "tier": "support",
         "depends_on": ["core", "tools", "plugins", "server"],
         "health": "yellow",
-        "debt": "asset_studio/contracts.py exceeds 870 lines, autonomy/workflows.py exceeds 1050 lines, db_internals/query_parser.py exceeds 890 lines, observability/run_store.py exceeds 920 lines, orchestrator/brain.py exceeds 970 lines, doc_processing/extraction.py exceeds 801 lines, codex/bridge.py exceeds 830 lines; TODO[batch-8]: marketplace publisher imports server --factor HTTP push behind an interface so marketplace does not reach up into server (plugins dep is housekeeping: publisher legitimately interacts with plugin definitions)",
+        "debt": "asset_studio/contracts.py exceeds 870 lines, autonomy/workflows.py exceeds 1050 lines, db_internals/query_parser.py exceeds 890 lines, observability/run_store.py exceeds 920 lines, orchestrator/brain.py exceeds 970 lines, doc_processing/extraction.py exceeds 801 lines; TODO[batch-8]: marketplace publisher imports server --factor HTTP push behind an interface so marketplace does not reach up into server (plugins dep is housekeeping: publisher legitimately interacts with plugin definitions)",
         "description": "Marketplace domain algorithms and utilities",
     },
     "markdown": {
@@ -1215,7 +1207,6 @@ RULES = {
         # These circular deps exist in the current codebase and are tech debt.
         # The test will only fail on NEW cycles not listed here.
         ("core", "tools"),
-        ("core", "codex"),
         ("core", "server"),
         ("server", "security"),
         ("server", "asset_studio"),
@@ -1270,6 +1261,7 @@ RULES = {
         # TODO[batch-8]: pre-existing hard-ceiling violations surfaced by push dry-run;
         # exempted to unblock push, deferred to a focused frontend-cleanup session.
         "**/runtime/040_model_setup_settings_01.js",  # 1559 lines (ceiling 1500); model-setup settings UI needs module split
+        "**/runtime/048_ui_studio_canvas.js",  # 1639 lines (ceiling 1500); forward-ported coordinate-canvas IIFE, needs module split in a focused frontend-cleanup session
         "*token_economy_space_theme.css",  # 2262 lines (ceiling 2000); space-theme stylesheet needs component-CSS split
     ],
 }

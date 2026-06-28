@@ -365,6 +365,15 @@ async def stream_openai_codex(
                     )
 
                 tool_calls: dict[str, ToolCallAccumulator] = {}
+                # Responses-API function calls carry TWO ids: an item id ("fc_...")
+                # and a call_id ("call_..."). output_item.added/done expose both, but
+                # the argument-delta events reference only the item id. We MUST key
+                # every tool call by the canonical call_id (what function_call_output
+                # references back), so map item_id -> call_id and resolve deltas
+                # through it. Otherwise the deltas spawn a second, mis-keyed tool call
+                # that leaks into history and breaks the next turn with
+                # "No tool call found for function call output".
+                item_to_call: dict[str, str] = {}
                 event_name = ""
                 data_lines: list[str] = []
                 done_emitted = False
@@ -429,14 +438,18 @@ async def stream_openai_codex(
                     elif event_type == "response.output_item.added":
                         item = _response_item(chunk)
                         if str(item.get("type") or "") == "function_call":
-                            call_id = str(item.get("call_id") or item.get("id") or "").strip()
+                            item_id = str(item.get("id") or "").strip()
+                            call_id = str(item.get("call_id") or item_id or "").strip()
+                            if item_id and call_id:
+                                item_to_call[item_id] = call_id
                             raw_name = str(item.get("name") or "").strip()
                             name = owner._openai_tool_name_map.get(raw_name, raw_name)
                             if call_id and call_id not in tool_calls:
                                 tool_calls[call_id] = ToolCallAccumulator(id=call_id, name=name)
                                 events.append(StreamEvent(type="tool_call_start", data={"id": call_id, "name": name}))
                     elif event_type == "response.function_call_arguments.delta":
-                        call_id = str(chunk.get("call_id") or chunk.get("item_id") or "").strip()
+                        raw_ref = str(chunk.get("call_id") or chunk.get("item_id") or "").strip()
+                        call_id = item_to_call.get(raw_ref, raw_ref)
                         if not call_id and len(tool_calls) == 1:
                             call_id = next(iter(tool_calls.keys()))
                         delta = str(chunk.get("delta") or "")

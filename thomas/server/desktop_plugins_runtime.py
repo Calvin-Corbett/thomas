@@ -169,7 +169,11 @@ def _normalize_installed_record(record: dict[str, Any]) -> dict[str, Any]:
     return {
         "plugin_id": plugin_id,
         "kind": _safe_text(record.get("kind")) or "desktop_plugin",
-        "marketplace_type": _safe_text(record.get("marketplace_type")) or "plugin",
+        # Pre-rename installs stored "command_center"; serve the canonical name.
+        "marketplace_type": {"command_center": "app"}.get(
+            _safe_text(record.get("marketplace_type")).lower(), _safe_text(record.get("marketplace_type"))
+        )
+        or "plugin",
         "mode_id": mode_id,
         "workspace_id": mode_id if left_nav_behavior == "workspace" else "",
         "display_name": _safe_text(record.get("display_name")) or plugin_id,
@@ -180,7 +184,11 @@ def _normalize_installed_record(record: dict[str, Any]) -> dict[str, Any]:
         "tags": _string_list(record.get("tags")),
         "requires": _string_list(record.get("requires")),
         "left_nav_behavior": left_nav_behavior if left_nav_behavior in _LEFT_NAV_BEHAVIORS else "none",
-        "default_nav_section": _safe_text(record.get("default_nav_section")).lower() or "installed",
+        "default_nav_section": {"command_centers": "apps"}.get(
+            _safe_text(record.get("default_nav_section")).lower(),
+            _safe_text(record.get("default_nav_section")).lower(),
+        )
+        or "installed",
         "default_nav_order": _safe_int(record.get("default_nav_order"), 900),
         "surface_title": _safe_text(surface.get("title")) or _safe_text(record.get("display_name")) or plugin_id,
         "surface_mode": _safe_text(surface.get("surface_mode")) or "immersive",
@@ -645,12 +653,12 @@ def create_official_hosted_manifest(
     surface_mode: str = "immersive",
     subtitle: str = "",
     capabilities: list[str] | None = None,
-    marketplace_type: str = "command_center",
+    marketplace_type: str = "app",
     categories: list[str] | None = None,
     tags: list[str] | None = None,
     requires: list[str] | None = None,
     left_nav_behavior: str = "workspace",
-    default_nav_section: str = "command_centers",
+    default_nav_section: str = "apps",
     default_nav_order: int = 400,
 ) -> dict[str, Any]:
     bundle_bytes = build_plugin_bundle_bytes(plugin_dir, plugin_id)

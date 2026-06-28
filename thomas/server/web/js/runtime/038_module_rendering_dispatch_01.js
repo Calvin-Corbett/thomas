@@ -918,6 +918,13 @@ function officeCollectRuntimeSnapshot(now = performance.now()) {
                     color: safeString(agent?.color),
                     costume: safeString(agent?.costume || 'none').toLowerCase(),
                     tint: safeString(agent?.tint || officeAgentTintFromColor(agent?.color)).toLowerCase(),
+                    specialty: safeString(agent?.specialty || 'Generalist').slice(0, 64),
+                    personality: safeString(agent?.personality || 'Helpful, direct, and persistent.').slice(0, 160),
+                    source: safeString(agent?.source || 'seed'),
+                    remoteIds: agent?.remoteIds && typeof agent.remoteIds === 'object' ? { ...agent.remoteIds } : {},
+                    remoteRoomId: safeString(agent?.remoteRoomId),
+                    remoteStatus: safeString(agent?.remoteStatus),
+                    lastMissionSummary: safeString(agent?.lastMissionSummary).slice(0, 180),
                     x: Number(agent?.x) || 0,
                     y: Number(agent?.y) || 0,
                     targetX: Number(agent?.targetX) || 0,
@@ -1013,6 +1020,13 @@ function officeApplyRuntimeSnapshot(snapshotRaw, now = performance.now()) {
             agent.costume = costume;
         }
         agent.tint = safeString(saved?.tint).toLowerCase() || officeAgentTintFromColor(agent.color);
+        agent.specialty = safeString(saved?.specialty || agent.specialty || 'Generalist').slice(0, 64);
+        agent.personality = safeString(saved?.personality || agent.personality || 'Helpful, direct, and persistent.').slice(0, 160);
+        agent.source = safeString(saved?.source || agent.source || 'seed');
+        agent.remoteIds = saved?.remoteIds && typeof saved.remoteIds === 'object' ? { ...saved.remoteIds } : (agent.remoteIds || {});
+        agent.remoteRoomId = safeString(saved?.remoteRoomId || agent.remoteRoomId);
+        agent.remoteStatus = safeString(saved?.remoteStatus || agent.remoteStatus);
+        agent.lastMissionSummary = safeString(saved?.lastMissionSummary || agent.lastMissionSummary).slice(0, 180);
         agent.speed = officeClamp(Number(saved?.speed) || agent.speed, 1.3, 5.2);
         agent.facing = Number(saved?.facing) >= 0 ? 1 : -1;
         agent.laneBias = officeClamp(Number(saved?.laneBias) || 0, -1, 1);
@@ -1169,7 +1183,7 @@ function officeApplyStoredAgentPrefs(agents, prefsRaw) {
             agent.color = color;
         }
         const costume = safeString(saved.costume).toLowerCase();
-        if (new Set(['none', 'cap', 'visor', 'headset', 'bowtie']).has(costume)) {
+        if (new Set(OFFICE_AGENT_COSTUME_POOL || ['none', 'cap', 'visor', 'headset', 'bowtie']).has(costume)) {
             agent.costume = costume;
         }
         const tint = safeString(saved.tint).toLowerCase();
@@ -1177,6 +1191,19 @@ function officeApplyStoredAgentPrefs(agents, prefsRaw) {
             agent.tint = tint;
         } else {
             agent.tint = officeAgentTintFromColor(agent.color);
+        }
+        agent.specialty = safeString(saved.specialty || agent.specialty || 'Generalist').slice(0, 64);
+        agent.personality = safeString(saved.personality || agent.personality || 'Helpful, direct, and persistent.').slice(0, 160);
+        agent.chatProfile = safeString(saved.chatProfile || agent.chatProfile).slice(0, 80);
+        agent.chatModelId = safeString(saved.chatModelId || agent.chatModelId).slice(0, 120);
+        if (Array.isArray(saved.officeChatHistory)) {
+            agent.officeChatHistory = saved.officeChatHistory.slice(-18).map((entry) => ({
+                role: safeString(entry?.role || 'agent').slice(0, 16),
+                text: safeString(entry?.text).replace(/\s+/g, ' ').trim().slice(0, 600),
+                at: Number(entry?.at) || Date.now(),
+                timeLabel: safeString(entry?.timeLabel).slice(0, 24)
+                    || new Date(Number(entry?.at) || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+            })).filter((entry) => entry.text);
         }
     });
 }

@@ -2,14 +2,23 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_DIR = REPO_ROOT / "thomas" / "server" / "web" / "js" / "runtime"
+MARKETPLACE_RUNTIME_JS = RUNTIME_DIR / "025_module_system_command_center_01.js"
+DISPATCH_RUNTIME_JS = RUNTIME_DIR / "039_module_rendering_dispatch_02.js"
+ACTION_RUNTIME_JS = RUNTIME_DIR / "013_actions_interactions_02.js"
 CHAT_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "chat-game-animations.css"
 SUGGESTION_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "easy-setup-ui.css"
 LAYOUT_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "layout-app-shell.css"
 ROBOT_STATUS_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "tool-calls-chat.css"
 ROBOT_DOCK_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "chat-robot-animations.css"
 ROBOT_PORTAL_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "robot-portal-animations.css"
+TOKEN_ECONOMY_JS = REPO_ROOT / "thomas" / "server" / "web" / "js" / "token_economy.js"
+TOKEN_ECONOMY_SPACE_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "token_economy_space_theme.css"
+MY_STUFF_HTML = REPO_ROOT / "thomas" / "server" / "web" / "static" / "my_stuff.html"
+MY_STUFF_JS = REPO_ROOT / "thomas" / "server" / "web" / "static" / "my_stuff.script01.js"
+MY_STUFF_CSS = REPO_ROOT / "thomas" / "server" / "web" / "static" / "my_stuff.style01.css"
+APP_RUNTIME_JS = REPO_ROOT / "thomas" / "server" / "web" / "js" / "app_runtime_primary.mjs"
 BRAIN_PY = REPO_ROOT / "thomas" / "marketplace" / "orchestrator" / "brain.py"
-COMPONENT_ICON_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "composer-attachments.css"
+COMPONENT_ICON_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "component_styles" / "composer-attachments.css"
 INDEX_HTML = REPO_ROOT / "thomas" / "server" / "web" / "index.html"
 TOGGLE_SIDEBAR_MODULE = REPO_ROOT / "thomas" / "server" / "web" / "js" / "modules" / "060_togglesidebarcollapsed.js"
 TOGGLE_SIDEBAR_RUNTIME_MODULE = (
@@ -167,23 +176,168 @@ def test_sidebar_chat_label_and_search_shell_contract() -> None:
     assert "if (globalSearchInput) globalSearchInput.focus();" not in js
 
 
-def test_chat_robot_uses_shared_pixel_agent_markup() -> None:
+def test_chat_status_suppresses_ambient_robots_and_keeps_game_player() -> None:
     js = _read_all_runtime_js()
     status_css = _read(ROBOT_STATUS_CSS)
-    dock_css = _read(ROBOT_DOCK_CSS)
+    composer_css = _read(COMPONENT_ICON_CSS)
+    index_html = _read(INDEX_HTML)
+    token_js = _read(TOKEN_ECONOMY_JS)
+    token_css = _read(TOKEN_ECONOMY_SPACE_CSS)
 
-    assert "landed.className = 'chat-robot-landed pixel-agent pixel-agent-blue';" in js
-    assert 'class="chat-robot-agent chat-robot-world-agent"' in js
-    assert 'class="office-agent-head"' in js
-    assert 'class="office-agent-body"' in js
-    assert 'class="office-agent-leg office-agent-leg-left"' in js
+    assert 'class="chat-game-bot-wrap" id="chatGameBotWrap"' in index_html
+    assert 'class="chat-game-player-avatar" id="chatGameBot"' in index_html
+    assert 'class="office-pixel-agent costume-headset" id="chatGameBot"' not in index_html
+    assert 'id="chatGameControls"' in index_html
+    assert ".chat-game-bot-wrap {" in composer_css
+    assert "display: block;" in composer_css
+    assert ".chat-game-player-avatar" in composer_css
+    assert ".chat-game-bot-wrap .office-pixel-agent" not in composer_css
 
-    assert ".chat-robot-agent .agent-head {" in status_css
-    assert ".chat-robot-agent .agent-body {" in status_css
-    assert ".chat-robot-agent .agent-leg {" in status_css
-    assert ".chat-robot-landed .agent-head {" in dock_css
-    assert ".chat-robot-landed .agent-body {" in dock_css
-    assert ".chat-robot-landed .agent-leg {" in dock_css
+    assert "function chatWorldEnsureUi() {" in js
+    assert "removeChatAgentPresenceUi();" in js
+    assert 'class="chat-robot-agent chat-robot-world-agent"' not in js
+    assert ".assistant-work-status-text" in status_css
+    assert ".assistant-work-status-timer" in status_css
+    assert "#chatAgentPresence," in status_css
+    assert ".chat-robot-world," in status_css
+    assert "body.te-nav-chat #officeScene .office-agent" in status_css
+
+    assert "_removeIdleThomas();" in token_js
+    assert "_stopAmbientBots();" in token_js
+    assert "#te-idle-thomas," in token_css
+    assert ".te-ambient-bot," in token_css
+    assert "body.te-space-active .robot-alert-stage" in token_css
+
+
+def test_token_economy_leads_with_tokens_and_runtime_profiles() -> None:
+    token_js = _read(TOKEN_ECONOMY_JS)
+
+    assert "TOKEN HISTORY" in token_js
+    assert "PROFILE MATRIX" in token_js
+    assert "data-te-hdollar>TOK" in token_js
+    assert "function modelTokens(detail)" in token_js
+    assert "api('/api/runtime/matrix')" in token_js
+    assert "SESSION TOKENS" in token_js
+    assert "AVG TOK/CALL" in token_js
+    assert "streaming token events" in token_js
+    assert "function paintPricing()" in token_js
+    assert "SPEND HISTORY" not in token_js
+    assert "RATE CARD" not in token_js
+
+
+def test_installed_plugin_nav_uses_fast_boot_refresh() -> None:
+    marketplace_js = _read(MARKETPLACE_RUNTIME_JS)
+    dispatch_js = _read(DISPATCH_RUNTIME_JS)
+
+    assert "function moduleRefreshInstalledPluginNav(" in marketplace_js
+    assert "moduleFetchJsonSafe('/api/marketplace/installed')" in marketplace_js
+    assert "moduleSetInstalledPluginRows(rows);" in marketplace_js
+    assert "moduleSetInstalledPluginRows(installedPlugins, { render: false });" in marketplace_js
+    assert "void moduleRefreshInstalledPluginNav({ force: true });" in dispatch_js
+    assert dispatch_js.index("void moduleRefreshInstalledPluginNav({ force: true });") < dispatch_js.index(
+        "void moduleRefreshMarketplace({ force: true });"
+    )
+
+
+def test_my_stuff_indexes_installed_workspace_plugins() -> None:
+    html = _read(MY_STUFF_HTML)
+    js = _read(MY_STUFF_JS)
+    css = _read(MY_STUFF_CSS)
+
+    assert "20260618-paper-apps-4" in html
+    assert 'id="installedAppsShelf"' in html
+    assert '<section class="stuff-installed-shelf" id="installedAppsShelf"' in html
+    assert "Loading app workspaces..." in html
+    assert "Installed Apps" in html
+    assert "installedPlugins: []" in js
+    assert "fetchJson(window.location.origin + '/api/marketplace/installed')" in js
+    assert "function installedPluginsFromPayload(payload)" in js
+    assert "async function refreshInstalledPlugins()" in js
+    assert "var installedPromise = refreshInstalledPlugins();" in js
+    assert "await installedPromise;" in js
+    assert js.index("var installedPromise = refreshInstalledPlugins();") < js.index("fetchJson('/api/local/projects')")
+    assert "function installedWorkspacePlugins()" in js
+    assert "function renderInstalledAppsShelf()" in js
+    assert "elements.installedAppsShelf.classList.remove('hidden');" in js
+    assert "function renderInstalledAppCard(plugin)" in js
+    assert "function pluginShelfRank(plugin)" in js
+    assert "paper-trading" in js
+    assert "function reservedModuleSlots()" in js
+    assert "function projectBoardPosition(project, moduleSlots)" in js
+    assert "+ cards;" in js
+    assert "left_nav_behavior).toLowerCase() !== 'workspace'" in js
+    assert "data-plugin-mode" in js
+    assert "window.parent.setSidebarNavMode(mode);" in js
+    assert "My Stuff ready. '" in js
+    assert "installed app' + (moduleCount === 1 ? '' : 's')" in js
+    assert "project' + (state.projects.length === 1 ? '' : 's')" in js
+    assert "+ moduleCards" not in js
+    assert ".stuff-module-app {" in css
+    assert ".stuff-module-icon {" in css
+    assert ".stuff-installed-shelf {" in css
+    assert ".stuff-installed-app {" in css
+    runtime_07 = _read(RUNTIME_DIR / "035_workbench_editors_07.js")
+    runtime_08 = _read(RUNTIME_DIR / "036_workbench_editors_08.js")
+    assert "src: '/static/my_stuff.html?v=20260618-paper-apps-4'" in runtime_07
+    assert "src: '/static/my_stuff.html?v=20260618-paper-apps-4'" in runtime_08
+    assert "/static/static/my_stuff.html" not in runtime_07
+    assert "/static/static/my_stuff.html" not in runtime_08
+
+
+def test_paper_trading_is_promoted_high_in_workspace_nav() -> None:
+    runtime_07 = _read(RUNTIME_DIR / "035_workbench_editors_07.js")
+    bundled_runtime = _read(APP_RUNTIME_JS)
+
+    for js in (runtime_07, bundled_runtime):
+        assert "promoteAfter('paper_trading', 'mission');" in js
+        assert "const ordered = stored.concat(appended);" in js
+        assert "return ordered;" in js
+
+
+def test_chat_games_keep_deterministic_proof_hooks_and_neutral_actor_payload() -> None:
+    game_js = _read(RUNTIME_DIR / "010_chat_games_01.js")
+    hook_js = _read(RUNTIME_DIR / "011_chat_games_02.js")
+    module_js = _read(REPO_ROOT / "thomas" / "server" / "web" / "js" / "modules" / "013_chatgamestepdinogameover.js")
+    source_module_js = _read(
+        REPO_ROOT / "thomas" / "server" / "web" / "js" / "src" / "runtime_modules" / "013_chatgamestepdinogameover.js"
+    )
+
+    assert "function chatGameRenderToTextPayload()" in game_js
+    assert "function chatGameAdvanceTime(ms = 16)" in hook_js
+    assert "function chatGameBootFromUrl()" in hook_js
+    assert "params.get('game') || params.get('chat_game')" in hook_js
+    assert "window.render_game_to_text = chatGameRenderToTextPayload;" in hook_js
+    assert "window.advanceTime = chatGameAdvanceTime;" in hook_js
+
+    render_start = game_js.index("function chatGameRenderToTextPayload()")
+    render_block = game_js[render_start:]
+    assert "actor: {" in render_block
+    assert "bot: {" not in render_block
+    assert "actor: {" in module_js
+    assert "bot: {" not in module_js
+    assert "actor: {" in source_module_js
+    assert "bot: {" not in source_module_js
+
+
+def test_failed_delegation_cards_prefer_failure_progress_over_title() -> None:
+    js = _read(ACTION_RUNTIME_JS)
+    setup_js = _read(RUNTIME_DIR / "003_easy_setup_onboarding_01.js")
+    continuity_js = _read(RUNTIME_DIR / "006_easy_setup_onboarding_04.js")
+    primary_js = _read(REPO_ROOT / "thomas" / "server" / "web" / "js" / "app_runtime_primary.mjs")
+
+    assert "function _delegationTask(evt) {" in js
+    assert "safeString(evt?.type) === 'delegation_failed'" in js
+    assert "safeString(evt?.state).toLowerCase() === 'failed'" in js
+    assert "safeString(evt.last_progress || evt.summary || evt.text || evt.task || evt.current_task)" in js
+    assert "safeString(evt.summary || evt.last_progress || evt.text || evt.task || evt.current_task)" in js
+    assert "|| _boundExecutionIds.size === 0" in js
+    assert "appendDelegationResultMessage(evt, { status, summary: cleanText });" in js
+    assert "summary = summary.replace(/no a first event/gi, 'no first event');" in setup_js
+    assert "void persistActiveChat({ quiet: true });" in setup_js
+    assert "function appendTerminalDelegationActivityResults(activity)" in continuity_js
+    assert "appendTerminalDelegationActivityResults(activity);" in continuity_js
+    assert "function appendDelegationResultMessage(evt, options = {})" in primary_js
+    assert "function appendTerminalDelegationActivityResults(activity)" in primary_js
 
 
 def test_model_setup_surface_uses_compact_centered_chip_and_themed_provider_dropdown() -> None:

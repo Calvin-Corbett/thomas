@@ -1,7 +1,7 @@
 /* components.css */
 /* Each import maps to a functional area of the UI. */
 /* 1 — Composer & attachments */
-@import url("./components_parts/composer-attachments.css?v=20260401-rename");
+@import url("./component_styles/composer-attachments.css?v=20260401-rename");
 @import url("./components_parts/chat-game-animations.css?v=20260401-rename");
 /* 2 — Settings & setup */
 @import url("./components_parts/settings-panel.css?v=20260401-rename");

@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -16,6 +18,35 @@ if str(_REPO_ROOT) not in sys.path:
 from thomas.core import agent_presence
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+def _spawn_presence_monitor(repo: Path, session_id: str, parent_pid: int, interval: int) -> None:
+    """Launch the heartbeat liveness daemon detached: it refreshes this session's
+    heartbeat until parent_pid exits, then the claim auto-expires offline. Best-effort."""
+    if not session_id:
+        return
+    monitor = Path(__file__).with_name("presence_monitor.py")
+    cmd = [
+        sys.executable,
+        str(monitor),
+        "--repo",
+        str(repo),
+        "--session-id",
+        session_id,
+        "--parent-pid",
+        str(int(parent_pid)),
+        "--interval",
+        str(int(interval)),
+    ]
+    kwargs: dict = {"cwd": str(repo), "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    if os.name == "nt":
+        kwargs["creationflags"] = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    else:
+        kwargs["start_new_session"] = True
+    try:
+        subprocess.Popen(cmd, **kwargs)  # noqa: S603 - fixed argv, no shell
+    except Exception:  # noqa: BLE001 - monitor is best-effort; never break register
+        pass
 
 
 def _format_status(payload: dict[str, object]) -> str:
@@ -114,6 +145,19 @@ def run(argv: Sequence[str] | None = None) -> int:
     register.add_argument("--task", default="")
     register.add_argument("--scope", default="")
     register.add_argument("--claim-status", default="")
+    register.add_argument(
+        "--monitor",
+        action="store_true",
+        help="Spawn a background heartbeat monitor that keeps this session alive until --parent-pid exits "
+        "(then the claim auto-expires offline).",
+    )
+    register.add_argument(
+        "--parent-pid",
+        type=int,
+        default=0,
+        help="PID whose exit ends the session (default: the process that invoked this CLI).",
+    )
+    register.add_argument("--monitor-interval", type=int, default=60)
     register.add_argument("--json", action="store_true")
 
     heartbeat = sub.add_parser("heartbeat", help="Refresh an existing presence session.")
@@ -150,6 +194,13 @@ def run(argv: Sequence[str] | None = None) -> int:
             claim_status=str(args.claim_status or ""),
             origin="agent_presence_cli",
         )
+        if getattr(args, "monitor", False):
+            _spawn_presence_monitor(
+                repo,
+                str(payload.get("session_id") or ""),
+                int(args.parent_pid or os.getppid()),
+                int(args.monitor_interval or 60),
+            )
         if args.json:
             print(json.dumps(payload, sort_keys=True))
         else:

@@ -1,6 +1,6 @@
 # Thomas Bible — what's actually in this repo
 
-> **Document last revised:** 2026-05-22 (Section 32 extended — added Pattern 19 on step-up surfacing: this codifies the dominant work pattern of the 0.16.2 → 0.16.7 arc. Each CI fix exposed the next layer of pre-existing failures hidden behind the step-up runner's first-failure-wins stop. Pattern 19 includes the classification decision tree for each surfaced failure (trusted-kernel bug vs. test-contract drift vs. marketplace-inventory bug vs. platform-specific test vs. sandbox-path leak) with the right disposition for each. Earlier same day: Pattern 18 on silent-fallback gate erosion: scripts/crew/brief/safety_config.py had ROOT=parent.parent (one too shallow), so CONFIG_PATH pointed at a non-existent scripts/crew/agent_safety.toml, every accessor silently returned defaults, three gates were running with diminished protection. Closes the 0.16.5 fix. Earlier same day: Pattern 17c on gates that require the leak strings (gate REQUIRED `<local Thomas workspace>` (`master`) in AGENTS.md); extended Pattern 16 with the `_via_main()` example from the 0.16.4 fix for `cli/_commands_models.py` after the cli/main.py monolith split. Pattern 17b on line-ending agnostic audit hashes (CRLF/LF Windows-local + Linux-CI hash divergence). Fix patterns for 0.16.3 / 0.16.4 / 0.16.5 documented. Previous revision 2026-05-21: Patterns 15–17 + per-user bible system clarification + 0.15.36–0.16.0 recovery arc summary. Patterns 15–16 document orphaned chat interceptors and test-patch reachability via sys.modules. Pattern 17 documents the pre-public cleanup tripwire and the lesson that CI gates depending on deleted artifacts are the second-order leak surface. 2026-05-22 clarification supersedes the private-only note: the checked-in Bible is the public baseline truth document, with per-install review state allowed locally. Previous revision 2026-05-20: Section 32 added — CI recovery patterns 8–14 documented from the dev-origin CI-debt clearance arc, 35+ commits 0.15.0–0.15.35. 2026-05-06 revision: Verification level nomenclature added; all 31 sections re-stamped honestly — see "Verification level nomenclature" section below for the marker definitions.)
+> **Document last revised:** 2026-06-25 (Section 12 code-search/RAG-search disambiguation completed. Section 16 marker enforcement restored: `docs/trash_marker.md` is the marker convention source, `scripts/forge/publish/preflight.py` rejects tracked `THOMAS_PRIVATE` files, and `scripts/forge/publish/snapshot.py` strips marker files from public snapshots. Previous same-day revision: Section 16 marker drift corrected after live code no longer matched an obsolete `scripts/_trash_markers.py` helper claim. Previous 2026-06-24 revision: Section 12 Q5 audit retired `thomas/tools/_test_bad_handler.py`, an unreferenced production-tree gate fixture. Previous 2026-05-22 revision: Section 32 extended — added Pattern 19 on step-up surfacing: this codifies the dominant work pattern of the 0.16.2 → 0.16.7 arc. Each CI fix exposed the next layer of pre-existing failures hidden behind the step-up runner's first-failure-wins stop. Pattern 19 includes the classification decision tree for each surfaced failure (trusted-kernel bug vs. test-contract drift vs. marketplace-inventory bug vs. platform-specific test vs. sandbox-path leak) with the right disposition for each. Earlier same day: Pattern 18 on silent-fallback gate erosion: scripts/crew/brief/safety_config.py had ROOT=parent.parent (one too shallow), so CONFIG_PATH pointed at a non-existent scripts/crew/agent_safety.toml, every accessor silently returned defaults, three gates were running with diminished protection. Closes the 0.16.5 fix. Earlier same day: Pattern 17c on gates that require the leak strings (gate REQUIRED `<local Thomas workspace>` (`master`) in AGENTS.md); extended Pattern 16 with the `_via_main()` example from the 0.16.4 fix for `cli/_commands_models.py` after the cli/main.py monolith split. Pattern 17b on line-ending agnostic audit hashes (CRLF/LF Windows-local + Linux-CI hash divergence). Fix patterns for 0.16.3 / 0.16.4 / 0.16.5 documented. Previous revision 2026-05-21: Patterns 15–17 + per-user bible system clarification + 0.15.36–0.16.0 recovery arc summary. Patterns 15–16 document orphaned chat interceptors and test-patch reachability via sys.modules. Pattern 17 documents the pre-public cleanup tripwire and the lesson that CI gates depending on deleted artifacts are the second-order leak surface. 2026-05-22 clarification supersedes the private-only note: the checked-in Bible is the public baseline truth document, with per-install review state allowed locally. Previous revision 2026-05-20: Section 32 added — CI recovery patterns 8–14 documented from the dev-origin CI-debt clearance arc, 35+ commits 0.15.0–0.15.35. 2026-05-06 revision: Verification level nomenclature added; all 31 sections re-stamped honestly — see "Verification level nomenclature" section below for the marker definitions.)
 >
 > **Purpose reminder:** This document is annotation, not a roadmap. It describes what is currently true about the codebase — Pattern findings, lying STATUS files, dead packages, file counts — without prescribing fixes. The "Planned features and open ideas" section near the bottom is the legitimate place for ideas; everything in Sections 1–31 is descriptive.
 >
@@ -356,9 +356,10 @@ Examples found 2026-05-06:
   accelerated catch-up work" — but the package is imported from
   5+ live consumers (heartbeat, config_validator, release_contracts,
   perf_profiler, soak_runner) per Section 24's verification.
-- `thomas/plugins/__init__.py` says "Plugin runtime package for
-  accelerated catch-up work" — but the package has 26 patch
-  files (Section 27) that are imported by the CLI command tree.
+- `thomas/plugins/__init__.py` previously said "Plugin runtime package
+  for accelerated catch-up work" despite 26 patch files (Section 27)
+  imported by the CLI command tree. Fixed 2026-06-25: it now describes
+  the runtime package and prompt-pack module catalog.
 - `thomas/core/testing_suite.py` (Section 25) opens with
   "MODULE STATUS: scaffold (assessed 2026-03-18)" + warns scores
   are unreliable — module runs but outputs shouldn't be trusted.
@@ -2756,6 +2757,7 @@ display. No second source of truth.
 ## 12. Tools & guardrails
 
 > Verified: 2026-05-06 ✅ DEEP — passes all 5 questions; "132 modules" docstring claim verified to ~136 active; guardrail asymmetry from Section 8 confirmed
+> Updated: 2026-06-24 by Codex Upgrade Worker. Scope: Q5 audit of `thomas/tools/_test_bad_handler.py`; `rg` found only Bible/changelog references, so the escaped production-tree fixture was retired.
 
 **Headline finding:** `GuardedToolRunner` (`thomas/agent/guarded_tools.py`,
 312 ln) is the canonical guardrail layer — it wraps every tool call
@@ -2869,12 +2871,10 @@ Every step that can fail or surface to the user goes through
   a fair label for the optional domain modules. The graceful
   fallback is implemented in one place and the list-of-tuples
   format is easy to scan.
-- ⚠️ **`thomas/tools/_test_bad_handler.py`** sits in the
-  production tools directory with a `_test_*` filename. Either
-  it's a deliberately-broken handler used to test the registry's
-  error handling (intentional), or it's a misnamed real test file
-  that escaped from `tests/` (slop). Verify and either rename or
-  retire.
+- ✅ **`thomas/tools/_test_bad_handler.py` was retired 2026-06-24.**
+  Q5 audit found no runtime importers or active tests; only the Bible
+  and changelog referenced it. It was an escaped production-tree fixture,
+  so the file was deleted instead of renamed.
 - ⚠️ **132 vs 136 docstring drift.** `tools.py:1` says "132 tool
   modules"; `_OPTIONAL_TOOL_MODULES` actually contains 136
   uncommented entries. Off by 4. Worth fixing the docstring (the
@@ -2905,9 +2905,9 @@ Every step that can fail or surface to the user goes through
   Bigger version of the same drift problem: docstring counts and
   feature lists rot the moment someone adds or removes an entry
   without updating prose. Worth a periodic audit.
-- ⚠️ **`thomas/tools/_test_bad_handler.py`** in production tree —
-  Q5 audit: is it intentional fixture code (rename without
-  underscore-prefix?) or escaped test (move to `tests/`)?
+- ✅ **`thomas/tools/_test_bad_handler.py` retired.** Q5 audit found
+  no live importers or tests, so the escaped production-tree fixture was
+  deleted on 2026-06-24.
 - ⚠️ **Per-module fallback hides import errors.** When a domain
   module's register function raises, the per-module log is
   DEBUG-level. Operators won't see "this 5GB module silently
@@ -3003,13 +3003,13 @@ Every step that can fail or surface to the user goes through
 | `thomas/tools/shell.py` | ✅ Conditional on `config.tools.allow_shell` |
 | `thomas/tools/git.py`, `git_conflicts.py`, `git_worktree.py` | ✅ Git surface |
 | `thomas/tools/browser.py`, `browser_*.py` (4 files) | ✅ Browser automation |
-| `thomas/tools/code_search.py`, `search_code.py` | ⚠️ Two similarly-named files — verify which is canonical |
+| `thomas/tools/code_search.py`, `search_code.py` | ✅ Disambiguated 2026-06-25: `code_search.py` registers sandboxed `code.*` tools; `search_code.py` is the legacy direct `rag.search` RAG adapter |
 | `thomas/tools/database.py`, `database_*.py`, `nl_to_sql.py` | ✅ DB surface |
 | `thomas/tools/email_*.py` (4 files) | ✅ Email |
 | `thomas/tools/dep_scanner*.py` (5 files) | ✅ Dependency scanning |
 | `thomas/tools/sandbox.py`, `sandbox_helpers.py` | ✅ Sandbox |
 | `thomas/tools/native_auth.py`, `windows_auth.py` | ✅ OS auth |
-| `thomas/tools/_test_bad_handler.py` | ⚠️ Test fixture or escaped test? Q5 audit pending |
+| `thomas/tools/_test_bad_handler.py` | ✅ Retired 2026-06-24 after Q5 audit found no live importers/tests |
 
 **Pattern 2 / placement issue:**
 
@@ -4120,8 +4120,11 @@ machinery:
    - Required branches missing.
    - Secret regexes match in any scanned file (`SECRET_PATTERNS`:
      OpenAI keys, GitHub PATs, AWS keys, etc.).
-   - `THOMAS_PRIVATE` marker check via
-     `scripts/_trash_markers.py:has_private_marker`.
+   - Tracked files with a line containing exactly `THOMAS_PRIVATE`,
+     `# THOMAS_PRIVATE`, `// THOMAS_PRIVATE`,
+     `/* THOMAS_PRIVATE */`, or `<!-- THOMAS_PRIVATE -->` fail preflight
+     (`_check_private_marker_files`). The marker reference doc itself is
+     exempt so the convention can ship publicly.
    - Optional deep checks: `check_repo_hygiene.py`,
      `check_release_hygiene.py`, `check_claim_integrity.py`,
      `security_audit.py` (line 387).
@@ -4130,8 +4133,11 @@ machinery:
    `PUBLIC_SNAPSHOT_EXCLUDED_PREFIXES` (`.thomas/`, `apps/site/`,
    `library/entries/`, `patches/`, `plans/`) and
    `PUBLIC_SNAPSHOT_EXCLUDED_PATHS` (specific paths like
-   `docs/WEBSITE_RELEASE_FLOW.md`). Honors per-file `THOMAS_PRIVATE`
-   markers — these are excluded regardless of path.
+   `docs/WEBSITE_RELEASE_FLOW.md`). Current code also strips files with a
+   line containing exactly `THOMAS_PRIVATE`, `# THOMAS_PRIVATE`,
+   `// THOMAS_PRIVATE`, `/* THOMAS_PRIVATE */`, or
+   `<!-- THOMAS_PRIVATE -->` during path filtering and after directory-copy
+   backfill.
 
 The end result: a clean tree the user can push to a public remote
 without leaking environment files, runtime caches, plans-internal
@@ -4147,10 +4153,13 @@ documents, or private library entries.
   preflight asserts `tools.allow_shell == false` for production
   reflects the threat model — a publicly-pushed Thomas should
   not auto-execute shell.
-- The `THOMAS_PRIVATE` marker is implemented in
-  `scripts/_trash_markers.py:has_private_marker` and consumed by
-  both preflight and snapshot. Section 8/9/10 confirmed this is
-  the file-level opt-out from public publish.
+- `docs/trash_marker.md` documents `THOMAS_PRIVATE` as the file-level
+  opt-out convention. `scripts/forge/publish/preflight.py` rejects tracked
+  marker files, and `scripts/forge/publish/snapshot.py` removes marker files
+  from public snapshots. Focused coverage lives in
+  `tests/test_github_publish_preflight.py`,
+  `tests/test_github_publish_snapshot.py`, and
+  `tests/test_trash_marker_doc.py`.
 - The `BLOCKED_TRACKED_EXACT` list includes 38 specific paths
   agents have learned to keep out of public publish — including
   test files like `tests/test_server_marketplace_routes.py` and
@@ -4170,8 +4179,8 @@ documents, or private library entries.
 - ✅ **`agent_commit.py`** orchestrates commit gating. Commit class
   → release-class detection → preflight invocation. Coherent flow.
 - ✅ **`THOMAS_TRASH` and `THOMAS_PRIVATE` markers** are documented
-  conventions (see `docs/trash_marker.md`); preflight + snapshot
-  honor both.
+  conventions (see `docs/trash_marker.md`). `THOMAS_PRIVATE` is enforced
+  in the public publish path by preflight rejection and snapshot stripping.
 - ⚠️ **README URL vs git remote mismatch.** README points users at
   `https://github.com/Calvin-Corbett/thomas/releases/...`
   (line 13); local git remote is `https://github.com/corbe/thomas.git`.
@@ -4262,9 +4271,9 @@ unambiguously good.**
 | Path | Lines | Status |
 |---|---|---|
 | [`scripts/crew/brief/commit.py`](../scripts/crew/brief/commit.py) | varies | 🛡️ Protected; recognizes `publish-candidate` and `public-release` commit classes |
-| [`scripts/forge/publish/preflight.py`](../scripts/forge/publish/preflight.py) | 541 | ✅ Multi-stage gate (blocklist, gitignore, prod.toml safety, secret regex, optional deep checks) |
-| [`scripts/forge/publish/snapshot.py`](../scripts/forge/publish/snapshot.py) | 289 | ✅ Generates a filtered public-tree snapshot |
-| [`scripts/_trash_markers.py`](../scripts/_trash_markers.py) | varies | ✅ `has_private_marker` — file-level `THOMAS_PRIVATE` opt-out |
+| [`scripts/forge/publish/preflight.py`](../scripts/forge/publish/preflight.py) | varies | ✅ Multi-stage gate (blocklist, `THOMAS_PRIVATE`, gitignore, prod.toml safety, secret regex, optional deep checks) |
+| [`scripts/forge/publish/snapshot.py`](../scripts/forge/publish/snapshot.py) | varies | ✅ Generates a filtered public-tree snapshot and strips `THOMAS_PRIVATE` files |
+| [`scripts/forge/publish/private_markers.py`](../scripts/forge/publish/private_markers.py) | varies | ✅ Shared `THOMAS_PRIVATE` marker forms and line parser; `docs/trash_marker.md` remains the convention source |
 
 **Optional deep-check scripts (invoked by preflight):**
 
@@ -6427,9 +6436,8 @@ by reading code:
   lists "First-party Thomas-native skills currently shipped."
 - **`thomas/plugins/`** is huge — **26 patch-numbered files
   (p097–p123)** plus regular files. Pattern 4 at scale, larger than
-  browser's 25-file p### tree (Section 14). Self-described as
-  "Plugin runtime package for accelerated catch-up work" —
-  another scaffold-claim.
+  browser's 25-file p### tree (Section 14). Its package docstring now
+  describes the runtime package and prompt-pack module catalog.
 - **`thomas/plugins_registry/`** is **NOT a Python package** —
   contains only `STATUS.md`, `api_keys.json`, `reports.json`. Data
   directory mislabeled as Python package (no `__init__.py`).
@@ -6457,10 +6465,9 @@ by reading code:
   `discover_native_skill_roots`, `discover_native_skills`,
   `resolve_builtin_promotion_root`, plus sandbox helpers
   (`create_skill_draft` etc.).
-- `thomas/plugins/__init__.py`: "Plugin runtime package for
-  accelerated catch-up work." Same scaffold-claim lie as
-  `thomas/browser/`, `thomas/system/`, `thomas/conversations/`.
-  Exports only `list_plugin_modules` from `catalog_index`.
+- `thomas/plugins/__init__.py`: "Plugin runtime package and prompt-pack
+  module catalog." Exports only `list_plugin_modules` from
+  `catalog_index`.
 - `thomas/plugins_registry/`: no `__init__.py`. Not a package.
 - `skills/` (repo root): 41 directories, each with a `SKILL.md`
   (Anthropic frontmatter format).
@@ -6509,8 +6516,8 @@ is infeasible.
   memory.v2 (1 dir) + browser (25 + 35 mirror) +
   workflow_profile (192) + secrets_v2 + workflow_v2 (1) +
   plugins (26 + cli mirror).
-- 🚨 **`thomas/plugins/` scaffold-claim docstring** — same lie
-  as browser/system/conversations packages. Pattern 5.
+- ✅ **`thomas/plugins/` package docstring is now honest** about the
+  runtime package and prompt-pack module catalog.
 - 🚨 **`thomas/plugins_registry/` mislabeled** — no `__init__.py`,
   just data files. Should be at `runtime/plugins_registry/` or
   similar runtime data location.
@@ -6521,7 +6528,7 @@ is infeasible.
 
 - 🚨 **`thomas/plugins/` 26 patch files** — same Pattern 4 trap
   as browser. Imports lock in patch numbers permanently.
-- 🚨 **`thomas/plugins/` scaffold-claim** — Pattern 5.
+- ✅ **`thomas/plugins/` package docstring** — corrected 2026-06-25.
 - 🚨 **`thomas/plugins_registry/`** — data dir pretending to be
   package. Move to `runtime/plugins_registry/`.
 - ⚠️ **`extensions/` 534 packs** — per-pack Q5 audit infeasible.
@@ -6544,8 +6551,7 @@ in disarray.**
   code is in Python. Anthropic SKILL.md format is a real
   standard. 41 skills delivered. This part of the ecosystem
   is healthy.
-- **Plugins**: 26-file p### tree with scaffold-claim docstring
-  + a non-Python registry directory + a 2-file repo-root
+- **Plugins**: 26-file p### tree + a non-Python registry directory + a 2-file repo-root
   plugins/ tree + a 5-file server/desktop_* family + a
   CLI mirror tree. **No clean canonical home.** This is the
   third-largest architectural debt after marketplace placement
@@ -6561,7 +6567,8 @@ in disarray.**
      same migration as Section 14's browser tree.
   3. **Move `thomas/plugins_registry/` to `runtime/plugins_registry/`**.
      It's not a package.
-  4. **Fix `thomas/plugins/__init__.py` scaffold-claim**.
+  4. **Keep `thomas/plugins/__init__.py` honest** after the 2026-06-25
+     docstring correction.
   5. **Verify `extensions/` 534 packs are generated**, not
      hand-edited. If hand-edited, that's an enormous
      maintenance burden.
@@ -6578,7 +6585,7 @@ in disarray.**
 | `skills/` (repo root, 41 packages) | ✅ Anthropic SKILL.md format; first-party shipped |
 | `skills/MIGRATION_INVENTORY.md` | ✅ Lists shipped skills |
 | **Plugins (disarray)** | |
-| `thomas/plugins/__init__.py` | 🚨 Scaffold-claim docstring (Pattern 5) |
+| `thomas/plugins/__init__.py` | ✅ Honest runtime catalog docstring; exports `list_plugin_modules` |
 | `thomas/plugins/p097–p123_*.py` (26 files) | 🚨 Pattern 4 patch tree |
 | `thomas/plugins/AGENTS.md`, `STATUS.md` | ⚠️ Default-suspect |
 | `thomas/plugins/benchmark_program.py`, `catalog_index.py`, `certification.py`, `competitor_evo_scope.py`, `competitor_intel_store.py`, `extension_catalog_runtime.py`, `external_skill_adapter.py`, `github_marketplace.py` | ⚠️ Q5 each |
@@ -8755,7 +8762,7 @@ cleanup pass. Bible does not prescribe action; just notes the state.
 | Pattern 5 (aspirational STATUS / placeholder source) | 7 self-admitted + 4 lying STATUS.md | Mostly honest STATUS surface; concentrated lies in orchestrator/specialists/skills/tray_agent |
 | Pattern 6 (lying GUARDRAILS) | 1 active + 1 fixed | app_parts/GUARDRAILS.md still active; server/GUARDRAILS.md fixed in Section 4 |
 | Pattern 7 (string-inspection tests) | 2 confirmed; 99 candidates | Sections 5, 7, 18 |
-| Pattern 8 (misleading package docstring on real code) | 4 confirmed | `thomas/browser/__init__.py`, `thomas/system/__init__.py`, `thomas/plugins/__init__.py`, `thomas/core/testing_suite.py` (self-admitted scaffold but running in prod) |
+| Pattern 8 (misleading package docstring on real code) | 4 originally confirmed; `thomas/plugins/__init__.py` fixed 2026-06-25 | `thomas/browser/__init__.py`, `thomas/system/__init__.py`, `thomas/plugins/__init__.py`, `thomas/core/testing_suite.py` (self-admitted scaffold but running in prod) |
 
 ---
 
@@ -9355,8 +9362,11 @@ that section's date.
     `_test_` prefix to clarify intent) or it's escaped test code
     that should live in `tests/`. Determine intent and either
     rename or move.
-  - **Status:** idea (small audit).
-  - **Source:** Section 12 verification, 2026-05-06.
+  - **Status:** done-2026-06-24; Q5 audit found no runtime importers
+    or active tests, only Bible/changelog references, so the escaped
+    production-tree fixture was deleted.
+  - **Source:** Section 12 verification, 2026-05-06; Codex Upgrade
+    Worker Q5 audit, 2026-06-24.
 
 - **Add boot-time WARN summary for low optional-tool load count (Section 12)**
   - **Why:** `register_all_optional_tools` logs per-module
@@ -9376,11 +9386,13 @@ that section's date.
   - **Source:** Section 12 verification, 2026-05-06.
 
 - **Disambiguate `code_search.py` vs `search_code.py` (Section 12)**
-  - **Why:** Two similarly-named files in `thomas/tools/`. Likely
-    one is canonical and the other is legacy or a thin wrapper.
-    Read both and consolidate.
-  - **Status:** idea (small audit).
-  - **Source:** Section 12 verification, 2026-05-06.
+  - **Why:** Two similarly-named files in `thomas/tools/` were easy
+    to mistake for duplicates. Live importers use `code_search.py`
+    for sandboxed `code.*` tools; `search_code.py` exposes the
+    legacy direct `rag.search` RAG adapter.
+  - **Status:** done-2026-06-25.
+  - **Source:** Section 12 verification, 2026-05-06; Codex Upgrade
+    Worker 10 audit, 2026-06-25.
 
 - **Surface effective tool count + per-task engine in Mission Control (Section 11/12)**
   - **Why:** Two operational gaps: (1) operators can't see how

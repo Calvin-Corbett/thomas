@@ -12,6 +12,13 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from scripts.forge.publish.private_markers import (
+    ACCEPTED_PRIVATE_MARKER_LINES,
+    PRIVATE_MARKER,
+    line_has_private_marker,
+    path_has_private_marker,
+)
+
 try:
     import tomllib
 except Exception:  # pragma: no cover
@@ -92,6 +99,7 @@ ALLOWLIST_FRAGMENTS = (
     "noreply",
     "local.invalid",
 )
+PRIVATE_MARKER_REPORT_LIMIT = 20
 
 
 def _run_git(args: Sequence[str], repo_root: Path) -> str:
@@ -194,6 +202,18 @@ def _scan_for_live_secrets(repo_root: Path, tracked: Sequence[str]) -> list[dict
                     )
                     break
     return findings
+
+
+def _line_has_private_marker(line: str) -> bool:
+    return line_has_private_marker(line)
+
+
+def _has_private_marker(repo_root: Path, rel_path: str) -> bool:
+    return path_has_private_marker(repo_root, rel_path)
+
+
+def _check_private_marker_files(repo_root: Path, tracked: Sequence[str]) -> list[str]:
+    return sorted({path for path in tracked if _has_private_marker(repo_root, path)})
 
 
 def _check_blocked_tracked_files(tracked: Sequence[str]) -> list[str]:
@@ -346,6 +366,14 @@ def run(argv: Sequence[str] | None = None) -> int:
             + (f", ... (+{len(blocked) - 8} more)" if len(blocked) > 8 else "")
         )
 
+    private_marker_files = _check_private_marker_files(repo_root, tracked)
+    if private_marker_files:
+        errors.append(
+            "tracked files marked THOMAS_PRIVATE must be excluded before publish: "
+            + ", ".join(private_marker_files[:8])
+            + (f", ... (+{len(private_marker_files) - 8} more)" if len(private_marker_files) > 8 else "")
+        )
+
     missing_gitignore = _check_gitignore_hardening(repo_root)
     if missing_gitignore:
         warnings.append("gitignore missing recommended entries: " + ", ".join(missing_gitignore))
@@ -391,6 +419,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         "required_branches": required_branches,
         "summary": {
             "tracked_file_count": len(tracked),
+            "private_marker_file_count": len(private_marker_files),
             "secret_finding_count": len(secret_findings),
             "error_count": len(errors),
             "warning_count": len(warnings),
@@ -400,6 +429,9 @@ def run(argv: Sequence[str] | None = None) -> int:
         "errors": errors,
         "warnings": warnings,
     }
+    if private_marker_files:
+        payload["private_marker_files"] = private_marker_files[:PRIVATE_MARKER_REPORT_LIMIT]
+        payload["private_marker_files_truncated"] = len(private_marker_files) > PRIVATE_MARKER_REPORT_LIMIT
     if secret_findings:
         payload["secret_findings"] = secret_findings[:20]
 

@@ -68,6 +68,24 @@ def _app_with_model(provider: str, model: str, profile: str) -> dict:
 
 
 class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
+    async def test_worker_emits_first_progress_before_app_config_access(self):
+        # A live provider/model setup can be slow. The delegation layer must get a
+        # first event before the worker touches config/model/tool construction, or
+        # self-development tasks can falsely fail as "no first event".
+        with TemporaryDirectory() as tmp:
+            stream = worker_runtime.run_agent_worker_events(
+                {},
+                prompt="x",
+                instructions="y",
+                work_dir=tmp,
+                profile="local",
+            ).__aiter__()
+            first = await stream.__anext__()
+            await stream.aclose()
+
+        self.assertEqual(first["type"], "progress")
+        self.assertIn("initializing", first["text"])
+
     async def _collect(self, provider: str, model: str, profile: str) -> list[dict]:
         _FakeLLM.instances = []
         with TemporaryDirectory() as tmp:
@@ -92,6 +110,7 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
     async def test_local_provider_runs_through_shared_path(self):
         events = await self._collect("ollama", "llama3", "local")
         types = [e["type"] for e in events]
+        self.assertEqual(types[:2], ["progress", "progress"])
         self.assertIn("tool_start", types)
         self.assertIn("tool_output", types)
         self.assertIn("done", types)
@@ -217,6 +236,54 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(brisk["token_economy"], "optimal")
         self.assertEqual(exhaustive["token_economy"], "max")
         self.assertLess(brisk["max_iterations"], exhaustive["max_iterations"])
+
+    async def test_worker_tolerates_missing_max_agent_iterations(self):
+        _FakeLLM.instances = []
+        with TemporaryDirectory() as tmp:
+            app = _app_with_model("anthropic", "claude", "local")
+            app[worker_runtime.APP_CONFIG].max_agent_iterations = None
+            with (
+                patch.object(worker_runtime, "LLMClient", _FakeLLM),
+                patch.object(worker_runtime, "AgentLoop", _FakeAgentLoop),
+                patch("thomas.server.app_helpers._build_tools", return_value=SimpleNamespace(_tools={})),
+            ):
+                events = [
+                    ev
+                    async for ev in worker_runtime.run_agent_worker_events(
+                        app,
+                        prompt="x",
+                        instructions="y",
+                        work_dir=tmp,
+                        profile="local",
+                        effort="exhaustive",
+                        autonomy_level=4,
+                    )
+                ]
+        self.assertIn("done", [event["type"] for event in events])
+        self.assertEqual(_FakeAgentLoop.run_kwargs["token_economy"], "max")
+        self.assertEqual(_FakeAgentLoop.run_kwargs["max_iterations"], 25)
+
+    async def test_worker_forwards_self_development_job_type(self):
+        _FakeLLM.instances = []
+        with TemporaryDirectory() as tmp:
+            app = _app_with_model("anthropic", "claude", "local")
+            with (
+                patch.object(worker_runtime, "LLMClient", _FakeLLM),
+                patch.object(worker_runtime, "AgentLoop", _FakeAgentLoop),
+                patch("thomas.server.app_helpers._build_tools", return_value=SimpleNamespace(_tools={})),
+            ):
+                _ = [
+                    ev
+                    async for ev in worker_runtime.run_agent_worker_events(
+                        app,
+                        prompt="fix Thomas in the live repo",
+                        instructions="Do live repo work.",
+                        work_dir=tmp,
+                        profile="local",
+                        job_type="self_development",
+                    )
+                ]
+        self.assertEqual(_FakeAgentLoop.run_kwargs["job_type"], "self_development")
 
 
 if __name__ == "__main__":

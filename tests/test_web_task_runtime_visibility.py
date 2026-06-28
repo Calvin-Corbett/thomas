@@ -80,12 +80,11 @@ def test_chat_presence_runtime_uses_platform_graph_and_motion_debug() -> None:
     assert "physicsNeedsSnap" in js
     assert "${officePixelAgentMarkup()}" in js
     assert ".task-continuity-panel {" in task_css
-    assert ".chat-robot-world {" in task_css
-    assert ".chat-robot-world-physics {" in task_css
+    assert ".chat-robot-world," in task_css
+    assert ".chat-robot-world-physics," in task_css
+    assert "display: none !important;" in task_css
     assert ".assistant-inline-thinking-status {" in task_css
-    assert ".chat-robot-world-route.route-door {" in task_css
-    assert ".chat-robot-world-route.route-ladder {" in task_css
-    assert ".chat-robot-world-route.route-lift" in task_css
+    assert ".chat-robot-world-route," in task_css
     assert ".mission-runtime-panel.is-focused {" in mission_css
     assert ".nav-item::before {" in sidebar_css
     assert "display: none;" in sidebar_css

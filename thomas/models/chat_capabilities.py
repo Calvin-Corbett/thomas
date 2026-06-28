@@ -27,15 +27,14 @@ def profile_chat_control_map(cfg: ModelConfig) -> dict[str, Any]:
     """Return chat control metadata for a profile."""
     provider = str(getattr(cfg, "provider", "") or "").strip().lower()
     reasoning_default = _normalize_reasoning_effort(getattr(cfg, "reasoning_effort", ""))
-    supports_reasoning_effort = bool(provider in {"codex", "openai_codex", "openai-codex"} or reasoning_default)
+    supports_reasoning_effort = bool(provider in {"openai_codex", "openai-codex"} or reasoning_default)
 
     model_controls: dict[str, Any] = {}
     if supports_reasoning_effort:
         model_controls["reasoning_effort"] = {
             "supported": True,
-            "label": "Reasoning" if provider in {"codex", "openai_codex", "openai-codex"} else "Reasoning Effort",
-            "default_value": reasoning_default
-            or ("medium" if provider in {"codex", "openai_codex", "openai-codex"} else ""),
+            "label": "Reasoning" if provider in {"openai_codex", "openai-codex"} else "Reasoning Effort",
+            "default_value": reasoning_default or ("medium" if provider in {"openai_codex", "openai-codex"} else ""),
             "options": [
                 _option("", "Auto"),
                 _option("low", "Low"),

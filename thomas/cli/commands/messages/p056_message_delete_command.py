@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import inspect
 import logging
 from collections.abc import Callable, Iterable
@@ -22,8 +23,10 @@ def _safe_add_argument(parser: Any, *args: Any, **kwargs: Any) -> None:
         return
     try:
         parser.add_argument(*args, **kwargs)
-    except ImportError:
-        # Duplicate option strings or incompatible parser type.
+    except (argparse.ArgumentError, TypeError, ValueError):
+        # Broad catch: argparse raises ArgumentError for duplicate options; duck-typed parsers may raise
+        # TypeError or ValueError. ImportError was incorrect here — ArgumentError is the real duplicate signal.
+        logger.debug("_safe_add_argument skipping duplicate/incompatible argument %r.", args, exc_info=True)
         return
 
 

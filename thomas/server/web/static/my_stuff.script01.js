@@ -1,10 +1,11 @@
 (function () {
     var CHAT_STORE_KEY = 'thomas.myStuff.projectChats.v2';
     var SESSION_STORE_KEY = 'thomas.myStuff.projectSessions.v2';
-    var SCRIPT_VERSION = '20260318-project-board-2';
+    var SCRIPT_VERSION = '20260625-forge+paper-1';
 
     var state = {
         projects: [],
+        installedPlugins: [],
         loading: false,
         activeProjectId: '',
         activeProject: null,
@@ -17,7 +18,8 @@
         detailResult: null,
         projectChats: readStore(CHAT_STORE_KEY),
         projectSessions: readStore(SESSION_STORE_KEY),
-        chatBusyProjectId: ''
+        chatBusyProjectId: '',
+        forgeBuilds: []
     };
 
     var SNAP = {
@@ -33,6 +35,10 @@
     var elements = {
         boardView: document.getElementById('boardView'),
         board: document.getElementById('board'),
+        forgeBuilds: document.getElementById('forgeBuilds'),
+        forgeBuildsGrid: document.getElementById('forgeBuildsGrid'),
+        installedAppsShelf: document.getElementById('installedAppsShelf'),
+        installedAppsList: document.getElementById('installedAppsList'),
         detailView: document.getElementById('detailView'),
         detailShell: document.getElementById('detailShell'),
         statusPill: document.getElementById('statusPill'),
@@ -109,6 +115,111 @@
         return 'info';
     }
 
+    function reservedModuleSlots() {
+        return 0;
+    }
+
+    function pluginPosition(plugin, index) {
+        var rawSlot = Number(plugin && plugin.my_stuff_slot);
+        if (Number.isFinite(rawSlot) && rawSlot > 0) return slotToPosition(rawSlot);
+        return slotToPosition(1 + Math.max(0, index || 0));
+    }
+
+    function pluginTone(plugin) {
+        return plugin && plugin.enabled === false ? 'warn' : 'good';
+    }
+
+    function pluginMeta(plugin) {
+        return safeString(plugin && plugin.subtitle)
+            || safeString(plugin && plugin.description)
+            || safeString(plugin && plugin.marketplace_type)
+            || 'Thomas module';
+    }
+
+    function pluginLabel(plugin) {
+        return safeString(plugin && plugin.display_name)
+            || safeString(plugin && plugin.surface_title)
+            || safeString(plugin && plugin.plugin_id)
+            || 'Module';
+    }
+
+    function pluginMode(plugin) {
+        return safeString(plugin && (plugin.mode_id || plugin.workspace_id || plugin.plugin_id)).toLowerCase();
+    }
+
+    function pluginId(plugin) {
+        return safeString(plugin && plugin.plugin_id).toLowerCase();
+    }
+
+    function pluginShelfRank(plugin) {
+        var id = pluginId(plugin);
+        var mode = pluginMode(plugin);
+        var label = pluginLabel(plugin).toLowerCase();
+        if (id === 'paper-trading' || mode === 'paper_trading' || label === 'paper trading') return 0;
+        if (label.indexOf('paper trading') >= 0) return 0;
+        if (id === 'freedom-transit' || mode === 'freedom_transit' || label === 'workforce') return 10;
+        return 100 + (Number(plugin && plugin.default_nav_order) || 900);
+    }
+
+    function pluginInitials(plugin) {
+        var label = pluginLabel(plugin).replace(/[^a-z0-9 ]/gi, ' ').trim();
+        if (!label) return 'APP';
+        var parts = label.split(/\s+/).filter(Boolean);
+        if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+        return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+    }
+
+    function installedWorkspacePlugins() {
+        var seen = {};
+        return (Array.isArray(state.installedPlugins) ? state.installedPlugins : [])
+            .filter(function (plugin) {
+                if (!plugin || plugin.enabled === false) return false;
+                if (safeString(plugin.left_nav_behavior).toLowerCase() !== 'workspace') return false;
+                var mode = pluginMode(plugin);
+                if (!mode || seen[mode]) return false;
+                seen[mode] = true;
+                return Boolean(pluginLabel(plugin));
+            })
+            .sort(function (left, right) {
+                var leftRank = pluginShelfRank(left);
+                var rightRank = pluginShelfRank(right);
+                if (leftRank !== rightRank) return leftRank - rightRank;
+                var leftOrder = Number(left && left.default_nav_order) || 900;
+                var rightOrder = Number(right && right.default_nav_order) || 900;
+                if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+                return pluginLabel(left).localeCompare(pluginLabel(right));
+            });
+    }
+
+    function findInstalledPluginByMode(modeRaw) {
+        var mode = safeString(modeRaw).toLowerCase();
+        if (!mode) return null;
+        return installedWorkspacePlugins().find(function (row) {
+            return pluginMode(row) === mode || safeString(row && row.workspace_id).toLowerCase() === mode;
+        }) || null;
+    }
+
+    function launchInstalledPlugin(plugin) {
+        var mode = pluginMode(plugin);
+        var url = safeString(plugin && plugin.surface_url);
+        try {
+            if (mode && window.parent && window.parent !== window && typeof window.parent.setSidebarNavMode === 'function') {
+                window.parent.setSidebarNavMode(mode);
+                return;
+            }
+        } catch (_error) {}
+        if (url) {
+            window.location.href = url;
+            return;
+        }
+        setStatus('That module does not expose a launch surface yet.', 'warn');
+    }
+
+    function launchInstalledPluginMode(modeRaw) {
+        var plugin = findInstalledPluginByMode(modeRaw);
+        launchInstalledPlugin(plugin || { mode_id: safeString(modeRaw) });
+    }
+
     function statusToneClass(tone) {
         var value = safeString(tone).toLowerCase();
         return value === 'good' || value === 'warn' || value === 'bad' || value === 'info' ? value : 'info';
@@ -149,6 +260,23 @@
         return payload || {};
     }
 
+    function installedPluginsFromPayload(payload) {
+        if (Array.isArray(payload && payload.plugins)) return payload.plugins;
+        if (Array.isArray(payload && payload.installed)) return payload.installed;
+        return [];
+    }
+
+    async function refreshInstalledPlugins() {
+        try {
+            var installedPayload = await fetchJson(window.location.origin + '/api/marketplace/installed');
+            state.installedPlugins = installedPluginsFromPayload(installedPayload);
+        } catch (_error) {
+            state.installedPlugins = [];
+        }
+        renderInstalledAppsShelf();
+        return state.installedPlugins;
+    }
+
     function slotToPosition(slot) {
         var normalized = Math.max(0, Number(slot) || 0);
         var col = normalized % SNAP.columns;
@@ -179,6 +307,25 @@
             x: Number(position.x) || SNAP.left,
             y: Number(position.y) || SNAP.top
         };
+    }
+
+    function projectBoardPosition(project, moduleSlots) {
+        var slot = Math.max(1, positionToSlot(projectPosition(project)));
+        return slotToPosition(slot + Math.max(0, Number(moduleSlots) || 0));
+    }
+
+    function storagePositionFromBoardPosition(position, moduleSlots) {
+        var slot = Math.max(1, positionToSlot(position) - Math.max(0, Number(moduleSlots) || 0));
+        return slotToPosition(slot);
+    }
+
+    function updateBoardMinHeight(positions) {
+        if (!elements.board) return;
+        var maxY = SNAP.top;
+        (Array.isArray(positions) ? positions : []).forEach(function (position) {
+            maxY = Math.max(maxY, Number(position && position.y) || SNAP.top);
+        });
+        elements.board.style.minHeight = String(Math.max(520, maxY + SNAP.tileHeight + SNAP.top)) + 'px';
     }
 
     function normalizeProjectPositions(projects) {
@@ -270,9 +417,11 @@
         if (!preserveStatus) {
             setStatus('Refreshing project board...', 'info');
         }
+        var installedPromise = refreshInstalledPlugins();
         try {
             var payload = await fetchJson('/api/local/projects');
             state.projects = Array.isArray(payload && payload.projects) ? payload.projects : [];
+            await installedPromise;
             var changedPositions = normalizeProjectPositions(state.projects);
             if (changedPositions.length) {
                 changedPositions.slice(0, 12).forEach(function (row) {
@@ -290,8 +439,17 @@
                 }
             }
             renderBoard();
+            void loadForgeBuilds();
             if (!preserveStatus) {
-                setStatus('Project board ready. ' + String(state.projects.length) + ' project' + (state.projects.length === 1 ? '' : 's') + ' loaded.', 'info');
+                var moduleCount = installedWorkspacePlugins().length;
+                setStatus(
+                    'My Stuff ready. '
+                    + String(moduleCount) + ' installed app' + (moduleCount === 1 ? '' : 's')
+                    + ' and '
+                    + String(state.projects.length) + ' project' + (state.projects.length === 1 ? '' : 's')
+                    + '/artifact' + (state.projects.length === 1 ? '' : 's') + ' loaded.',
+                    'info'
+                );
             } else {
                 renderStatus();
             }
@@ -354,18 +512,126 @@
         }
     }
 
+    // -- Forge Code build deliverables ("My Stuff" build outputs) -------------
+    // A run that produced a coherent deliverable (a built page/app, a doc, an
+    // image, a data file) is registered server-side at run completion; we surface
+    // those here so a build becomes a durable, openable thing -- not a diff that
+    // scrolled away. Additive + default-safe: if the endpoint is missing or empty
+    // (e.g. before any deliverable exists), the section stays hidden and the board
+    // is unchanged.
+    function forgeBuildGlyph(kind) {
+        var value = safeString(kind).toLowerCase();
+        if (value === 'html') return '🌐';
+        if (value === 'image') return '🖼️';
+        if (value === 'markdown') return '📄';
+        if (value === 'data') return '📊';
+        return '📦';
+    }
+
+    function renderForgeBuilds() {
+        if (!elements.forgeBuilds || !elements.forgeBuildsGrid) return;
+        var builds = Array.isArray(state.forgeBuilds) ? state.forgeBuilds : [];
+        if (!builds.length) {
+            elements.forgeBuilds.classList.add('hidden');
+            elements.forgeBuildsGrid.innerHTML = '';
+            return;
+        }
+        elements.forgeBuilds.classList.remove('hidden');
+        elements.forgeBuildsGrid.innerHTML = builds.map(function (build) {
+            var openUrl = safeString(build && build.open_url);
+            var deepLink = safeString(build && build.deep_link);
+            var kind = safeString(build && build.kind);
+            var title = safeString(build && build.title) || 'Build';
+            var thumb = safeString(build && build.thumbnail);
+            // A registered deliverable persists as a registry row + path; its built
+            // file can later be reverted/moved/deleted, leaving the card dangling so
+            // "Open" 404s. The server reports `available:false` for those. Render them
+            // greyed + non-opening and never load the (gone) artifact -- that load IS
+            // the 404. A missing flag is treated as available (older payloads).
+            var available = !build || build.available !== false;
+            var preview;
+            if (!available) {
+                preview = '<span class="stuff-forge-thumb-glyph">' + forgeBuildGlyph(kind) + '</span>';
+            } else if (kind === 'image' && thumb) {
+                preview = '<img class="stuff-forge-thumb-img" src="' + escapeHtml(thumb) + '" alt="' + escapeHtml(title) + ' preview" loading="lazy">';
+            } else if (kind === 'html' && openUrl) {
+                // A real, sandboxed live preview of the built page (opaque origin --
+                // it cannot reach this board's DOM), not a fabricated screenshot.
+                preview = '<iframe class="stuff-forge-thumb-frame" src="' + escapeHtml(openUrl) + '" sandbox="allow-scripts" loading="lazy" title="' + escapeHtml(title) + ' preview" tabindex="-1"></iframe>';
+            } else {
+                preview = '<span class="stuff-forge-thumb-glyph">' + forgeBuildGlyph(kind) + '</span>';
+            }
+            var metaLine = available
+                ? (escapeHtml(kind || 'deliverable') + ' · ' + escapeHtml(formatRelativeTime(build && (build.updated_at || build.created_at))))
+                : 'Unavailable · the built file was moved or deleted';
+            // Greyed via inline opacity (no extra stylesheet); the conversation
+            // deep-link still works since it does not depend on the built file.
+            return ''
+                + '<article class="stuff-forge-card"' + (available ? '' : ' style="opacity:0.6;"') + '>'
+                + '  <div class="stuff-forge-thumb">' + preview + '</div>'
+                + '  <div class="stuff-forge-body">'
+                + '    <h3 class="stuff-forge-title">' + escapeHtml(title) + '</h3>'
+                + '    <p class="stuff-forge-meta">' + metaLine + '</p>'
+                + '    <div class="stuff-forge-actions">'
+                +        (available && openUrl ? '<button class="stuff-btn stuff-btn-primary" type="button" data-forge-open="' + escapeHtml(openUrl) + '">Open</button>' : '')
+                +        (!available ? '<button class="stuff-btn stuff-btn-ghost" type="button" disabled aria-disabled="true" title="The built file is no longer on disk">Unavailable</button>' : '')
+                +        (deepLink ? '<button class="stuff-btn stuff-btn-ghost" type="button" data-forge-convo="' + escapeHtml(deepLink) + '">Open in Code</button>' : '')
+                + '    </div>'
+                + '  </div>'
+                + '</article>';
+        }).join('');
+    }
+
+    async function loadForgeBuilds() {
+        try {
+            var payload = await fetchJson('/api/evolve/agent/deliverables');
+            state.forgeBuilds = Array.isArray(payload && payload.deliverables) ? payload.deliverables : [];
+        } catch (_error) {
+            state.forgeBuilds = [];
+        }
+        renderForgeBuilds();
+    }
+
+    function renderInstalledAppCard(plugin) {
+        var mode = pluginMode(plugin);
+        var tone = pluginTone(plugin);
+        return ''
+            + '<button class="stuff-installed-app stuff-module-app" type="button" data-plugin-mode="' + escapeHtml(mode) + '">'
+            + '  <span class="stuff-installed-icon stuff-module-icon">' + escapeHtml(pluginInitials(plugin)) + '</span>'
+            + '  <span class="stuff-installed-copy">'
+            + '    <span class="stuff-app-title">' + escapeHtml(pluginLabel(plugin)) + '</span>'
+            + '    <span class="stuff-app-meta">' + escapeHtml(pluginMeta(plugin)) + '</span>'
+            + '  </span>'
+            + '  <span class="stuff-installed-action">Open</span>'
+            + '  <span class="stuff-app-badge is-' + escapeHtml(tone) + '">' + (tone === 'good' ? 'Installed' : 'Needs review') + '</span>'
+            + '</button>';
+    }
+
+    function renderInstalledAppsShelf() {
+        if (!elements.installedAppsShelf || !elements.installedAppsList) return;
+        var plugins = installedWorkspacePlugins();
+        elements.installedAppsShelf.classList.remove('hidden');
+        elements.installedAppsList.innerHTML = plugins.length
+            ? plugins.map(renderInstalledAppCard).join('')
+            : '<div class="stuff-installed-empty">No installed app workspaces yet.</div>';
+    }
+
     function renderBoard() {
         if (!elements.board) return;
         normalizeProjectPositions(state.projects);
+        renderInstalledAppsShelf();
+        var moduleSlots = reservedModuleSlots();
         var projects = Array.isArray(state.projects) ? state.projects.slice() : [];
         projects.sort(function (left, right) {
             var leftPos = projectPosition(left);
             var rightPos = projectPosition(right);
             return leftPos.y - rightPos.y || leftPos.x - rightPos.x || safeString(left && left.name).localeCompare(safeString(right && right.name));
         });
+        var renderedPositions = [slotToPosition(0)];
         var cards = projects.map(function (project) {
             var tone = toneForState(project && project.readiness && project.readiness.state);
-            var pos = projectPosition(project);
+            var pos = projectBoardPosition(project, moduleSlots);
+            renderedPositions.push(pos);
             var icon = project && project.board_icon && project.board_icon.emoji ? project.board_icon.emoji : '[]';
             var accent = project && project.board_icon && project.board_icon.accent ? project.board_icon.accent : '#4c8eff';
             return ''
@@ -384,6 +650,7 @@
             + '  <span class="stuff-app-meta">Link a local repo and let Thomas stage it.</span>'
             + '</button>'
             + cards;
+        updateBoardMinHeight(renderedPositions);
     }
 
     function actionButtonMarkup(action, label, extraClass, disabled) {
@@ -491,7 +758,9 @@
         });
         if (!seenActions.troubleshoot) actionsMarkup.push(actionButtonMarkup('troubleshoot', 'Troubleshoot', 'stuff-btn-ghost', false));
         actionsMarkup.push(actionButtonMarkup('refresh_read', 'Refresh Read', 'stuff-btn-ghost', false));
-        actionsMarkup.push(actionButtonMarkup('remove', 'Remove Project', 'stuff-btn-danger', false));
+        if (!(project && project.generated)) {
+            actionsMarkup.push(actionButtonMarkup('remove', 'Remove Project', 'stuff-btn-danger', false));
+        }
 
         var findings = Array.isArray(project && project.findings_preview) ? project.findings_preview : [];
         var commands = candidates.filter(function (candidate) {
@@ -796,11 +1065,14 @@
             },
             body: JSON.stringify({ action: action })
         });
+        var result = payload && payload.result ? payload.result : {};
+        if (safeString(result && result.kind) === 'open_url' && safeString(result && result.url)) {
+            window.open(safeString(result.url), '_blank', 'noopener');
+        }
         await refresh({ preserveStatus: true });
         await openProject(projectId, { preserveResult: true });
-        var result = payload && payload.result ? payload.result : {};
         var commandBits = Array.isArray(result && result.launched_command) ? result.launched_command.join(' ') : '';
-        var detail = safeString(commandBits || result && (result.command_display || result.target || result.cwd));
+        var detail = safeString(commandBits || result && (result.command_display || result.url || result.target || result.cwd));
         var title = action === 'launch'
             ? 'Launch started'
             : action === 'prepare'
@@ -917,11 +1189,16 @@
 
     if (elements.board) {
         elements.board.addEventListener('click', function (event) {
-            var target = event.target instanceof Element ? event.target.closest('[data-project-id], #boardImportHub') : null;
+            var target = event.target instanceof Element ? event.target.closest('[data-project-id], [data-plugin-mode], #boardImportHub') : null;
             if (!target) return;
             if (Date.now() < state.suppressClickUntil) return;
             if (target.id === 'boardImportHub') {
                 openImportSheet();
+                return;
+            }
+            var pluginMode = safeString(target.getAttribute('data-plugin-mode'));
+            if (pluginMode) {
+                launchInstalledPluginMode(pluginMode);
                 return;
             }
             var projectId = safeString(target.getAttribute('data-project-id'));
@@ -937,9 +1214,11 @@
                 return safeString(row && row.id) === projectId;
             });
             if (!project) return;
-            var pos = projectPosition(project);
+            var moduleSlots = reservedModuleSlots();
+            var pos = projectBoardPosition(project, moduleSlots);
             state.drag = {
                 id: projectId,
+                moduleSlots: moduleSlots,
                 pointerId: event.pointerId,
                 startX: event.clientX,
                 startY: event.clientY,
@@ -980,7 +1259,8 @@
             var deltaY = event.clientY - drag.startY;
             var snappedX = snapCoordinate(drag.baseX + deltaX, SNAP.left, SNAP.width, maxX);
             var snappedY = snapCoordinate(drag.baseY + deltaY, SNAP.top, SNAP.height, maxY);
-            var nextPos = findNextOpenPosition(drag.id, { x: snappedX, y: snappedY });
+            var storagePreferred = storagePositionFromBoardPosition({ x: snappedX, y: snappedY }, drag.moduleSlots);
+            var nextPos = findNextOpenPosition(drag.id, storagePreferred);
             state.projects = (state.projects || []).map(function (project) {
                 if (safeString(project && project.id) !== drag.id) return project;
                 project.board_position = { x: nextPos.x, y: nextPos.y };
@@ -1018,6 +1298,14 @@
         });
     }
 
+    if (elements.installedAppsList) {
+        elements.installedAppsList.addEventListener('click', function (event) {
+            var target = event.target instanceof Element ? event.target.closest('[data-plugin-mode]') : null;
+            if (!target) return;
+            launchInstalledPluginMode(target.getAttribute('data-plugin-mode'));
+        });
+    }
+
     if (elements.detailShell) {
         elements.detailShell.addEventListener('click', function (event) {
             var actionTarget = event.target instanceof Element ? event.target.closest('button[data-detail-action]') : null;
@@ -1048,8 +1336,33 @@
         });
     }
 
+    if (elements.forgeBuildsGrid) {
+        elements.forgeBuildsGrid.addEventListener('click', function (event) {
+            var openTarget = event.target instanceof Element ? event.target.closest('[data-forge-open]') : null;
+            if (openTarget) {
+                var openUrl = safeString(openTarget.getAttribute('data-forge-open'));
+                // Open the real built file (sandboxed artifact preview) in a new tab.
+                if (openUrl) window.open(openUrl, '_blank', 'noopener');
+                return;
+            }
+            var convoTarget = event.target instanceof Element ? event.target.closest('[data-forge-convo]') : null;
+            if (convoTarget) {
+                var deepLink = safeString(convoTarget.getAttribute('data-forge-convo'));
+                if (!deepLink) return;
+                // Deep-link back to the originating Code conversation. This board is
+                // an embedded surface; navigate the TOP window so Thomas Code opens.
+                try {
+                    (window.top || window).location.href = deepLink;
+                } catch (_error) {
+                    window.location.href = deepLink;
+                }
+            }
+        });
+    }
+
     renderStatus();
     renderBoard();
     openBoardView();
     void refresh();
+    void loadForgeBuilds();
 })();

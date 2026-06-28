@@ -106,7 +106,10 @@ def _changed_files(repo_root: Path, *, base: str | None = None, head: str | None
         text=True,
     )
     if proc.returncode != 0:
-        return []
+        # Fail CLOSED: a git error must not masquerade as an empty (clean) change set —
+        # that would silently PASS the gate. Surface it so run() FAILs instead of treating
+        # "0 files" and "git broke" the same.
+        raise RuntimeError(proc.stderr.strip() or "git diff --name-only failed")
     return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
 
 
@@ -206,7 +209,14 @@ def run(
     # (Windows sign-in, audited) to skip `thomas-commit-growth-guard`, or split
     # the change.
 
-    staged = _changed_files(repo_root, base=base, head=head) if base and head else _staged_files(repo_root)
+    try:
+        staged = _changed_files(repo_root, base=base, head=head) if base and head else _staged_files(repo_root)
+    except RuntimeError as exc:
+        if json_output:
+            print(json.dumps({"ok": False, "error": str(exc)}, indent=2))
+        else:
+            print(f"Commit growth guard: FAIL ({exc})")
+        return 1
     violations: list[dict] = []
     approved = False
     approval_trailer = ""

@@ -330,6 +330,11 @@ class ToolsConfig:
     allow_shell: bool = False
     shell_timeout: int = 30
     max_file_size: int = 5_000_000
+    # File-access permission ladder (see thomas/core/file_access.py): 0 read_only,
+    # 1 workspace (default, sandbox-confined), 2 project, 3 pc (your folders),
+    # 4 full. Dial up to let the worker write beyond its workspace (e.g. your
+    # Desktop). OS system dirs + Thomas's own code stay protected at every level.
+    file_access: int = 1
 
     @property
     def sandbox_path(self) -> Path:
@@ -423,7 +428,7 @@ class AppConfig:
     quality: QualityConfig = field(default_factory=QualityConfig)
     keybindings: dict[str, str] = field(default_factory=dict)
     unknown_core_keys: list[str] = field(default_factory=list)
-    default_model: str = "codex"
+    default_model: str = "openai_codex"
     max_agent_iterations: int = 10
     environment: str = "development"  # "development" or "production"
 
@@ -540,6 +545,7 @@ def _env_override(data: dict[str, Any], prefix: str = "THOMAS") -> None:
         "costs",
         "spend",
         "batching",
+        "evolve",  # [evolve.funnel] / [evolve.claude_bridge] engine config
     }
     allowed_sections = set(core_section_fields.keys()) | extension_sections
 
@@ -690,6 +696,7 @@ def _collect_unknown_core_keys(data: dict[str, Any]) -> list[str]:
         "costs",
         "spend",
         "batching",
+        "evolve",  # [evolve.funnel] / [evolve.claude_bridge] engine config
     }
 
     for key, val in data.items():
@@ -778,11 +785,14 @@ def load_config(
         if isinstance(mdata, dict):
             models[name] = _build_model_config(name, mdata)
 
-    # If no models defined, create a default codex profile (plus local fallback).
+    # If no models defined, create a default openai_codex profile (plus local
+    # fallback). openai_codex = ChatGPT-subscription OAuth (no API key) that calls
+    # the Responses API and CAN use Thomas's own tools/skills. The old "codex"
+    # bridge could not use Thomas's tools, so it is NOT the default anymore.
     if not models:
-        models["codex"] = ModelConfig(
-            name="codex",
-            provider="codex",
+        models["openai_codex"] = ModelConfig(
+            name="openai_codex",
+            provider="openai_codex",
             model="gpt-5.5",
             max_tokens=16384,
             context_window=200000,
@@ -841,11 +851,14 @@ def load_config(
 
     # Build tools config
     tools_data = data.get("tools", {})
+    from thomas.core.file_access import parse_file_access_level
+
     tools = ToolsConfig(
         sandbox_root=tools_data.get("sandbox_root", "."),
         allow_shell=tools_data.get("allow_shell", False),
         shell_timeout=tools_data.get("shell_timeout", 30),
         max_file_size=tools_data.get("max_file_size", 5_000_000),
+        file_access=parse_file_access_level(tools_data.get("file_access", "workspace")),
     )
 
     # Build failover config
@@ -916,7 +929,7 @@ def load_config(
         quality=quality,
         keybindings=keybindings,
         unknown_core_keys=unknown_core_keys,
-        default_model=data.get("default_model", "codex"),
+        default_model=data.get("default_model", "openai_codex"),
         max_agent_iterations=data.get("max_agent_iterations", 10),
         environment=environment,
     )

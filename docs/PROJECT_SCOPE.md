@@ -79,9 +79,10 @@ Against the pinned currently released Reference CLI baseline on the same benchma
 
 ## Enforcement
 
-- Competitive scope gate: `scripts/forge/gates/competitive_scope_gate.py`
-- Reference CLI metric parity gate: `scripts/forge/gates/reference_cli_metric_parity_gate.py`
+- Historical competitive-scope and Reference CLI parity launch checks from February 2026 are retired; do not route current enforcement to deleted launch-gate scripts.
+- Docs reliability runner: `scripts/doc.py`
 - Model onboarding gate: `scripts/forge/gates/model_onboarding_gate.py`
+- Feature catalog gate: `scripts/forge/gates/feature_catalog_gate.py`
 - API capability onboarding protocol: `docs/API_CAPABILITY_ONBOARDING_PROTOCOL.md`
 - Surface parity gate: `scripts/forge/gates/surface_parity.py`
 - Robustness CI workflow: `.github/workflows/robustness-gates.yml`

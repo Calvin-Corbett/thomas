@@ -14,6 +14,18 @@ os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
 # the SSRF guard (thomas/server/net_safety.py) blocks by default. Opt out here so
 # integration tests run; the guard's blocking behavior is covered by test_net_safety.py.
 os.environ.setdefault("THOMAS_ALLOW_PRIVATE_OUTBOUND", "1")
+# evolve's headless build fallback spawns a real `claude -p` subprocess when the
+# in-process agent no-ops; that subprocess blocks forever under pytest and hangs the
+# suite (e.g. test_cli_evolve_commands.py). Disable the live fallback for tests --
+# genuine evolve runs leave it enabled. See _evolve_cli_fallback_enabled().
+os.environ.setdefault("THOMAS_EVOLVE_DISABLE_CLI_FALLBACK", "1")
+# evolve's doppelganger builds a fresh "green" venv and, when its dep probe
+# (import aiohttp, click, httpx) fails in that empty venv, runs a real networked
+# `pip install -e .[repl,server]` that blocks forever offline -- hanging
+# test_cli_evolve_commands.py. Build the green venv with --system-site-packages
+# under test so it inherits those deps from this interpreter; the probe passes
+# and the networked install is skipped. See doppelganger.ensure_green_venv().
+os.environ.setdefault("THOMAS_EVOLVE_HERMETIC_VENV", "1")
 
 pytest_plugins = []
 if (Path(__file__).with_name("conftest_factories.py")).exists():

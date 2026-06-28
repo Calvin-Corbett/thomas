@@ -1,1 +1,1 @@
-"""Scaffold package for accelerated catch-up work."""
+"""Marketplace security governance tools and policy audit helpers."""

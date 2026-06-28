@@ -412,7 +412,7 @@ def _workboard_inbox_gate(agent: str, *, workboard_path: Path = DEFAULT_WORKBOAR
     return (
         False,
         f"unread workboard messages for `{payload.get('agent', agent)}` must be acked before coordinated action{suffix}; "
-        f"run: python scripts/crew/workboard/message.py --list --agent {payload.get('agent', agent)}",
+        f"run: python scripts/crew/workboard/message.py --inbox --agent {payload.get('agent', agent)}",
     )
 
 

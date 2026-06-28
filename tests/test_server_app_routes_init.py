@@ -123,6 +123,7 @@ def _build_test_app(
     static_dir = web_dir / "static"
     static_dir.mkdir(parents=True, exist_ok=True)
     (static_dir / "hello.txt").write_text("hello static", encoding="utf-8")
+    (static_dir / "my_stuff.html").write_text("my stuff static", encoding="utf-8")
 
     stored_chats: dict[str, dict[str, object]] = {}
     app = web.Application()
@@ -375,6 +376,11 @@ async def test_static_compat_rejects_traversal_and_page_aliases(
             assert response.status == 200
             assert await response.text() == "ok"
 
+        for route in ("/my-stuff", "/my-stuff/", "/my_stuff", "/my_stuff/"):
+            response = await client.get(route)
+            assert response.status == 200
+            assert await response.text() == "my stuff static"
+
         static_file = await client.get("/static/hello.txt")
         assert static_file.status == 200
         assert static_file.headers["Content-Type"].startswith("text/plain")
@@ -498,11 +504,6 @@ def test_optional_route_registration_wires_runtime_dependencies(
     )
     monkeypatch.setitem(
         sys.modules,
-        "thomas.server.routes.codex_aiohttp",
-        SimpleNamespace(register_codex_routes=_record("codex")),
-    )
-    monkeypatch.setitem(
-        sys.modules,
         "thomas.server.routes.mission",
         SimpleNamespace(register_mission_routes=_record("mission")),
     )
@@ -583,7 +584,7 @@ def test_optional_route_registration_wires_runtime_dependencies(
     assert {"memory_routes", "search", "secrets", "local_projects", "marketplace", "plugin_hosting"}.issubset(
         called.keys()
     )
-    assert {"life_manager", "codex", "mission", "observability", "chat_v2"}.issubset(called.keys())
+    assert {"life_manager", "mission", "observability", "chat_v2"}.issubset(called.keys())
     assert callable(chat_deps["read_json"])
     assert callable(chat_deps["task_ledger_update"])
     assert callable(chat_deps["resolve_natural_model_switch"])
@@ -818,7 +819,6 @@ def test_route_registration_skips_when_runtime_guards_missing(
     assert "Secrets route registration skipped: missing runtime dependencies" in text
     assert "Local project route registration skipped: missing runtime dependencies" in text
     assert "Marketplace route registration skipped: missing runtime dependencies" in text
-    assert "Codex route registration skipped: missing runtime dependencies" in text
     assert "Mission routes unavailable: missing API access guard" in text
 
 
@@ -926,11 +926,6 @@ def test_route_registration_logs_module_failures(tmp_path: Path, monkeypatch: py
     )
     monkeypatch.setitem(
         sys.modules,
-        "thomas.server.routes.codex_aiohttp",
-        SimpleNamespace(register_codex_routes=_boom("codex", KeyError("codex"))),
-    )
-    monkeypatch.setitem(
-        sys.modules,
         "thomas.server.routes.mission",
         SimpleNamespace(register_mission_routes=_boom("mission", KeyError("mission"))),
     )
@@ -1021,7 +1016,6 @@ def test_route_registration_logs_module_failures(tmp_path: Path, monkeypatch: py
     assert "Secrets routes unavailable:" in text
     assert "Local project routes unavailable:" in text
     assert "Marketplace routes unavailable:" in text
-    assert "Codex routes unavailable:" in text
     assert "Mission routes unavailable:" in text
     assert "Observability routes unavailable:" in text
     assert "Chat V2 routes unavailable:" in text

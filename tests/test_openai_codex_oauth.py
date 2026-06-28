@@ -108,6 +108,19 @@ class TestOpenAICodexTokenStore(unittest.TestCase):
             assert read_openai_codex_token(store, "chatgpt")["email"] == "fresh@example.com"
 
 
+def test_default_secret_store_respects_secret_root_override(tmp_path, monkeypatch) -> None:
+    from thomas.server.secrets import SecretStore
+
+    store = SecretStore(tmp_path)
+    token_payload = _token_payload()
+    write_openai_codex_token(store, "chatgpt", token_payload, persist=True)
+    monkeypatch.setenv("THOMAS_SECRET_ROOT", str(tmp_path))
+
+    token = __import__("asyncio").run(ensure_openai_codex_access_token("chatgpt"))
+
+    assert token == token_payload["access_token"]
+
+
 class TestOpenAICodexRoutes(AioHTTPTestCase):
     def setUp(self) -> None:
         super().setUp()

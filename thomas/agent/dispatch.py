@@ -118,6 +118,127 @@ _DELIVERABLE_RE = re.compile(
     re.I,
 )
 
+# Imperative intent: a request phrased as a command ("put a file on my desktop",
+# "order more paper", "book a flight") is actionable even when it lacks one of the
+# whitelisted deliverable nouns. This is the semantic upgrade over the verb+noun
+# whitelist that misread natural requests as small talk — the casual/question guards
+# above still win first, so only genuine commands reach here.
+_TASK_LEAD_VERBS = frozenset(
+    {
+        "put",
+        "get",
+        "set",
+        "make",
+        "build",
+        "create",
+        "write",
+        "draft",
+        "compose",
+        "send",
+        "email",
+        "message",
+        "post",
+        "schedule",
+        "book",
+        "order",
+        "buy",
+        "purchase",
+        "reserve",
+        "remind",
+        "add",
+        "remove",
+        "delete",
+        "clean",
+        "clear",
+        "organize",
+        "organise",
+        "sort",
+        "rename",
+        "move",
+        "copy",
+        "download",
+        "upload",
+        "install",
+        "uninstall",
+        "deploy",
+        "run",
+        "execute",
+        "launch",
+        "start",
+        "stop",
+        "find",
+        "search",
+        "look",
+        "research",
+        "summarize",
+        "summarise",
+        "translate",
+        "convert",
+        "generate",
+        "fix",
+        "debug",
+        "update",
+        "change",
+        "turn",
+        "throw",
+        "pull",
+        "fetch",
+        "grab",
+        "check",
+        "review",
+        "analyze",
+        "analyse",
+        "investigate",
+        "plan",
+        "design",
+        "draw",
+        "compile",
+        "format",
+        "refactor",
+        "configure",
+        "setup",
+        "connect",
+        "cancel",
+        "print",
+        "open",
+        "play",
+        "record",
+        "scan",
+        "calculate",
+        "compute",
+        "prepare",
+        "gather",
+        "fill",
+        "back",
+        "track",
+    }
+)
+_IMPERATIVE_LEAD_RE = re.compile(
+    r"^\s*(?:please\s+|kindly\s+|hey,?\s+|ok(?:ay)?,?\s+|so,?\s+|now,?\s+|"
+    r"can you\s+|could you\s+|would you\s+|will you\s+|"
+    r"i'?d?\s+(?:really\s+)?(?:need|want|like|love)\s+(?:you\s+)?(?:to\s+)?|"
+    r"i need\s+(?:you\s+)?(?:to\s+)?|let'?s\s+|go\s+(?:ahead\s+and\s+)?)?"
+    r"(?P<verb>[a-z']+)\b",
+    re.I,
+)
+# "I need the report pulled together" / "want this done": a need/want + a
+# completed-action participle is a task even when the leading word isn't a verb.
+_NEED_DONE_RE = re.compile(
+    r"\b(?:need|want|'?d like|gotta|have to|trying to)\b[^.\n]{0,80}?"
+    r"\b(?:done|made|built|set ?up|created|pulled|sent|fixed|cleaned|organized|"
+    r"organised|scheduled|booked|ordered|installed|deployed|written|drafted|"
+    r"generated|updated|renamed|moved|copied|printed|downloaded)\b",
+    re.I,
+)
+
+
+def _is_imperative_task(src: str) -> bool:
+    m = _IMPERATIVE_LEAD_RE.match(src)
+    if m and m.group("verb").lower() in _TASK_LEAD_VERBS:
+        return True
+    return bool(_NEED_DONE_RE.search(src))
+
+
 _SHORT_MESSAGE_WORD_LIMIT = 4
 _CASUAL_PATTERNS = [
     _GREETING_RE,
@@ -161,7 +282,7 @@ def should_dispatch(
             return DispatchDecision(action="casual", reason=f"pattern:{pattern.pattern[:24]}")
 
     words = src.split()
-    if len(words) <= _SHORT_MESSAGE_WORD_LIMIT and not _ACTION_VERB_RE.search(src):
+    if len(words) <= _SHORT_MESSAGE_WORD_LIMIT and not _ACTION_VERB_RE.search(src) and not _is_imperative_task(src):
         return DispatchDecision(action="casual", reason="short_no_action_verb")
 
     if _has_active_tasks(active_tasks) and _STATUS_RE.search(src):
@@ -205,6 +326,13 @@ def should_dispatch(
 
     if _ACTION_VERB_RE.search(src) and _DELIVERABLE_RE.search(src):
         return DispatchDecision(action="dispatch", reason="action_verb_with_deliverable")
+
+    # Natural-language command ("put a file…", "order more paper", "book a flight"):
+    # actionable even without a whitelisted deliverable noun. Reached only after the
+    # casual / question / exploratory / status guards above have declined, so genuine
+    # conversation is not misrouted.
+    if _is_imperative_task(src):
+        return DispatchDecision(action="dispatch", reason="imperative_task")
 
     if mode == "max" and _ACTION_VERB_RE.search(src):
         return DispatchDecision(action="dispatch", reason="max_mode_actionable")

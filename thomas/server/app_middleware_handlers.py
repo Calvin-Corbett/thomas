@@ -59,9 +59,9 @@ def setup_middleware_and_handlers(
         "Content-Security-Policy": (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline' blob: https://cdn.jsdelivr.net https://unpkg.com; "
-            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://fonts.googleapis.com; "
             "img-src 'self' data: blob:; "
-            "font-src 'self' https://cdn.jsdelivr.net https://unpkg.com; "
+            "font-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://fonts.gstatic.com; "
             "connect-src 'self'"
         ),
         "Cross-Origin-Opener-Policy": "same-origin",
@@ -91,6 +91,15 @@ def setup_middleware_and_handlers(
         if _security_headers_enabled and not bool(getattr(resp, "prepared", False)):
             for header_name, header_value in _security_headers.items():
                 resp.headers.setdefault(header_name, header_value)
+            # Generated user apps under /deliverable/ are multi-file (index.html +
+            # styles.css + src/*.js). On a bare-IP host like 127.0.0.1 there is no
+            # registrable "site", so Cross-Origin-Resource-Policy: same-site makes
+            # Chromium block those same-origin sub-resources as NotSameSite — the app
+            # loads index.html but its stylesheet and scripts are refused, rendering a
+            # blank/white page. Serve generated-app assets with a CORP that does not
+            # depend on the same-site computation so multi-file apps actually render.
+            if request.path.startswith("/deliverable/"):
+                resp.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
         return resp
 
     app.middlewares.append(security_headers)
@@ -709,8 +718,28 @@ def setup_middleware_and_handlers(
     def _web_build_fingerprint(*relative_paths: str) -> str:
         # Cache-busting build fingerprint over file mtime/size only -- not a
         # security primitive, so sha1 is acceptable here (py/weak-sensitive-data-hashing).
+        #
+        # Hash the explicitly-named files PLUS every JS module and stylesheet.
+        # Previously only the few named files were fingerprinted, so a fix to any
+        # other runtime/NNN_*.js module or a .css file left the ?v= UNCHANGED -- and
+        # browsers kept serving the cached, pre-fix frontend. That is the root cause
+        # of "the AI fixed it but it's still broken on my machine": the server had the
+        # new code, the browser never re-fetched it. Covering the whole frontend means
+        # ANY frontend edit busts the cache. NOTE: we walk all of js/ (not just
+        # js/runtime/) so top-level modules like js/composer_redesign.js — loaded
+        # directly from index.html with ?v=__THOMAS_WEB_BUILD__ — also bust the cache.
         digest = hashlib.sha1(usedforsecurity=False)
-        for relative in relative_paths:
+        paths: list[str] = list(relative_paths)
+        try:
+            for sub, pattern in (("js", "*.js"), ("css", "*.css")):
+                base = web_dir / sub
+                if base.is_dir():
+                    for found in sorted(base.rglob(pattern)):
+                        if found.is_file():
+                            paths.append(found.relative_to(web_dir).as_posix())
+        except OSError:
+            pass
+        for relative in dict.fromkeys(paths):  # dedupe, preserve order, deterministic
             try:
                 path = web_dir / relative
                 stat = path.stat()
@@ -726,6 +755,7 @@ def setup_middleware_and_handlers(
 
     _page_handlers = build_page_handlers(web_dir, _web_build_fingerprint)
     index = _page_handlers["index"]
+    classic = _page_handlers["classic"]
     settings = _page_handlers["settings"]
     companion = _page_handlers["companion"]
     landing = _page_handlers["landing"]
@@ -758,6 +788,7 @@ def setup_middleware_and_handlers(
             "_read_chat_from_disk": _read_chat_from_disk,
             "_build_tools": __import__("thomas.server.app_helpers", fromlist=["_build_tools"])._build_tools,
             "index": index,
+            "classic": classic,
             "settings": settings,
             "companion": companion,
             "landing": landing,

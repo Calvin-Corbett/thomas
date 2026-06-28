@@ -18,171 +18,171 @@ repos:
     hooks:
       - id: thomas-agent-safety-validation
         name: Thomas Agent Safety Validation
-        entry: python scripts/validate_agent_changes.py
+        entry: python scripts/_gate_python.py scripts/validate_agent_changes.py
         language: system
         pass_filenames: false
 
       - id: thomas-active-folder-guard
         name: Thomas Active Folder Guard
-        entry: python scripts/active_folders.py guard-staged --auto-claim-staged --require-explicit-agent
+        entry: python scripts/_gate_python.py scripts/active_folders.py guard-staged --auto-claim-staged --require-explicit-agent
         language: system
         pass_filenames: false
 
       - id: thomas-workboard-inbox-gate
         name: Thomas Workboard Inbox Gate
-        entry: python scripts/forge/gates/workboard_inbox.py
+        entry: python scripts/_gate_python.py scripts/forge/gates/workboard_inbox.py
         language: system
         pass_filenames: false
 
       - id: thomas-precommit-skip-policy-gate
         name: Thomas Pre-commit Skip Policy Gate
-        entry: python scripts/forge/gates/precommit_skip_policy.py
+        entry: python scripts/_gate_python.py scripts/forge/gates/precommit_skip_policy.py
         language: system
         pass_filenames: false
 
       - id: thomas-enforcement-integrity
         name: Thomas Enforcement Integrity (anti-tamper for gate scripts)
-        entry: python scripts/forge/gates/enforcement_integrity.py --check-staged
+        entry: python scripts/_gate_python.py scripts/forge/gates/enforcement_integrity.py --check-staged
         language: system
         pass_filenames: false
 
       - id: thomas-protected-files-gate
         name: Thomas Protected Files Gate
-        entry: python scripts/forge/gates/protected_files_gate.py
+        entry: python scripts/_gate_python.py scripts/forge/gates/protected_files_gate.py
         language: system
         pass_filenames: false
 
       - id: thomas-plan-structure-gate
         name: Thomas Plan Structure Gate
-        entry: python scripts/forge/gates/plan_structure_gate.py
+        entry: python scripts/_gate_python.py scripts/forge/gates/plan_structure_gate.py
         language: system
         pass_filenames: false
 
       - id: thomas-core-overhead-guard
         name: Thomas Core Overhead Guard
-        entry: python scripts/forge/gates/core_overhead_guard.py
+        entry: python scripts/_gate_python.py scripts/forge/gates/core_overhead_guard.py
         language: system
         pass_filenames: true
 
       - id: thomas-worktree-rules-gate
         name: Thomas Worktree Rules Gate
-        entry: python scripts/forge/gates/worktree_rules_gate.py
+        entry: python scripts/_gate_python.py scripts/forge/gates/worktree_rules_gate.py
         language: system
         pass_filenames: false
 
       - id: thomas-worktree-branch-guard
         name: Thomas Worktree Branch Guard
-        entry: python scripts/forge/gates/worktree_branch_guard.py
+        entry: python scripts/_gate_python.py scripts/forge/gates/worktree_branch_guard.py
         language: system
         pass_filenames: false
 
       - id: thomas-workboard-claims-gate
         name: Thomas Workboard Claims Gate
-        entry: python scripts/forge/gates/workboard_claims.py --require-identity-metadata
+        entry: python scripts/_gate_python.py scripts/forge/gates/workboard_claims.py --require-identity-metadata
         language: system
         pass_filenames: false
 
       - id: thomas-workboard-task-problems-gate
         name: Thomas Workboard Task Problems Gate
-        entry: python scripts/forge/gates/workboard_task_problems.py
+        entry: python scripts/_gate_python.py scripts/forge/gates/workboard_task_problems.py
         language: system
         pass_filenames: false
 
       - id: thomas-workboard-changed-files-gate
         name: Thomas Workboard Changed Files Gate
-        entry: python scripts/forge/gates/workboard_changed_files.py --staged --require-identity-metadata
+        entry: python scripts/_gate_python.py scripts/forge/gates/workboard_changed_files.py --staged --require-identity-metadata
         language: system
         pass_filenames: false
 
       - id: thomas-workboard-agent-claim-gate
         name: Thomas Workboard Agent Claim Gate
-        entry: python scripts/forge/gates/workboard_agent_claim.py --enforce-staged-scope --enforce-parent-throughput --parent-target-workers 2 --parent-min-ready-suggestions 2
+        entry: python scripts/_gate_python.py scripts/forge/gates/workboard_agent_claim.py --enforce-staged-scope --enforce-parent-throughput --parent-target-workers 2 --parent-min-ready-suggestions 2
         language: system
         pass_filenames: false
 
       - id: thomas-workboard-issue-tool-smoke
         name: Thomas Workboard Issue Tool Smoke
-        entry: python scripts/crew/workboard/issue.py --help
+        entry: python scripts/_gate_python.py scripts/crew/workboard/issue.py --help
         language: system
         pass_filenames: false
 
       - id: thomas-workboard-problem-record-smoke
         name: Thomas Workboard Problem Record Smoke
-        entry: python scripts/crew/workboard/problem_record.py --help
+        entry: python scripts/_gate_python.py scripts/crew/workboard/problem_record.py --help
         language: system
         pass_filenames: false
 
       - id: thomas-bulk-commit-guard
         name: Thomas Bulk Commit Guard
-        entry: python scripts/forge/gates/bulk_commit_guard.py --max-files 50
+        entry: python scripts/_gate_python.py scripts/forge/gates/bulk_commit_guard.py --max-files 50
         language: system
         pass_filenames: false
 
       - id: thomas-commit-growth-guard
         name: Thomas Commit Growth Guard
-        entry: python scripts/forge/gates/commit_growth_guard.py --max-growth 300
+        entry: python scripts/_gate_python.py scripts/forge/gates/commit_growth_guard.py --max-growth 300
         language: system
         pass_filenames: false
 
       - id: thomas-monolith-guard
         name: Thomas Monolith Guard
-        entry: python scripts/forge/gates/monolith_guard.py --staged-only
+        entry: python scripts/_gate_python.py scripts/forge/gates/monolith_guard.py --staged-only
         language: system
         pass_filenames: false
 
       - id: thomas-monolith-filename-pattern-gate
         name: Thomas Monolith filename pattern gate
-        entry: python scripts/forge/gates/monolith_filename_guard.py --staged-only
+        entry: python scripts/_gate_python.py scripts/forge/gates/monolith_filename_guard.py --staged-only
         language: system
         pass_filenames: false
 
       - id: thomas-protected-deletion-guard
         name: Thomas Protected Deletion Guard
-        entry: python scripts/forge/gates/deletions.py --staged-only
+        entry: python scripts/_gate_python.py scripts/forge/gates/deletions.py --staged-only
         language: system
         pass_filenames: false
 
       - id: thomas-feature-registry-gate
         name: Thomas Feature Registry Gate
-        entry: python scripts/forge/gates/feature_registry.py
+        entry: python scripts/_gate_python.py scripts/forge/gates/feature_registry.py
         language: system
         pass_filenames: false
 
       - id: thomas-repo-identity-gate
         name: Thomas Repo Identity Gate
-        entry: python scripts/forge/gates/repo_identity.py
+        entry: python scripts/_gate_python.py scripts/forge/gates/repo_identity.py
         language: system
         pass_filenames: false
 
       - id: thomas-site-visual-proof-gate
         name: Thomas Site Visual Proof Gate
-        entry: python scripts/forge/gates/site_visual_proof.py
+        entry: python scripts/_gate_python.py scripts/forge/gates/site_visual_proof.py
         language: system
         pass_filenames: false
 
       - id: thomas-merge-readiness
         name: Thomas Merge Readiness
-        entry: python scripts/forge/gates/merge_readiness.py
+        entry: python scripts/_gate_python.py scripts/forge/gates/merge_readiness.py
         language: system
         pass_filenames: false
         stages: [pre-push]
 
       - id: thomas-workboard-inbox-final-gate
         name: Thomas Workboard Inbox Final Gate
-        entry: python scripts/forge/gates/workboard_inbox.py
+        entry: python scripts/_gate_python.py scripts/forge/gates/workboard_inbox.py
         language: system
         pass_filenames: false
 
       - id: thomas-workboard-inbox-commit-msg-gate
         name: Thomas Workboard Inbox Commit Message Gate
-        entry: python scripts/forge/gates/workboard_inbox.py
+        entry: python scripts/_gate_python.py scripts/forge/gates/workboard_inbox.py
         language: system
         pass_filenames: false
         stages: [commit-msg]
 
       - id: thomas-publish-preflight
         name: Thomas Publish Preflight (secret scan + blocked-file check)
-        entry: python scripts/forge/publish/preflight.py --skip-worktree-clean-check --required-branch dev --strict
+        entry: python scripts/_gate_python.py scripts/forge/publish/preflight.py --skip-worktree-clean-check --required-branch dev --strict
         language: system
         pass_filenames: false
         stages: [pre-push]

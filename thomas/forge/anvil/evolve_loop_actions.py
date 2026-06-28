@@ -33,21 +33,35 @@ def bind_real_collaborators(
     planner: PlannerFn | None,
     session_runner: SessionRunnerFn | None,
     promoter: PromoterFn | None,
+    *,
+    mode: str = "classic",
 ) -> tuple[PlannerFn, SessionRunnerFn, PromoterFn]:
     """Default the injected collaborators to the real green-mirror engine.
+
+    ``mode`` selects the per-goal creative engine when ``session_runner`` is not
+    injected: ``"classic"`` (the single-pass green-mirror engine) or ``"funnel"``
+    (the additive multi-agent funnel, which itself wraps the classic engine as its
+    builder and never touches the blue-owned promotion gate). An explicitly
+    injected ``session_runner`` always wins over ``mode`` so tests stay in control.
 
     Imported lazily so unit tests (which inject fakes) never pull in the heavy
     engine module or its subprocess machinery.
     """
     if planner is None:
         planner = plan_backlog
-    if session_runner is None or promoter is None:
-        from .evolve import promote_evolve_session, run_evolve_session
+    if session_runner is None:
+        if str(mode).strip().lower() == "funnel":
+            from .evolve_funnel import run_funnel_session
 
-        if session_runner is None:
+            session_runner = run_funnel_session
+        else:
+            from .evolve import run_evolve_session
+
             session_runner = run_evolve_session
-        if promoter is None:
-            promoter = promote_evolve_session
+    if promoter is None:
+        from .evolve import promote_evolve_session
+
+        promoter = promote_evolve_session
     return planner, session_runner, promoter
 
 
@@ -96,6 +110,7 @@ def approve_pending(
         profile=profile,
         passes=1,
         promote_on_pass=False,
+        refactor_first=(goal.category == "refactor"),
         timeout_seconds=timeout_seconds,
     )
     session = dict(result.get("session") or {})

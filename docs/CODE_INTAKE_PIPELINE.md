@@ -1,6 +1,6 @@
 # Code Intake Pipeline (High-Volume Prompt Drops)
 
-Last updated: 2026-02-20
+Last updated: 2026-06-26
 
 This pipeline is for ingesting large numbers of generated code drops safely,
 with queue state, validation reports, and controlled apply flow.
@@ -21,6 +21,10 @@ Primary tool:
 - `python scripts/forge/intake/cli.py`
 - `python scripts/forge/intake/seed_batch.py`
 
+Both scripts resolve the default intake root from the repository root:
+`code_intake/`. They do not use `scripts/forge/code_intake/` when run
+directly from the repository root.
+
 Commands:
 - `init`: create queue structure and template
 - `new`: create a new incoming drop skeleton
@@ -34,6 +38,8 @@ Batch seeding helper:
 - `python scripts/forge/intake/seed_batch.py --batch-id B01`
 - Seeds incoming drops from `docs/REFERENCE_CLI_CATCHUP_PROMPT_BATCH_INDEX_216_2026-02-20.csv`
 - Creates manifest + diff placeholder per prompt in that batch
+- `--dry-run` validates the batch and prints planned drops without creating
+  queue directories or files.
 
 ## Supported Artifact Types
 

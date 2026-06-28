@@ -1,11 +1,14 @@
 """SQLite-based preferences store with encryption support."""
 
 import json
+import logging
 import os
 import sqlite3
 import threading
 from functools import lru_cache
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
@@ -361,7 +364,8 @@ class PreferencesStore:
                     "UPDATE preference_keys SET mask_tail=?, key_hash=? WHERE user_id=? AND provider=?",
                     (m, _sha256_hex(plain), user_id, provider),
                 )
-            except Exception:
+            except (InvalidToken, sqlite3.DatabaseError, ValueError, TypeError) as exc:
+                log.warning("Could not decrypt API key for provider %r (user %r): %s", provider, user_id, exc)
                 masked[provider] = "••••••(unreadable)"
         return masked
 

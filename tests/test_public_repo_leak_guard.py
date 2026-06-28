@@ -51,3 +51,12 @@ def test_leak_blocklist_absent_default_returns_empty(monkeypatch, tmp_path) -> N
     subs, paths, prefixes, regex = leak_guard._load_local_blocklist()
 
     assert (subs, paths, prefixes, regex) == ((), frozenset(), (), ())
+
+
+def test_module_registry_artifact_remains_forbidden() -> None:
+    assert "MODULE_REGISTRY.md" in leak_guard.FORBIDDEN_PATHS
+
+    path_hits, substring_hits = leak_guard._scan_paths(["MODULE_REGISTRY.md"])
+
+    assert path_hits == ["MODULE_REGISTRY.md"]
+    assert substring_hits == []

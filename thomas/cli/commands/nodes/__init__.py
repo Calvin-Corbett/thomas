@@ -1,1 +1,1 @@
-"""Scaffold package for accelerated catch-up work."""
+"""CLI adapters for Thomas node host, device, and action commands."""

@@ -389,7 +389,9 @@ class CostTracker:
 
     def today_by_model_detail(self) -> dict[str, dict[str, Any]]:
         self._refresh_cache()
-        d = date.today().isoformat()
+        return self._model_detail_for_day(date.today().isoformat())
+
+    def _model_detail_for_day(self, d: str) -> dict[str, dict[str, Any]]:
         models = set()
         models |= set(self._daily_model_usd.get(d, {}).keys())
         models |= set(self._daily_model_calls.get(d, {}).keys())
@@ -402,14 +404,25 @@ class CostTracker:
             calls = int(self._daily_model_calls.get(d, {}).get(m, 0))
             pt = int(self._daily_model_prompt.get(d, {}).get(m, 0))
             ct = int(self._daily_model_completion.get(d, {}).get(m, 0))
+            tokens = {"prompt": pt, "completion": ct, "total": pt + ct}
             out[m] = {
                 "usd": usd,
                 "calls": calls,
                 "prompt_tokens": pt,
                 "completion_tokens": ct,
                 "total_tokens": pt + ct,
+                "tokens": tokens,
             }
-        return dict(sorted(out.items(), key=lambda kv: (-float(kv[1].get("usd", 0.0)), kv[0].lower())))
+        return dict(
+            sorted(
+                out.items(),
+                key=lambda kv: (
+                    -int(kv[1].get("total_tokens", 0) or 0),
+                    -float(kv[1].get("usd", 0.0) or 0.0),
+                    kv[0].lower(),
+                ),
+            )
+        )
 
     def by_day(self, days: int = 7) -> list[dict[str, Any]]:
         self._refresh_cache()
@@ -424,7 +437,26 @@ class CostTracker:
         start = today - timedelta(days=days - 1)
         for i in range(days):
             d = (start + timedelta(days=i)).isoformat()
-            out.append({"date": d, "usd": float(self._daily_usd.get(d, 0.0))})
+            pt = int(self._daily_prompt_tok.get(d, 0))
+            ct = int(self._daily_completion_tok.get(d, 0))
+            calls = int(self._daily_calls.get(d, 0))
+            detail = self._model_detail_for_day(d)
+            top_model = next(iter(detail.keys()), "")
+            out.append(
+                {
+                    "date": d,
+                    "usd": float(self._daily_usd.get(d, 0.0)),
+                    "call_count": calls,
+                    "calls": calls,
+                    "prompt_tokens": pt,
+                    "completion_tokens": ct,
+                    "total_tokens": pt + ct,
+                    "tokens": {"prompt": pt, "completion": ct, "total": pt + ct},
+                    "by_model_detail": detail,
+                    "model_count": len(detail),
+                    "top_model": top_model,
+                }
+            )
         return out
 
     def session_usd(self) -> float:
@@ -440,13 +472,34 @@ class CostTracker:
 
     def session_by_model_detail(self) -> dict[str, dict[str, Any]]:
         out: dict[str, dict[str, Any]] = {}
-        for m in self._session_model_usd.keys():
+        models = set()
+        models |= set(self._session_model_usd.keys())
+        models |= set(self._session_model_calls.keys())
+        models |= set(self._session_model_prompt.keys())
+        models |= set(self._session_model_completion.keys())
+        for m in models:
             usd = float(self._session_model_usd.get(m, 0.0))
             calls = int(self._session_model_calls.get(m, 0))
             pt = int(self._session_model_prompt.get(m, 0))
             ct = int(self._session_model_completion.get(m, 0))
-            out[m] = {"usd": usd, "calls": calls, "prompt_tokens": pt, "completion_tokens": ct, "total_tokens": pt + ct}
-        return dict(sorted(out.items(), key=lambda kv: (-float(kv[1].get("usd", 0.0)), kv[0].lower())))
+            out[m] = {
+                "usd": usd,
+                "calls": calls,
+                "prompt_tokens": pt,
+                "completion_tokens": ct,
+                "total_tokens": pt + ct,
+                "tokens": {"prompt": pt, "completion": ct, "total": pt + ct},
+            }
+        return dict(
+            sorted(
+                out.items(),
+                key=lambda kv: (
+                    -int(kv[1].get("total_tokens", 0) or 0),
+                    -float(kv[1].get("usd", 0.0) or 0.0),
+                    kv[0].lower(),
+                ),
+            )
+        )
 
     def reset_session(self) -> None:
         with self._lock:
@@ -462,12 +515,25 @@ class CostTracker:
     def pricing_table(self) -> dict[str, dict[str, float]]:
         out: dict[str, dict[str, float]] = {}
         for k, v in self._pricing.items():
-            out[k] = {"input_per_1k": float(v["input_per_1k"]), "output_per_1k": float(v["output_per_1k"])}
+            input_per_1k = float(v["input_per_1k"])
+            output_per_1k = float(v["output_per_1k"])
+            out[k] = {
+                "input_per_1k": input_per_1k,
+                "output_per_1k": output_per_1k,
+                "input_per_1m": input_per_1k * 1000.0,
+                "output_per_1m": output_per_1k * 1000.0,
+                "prompt_per_1m": input_per_1k * 1000.0,
+                "completion_per_1m": output_per_1k * 1000.0,
+            }
         out.setdefault(
             "defaults",
             {
                 "input_per_1k": float(self._fallback_unknown["input_per_1k"]),
                 "output_per_1k": float(self._fallback_unknown["output_per_1k"]),
+                "input_per_1m": float(self._fallback_unknown["input_per_1k"]) * 1000.0,
+                "output_per_1m": float(self._fallback_unknown["output_per_1k"]) * 1000.0,
+                "prompt_per_1m": float(self._fallback_unknown["input_per_1k"]) * 1000.0,
+                "completion_per_1m": float(self._fallback_unknown["output_per_1k"]) * 1000.0,
             },
         )
         return out
@@ -647,9 +713,9 @@ class CostTracker:
                     obj = json.loads(line)
                     day = str(obj.get("day", "")).strip()
                     model = str(obj.get("model", "unknown")).strip() or "unknown"
-                    usd_total = float(obj.get("usd_total", 0.0) or 0.0)
-                    pt = int(obj.get("prompt_tokens", 0) or 0)
-                    ct = int(obj.get("completion_tokens", 0) or 0)
+                    usd_total = max(0.0, float(obj.get("usd_total", 0.0) or 0.0))
+                    pt = max(0, int(obj.get("prompt_tokens", 0) or 0))
+                    ct = max(0, int(obj.get("completion_tokens", 0) or 0))
                     if not day:
                         continue
                 except Exception:

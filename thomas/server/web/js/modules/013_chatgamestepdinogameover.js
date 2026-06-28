@@ -277,7 +277,7 @@ function chatGameRenderToTextPayload() {
                 costume: safeString(state.selectedAgent?.costume),
                 color: safeString(state.selectedAgent?.color),
             },
-            bot: {
+            actor: {
                 visible: Boolean(state.scene?.botVisible),
                 x: Number((state.scene?.botX || 0).toFixed(2)),
                 y: Number((state.scene?.botY || 0).toFixed(2)),
@@ -317,7 +317,7 @@ function chatGameRenderToTextPayload() {
                 costume: safeString(state.selectedAgent?.costume),
                 color: safeString(state.selectedAgent?.color),
             },
-            bot: {
+            actor: {
                 visible: Boolean(state.scene?.botVisible),
                 x: Number((state.scene?.botX || 0).toFixed(2)),
                 y: Number((state.scene?.botY || 0).toFixed(2)),
@@ -369,7 +369,7 @@ function chatGameRenderToTextPayload() {
                 costume: safeString(state.selectedAgent?.costume),
                 color: safeString(state.selectedAgent?.color),
             },
-            bot: {
+            actor: {
                 visible: Boolean(state.scene?.botVisible),
                 x: Number((state.scene?.botX || 0).toFixed(2)),
                 y: Number((state.scene?.botY || 0).toFixed(2)),

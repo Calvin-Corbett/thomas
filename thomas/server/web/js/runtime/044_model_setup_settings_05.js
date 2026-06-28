@@ -81,7 +81,11 @@ async function moduleUiEditorProjectFromFiles(filesRaw) {
     };
 }
 
-// [duplicate removed] const moduleWorkbenchTeardownOriginalForUiEditor = moduleWorkbenchTeardown;
+// Capture the original workbench teardown BEFORE wrapping it, so the UI-Editor
+// wrapper can delegate back to it. (A dead-code pass wrongly commented this out
+// as a "duplicate" — without it the wrapper throws ReferenceError, the UI Editor
+// never tears down, and its view bleeds over the next screen.)
+const moduleWorkbenchTeardownOriginalForUiEditor = moduleWorkbenchTeardown;
 moduleWorkbenchTeardown = function moduleWorkbenchTeardownWithUiEditor(mode) {
     if (safeString(mode) === 'app_builder') {
         const state = moduleEnsureRuntime();

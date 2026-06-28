@@ -142,6 +142,7 @@ def _registry_path(app: web.Application) -> Path:
         os.environ.get("THOMAS_STATE_DIR"),
         getattr(cfg, "home_dir", None),
         getattr(cfg, "data_dir", None),
+        getattr(cfg, "root", None),
     ):
         value = str(raw or "").strip()
         if value:

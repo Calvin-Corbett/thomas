@@ -8,6 +8,18 @@ function officeCollectAgentPrefsSnapshot() {
             color: /^#[0-9a-f]{6}$/i.test(safeString(agent.color)) ? safeString(agent.color) : '#9ad8ff',
             costume: safeString(agent.costume || 'none'),
             tint: safeString(agent.tint || 'blue'),
+            specialty: safeString(agent.specialty || 'Generalist').slice(0, 64),
+            personality: safeString(agent.personality || 'Helpful, direct, and persistent.').slice(0, 160),
+            chatProfile: safeString(agent.chatProfile).slice(0, 80),
+            chatModelId: safeString(agent.chatModelId).slice(0, 120),
+            officeChatHistory: Array.isArray(agent.officeChatHistory)
+                ? agent.officeChatHistory.slice(-18).map((entry) => ({
+                    role: safeString(entry?.role).slice(0, 16),
+                    text: safeString(entry?.text).slice(0, 600),
+                    at: Number(entry?.at) || Date.now(),
+                    timeLabel: safeString(entry?.timeLabel).slice(0, 24),
+                })).filter((entry) => entry.text)
+                : [],
         };
     });
     return snapshot;
@@ -66,6 +78,37 @@ function initContentWorkspace() {
 //   Nav mode switching, chat list, office/content workspace init           
 // 
 
+// Deep-link consumer for "My Stuff" build deliverables: a "/?forge_code=<cid>"
+// URL (the deep_link a deliverable carries back to its originating Code
+// conversation) opens the Forge Code surface and resumes that conversation. The
+// param is stripped afterward so a refresh does not re-trigger it. Fully
+// defensive: a missing global or unknown id simply lands on the Code surface.
+function maybeOpenForgeCodeDeepLink() {
+    let cid = '';
+    try {
+        cid = new URLSearchParams(window.location.search).get('forge_code') || '';
+    } catch (_e) {
+        cid = '';
+    }
+    if (!cid) return;
+    try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('forge_code');
+        window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+    } catch (_e) { /* non-fatal: leave the URL as-is */ }
+    setSidebarNavMode('evolution');
+    // The Evolution shell + Code surface build on the next frame; open Code and
+    // resume the conversation once they exist.
+    window.setTimeout(() => {
+        try {
+            if (typeof forgeShowSide === 'function') forgeShowSide('code');
+            if (typeof window.forgeCodeOpenConversation === 'function') {
+                void window.forgeCodeOpenConversation(cid);
+            }
+        } catch (_e) { /* non-fatal */ }
+    }, 60);
+}
+
 function setSidebarNavMode(mode = 'chat', { persist = true } = {}) {
     const requestedMode = normalizeNavMode(mode);
     const previousMode = sidebarNavMode;
@@ -81,12 +124,14 @@ function setSidebarNavMode(mode = 'chat', { persist = true } = {}) {
 
     /* Body class so CSS can scope things to the chat page */
     document.body.classList.toggle('te-nav-chat', isChat);
+    document.body.classList.toggle('office-active', isOffice);
 
     if (navChatBtn) navChatBtn.classList.toggle('active', isChat);
     const navOfficeBtnLive = document.getElementById('navOfficeBtn');
     if (navOfficeBtnLive) navOfficeBtnLive.classList.toggle('active', isOffice);
     if (navMissionBtn) navMissionBtn.classList.toggle('active', isMission);
-    if (navEvolutionBtn) navEvolutionBtn.classList.toggle('active', isEvolution);
+    const navForgeBtnLive = document.getElementById('navForgeBtn');
+    if (navForgeBtnLive) navForgeBtnLive.classList.toggle('active', isEvolution);
     if (navContentBtn) navContentBtn.classList.toggle('active', isContent);
     sidebarModeButtons.forEach((button) => {
         const buttonMode = normalizeNavMode(button.dataset.navMode);
@@ -703,6 +748,11 @@ async function loadSessionFromHistory(sid) {
     syncActiveChatSidebarEntry({ touchUpdatedAt: false });
     renderSidebarChatList();
     pushDebugEvent('chat', `Loaded session ${safeString(sid)}`);
+    // Rebuild the deliverable chips from the durable task ledger so a reload/chat-switch
+    // no longer loses them (the per-message strip state is in-memory only).
+    if (typeof reconcileSessionDeliverables === 'function') {
+        void reconcileSessionDeliverables(sid);
+    }
     await refreshTaskContinuity({ sessionOverride: sessionId || sid, force: true });
     _positionRobotDock();
     if (!document.querySelector('.chat-robot-landed')) {
@@ -733,14 +783,20 @@ async function fetchModels() {
             const active = availableModelProfiles.filter(m => m.has_api_key);
 
             for (const m of availableModelProfiles) {
+                // Legacy "codex" profile is hidden from the picker — the real
+                // ChatGPT OAuth path is the "openai_codex" profile.
+                if (safeString(m.name).toLowerCase() === 'codex') continue;
+
+                const displayName = formatProviderDisplay(m.name) || m.name;
+
                 const providerOption = document.createElement('option');
-                providerOption.value = m.name;
-                providerOption.textContent = m.name;
+                providerOption.value = m.name;          // internal value unchanged
+                providerOption.textContent = displayName;
                 setupProviderSelector.appendChild(providerOption);
 
                 const legacyOption = document.createElement('option');
-                legacyOption.value = m.name;
-                legacyOption.textContent = m.name;
+                legacyOption.value = m.name;            // internal value unchanged
+                legacyOption.textContent = displayName;
                 modelSelector.appendChild(legacyOption);
             }
 
@@ -762,6 +818,7 @@ async function fetchModels() {
             updateDebugDockSnapshot();
         }
     } catch (e) { console.error("Failed to fetch models", e); }
+    if (typeof syncModelSetupCurrentLabel === 'function') syncModelSetupCurrentLabel({ force: true });
 }
 
 function initFeatures() {
@@ -780,6 +837,7 @@ function initFeatures() {
     initMissionWorkspace();
     initContentWorkspace();
     initModuleWorkspace();
+    void moduleRefreshInstalledPluginNav({ force: true });
     void moduleRefreshMarketplace({ force: true });
     setDebugDockOpen(false, { recordEvent: false });
     const restoredMode = resolveBootNavMode();
@@ -787,6 +845,7 @@ function initFeatures() {
     applyResponsiveSidebarState();
     setChatListExpanded(chatListExpanded, { persist: false });
     setSidebarNavMode(restoredMode, { persist: false });
+    maybeOpenForgeCodeDeepLink();
     if (taskContinuityRefreshBtn) {
         taskContinuityRefreshBtn.addEventListener('click', () => {
             void refreshTaskContinuity({ force: true });
@@ -881,8 +940,9 @@ function initFeatures() {
         });
     }
 
-    if (navEvolutionBtn) {
-        navEvolutionBtn.addEventListener('click', () => {
+    const navForgeBtn = document.getElementById('navForgeBtn');
+    if (navForgeBtn) {
+        navForgeBtn.addEventListener('click', () => {
             ensureSettingsUiClosed();
             setSidebarNavMode('evolution');
         });
