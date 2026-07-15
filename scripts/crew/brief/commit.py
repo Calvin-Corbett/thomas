@@ -454,7 +454,16 @@ def _run_local_gates(
 def _create_commit_object(repo_root: Path, *, agent: str, index_path: Path, parent_head: str, message: str) -> str:
     env = _temp_index_env(agent, index_path)
     tree = _git_output(repo_root, ["write-tree"], env=env)
-    proc = _run_git(repo_root, ["commit-tree", tree, "-p", parent_head], env=env, input_text=message)
+    # `git commit-tree` is plumbing and does NOT honor commit.gpgsign, so every
+    # scoped agent commit was created UNSIGNED and failed the required
+    # signed-commits-check on CI (discovered 2026-07-15, PR 102). Sign
+    # explicitly with the repo-configured key when signing is configured;
+    # otherwise keep the old behavior so ad-hoc clones still work.
+    sign_args: list[str] = []
+    gpgsign_proc = _run_git(repo_root, ["config", "--get", "commit.gpgsign"], env=env)
+    if gpgsign_proc.returncode == 0 and str(gpgsign_proc.stdout or "").strip().lower() == "true":
+        sign_args.append("-S")
+    proc = _run_git(repo_root, ["commit-tree", tree, "-p", parent_head, *sign_args], env=env, input_text=message)
     if proc.returncode != 0:
         raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or "git commit-tree failed")
     return str(proc.stdout or "").strip()

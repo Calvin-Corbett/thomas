@@ -51,3 +51,12 @@ The startup router (`crew/brief/startup_router.py`) now scans branches automatic
 2. Read `GUARDRAILS.md` (immutable project rules)
 3. Read the module-level `GUARDRAILS.md` in whatever directory you're modifying (if one exists)
 4. Check `agent_safety.toml` for protected files, forbidden patterns, and circular import rules
+
+## Installed Claude Code tooling (use it — don't wait to be asked)
+
+- `/code-review` - run on any nontrivial diff before committing to `dev`
+- `/security-review` - run when touching `thomas/server/`, `/gateway` routes, or auth/token/secret handling
+- `frontend-design` skill + Playwright MCP - any `thomas/server/web/` UI work: apply the design skill, then verify live at http://127.0.0.1:8899 (`run-ui.cmd`)
+- `code-simplifier` agent - run after completing a refactor or a logical chunk of new code
+- Context7 MCP - pull current docs for aiohttp/ChromaDB/sentence-transformers instead of answering from memory
+- `/feature-dev` - use for multi-file features (explorer → architect → reviewer flow)

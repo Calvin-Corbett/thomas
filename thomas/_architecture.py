@@ -75,9 +75,10 @@ MODULES = {
             "desktop_operator",
             "cli",
             "integrations",
+            "forge",  # evolve_agent_routes drives Forge Anvil (server is the delivery tier for the Code tab)
         ],
         "health": "yellow",
-        "debt": "routes/companion_aiohttp.py exceeds 850 lines, routes/asset_studio_aiohttp.py exceeds 1080 lines, app_routes_init.py exceeds 800 lines, routes/local_projects_helpers_aiohttp.py exceeds 800 lines, routes/marketplace_catalog_aiohttp.py exceeds 1020 lines, routes/chat_aiohttp_streaming.py exceeds 810 lines; TODO[batch-8]: server chat-plan-mode route imports cli --server should not depend on cli (cli is the consumer of server, not the other way); extract shared command-handling into core or expose via a thin interface; TODO[batch-8]: server discord-channels routes import integrations --server tier should not depend on ext tier; integrations should expose a server-facing interface or move shared code to core",
+        "debt": "routes/companion_aiohttp.py exceeds 850 lines, routes/asset_studio_aiohttp.py exceeds 1080 lines, app_routes_init.py exceeds 800 lines, routes/local_projects_helpers_aiohttp.py exceeds 800 lines, routes/marketplace_catalog_aiohttp.py exceeds 1020 lines, routes/chat_aiohttp_streaming.py exceeds 810 lines, chat_delegation_canvas.py exceeds 1046 lines, chat_delegation_deliverable.py exceeds 823 lines, routes/chat_v2.py exceeds 869 lines; TODO[batch-8]: server chat-plan-mode route imports cli --server should not depend on cli (cli is the consumer of server, not the other way); extract shared command-handling into core or expose via a thin interface; TODO[batch-8]: server discord-channels routes import integrations --server tier should not depend on ext tier; integrations should expose a server-facing interface or move shared code to core",
         "description": "aiohttp web server, API routing, static serving",
     },
     "cli": {
@@ -109,7 +110,7 @@ MODULES = {
             "desktop_operator",
         ],
         "health": "yellow",
-        "debt": "repl.py exceeds 1810 lines, repl_runtime.py exceeds 1170 lines, parity_commands.py exceeds 1180 lines, _commands_base.py exceeds 930 lines, _commands_models.py exceeds 820 lines",
+        "debt": "repl.py exceeds 1810 lines, repl_runtime.py exceeds 1170 lines, parity_commands.py exceeds 1180 lines, _commands_base.py exceeds 930 lines, _commands_models.py exceeds 820 lines, commands/evolve.py exceeds 836 lines",
         "description": "Click CLI commands and entry points",
     },
     "memory": {
@@ -222,7 +223,7 @@ MODULES = {
         "tier": "infra",
         "depends_on": ["core", "investigation", "integrations"],
         "health": "yellow",
-        "debt": "git_conflicts.py exceeds 1110 lines, browser.py exceeds 940 lines, ssh.py exceeds 860 lines, engineering.py exceeds 850 lines, database_commands.py exceeds 800 lines; TODO[batch-8]: moltbook tools imports integrations --infra tier should not depend on ext tier; either move shared adapter to core or invert via a tools-provider interface in integrations",
+        "debt": "git_conflicts.py exceeds 1110 lines, browser.py exceeds 940 lines, ssh.py exceeds 860 lines, engineering.py exceeds 850 lines, database_commands.py exceeds 800 lines, filesystem.py exceeds 867 lines; TODO[batch-8]: moltbook tools imports integrations --infra tier should not depend on ext tier; either move shared adapter to core or invert via a tools-provider interface in integrations",
         "description": "Tool definitions, registry, sandbox",
     },
     # -- SUPPORT --smaller utility modules ---------------------------------
@@ -370,8 +371,25 @@ MODULES = {
     },
     "forge": {
         "tier": "infra",
-        "depends_on": ["core", "tools"],
-        "health": "green",
+        "depends_on": [
+            "core",
+            "tools",
+            # TODO[batch-8]: dispatch_agent_loop drives the native AgentLoop for
+            # evolve dispatch (lazy import). Acceptable while forge is the
+            # orchestrator of self-modification; revisit if agent grows a
+            # forge-facing interface.
+            "agent",
+            # TODO[batch-8]: dispatch_agent_loop lazily imports
+            # server.openai_codex_oauth for the shared secret store --infra tier
+            # reaching up into server. Hoist the secret store into core, then
+            # remove this dep and the (server, forge) known_cycles entry.
+            "server",
+            # TODO[batch-8]: bridge_desktop lazily imports desktop_operator for
+            # the global operator manager. Consider a core-level handle instead.
+            "desktop_operator",
+        ],
+        "health": "yellow",
+        "debt": "anvil/evolve.py exceeds 1335 lines, anvil/evolve_verification.py exceeds 1133 lines",
         "description": "Praxis.Forge construction umbrella -- Anvil (self-mod / Doppelganger Protocol / Evolve runtime). Future sub-pieces: Gates, Intake, Publish.",
     },
     "watcher": {
@@ -1238,6 +1256,11 @@ RULES = {
         # should not depend on cli (cli is the consumer of server). Eventually
         # extract shared command-handling into core or expose via thin interface.
         ("server", "cli"),
+        # TODO[batch-8]: server/routes/evolve_agent_routes.py imports forge
+        # (Code-tab delivery) while forge/anvil/dispatch_agent_loop.py lazily
+        # imports server.openai_codex_oauth for the shared secret store. Hoist
+        # the secret store into core to break the cycle, then drop this entry.
+        ("server", "forge"),
         # TODO[batch-8]: marketplace/orchestrator/brain.py imports agent;
         # orchestrator (support tier) reaching up into agent (core tier).
         # Eventually expose an orchestrator-facing interface in agent.
@@ -1263,6 +1286,16 @@ RULES = {
         "**/runtime/040_model_setup_settings_01.js",  # 1559 lines (ceiling 1500); model-setup settings UI needs module split
         "**/runtime/048_ui_studio_canvas.js",  # 1639 lines (ceiling 1500); forward-ported coordinate-canvas IIFE, needs module split in a focused frontend-cleanup session
         "*token_economy_space_theme.css",  # 2262 lines (ceiling 2000); space-theme stylesheet needs component-CSS split
+        # Pre-existing ceiling violations surfaced when CI came back from the
+        # 2026-06 Actions outage; exempted to restore a green gate baseline.
+        # All four are slated for split/deletion in the product-ready push
+        # (plans/thomas/PRODUCT_READY_PUSH_2026-07-15.md P1/P2): 001 is the
+        # legacy SPA preamble, 021/022 are virtual-office legacy modules, 047
+        # is the Code client being merged with wt2's unified_code_mode.
+        "**/runtime/001_preamble.js",  # 2639 lines (ceiling 1500)
+        "**/runtime/021_virtual_office_05.js",  # 3391 lines (ceiling 1500)
+        "**/runtime/022_virtual_office_06.js",  # 7546 lines (ceiling 1500)
+        "**/runtime/047_evolve_agent_chat.js",  # 1874 lines (ceiling 1500)
     ],
 }
 

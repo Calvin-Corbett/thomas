@@ -39,6 +39,45 @@ from .doppelganger import (
     promote_green_delta_to_blue,
     sync_blue_to_green,
 )
+
+# Charter/session-store, architecture-debt sync, and prompt building were split
+# into sibling modules (2026-07-15) to keep this file under MONOLITH_CEILING.
+# Everything is re-exported here so `thomas.forge.anvil.evolve` remains the
+# stable import surface for the CLI, server routes, and tests.
+from .evolve_arch_sync import _sync_architecture_health_debt  # noqa: F401
+from .evolve_charter import (  # noqa: F401
+    DEFAULT_EVOLVE_GOAL,
+    DEFAULT_EVOLVE_OBJECTIVE,
+    DEFAULT_EVOLVE_PRINCIPLES,
+    DEFAULT_VERIFY_COMMANDS,
+    LEGACY_DEFAULT_VERIFY_COMMAND_SETS,
+    EvolveCharter,
+    _charter_json_path,
+    _charter_markdown_path,
+    _current_default_if_legacy,
+    _normalize_relpath,
+    _normalize_verify_commands,
+    _read_json,
+    _sessions_root,
+    _sha256,
+    _write_json,
+    _write_text,
+    build_charter_markdown,
+    ensure_evolve_charter,
+    has_evolve_charter,
+    list_evolve_sessions,
+    load_evolve_charter,
+    load_evolve_session,
+    load_latest_evolve_session,
+    resolve_evolve_root,
+    resolve_repo_root,
+    utc_now_iso,
+)
+from .evolve_prompts import (  # noqa: F401
+    _build_agent_prompt,
+    _build_no_change_retry_goal,
+    _render_session_markdown,
+)
 from .evolve_runtime_exec import (
     _build_green_chat_command,
     _evolve_child_env,
@@ -74,27 +113,6 @@ BLUE_SUPERVISOR_MANIFEST_SCOPES = (
     "thomas/forge/anvil",
 )
 
-DEFAULT_EVOLVE_OBJECTIVE = (
-    "Continuously improve Thomas across reliability, UI polish, safety, latency, and maintainability."
-)
-DEFAULT_EVOLVE_GOAL = "Choose the single highest-leverage safe improvement you can implement right now, then verify it."
-DEFAULT_EVOLVE_PRINCIPLES = [
-    "Operate only in the green doppelganger mirror. Never assume blue/live edits are safe.",
-    "Prefer user-visible improvements, reliability, and maintainability over novelty.",
-    "Respect existing work. Do not revert unrelated edits or broaden scope without evidence.",
-    "Run targeted verification before you stop, and leave clear evidence in artifacts.",
-    "If verification fails, fix it or stop with an honest failure record instead of hand-waving.",
-]
-# Verification runs inside the green mirror, which intentionally has no .git.
-# Exclude checks that need git history/baselines; the dependency-direction
-# architecture checks still run, and commit-time gates still catch banned files.
-DEFAULT_VERIFY_COMMANDS = [
-    'python -m pytest tests/test_architecture.py -q -k "not test_no_new_legacy_files and not test_debt_trending"'
-]
-LEGACY_DEFAULT_VERIFY_COMMAND_SETS = {
-    ('python -m pytest tests/test_architecture.py -q -k "not test_no_new_legacy_files"',),
-    ("python -m pytest tests/test_architecture.py -x --tb=short -q",),
-}
 EVOLVE_GREEN_QUALITY_ENV = {
     "THOMAS_QUALITY_ENABLED": "false",
     "THOMAS_QUALITY_ENFORCE": "false",
@@ -107,194 +125,6 @@ class _PromotionRejected(RuntimeError):
     def __init__(self, message: str, *, supervisor_verdict: dict[str, Any] | None = None) -> None:
         super().__init__(message)
         self.supervisor_verdict = supervisor_verdict or {}
-
-
-@dataclass(frozen=True)
-class EvolveCharter:
-    objective: str = DEFAULT_EVOLVE_OBJECTIVE
-    default_goal: str = DEFAULT_EVOLVE_GOAL
-    principles: list[str] = field(default_factory=lambda: list(DEFAULT_EVOLVE_PRINCIPLES))
-    verify_commands: list[str] = field(default_factory=lambda: list(DEFAULT_VERIFY_COMMANDS))
-    acceptance_checks: list[str] = field(default_factory=list)
-    max_passes: int = 1
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "acceptance_checks", _normalize_acceptance_checks(self.acceptance_checks))
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "objective": self.objective,
-            "default_goal": self.default_goal,
-            "principles": list(self.principles),
-            "verify_commands": list(self.verify_commands),
-            "acceptance_checks": list(self.acceptance_checks),
-            "max_passes": int(self.max_passes),
-        }
-
-    @classmethod
-    def from_dict(cls, payload: dict[str, Any] | None) -> EvolveCharter:
-        payload = dict(payload or {})
-        principles = payload.get("principles")
-        verify_commands = _normalize_verify_commands(payload.get("verify_commands"))
-        return cls(
-            objective=str(payload.get("objective") or DEFAULT_EVOLVE_OBJECTIVE),
-            default_goal=str(payload.get("default_goal") or DEFAULT_EVOLVE_GOAL),
-            principles=[str(x).strip() for x in (principles or []) if str(x).strip()]
-            or list(DEFAULT_EVOLVE_PRINCIPLES),
-            verify_commands=_current_default_if_legacy(verify_commands),
-            acceptance_checks=_normalize_acceptance_checks(payload.get("acceptance_checks")),
-            max_passes=max(1, min(int(payload.get("max_passes") or 1), 8)),
-        )
-
-
-def _normalize_verify_commands(value: Any) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    return [str(item).strip() for item in value if str(item).strip()]
-
-
-def _current_default_if_legacy(commands: list[str]) -> list[str]:
-    if not commands:
-        return list(DEFAULT_VERIFY_COMMANDS)
-    if tuple(commands) in LEGACY_DEFAULT_VERIFY_COMMAND_SETS:
-        return list(DEFAULT_VERIFY_COMMANDS)
-    return list(commands)
-
-
-def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def resolve_repo_root(project_root: Path | None = None) -> Path:
-    if project_root is None:
-        return find_project_root().resolve()
-    return Path(project_root).expanduser().resolve()
-
-
-def resolve_evolve_root(project_root: Path | None = None) -> Path:
-    return resolve_repo_root(project_root) / ".thomas" / "evolve"
-
-
-def _charter_json_path(project_root: Path | None = None) -> Path:
-    return resolve_evolve_root(project_root) / "charter.json"
-
-
-def _charter_markdown_path(project_root: Path | None = None) -> Path:
-    return resolve_evolve_root(project_root) / "charter.md"
-
-
-def _sessions_root(project_root: Path | None = None) -> Path:
-    return resolve_evolve_root(project_root) / "sessions"
-
-
-def has_evolve_charter(project_root: Path | None = None) -> bool:
-    return _charter_json_path(project_root).exists()
-
-
-def _write_text(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-
-
-def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    _write_text(path, json.dumps(payload, ensure_ascii=False, indent=2))
-
-
-def _read_json(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def build_charter_markdown(charter: EvolveCharter) -> str:
-    lines = [
-        "# Thomas Evolve Charter",
-        "",
-        f"## Objective\n{charter.objective}",
-        "",
-        f"## Default Goal\n{charter.default_goal}",
-        "",
-        "## Principles",
-    ]
-    lines.extend(f"- {item}" for item in charter.principles)
-    lines.append("")
-    lines.append("## Verification")
-    lines.extend(f"- `{cmd}`" for cmd in charter.verify_commands)
-    lines.append("")
-    lines.append("## Acceptance Checks")
-    if charter.acceptance_checks:
-        lines.extend(f"- `{check}`" for check in charter.acceptance_checks)
-    else:
-        lines.append("- none")
-    lines.append("")
-    lines.append(f"## Max Passes\n{int(charter.max_passes)}")
-    return "\n".join(lines).strip() + "\n"
-
-
-def ensure_evolve_charter(
-    project_root: Path | None = None,
-    charter: EvolveCharter | None = None,
-    *,
-    overwrite: bool = False,
-) -> tuple[Path, Path, Path]:
-    repo_root = resolve_repo_root(project_root)
-    evolve_root = resolve_evolve_root(repo_root)
-    json_path = _charter_json_path(repo_root)
-    markdown_path = _charter_markdown_path(repo_root)
-    if json_path.exists() and not overwrite:
-        return evolve_root, json_path, markdown_path
-    next_charter = charter or EvolveCharter()
-    evolve_root.mkdir(parents=True, exist_ok=True)
-    _sessions_root(repo_root).mkdir(parents=True, exist_ok=True)
-    _write_json(json_path, next_charter.to_dict())
-    _write_text(markdown_path, build_charter_markdown(next_charter))
-    return evolve_root, json_path, markdown_path
-
-
-def load_evolve_charter(project_root: Path | None = None) -> EvolveCharter:
-    repo_root = resolve_repo_root(project_root)
-    json_path = _charter_json_path(repo_root)
-    if not json_path.exists():
-        ensure_evolve_charter(repo_root)
-    return EvolveCharter.from_dict(_read_json(json_path))
-
-
-def list_evolve_sessions(project_root: Path | None = None, *, limit: int = 20) -> list[dict[str, Any]]:
-    root = _sessions_root(project_root)
-    if not root.exists():
-        return []
-    rows: list[dict[str, Any]] = []
-    for path in sorted(root.iterdir(), key=lambda item: item.name, reverse=True):
-        if not path.is_dir():
-            continue
-        payload_path = path / "session.json"
-        if not payload_path.exists():
-            continue
-        try:
-            rows.append(_read_json(payload_path))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-            logger.warning("Skipping unreadable evolve session metadata %s: %s", payload_path, exc)
-            continue
-        if len(rows) >= max(1, int(limit)):
-            break
-    return rows
-
-
-def load_latest_evolve_session(project_root: Path | None = None) -> dict[str, Any] | None:
-    rows = list_evolve_sessions(project_root, limit=1)
-    return rows[0] if rows else None
-
-
-def load_evolve_session(project_root: Path | None, session_token: str) -> dict[str, Any]:
-    root = _sessions_root(project_root)
-    token = str(session_token or "").strip()
-    if not token:
-        raise RuntimeError("session_id is required")
-    exact = root / token / "session.json"
-    if exact.exists():
-        return _read_json(exact)
-    matches = sorted(root.glob(f"{token}*/session.json"), key=lambda item: item.parent.name, reverse=True)
-    if not matches:
-        raise RuntimeError(f"evolve session '{token}' was not found")
-    return _read_json(matches[0])
 
 
 def _iter_scope_files(root: Path) -> dict[str, Path]:
@@ -316,14 +146,6 @@ def _iter_scope_files(root: Path) -> dict[str, Path]:
                 continue
             files[candidate.relative_to(root).as_posix()] = candidate
     return files
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(65536), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _canonical_json_bytes(payload: dict[str, Any]) -> bytes:
@@ -415,10 +237,6 @@ def _read_text(path: Path) -> str | None:
         return None
     except OSError:
         return None
-
-
-def _normalize_relpath(value: str | Path) -> str:
-    return str(value or "").replace("\\", "/").lstrip("./")
 
 
 def _load_evolve_protected_paths(repo_root: Path) -> set[str]:
@@ -602,169 +420,6 @@ def _diff_preview(paths, delta: dict[str, Any], *, limit: int = 32) -> str:
             difflib.unified_diff(before.splitlines(keepends=True), [], fromfile=f"a/{rel}", tofile=f"b/{rel}", n=3)
         )
     return "".join(out)
-
-
-def _module_debt_nodes(source: str) -> list[tuple[str, ast.Constant]]:
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return []
-    out: list[tuple[str, ast.Constant]] = []
-    for node in tree.body:
-        if not isinstance(node, ast.Assign) or not any(
-            isinstance(target, ast.Name) and target.id == "MODULES" for target in node.targets
-        ):
-            continue
-        if not isinstance(node.value, ast.Dict):
-            continue
-        for key, value in zip(node.value.keys, node.value.values, strict=False):
-            if not isinstance(key, ast.Constant) or not isinstance(key.value, str):
-                continue
-            if not isinstance(value, ast.Dict):
-                continue
-            for item_key, item_value in zip(value.keys, value.values, strict=False):
-                if (
-                    isinstance(item_key, ast.Constant)
-                    and item_key.value == "debt"
-                    and isinstance(item_value, ast.Constant)
-                    and isinstance(item_value.value, str)
-                ):
-                    out.append((key.value, item_value))
-    return out
-
-
-def _architecture_soft_limit(source: str) -> int:
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return 800
-    for node in tree.body:
-        if not isinstance(node, ast.Assign) or not any(
-            isinstance(target, ast.Name) and target.id == "RULES" for target in node.targets
-        ):
-            continue
-        try:
-            rules = ast.literal_eval(node.value)
-        except (SyntaxError, ValueError):
-            return 800
-        if isinstance(rules, dict):
-            try:
-                return int(rules.get("max_new_file_lines") or 800)
-            except (TypeError, ValueError):
-                return 800
-    return 800
-
-
-_DEBT_SIZE_RE = re.compile(r"(?P<path>[\w\-/]+\.py)\s+(?:exceeds?|over)\s+\d+\s+lines", re.IGNORECASE)
-
-
-def _remove_debt_match(text: str, match: re.Match[str]) -> str:
-    start, end = match.span()
-    left = max(text.rfind(",", 0, start), text.rfind(";", 0, start))
-    right_candidates = [pos for pos in (text.find(",", end), text.find(";", end)) if pos != -1]
-    right = min(right_candidates) if right_candidates else -1
-    if left == -1:
-        remove_start = 0
-        remove_end = right + 1 if right != -1 else end
-    else:
-        remove_start = left
-        remove_end = end
-    next_text = text[:remove_start] + text[remove_end:]
-    next_text = re.sub(r"\s*([,;])\s*", r"\1 ", next_text)
-    next_text = re.sub(r"\s{2,}", " ", next_text)
-    return next_text.strip(" ,;")
-
-
-def _prune_stale_debt_note(
-    module_root: Path,
-    debt: str,
-    *,
-    soft_limit: int,
-    eligible_paths: set[str],
-) -> tuple[str, list[str]]:
-    next_debt = str(debt or "")
-    removed: list[str] = []
-    while True:
-        stale: re.Match[str] | None = None
-        for match in _DEBT_SIZE_RE.finditer(next_debt):
-            rel = _normalize_relpath(match.group("path"))
-            if rel not in eligible_paths:
-                continue
-            candidate = module_root / rel
-            if not candidate.exists():
-                continue
-            try:
-                line_count = len(candidate.read_text(encoding="utf-8", errors="replace").splitlines())
-            except OSError:
-                continue
-            if line_count <= int(soft_limit):
-                stale = match
-                removed.append(rel)
-                break
-        if stale is None:
-            break
-        next_debt = _remove_debt_match(next_debt, stale)
-    return next_debt, removed
-
-
-def _sync_architecture_health_debt(paths, changed_files: set[str]) -> dict[str, Any]:
-    """Prune stale architecture debt notes after a green refactor.
-
-    The agent must not edit ``thomas/_architecture.py`` directly. This helper
-    only runs when that file still matches blue, and only removes stale
-    ``file.py exceeds N lines`` fragments for files changed by this session and
-    now under the soft limit.
-    """
-    rel = "thomas/_architecture.py"
-    blue_path = paths.blue_root / rel
-    green_path = paths.green_root / rel
-    if not blue_path.exists() or not green_path.exists():
-        return {"changed_files": [], "removed": []}
-    try:
-        if _sha256(blue_path) != _sha256(green_path):
-            return {"changed_files": [], "removed": [], "skipped_reason": "architecture_already_changed"}
-    except OSError:
-        return {"changed_files": [], "removed": [], "skipped_reason": "architecture_unreadable"}
-
-    changed_by_module: dict[str, set[str]] = {}
-    for item in changed_files:
-        normalized = _normalize_relpath(item)
-        parts = normalized.split("/", 2)
-        if len(parts) < 3 or parts[0] != "thomas" or not parts[2].endswith(".py"):
-            continue
-        changed_by_module.setdefault(parts[1], set()).add(parts[2])
-    if not changed_by_module:
-        return {"changed_files": [], "removed": []}
-
-    source = green_path.read_text(encoding="utf-8")
-    soft_limit = _architecture_soft_limit(source)
-    lines = source.splitlines(keepends=True)
-    replacements: list[tuple[int, int, int, str]] = []
-    removed: list[dict[str, str]] = []
-    for module_name, node in _module_debt_nodes(source):
-        eligible_paths = changed_by_module.get(module_name, set())
-        if not eligible_paths:
-            continue
-        if node.lineno != node.end_lineno:
-            continue
-        module_root = paths.green_root / "thomas" / module_name
-        new_debt, removed_refs = _prune_stale_debt_note(
-            module_root,
-            str(node.value),
-            soft_limit=soft_limit,
-            eligible_paths=eligible_paths,
-        )
-        if not removed_refs or new_debt == node.value:
-            continue
-        replacements.append((node.lineno - 1, node.col_offset, node.end_col_offset, json.dumps(new_debt)))
-        removed.extend({"module": module_name, "path": item} for item in removed_refs)
-
-    for line_idx, start, end, replacement in sorted(replacements, reverse=True):
-        lines[line_idx] = lines[line_idx][:start] + replacement + lines[line_idx][end:]
-    if not replacements:
-        return {"changed_files": [], "removed": []}
-    green_path.write_text("".join(lines), encoding="utf-8")
-    return {"changed_files": [rel], "removed": removed}
 
 
 def _preferred_evolve_codex_profile(config: Any) -> str:
@@ -1033,86 +688,6 @@ def _promote_verified_green_delta(
     return backup, supervisor_verdict
 
 
-def _build_agent_prompt(
-    charter: EvolveCharter,
-    goal: str,
-    *,
-    pass_index: int,
-    pass_count: int,
-    acceptance_checks: list[str] | None = None,
-) -> str:
-    active_acceptance_checks = _normalize_acceptance_checks(acceptance_checks or charter.acceptance_checks)
-    lines = [
-        "You are Thomas running inside evolve mode on the green doppelganger mirror of the Thomas repository.",
-        "",
-        f"Objective: {charter.objective}",
-        f"Goal for this pass: {goal or charter.default_goal}",
-        f"Pass: {pass_index} of {pass_count}",
-        "",
-        "Rules:",
-        "- Work only inside the current cwd, which is the green mirror of Thomas.",
-        "- The green mirror intentionally has no .git metadata. Do not rely on git commands.",
-        "- Do not call git.status or git.diff; the blue supervisor computes all deltas after you stop.",
-        "- Do not touch runtime/doppelganger, .thomas/evolve, secrets, or external machine state.",
-        (
-            "- Hard-stop boundary: do not modify policy, guardrail, support, supervisor-owned files, "
-            "test infrastructure, or new evolve-loop files. Touching these rejects the whole session before verification."
-        ),
-        "- Non-Python file changes are human-held until dedicated non-Python verification exists; prefer Python-only deltas unless the goal explicitly requires otherwise.",
-        (
-            "- Forbidden examples: WORKTREE_RULES.md, AGENTS.md, GUARDRAILS.md, agent_safety.toml, "
-            "docs/AGENT_FILE_EDITING_RULES.md, tests/*, conftest.py, pytest.ini, thomas/_architecture.py, "
-            "new thomas/forge/anvil/*.py files, and supervisor-owned evolve files."
-        ),
-        "- Existing non-supervisor evolve-loop files may be changed for explicit evolve-loop goals; blue supervisor still requires blast-radius tests.",
-        "- If a useful change seems to require one of those files, stop and report the boundary instead.",
-        "- If verification fails because of environment limits or missing metadata, report that honestly instead of editing the guard.",
-        "- Prefer concrete code improvements over commentary-only work.",
-        "- Use `fs.search` or `code.search` to locate target symbols in large files, then read a small `fs.read_file` start_line/end_line range before editing.",
-        "- To make an edit, use `diff.create` for targeted patches or `fs.write_file` for full-file rewrites; reading files is only preparation.",
-        "- Shell/process tools are disabled in self-development. Do not use shell commands to edit files; do not call `shell.exec`.",
-        "- A successful pass must leave at least one eligible file diff. Do not claim success after read-only work.",
-        "- If no safe eligible change exists, end with `NO_ELIGIBLE_CHANGE: <reason>` and do not call it done.",
-        "- Pick the smallest useful change, edit it, run the narrowest relevant test, then stop.",
-        "- Keep this pass SMALL and focused: a handful of related edits, not an exhaustive sweep. The loop runs many passes, so for a large goal (e.g. dozens of call sites) fix only a few this pass and stop -- finishing cleanly and promoting beats timing out with nothing done.",
-        "- Run targeted verification yourself before you stop.",
-        "- End with a concise summary of files changed and verification run.",
-        "",
-        "Principles:",
-    ]
-    lines.extend(f"- {item}" for item in charter.principles)
-    if active_acceptance_checks:
-        lines.append("")
-        lines.append("Acceptance checks the blue supervisor will run:")
-        lines.extend(f"- {check}" for check in active_acceptance_checks)
-    if charter.verify_commands:
-        lines.append("")
-        lines.append("Post-run verification ladder:")
-        lines.extend(f"- {cmd}" for cmd in charter.verify_commands)
-    return "\n".join(lines).strip()
-
-
-def _build_no_change_retry_goal(goal: str) -> str:
-    return (
-        "The previous evolve attempt exited successfully but produced no eligible file diff. "
-        "Retry once with a write-or-refuse approach: use at most one targeted `code.search` call to locate "
-        "the symbol or file slice, then at most one bounded `fs.read_file` call, then your next substantive "
-        "tool call must be `diff.create` or `fs.write_file` against an eligible path. "
-        "This retry instruction overrides the general search guidance: do not call `fs.search`, `git.status`, "
-        "`shell.exec`, or any inspection tool except the single optional `code.search` call and the single "
-        "optional bounded `fs.read_file` call. "
-        "When calling `diff.create`, copy `old_str` exactly from the `fs.read_file` output; do not infer code "
-        "syntax from the original goal text. "
-        "`shell.exec` is unavailable; if `diff.create` fails, immediately use `fs.write_file` with the complete "
-        "corrected file content, or return `NO_ELIGIBLE_CHANGE: <specific reason>`. "
-        "Only run verification after a write tool succeeds. "
-        "Make exactly one safe allowed diff for the original goal, run the narrowest relevant verification, "
-        "and stop. If no safe eligible diff exists, return "
-        "`NO_ELIGIBLE_CHANGE: <specific reason>` without claiming success. Original goal: "
-        f"{goal}"
-    )
-
-
 def _is_test_infra_path(rel: str) -> bool:
     norm = _normalize_relpath(rel)
     name = Path(norm).name
@@ -1177,42 +752,6 @@ def _session_status(
     if promoted:
         return "promoted"
     return "ready"
-
-
-def _render_session_markdown(session: dict[str, Any]) -> str:
-    lines = [
-        f"# Evolve Session {session['session_id']}",
-        "",
-        f"- Status: `{session['status']}`",
-        f"- Goal: {session['goal']}",
-        f"- Changed files: {session['delta']['changed_count']}",
-        f"- Promotable: `{str(session['promotable']).lower()}`",
-        f"- Promoted: `{str(session['promoted']).lower()}`",
-    ]
-    if session.get("policy_violations"):
-        lines.append(f"- Policy violations: {len(session['policy_violations'])}")
-    lines.extend(
-        [
-            "",
-            "## Verification",
-        ]
-    )
-    if session.get("verification"):
-        for item in session["verification"]:
-            lines.append(f"- `{item['command']}` -> `{item['returncode']}`")
-    else:
-        lines.append("- No verification commands recorded.")
-    if session.get("policy_violations"):
-        lines.append("")
-        lines.append("## Policy Violations")
-        lines.extend(f"- `{rel}`" for rel in session["policy_violations"])
-    lines.append("")
-    lines.append("## Files")
-    if session["delta"]["changed_files"]:
-        lines.extend(f"- `{rel}`" for rel in session["delta"]["changed_files"])
-    else:
-        lines.append("- No tracked file changes.")
-    return "\n".join(lines).strip() + "\n"
 
 
 def run_evolve_session(

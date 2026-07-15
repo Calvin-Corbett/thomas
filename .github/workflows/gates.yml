@@ -421,7 +421,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - run: python scripts/forge/gates/repo_identity.py
+      # Pass the CI-truth slug: this workflow runs on both the private dev repo
+      # (calvin-corbett/thomas-dev) and the public repo (calvin-corbett/thomas).
+      # The policy's allowed_repo_slugs list still forbids unlisted remotes, so
+      # the anti-clone property is preserved (a fork/clone slug fails closed).
+      - run: python scripts/forge/gates/repo_identity.py --expected-slug "$GITHUB_REPOSITORY"
 
   # ────────────────────────────────────────────────────────────────────────
   # SIGNED-COMMIT VERIFICATION (architecture layer 1 + 2 + 3 check)
@@ -449,6 +453,15 @@ jobs:
         run: |
           BASE="${{ github.event.pull_request.base.sha }}"
           HEAD="${{ github.event.pull_request.head.sha }}"
+          # SSH-signed commits (gpg.format=ssh, this repo's standard per
+          # docs/SIGNING_KEY_SETUP.md) can only be verified when git knows the
+          # allowed signers. Without this, every SSH signature reports E/N on
+          # the runner and the gate rejects ALL signed commits (2026-07-15).
+          # NOTE (landing-lane hardening): docs/ops/allowed_signers and this
+          # workflow are PR-editable judges — an attacker PR could add its own
+          # key. Mitigation tracked in plans/thomas/PRODUCT_READY_PUSH_2026-07-15.md
+          # (protect both files via agent_safety enforcement list + manifest).
+          git config gpg.ssh.allowedSignersFile "$PWD/docs/ops/allowed_signers"
           unsigned=""
           for sha in $(git rev-list "$BASE..$HEAD"); do
             # %G? returns: G=good, U=good-untrusted, X=expired-signature,

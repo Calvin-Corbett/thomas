@@ -12,7 +12,14 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from scripts.forge.publish.private_markers import (
+# Make `scripts.forge.publish` importable when this file is run directly
+# (`python scripts/forge/publish/preflight.py`, the documented CI/pre-push
+# invocation) as well as via `python -m scripts.forge.publish.preflight`.
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from scripts.forge.publish.private_markers import (  # noqa: E402
     ACCEPTED_PRIVATE_MARKER_LINES,
     PRIVATE_MARKER,
     line_has_private_marker,

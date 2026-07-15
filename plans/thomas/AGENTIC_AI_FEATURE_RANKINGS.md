@@ -1299,7 +1299,7 @@
 - Score: 85/100
 - Repo URL: https://github.com/agentclientprotocol/agent-client-protocol
 - Feature/ability: Standard protocol/schema for agent sessions, prompts, cancellation, tool calls, and permission messages.
-- Why Thomas should adopt it: Thomas needs visible, provider-independent sessions across Codex, Gemini, Claude, OpenCode, and OpenClaw-like agents.
+- Why Thomas should adopt it: Thomas needs visible, provider-independent sessions across Codex, Gemini, Claude, OpenCode, and redacted-acp-peer-like agents.
 - Likely Thomas integration surface: Thomas portal agent protocol, worker session API, permission prompts, and multi-provider adapter layer.
 - Risk/effort: Medium-high; protocol alignment could shape core portal APIs.
 - Next implementation task shape: Map Thomas worker session events to ACP session and permission message types.
@@ -2138,7 +2138,7 @@
 ### 214. VS Code ACP Client Extension
 - Score: 82/100
 - Repo URL: https://github.com/formulahendry/vscode-acp
-- Feature/ability: VS Code extension connecting to ACP-compatible agents such as Claude, Codex, Copilot, Gemini, Qwen, OpenCode, Kiro, and OpenClaw.
+- Feature/ability: VS Code extension connecting to ACP-compatible agents such as Claude, Codex, Copilot, Gemini, Qwen, OpenCode, Kiro, and redacted-acp-peer.
 - Why Thomas should adopt it: Shows how editor-native ACP clients expose sessions, permissions, and multiple backend agents.
 - Likely Thomas integration surface: Agent client UX, editor integration, ACP session model, and multi-provider worker controls.
 - Risk/effort: Medium; client reference, not core backend.
@@ -2875,15 +2875,15 @@
 - Next implementation task shape: Compare ModelCache service-mode design against a Thomas local cache service with per-repo namespace, worker identity, cache provenance, and hit/miss metrics.
 - Source entry reference: `2026-06-26 - CodeFuse ModelCache`.
 
-### 288. OpenClaw Multi-Agent Test Suite
+### 288. redacted-acp-peer Multi-Agent Test Suite
 - Score: 79/100
-- Repo URL: https://github.com/ThinkOffApp/openclaw-multi-agent-test-suite
+- Repo URL: https://github.com/ThinkOffApp/redacted-acp-peer-multi-agent-test-suite
 - Feature/ability: Reproducible benchmark for measuring LLM performance in multi-agent environments using a staged model-capability framework.
 - Why Thomas should adopt it: Thomas coordination claims should be tested under multi-agent failure modes, not inferred from single-agent task success.
 - Likely Thomas integration surface: Multi-agent benchmark tasks, coordinator/reviewer scoring, staged capability rubric, route replay, and agent-collaboration regression suite.
 - Risk/effort: Medium effort and medium risk; concept fit is strong, but project maturity needs review before relying on its rubric.
 - Next implementation task shape: Derive a Thomas coordinator/reviewer test scenario from the staged capability framework and run it with two workers plus a reviewer transcript.
-- Source entry reference: `2026-06-26 - OpenClaw multi-agent test suite`.
+- Source entry reference: `2026-06-26 - redacted-acp-peer multi-agent test suite`.
 
 ### 289. Agent-Skills CLI
 - Score: 79/100
@@ -2978,7 +2978,7 @@
 ### 298. ACP UI Cross-Platform Agent Client
 - Score: 78/100
 - Repo URL: https://github.com/formulahendry/acp-ui
-- Feature/ability: Cross-platform desktop/mobile/web client for Agent Client Protocol across Claude, Codex, Copilot, Qwen, Gemini, OpenCode, and OpenClaw-style agents.
+- Feature/ability: Cross-platform desktop/mobile/web client for Agent Client Protocol across Claude, Codex, Copilot, Qwen, Gemini, OpenCode, and redacted-acp-peer-style agents.
 - Why Thomas should adopt it: Thomas needs a visible portal and should study client protocol abstractions before hardwiring provider UIs.
 - Likely Thomas integration surface: Thomas portal client protocol, multi-provider session UI, mobile/web companion, and agent connection registry.
 - Risk/effort: Medium; early project, but useful UX/protocol reference.

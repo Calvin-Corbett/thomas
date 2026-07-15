@@ -7,12 +7,20 @@ import argparse
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from scripts.forge.publish.private_markers import (
+# Make `scripts.forge.publish` importable when this file is run directly
+# (`python scripts/forge/publish/snapshot.py`) as well as via
+# `python -m scripts.forge.publish.snapshot`.
+_SNAPSHOT_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_SNAPSHOT_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SNAPSHOT_REPO_ROOT))
+
+from scripts.forge.publish.private_markers import (  # noqa: E402
     ACCEPTED_PRIVATE_MARKER_LINES,
     PRIVATE_MARKER,
     line_has_private_marker,

@@ -866,7 +866,7 @@ Research-only queue for agentic AI repositories and implementation ideas Thomas 
 
 - Repo URL: https://github.com/formulahendry/acp-ui
 - Repo name: formulahendry/acp-ui
-- Feature or ability Thomas should consider: Cross-platform desktop/mobile/web client for Agent Client Protocol that can connect to compatible agents such as Claude, Codex, Copilot, Qwen, Gemini, OpenCode, and OpenClaw.
+- Feature or ability Thomas should consider: Cross-platform desktop/mobile/web client for Agent Client Protocol that can connect to compatible agents such as Claude, Codex, Copilot, Qwen, Gemini, OpenCode, and redacted-acp-peer.
 - Why it matters for Thomas: Thomas needs a visible portal for running and monitoring agents. ACP UI is a useful reference for a client protocol abstraction instead of hardwiring each provider UI separately.
 - Integration surface guess: Thomas portal client protocol, multi-provider session UI, mobile/web companion, and agent connection registry.
 - Evidence/source URL: https://github.com/formulahendry/acp-ui
@@ -900,7 +900,7 @@ Research-only queue for agentic AI repositories and implementation ideas Thomas 
 - Repo URL: https://github.com/agentclientprotocol/agent-client-protocol
 - Repo name: agentclientprotocol/agent-client-protocol
 - Feature or ability Thomas should consider: Standardized protocol and schema for connecting editors/clients to agents through common session, prompt, cancel, tool-call, and permission message flows.
-- Why it matters for Thomas: Thomas needs visible, provider-independent agent sessions. ACP is a concrete candidate for decoupling the Thomas portal/client from individual agents like Codex, Gemini, Claude, OpenCode, and OpenClaw.
+- Why it matters for Thomas: Thomas needs visible, provider-independent agent sessions. ACP is a concrete candidate for decoupling the Thomas portal/client from individual agents like Codex, Gemini, Claude, OpenCode, and redacted-acp-peer.
 - Integration surface guess: Thomas portal agent protocol, worker session API, permission prompts, and multi-provider adapter layer.
 - Evidence/source URL: https://github.com/agentclientprotocol/agent-client-protocol
 - Date found: 2026-06-26
@@ -976,7 +976,7 @@ Research-only queue for agentic AI repositories and implementation ideas Thomas 
 
 - Repo URL: https://github.com/formulahendry/vscode-acp
 - Repo name: formulahendry/vscode-acp
-- Feature or ability Thomas should consider: VS Code extension that connects to ACP-compatible agents such as Claude, Codex, Copilot, Gemini, Qwen, OpenCode, Kiro, and OpenClaw.
+- Feature or ability Thomas should consider: VS Code extension that connects to ACP-compatible agents such as Claude, Codex, Copilot, Gemini, Qwen, OpenCode, Kiro, and redacted-acp-peer.
 - Why it matters for Thomas: Thomas can study how editor-native ACP clients expose sessions, permissions, and multiple backend agents through a familiar developer surface.
 - Integration surface guess: Agent client UX, editor integration, ACP session model, and multi-provider worker controls.
 - Evidence/source URL: https://github.com/formulahendry/vscode-acp
@@ -1086,7 +1086,7 @@ Research-only queue for agentic AI repositories and implementation ideas Thomas 
 
 - Repo URL: https://github.com/allvegetable/acp-bridge
 - Repo name: allvegetable/acp-bridge
-- Feature or ability Thomas should consider: Multi-agent orchestrator for OpenClaw that manages Codex, Claude, Gemini, and OpenCode through Agent Client Protocol with parallel tasks, dependency chains, and diagnostics.
+- Feature or ability Thomas should consider: Multi-agent orchestrator for redacted-acp-peer that manages Codex, Claude, Gemini, and OpenCode through Agent Client Protocol with parallel tasks, dependency chains, and diagnostics.
 - Why it matters for Thomas: Thomas needs visible multi-agent orchestration across providers. ACP Bridge is a direct reference for provider-neutral task orchestration and dependency management.
 - Integration surface guess: Thomas-native ACP orchestrator, worker dependency graph, provider adapter registry, and diagnostic event stream.
 - Evidence/source URL: https://github.com/allvegetable/acp-bridge
@@ -3150,14 +3150,14 @@ Research-only queue for agentic AI repositories and implementation ideas Thomas 
 - Date found: 2026-06-26
 - Confidence note: High confidence; strong web-agent benchmark that complements Thomas browser tooling.
 
-### 2026-06-26 - OpenClaw multi-agent test suite
+### 2026-06-26 - redacted-acp-peer multi-agent test suite
 
-- Repo URL: https://github.com/ThinkOffApp/openclaw-multi-agent-test-suite
-- Repo name: ThinkOffApp/openclaw-multi-agent-test-suite
+- Repo URL: https://github.com/ThinkOffApp/redacted-acp-peer-multi-agent-test-suite
+- Repo name: ThinkOffApp/redacted-acp-peer-multi-agent-test-suite
 - Feature or ability Thomas should consider: Reproducible benchmark for measuring LLM performance in multi-agent environments using a staged model-capability framework.
 - Why it matters for Thomas: Thomas coordination claims should be tested under multi-agent failure modes, not inferred from single-agent task success.
 - Integration surface guess: Multi-agent benchmark tasks, coordinator/reviewer scoring, staged capability rubric, route replay, and agent-collaboration regression suite.
-- Evidence/source URL: https://github.com/ThinkOffApp/openclaw-multi-agent-test-suite
+- Evidence/source URL: https://github.com/ThinkOffApp/redacted-acp-peer-multi-agent-test-suite
 - Date found: 2026-06-26
 - Confidence note: Medium-high confidence; directly relevant to multi-agent capability scoring, though project maturity needs review.
 
@@ -5012,7 +5012,7 @@ Research-only queue for agentic AI repositories and implementation ideas Thomas 
 - 2026-06-26 heartbeat 19:41Z: Source checked: https://github.com/THUDM/AgentBench
 - 2026-06-26 heartbeat 19:41Z: Source checked: https://github.com/OpenBMB/ToolBench
 - 2026-06-26 heartbeat 19:41Z: Source checked: https://github.com/OSU-NLP-Group/Mind2Web
-- 2026-06-26 heartbeat 19:41Z: Source checked: https://github.com/ThinkOffApp/openclaw-multi-agent-test-suite
+- 2026-06-26 heartbeat 19:41Z: Source checked: https://github.com/ThinkOffApp/redacted-acp-peer-multi-agent-test-suite
 - 2026-06-26 heartbeat 19:41Z: Source checked but skipped as duplicate: https://github.com/lm-sys/RouteLLM
 - 2026-06-26 heartbeat 19:41Z: Source checked but skipped as duplicate: https://github.com/ulab-uiuc/LLMRouter
 - 2026-06-26 heartbeat 19:41Z: Source checked but skipped as duplicate: https://github.com/swe-bench/SWE-bench
