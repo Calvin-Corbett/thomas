@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+### Added (Landing Lane, 2026-07-15)
+
+- **`scripts/crew/land.py`** — the one sanctioned unit-finish command: rebases onto fresh dev, pre-flights the exact CI checks (commit signatures first — the historical silent killer — then enforcement-integrity, plan-structure, task-problems, leak guard), detects protected-file diffs early and routes them to the `commit_guarded` owner-tap flow, pushes, opens the PR, arms auto-merge, watches the gate battery with fix-it cards on failure, and syncs/cleans up after the merge. Agents should never end a unit any other way.
+- **Coordination Protocol V2** (docs/AGENT_COORDINATION.md): message-and-proceed replaces stop-and-wait; waiting is reserved for owner taps, active-claim conflicts, destructive ops, and genuine questions; stale-able blockers must be re-verified live before waiting on them.
+
 ### Fixed (CI gates green, 2026-07-15)
 
 - **Architecture suite green again (13/13).** Declared the real `server↔forge` dependency (Code-tab routes drive Forge Anvil; `dispatch_agent_loop` reads the shared codex-oauth secret store) as an explicit known cycle with a TODO to hoist the secret store into `thomas/core`; debt-annotated the seven files that outgrew the new-file limit; split `thomas/forge/anvil/evolve.py` (1796 → 1335 lines, over the absolute MONOLITH_CEILING) into `evolve_charter.py`, `evolve_arch_sync.py`, and `evolve_prompts.py` with `evolve.py` re-exporting everything so all existing imports keep working; exempted four pre-existing over-ceiling legacy JS files pending their planned split/deletion in the product-ready push.

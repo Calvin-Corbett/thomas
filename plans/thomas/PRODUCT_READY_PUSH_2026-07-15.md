@@ -88,6 +88,20 @@ already covers the human-approved override lane.
   main, tag a release so PyPI workflow runs, fix daily-red Nightly Reliability, README/docs truth pass
   (Bible claim, DOCUMENTATION_INDEX broken links, Dockerfile nonexistent [dev] extra, CONTRIBUTING.md).
 
+## Coordination Protocol V2 (Calvin-directed 2026-07-15, msg-20260715211922 — binding)
+
+Replaces the stop-and-wait supervisor protocol. Workers message-and-PROCEED:
+1. Do NOT stop after a unit when the next unit is already queued — proceed immediately.
+2. Message-and-WAIT only for: protected-file changes needing a Calvin tap, scope conflict with an
+   ACTIVE claim, irreversible/destructive operations, or a genuine question.
+3. Staleness rule: before waiting on any blocker involving external state (PR/CI/branch), re-verify
+   LIVE first (gh pr view/checks, git fetch). If reality moved past the report, resolve your own
+   message and proceed on evidence.
+4. Blocked on the coordinator >15 min with a queued default → take the default, note it.
+5. Escalated p0 = real fires only.
+AGENTS.md's supervisor-protocol section still says stop-and-wait; it is superseded by this and gets
+rewritten in the next protected-file tap batch.
+
 ## Conflict rules (binding)
 
 - chat.html is FROZEN for all agents until the wt2-vs-forge-tab direction decision is executed.

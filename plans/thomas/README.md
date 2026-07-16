@@ -8,6 +8,7 @@
 - `plans/thomas/onboarding/THOMAS_ONBOARDING_UX_PLAN.md`
 - `plans/thomas/V3_CHAT_SPEC.md`
 - `plans/thomas/verification/AGENT_VERIFICATION_PROTOCOL_PLAN.md`
+- `plans/thomas/WT2_LANDING_MAP_2026-07-15.md` — landing plan for the unified Chat/Code/Work shell (wt2).
 - `plans/thomas/PRODUCT_READY_PUSH_2026-07-15.md` — binding mission plan for the claude+codex product-ready push.
 - `plans/thomas/AGENTIC_AI_FEATURE_RANKINGS.md` — agentic-AI feature research rankings.
 - `plans/thomas/AGENTIC_AI_FEATURE_RESEARCH_QUEUE.md` — agentic-AI feature research queue.
