@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.2] - 2026-07-19
+
+### Fixed
+
+- CRITICAL: Code mode could write into Thomas's OWN source repo. When the server runs from the repo with a repo-relative data dir, the scratch project resolved *inside* the repo working tree, so `git rev-parse --show-toplevel` walked up to the repo root and Code edits landed in the product source (a stale client `localStorage` root made it worse). Scratch is now anchored in `~/.thomas/code_scratch` (outside any checkout), the new-conversation route hard-rejects the Thomas source repo and substitutes scratch, and the client migration (v2) re-clears the poisoned stored root. Verified: a Code build now writes to the scratch project, not the repo.
+
 ## [0.19.1] - 2026-07-19
 
 ### Fixed

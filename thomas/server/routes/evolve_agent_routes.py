@@ -253,6 +253,9 @@ def build_evolve_agent_handlers(
                         requested_project,
                         fallback=catalog_root,
                     )
+                    _repo = forge_code_projects.thomas_source_repo_root()
+                    if _repo is not None and project_root == _repo:
+                        project_root = forge_code_projects.default_scratch_project(catalog_root)
                 elif requested_project:
                     selected = forge_code_projects.validate_project_root(requested_project, fallback=catalog_root)
                     if selected != project_root:
@@ -271,6 +274,12 @@ def build_evolve_agent_handlers(
                     catalog_root if requested_project else forge_code_projects.default_scratch_project(catalog_root)
                 )
                 project_root = forge_code_projects.validate_project_root(requested_project, fallback=_fallback)
+                # HARD SAFETY NET: a stale client localStorage (or catalog root)
+                # can still resolve to Thomas's own source repo, which Code must
+                # never edit. If it does, silently substitute a scratch project.
+                _repo = forge_code_projects.thomas_source_repo_root()
+                if _repo is not None and project_root == _repo:
+                    project_root = forge_code_projects.default_scratch_project(catalog_root)
                 conv = None
         except forge_code_projects.ForgeCodeProjectError as exc:
             return web.json_response({"ok": False, "error": str(exc), "code": "invalid_project_root"}, status=400)

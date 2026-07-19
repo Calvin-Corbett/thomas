@@ -946,16 +946,22 @@
 
   if (window.setInterval) window.setInterval(refreshElapsed, 1000);
   try {
-    // One-time migration (2026-07-18): earlier sessions auto-stored the Thomas
-    // source repo as the Code project, so every new conversation silently
-    // edited the product tree. Clear the stored root once; with none stored,
-    // the server binds new conversations to the scratch project and a real
-    // project stays one "Choose project folder" click away.
-    if (!localStorage.getItem('thomas_code_project_migrated')) {
+    // Migration (v2, 2026-07-19): earlier sessions auto-stored the Thomas source
+    // repo as the Code project, so every new conversation silently edited the
+    // product tree. The v1 migration cleared it once, but a later run re-saved
+    // the repo path (scratch resolved into the repo when the server runs from
+    // it). v2 re-clears, and we additionally refuse a stored root that looks
+    // like the running server's own source checkout. The server also rejects
+    // it as a hard safety net.
+    if (localStorage.getItem('thomas_code_project_migrated') !== 'v2') {
       localStorage.removeItem('thomas_code_project_root');
-      localStorage.setItem('thomas_code_project_migrated', '1');
+      localStorage.setItem('thomas_code_project_migrated', 'v2');
     }
-    state.projectRoot = localStorage.getItem('thomas_code_project_root') || '';
+    const _storedRoot = localStorage.getItem('thomas_code_project_root') || '';
+    // Heuristic client guard: a path ending in the Thomas package folder is the
+    // source repo — never use it as a scratch Code project.
+    state.projectRoot = /[\\/](thomas|thomas-dev)[\\/]?$/i.test(_storedRoot) ? '' : _storedRoot;
+    if (!state.projectRoot && _storedRoot) { try { localStorage.removeItem('thomas_code_project_root'); } catch (e) {} }
   }
   catch (error) { recordError(error, 'The saved Code project could not be loaded.'); }
   try {

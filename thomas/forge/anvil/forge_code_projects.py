@@ -50,20 +50,45 @@ def validate_project_root(value: str | Path | None, *, fallback: str | Path) -> 
     return root
 
 
+def thomas_source_repo_root() -> Path | None:
+    """Absolute git-toplevel of Thomas's OWN source checkout, if it is one.
+
+    Code runs must NEVER be pointed here: a "make me a game" ask would write
+    into the product tree and its change-attribution/Revert UI would sweep up
+    unrelated edits. Used as a hard safety net that rejects this path.
+    """
+    try:
+        import thomas
+
+        pkg = Path(thomas.__file__).resolve().parent  # .../thomas
+        proc = subprocess.run(
+            ["git", "-C", str(pkg.parent), "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            return Path(proc.stdout.strip()).resolve()
+    except (OSError, subprocess.SubprocessError, ImportError, ValueError):
+        return None
+    return None
+
+
 def default_scratch_project(catalog_root: str | Path) -> Path:
     """Default project for a NEW Code conversation when the user picked none.
 
-    Falling back to the catalog root pointed Code runs at Thomas's OWN source
-    repository: a "make me a game" ask wrote into the product tree and change
-    attribution swept up unrelated concurrent edits with live Revert buttons.
-    Scratch work gets its own git repository under the user data dir instead;
-    a real project is still one "Choose project folder" click away.
+    The scratch repo is anchored in the user's HOME (``~/.thomas/code_scratch``),
+    deliberately OUTSIDE any Thomas checkout: when the server runs from the repo
+    with a repo-relative data dir, a data-dir-relative scratch path sits inside
+    the repo working tree, so ``git rev-parse --show-toplevel`` walks up to the
+    repo root and Code edits the product source (observed 2026-07-19). A
+    home-anchored scratch has its OWN git toplevel. A real project is still one
+    "Choose project folder" click away.
     """
 
-    import os
-
-    data_dir = Path(os.environ.get("THOMAS_HOME") or (Path.home() / ".thomas")).expanduser()
-    scratch = data_dir / "projects" / "scratch"
+    scratch = (Path.home() / ".thomas" / "code_scratch").expanduser()
     try:
         scratch.mkdir(parents=True, exist_ok=True)
         if not (scratch / ".git").exists():
@@ -79,7 +104,13 @@ def default_scratch_project(catalog_root: str | Path) -> Path:
                 raise ForgeCodeProjectError(f"scratch project git init failed: {proc.stderr.strip()[:200]}")
     except OSError as exc:
         raise ForgeCodeProjectError("scratch project directory could not be created") from exc
-    return validate_project_root(scratch, fallback=scratch)
+    resolved = validate_project_root(scratch, fallback=scratch)
+    repo = thomas_source_repo_root()
+    if repo is not None and resolved == repo:
+        # Scratch somehow still resolved to the Thomas repo (e.g. HOME is inside
+        # the checkout). Fail loudly rather than silently editing the product.
+        raise ForgeCodeProjectError("scratch project resolved to the Thomas source repo; refusing")
+    return resolved
 
 
 def _registry_path(catalog_root: str | Path) -> Path:
