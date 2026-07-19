@@ -206,7 +206,10 @@
   display: flex;
   gap: 10px;
   max-width: 720px;
-  margin: 0 auto 14px;
+  /* No auto side margins on the base row: the is-user / is-thomas rules own
+     horizontal alignment. `margin: 0 auto` here left user bubbles with auto on
+     BOTH sides (is-user only reset the left), centering them mid-column. */
+  margin: 0 0 14px;
   padding: 8px 10px;
   border: 0;
   color: var(--c-text);
@@ -218,12 +221,14 @@
   width: fit-content;
   max-width: min(720px, 88%);
   margin-left: auto;
+  margin-right: 0;
   padding: 12px 15px;
   border: 1px solid var(--c-accent-line);
   border-radius: 15px;
   background: var(--c-accent-soft);
 }
 .tc-work-message.is-thomas {
+  margin-left: 0;
   margin-right: auto;
   background: transparent;
 }
@@ -255,6 +260,47 @@
   color: var(--c-muted);
   font-size: 12px;
   animation: tc-work-pulse 1.3s ease-in-out infinite;
+}
+.tc-work-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 8px 8px 14px;
+  border: 1px solid var(--c-border);
+  border-radius: 16px;
+  background: var(--c-surface-2, rgba(255, 255, 255, 0.03));
+}
+.tc-work-composer:focus-within {
+  border-color: var(--c-accent-line);
+}
+.tc-work-composer textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 22px;
+  max-height: 160px;
+  resize: none;
+  border: 0;
+  background: transparent;
+  color: var(--c-text);
+  font: 14px/1.5 inherit;
+  outline: none;
+}
+.tc-work-composer-send {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--c-accent);
+  color: var(--c-accent-ink);
+  cursor: pointer;
+}
+.tc-work-composer-send:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 .tc-work-job-layout {
   display: grid;

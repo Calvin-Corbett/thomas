@@ -220,6 +220,23 @@
     root.querySelector('#tc-work-dashboard-form')?.addEventListener('submit', event => { event.preventDefault(); void safely(() => updateDashboard(new FormData(event.currentTarget))); });
     root.querySelector('[data-work-dashboard-design]')?.addEventListener('click', () => { void safely(designDashboard); });
     root.querySelectorAll('[data-work-dashboard-run]').forEach(button => button.addEventListener('click', () => { void safely(() => runDashboardAction(button.dataset.workDashboardRun)); }));
+    const composer = root.querySelector('#tc-work-composer');
+    if (composer) {
+      const field = composer.querySelector('textarea');
+      const submitComposer = () => {
+        const value = field ? field.value : '';
+        if (!String(value || '').trim() || state.running) return;
+        if (field) field.value = '';
+        void send(value);
+      };
+      composer.addEventListener('submit', event => { event.preventDefault(); submitComposer(); });
+      if (field) {
+        // Enter sends, Shift+Enter is a newline; grow with content like main chat.
+        field.addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submitComposer(); } });
+        field.addEventListener('input', () => { field.style.height = 'auto'; field.style.height = Math.min(field.scrollHeight, 160) + 'px'; });
+        if (!state.running && document.activeElement !== field) { try { field.focus({ preventScroll: true }); } catch (e) { field.focus(); } }
+      }
+    }
     root.querySelectorAll('form input, form textarea, form select').forEach(element => {
       element.addEventListener('input', () => { state.formDirty = true; });
       element.addEventListener('change', () => { state.formDirty = true; });

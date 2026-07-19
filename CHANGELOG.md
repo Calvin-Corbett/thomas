@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.1] - 2026-07-19
+
+### Fixed
+
+- Work mode was missing its chat composer: the job view rendered a transcript but no input box, and `send()` was never wired to anything — you could not talk to Thomas inside a job. Added a composer (Enter sends, Shift+Enter newline, autogrow, send button) to both the job and onboarding views. Verified live.
+- Work-mode user message bubbles were centered mid-column instead of right-aligned: the base `.tc-work-message` used `margin: 0 auto` and the `is-user` rule only reset `margin-left`, leaving both sides `auto`. User bubbles now right-align, Thomas left.
+- Multi-deliverable chat asks joined by "and"/"also" (e.g. "make a game and also a graph") produced one worker that built only the first item. The operator prompt now instructs one `send_task` per distinct deliverable; a single multi-attribute deliverable stays one task. (Complements the per-worker brief fix in 0.19.0.)
+
 ## [Unreleased]
 
 ### Added
