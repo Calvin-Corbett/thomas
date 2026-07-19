@@ -16,6 +16,7 @@ from aiohttp import web
 
 from thomas.core.config import AppConfig
 from thomas.server.app_keys import APP_CONFIG
+from thomas.server.routes.local_project_folder_picker import pick_folder_via_dialog as _pick_folder_via_dialog
 
 log = logging.getLogger(__name__)
 
@@ -698,6 +699,10 @@ def _build_project_dossier(
         "findings_preview": findings_preview,
         "launch_candidates": launch_candidates,
         "actions": actions,
+        # Owner-managed project context is orthogonal to the file-system dossier.
+        # Preserve it across refreshes so linked chats, pinned references, and
+        # explicit share receipts survive a rescan of the project folder.
+        "workspace": dict(existing.get("workspace") or {}),
     }
     accent = _safe_text(dossier["board_icon"].get("accent")) or _accent_for_id(project_id)
     dossier["board_icon"]["accent"] = accent
@@ -789,31 +794,3 @@ def _perform_project_action(project: dict[str, Any], requested_action: str) -> t
     if action == "open_folder":
         return action, _open_path(root)
     raise web.HTTPBadRequest(text=f"unsupported project action: {action}")
-
-
-def _pick_folder_via_dialog() -> str:
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-    except Exception as exc:  # pragma: no cover - platform dependent
-        raise web.HTTPConflict(text="local folder picker is not available on this machine") from exc
-
-    root = None
-    try:
-        root = tk.Tk()
-        root.withdraw()
-        try:
-            root.attributes("-topmost", True)
-        except Exception:
-            pass
-        selected = filedialog.askdirectory(title="Choose a project folder for My Stuff", mustexist=True)
-    except Exception as exc:  # pragma: no cover - platform dependent
-        log.exception("Local folder picker failed")
-        raise web.HTTPConflict(text="could not open the local folder picker") from exc
-    finally:
-        if root is not None:
-            try:
-                root.destroy()
-            except Exception:
-                pass
-    return _safe_text(selected)

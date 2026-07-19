@@ -244,7 +244,7 @@ def test_my_stuff_indexes_installed_workspace_plugins() -> None:
     js = _read(MY_STUFF_JS)
     css = _read(MY_STUFF_CSS)
 
-    assert "20260618-paper-apps-4" in html
+    assert "20260624-forge-builds-1" in html
     assert 'id="installedAppsShelf"' in html
     assert '<section class="stuff-installed-shelf" id="installedAppsShelf"' in html
     assert "Loading app workspaces..." in html
@@ -278,8 +278,8 @@ def test_my_stuff_indexes_installed_workspace_plugins() -> None:
     assert ".stuff-installed-app {" in css
     runtime_07 = _read(RUNTIME_DIR / "035_workbench_editors_07.js")
     runtime_08 = _read(RUNTIME_DIR / "036_workbench_editors_08.js")
-    assert "src: '/static/my_stuff.html?v=20260618-paper-apps-4'" in runtime_07
-    assert "src: '/static/my_stuff.html?v=20260618-paper-apps-4'" in runtime_08
+    assert "src: '/static/my_stuff.html?v=20260624-forge-builds-1'" in runtime_07
+    assert "src: '/static/my_stuff.html?v=20260624-forge-builds-1'" in runtime_08
     assert "/static/static/my_stuff.html" not in runtime_07
     assert "/static/static/my_stuff.html" not in runtime_08
 

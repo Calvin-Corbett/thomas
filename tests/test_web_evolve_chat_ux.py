@@ -6,6 +6,9 @@ ROOT = Path(__file__).resolve().parents[1]
 WEB_INDEX_PATH = ROOT / "thomas" / "server" / "web" / "index.html"
 RUNTIME_DIR = ROOT / "thomas" / "server" / "web" / "js" / "runtime"
 COMPOSER_CONTROLS_PATH = ROOT / "thomas" / "server" / "web" / "js" / "composer_controls.js"
+COMPANION_RUNTIME_PATH = ROOT / "thomas" / "server" / "web" / "js" / "companion_runtime.js"
+PRIMARY_RUNTIME_PATH = ROOT / "thomas" / "server" / "web" / "js" / "app_runtime_primary.mjs"
+CHAT_HTML_PATH = ROOT / "thomas" / "server" / "web" / "chat.html"
 
 
 def _read(path: Path) -> str:
@@ -45,15 +48,90 @@ def test_evolve_runtime_stays_in_chat_and_posts_followups() -> None:
     assert "const EVOLVE_TERMINAL_JOB_STATUSES = new Set(['succeeded', 'failed', 'cancelled', 'dead']);" in text
 
 
-def test_chat_runtime_defaults_to_v2_and_renders_delegation_activity() -> None:
+def test_chat_runtime_uses_only_v2_and_renders_delegation_activity() -> None:
     text = _read_all_runtime_js()
-    assert "const chatEndpoint = window.__THOMAS_CHAT_V2__ === false ? '/api/chat' : '/api/v2/chat';" in text
+    assert "const chatEndpoint = '/api/v2/chat';" in text
+    assert "window.__THOMAS_CHAT_V2__" not in text
+    assert "'/api/chat'" not in text
     assert "function createDelegationBadge(specialistId, task) {" in text
     assert "function createAgentActivityRow(agentId, status, currentTask, elapsedMs) {" in text
     assert "function upsertAgentActivity(container, agentId, status, currentTask, elapsedMs) {" in text
     assert "} else if (evt.type === 'delegation') {" in text
     assert "} else if (evt.type === 'agent_activity') {" in text
     assert "} else if (evt.type === 'memory_refresh') {" in text
+
+
+def test_chatgpt_connection_reply_opens_profile_scoped_easy_setup_recovery() -> None:
+    split_runtime = _read(RUNTIME_DIR / "013_actions_interactions_02.js")
+    bundled_runtime = _read(PRIMARY_RUNTIME_PATH)
+
+    for text in (split_runtime, bundled_runtime):
+        assert "function shouldPromptChatGPTConnectionRecovery(assistantText = '', payload = {}) {" in text
+        assert "if (!isChatGPTConnectionProfile(payload?.profile || payload?.model)) return false;" in text
+        assert "/^(?:the )?chatgpt(?: oauth| model)? (?:is not|isn't) connected\\b/i" in text
+        assert "if (!normalized || normalized.length > 500) return false;" in text
+        assert "if (shouldPromptChatGPTConnectionRecovery(assistantFinalText, payload)) {" in text
+        assert "await promptChatGPTConnectionRecovery(payload);" in text
+        assert "source: 'chatgpt_connection_recovery'" in text
+        assert "handleEasySetupPathSelect('codex');" in text
+        assert "Your ChatGPT or Codex app sign-in is separate from Thomas." in text
+
+
+def test_companion_chat_uses_the_canonical_v2_endpoint() -> None:
+    text = _read(COMPANION_RUNTIME_PATH)
+    assert 'fetch("/api/v2/chat", {' in text
+    assert 'fetch("/api/chat", {' not in text
+
+
+def test_primary_runtime_fallback_has_no_v1_chat_switch() -> None:
+    text = _read(PRIMARY_RUNTIME_PATH)
+    assert "window.__THOMAS_CHAT_V2__" not in text
+    assert "'/api/chat'" not in text
+    assert text.count("const chatEndpoint = '/api/v2/chat';") >= 2
+
+
+def test_chat_shell_defaults_to_a_usable_profile_case_insensitively() -> None:
+    text = _read(CHAT_HTML_PATH)
+    assert "String(prefs.active_profile || d.default || '').trim().toLowerCase()" in text
+    assert "String(p.name || '').trim().toLowerCase() === active" in text
+    assert "profilesData.find(usable) || profilesData[0]" in text
+    assert "profilesData.find(p => !!p.has_api_key) || pick || profilesData[0]" not in text
+
+
+def test_root_chat_prompts_and_starts_native_chatgpt_oauth_recovery() -> None:
+    text = _read(CHAT_HTML_PATH)
+
+    assert "function shouldPromptChatGPTConnection(assistantText) {" in text
+    assert "if (!isChatGPTOAuthProfile(state.profile)) return false;" in text
+    assert "/^(?:the )?chatgpt(?: oauth| model)? (?:is not|isn't) connected\\b/i" in text
+    assert "await maybePromptChatGPTConnection(acc);" in text
+    assert "status.needs_login === true && status.logged_in !== true" in text
+    assert "overlay.id = 'tc-chatgpt-connect-prompt';" in text
+    assert "Connect ChatGPT to Thomas" in text
+    assert "Your ChatGPT or Codex app sign-in is separate from Thomas's local connection." in text
+    assert "fetch('/api/openai-codex/login', {" in text
+    assert "body: JSON.stringify({ profile: state.profile || 'openai_codex', timeout_s: 300 })" in text
+
+
+def test_root_chat_surfaces_gpt56_models_and_distinct_reasoning_efforts() -> None:
+    text = _read(CHAT_HTML_PATH)
+
+    assert "async function hydrateProfileModels() {" in text
+    assert "fetch('/api/openai-codex/models?profile=' + encodeURIComponent(p.name))" in text
+    assert "body: JSON.stringify({ advanced: { model: { active_profile: profileName, model_id: modelId } } })" in text
+    assert "m.available === false ? ' · unavailable on this connection'" in text
+    assert "['none', 'None']" in text
+    assert "['xhigh', 'xHigh']" in text
+    assert "['max', 'Max']" in text
+
+
+def test_root_chat_canvas_hint_requires_visual_object_and_action() -> None:
+    text = _read(CHAT_HTML_PATH)
+
+    assert "function detectVisualIntent(text)" in text
+    assert "playable (browser )?game|interactive (chart|graph|dashboard|site|app|visual)" in text
+    assert "return visual.test(lc) && (action.test(lc) || leading.test(lc));" in text
+    assert "_pendingCanvasIntent = !!detectVisualIntent(text);" in text
 
 
 def test_chat_runtime_prefers_visible_model_selector_over_setup_profile() -> None:

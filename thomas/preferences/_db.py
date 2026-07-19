@@ -10,6 +10,10 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
+_TOKEN_THROTTLE_OPT_IN_MIGRATION = "token_throttle_opt_in_v019"
+_LEGACY_SESSION_TOKEN_BUDGET = 200_000
+_LEGACY_DAILY_TOKEN_BUDGET = 2_000_000
+
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
 from ._patches import PreferencesPatch
@@ -150,7 +154,72 @@ class PreferencesStore:
             if "key_hash" not in cols:
                 conn.execute("ALTER TABLE preference_keys ADD COLUMN key_hash TEXT;")
 
+            self._migrate_legacy_token_throttle(conn)
+
             conn.commit()
+
+    def _migrate_legacy_token_throttle(self, conn: sqlite3.Connection) -> None:
+        """Make the old default cumulative-token throttle opt-in exactly once."""
+        marker = conn.execute(
+            "SELECT 1 FROM preferences_meta WHERE k = ?",
+            (_TOKEN_THROTTLE_OPT_IN_MIGRATION,),
+        ).fetchone()
+        if marker:
+            return
+
+        migrated = 0
+        unresolved = 0
+        for row in conn.execute("SELECT user_id, data_json FROM preferences").fetchall():
+            try:
+                data = json.loads(row["data_json"])
+            except (json.JSONDecodeError, TypeError) as exc:
+                unresolved += 1
+                log.warning(
+                    "Token-throttle migration deferred for preference user %r: invalid JSON (%s)",
+                    row["user_id"],
+                    exc,
+                )
+                continue
+            if not isinstance(data, dict):
+                unresolved += 1
+                log.warning(
+                    "Token-throttle migration deferred for preference user %r: JSON root is not an object",
+                    row["user_id"],
+                )
+                continue
+            advanced = data.get("advanced") or {}
+            if not isinstance(advanced, dict):
+                continue
+            cost = advanced.get("cost") or {}
+            if not isinstance(cost, dict):
+                continue
+            is_legacy_default = (
+                cost.get("session_token_budget") == _LEGACY_SESSION_TOKEN_BUDGET
+                and cost.get("daily_token_budget") == _LEGACY_DAILY_TOKEN_BUDGET
+                and cost.get("throttle_on_budget") is True
+            )
+            if not is_legacy_default:
+                continue
+            cost["throttle_on_budget"] = False
+            conn.execute(
+                "UPDATE preferences SET data_json = ?, updated_at = ? WHERE user_id = ?",
+                (json.dumps(data), utc_now_iso(), row["user_id"]),
+            )
+            migrated += 1
+
+        if unresolved:
+            log.warning(
+                "Token-throttle migration remains pending for %d malformed preference profile(s)",
+                unresolved,
+            )
+            return
+
+        conn.execute(
+            "INSERT INTO preferences_meta (k, v) VALUES (?, ?)",
+            (_TOKEN_THROTTLE_OPT_IN_MIGRATION, "1"),
+        )
+        if migrated:
+            log.info("Made cumulative token throttling opt-in for %d legacy preference profile(s)", migrated)
 
     def _get_or_create_kdf_salt(self, conn: sqlite3.Connection) -> bytes:
         """Return the persisted per-install KDF salt, creating it on first use.

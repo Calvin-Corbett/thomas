@@ -105,3 +105,28 @@ def test_runtime_profile_persists_to_record_and_summary(tmp_path):
 
     full = task_bot_runtime.get_execution(row["execution_id"], tmp_path)
     assert full["runtime_profile"]["guardrails"] == "strict"
+
+
+def test_verified_completion_clears_a_stale_blocker(tmp_path):
+    eid = task_bot_runtime.create_execution(session_id="s", summary="answer", repo_root=tmp_path)["execution_id"]
+    _advance_to_executing(eid, tmp_path)
+    task_bot_runtime.update_execution(
+        eid,
+        blocker="old_watchdog_failure",
+        actor="worker",
+        repo_root=tmp_path,
+        force=True,
+    )
+
+    task_bot_runtime.complete_execution(
+        eid,
+        actor="worker",
+        summary="Verified answer.",
+        repo_root=tmp_path,
+        verified_success=True,
+    )
+
+    record = task_bot_runtime.get_execution(eid, tmp_path)
+    assert record["state"] == "completed"
+    assert record["proof_status"] == "verified"
+    assert record["blocker"] == ""

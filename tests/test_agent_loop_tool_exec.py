@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from thomas.agent.loop_execution import _failed_tool_signature, _record_failed_tool, _tool_result_with_recovery
 from thomas.agent.loop_tool_exec import _is_write_tool, _sanitize_write_tool_path, execute_tools
 from thomas.core.events import EventType
 from thomas.tools.base import ToolResult
@@ -109,6 +110,32 @@ def test_execute_tools_level_4_passes_no_human_mode_allow() -> None:
     assert runner.no_human_mode_inputs == ["allow"]
     assert len(events) == 1
     assert events[0].type == EventType.TOOL_RESULT
+
+
+def test_missing_file_read_gives_the_model_a_write_recovery_path() -> None:
+    recovered = _tool_result_with_recovery("fs.read_file", "File not found: game.js")
+
+    assert "Do not read it again" in recovered
+    assert "fs.write_file" in recovered
+    assert _tool_result_with_recovery("fs.list_dir", "File not found") == "File not found"
+
+
+def test_failure_signature_distinguishes_arguments_and_normalizes_error_noise() -> None:
+    first = _failed_tool_signature("fs.read_file", {"path": "game.js"}, " File  NOT  Found ")
+    same = _failed_tool_signature("fs.read_file", {"path": "game.js"}, "file not found")
+    other_path = _failed_tool_signature("fs.read_file", {"path": "styles.css"}, "file not found")
+
+    assert first == same
+    assert first != other_path
+
+
+def test_identical_missing_file_failure_survives_unrelated_successes() -> None:
+    counts: dict[str, int] = {}
+
+    assert _record_failed_tool(counts, "fs.read_file", {"path": "game.js"}, "file not found") == 1
+    # Successful calls do not touch this failure map.
+    assert _record_failed_tool(counts, "fs.read_file", {"path": "game.js"}, "file not found") == 2
+    assert _record_failed_tool(counts, "fs.read_file", {"path": "game.js"}, "file not found") == 3
 
 
 def test_execute_tools_level_3_does_not_override_no_human_mode() -> None:

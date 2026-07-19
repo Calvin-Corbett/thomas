@@ -1,7 +1,7 @@
 import os
 import unittest
 
-from thomas.marketplace.autonomy.workflows import WorkflowRunner
+from thomas.marketplace.autonomy.workflows import WorkflowExecutionError, WorkflowRunner
 
 
 class _ChainParallelAdapter:
@@ -86,6 +86,43 @@ class _ProfileFallbackAdapter:
         if "workflow chain worker" in system_prompt and profile == "primary-profile":
             raise RuntimeError("primary profile temporary failure")
         return {"output": f"ok:{profile or 'default'}", "summary": "ok"}
+
+
+class _InventedProfileAdapter:
+    def __init__(self, *, fail_workers: bool = False):
+        self.calls = []
+        self.fail_workers = fail_workers
+
+    async def generate_json(  # noqa: D401
+        self,
+        *,
+        system_prompt,
+        user_prompt,
+        session_id=None,
+        schema_hint=None,
+        profile=None,
+        model_id=None,
+    ):
+        _ = user_prompt, session_id, schema_hint, model_id
+        self.calls.append({"system_prompt": system_prompt, "profile": profile})
+        if "You are an orchestrator. Decompose the goal" in system_prompt:
+            return {
+                "workers": [
+                    {
+                        "name": "qa",
+                        "prompt": "check local QA",
+                        "capability": "local QA inspection",
+                        "profile": "Independent QA reviewer",
+                    }
+                ]
+            }
+        if "parallel workflow worker" in system_prompt:
+            if self.fail_workers:
+                raise RuntimeError("worker backend failed")
+            return {"output": "verified local QA", "summary": "verified"}
+        if "orchestrator that merges worker outputs" in system_prompt:
+            return {"final_output": "verified local QA"}
+        return {"output": "ok", "summary": "ok"}
 
 
 class _RouteFallbackAdapter:
@@ -263,6 +300,35 @@ class TestWorkflowRunner(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(out.get("pattern"), "orchestrator_worker")
         self.assertEqual(len(out.get("workers", [])), 2)
         self.assertEqual(out.get("final_output"), "synthesized")
+
+    async def test_orchestrator_ignores_untrusted_model_profile_without_registry(self):
+        adapter = _InventedProfileAdapter()
+        runner = WorkflowRunner(chat_adapter=adapter, session_id="s1")
+
+        out = await runner.run(
+            {
+                "workflow": "orchestrator_worker",
+                "goal": "return a local QA brief",
+                "worker_count": 1,
+            }
+        )
+
+        self.assertEqual(out.get("final_output"), "verified local QA")
+        worker_calls = [call for call in adapter.calls if "parallel workflow worker" in str(call.get("system_prompt"))]
+        self.assertEqual([call.get("profile") for call in worker_calls], [None])
+
+    async def test_orchestrator_fails_closed_when_every_worker_fails(self):
+        adapter = _InventedProfileAdapter(fail_workers=True)
+        runner = WorkflowRunner(chat_adapter=adapter, session_id="s1")
+
+        with self.assertRaisesRegex(WorkflowExecutionError, "failed closed"):
+            await runner.run(
+                {
+                    "workflow": "orchestrator_worker",
+                    "goal": "return a local QA brief",
+                    "worker_count": 1,
+                }
+            )
 
     async def test_evaluator_optimizer_improves_until_pass(self):
         runner = WorkflowRunner(chat_adapter=_EvalOptAdapter(), session_id="s1")

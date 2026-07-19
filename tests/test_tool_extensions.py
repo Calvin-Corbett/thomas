@@ -9,6 +9,13 @@ def _registered_tool(_registry) -> None:
     return None
 
 
+def test_legacy_domain_path_resolves_moved_marketplace_tools() -> None:
+    fn = tool_extensions._try_import("thomas.api_gateway.tools", "register_api_gateway_tools")
+
+    assert callable(fn)
+    assert fn.__module__ == "thomas.marketplace.api_gateway.tools"
+
+
 def test_register_all_optional_tools_warns_when_loaded_count_is_below_threshold(monkeypatch, caplog) -> None:
     monkeypatch.setattr(
         tool_extensions,

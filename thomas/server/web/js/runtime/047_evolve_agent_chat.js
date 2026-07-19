@@ -1,47 +1,13 @@
-/* Thomas Code -- the Forge engineering surface.
-
-   Reuses Thomas's REAL chat composer (the one with reasoning/autonomy/model
-   controls) instead of a second bespoke one: in Forge Code mode the composer is
-   un-hidden at the bottom like a normal chat, and an ADDITIVE capture-phase
-   interceptor on the send button routes that send to the headless build
-   (/api/evolve/agent/*) instead of main chat -- only while Forge Code is active.
-   No edits to handleSend; fully reversible; cannot affect main chat otherwise.
-
-   The build runs through the claude/codex CLI (your subscription, not the paid
-   API). A Code conversation is rendered with the SAME visual language as the main
-   Thomas chat: it reuses the real chat's message rows and markdown renderer
-   (`formatMarkdown`) so an assistant reply reads like a normal Thomas message --
-   proportional prose, NOT a monospace log. Build-specific actions are rendered as
-   clean, scannable CARDS in that same language: tool calls become structured
-   chips with an icon + verb + target + live status, and edits become real
-   code-review diffs (line-number gutter, +/- signs, per-line tints, syntax
-   highlighting, word-level intra-line highlighting) -- never raw monospace dumps.
-
-   It also carries conversation continuity via a collapsible session-history left
-   rail (day-grouped, searchable, with inline rename + delete + "New conversation"
-   and the active session highlighted), a working Stop control, honest
-   done/no-op/failure states, and a per-file diff panel with working Keep/Revert --
-   all over the server's real endpoints, never a second composer. All styling lives
-   in evolution.css and is token-driven; this module owns behavior, not hardcoded
-   color. */
 (function () {
     'use strict';
     if (window.__forgeCodeLoaded) return;
     window.__forgeCodeLoaded = true;
-
     function el(id) { return document.getElementById(id); }
     function stripAnsi(s) { return String(s).replace(/\x1b\[[0-9;]*m/g, ''); }
     function escapeHtml(s) { return String(s).replace(/[&<>]/g, function (c) { return c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'; }); }
     function tx() { return el('forgeCodeTranscript'); }
     function showStop(on) { var b = el('forgeCodeStop'); if (!b) return; if (on) b.removeAttribute('hidden'); else b.setAttribute('hidden', ''); }
     function setStatus(txt, working) { var s = el('forgeCodeStatus'); if (s) { s.textContent = txt; s.classList.toggle('working', !!working); } }
-
-    // Mirror Forge-Code active state onto <body> so main-chat-only chrome (the
-    // composer's "Try asking" suggestion bubbles, etc.) can be suppressed via CSS
-    // while a build is active -- without touching the main chat's own show/hide
-    // logic. 046 flips window.forgeCodeActive on the Evolve<->Code tab switch; we
-    // intercept that assignment and mirror it to a body class. Additive + fully
-    // reversible (drop the class and the main chat's behavior resumes).
     (function mirrorForgeActive() {
         var active = !!window.forgeCodeActive;
         function reflect(v) {
@@ -59,10 +25,6 @@
             document.addEventListener('DOMContentLoaded', function () { reflect(active); });
         } else { reflect(active); }
     })();
-
-    // -- a single coherent icon set (line style, 24-grid, 1.8 stroke) -------
-    // Returned as inline SVG strings so tool chips / diffs / statuses all share
-    // one icon family instead of mixing glyphs or emoji.
     var ICONS = {
         read: '<path d="M4 4h10l6 6v10a0 0 0 0 1 0 0H4z"/><path d="M14 4v6h6"/><path d="M8 14h7M8 17h7"/>',
         edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/>',
@@ -98,11 +60,6 @@
         return '<svg class="' + (cls || '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
             + 'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + p + '</svg>';
     }
-
-    // -- markdown via the REAL chat renderer --------------------------------
-    // Reuse the main chat's formatMarkdown (marked + hljs + sanitizer) so a Code
-    // message renders exactly like a normal Thomas assistant message. Defensive:
-    // if it is somehow unavailable, fall back to escaped plain text.
     function mdHtml(text) {
         try { if (typeof formatMarkdown === 'function') return formatMarkdown(String(text || '')); }
         catch (_e) { /* fall through */ }
@@ -125,20 +82,12 @@
         } catch (_e) { /* ignore */ }
         return 'Thomas';
     }
-
-    // -- scroll: auto-follow the stream, but never trap the user ------------
-    // `stick` stays true while the user is at (or near) the bottom; if they
-    // scroll up to read history we stop yanking them back down.
     var stick = true;
     var newCount = 0; // unread units that arrived while the user was scrolled up
     function nearBottom(t) { return (t.scrollHeight - t.scrollTop - t.clientHeight) < 90; }
     function follow() { var t = tx(); if (t && stick) t.scrollTop = t.scrollHeight; }
     function jumpBottom() { var t = tx(); if (t) { stick = true; t.scrollTop = t.scrollHeight; } newCount = 0; updateJump(); }
-    // A new card/message landed. While the user is reading history (scrolled up) we
-    // do NOT yank them down; instead we tally it so the jump button can say "N new".
     function noteNewContent() { if (!stick) { newCount++; updateJump(); } }
-    // Show the pinned "Jump to latest" affordance only when detached from the live
-    // edge; hide it (and clear the tally) the moment we are following the bottom.
     function updateJump() {
         var b = el('forgeCodeJump'); if (!b) return;
         if (stick) { b.hidden = true; newCount = 0; return; }
@@ -146,22 +95,12 @@
         if (lbl) lbl.textContent = newCount > 0 ? ('Jump to latest · ' + newCount + ' new') : 'Jump to latest';
         b.hidden = false;
     }
-
-    // -- conversation continuity + per-turn render state --------------------
     var es = null;
     var currentConvoId = null, pendingSourceItem = null;
     var agentStack = null, currentSayEl = null, sawAction = false, sawSay = false, lastToolCard = null;
-    // A single-slot follow-up queued while a build is in flight. The user can keep
-    // typing the next instruction mid-run; we stash it (NEVER drop it) and auto-send
-    // it once the current build finalizes, or drop it only when the user cancels.
     var pendingFollowup = null;
-    // The exact message of the turn currently/last in flight, so a build error can
-    // offer a RETRY that re-sends the same turn (reusing currentConvoId). Stored at
-    // send time; never cleared on failure (the user may still want to retry).
     var lastSentMessage = null;
-
     function clearEmpty() { var t = tx(); if (!t) return; var e = t.querySelector('.fc-empty'); if (e) e.remove(); }
-
     function appendUserRow(msg) {
         var t = tx(); if (!t) return;
         clearEmpty();
@@ -172,19 +111,7 @@
         highlightIn(content);
         stack.appendChild(content); row.appendChild(stack); t.appendChild(row);
     }
-
-    // Begin a fresh assistant turn: the next agent event opens its message row.
     function startAgentTurn() { agentStack = null; currentSayEl = null; sawAction = false; sawSay = false; lastToolCard = null; resetDispatchFilter(); }
-
-    // -- strip the dispatch CLI's OWN stdout summary from the transcript -----
-    // After a build, the `evolve dispatch` command prints its own summary --
-    // "DISPATCHED via …", a "changed files:" list of bare paths, "Review the
-    // diff …". That is the dispatcher talking, not the agent: the per-file
-    // changes already render cleanly as diff cards / the changes panel. So we
-    // drop those lines from streamed + stored prose. State spans events/frames
-    // because the stream may split the "changed files:" block; it resets at each
-    // turn boundary so genuine agent text is never swallowed. The honest
-    // "• no change made — nothing to review" status does NOT match and is kept.
     var inChangedFilesBlock = false;
     function resetDispatchFilter() { inChangedFilesBlock = false; }
     function isDispatchNoiseLine(rawLine) {
@@ -196,8 +123,6 @@
         if (/^Review the diff\b/i.test(t)) { inChangedFilesBlock = false; return true; }
         if (/^changed files:/i.test(t)) { inChangedFilesBlock = true; return true; }
         if (inChangedFilesBlock) {
-            // a bare path token inside the "changed files:" block (works whether
-            // the source line kept or lost its indentation on the way here)
             if (/^\S+$/.test(t) && /[\/\\.]/.test(t)) return true;
             inChangedFilesBlock = false; // block ended -> keep this line
         }
@@ -212,13 +137,6 @@
         }
         return kept.join('\n');
     }
-
-    // -- strip tool-runner / harness coaching from the rendered transcript ---
-    // The headless CLI's tool runner sometimes injects operator-facing coaching
-    // into a tool result (e.g. "file state is current in your context — no need
-    // to Read it back"). That is harness chatter, NOT the agent's work, and must
-    // never surface in a tool card or message. Any LINE containing one of these
-    // markers is dropped (case-insensitive); genuine agent prose is untouched.
     var HARNESS_NOISE = [
         'file state is current in your context',
         'no need to read it back',
@@ -239,34 +157,18 @@
         }
         return kept.join('\n');
     }
-
-    // -- strip internal scratch-pad ids from user-facing narration ----------
-    // The model sometimes emits private rubric/ticket ids (e.g. "SC-UXQ-5") as
-    // bookkeeping inside its prose. Those are internal scratch-pad and must not
-    // reach the user. Light, targeted filter on the "SC-…-N" family: drop the id
-    // and a bracket/paren wrapper that now holds only it, then tidy the gap.
     var SCRATCH_ID = /\bSC-[A-Z0-9]{1,8}-\d+\b/;
     function stripScratchIds(text) {
         var s = String(text == null ? '' : text);
         if (!SCRATCH_ID.test(s)) return s; // nothing to strip -> leave prose (and any code indentation) untouched
         s = s.replace(/[([{]\s*SC-[A-Z0-9]{1,8}-\d+\s*[)\]}]/g, '');
         s = s.replace(/\bSC-[A-Z0-9]{1,8}-\d+\b/g, '');
-        // Tidy only the gap the removal left: collapse a run of spaces that
-        // FOLLOWS a non-space char (so leading code indentation is preserved),
-        // and pull punctuation back onto the previous word.
         s = s.replace(/(\S)[ \t]{2,}/g, '$1 ').replace(/[ \t]+([,.;:])/g, '$1');
         return s;
     }
-
-    // The ONE prose cleaner: dispatch echo + harness chatter + scratch ids. Used
-    // by every text sink (live + replay) so a leak is filtered in exactly one
-    // place regardless of how the conversation is rendered.
     function cleanProse(text) {
         return stripScratchIds(stripHarnessNoise(stripDispatchNoise(text)));
     }
-
-    // Lazily create the assistant turn's row (the real chat .message-row /
-    // .message-meta / author so it reads like a normal reply).
     function ensureAgentStack() {
         if (agentStack) return agentStack;
         var t = tx(); if (!t) return null;
@@ -278,7 +180,6 @@
         meta.appendChild(author); stack.appendChild(meta); row.appendChild(stack); t.appendChild(row);
         agentStack = stack; return stack;
     }
-
     function verbFor(name) {
         switch (String(name || '').toLowerCase()) {
             case 'read': return 'Read';
@@ -301,29 +202,17 @@
             default: return 'tool';
         }
     }
-    // The bridge summarizes a tool input as "<key>: <value>" (e.g. "file_path:
-    // a.py"); show just the value as the chip target, not the raw key/JSON.
     function actionTarget(raw) {
         var s = String(raw || '').trim();
         var m = s.match(/^[a-z_]+:\s*([\s\S]+)$/i);
         return (m ? m[1] : s).trim();
     }
-
-    // -- markdown render of a live say bubble, debounced --------------------
-    // Streaming APPENDS raw tokens as a plain-text node (cheap, no per-token full
-    // rebuild — Perf-2); the markdown is rendered for the WHOLE block only when it
-    // settles (a short idle debounce) or at finalize. This swaps the per-chunk
-    // `innerHTML = mdHtml(buf)` (which destroyed + reparsed the entire accumulated
-    // message every token) for an O(delta) append plus an occasional full render.
     function renderSayMarkdown(elx) {
         if (!elx) return;
         if (elx.__mdTimer) { clearTimeout(elx.__mdTimer); elx.__mdTimer = null; }
         elx.innerHTML = mdHtml(elx.__buf || '');
         elx.__tail = null; // the plain-text tail is now baked into the rendered HTML
     }
-    // THROTTLE (not debounce): render at most ~once per 120ms while tokens keep
-    // arriving, so a long continuous stream still formats progressively instead of
-    // staying raw until it pauses. Between renders the plain-text tail grows live.
     function scheduleSayMarkdown(elx) {
         if (!elx || elx.__mdTimer) return;
         elx.__mdTimer = setTimeout(function () {
@@ -332,12 +221,6 @@
             follow();
         }, 120);
     }
-
-    // -- assistant prose: token-by-token into ONE merging bubble ------------
-    // `isDelta` true -> a token-progressive fragment: append it as plain text
-    // immediately and defer the markdown render. `isDelta` falsy -> a WHOLE block
-    // (legacy non-streaming path, or the terminal `result` echo): render markdown
-    // now, de-duping the echo of text we already streamed.
     function appendSay(text, isDelta) {
         var stack = ensureAgentStack(); if (!stack) return;
         if (isDelta) {
@@ -352,8 +235,6 @@
             }
             currentSayEl.__streamed = true;
             currentSayEl.__buf += raw;
-            // Extend a single trailing text node (genuine O(delta) append) until the
-            // next markdown render bakes it in and clears the tail.
             if (!currentSayEl.__tail) {
                 currentSayEl.__tail = document.createTextNode('');
                 currentSayEl.appendChild(currentSayEl.__tail);
@@ -372,13 +253,7 @@
             currentSayEl.__last = '';
             stack.appendChild(currentSayEl);
         }
-        // A WHOLE block arrived. If this bubble was already streamed token-by-token,
-        // this is the terminal `result` echo of that same text — render the streamed
-        // buffer as markdown (finalize) and DROP the echo so it shows once, not twice.
         if (currentSayEl.__streamed) { renderSayMarkdown(currentSayEl); follow(); return; }
-        // De-dupe the FINAL message in the non-streamed path too: the CLI can emit
-        // the last message twice (streamed block, then terminal `result`). If the
-        // incoming text just repeats the last segment (or the whole buffer), drop it.
         var norm = text.trim();
         if (norm && (currentSayEl.__last === norm || currentSayEl.__buf.trim() === norm)) {
             renderSayMarkdown(currentSayEl); return;
@@ -386,17 +261,8 @@
         currentSayEl.__last = norm;
         currentSayEl.__buf += (currentSayEl.__buf ? '\n\n' : '') + text;
         renderSayMarkdown(currentSayEl);
-        // NB: syntax highlighting is deferred to finalize() to keep streaming
-        // jank-free (no per-token re-highlight flashing inside a growing block).
         follow();
     }
-
-    // -- mid-task INSIGHT card: the model's salient "I'm noticing…" beat -----
-    // A distinct, lighter surface than tool/diff cards: a soft accent-tinted
-    // inset strip with a subtle bulb icon, sitting ABOVE the live tool activity.
-    // The text is the model's own first-person observation (sourced organically
-    // from its reasoning by the bridge); it is shown as plain prose — never
-    // markdown/HTML — and de-duped so a repeated lead note shows once.
     function appendInsight(text) {
         text = cleanProse(text); if (!text.trim()) return;
         currentSayEl = null;
@@ -409,7 +275,6 @@
         node.querySelector('.fc-insight-text').textContent = text;
         stack.appendChild(node); follow();
     }
-
     function appendReason(text) {
         text = String(text || ''); if (!text.trim()) return;
         currentSayEl = null;
@@ -420,8 +285,6 @@
         var body = document.createElement('div'); body.className = 'fc-reason-body'; body.innerHTML = mdHtml(text);
         det.appendChild(sum); det.appendChild(body); stack.appendChild(det); follow();
     }
-
-    // -- tool call CARD: icon + verb + target + live status ----------------
     function appendAction(d) {
         currentSayEl = null;
         var stack = ensureAgentStack(); if (!stack) return;
@@ -429,7 +292,6 @@
         var isRun = name === 'run'; // the engine's REAL verify/run step
         if (!isRun) sawAction = true; // a genuine agent build action
         var target = actionTarget(d.text) || (isRun ? 'changed files' : '');
-
         var card = document.createElement('div'); card.className = 'fc-tool' + (isRun ? ' is-run' : '');
         var head = document.createElement('div'); head.className = 'fc-tool-head';
         head.innerHTML =
@@ -442,7 +304,6 @@
         lastToolCard = card;
         follow();
     }
-
     function setToolState(card, state) {
         if (!card) return;
         var st = card.querySelector('.fc-tool-status'); if (!st) return;
@@ -450,18 +311,11 @@
         st.innerHTML = svg(state === 'error' ? 'alert' : state === 'success' ? 'check' : 'spinner');
         if (state === 'error') card.classList.add('is-error');
     }
-
-    // Looks-like-a-unified-diff heuristic (an Edit tool result often is one).
     function looksLikeDiff(s) {
         return /^@@ /m.test(s) || /^(\+\+\+ |--- )/m.test(s);
     }
-
-    // -- tool RESULT: attach into its card (status + collapsed output) ------
     function appendResult(d) {
         currentSayEl = null;
-        // A tool result can carry tool-runner/harness coaching (e.g. "file state
-        // is current in your context — no need to Read it back"). Strip it so a
-        // tool card never shows harness chatter; the real result body remains.
         var text = stripHarnessNoise(String(d.text || ''));
         var isErr = !!d.is_error;
         if (lastToolCard) {
@@ -471,7 +325,6 @@
             follow();
             return;
         }
-        // No owning card -> standalone result block.
         var stack = ensureAgentStack(); if (!stack) return;
         if (!text.trim() && !isErr) return;
         if (text.length > 200 || text.indexOf('\n') !== -1) {
@@ -487,9 +340,7 @@
         }
         follow();
     }
-
     function attachToolBody(card, text, isErr) {
-        // A diff result -> render the real code-review diff inside the card.
         if (!isErr && looksLikeDiff(text)) {
             var dc = buildDiffCard(diffPathFromText(text) || (card.querySelector('.fc-tool-target') || {}).textContent || 'diff', text, {});
             dc.style.borderRadius = '0';
@@ -498,7 +349,6 @@
             card.appendChild(dc);
             return;
         }
-        // Long / multi-line -> collapsible body; short -> a quiet inline line.
         if (text.length > 160 || text.indexOf('\n') !== -1) {
             var det = document.createElement('details'); det.className = 'fc-tool-body' + (isErr ? ' is-error' : '');
             var sum = document.createElement('summary');
@@ -513,11 +363,6 @@
             card.appendChild(div);
         }
     }
-
-    // Map a raw provider/git/permission/transport error string (+ optional exit
-    // code) to a short, PLAIN-LANGUAGE cause the user can actually act on. This
-    // only classifies the message for readability — it never hides or fakes the
-    // failure; the raw detail is always kept available below the cause line.
     function plainCause(detail, rc) {
         var s = String(detail == null ? '' : detail).toLowerCase();
         if (/rate.?limit|\b429\b|too many requests|quota|overloaded|capacity|try again later/.test(s))
@@ -538,10 +383,6 @@
             return 'The build exited with an error (code ' + rc + ').';
         return 'The build hit an error before it could finish.';
     }
-    // A retry-capable error descriptor: a plain-language CAUSE, the raw DETAIL
-    // (kept, never discarded), and whether a same-turn retry is available (we have
-    // a stored last message to re-send). Pure + side-effect-free so it can be
-    // reasoned about / tested independently of the DOM.
     function buildErrorDescriptor(detail, rc) {
         return {
             cause: plainCause(detail, rc),
@@ -549,32 +390,21 @@
             retryable: !!lastSentMessage
         };
     }
-    // Re-send the SAME turn that just failed: same message, same conversation id
-    // (currentConvoId is preserved across a failure). No-op if a build is somehow
-    // already live, or if there is nothing stored to retry.
     function retryLastTurn() {
         if (es) return;
         var msg = lastSentMessage;
         if (!msg) return;
         void sendToBuild(msg);
     }
-    // Render a build error as an actionable card: the plain-language cause up top,
-    // the raw provider/git/permission detail collapsed but available, and a RETRY
-    // that re-sends the same turn. Honest: a genuine failure still reads as failed
-    // — this only makes it legible and recoverable.
     function appendBuildError(detail, rc) {
         currentSayEl = null;
         var stack = ensureAgentStack(); if (!stack) return null;
         var desc = buildErrorDescriptor(detail, rc);
         var node = document.createElement('div'); node.className = 'fc-error is-build';
-
         var head = document.createElement('div'); head.className = 'fc-error-head';
         head.innerHTML = svg('alert') + '<span class="fc-error-cause"></span>';
         head.querySelector('.fc-error-cause').textContent = desc.cause;
         node.appendChild(head);
-
-        // Keep the raw detail SECONDARY (collapsed) but never lose it — only when
-        // it adds something beyond the cause line itself.
         if (desc.detail.trim() && desc.detail.trim().toLowerCase() !== desc.cause.toLowerCase()) {
             var det = document.createElement('details'); det.className = 'fc-error-detail';
             var sum = document.createElement('summary'); sum.textContent = 'Details';
@@ -582,7 +412,6 @@
             det.appendChild(sum); det.appendChild(pre);
             node.appendChild(det);
         }
-
         if (desc.retryable) {
             var actions = document.createElement('div'); actions.className = 'fc-error-actions';
             var retry = document.createElement('button'); retry.type = 'button'; retry.className = 'fc-error-retry';
@@ -595,14 +424,10 @@
             actions.appendChild(retry);
             node.appendChild(actions);
         }
-
         stack.appendChild(node); follow();
         return desc;
     }
-    // Backwards-compatible thin wrapper: every existing caller that reported a raw
-    // error string now gets the plain-cause + retry treatment for free.
     function appendError(text) { return appendBuildError(text, null); }
-
     function appendStatus(text) {
         text = cleanProse(text); if (!text.trim()) return;
         currentSayEl = null;
@@ -610,8 +435,6 @@
         var node = document.createElement('div'); node.className = 'fc-status'; node.textContent = text;
         stack.appendChild(node); follow();
     }
-
-    // A centered terminal-state pill (done / no-op / failure) -- NOT chat content.
     function appendNote(variant, iconName, text) {
         var t = tx(); if (!t) return;
         clearEmpty();
@@ -620,12 +443,6 @@
         d.querySelector('span').textContent = text;
         t.appendChild(d); follow();
     }
-
-    // A brief, app-consistent toast for an action outcome (Keep/Revert). Reuses
-    // the host's global notifier when present (the same window.notifyUser that
-    // 048 reuses); best-effort -- if it is unavailable the in-place diff-card
-    // state below is the durable source of truth, so the user is never left
-    // wondering whether the action worked (UX-11).
     function forgeToast(msg, tone) {
         try {
             if (typeof window.notifyUser === 'function') {
@@ -633,27 +450,17 @@
             }
         } catch (_e) { /* toast is best-effort; the card state still tells the truth */ }
     }
-
-    // Close out a turn: stop the caret, run deferred syntax highlighting once.
     function finalizeTurn() {
         var t = tx(); if (!t) return;
         t.querySelectorAll('.assistant-bubble.is-streaming').forEach(function (b) {
-            // Bake the streamed plain-text tail into its final markdown render (the
-            // GPT path streams deltas but sends no terminal echo to trigger it), then
-            // drop the streaming class.
             if (b.__buf != null) renderSayMarkdown(b);
             b.classList.remove('is-streaming');
         });
         t.querySelectorAll('.message-content').forEach(function (c) { highlightIn(c); });
     }
-
-    // The ONE renderer for a streamed/stored forge event -- used by both the live
-    // stream and conversation resume so they are pixel-identical.
     function renderEvent(d) {
         var kind = d.kind || d.fc;
         var text = (d.text != null) ? d.text : '';
-        // A "new unit" for the jump-to-latest counter: any non-say card, or the
-        // FIRST fragment of a fresh say bubble (continuing deltas don't re-count).
         var isNewUnit = (kind !== 'say') || !currentSayEl;
         if (kind === 'tool') { appendAction(d); }
         else if (kind === 'tool_result') { appendResult(d); }
@@ -664,11 +471,6 @@
         else { appendSay(text, !!d.delta); } // 'say'/unknown -> chat message (delta-aware)
         if (isNewUnit) noteNewContent();
     }
-
-    // Replay a stored transcript (the same forge-event JSON-line log) into the
-    // current assistant turn so a resumed conversation looks identical to live.
-    // Internal-noise strings baked into old stored transcripts are skipped at
-    // the string level so they never surface in the rendered conversation.
     var REPLAY_NOISE = ['claude session', 'hook_started', 'hook_response', 'thinking_tokens', 'post_turn_summary', 'notification', 'init ('];
     function replayTranscript(raw) {
         var lines = String(raw || '').split('\n');
@@ -686,17 +488,12 @@
             appendSay(t);
         }
     }
-
     function clearTranscript() {
         var t = tx(); if (t) t.innerHTML = '';
         startAgentTurn();
         var ch = el('forgeCodeChanges'); if (ch) ch.innerHTML = '';
         stick = true; newCount = 0; updateJump(); // re-attach to the live edge
     }
-
-    // ========================================================================
-    // Real code-review diff rendering
-    // ========================================================================
     function langForFile(file) {
         var f = String(file || '').toLowerCase();
         var m = f.match(/\.([a-z0-9]+)$/);
@@ -727,9 +524,6 @@
         var m = String(s).match(/^\+\+\+ b\/(.+)$/m) || String(s).match(/^\+\+\+ (.+)$/m);
         return m ? m[1].trim() : '';
     }
-
-    // syntax-highlight a single fragment; per-fragment so word marks can wrap
-    // around it without breaking nested HTML. Falls back to escaped text.
     function hlFrag(s, lang) {
         if (!s) return '';
         try {
@@ -739,16 +533,10 @@
         } catch (_e) { /* fall through */ }
         return escapeHtml(s);
     }
-
-    // word tokenizer: keep words, whitespace runs, and punctuation as units.
     function splitWords(s) { return String(s).match(/(\s+|[A-Za-z0-9_$]+|[^\sA-Za-z0-9_$])/g) || []; }
-
-    // LCS word diff between a removed line and its paired added line; returns
-    // {a:[{t,c}], b:[{t,c}]} where c=true marks a changed (added/removed) run.
     function wordDiff(aStr, bStr) {
         var a = splitWords(aStr), b = splitWords(bStr);
         var n = a.length, m = b.length;
-        // bound the cost; very long lines fall back to whole-line tinting.
         if (n * m > 40000) return null;
         var dp = []; for (var i = 0; i <= n; i++) { dp.push(new Array(m + 1).fill(0)); }
         for (i = n - 1; i >= 0; i--) {
@@ -775,7 +563,6 @@
         }
         return out;
     }
-    // render a code line: syntax-highlighted, with changed words wrapped in marks.
     function codeHtml(text, lang, segs) {
         if (text === '') return '';
         if (!segs) return hlFrag(text, lang);
@@ -786,8 +573,6 @@
         }
         return out;
     }
-
-    // parse a unified diff into rows with old/new line numbers + change runs.
     function parseDiff(diff) {
         var lines = String(diff || '').split('\n');
         var rows = [];
@@ -800,14 +585,12 @@
                 rows.push({ type: 'hunk', text: line });
                 continue;
             }
-            // skip file headers / index lines -- the bar carries the path.
             if (/^(diff --git|index |--- |\+\+\+ |new file|deleted file|similarity|rename |Binary )/.test(line)) continue;
             var c = line.charAt(0);
             if (c === '+') { rows.push({ type: 'add', oldNo: 0, newNo: newNo, text: line.slice(1) }); maxNo = Math.max(maxNo, newNo); newNo++; adds++; }
             else if (c === '-') { rows.push({ type: 'del', oldNo: oldNo, newNo: 0, text: line.slice(1) }); maxNo = Math.max(maxNo, oldNo); oldNo++; dels++; }
             else { var txt = (c === ' ') ? line.slice(1) : line; rows.push({ type: 'ctx', oldNo: oldNo, newNo: newNo, text: txt }); maxNo = Math.max(maxNo, oldNo, newNo); oldNo++; newNo++; }
         }
-        // pair contiguous del-runs with the following add-runs for word diff.
         for (i = 0; i < rows.length; i++) {
             if (rows[i].type !== 'del') continue;
             var d0 = i; while (i < rows.length && rows[i].type === 'del') i++;
@@ -821,7 +604,6 @@
         }
         return { rows: rows, maxNo: maxNo, adds: adds, dels: dels };
     }
-
     function rowHtml(r, lang) {
         if (r.type === 'hunk') {
             return '<div class="fc-diff-row fc-hunk"><span class="fc-code">' + escapeHtml(r.text) + '</span></div>';
@@ -837,22 +619,9 @@
             + '<span class="fc-code">' + (codeHtml(r.text, lang, r.segs) || '&nbsp;') + '</span>'
             + '</div>';
     }
-
-    // -- diff virtualization ------------------------------------------------
-    // A multi-thousand-line diff is scroll-bounded (max-height) but, rendered
-    // naively, still builds one DOM node PER ROW — thousands of nodes, slow and
-    // memory-heavy. Above the threshold we WINDOW the body: only the rows in (and
-    // a small buffer around) the visible viewport are realized, recycled on scroll
-    // via a transform-positioned window over a full-height sizer. The node count
-    // stays bounded (~viewport + buffer) no matter how large the diff is. BELOW
-    // the threshold a diff renders EVERY row exactly as before — small diffs are
-    // pixel-identical with zero behavioral change. Copy / Keep / Revert always act
-    // on the FULL diff (they use the diff string / file path, not the rendered
-    // rows), so what is windowed for display never narrows what those act on.
     var DIFF_VIRTUALIZE_THRESHOLD = 400; // rows; below this -> render everything
     var DIFF_WINDOW_BUFFER = 24;          // extra rows above & below the viewport
     var DIFF_ROW_FALLBACK_H = 21;         // px; sane row height until measured live
-
     function renderDiffRows(body, rows, lang) {
         if (rows.length <= DIFF_VIRTUALIZE_THRESHOLD) {
             var html = '';
@@ -862,19 +631,14 @@
         }
         virtualizeDiffBody(body, rows, lang);
     }
-
     function virtualizeDiffBody(body, rows, lang) {
         body.classList.add('fc-diff-virt');
-        // sizer reserves the full scroll height; window holds ONLY the realized
-        // rows and is translated to sit at the right scroll offset.
         var sizer = document.createElement('div'); sizer.className = 'fc-diff-sizer';
         var win = document.createElement('div'); win.className = 'fc-diff-window';
         sizer.appendChild(win); body.appendChild(sizer);
-
         var rowH = DIFF_ROW_FALLBACK_H, measured = false, lastStart = -1, lastEnd = -1;
         var raf = window.requestAnimationFrame ? window.requestAnimationFrame.bind(window)
             : function (f) { return setTimeout(f, 16); };
-
         function applyHeight() { sizer.style.height = (rows.length * rowH) + 'px'; }
         function renderWindow() {
             var top = body.scrollTop;
@@ -888,16 +652,12 @@
             win.style.transform = 'translateY(' + (start * rowH) + 'px)';
             win.innerHTML = html;
         }
-        // Once attached + laid out, measure a real row's height and repaint with
-        // the precise value (the card is appended by the caller AFTER this runs,
-        // so the first paint uses the fallback and rAF corrects it).
         function measure() {
             if (measured) return;
             var probe = win.firstChild;
             var h = (probe && probe.getBoundingClientRect) ? probe.getBoundingClientRect().height : 0;
             if (h && h > 4) { rowH = h; measured = true; applyHeight(); lastStart = lastEnd = -1; renderWindow(); }
         }
-
         applyHeight();
         renderWindow();
         raf(function () { measure(); if (!measured) raf(measure); });
@@ -907,25 +667,19 @@
             raf(function () { body.__virtPending = false; if (!measured) measure(); renderWindow(); });
         });
     }
-
-    // Build a complete diff card (header bar + scroll-bounded body). opts:
-    //   { keepRevert, untracked, rawDiff } -> wires Keep/Revert when keepRevert.
     function buildDiffCard(file, diff, opts) {
         opts = opts || {};
         var lang = langForFile(file);
         var parsed = parseDiff(diff);
         var digits = String(Math.max(parsed.maxNo, 1)).length;
-
         var card = document.createElement('div'); card.className = 'fc-diff-card';
         card.style.setProperty('--fc-gut', (digits + 1) + 'ch');
-
         var bar = document.createElement('div'); bar.className = 'fc-diff-bar';
         bar.innerHTML =
             '<span class="fc-diff-fic">' + svg('file') + '</span>'
             + '<span class="fc-diff-path" title="' + escapeHtml(file) + '"><bdi>' + escapeHtml(file) + '</bdi></span>'
             + '<span class="fc-diff-lang">' + escapeHtml(langBadge(lang, file)) + '</span>'
             + '<span class="fc-diff-stat"><span class="add">+' + parsed.adds + '</span><span class="del">−' + parsed.dels + '</span></span>';
-
         var actions = document.createElement('div'); actions.className = 'fc-diff-actions';
         var copyBtn = document.createElement('button'); copyBtn.type = 'button'; copyBtn.className = 'fc-diff-btn'; copyBtn.setAttribute('aria-label', 'Copy diff');
         copyBtn.innerHTML = svg('copy') + '<span>Copy</span>';
@@ -940,16 +694,9 @@
             } catch (_e) { /* clipboard unavailable */ }
         });
         actions.appendChild(copyBtn);
-
         if (opts.keepRevert) {
             var keepBtn = document.createElement('button'); keepBtn.type = 'button'; keepBtn.className = 'fc-diff-btn'; keepBtn.textContent = 'Keep';
             var revBtn = document.createElement('button'); revBtn.type = 'button'; revBtn.className = 'fc-diff-btn'; revBtn.textContent = 'Revert';
-
-            // Settle the card into a terminal, unmistakable state once Keep or
-            // Revert succeeds: tint/dim via the class, stamp a visible
-            // "Kept"/"Reverted" badge on the bar, and lock BOTH buttons so the
-            // action can't be repeated or second-guessed (UX-11). This in-place
-            // state is the DURABLE confirmation; the toast is added on top.
             function settleCard(state, label) {
                 card.classList.add(state);
                 keepBtn.disabled = true; revBtn.disabled = true;
@@ -958,16 +705,12 @@
                 badge.classList.add('is-' + state);
                 badge.textContent = label;
             }
-            // Failure path: re-enable so the user can retry, and surface the
-            // REAL reason from the server (never a silent failure) both as a
-            // toast and as a persistent in-transcript note.
             function failNote(verb, res) {
                 keepBtn.disabled = false; revBtn.disabled = false;
                 var why = (res && res.reason) ? res.reason : (res && res.error) ? res.error : 'please try again';
                 forgeToast('Could not ' + verb + ' ' + file + ' — ' + why, 'error');
                 appendNote('is-warn', 'alert', 'Could not ' + verb + ' ' + file + ' — ' + why);
             }
-
             keepBtn.addEventListener('click', async function () {
                 keepBtn.disabled = true; revBtn.disabled = true;
                 var res;
@@ -987,34 +730,16 @@
             actions.appendChild(keepBtn); actions.appendChild(revBtn);
         }
         bar.appendChild(actions);
-
         var body = document.createElement('div'); body.className = 'fc-diff-body';
         renderDiffRows(body, parsed.rows, lang);
-
         card.appendChild(bar); card.appendChild(body);
         return card;
     }
-
-    // ========================================================================
-    // Artifact / preview cards -- the run's RENDERABLE output, shown inline
-    // ========================================================================
-    // When a build writes a renderable file (an HTML page, an image, a markdown
-    // doc, a data file), the server's detector records an artifact descriptor on
-    // the turn and emits it on the live `done` frame. We render that descriptor as
-    // a card in the SAME visual language as the diff card (bar + bounded body),
-    // so Forge Code finally SHOWS what it made -- not just the diff that made it.
-    // The preview always reflects the REAL built bytes: every kind sources its
-    // content from the same-site /artifact route (the actual file on disk), never
-    // a fabricated stand-in. Code-only runs produce no descriptor -> no card.
-
     function baseName(path) {
         var s = String(path || '');
         var i = Math.max(s.lastIndexOf('/'), s.lastIndexOf('\\'));
         return i >= 0 ? s.slice(i + 1) : s;
     }
-    // Same-origin URL for a build's output file. Each path segment is encoded so a
-    // space or unicode name resolves, while the "/" structure (for an HTML page's
-    // sibling assets) is preserved.
     function artifactUrl(cid, file) {
         var segs = String(file || '').split('/').map(function (s) { return encodeURIComponent(s); });
         return '/api/evolve/agent/artifact/' + encodeURIComponent(String(cid || '')) + '/' + segs.join('/');
@@ -1035,10 +760,6 @@
         if (art.kind === 'data') return String(art.ext || 'data').toUpperCase();
         return 'FILE';
     }
-
-    // -- a tiny CSV parser (quote-aware) for the data preview ----------------
-    // Handles quoted fields, escaped "" quotes, and commas/newlines inside
-    // quotes. Bounded by the caller (only the first N rows are rendered).
     function parseCsv(text) {
         var rows = [], row = [], field = '', i = 0, inQ = false;
         var s = String(text || '');
@@ -1057,7 +778,6 @@
         if (field !== '' || row.length) { row.push(field); rows.push(row); }
         return rows;
     }
-
     function tableFromRows(rows) {
         var MAX_ROWS = 50, MAX_COLS = 24;
         var table = document.createElement('table'); table.className = 'fc-art-table';
@@ -1074,9 +794,6 @@
         }
         return table;
     }
-
-    // Render the data preview (CSV -> table, JSON -> table of records or pretty
-    // block) into `body`. Always from the REAL fetched bytes.
     function renderDataPreview(body, art, text) {
         if (art.ext === 'csv') {
             var rows = parseCsv(text);
@@ -1085,8 +802,6 @@
         if (art.ext === 'json') {
             var data = null;
             try { data = JSON.parse(text); } catch (_e) { data = undefined; }
-            // An array of flat objects renders as a real table (the common shape);
-            // anything else falls back to a pretty, scrollable JSON block.
             if (Array.isArray(data) && data.length && typeof data[0] === 'object' && data[0] !== null && !Array.isArray(data[0])) {
                 var cols = [];
                 for (var k in data[0]) { if (Object.prototype.hasOwnProperty.call(data[0], k)) cols.push(k); }
@@ -1108,21 +823,15 @@
                 return;
             }
         }
-        // Unknown / unparseable -> show the raw text, never a fabricated preview.
         var raw = document.createElement('pre'); raw.className = 'fc-art-json';
         raw.textContent = String(text || '');
         body.appendChild(raw);
     }
-
-    // Build one artifact card: bar (icon + title + kind + Open) and a bounded
-    // preview body whose content depends on the artifact kind.
     function buildArtifactCard(art, cid) {
         if (!art || !art.file || !art.kind) return null;
         var url = artifactUrl(cid, art.file);
         var title = baseName(art.file);
-
         var card = document.createElement('div'); card.className = 'fc-art-card';
-
         var bar = document.createElement('div'); bar.className = 'fc-art-bar';
         bar.innerHTML =
             '<span class="fc-art-ic">' + svg(iconForArtifact(art.kind)) + '</span>'
@@ -1133,15 +842,8 @@
         open.innerHTML = svg('external') + '<span>Open</span>';
         bar.appendChild(open);
         card.appendChild(bar);
-
         var body = document.createElement('div'); body.className = 'fc-art-body fc-art-' + art.kind;
-
         if (art.kind === 'html') {
-            // SANDBOXED preview of the built page. The page is served from our own
-            // origin (so its relative assets resolve) but the sandbox attribute --
-            // with allow-scripts but NOT allow-same-origin -- forces it into an
-            // opaque origin so it can never script the host app. The server stamps
-            // the same sandbox via CSP as a call-site-independent backstop.
             var frame = document.createElement('iframe'); frame.className = 'fc-art-frame';
             frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-popups');
             frame.setAttribute('loading', 'lazy');
@@ -1153,7 +855,6 @@
             img.alt = title; img.loading = 'lazy'; img.src = url;
             body.appendChild(img);
         } else if (art.kind === 'markdown') {
-            // Reuse the chat's markdown renderer over the REAL fetched file bytes.
             var mdBox = document.createElement('div'); mdBox.className = 'fc-art-md markdown-body';
             mdBox.textContent = 'Loading…';
             body.appendChild(mdBox);
@@ -1169,13 +870,9 @@
                 renderDataPreview(dataBox, art, txt);
             }).catch(function () { dataBox.textContent = 'Could not load preview.'; });
         }
-
         card.appendChild(body);
         return card;
     }
-
-    // Render a run's artifact descriptors into the current assistant turn. Used by
-    // both the live `done` frame and conversation resume so they look identical.
     function renderArtifacts(list, cid) {
         if (!list || !list.length) return;
         cid = cid || currentConvoId;
@@ -1187,20 +884,10 @@
         }
         follow();
     }
-
-    // -- session-history SIDEBAR (left rail) --------------------------------
-    // A collapsible left rail listing past Code conversations -- the primary
-    // history surface (replaces the cramped day-grouped <select>). It groups by
-    // Today / Yesterday / Last 7 days / Older, filters by title with a client-side
-    // search box, highlights the active conversation, and carries inline rename +
-    // delete + "New conversation". It reuses the SAME resume/new machinery the
-    // dropdown used, so clicking an item repopulates the transcript identically.
     var convoSummaries = [];   // cached summaries from /conversations (newest first)
     var railQuery = '';        // current client-side search filter (lowercased)
     var railUserPref = null;   // null = auto (by viewport), true/false = user choice
-
     function startOfLocalDay(ms) { var d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); }
-    // Bucket an updated_at timestamp into one of the four day groups.
     function bucketFor(iso) {
         var t = Date.parse(String(iso || ''));
         if (isNaN(t)) return 3;
@@ -1211,8 +898,6 @@
         return 3;
     }
     var BUCKET_LABELS = ['Today', 'Yesterday', 'Last 7 days', 'Older'];
-
-    // A short, human relative time for a conversation's last activity.
     function relTime(iso) {
         var t = Date.parse(String(iso || ''));
         if (isNaN(t)) return '';
@@ -1227,23 +912,18 @@
         try { return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); }
         catch (_e) { return ''; }
     }
-    // A compact, readable model label from the stored "vendor:tier" id.
     function modelLabel(m) {
         var s = String(m || '').trim(); if (!s) return '';
         var tier = s.indexOf(':') !== -1 ? s.split(':').pop() : s;
         var map = { sonnet: 'Sonnet', opus: 'Opus', fable: 'Fable', gpt: 'GPT-5.5', haiku: 'Haiku' };
         return map[tier.toLowerCase()] || (tier.charAt(0).toUpperCase() + tier.slice(1));
     }
-
-    // Reflect the active conversation onto the rendered rail without a re-fetch.
     function setActiveConvo(id) {
         var list = el('forgeCodeRailList'); if (!list) return;
         list.querySelectorAll('.fc-convo').forEach(function (row) {
             row.classList.toggle('is-active', row.getAttribute('data-id') === String(id || ''));
         });
     }
-
-    // Build one conversation row (title + meta + rename/delete actions).
     function railRowHtml(c) {
         var title = (c.title && String(c.title).trim()) || 'Untitled build';
         var meta = relTime(c.updated_at);
@@ -1260,8 +940,6 @@
             + '<button type="button" class="fc-convo-act fc-convo-del" data-act="delete" aria-label="Delete conversation" title="Delete">' + svg('trash') + '</button>'
             + '</div></div>';
     }
-
-    // Render the (optionally filtered) cached summaries into the rail.
     function renderRail() {
         var list = el('forgeCodeRailList'); if (!list) return;
         var q = railQuery;
@@ -1285,7 +963,6 @@
         }
         list.innerHTML = html;
     }
-
     async function refreshConvos() {
         var data;
         try { data = await fetch('/api/evolve/agent/conversations').then(function (r) { return r.json(); }); }
@@ -1294,8 +971,6 @@
         convoSummaries = data.conversations || [];
         renderRail();
     }
-
-    // -- collapse: manual toggle + automatic below ~700px viewport ----------
     function applyRailState() {
         var wrap = document.querySelector('.forge-code-wrap'); if (!wrap) return;
         var collapsed = (railUserPref === null) ? (window.innerWidth < 700) : railUserPref;
@@ -1307,8 +982,6 @@
         railUserPref = !collapsed; // collapse when shown, expand when hidden
         applyRailState();
     }
-
-    // -- inline rename + delete over the real endpoints ---------------------
     async function renameConvo(id, row) {
         if (!row) return;
         var titleEl = row.querySelector('.fc-convo-title'); if (!titleEl) return;
@@ -1326,7 +999,6 @@
             span.textContent = text; input.replaceWith(span);
         }
         async function commit() {
-            // Enter fires commit then blur fires it again -- settle exactly once.
             if (done) return;
             var next = input.value.trim();
             if (!next || next === current) { restore(current); return; }
@@ -1347,7 +1019,6 @@
         });
         input.addEventListener('blur', function () { commit(); });
     }
-
     async function deleteConvo(id, row) {
         if (!id) return;
         var title = row ? (row.querySelector('.fc-convo-title') || {}).textContent : '';
@@ -1358,12 +1029,9 @@
                 .then(function (r) { return r.json(); });
         } catch (_e) { res = null; }
         if (!res || !res.ok) { appendNote('is-warn', 'alert', 'Could not delete that conversation'); return; }
-        // If the active conversation was deleted, fall back to a fresh one.
         if (String(id) === String(currentConvoId || '')) window.forgeCodeNewConversation();
         refreshConvos();
     }
-
-    // -- resume a stored conversation (no re-run) ---------------------------
     async function resumeConversation(id) {
         var data;
         try { data = await fetch('/api/evolve/agent/conversations/' + encodeURIComponent(id)).then(function (r) { return r.json(); }); }
@@ -1382,8 +1050,6 @@
                 startAgentTurn();
                 if (turn.transcript) replayTranscript(turn.transcript);
                 else appendSay(turn.text || '');
-                // Re-render this turn's recorded artifact previews so a resumed
-                // conversation shows what the build made, identical to live.
                 if (turn.artifacts && turn.artifacts.length) renderArtifacts(turn.artifacts, currentConvoId);
                 if (turn.model) lastModel = turn.model;
             }
@@ -1394,7 +1060,6 @@
         renderChanges();
         jumpBottom();
     }
-
     function emptyHintHtml() {
         return '<div class="fc-empty">'
             + '<div class="fc-empty-glyph">' + svg('spark') + '</div>'
@@ -1403,8 +1068,6 @@
             + 'Thomas works in the live repo on your subscription and shows its edits here — like talking to Claude Code. Git is your undo.</div>'
             + '</div>';
     }
-
-    // -- exposed continuity controls (used by the Evolve -> Code handoff) ----
     window.forgeCodeNewConversation = function () {
         currentConvoId = null;
         pendingSourceItem = null;
@@ -1412,7 +1075,6 @@
         var t = tx(); if (t) t.innerHTML = emptyHintHtml();
         setActiveConvo(null);
     };
-
     function seedContext(src) {
         var t = tx(); if (!t) return;
         if (src && (src.title || src.rationale)) {
@@ -1435,7 +1097,6 @@
             t.innerHTML = emptyHintHtml();
         }
     }
-
     window.forgeCodeStartConversation = async function (seed) {
         seed = seed || {};
         var src = (seed.source_evolve_item && typeof seed.source_evolve_item === 'object') ? seed.source_evolve_item : null;
@@ -1453,24 +1114,9 @@
         currentConvoId = (resp && resp.ok && resp.conversation && resp.conversation.id) ? String(resp.conversation.id) : null;
         refreshConvos();
     };
-
-    // -- bounded SSE reconnect ----------------------------------------------
-    // A mid-stream transport drop (network blip, proxy timeout, a rate-limit that
-    // severs the connection) must not silently kill the run. On `onerror` we make a
-    // BOUNDED number of reconnect attempts with short backoff, showing a transient
-    // "Reconnecting…" strip; only after the budget is exhausted do we fall back to
-    // an honest error + idle (with a Retry). The budget is governed by RECEIVED
-    // DATA, not by connection opens: it resets only when a reconnected stream
-    // actually delivers a frame, so a dead endpoint that accepts-then-closes can
-    // never spam (it stops after MAX_RECONNECT). The reopened stream replays this
-    // turn's transcript from the start, so before each reconnect we reset the
-    // in-progress turn and let it re-render ONCE (no duplication); a genuinely
-    // finished build replays in full and still emits its REAL done frame, so a
-    // failure stays a failure — reconnect never fakes success.
     var MAX_RECONNECT = 3;
     var reconnectAttempts = 0;
     var reconnectTimer = null;
-
     function ensureReconnectBar() {
         var bar = el('forgeCodeReconnect'); if (bar) return bar;
         var main = document.querySelector('.forge-code-main'); if (!main) return null;
@@ -1496,10 +1142,6 @@
         reconnectAttempts = 0;
         hideReconnecting();
     }
-
-    // Drop the in-progress assistant turn's DOM (its message-row) and reset the
-    // per-turn render state, so a replayed transcript re-renders exactly once. The
-    // user row and any centered notes are separate and untouched.
     function resetCurrentAgentTurn() {
         try {
             if (agentStack) {
@@ -1509,51 +1151,32 @@
         } catch (_e) { /* ignore */ }
         startAgentTurn();
     }
-
-    // -- the live build stream ----------------------------------------------
-    // openStream() begins a FRESH run (resets the reconnect budget + scroll edge);
-    // connectStream() does the actual EventSource wiring and is reused verbatim by
-    // the reconnect path.
     function openStream() {
         clearReconnect();
         stick = true; newCount = 0; updateJump(); // follow the new run from the first token
         connectStream();
     }
-
     function connectStream() {
         if (es) { try { es.close(); } catch (_e) { /* ignore */ } }
         es = new EventSource('/api/evolve/agent/stream');
         showStop(true);
         es.onmessage = function (ev) {
-            // First frame after a (re)connect: the transport is healthy and
-            // delivering data -> retire the reconnect budget so a LATER drop gets
-            // its own full set of attempts.
             if (reconnectAttempts) { clearReconnect(); setStatus('working', true); }
             try {
                 var d = JSON.parse(ev.data);
                 if (d.type === 'output') { renderEvent(d); return; }
                 if (d.type !== 'done') return;
-                // HONEST terminal states (see header comment).
                 var rc = d.returncode;
                 var changed = d.changed_files || [];
                 finalizeTurn();
                 clearReconnect(); // a clean terminal frame -> no reconnect owed
                 if (rc !== 0) {
-                    // A real build failure: a plain-language cause + a working Retry
-                    // (re-sends the same turn). Never faked as success.
                     appendBuildError('The build process exited with code ' + rc + '.', rc);
                 } else if (changed.length > 0) {
-                    // Show any RENDERABLE output this run produced (HTML page,
-                    // image, markdown, data) inline in the reply -- the detector
-                    // decided this from the real written files; a code-only run
-                    // carries an empty list and gets no card.
                     renderArtifacts(d.artifacts, d.conversation_id || currentConvoId);
                     appendNote('is-done', 'check', 'Done — ' + changed.length + ' file' + (changed.length === 1 ? '' : 's') + ' changed');
                     renderChanges();
                 } else if (sawSay) {
-                    // No files changed but the agent answered in prose -> a clean
-                    // ANSWER, not a failed/empty build. The reply bubble stands on
-                    // its own; this calm pill just marks the turn honestly.
                     appendNote('is-done', 'check', 'Answered');
                 } else if (sawAction) {
                     appendNote('is-warn', 'dash', 'No changes were needed.');
@@ -1568,8 +1191,6 @@
             } catch (_e) { /* ignore malformed frame */ }
         };
         es.onerror = function () {
-            // A clean done already tore the stream down (es === null) -> this is
-            // NOT an unexpected drop; ignore it.
             if (!es) return;
             try { es.close(); } catch (_e) { /* ignore */ }
             es = null;
@@ -1586,46 +1207,29 @@
                 }, backoff);
                 return;
             }
-            // Budget exhausted: stop retrying (no spam) and fall back honestly.
             clearReconnect();
             setStatus('idle', false); showStop(false); finalizeTurn();
             appendBuildError('The live connection to the build dropped and could not be restored after ' + MAX_RECONNECT + ' attempts.', null);
             flushFollowup();
         };
     }
-
     function stopBuild() {
-        // INSTANT Stop: flip the UI to stopped and close the EventSource IMMEDIATELY
-        // so the user sees the interruption land in <1s. The process-tree kill is
-        // fired-and-forgotten on the server (it does not block this path, and we do
-        // NOT await it) — the UI never waits on a taskkill to feel responsive.
         setStatus('idle', false);
         showStop(false);
         if (es) { try { es.close(); } catch (_e) { /* ignore */ } es = null; }
         clearReconnect(); // a manual Stop cancels any pending reconnect attempt
         finalizeTurn();
-        // The user is interrupting -> don't auto-fire a queued follow-up behind a
-        // manual Stop. Clear the queued indicator; the text stays in the composer
-        // so they can edit and resend on their own terms (never silently lost).
         cancelFollowup();
         appendNote('is-warn', 'stop', 'Stopped');
-        // Best-effort kill, not awaited: the UI already reflects "stopped".
         try {
             var p = fetch('/api/evolve/agent/stop', { method: 'POST' });
             if (p && typeof p.catch === 'function') p.catch(function () { /* best effort */ });
         } catch (_e) { /* best effort */ }
     }
-
-    // -- mid-run follow-up queue (single slot) ------------------------------
-    // Restore typed text into the composer ONLY when it is empty, so we never
-    // clobber something the user is actively editing.
     function restoreComposer(msg) {
         var ta = el('composerTextarea');
         if (ta && !((ta.value || '').trim())) { ta.value = msg; ta.dispatchEvent(new Event('input')); }
     }
-
-    // Build (lazily) the single, reusable "queued" affordance and park it just
-    // above the changes panel inside the Forge Code main column.
     function ensureQueuedBar() {
         var bar = el('forgeCodeQueued'); if (bar) return bar;
         var main = document.querySelector('.forge-code-main'); if (!main) return null;
@@ -1644,22 +1248,12 @@
     }
     function showQueuedIndicator() { var bar = ensureQueuedBar(); if (bar) bar.hidden = false; }
     function hideQueuedIndicator() { var bar = el('forgeCodeQueued'); if (bar) bar.hidden = true; }
-
-    // Stash a mid-run message as the pending follow-up. The composer keeps the
-    // text (shown as queued) so the user never has to retype it.
     function queueFollowup(msg) {
         pendingFollowup = msg;
         restoreComposer(msg);
         showQueuedIndicator();
     }
-
-    // User dismissed the queued message: drop the slot and hide the affordance.
-    // The composer text is left intact so they can still edit/resend by hand.
     function cancelFollowup() { pendingFollowup = null; hideQueuedIndicator(); }
-
-    // The current build finalized: auto-send the queued follow-up. We send the
-    // LIVE composer content (so any edits the user made while it sat queued win),
-    // and quietly do nothing if they cleared it.
     function flushFollowup() {
         if (!pendingFollowup || es) return;
         pendingFollowup = null;
@@ -1670,11 +1264,7 @@
         if (ta) { ta.value = ''; ta.dispatchEvent(new Event('input')); }
         void sendToBuild(msg);
     }
-
     async function sendToBuild(msg) {
-        // Defensive: if a build is somehow still in flight, QUEUE the message
-        // instead of dropping it (the interceptor already routes the common case
-        // here, but this keeps every caller data-safe).
         if (es) { queueFollowup(msg); return; }
         lastSentMessage = msg; // remember the turn so a build error can offer Retry
         var engine = (el('forgeCodeEngine') || {}).value || 'agent';
@@ -1701,9 +1291,6 @@
             refreshConvos();
             openStream();
         } else if (status === 409 || (resp && resp.error === 'agent is already working')) {
-            // Lost a race: the composer was cleared on the accepted path but the
-            // server reports busy and we have no live stream to flush against.
-            // Restore the typed text so it is preserved (never lost) for a retry.
             setStatus('idle', false);
             showStop(false);
             restoreComposer(msg);
@@ -1714,14 +1301,8 @@
             appendError((resp && resp.error) || 'could not start the build');
         }
     }
-
-    // -- per-file diff panel with Keep / Revert -----------------------------
     async function renderChanges() {
         var panel = el('forgeCodeChanges'); if (!panel) return;
-        // Scope the changes panel to THIS conversation's own build output by
-        // passing its id: the server intersects the run's recorded changed_files
-        // with the live dirty tree, so we show only the files this conversation
-        // wrote — never every dirty file in the repo.
         var url = '/api/evolve/agent/changes';
         if (currentConvoId) url += '?cid=' + encodeURIComponent(currentConvoId);
         var data;
@@ -1737,18 +1318,13 @@
             panel.appendChild(card);
         }
     }
-
     function injectStyle() { /* all Forge Code styling lives in evolution.css (token-driven) */ }
-
     function mount() {
         var code = el('forgeCode'); if (!code) return false;
         if (code.querySelector('.forge-code-wrap')) return true;
         code.innerHTML = '<div class="forge-code-wrap">'
             + '<div class="forge-code-shell">'
-            // Collapsed-state handle: a slim re-open control that takes the rail's
-            // place when the sidebar is hidden (manually or below ~700px).
             + '<button type="button" id="forgeCodeRailHandle" class="fc-rail-handle" aria-label="Show conversation history" title="Show history">' + svg('railRight') + '</button>'
-            // -- session-history left rail --
             + '<aside class="forge-code-rail" id="forgeCodeRail" aria-label="Conversation history">'
             + '<div class="fc-rail-top">'
             + '<button type="button" id="forgeCodeRailNew" class="fc-rail-new">' + svg('plus') + '<span>New conversation</span></button>'
@@ -1759,7 +1335,6 @@
             + '</div>'
             + '<div class="fc-rail-list" id="forgeCodeRailList"></div>'
             + '</aside>'
-            // -- main column: the existing head + transcript + changes --
             + '<div class="forge-code-main">'
             + '<div class="forge-code-head">'
             + '<div class="fc-sub">Tell Thomas what to build or change &mdash; type in the composer below (your normal chat bar). It builds in the live repo on your subscription and shows its work here. Git is your undo.</div>'
@@ -1773,16 +1348,11 @@
             + '<div id="forgeCodeChanges" class="forge-code-changes"></div>'
             + '</div></div></div>';
         injectStyle();
-
         var trans = el('forgeCodeTranscript');
         if (trans && !trans.__forgeScroll) {
             trans.__forgeScroll = true;
             trans.addEventListener('scroll', function () { stick = nearBottom(trans); updateJump(); });
         }
-
-        // The pinned "Jump to latest" control: hidden while at the live edge, shown
-        // (with an unread tally) once the user scrolls up. Clicking it re-attaches
-        // auto-scroll and snaps to the bottom. Built once, parked over the transcript.
         var jmain = document.querySelector('.forge-code-main');
         if (jmain && !el('forgeCodeJump')) {
             var jb = document.createElement('button');
@@ -1794,8 +1364,6 @@
             jb.addEventListener('click', function () { jumpBottom(); });
             jmain.appendChild(jb);
         }
-
-        // -- wire the history rail --
         var newBtn = el('forgeCodeRailNew');
         if (newBtn && !newBtn.__forgeWired) { newBtn.__forgeWired = true; newBtn.addEventListener('click', function () { window.forgeCodeNewConversation(); }); }
         var collapseBtn = el('forgeCodeRailCollapse');
@@ -1807,7 +1375,6 @@
             searchInput.__forgeWired = true;
             searchInput.addEventListener('input', function () { railQuery = (searchInput.value || '').trim().toLowerCase(); renderRail(); });
         }
-        // Delegate item clicks: open (resume), rename, delete.
         var list = el('forgeCodeRailList');
         if (list && !list.__forgeWired) {
             list.__forgeWired = true;
@@ -1822,10 +1389,8 @@
                 else if (act === 'delete') { deleteConvo(id, row); }
             });
         }
-
         var stopBtn = el('forgeCodeStop');
         if (stopBtn && !stopBtn.__forgeWired) { stopBtn.__forgeWired = true; stopBtn.addEventListener('click', function () { void stopBuild(); }); }
-
         if (!window.__forgeRailResize) {
             window.__forgeRailResize = true;
             window.addEventListener('resize', applyRailState);
@@ -1835,31 +1400,18 @@
         return true;
     }
     window.forgeCodeMount = mount;
-
-    // Deep-link entry point (used by the "My Stuff" build deliverables -> "Open in
-    // Code" action): ensure the surface is mounted, then resume the conversation
-    // that produced the deliverable so it re-opens to its transcript.
     window.forgeCodeOpenConversation = function (id) {
         if (!id) return;
         try { mount(); } catch (_e) { /* surface may already be mounted */ }
         return resumeConversation(String(id));
     };
-
-    // ADDITIVE capture-phase interceptor on the real send button. Fires BEFORE the
-    // core handleSend listener; when Forge Code is active it claims the send and
-    // routes it to the build, otherwise it does nothing and main chat is untouched.
     function interceptor(e) {
         if (!window.forgeCodeActive) return;
         var ta = el('composerTextarea'); var msg = ((ta && ta.value) || '').trim();
         if (!msg) return;
         e.stopImmediatePropagation();
         if (e.preventDefault) e.preventDefault();
-        // A build is in flight: QUEUE this as a follow-up (frontier behaviour)
-        // instead of wiping + dropping it. The composer text stays put — shown as
-        // queued — and auto-sends when the current build finalizes. We do NOT
-        // clear here because the clear must never precede a possible rejection.
         if (es) { queueFollowup(msg); return; }
-        // Accepted path: only NOW clear the composer, after the busy-check passed.
         if (ta) { ta.value = ''; ta.dispatchEvent(new Event('input')); }
         void sendToBuild(msg);
     }
@@ -1867,7 +1419,6 @@
         var sb = el('sendBtn');
         if (sb && !sb.__forgeWired) { sb.__forgeWired = true; sb.addEventListener('click', interceptor, true); }
     }
-
     var tries = 0;
     var iv = setInterval(function () { tries++; wireInterceptor(); if ((el('sendBtn') && el('sendBtn').__forgeWired) || tries > 1500) clearInterval(iv); }, 500);
     wireInterceptor();

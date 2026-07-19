@@ -10,29 +10,242 @@ fabricated: the pass/fail shown is the genuine returncode of a genuine subproces
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlsplit
 
 from .bridge_config import emergency_stop_active
 from .bridge_prompts import compose_fix_prompt
 from .forge_event_stream import FORGE_EVENT_KEY
+from .web_artifact_smoke import smoke_html_artifacts
 
 # A small, self-contained verifier program: byte-compile each changed file and
 # import each changed package module. A syntax error (py_compile) or an import
 # error raises -> the subprocess exits non-zero -> the run is honestly a failure.
 _VERIFY_SRC = (
-    "import importlib, json, sys, py_compile\n"
+    "import csv, html.parser, importlib, json, pathlib, shutil, subprocess, sys, py_compile, xml.etree.ElementTree as ET, zipfile\n"
     "files = json.loads(sys.argv[1])\n"
     "mods = json.loads(sys.argv[2])\n"
+    "preflight_failures = json.loads(sys.argv[3])\n"
+    "assert not preflight_failures, '; '.join(preflight_failures)\n"
     "for f in files:\n"
-    "    py_compile.compile(f, doraise=True)\n"
-    "    print('compiled ' + f)\n"
+    "    p=pathlib.Path(f); raw=p.read_bytes(); ext=p.suffix.lower()\n"
+    "    if ext=='.py': py_compile.compile(f,doraise=True); print('compiled '+f)\n"
+    "    elif ext in {'.js','.mjs','.cjs'}:\n"
+    "        node=shutil.which('node'); assert node,'node is required to verify JavaScript'; r=subprocess.run([node,'--check',f],capture_output=True,text=True); assert r.returncode==0,r.stdout+r.stderr; print('checked '+f)\n"
+    "    elif ext in {'.html','.htm'}: text=raw.decode('utf-8'); parser=html.parser.HTMLParser(); parser.feed(text); assert '<' in text and '>' in text,'HTML has no elements'; print('parsed '+f)\n"
+    "    elif ext=='.json': json.loads(raw.decode('utf-8')); print('parsed '+f)\n"
+    "    elif ext=='.csv': rows=list(csv.reader(raw.decode('utf-8-sig').splitlines())); assert rows,'CSV is empty'; print('parsed '+f)\n"
+    "    elif ext in {'.svg','.xml'}: ET.fromstring(raw); print('parsed '+f)\n"
+    "    elif ext=='.css': text=raw.decode('utf-8'); assert text.count('{')==text.count('}'),'unbalanced CSS braces'; print('checked '+f)\n"
+    "    elif ext=='.pdf': assert raw.startswith(b'%PDF-'),'invalid PDF header'; print('opened '+f)\n"
+    "    elif ext in {'.docx','.xlsx','.pptx'}: assert zipfile.is_zipfile(p),'invalid Office document'; print('opened '+f)\n"
+    "    elif ext=='.png': assert raw.startswith(b'\\x89PNG\\r\\n\\x1a\\n'),'invalid PNG'; print('opened '+f)\n"
+    "    elif ext in {'.jpg','.jpeg'}: assert raw.startswith(b'\\xff\\xd8') and raw.endswith(b'\\xff\\xd9'),'invalid JPEG'; print('opened '+f)\n"
+    "    else: raw.decode('utf-8'); print('read '+f)\n"
     "for m in mods:\n"
     "    importlib.import_module(m)\n"
     "    print('imported ' + m)\n"
-    "print('VERIFY_OK: ' + str(len(files)) + ' compiled, ' + str(len(mods)) + ' imported')\n"
+    "print('STATIC_VERIFY_OK: ' + str(len(files)) + ' files checked, ' + str(len(mods)) + ' imported')\n"
 )
+
+_INLINE_SCRIPT_RE = re.compile(
+    r"<script\b(?P<attrs>[^>]*)>(?P<body>.*?)</script\s*>",
+    re.IGNORECASE | re.DOTALL,
+)
+_SCRIPT_SRC_RE = re.compile(r"\bsrc\s*=\s*(['\"])(?P<src>.*?)\1", re.IGNORECASE | re.DOTALL)
+_THROW_RE = re.compile(r"\bthrow\s+(?:new\s+)?(?:Error|TypeError|RangeError|ReferenceError|SyntaxError|URIError)\b")
+_REPAIR_TRUNCATION_SUFFIXES = {".css", ".html", ".htm", ".js", ".mjs", ".cjs"}
+_REPAIR_TRUNCATION_MIN_BYTES = 1024
+_REPAIR_TRUNCATION_RATIO = 0.25
+_SMOKE_LINKED_ASSET_SUFFIXES = {".css", ".js", ".mjs", ".cjs"}
+_SMOKE_DISCOVERY_MAX_HTML = 2000
+_SMOKE_DISCOVERY_MAX_BYTES = 2 * 1024 * 1024
+
+
+class _LocalAssetReferenceParser(HTMLParser):
+    """Collect actual script/link URLs without matching comments or body prose."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.references: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        values = {str(name).lower(): str(value or "") for name, value in attrs}
+        if tag.lower() == "script" and values.get("src"):
+            self.references.append(values["src"])
+        elif tag.lower() == "link" and values.get("href"):
+            self.references.append(values["href"])
+
+
+def _mask_js_strings_and_comments(source: str) -> str:
+    """Mask JS literals/comments while retaining newlines and brace positions.
+
+    The Code verifier is intentionally not a JavaScript runtime.  Executing an
+    arbitrary generated app merely to inspect it would grant the app the local
+    user's permissions.  This small lexical pass instead supports one narrow,
+    fail-closed boot check: an unconditional top-level ``throw new Error``.  It
+    ignores throw-looking text in strings/comments and throws inside functions or
+    control blocks, which keeps the check useful without pretending to prove full
+    browser behavior.
+    """
+    out = list(source)
+    state = "code"
+    quote = ""
+    escaped = False
+    index = 0
+    while index < len(source):
+        char = source[index]
+        nxt = source[index + 1] if index + 1 < len(source) else ""
+        if state == "code":
+            if char in {"'", '"', "`"}:
+                state, quote, out[index] = "string", char, " "
+            elif char == "/" and nxt == "/":
+                state, out[index], out[index + 1] = "line_comment", " ", " "
+                index += 1
+            elif char == "/" and nxt == "*":
+                state, out[index], out[index + 1] = "block_comment", " ", " "
+                index += 1
+        elif state == "string":
+            if char != "\n":
+                out[index] = " "
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                state = "code"
+        elif state == "line_comment":
+            if char == "\n":
+                state = "code"
+            else:
+                out[index] = " "
+        else:
+            if char != "\n":
+                out[index] = " "
+            if char == "*" and nxt == "/":
+                out[index + 1] = " "
+                index += 1
+                state = "code"
+        index += 1
+    return "".join(out)
+
+
+def _has_obvious_top_level_throw(source: str) -> bool:
+    """Return true only for an obvious error throw at JavaScript brace depth 0."""
+    masked = _mask_js_strings_and_comments(source)
+    depth = 0
+    for line in masked.splitlines(keepends=True):
+        for match in _THROW_RE.finditer(line):
+            before = line[: match.start()]
+            if depth == 0 and not before.strip():
+                return True
+        for char in line:
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth = max(0, depth - 1)
+    return False
+
+
+def _artifact_preflight_failures(cwd: str | Path, files: list[str]) -> list[str]:
+    """Find safe, deterministic web boot failures before the verifier subprocess.
+
+    Inline scripts and existing local ``src`` dependencies of changed HTML are
+    inspected, as are changed JavaScript files.  No generated JavaScript is
+    executed in Thomas's process; findings are passed into ``_VERIFY_SRC`` so the
+    real verifier subprocess exits nonzero and the streamed returncode is honest.
+    """
+    root = Path(cwd).resolve()
+    failures: list[str] = []
+    checked: set[Path] = set()
+
+    def inspect_script(path: Path, label: str) -> None:
+        resolved = path.resolve()
+        if resolved in checked or not resolved.is_file() or not resolved.is_relative_to(root):
+            return
+        checked.add(resolved)
+        try:
+            source = resolved.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            return
+        if _has_obvious_top_level_throw(source):
+            failures.append(f"obvious JavaScript boot failure in {label}: top-level throw")
+
+    for name in files:
+        path = (root / name).resolve()
+        suffix = path.suffix.lower()
+        if suffix in {".js", ".mjs", ".cjs"}:
+            inspect_script(path, name)
+            continue
+        if suffix not in {".html", ".htm"} or not path.is_file() or not path.is_relative_to(root):
+            continue
+        try:
+            html = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        for number, match in enumerate(_INLINE_SCRIPT_RE.finditer(html), start=1):
+            src_match = _SCRIPT_SRC_RE.search(match.group("attrs") or "")
+            if src_match:
+                src = src_match.group("src").strip().split("?", 1)[0].split("#", 1)[0]
+                if src and "://" not in src and not src.startswith("//"):
+                    linked = (root / src.lstrip("/")) if src.startswith("/") else (path.parent / src)
+                    inspect_script(linked, f"{name} -> {src}")
+            elif _has_obvious_top_level_throw(match.group("body") or ""):
+                failures.append(f"obvious JavaScript boot failure in {name} inline script {number}: top-level throw")
+    return failures
+
+
+def _browser_smoke_files(cwd: str | Path, changed_files: list[str]) -> list[str]:
+    """Include HTML entrypoints that load a changed local CSS/JS asset."""
+
+    root = Path(cwd).resolve()
+    changed_paths = [(root / name).resolve() for name in changed_files]
+    html_paths = {
+        path
+        for path in changed_paths
+        if path.suffix.lower() in {".html", ".htm"} and path.is_file() and path.is_relative_to(root)
+    }
+    assets = [
+        path
+        for path in changed_paths
+        if path.suffix.lower() in _SMOKE_LINKED_ASSET_SUFFIXES and path.is_file() and path.is_relative_to(root)
+    ]
+    if assets:
+        candidates = sorted({*root.rglob("*.html"), *root.rglob("*.htm")})
+        for candidate in candidates[:_SMOKE_DISCOVERY_MAX_HTML]:
+            try:
+                if candidate.stat().st_size > _SMOKE_DISCOVERY_MAX_BYTES:
+                    continue
+                source = candidate.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                continue
+            parser = _LocalAssetReferenceParser()
+            try:
+                parser.feed(source)
+            except (ValueError, TypeError):
+                continue
+            linked: set[Path] = set()
+            for raw_reference in parser.references:
+                parsed = urlsplit(raw_reference)
+                if parsed.scheme or parsed.netloc or raw_reference.startswith("//"):
+                    continue
+                reference = unquote(parsed.path).replace("\\", "/")
+                if not reference:
+                    continue
+                target = (root / reference.lstrip("/")) if reference.startswith("/") else (candidate.parent / reference)
+                try:
+                    resolved = target.resolve()
+                except OSError:
+                    continue
+                if resolved.is_relative_to(root):
+                    linked.add(resolved)
+            if any(asset in linked for asset in assets):
+                html_paths.add(candidate.resolve())
+    return sorted(str(path.relative_to(root)).replace("\\", "/") for path in html_paths)
 
 
 def _is_test_file(path: str) -> bool:
@@ -86,9 +299,9 @@ def verify_python_changes(
     import subprocess
     import sys
 
-    files = [f for f in (changed_files or []) if str(f).endswith(".py")]
+    files = [str(f) for f in (changed_files or []) if (Path(cwd) / str(f)).is_file()]
     if not files:
-        return True, 0, "no python files changed — nothing to verify"
+        return False, 1, "changed paths could not be verified as files"
 
     tests = [f for f in files if _is_test_file(f)]
     if tests:
@@ -96,8 +309,16 @@ def verify_python_changes(
         label = "pytest " + " ".join(tests)
     else:
         modules = [m for m in (_importable_module_for(cwd, f) for f in files) if m]
-        cmd = [sys.executable, "-c", _VERIFY_SRC, json.dumps(files), json.dumps(modules)]
-        label = "verify: byte-compile + import (" + ", ".join(files) + ")"
+        preflight_failures = _artifact_preflight_failures(cwd, files)
+        cmd = [
+            sys.executable,
+            "-c",
+            _VERIFY_SRC,
+            json.dumps(files),
+            json.dumps(modules),
+            json.dumps(preflight_failures),
+        ]
+        label = "static checks: syntax + parse + open (" + ", ".join(files) + ")"
 
     emit({FORGE_EVENT_KEY: "tool", "name": "run", "text": label[:200]})
     try:
@@ -122,7 +343,76 @@ def verify_python_changes(
     body = str(out or "").strip()
     detail = f"exit {rc}" + (("\n" + body) if body else "")
     emit({FORGE_EVENT_KEY: "tool_result", "text": detail[:500], "is_error": not ok})
+    smoke_files = _browser_smoke_files(cwd, files) if ok else []
+    if smoke_files:
+        emit(
+            {
+                FORGE_EVENT_KEY: "tool",
+                "name": "run",
+                "text": "offline real-browser smoke for changed HTML or linked web assets",
+            }
+        )
+        smoke = smoke_html_artifacts(cwd, smoke_files, timeout=min(timeout, 30))
+        smoke_detail = (
+            "BROWSER_SMOKE_OK: " if smoke.ok and smoke.attempted else "BROWSER_SMOKE_SKIPPED: "
+        ) + smoke.summary
+        if smoke.attempted and not smoke.ok:
+            smoke_detail = "BROWSER_SMOKE_FAILED: " + smoke.summary
+        emit(
+            {
+                FORGE_EVENT_KEY: "tool_result",
+                "text": smoke_detail[:1500],
+                "is_error": bool(smoke.attempted and not smoke.ok),
+            }
+        )
+        if smoke.attempted and not smoke.ok:
+            return False, 1, smoke_detail
+        detail += "\n" + smoke_detail
     return ok, rc, detail[-1500:]
+
+
+def _snapshot_repair_files(cwd: str | Path, changed_files: list[str]) -> dict[Path, bytes]:
+    """Capture existing web sources before a repair that may touch clean owners too."""
+
+    root = Path(cwd).resolve()
+    snapshot: dict[Path, bytes] = {}
+    candidates = {(root / name).resolve() for name in changed_files}
+    candidates.update(
+        path.resolve()
+        for path in root.rglob("*")
+        if path.is_file() and path.suffix.lower() in _REPAIR_TRUNCATION_SUFFIXES
+    )
+    for path in sorted(candidates):
+        if path.suffix.lower() not in _REPAIR_TRUNCATION_SUFFIXES or not path.is_relative_to(root):
+            continue
+        try:
+            snapshot[path] = path.read_bytes()
+        except OSError:
+            continue
+    return snapshot
+
+
+def _restore_catastrophic_repair_truncations(snapshot: dict[Path, bytes]) -> tuple[list[str], list[str]]:
+    """Restore web sources a fix pass unexpectedly reduced to a tiny stub."""
+
+    restored: list[str] = []
+    failed: list[str] = []
+    for path, before in snapshot.items():
+        if len(before) < _REPAIR_TRUNCATION_MIN_BYTES:
+            continue
+        try:
+            after_size = path.stat().st_size
+        except OSError:
+            after_size = 0
+        if after_size >= len(before) * _REPAIR_TRUNCATION_RATIO:
+            continue
+        try:
+            path.write_bytes(before)
+        except OSError:
+            failed.append(path.name)
+            continue
+        restored.append(path.name)
+    return restored, failed
 
 
 def _verify_and_iterate(
@@ -161,10 +451,27 @@ def _verify_and_iterate(
             return rc or 1
         iters += 1
         emit({FORGE_EVENT_KEY: "meta", "text": f"verification failed (exit {rc}); fix pass {iters}/{limit}"})
+        repair_snapshot = _snapshot_repair_files(cwd, changed)
+        fix_error: Exception | None = None
+        frc = 0
         try:
             frc, _out = run_pass(compose_fix_prompt(goal, summary))
         except (RuntimeError, ValueError, TypeError, OSError) as exc:
-            emit({FORGE_EVENT_KEY: "error", "text": f"fix pass could not run: {exc}"})
+            fix_error = exc
+        restored, restore_failed = _restore_catastrophic_repair_truncations(repair_snapshot)
+        if restored or restore_failed:
+            detail = ", ".join(restored)
+            if restore_failed:
+                detail += ("; " if detail else "") + "restore failed for " + ", ".join(restore_failed)
+            emit(
+                {
+                    FORGE_EVENT_KEY: "error",
+                    "text": "verification repair was stopped after destructive truncation: " + detail,
+                }
+            )
+            return rc or 1
+        if fix_error is not None:
+            emit({FORGE_EVENT_KEY: "error", "text": f"fix pass could not run: {fix_error}"})
             return rc or 1
         if frc != 0:
             return frc

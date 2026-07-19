@@ -282,6 +282,7 @@ class AgentLoop(_AgentLoopBase):
         self,
         prompt: Any,
         *,
+        intent_text: str | None = None,
         mode: str = "auto",
         tools_policy: str = "auto",
         token_economy: str = "optimal",
@@ -297,6 +298,7 @@ class AgentLoop(_AgentLoopBase):
         async for event in _agent_loop_run(
             self,
             prompt,
+            intent_text=intent_text,
             mode=mode,
             tools_policy=tools_policy,
             token_economy=token_economy,

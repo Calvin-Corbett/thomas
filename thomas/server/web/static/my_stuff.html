@@ -27,6 +27,19 @@
             <span class="stuff-status-text" id="statusText">Loading project board...</span>
         </section>
 
+        <section class="stuff-installed-shelf" id="installedAppsShelf" aria-labelledby="installedAppsTitle">
+            <div class="stuff-installed-head">
+                <div>
+                    <p class="stuff-kicker">Ready now</p>
+                    <h2 id="installedAppsTitle">Installed Apps</h2>
+                </div>
+                <p class="stuff-subtitle">Open an installed app in its own workspace.</p>
+            </div>
+            <div class="stuff-installed-apps" id="installedAppsList" aria-live="polite">
+                <div class="stuff-installed-empty">Loading app workspaces...</div>
+            </div>
+        </section>
+
         <section class="stuff-board-view" id="boardView">
             <div class="stuff-board-frame">
                 <div class="stuff-board" id="board" aria-label="Project board"></div>

@@ -48,7 +48,7 @@ def _seed_locked_corpus(root: Path) -> None:
         + "\n",
         encoding="utf-8",
     )
-    digest = hashlib.sha256(case_file.read_bytes()).hexdigest()
+    digest = hashlib.sha256(case_file.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
     (corpus / "LOCK.json").write_text(
         json.dumps({"version": 1, "files": {"cases/known_good_minimal.json": digest}}, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

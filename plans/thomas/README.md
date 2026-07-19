@@ -1,5 +1,7 @@
 # Thomas Plan Workspace (active)
 
+- `plans/thomas/tasks/thomas-coherence-passage-2026-07-12/PLAN.md` - canonical governed-operator migration across V2 chat, action, delegation, memory, and proof.
+
 - `plans/thomas/WORKBOARD.md` — active execution board.
 - `plans/thomas/companion/STORE_COMPLIANCE_PLAN.md`
 - `plans/thomas/ui/UI_UPGRADE_PLAN.md`
@@ -48,3 +50,8 @@
 - `plans/thomas/self_improvement/SELF_IMPROVEMENT_RESEARCH_QUEUE.md`
 - `plans/thomas/self_improvement/SELF_IMPROVEMENT_RUBRICS.md`
 - `plans/thomas/ui/PARALLEL_CODE_WORKER_UI_COMPARISON.md`
+
+## Landed 0.19.0 plan documents (reference)
+- `plans/thomas/chatgpt_parity/BONUS_SCORECARD.md`
+- `plans/thomas/chatgpt_parity/GAP_LEDGER.md`
+- `plans/thomas/chatgpt_parity/RUBRIC.md`

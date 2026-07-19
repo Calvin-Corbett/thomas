@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import logging
 import platform as _platform
 from collections.abc import Awaitable, Callable
@@ -10,19 +11,21 @@ from typing import Any
 from thomas.agent.chat_dispatcher import dispatch_async
 from thomas.agent.dispatch import should_dispatch
 from thomas.core import task_bot_runtime
-from thomas.core.file_access import PROJECT, clamp_file_access_level, file_access_spec
+from thomas.core.file_access import READ_ONLY, clamp_file_access_level
 from thomas.core.task_titling import derive_task_title
 from thomas.marketplace.orchestrator.bot_roster import pick_bot_for_specialist
 from thomas.server import chat_delegation_live_repo as _live_repo_module
 from thomas.server import chat_delegation_runner as _runner_module
-from thomas.server.chat_delegation_canvas import canvas_start, is_canvas_task, run_canvas_worker
-
-# Re-export every deliverable helper that external callers may import from this module.
-# (Tests and routes do `from thomas.server.chat_delegation import _build_result_summary`
-# etc., so these must stay at module scope as visible attributes.)
+from thomas.server.app_keys import APP_CONFIG, APP_TOOLS
+from thomas.server.chat_delegation_canvas import (
+    canvas_finish,
+    canvas_start,
+    is_canvas_task,
+    run_canvas_worker,
+)
+from thomas.server.chat_delegation_canvas_completion import complete_canvas_delivery
 from thomas.server.chat_delegation_deliverable import (  # noqa: F401
     _FAILURE_LANGUAGE_RE,
-    _artifacts_from_created,
     _build_result_summary,
     _claimed_filenames,
     _claims_action_success,
@@ -59,22 +62,29 @@ from thomas.server.chat_delegation_session import (  # noqa: F401
     _worker_has_started_progress,
     session_active_delegations,
 )
+from thomas.server.chat_delegation_tasks import (
+    build_active_task_digest_from_rows,
+    resolve_active_task_ref_from_rows,
+)
 from thomas.server.chat_delegation_worker_config import (  # noqa: F401
     _WORKER_FIRST_EVENT_TIMEOUT_S,
     _WORKER_IDLE_EVENT_TIMEOUT_S,
     PROVIDER_NATIVE_BACKEND,
     TASK_MANAGER_BACKEND,
+    _agent_worker_permission_block,
     _agent_worker_runtime_profile,
     _helper_prompt,
     _infer_specialist,
     _replan_prompt,
     _requested_delegate_count,
+    _requested_delegate_items,
     _self_recovery_attempts,
 )
-from thomas.server.worker_runtime import run_agent_worker_events
+from thomas.server.chat_delegation_workspace import ensure_task_workspace as _ensure_task_workspace
+from thomas.server.model_runtime_receipt import validate_model_runtime_receipt
+from thomas.server.worker_runtime import _explicit_browser_preflight, run_agent_worker_events
 
 log = logging.getLogger(__name__)
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -105,79 +115,14 @@ async def _run_exhaustive_worker(*args: Any, **kwargs: Any) -> None:
     return await _runner_module._run_exhaustive_worker(*args, **kwargs)
 
 
-def build_active_task_digest(
-    session_id: str,
-    *,
-    repo_root: str | Path | None = None,
-    limit: int = 3,
-) -> str:
+def build_active_task_digest(session_id: str, *, repo_root: str | Path | None = None, limit: int = 3) -> str:
     rows = session_active_delegations(session_id, repo_root=repo_root)
-    if not rows:
-        return ""
-    lines = ["Background work in this chat: to change or stop a RUNNING one, call update_task with its [task <ref>]:"]
-    for row in rows[: max(1, int(limit or 1))]:
-        bot = str(row.get("bot_id") or "worker").strip() or "worker"
-        state = str(row.get("state") or "requested").replace("_", " ")
-        backend = str(row.get("backend_type") or TASK_MANAGER_BACKEND).replace("_", " ")
-        ref = str(row.get("execution_id") or "").strip()
-        # Lead with WHAT the task is (its subject) so the model can match the user's
-        # reference ("cancel the jazz report") to the right task. The subject lives in
-        # `summary` (the task request); `last_progress` is only a status line and must
-        # NOT replace it — burying the subject left the model unable to tell which task
-        # the user meant. (chat sweep, 2026-06-27)
-        subject = str(row.get("summary") or row.get("title") or "").strip()
-        progress = str(row.get("last_progress") or "").strip()
-        if subject and progress and progress.lower() not in subject.lower():
-            detail = f"{subject} (status: {progress})"
-        else:
-            detail = subject or progress or "starting up"
-        lines.append(f"- [task {ref}] {bot} [{state} via {backend}]: {detail}")
-    return "\n".join(lines)
+    return build_active_task_digest_from_rows(rows, limit=limit, default_backend=TASK_MANAGER_BACKEND)
 
 
-def resolve_active_task_ref(
-    session_id: str,
-    task_ref: str,
-    *,
-    repo_root: str | Path | None = None,
-) -> str | None:
-    ref = str(task_ref or "").strip().lower().replace("[", "").replace("]", "")
-    for token in ("task", "ref", "#", ":"):
-        ref = ref.replace(token, "")
-    ref = ref.strip()
-    if not ref:
-        return None
+def resolve_active_task_ref(session_id: str, task_ref: str, *, repo_root: str | Path | None = None) -> str | None:
     rows = session_active_delegations(session_id, repo_root=repo_root)
-    matches: list[tuple[str, bool]] = []
-    for row in rows:
-        eid = str(row.get("execution_id") or "").lower()
-        if not eid:
-            continue
-        terminal = str(row.get("state") or "").lower() in _TERMINAL_TASK_STATES
-        if eid == ref or eid.endswith(ref) or ref.endswith(eid) or (len(ref) >= 4 and ref in eid):
-            matches.append((str(row.get("execution_id") or ""), terminal))
-    for eid, terminal in matches:
-        if not terminal:
-            return eid
-    if matches:
-        return matches[0][0]
-    # The model often references a task by a loose ref the opaque exec-id doesn't
-    # contain. These are PLAUSIBLE interpretations of what it copied from the digest,
-    # not blind guesses (an unrelated ref still resolves to None):
-    #   (a) a pure ordinal ('[task 1]' -> '1') maps to the Nth task in digest order;
-    #   (b) otherwise the ref's words are matched against each task's subject
-    #       ('cancel the jazz report' -> the task whose summary mentions jazz).
-    # (chat sweep, 2026-06-27)
-    digits = "".join(ch for ch in ref if ch.isdigit())
-    if digits and digits == ref and 1 <= int(digits) <= len(rows):
-        return str(rows[int(digits) - 1].get("execution_id") or "") or None
-    ref_words = [w for w in ref.replace("-", " ").replace("_", " ").split() if len(w) >= 3]
-    if ref_words:
-        for r in rows:
-            subject = str(r.get("summary") or r.get("title") or "").lower()
-            if subject and any(w in subject for w in ref_words):
-                return str(r.get("execution_id") or "") or None
-    return None
+    return resolve_active_task_ref_from_rows(rows, task_ref, terminal_states=_TERMINAL_TASK_STATES)
 
 
 def apply_task_update(
@@ -207,23 +152,6 @@ def apply_task_update(
         return {"ok": False, "error": str(exc)}
 
 
-def _ensure_task_workspace(execution_id: str) -> Path:
-    """Create and return a clean per-task workspace OUTSIDE the source repo.
-
-    User deliverables are built here (e.g. a pac-man HTML file). Keeping it outside
-    the Thomas repo avoids the dev guardrails that block writes inside the repo.
-    """
-    safe_id = "".join(ch for ch in str(execution_id or "") if ch.isalnum() or ch in "-_") or "task"
-    base = Path.home() / ".thomas" / "workspaces" / safe_id
-    try:
-        base.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        # Fall back to a repo-local runtime dir if home isn't writable.
-        base = (ROOT / "runtime" / "workspaces" / safe_id).resolve()
-        base.mkdir(parents=True, exist_ok=True)
-    return base
-
-
 async def start_background_delegation(
     app: Any,
     *,
@@ -237,11 +165,16 @@ async def start_background_delegation(
     autonomy_level: int = 4,
     file_access: int | None = None,
     profile: str | None = None,
+    model_id: str | None = None,
+    reasoning_effort: str | None = None,
     effort: str = "diligent",
     guardrails: str = "",
     guardrail_modes: dict[str, str] | None = None,
     session_llm: Any = None,
     surface: str | None = None,
+    work_context_id: str = "",
+    memory_enabled: bool = True,
+    runtime_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     normalized_mode = str(mode or "").strip().lower()
     forced = bool(force)
@@ -260,46 +193,87 @@ async def start_background_delegation(
 
     specialist_id = _infer_specialist(prompt)
     emitter = _DelegationEmitter(emit_event)
-    delegate_count = _requested_delegate_count(prompt) if forced else 1
+    delegate_items = _requested_delegate_items(prompt)
+    delegate_count = len(delegate_items) or (_requested_delegate_count(prompt) if forced else 1)
 
     if delegate_count > 1:
         exclude: set[str] = set()
         records: list[dict[str, Any]] = []
         for index in range(delegate_count):
-            bot = pick_bot_for_specialist(specialist_id, exclude=set(exclude))
+            assigned_item = delegate_items[index] if delegate_items else ""
+            item_specialist_id = _infer_specialist(assigned_item) if assigned_item else specialist_id
+            bot = pick_bot_for_specialist(item_specialist_id, exclude=set(exclude))
             exclude.add(bot.id)
             helper_prompt = _helper_prompt(
                 prompt,
                 helper_index=index + 1,
                 helper_count=delegate_count,
                 bot_name=bot.name,
+                assigned_item=assigned_item,
             )
-            record = await _start_task_manager_delegation(
-                session_id=session_id,
-                prompt=helper_prompt,
-                specialist_id=specialist_id,
-                bot=bot,
-                emitter=emitter,
-                repo_root=repo_root,
-            )
+            try:
+                # Each explicit deliverable gets its own provider-native worker and
+                # workspace.  The task-manager queue needs a separate poller and can
+                # otherwise sit forever in a standalone local server, which made the
+                # UI claim a handoff without ever producing the requested files.
+                record = await _start_agent_worker_delegation(
+                    app,
+                    session_id=session_id,
+                    prompt=helper_prompt,
+                    specialist_id=item_specialist_id,
+                    bot=bot,
+                    emitter=emitter,
+                    repo_root=repo_root,
+                    autonomy_level=autonomy_level,
+                    file_access=file_access,
+                    recent_messages=recent_messages,
+                    profile=profile,
+                    model_id=model_id,
+                    reasoning_effort=reasoning_effort,
+                    effort=effort,
+                    guardrails=guardrails,
+                    guardrail_modes=guardrail_modes,
+                    display_title=assigned_item,
+                    group_expected_count=delegate_count,
+                    work_context_id=work_context_id,
+                    memory_enabled=memory_enabled,
+                    runtime_policy=runtime_policy,
+                )
+            except (RuntimeError, OSError, ValueError, TypeError) as exc:
+                log.warning("Parallel agent worker failed: %s", exc, exc_info=True)
+                record = (
+                    None
+                    if (work_context_id or runtime_policy)
+                    else await _start_task_manager_delegation(
+                        session_id=session_id,
+                        prompt=helper_prompt,
+                        specialist_id=item_specialist_id,
+                        bot=bot,
+                        emitter=emitter,
+                        repo_root=repo_root,
+                        group_expected_count=delegate_count,
+                        memory_enabled=memory_enabled,
+                        fallback_reason="The primary worker could not start. Thomas switched this item to Task Manager.",
+                    )
+                )
             if record:
                 records.append(record)
         return records or None
 
     bot = pick_bot_for_specialist(specialist_id)
 
-    # Engine choice is the MODEL's call, declared via send_task(surface=...) — organic
-    # routing, NOT a keyword regex (Calvin's law). 'canvas' -> fast streaming watch-it-draw
-    # worker; 'task' -> capable agent worker. Only when the model declared NOTHING (the
-    # narration-backstop / forced-launch paths) do we fall back to the tightened is_canvas_task
-    # hint. Falls back to the agent worker on any canvas-worker error.
     _declared = str(surface or "").strip().lower()
     if _declared == "canvas":
-        _want_canvas = True
+        _want_canvas = is_canvas_task(prompt)
     elif _declared == "task":
         _want_canvas = False
     else:
         _want_canvas = is_canvas_task(prompt)
+    effective_file_access = clamp_file_access_level(file_access if file_access is not None else 1)
+    if _want_canvas and _agent_worker_permission_block(
+        prompt, targets_live_repo=False, file_access=effective_file_access
+    ):
+        _want_canvas = False
     if _want_canvas:
         try:
             return await _start_canvas_worker_delegation(
@@ -310,7 +284,11 @@ async def start_background_delegation(
                 emitter=emitter,
                 repo_root=repo_root,
                 profile=profile,
+                model_id=model_id,
                 session_llm=session_llm,
+                memory_enabled=memory_enabled,
+                file_access=file_access,
+                runtime_policy=runtime_policy,
             )
         except (RuntimeError, OSError, ValueError, TypeError) as exc:
             log.warning("Canvas worker failed, falling back to agent worker: %s", exc, exc_info=True)
@@ -328,12 +306,19 @@ async def start_background_delegation(
             file_access=file_access,
             recent_messages=recent_messages,
             profile=profile,
+            model_id=model_id,
+            reasoning_effort=reasoning_effort,
             effort=effort,
             guardrails=guardrails,
             guardrail_modes=guardrail_modes,
+            work_context_id=work_context_id,
+            memory_enabled=memory_enabled,
+            runtime_policy=runtime_policy,
         )
     except (RuntimeError, OSError, ValueError, TypeError) as exc:
-        log.warning("Agent worker delegation failed, falling back to task manager: %s", exc, exc_info=True)
+        log.warning("Agent worker delegation failed: %s", exc, exc_info=True)
+        if work_context_id or runtime_policy:
+            return None
 
     return await _start_task_manager_delegation(
         session_id=session_id,
@@ -342,6 +327,8 @@ async def start_background_delegation(
         bot=bot,
         emitter=emitter,
         repo_root=repo_root,
+        memory_enabled=memory_enabled,
+        fallback_reason="The primary worker could not start. Thomas switched the task to Task Manager.",
     )
 
 
@@ -353,8 +340,16 @@ async def _start_task_manager_delegation(
     bot: Any,
     emitter: _DelegationEmitter,
     repo_root: str | Path | None,
+    group_expected_count: int = 1,
+    memory_enabled: bool = True,
+    fallback_reason: str = "",
 ) -> dict[str, Any] | None:
     root = _resolve_repo_root(repo_root)
+    runtime_profile = {
+        "group_expected_count": max(1, int(group_expected_count or 1)),
+        "memory_enabled": memory_enabled,
+        "fallback_from": "provider_native_worker" if fallback_reason else "",
+    }
     result = await dispatch_async(
         prompt,
         session_id,
@@ -371,6 +366,7 @@ async def _start_task_manager_delegation(
             "state": "failed",
             "summary": derive_task_title(prompt),
             "last_progress": result.error or "Background dispatch failed.",
+            "runtime_profile": runtime_profile,
         }
         await emitter.failed(failed, specialist_id=specialist_id, bot=bot, text=failed["last_progress"])
         return failed
@@ -379,7 +375,8 @@ async def _start_task_manager_delegation(
         result.execution_id,
         bot_id=bot.id,
         backend_type=TASK_MANAGER_BACKEND,
-        progress_summary="Queued for background execution.",
+        runtime_profile=runtime_profile,
+        progress_summary=fallback_reason or "Queued for background execution.",
         actor="thomas-max-delegation",
         repo_root=root,
         force=True,
@@ -399,10 +396,21 @@ async def _start_canvas_worker_delegation(
     emitter: _DelegationEmitter,
     repo_root: str | Path | None,
     profile: str | None = None,
+    model_id: str | None = None,
     session_llm: Any = None,
+    memory_enabled: bool = True,
+    file_access: int | None = None,
+    runtime_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Fast streaming visual worker: streams a self-contained HTML document to the
-    Canvas (the per-execution store), then writes it as a downloadable deliverable."""
+    """Stream a reviewed HTML document to Canvas, then persist its deliverable."""
+    from thomas.server.chat_runtime_policy import tool_policy_from_payload
+
+    tool_policy = tool_policy_from_payload((runtime_policy or {}).get("tools"))
+    if tool_policy is not None and not tool_policy.allow_file_write:
+        raise PermissionError("allow_file_write policy denied Canvas artifact delivery")
+    effective_file_access = clamp_file_access_level(file_access if file_access is not None else 1)
+    if effective_file_access == READ_ONLY:
+        raise PermissionError("read_only file access denied Canvas artifact delivery")
     root = _resolve_repo_root(repo_root)
     execution = task_bot_runtime.create_execution(
         session_id=session_id,
@@ -413,12 +421,17 @@ async def _start_canvas_worker_delegation(
         bot_id=bot.id,
         actor="thomas-canvas",
         backend_type=PROVIDER_NATIVE_BACKEND,
-        runtime_profile={"backend_type": PROVIDER_NATIVE_BACKEND, "canvas": True},
+        runtime_profile={
+            "backend_type": PROVIDER_NATIVE_BACKEND,
+            "canvas": True,
+            "memory_enabled": memory_enabled,
+            "requested_profile": str(profile or ""),
+            "requested_model_id": str(model_id or ""),
+            "file_access": effective_file_access,
+        },
         repo_root=root,
     )
     execution_id = str(execution.get("execution_id") or "")
-    # Register the canvas store NOW (before the started event) so the very first
-    # delegation_started already carries is_canvas=True and the Canvas opens instantly.
     canvas_start(execution_id, title=derive_task_title(prompt))
     task_bot_runtime.update_execution(
         execution_id,
@@ -440,46 +453,92 @@ async def _start_canvas_worker_delegation(
         await emitter.progress(rec, specialist_id=specialist_id, bot=bot, text=text)
 
     async def _run() -> None:
-        # Generate in the BACKGROUND so the chat turn returns immediately and the
-        # Canvas streams via the /delegations poll (no shared-LLM-lock deadlock and
-        # no turn-blocking). The per-execution canvas store grows live for the poll.
+        worker_runtime: dict[str, Any] = {}
+
+        def _record_runtime(receipt: dict[str, Any]) -> None:
+            worker_runtime.update(receipt)
+
         try:
             html = await run_canvas_worker(
                 execution_id=execution_id,
                 prompt=prompt,
                 root=root,
                 profile=profile,
-                emit_progress=_progress,
+                model_id=model_id,
                 session_llm=session_llm,
+                emit_progress=_progress,
+                record_runtime=_record_runtime,
+                runtime_policy=runtime_policy,
             )
         except Exception as exc:  # noqa: BLE001 - surface as a failed card, don't crash anything
+            log.exception("Canvas worker failed for %s (%s)", execution_id, type(exc).__name__)
+            canvas_finish(execution_id, "failed")
+            safe_error = "Canvas generation failed before a verified result was produced."
             task_bot_runtime.fail_execution(
                 execution_id,
                 actor=bot.name,
-                summary=f"Canvas worker failed: {exc}",
+                summary=safe_error,
                 blocker="canvas_failed",
+                repo_root=root,
+            )
+            rec = _normalize_record(task_bot_runtime.get_execution(execution_id, root))
+            await emitter.failed(rec, specialist_id=specialist_id, bot=bot, text=safe_error)
+            return
+        validated_runtime = validate_model_runtime_receipt(
+            worker_runtime,
+            requested_profile=str(profile or ""),
+            requested_model_id=str(model_id or ""),
+        )
+        if validated_runtime is None:
+            task_bot_runtime.fail_execution(
+                execution_id,
+                actor=bot.name,
+                summary="Canvas worker failed: model runtime receipt missing.",
+                blocker="model_runtime_missing",
+                repo_root=root,
+            )
+            rec = _normalize_record(task_bot_runtime.get_execution(execution_id, root))
+            await emitter.failed(rec, specialist_id=specialist_id, bot=bot, text="Model runtime receipt missing.")
+            return
+        current = task_bot_runtime.get_execution(execution_id, root) or {}
+        runtime_profile = dict(current.get("runtime_profile") or {})
+        runtime_profile["model_runtime"] = validated_runtime
+        task_bot_runtime.update_execution(
+            execution_id,
+            runtime_profile=runtime_profile,
+            actor=bot.name,
+            repo_root=root,
+            force=True,
+        )
+        try:
+            rec, summary = complete_canvas_delivery(
+                execution_id=execution_id,
+                prompt=prompt,
+                html=html,
+                actor=bot.name,
+                repo_root=root,
+                workspace_for=_ensure_task_workspace,
+                file_access=effective_file_access,
+                allowed_paths=tool_policy.allowed_paths if tool_policy is not None else (),
+            )
+        except (OSError, RuntimeError, ValueError, TypeError) as exc:
+            canvas_finish(execution_id, "failed")
+            task_bot_runtime.fail_execution(
+                execution_id,
+                actor=bot.name,
+                summary=f"Canvas review failed: {exc}",
+                blocker="canvas_review_failed",
                 repo_root=root,
             )
             rec = _normalize_record(task_bot_runtime.get_execution(execution_id, root))
             await emitter.failed(rec, specialist_id=specialist_id, bot=bot, text=str(exc))
             return
-        # Persist the final HTML as a real downloadable deliverable.
-        try:
-            work_dir = _ensure_task_workspace(execution_id)
-            (Path(work_dir) / "index.html").write_text(html or "", encoding="utf-8")
-        except OSError:
-            log.debug("canvas deliverable write failed for %s", execution_id, exc_info=True)
-        task_bot_runtime.update_execution(
-            execution_id,
-            state="completed",
-            proof_status="verified",
-            progress_summary="Rendered on the canvas.",
-            actor=bot.name,
-            repo_root=root,
-            force=True,
+        await emitter.completed(
+            rec,
+            specialist_id=specialist_id,
+            bot=bot,
+            text=summary,
         )
-        rec = _normalize_record(task_bot_runtime.get_execution(execution_id, root))
-        await emitter.completed(rec, specialist_id=specialist_id, bot=bot, text="Rendered on the canvas.")
 
     asyncio.create_task(_run())
     return record
@@ -498,9 +557,16 @@ async def _start_agent_worker_delegation(
     file_access: int | None = None,
     recent_messages: list[dict[str, Any]] | None = None,
     profile: str | None = None,
+    model_id: str | None = None,
+    reasoning_effort: str | None = None,
     effort: str = "diligent",
     guardrails: str = "",
     guardrail_modes: dict[str, str] | None = None,
+    display_title: str = "",
+    group_expected_count: int = 1,
+    work_context_id: str = "",
+    memory_enabled: bool = True,
+    runtime_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     root = _resolve_repo_root(repo_root)
     targets_live_repo = _prompt_targets_live_thomas_repo(prompt)
@@ -509,13 +575,21 @@ async def _start_agent_worker_delegation(
         autonomy_level=autonomy_level,
         file_access=file_access,
         effort=effort,
+        model_id=model_id,
+        reasoning_effort=reasoning_effort,
         guardrails=guardrails,
         requires_live_repo_change=targets_live_repo,
     )
+    runtime_profile["group_expected_count"] = max(1, int(group_expected_count or 1))
+    runtime_profile["memory_enabled"] = bool(memory_enabled)
+    runtime_profile["requested_profile"] = str(profile or "")
+    runtime_profile["requested_model_id"] = str(model_id or "")
+    if work_context_id:
+        runtime_profile["work_context_id"] = str(work_context_id)
     execution = task_bot_runtime.create_execution(
         session_id=session_id,
         # Display title for the task card — a real name for the work, not a raw prompt truncation.
-        summary=derive_task_title(prompt),
+        summary=derive_task_title(display_title or prompt),
         intent="chat_task",
         scope=[specialist_id],
         visibility="background",
@@ -526,6 +600,22 @@ async def _start_agent_worker_delegation(
         repo_root=root,
     )
     execution_id = str(execution.get("execution_id") or "")
+
+    permission_block = _agent_worker_permission_block(
+        prompt, targets_live_repo=targets_live_repo, file_access=effective_file_access
+    )
+    if permission_block is not None:
+        blocker, summary = permission_block
+        task_bot_runtime.fail_execution(
+            execution_id,
+            actor=bot.name,
+            summary=summary,
+            blocker=blocker,
+            repo_root=root,
+        )
+        record = _normalize_record(task_bot_runtime.get_execution(execution_id, root))
+        await emitter.failed(record, specialist_id=specialist_id, bot=bot, text=summary)
+        return record
     task_bot_runtime.update_execution(
         execution_id,
         state="classified",
@@ -557,24 +647,6 @@ async def _start_agent_worker_delegation(
     record = _normalize_record(task_bot_runtime.get_execution(execution_id, root))
     await emitter.started(record, specialist_id=specialist_id, bot=bot)
 
-    if targets_live_repo and effective_file_access < PROJECT:
-        spec = file_access_spec(effective_file_access)
-        summary = (
-            "This task targets Thomas's live repo, but file access is "
-            f"'{spec.ui_label}'. Raise the file-access dial to Project or higher, "
-            "then retry so Thomas can work on the live checkout instead of a sandbox."
-        )
-        task_bot_runtime.fail_execution(
-            execution_id,
-            actor=bot.name,
-            summary=summary,
-            blocker="file_access_too_low_for_self_development",
-            repo_root=root,
-        )
-        record = _normalize_record(task_bot_runtime.get_execution(execution_id, root))
-        await emitter.failed(record, specialist_id=specialist_id, bot=bot, text=summary)
-        return record
-
     # Normal deliverables run in a clean per-task workspace; self-development uses the
     # live checkout directly and is gated later on actual source-file changes.
     work_dir = root if targets_live_repo else _ensure_task_workspace(execution_id)
@@ -587,22 +659,39 @@ async def _start_agent_worker_delegation(
         else _os_name
     )
     instructions = (
-        "You are a background worker building a deliverable for the user. "
+        "You are a background worker completing the user's task. "
         f"Your working directory is a fresh, empty workspace: {work_dir}. "
         "It is NOT a source repository — there are no repo rules, startup routers, "
-        "or coordination checks to run here, so do not look for them. Just build "
-        "what was asked directly: create whatever files are needed in this folder. "
+        "or coordination checks to run here, so do not look for them. Create files "
+        "ONLY when the user explicitly requests an artifact, file, document, app, "
+        "game, or code deliverable. For answer-only analysis, recommendations, or "
+        "research, do not inspect the empty workspace and do not create files; return "
+        "the complete substantive answer as text. "
         f"You are running on {_shell_hint}. "
         "HARD RULE — creating or editing files: you MUST use the `fs.write_file` "
         "tool (pass `path` and `content`); writing to a nested path creates the "
         "folders for you. Use `fs.list_dir` to inspect and `fs.read_file` to read. "
+        "WEB CAPABILITY - browser tools are available for web tasks. Use "
+        "`browser.open` with an http(s) URL, then `browser.extract` with a CSS "
+        "selector to read specific page content. Use `browser.click`, "
+        "`browser.type`, `browser.screenshot`, and `browser.close` when the task "
+        "needs them. Never claim that browsing is outside your capabilities while "
+        "these registered browser tools are available; call the appropriate tool "
+        "and report any real tool error honestly. "
+        "EXECUTION FIDELITY - follow an explicitly ordered tool sequence in the "
+        "user's prompt, preserve exact requested filenames, and treat successful "
+        "tool results as authoritative input to later steps. Never put bracketed "
+        "placeholders or invented values into an artifact when a prior tool result "
+        "supplies the real value. Read back the exact requested artifact and correct "
+        "filename or content mismatches before finishing. "
         "NEVER use shell commands such as printf, echo, touch, cat, tee, or heredocs "
         "to create or write files — they are unreliable and fail on this OS. Reserve "
         "the `shell.exec` tool ONLY for running programs/builds, and when you do, use "
         "commands valid for the OS above. Use relative paths inside the workspace. "
-        "Do not address the user conversationally. "
-        "When done, end with a one-line summary of what you built and the main file "
-        "name(s) so it can be shown back in chat. " + quality_tier_clause(effort, autonomy_level)
+        "Do not address the user conversationally. For an artifact task, end with a "
+        "one-line summary of what you built and the main file name(s). For an "
+        "answer-only task, return the requested answer itself, not a readiness notice. "
+        + quality_tier_clause(effort, autonomy_level)
     )
     if targets_live_repo:
         instructions = (
@@ -618,6 +707,12 @@ async def _start_agent_worker_delegation(
             "sandbox substitute. NEVER use shell commands such as printf, echo, touch, "
             "cat, tee, redirection, or heredocs to create or edit files. Reserve "
             "`shell.exec` ONLY for read-only inspection commands and tests/builds. "
+            "Browser tools are available for web research: use `browser.open` with "
+            "an http(s) URL and `browser.extract` with a CSS selector instead of "
+            "claiming that browsing is outside your capabilities. "
+            "Follow explicitly ordered tool steps and exact filenames; use real tool "
+            "results rather than placeholders, then read back and correct the exact "
+            "requested artifact before finishing. "
             "If you cannot modify the live repo, create "
             f"`runtime/self_development/{execution_id}/SELF_DEVELOPMENT_REPORT.md` "
             "explaining the blocker, but do not say the requested fix is done. "
@@ -633,12 +728,51 @@ async def _start_agent_worker_delegation(
     if handoff:
         instructions = f"{instructions}\n\n{handoff}"
 
+    preflight_events: list[dict[str, Any]] = []
+    preflight_evidence = ""
+    preflight_baseline: dict[str, tuple[int, int]] | None = None
+    explicit_recipe = all(
+        name in prompt.casefold() for name in ("browser.open", "browser.extract", "fs.write_file", "fs.read_file")
+    )
+    app_config = app.get(APP_CONFIG) if hasattr(app, "get") else None
+    from thomas.server.chat_runtime_policy import PolicyToolRegistryView, tool_policy_from_payload
+
+    worker_tool_policy = tool_policy_from_payload((runtime_policy or {}).get("tools"))
+    if explicit_recipe and app_config is not None and not targets_live_repo:
+        from thomas.server.app_helpers import _build_tools
+
+        preflight_baseline = _workspace_mtimes(work_dir)
+        scoped_config = dataclasses.replace(
+            app_config,
+            tools=dataclasses.replace(
+                app_config.tools,
+                sandbox_root=str(work_dir),
+                allow_shell=True,
+                file_access=effective_file_access,
+            ),
+        )
+        preflight_tools = _build_tools(scoped_config)
+        if worker_tool_policy is not None:
+            preflight_tools = PolicyToolRegistryView(preflight_tools, worker_tool_policy, base_root=work_dir or root)
+        preflight_events, preflight_evidence = await _explicit_browser_preflight(prompt, preflight_tools)
+    elif not explicit_recipe:
+        app_tools = app.get(APP_TOOLS) if hasattr(app, "get") else None
+        if app_tools is not None and not targets_live_repo:
+            if worker_tool_policy is not None:
+                app_tools = PolicyToolRegistryView(app_tools, worker_tool_policy, base_root=work_dir or root)
+            preflight_events, preflight_evidence = await _explicit_browser_preflight(prompt, app_tools)
+    worker_prompt = prompt
+    if preflight_evidence:
+        worker_prompt += (
+            "\n\n[Verified explicit browser results - use these exact values in later steps]\n" + preflight_evidence
+        )
+
     from thomas.server.exhaustive_runtime import is_exhaustive
 
     runner = _run_exhaustive_worker if is_exhaustive(effort) else _run_agent_worker
     worker_kwargs: dict[str, Any] = {
         "execution_id": execution_id,
-        "prompt": prompt,
+        "prompt": worker_prompt,
         "specialist_id": specialist_id,
         "bot": bot,
         "instructions": instructions,
@@ -646,12 +780,19 @@ async def _start_agent_worker_delegation(
         "work_dir": work_dir,
         "requires_live_repo_change": targets_live_repo,
         "profile": profile,
+        "model_id": model_id,
+        "reasoning_effort": reasoning_effort,
         "effort": effort,
         "autonomy_level": autonomy_level,
         "file_access": file_access,
         "guardrails": guardrails,
         "guardrail_modes": guardrail_modes,
+        "memory_enabled": memory_enabled,
+        "runtime_policy": dict(runtime_policy or {}),
     }
+    if runner is _run_agent_worker:
+        worker_kwargs["preflight_events"] = preflight_events
+        worker_kwargs["preflight_baseline"] = preflight_baseline
     asyncio.create_task(
         _run_agent_worker_supervised(
             runner,

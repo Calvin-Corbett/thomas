@@ -15,11 +15,55 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Thomas Chat</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600;6..72,700&family=JetBrains+Mono:wght@400;500;600&family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-  <script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%238b8cff'/%3E%3Ctext x='50' y='72' text-anchor='middle' font-family='sans-serif' font-size='64' font-weight='700' fill='white'%3ET%3C/text%3E%3C/svg%3E">
+  <!-- Shared shell rules FIRST: unified_modes.css owns the mode switch and the
+       #tc-shell[data-surface-mode] visibility flips that reveal the Code/Work
+       workspace. Dropping it during the CSS split left the mode surface
+       display:none forever (P1 caught by the codex PR review, 2026-07-19). -->
+  <link rel="stylesheet" href="/static/css/unified_modes.css?v=__THOMAS_WEB_BUILD__">
+  <link rel="stylesheet" href="/static/css/unified_code_mode.css?v=__THOMAS_WEB_BUILD__">
+  <link rel="stylesheet" href="/static/css/unified_code_activity.css?v=__THOMAS_WEB_BUILD__">
+  <link rel="stylesheet" href="/static/css/unified_code_results.css?v=__THOMAS_WEB_BUILD__">
+  <link rel="stylesheet" href="/static/css/unified_work_mode.css?v=__THOMAS_WEB_BUILD__">
+  <link rel="stylesheet" href="/static/css/unified_work_details.css?v=__THOMAS_WEB_BUILD__">
   <style>
+    /* Local, deterministic icon fallback: the chat shell must boot offline. */
+    .ph { display: inline-grid; place-items: center; width: 1.1em; font-style: normal; font-weight: 700; }
+    .ph::before { content: "\2022"; }
+    .ph-pencil-simple-line::before { content: "\270E"; }
+    .ph-magnifying-glass::before { content: "\2315"; }
+    .ph-plus::before { content: "+"; }
+    .ph-gear-six::before { content: "\2699"; }
+    .ph-sidebar-simple::before { content: "\25EB"; }
+    .ph-caret-down::before { content: "\2304"; }
+    .ph-caret-right::before { content: "\203A"; }
+    .ph-file::before { content: "\25A1"; }
+    .ph-file-code::before { content: "\226A\226B"; font-size: .72em; letter-spacing: -.12em; }
+    .ph-chalkboard-simple::before, .ph-desktop::before { content: "\25A3"; }
+    .ph-sliders-horizontal::before { content: "\2261"; }
+    .ph-microphone::before { content: "\25C9"; }
+    .ph-arrow-up::before { content: "\2191"; }
+    .ph-arrow-right::before { content: "\2192"; }
+    .ph-arrow-clockwise::before { content: "\21BB"; }
+    .ph-arrow-square-out::before { content: "\2197"; }
+    .ph-download-simple::before { content: "\2193"; }
+    .ph-check::before { content: "\2713"; }
+    .ph-x::before, .ph-stop::before { content: "\00D7"; }
+    .ph-hammer::before { content: "\2692"; }
+    .ph-crosshair-simple::before { content: "\2295"; }
+    .ph-buildings::before { content: "\25A6"; }
+    .ph-pencil-ruler::before { content: "\270E"; }
+    .ph-cards::before, .ph-grid-four::before { content: "\25A6"; }
+    .ph-broadcast::before { content: "\224B"; }
+    .ph-coins::before { content: "\25C9"; }
+    .ph-storefront::before { content: "\25A3"; }
+    .ph-users-three::before { content: "\25C9"; }
+    .ph-chart-line-up::before, .ph-chart-bar::before { content: "\2197"; }
+    .ph-scribble-loop::before { content: "\223F"; }
+    .ph-file-text::before { content: "\25A4"; }
+    .ph-code::before { content: "<>"; font-size: .72em; }
+    .ph-copy::before { content: "\25A3"; }
+    .ph-thumbs-up::before { content: "+"; }
     html, body { margin: 0; padding: 0; height: 100%; }
     *, *::before, *::after { box-sizing: border-box; }
     .tc-scroll { scrollbar-width: thin; scrollbar-color: var(--c-border-2) transparent; }
@@ -80,6 +124,24 @@
     .hv-newchat:hover{ background: var(--c-accent-soft) !important; border-color: var(--c-accent-line) !important; }
     .hv-card:hover   { border-color: var(--c-accent-line) !important; background: var(--c-surface-2) !important; transform: translateY(-2px); }
 
+    /* Assistant answers keep the open Chat layout, but read like finished work. */
+    .tc-markdown { white-space: normal !important; }
+    .tc-markdown > *:first-child { margin-top: 0 !important; }
+    .tc-markdown > *:last-child { margin-bottom: 0 !important; }
+    .tc-markdown h1, .tc-markdown h2, .tc-markdown h3 { color: var(--c-text); font-family: var(--font-head); letter-spacing: -0.018em; }
+    .tc-markdown h1 { margin: 0 0 14px; font-size: 23px; line-height: 1.25; }
+    .tc-markdown h2 { margin: 24px 0 9px; font-size: 19px; line-height: 1.3; }
+    .tc-markdown h3 { margin: 21px 0 8px; font-size: 16px; line-height: 1.35; }
+    .tc-markdown p { margin: 0 0 11px; }
+    .tc-markdown ul, .tc-markdown ol { margin: 5px 0 13px; padding-left: 22px; }
+    .tc-markdown li { margin: 4px 0; padding-left: 2px; }
+    .tc-markdown strong { color: var(--c-text); font-weight: 750; }
+    .tc-markdown code { border: 1px solid var(--c-border); border-radius: 5px; background: var(--c-surface-2); padding: 1px 5px; font-family: var(--font-mono); font-size: .88em; }
+    .tc-markdown pre { margin: 12px 0 15px; overflow-x: auto; border: 1px solid var(--c-border); border-radius: 11px; background: rgba(3,5,13,.62); padding: 13px 15px; color: var(--c-text); font: 13px/1.6 var(--font-mono); white-space: pre; }
+    .tc-markdown pre code { border: 0; background: transparent; padding: 0; font: inherit; }
+    .tc-markdown hr { margin: 19px 0; border: 0; border-top: 1px solid var(--c-border); }
+    .tc-markdown a { color: var(--c-accent); text-underline-offset: 3px; }
+
     /* Chat content "rail": its left edge is anchored to a VIEWPORT-relative
        position (not the column's width), so when the Canvas opens and the chat
        column shrinks from the right, the composer/thread DON'T slide — they only
@@ -90,6 +152,11 @@
          overlay the chat instead of squeezing it. */
       .tc-rail { margin-left: auto !important; }
       #tc-canvas { position: absolute !important; top: 0; right: 0; bottom: 0; z-index: 40; width: min(94vw, 540px) !important; box-shadow: var(--c-shadow); }
+    }
+    @media (max-width: 760px) {
+      .tc-sidebar { position: absolute !important; inset: 0 auto 0 0; z-index: 80 !important; margin-left: -280px !important; box-shadow: var(--c-shadow); }
+      .tc-shell.is-mobile-sidebar-open .tc-sidebar { margin-left: 0 !important; }
+      #tc-canvas { width: 100vw !important; }
     }
     @keyframes tc-shimmer-loop { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
     @keyframes tc-indeterminate { 0% { transform: translateX(-130%); } 100% { transform: translateX(380%); } }
@@ -221,6 +288,11 @@
       </div>
 
       <div style="padding: 0 12px 12px;">
+        <div id="tc-mode-switch" role="tablist" aria-label="Thomas mode">
+          <button type="button" class="tc-mode-button is-active" role="tab" aria-selected="true" tabindex="0" data-thomas-mode="chat"><i class="ph ph-chats-circle" aria-hidden="true"></i><span>Chat</span></button>
+          <button type="button" class="tc-mode-button" role="tab" aria-selected="false" tabindex="-1" data-thomas-mode="code"><i class="ph ph-code" aria-hidden="true"></i><span>Code</span></button>
+          <button type="button" class="tc-mode-button" role="tab" aria-selected="false" tabindex="-1" data-thomas-mode="work"><i class="ph ph-briefcase" aria-hidden="true"></i><span>Work</span></button>
+        </div>
         <label style="display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-radius: 10px; background: var(--c-surface); border: 1px solid var(--c-border); cursor: text;">
           <i class="ph ph-magnifying-glass" style="font-size: 15px; color: var(--c-muted);"></i>
           <input id="tc-search" placeholder="Search chats" style="flex: 1; min-width: 0; background: transparent; border: 0; outline: none; color: var(--c-text); font-family: inherit; font-size: 13.5px;" />
@@ -231,14 +303,14 @@
         <button id="tc-newchat" class="hv-newchat" style="flex: 0 0 auto; width: 100%; display: flex; align-items: center; gap: 9px; padding: 9px 11px; margin-bottom: 8px; border-radius: 10px; border: 1px dashed var(--c-border-2); background: transparent; color: var(--c-text); font-family: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: all .15s;">
           <i class="ph ph-plus" style="font-size: 15px;"></i> New chat
         </button>
-        <div style="flex: 0 0 auto; font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--c-muted); padding: 10px 6px 6px;">Recent</div>
+        <div id="tc-history-label" style="flex: 0 0 auto; font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--c-muted); padding: 10px 6px 6px;">Recent chats</div>
         <div id="tc-chats" class="tc-scroll" style="flex: 1 1 auto; min-height: 60px; overflow-y: auto;"></div>
         <div style="flex: 0 0 auto; font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--c-muted); padding: 14px 6px 6px; border-top: 1px solid var(--c-border); margin-top: 6px;">Workspaces</div>
         <div id="tc-workspaces" style="flex: 0 0 auto; max-height: 42%; overflow-y: auto;" class="tc-scroll"></div>
       </nav>
 
       <div style="padding: 10px 12px; border-top: 1px solid var(--c-border);">
-        <button class="hv-soft" style="width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--c-dim); font-family: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; transition: all .14s;">
+        <button id="tc-settings" class="hv-soft" style="width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--c-dim); font-family: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; transition: all .14s;">
           <i class="ph ph-gear-six" style="font-size: 17px;"></i> Settings
         </button>
       </div>
@@ -257,7 +329,7 @@
         <div style="position: relative;" data-model-switch="1">
           <button id="tc-model-btn" class="hv-pill" title="Switch model" style="display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-family: var(--font-label); font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;">
             <span style="width: 7px; height: 7px; border-radius: 999px; background: var(--c-accent); box-shadow: 0 0 8px var(--c-accent);"></span>
-            <span id="tc-model">gpt-5.5</span>
+            <span id="tc-model">GPT-5.6 Sol</span>
             <i class="ph ph-caret-down" style="font-size: 12px; color: var(--c-muted);"></i>
           </button>
           <div id="tc-model-menu" style="display: none; position: absolute; left: 0; top: calc(100% + 8px); z-index: 40; width: 300px; max-height: 60vh; overflow-y: auto; padding: 8px; border-radius: 14px; background: var(--c-menu-bg); border: 1px solid var(--c-border-2); box-shadow: var(--c-shadow);" class="tc-scroll">
@@ -287,14 +359,15 @@
       </header>
 
       <!-- body row: chat column + canvas column -->
-      <div style="flex: 1; min-height: 0; display: flex;">
-        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+      <div id="tc-body-row" style="flex: 1; min-height: 0; display: flex;">
+        <div id="tc-primary-column" style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+          <section id="tc-mode-surface" aria-live="polite" aria-label="Mode workspace" style="display:none;"></section>
           <div id="tc-scroll" class="tc-scroll" style="flex: 1; min-height: 0; overflow-y: auto;">
             <!-- WELCOME -->
             <div id="tc-welcome" class="tc-rail" style="max-width: 720px; margin: 0 auto; padding: clamp(20px, 4vh, 56px) 24px 32px; display: flex; flex-direction: column; align-items: center; text-align: center;">
               <div style="height: 124px; display: grid; place-items: center; margin-bottom: 2px; animation: tc-hover 4.2s ease-in-out infinite;" data-bot data-primary="var(--bot-primary)" data-secondary="var(--bot-secondary)" data-trim="var(--bot-trim)" data-glow="var(--bot-glow)" data-scale="2.5" data-flame="true"></div>
               <h1 id="tc-welcome-title" style="margin: 0; font-family: var(--font-head); font-size: clamp(28px, 4vw, 38px); font-weight: 800; letter-spacing: -0.02em;">Where to, Captain?</h1>
-              <p id="tc-welcome-sub" style="margin: 10px 0 0; font-size: 16px; color: var(--c-dim); max-width: 460px; line-height: 1.6;">Thomas takes the ask, hands it to the crew, and reports back from orbit.</p>
+              <p id="tc-welcome-sub" style="margin: 10px 0 0; font-size: 16px; color: var(--c-dim); max-width: 460px; line-height: 1.6;">Thomas understands the ask, acts within your boundaries, and shows you what changed.</p>
               <div id="tc-cards" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 30px; width: 100%;"></div>
             </div>
 
@@ -316,6 +389,7 @@
                     <button id="tc-tools-btn" class="hv-icon" title="Tools — AI settings" style="display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--c-border); background: transparent; color: var(--c-dim); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;"><i class="ph ph-sliders-horizontal" style="font-size: 16px;"></i> Tools</button>
                     <div id="tc-tools-menu" style="display: none; position: absolute; bottom: calc(100% + 10px); left: 0; z-index: 60; width: 312px; padding: 12px; border-radius: 14px; background: var(--c-menu-bg, var(--c-surface)); border: 1px solid var(--c-border-2); box-shadow: var(--c-shadow);" class="tc-scroll"></div>
                   </div>
+                  <button id="tc-code-project-btn" class="hv-icon" title="Choose project folder" hidden style="display: none; align-items: center; gap: 7px; max-width: 220px; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--c-border); background: transparent; color: var(--c-dim); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;"><i class="ph ph-folder-open" style="font-size: 16px;"></i><span>Project</span></button>
                   <div style="flex: 1;"></div>
                   <button id="tc-mic-btn" class="hv-icon" title="Voice input" style="width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--c-border); background: transparent; color: var(--c-dim); display: grid; place-items: center; cursor: pointer; transition: all .15s;"><i class="ph ph-microphone" style="font-size: 18px;"></i></button>
                   <button id="tc-send" title="Send" style="width: 40px; height: 40px; border-radius: 12px; border: 0; background: var(--send-bg, var(--c-surface-2)); color: var(--send-ink, var(--c-muted)); display: grid; place-items: center; cursor: var(--send-cursor, default); transition: all .18s; opacity: var(--send-op, 0.85);"><i id="tc-send-icon" class="ph ph-arrow-up" style="font-size: 19px; font-weight: 700;"></i></button>
@@ -344,6 +418,11 @@
     </main>
   </div>
 
+  <script src="/static/js/unified_mode_shell.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/unified_code_lifecycle.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/unified_code_mode.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/unified_work_support.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/unified_work_mode.js?v=__THOMAS_WEB_BUILD__"></script>
   <script>
   (function () {
     "use strict";
@@ -363,7 +442,7 @@
     };
 
     const THEME_META = {
-      nebula:    { bot: ['#9ad8ff', '#5aaeff', 'rgba(90,174,255,0.5)'],  trim: '#0d1117', fontHead: "'Manrope', system-ui, sans-serif", fontLabel: "'Manrope', system-ui, sans-serif", rCard: '14px', rComposer: '18px', menuBg: '#15142b', composerAccent: 'linear-gradient(90deg, transparent, rgba(139,140,255,0.7), transparent)', msgRule: '0', welcome: ['Where to, Captain?', 'Thomas takes the ask, hands it to the crew, and reports back from orbit.'] },
+      nebula:    { bot: ['#9ad8ff', '#5aaeff', 'rgba(90,174,255,0.5)'],  trim: '#0d1117', fontHead: "'Manrope', system-ui, sans-serif", fontLabel: "'Manrope', system-ui, sans-serif", rCard: '14px', rComposer: '18px', menuBg: '#15142b', composerAccent: 'linear-gradient(90deg, transparent, rgba(139,140,255,0.7), transparent)', msgRule: '0', welcome: ['Where to, Captain?', 'Thomas understands the ask, acts within your boundaries, and shows you what changed.'] },
       dark:      { bot: ['#9ad8ff', '#5aaeff', 'rgba(90,174,255,0.30)'], trim: '#0d1117', fontHead: "'Manrope', system-ui, sans-serif", fontLabel: "'JetBrains Mono', ui-monospace, monospace", rCard: '8px', rComposer: '12px', menuBg: '#22252b', composerAccent: 'transparent', msgRule: '0', welcome: ['Ready when you are.', 'Describe the task. Thomas plans it, dispatches a worker, and reports back.'] },
       light:     { bot: ['#7db0ff', '#2f6bff', 'rgba(47,107,255,0.28)'], trim: '#16233a', fontHead: "'Manrope', system-ui, sans-serif", fontLabel: "'Manrope', system-ui, sans-serif", rCard: '16px', rComposer: '18px', menuBg: '#ffffff', composerAccent: 'transparent', msgRule: '0', welcome: ['How can I help?', 'Ask a question or describe something you want done — Thomas handles the rest.'] },
       aurora:    { bot: ['#a8f0da', '#34e0b0', 'rgba(52,224,176,0.45)'], trim: '#06302a', fontHead: "'Manrope', system-ui, sans-serif", fontLabel: "'Manrope', system-ui, sans-serif", rCard: '14px', rComposer: '18px', menuBg: '#0c2226', composerAccent: 'linear-gradient(90deg, transparent, rgba(52,224,176,0.7), rgba(70,160,255,0.5), transparent)', msgRule: '0', welcome: ['Good evening.', 'A calm place to think. Thomas takes the ask, hands it off, and reports back.'] },
@@ -371,8 +450,9 @@
     };
 
     // ---------- State ----------
-    const state = { theme: loadTheme(), themeMenuOpen: false, input: '', search: '', messages: [], activeChat: null, streaming: false, artifactOpen: false, artifactKind: 'board', sessionId: null, profile: '', modelId: '', modelLabel: '' };
+    const state = { theme: loadTheme(), surfaceMode: 'chat', themeMenuOpen: false, input: '', search: '', messages: [], activeChat: null, streaming: false, artifactOpen: false, artifactKind: 'board', sessionId: null, restoredCanvas: null, profile: '', modelId: '', modelLabel: '' };
     let timer = null, abortController = null;
+    let chatSelectionToken = 0;
     const msgRefs = []; // per-message { bubbleEl } for in-place streaming updates
     // Sidebar chat list — starts EMPTY and is populated only from the real server
     // (GET /api/chats below). It must never be seeded with demo/placeholder chats:
@@ -382,8 +462,24 @@
     let profilesData = [];        // model profiles from GET /api/models
     state.modelMenuOpen = false;
     // AI settings ("Tools"), attachments ("+"), and voice ("mic") state
-    const DIAL_DEFAULTS = { autonomy: 1, effort: 'medium', tokenEconomy: 'balanced', fileAccess: 'workspace', guardrails: 'guarded', memory: true };
-    state.dials = (function () { try { return Object.assign({}, DIAL_DEFAULTS, JSON.parse(localStorage.getItem('thomas_dials') || '{}')); } catch (e) { return Object.assign({}, DIAL_DEFAULTS); } })();
+    // Autonomy defaults to Agent (3): a fresh chat must be able to EXECUTE an
+    // ask, not tell the owner to raise a dial and resend. Guardrails stay
+    // 'guarded' — dangerous actions still gate on approval. (Calvin, 2026-07-18.)
+    const DIAL_DEFAULTS = { autonomy: 3, effort: 'medium', tokenEconomy: 'balanced', fileAccess: 'workspace', guardrails: 'guarded', memory: true };
+    state.dials = (function () {
+      try {
+        const stored = JSON.parse(localStorage.getItem('thomas_dials') || '{}');
+        // One-time migration: autonomy 1 stored before 2026-07-18 was the OLD
+        // default, not a user choice. Lift it to the new default once; after
+        // that the user's own dial changes always stick.
+        if (stored.autonomy === 1 && !localStorage.getItem('thomas_dials_autonomy_migrated')) {
+          stored.autonomy = DIAL_DEFAULTS.autonomy;
+          localStorage.setItem('thomas_dials_autonomy_migrated', '1');
+          localStorage.setItem('thomas_dials', JSON.stringify(stored));
+        }
+        return Object.assign({}, DIAL_DEFAULTS, stored);
+      } catch (e) { return Object.assign({}, DIAL_DEFAULTS); }
+    })();
     state.docs = []; state.images = []; state.toolsMenuOpen = false; state.listening = false;
 
     // ---------- Element refs ----------
@@ -485,12 +581,44 @@
     }
 
     // ---------- Model selector ----------
-    function setProfile(p) {
+    function profileModelOptions(p) {
+      if (p && Array.isArray(p.models) && p.models.length) return p.models;
+      return [{ id: String(p && (p.model || p.name) || 'model'), display_name: String(p && (p.model || p.name) || 'model'), is_default: true, available: true }];
+    }
+    async function hydrateProfileModels() {
+      await Promise.all(profilesData.map(async p => {
+        const provider = String(p && p.provider || '').toLowerCase().replace(/-/g, '_');
+        if (provider !== 'openai_codex') return;
+        try {
+          const r = await fetch('/api/openai-codex/models?profile=' + encodeURIComponent(p.name));
+          if (!r.ok) return;
+          const data = await r.json();
+          if (Array.isArray(data.models) && data.models.length) p.models = data.models;
+        } catch (e) {}
+      }));
+    }
+    function persistModelSelection(profileName, modelId) {
+      fetch('/api/preferences', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ advanced: { model: { active_profile: profileName, model_id: modelId } } }),
+      }).catch(() => {});
+    }
+    function setProfile(p, modelOption) {
       if (!p) return;
+      const models = profileModelOptions(p);
+      const choice = modelOption || models.find(m => m.is_default && m.available !== false) || models.find(m => m.available !== false) || models[0];
+      if (!choice || choice.available === false) return;
       state.profile = p.name;
-      state.modelId = p.model || '';
-      state.modelLabel = String(p.model || p.name || 'model').split('/').pop();
+      state.modelId = choice.id || p.model || '';
+      state.modelLabel = String(choice.display_name || choice.id || p.model || p.name || 'model').split('/').pop();
       const el = document.getElementById('tc-model'); if (el) el.textContent = state.modelLabel;
+      const effortControl = p.chat_controls && p.chat_controls.model && p.chat_controls.model.reasoning_effort;
+      const validEfforts = effortControl && Array.isArray(effortControl.options) ? effortControl.options.map(o => String(o.value)) : [];
+      if (validEfforts.length && !validEfforts.includes(String(state.dials.effort))) {
+        state.dials.effort = String(effortControl.default_value || 'medium'); saveDials();
+      }
+      if (modelOption) persistModelSelection(state.profile, state.modelId);
     }
     function toggleModelMenu() {
       state.modelMenuOpen = !state.modelMenuOpen;
@@ -502,18 +630,23 @@
       const wrap = document.getElementById('tc-model-options'); if (!wrap) return;
       wrap.innerHTML = '';
       profilesData.forEach(p => {
-        const sel = p.name === state.profile;
-        const usable = !!p.has_api_key || p.provider === 'openai_codex' || p.name === 'local';
-        const b = document.createElement('button');
-        b.className = 'hv-soft';
-        b.style.cssText = `width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 9px; border-radius: 10px; border: 1px solid ${sel ? 'var(--c-accent-line)' : 'transparent'}; background: ${sel ? 'var(--c-accent-soft)' : 'transparent'}; color: var(--c-text); font-family: inherit; cursor: pointer; text-align: left; transition: all .14s; margin-bottom: 2px; opacity: ${usable ? '1' : '0.5'};`;
-        b.innerHTML = `<span style="flex: 1; min-width: 0;">
-            <span style="display: block; font-size: 13px; font-weight: 700;">${esc(String(p.model || p.name).split('/').pop())}</span>
-            <span style="display: block; font-size: 11px; color: var(--c-muted);">${esc(p.name)}${usable ? '' : ' · needs key'}</span>
-          </span>
-          <i class="ph ph-check" style="font-size: 15px; color: var(--c-accent); opacity: ${sel ? '1' : '0'};"></i>`;
-        b.addEventListener('click', () => { setProfile(p); closeModelMenu(); });
-        wrap.appendChild(b);
+        const usableProfile = !!p.has_api_key || p.provider === 'openai_codex' || p.name === 'local';
+        profileModelOptions(p).forEach(m => {
+          const sel = p.name === state.profile && String(m.id || '') === String(state.modelId || '');
+          const usable = usableProfile && m.available !== false;
+          const b = document.createElement('button');
+          b.type = 'button'; b.className = 'hv-soft'; b.disabled = !usable;
+          if (m.unavailable_reason) b.title = String(m.unavailable_reason);
+          b.style.cssText = `width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 9px; border-radius: 10px; border: 1px solid ${sel ? 'var(--c-accent-line)' : 'transparent'}; background: ${sel ? 'var(--c-accent-soft)' : 'transparent'}; color: var(--c-text); font-family: inherit; cursor: ${usable ? 'pointer' : 'not-allowed'}; text-align: left; transition: all .14s; margin-bottom: 2px; opacity: ${usable ? '1' : '0.5'};`;
+          const status = !usableProfile ? ' · needs key' : (m.available === false ? ' · unavailable on this connection' : '');
+          b.innerHTML = `<span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 13px; font-weight: 700;">${esc(String(m.display_name || m.id || p.name).split('/').pop())}</span>
+              <span style="display: block; font-size: 11px; color: var(--c-muted);">${esc(p.name)}${status}</span>
+            </span>
+            <i class="ph ph-check" style="font-size: 15px; color: var(--c-accent); opacity: ${sel ? '1' : '0'};"></i>`;
+          if (usable) b.addEventListener('click', () => { setProfile(p, m); closeModelMenu(); });
+          wrap.appendChild(b);
+        });
       });
     }
 
@@ -529,9 +662,17 @@
       return d.toLocaleDateString([], opts);
     }
     function renderChats() {
-      const chats = chatList;
+      const query = String(state.search || '').trim().toLowerCase();
       const wrap = document.getElementById('tc-chats');
+      if (window.ThomasUnifiedModes && window.ThomasUnifiedModes.renderHistory(wrap, query)) return;
+      const chats = query
+        ? chatList.filter(c => (String(c.title || '') + '\n' + String(c.preview || '')).toLowerCase().includes(query))
+        : chatList;
       wrap.innerHTML = '';
+      if (!chats.length) {
+        wrap.innerHTML = `<div data-chat-empty style="padding:12px 10px;color:var(--c-muted);font-size:12px;line-height:1.5;">${query ? 'No matching chats.' : 'No chats yet.'}</div>`;
+        return;
+      }
       chats.forEach(c => {
         const sel = c.id === state.activeChat;
         const b = document.createElement('button');
@@ -552,7 +693,9 @@
     function openWorkspace(mode) {
       const f = document.getElementById('tc-ws-frame');
       if (!f) return;
-      f.src = '/classic?nav=' + encodeURIComponent(mode) + '&embed=1';
+      f.src = mode === 'settings'
+        ? '/settings?embed=1'
+        : '/classic?nav=' + encodeURIComponent(mode) + '&embed=1';
       f.style.display = 'block';
       state.workspaceOpen = true;
     }
@@ -563,7 +706,8 @@
     }
     function renderWorkspaces() {
       const workspaces = [
-        { icon: 'ph-hammer',           label: 'Forge',           mode: 'evolution' },
+        // Code and Work are first-class modes above search. Do not duplicate their
+        // legacy Forge/Workforce entry points in this secondary workspace list.
         { icon: 'ph-crosshair-simple', label: 'Mission Control', mode: 'mission' },
         { icon: 'ph-buildings',        label: 'Virtual Office',  mode: 'office' },
         { icon: 'ph-pencil-ruler',     label: 'UI Editor',       mode: 'app_builder' },
@@ -571,7 +715,6 @@
         { icon: 'ph-broadcast',        label: 'Channels',        mode: 'channels' },
         { icon: 'ph-coins',            label: 'Token Economy',   mode: 'token_economy' },
         { icon: 'ph-storefront',       label: 'Marketplace',     mode: 'marketplace' },
-        { icon: 'ph-users-three',      label: 'Workforce',       mode: 'workforce' },
         { icon: 'ph-chart-line-up',    label: 'Paper Trading',   mode: 'paper_trading' },
       ];
       const wrap = document.getElementById('tc-workspaces');
@@ -613,10 +756,42 @@
       const isUser = m.role === 'user';
       const showDots = !isUser && m.streaming && (!m.text || m.text.length === 0);
       const showCursor = !isUser && m.streaming && m.text && m.text.length > 0;
-      let html = esc(m.text);
+      let html = isUser ? esc(m.text) : mdToHtml(m.text);
       if (showCursor) html += `<span style="display: inline-block; width: 8px; height: 17px; transform: translateY(2px); margin-left: 2px; background: var(--c-accent); animation: tc-blink 1s step-end infinite;"></span>`;
       if (showDots) html = `<span style="display: inline-flex; gap: 5px; padding: 4px 0;"><span style="width: 7px; height: 7px; border-radius: 999px; background: var(--c-muted); animation: tc-dot 1.3s ease-in-out infinite;"></span><span style="width: 7px; height: 7px; border-radius: 999px; background: var(--c-muted); animation: tc-dot 1.3s ease-in-out .2s infinite;"></span><span style="width: 7px; height: 7px; border-radius: 999px; background: var(--c-muted); animation: tc-dot 1.3s ease-in-out .4s infinite;"></span></span>`;
       return html;
+    }
+    async function copyMessageText(text, button) {
+      const value = String(text || '');
+      let copied = false;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(value);
+          copied = true;
+        }
+      } catch (e) {}
+      if (!copied) {
+        const area = document.createElement('textarea');
+        area.value = value;
+        area.setAttribute('readonly', '');
+        area.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+        document.body.appendChild(area);
+        area.select();
+        try { copied = document.execCommand('copy'); } catch (e) { copied = false; }
+        area.remove();
+      }
+      if (button) {
+        button.title = copied ? 'Copied' : 'Copy failed';
+        button.setAttribute('aria-label', button.title);
+        const icon = button.querySelector('i');
+        if (icon && copied) icon.className = 'ph ph-check';
+        setTimeout(() => {
+          button.title = 'Copy message';
+          button.setAttribute('aria-label', 'Copy message');
+          if (icon) icon.className = 'ph ph-copy';
+        }, 1400);
+      }
+      return copied;
     }
     function buildMessageNode(m, idx) {
       const isUser = m.role === 'user';
@@ -637,11 +812,11 @@
         html += `<div style="display: flex; align-items: center; gap: 9px;">
           ${avatar(26, 8, 4, 5)}
           <span style="font-size: 13px; font-weight: 700;">Thomas</span>
-          <span style="font-size: 11.5px; color: var(--c-muted); font-family: var(--font-label);">${esc(m.model || 'gpt-5.5')}</span>
+          <span class="tc-message-model" style="font-size: 11.5px; color: var(--c-muted); font-family: var(--font-label);">${esc(m.model || 'GPT-5.6 Sol')}</span>
         </div>`;
         html += `<div class="tc-activity" style="display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 768px;"></div>`;
       }
-      html += `<div class="tc-bubble" style="max-width: ${mMax}; background: ${mBg}; color: ${mColor}; border: ${mBorder}; border-left: ${rule}; border-radius: ${mRadius}; padding: ${mPad}; font-size: 16px; line-height: 1.72; white-space: pre-wrap; word-wrap: break-word; letter-spacing: 0.003em;">${bubbleInner(m)}</div>`;
+      html += `<div class="tc-bubble${isUser ? '' : ' tc-markdown'}" style="max-width: ${mMax}; background: ${mBg}; color: ${mColor}; border: ${mBorder}; border-left: ${rule}; border-radius: ${mRadius}; padding: ${mPad}; font-size: 16px; line-height: 1.72; white-space: pre-wrap; word-wrap: break-word; letter-spacing: 0.003em;">${bubbleInner(m)}</div>`;
 
       if (m.artifact) {
         const a = m.artifact;
@@ -654,18 +829,18 @@
           <i class="ph ph-arrow-right" style="font-size: 15px; color: var(--c-muted);"></i>
         </button>`;
       }
-      if (!isUser) {
-        html += `<div style="display: flex; align-items: center; gap: 4px; margin-top: 2px;">
-          ${[{ icon: 'ph-copy', title: 'Copy' }, { icon: 'ph-arrow-clockwise', title: 'Retry' }, { icon: 'ph-thumbs-up', title: 'Good' }].map(act => `<button class="hv-soft" title="${act.title}" style="width: 28px; height: 28px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--c-muted); display: grid; place-items: center; cursor: pointer; transition: all .14s;"><i class="ph ${act.icon}" style="font-size: 15px;"></i></button>`).join('')}
-        </div>`;
-      }
+      html += `<div style="display:flex;align-items:center;gap:4px;margin-top:2px;">
+        <button type="button" data-msg-copy class="hv-soft" title="Copy message" aria-label="Copy message" style="width:28px;height:28px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--c-muted);display:grid;place-items:center;cursor:pointer;transition:all .14s;"><i class="ph ph-copy" style="font-size:15px;"></i></button>
+      </div>`;
       wrap.innerHTML = html;
       const bubbleEl = wrap.querySelector('.tc-bubble');
       const activityEl = wrap.querySelector('.tc-activity');
-      msgRefs[idx] = { bubbleEl, activityEl };
+      msgRefs[idx] = { bubbleEl, activityEl, modelEl: wrap.querySelector('.tc-message-model') };
       if (m.activity) renderActivity(idx);
       const artBtn = wrap.querySelector('.tc-art');
-      if (artBtn && m.artifact) artBtn.addEventListener('click', () => canvasRender(m.artifact.url, m.artifact.name));
+      if (artBtn && m.artifact) artBtn.addEventListener('click', () => { void canvasRender(m.artifact.url, m.artifact.name, m.artifact.kind || ''); });
+      const copyBtn = wrap.querySelector('[data-msg-copy]');
+      if (copyBtn) copyBtn.addEventListener('click', () => { void copyMessageText(m.text, copyBtn); });
       return wrap;
     }
     function appendMessage(m) {
@@ -684,12 +859,15 @@
 
     // ---------- Composer dynamic state (send button) ----------
     function syncDynamic() {
-      const active = !!(state.input.trim() || state.streaming);
+      const modeBusy = window.ThomasUnifiedModes && window.ThomasUnifiedModes.isBusy
+        ? window.ThomasUnifiedModes.isBusy()
+        : state.streaming;
+      const active = !!(state.input.trim() || modeBusy);
       shell.style.setProperty('--send-bg', active ? 'var(--c-accent)' : 'var(--c-surface-2)');
       shell.style.setProperty('--send-ink', active ? 'var(--c-accent-ink)' : 'var(--c-muted)');
       shell.style.setProperty('--send-op', active ? '1' : '0.85');
       shell.style.setProperty('--send-cursor', active ? 'pointer' : 'default');
-      sendIconEl.className = 'ph ' + (state.streaming ? 'ph-stop' : 'ph-arrow-up');
+      sendIconEl.className = 'ph ' + (modeBusy ? 'ph-stop' : 'ph-arrow-up');
     }
     function autosize() { inputEl.style.height = 'auto'; inputEl.style.height = Math.min(inputEl.scrollHeight, 180) + 'px'; }
     function scrollEnd() { requestAnimationFrame(() => { scrollEl.scrollTop = scrollEl.scrollHeight; }); }
@@ -708,9 +886,9 @@
     // A VISUAL request (chart, design, drawing, UI) — these go to the canvas WORKER,
     // which makes a real visual. Thomas's chat text must NEVER stand in for one.
     function detectVisualIntent(text) {
-      const lc = String(text).toLowerCase();
-      const visual = /\b(draw|sketch|design|paint|illustrate|render|visuali[sz]e|chart|graph|diagram|mockup|wireframe|infographic|poster|banner|logo|icon|dashboard|pie chart|bar chart|flow ?chart|landing page|web ?page|interface|drawing|picture|svg)\b/;
-      return visual.test(lc);
+      const lc = String(text).toLowerCase().replace(/\b(chart of accounts|graph (database|query|theory)|(medical|patient|astrology|birth) chart|plot (summary|of (the )?(story|book|movie)))\b/g, ' ');
+      const visual = /\b((pie|bar|line|area|scatter|gantt|org(anizational)?) (chart|graph|plot)|chart|graph|plot|dashboard|histogram|heat ?map|timeline|mind ?map|flow ?chart|diagram|mock ?up|wireframe|infographic|poster|banner|logo|landing page|web ?page|ui (design|mockup)|illustration|drawing|picture|image|svg|playable (browser )?game|interactive (chart|graph|dashboard|site|app|visual))\b/, action = /\b(create|make|draw|sketch|design|paint|illustrate|render|visuali[sz]e|generate|build|show|display|present)\b/, leading = /^\s*((please|can you|could you)\s+)?(a |an |the )?(chart|graph|plot|dashboard|histogram|heat ?map|timeline|mind ?map|flow ?chart|diagram|mock ?up|wireframe|infographic|logo|poster|banner|landing page|illustration|drawing)\b/;
+      return visual.test(lc) && (action.test(lc) || leading.test(lc));
     }
     function detectCanvasIntent(text) {
       if (detectArtifact(text)) return true;
@@ -747,9 +925,17 @@
       const overallColor = anyFailed ? '#ff7a7a' : anyCancelled ? 'var(--c-muted)' : 'var(--c-accent)';
       const handoffSteps = steps.filter(s => s.kind === 'handoff');
       const primary = handoffSteps.length ? handoffSteps[handoffSteps.length - 1] : null;
-      const title = primary ? ('Handed off to ' + esc(primary.worker || 'a worker')) : 'Working';
+      const groupSize = Math.max(handoffSteps.length, Number(a.expectedHandoffCount || 0));
+      const grouped = groupSize > 1;
+      const completedWorkers = handoffSteps.filter(s => s.status === 'completed').length;
+      const failedWorkers = handoffSteps.filter(s => s.status === 'failed' || s.status === 'cancelled').length;
+      const title = grouped
+        ? (completedWorkers === groupSize ? `${groupSize} workers completed` : anyRunning ? `${groupSize} workers working` : `${groupSize} workers finished`)
+        : (primary ? ('Handed off to ' + esc(primary.worker || 'a worker')) : 'Working');
       const latest = steps[steps.length - 1];
-      const current = (latest && latest.label) || (primary && primary.label) || '';
+      const current = grouped
+        ? (anyRunning ? `${completedWorkers + failedWorkers} of ${groupSize} finished` : (failedWorkers ? `${completedWorkers} completed, ${failedWorkers} failed` : ''))
+        : ((latest && latest.label) || (primary && primary.label) || '');
       // Card fits its content (left-aligned, not full width). One status indicator;
       // a Cancel (✕) button appears while the task is still running.
       let html = `<div style="align-self:flex-start;width:fit-content;max-width:480px;border:1px solid var(--c-accent-line);border-radius:12px;background:var(--c-accent-soft);overflow:hidden;">
@@ -760,9 +946,10 @@
             ${current ? `<span style="font-size:11px;color:var(--c-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px;">${esc(current)}</span>` : ''}
           </span>
           <span style="flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:${overallColor};margin-left:6px;">${anyRunning ? '<i class="ph ph-circle-notch" style="animation:tc-spin 1s linear infinite;font-size:14px;color:var(--c-dim);"></i>' : overall}</span>
-          ${anyRunning ? `<button data-act-cancel title="Cancel task" style="flex:0 0 auto;width:22px;height:22px;border-radius:6px;border:1px solid var(--c-border-2);background:transparent;color:var(--c-muted);display:grid;place-items:center;cursor:pointer;padding:0;"><i class="ph ph-x" style="font-size:12px;"></i></button>` : ''}
+          ${anyRunning ? `<button data-act-cancel aria-label="${a.cancelling ? 'Cancelling task' : 'Cancel task'}" title="${a.cancelling ? 'Cancelling task' : 'Cancel task'}" ${a.cancelling ? 'disabled' : ''} style="flex:0 0 auto;width:22px;height:22px;border-radius:6px;border:1px solid var(--c-border-2);background:transparent;color:var(--c-muted);display:grid;place-items:center;cursor:${a.cancelling ? 'wait' : 'pointer'};padding:0;"><i class="ph ${a.cancelling ? 'ph-circle-notch' : 'ph-x'}" style="font-size:12px;${a.cancelling ? 'animation:tc-spin 1s linear infinite;' : ''}"></i></button>` : ''}
           <i class="ph ph-caret-${a.expanded ? 'up' : 'down'}" style="font-size:13px;color:var(--c-muted);flex:0 0 auto;"></i>
         </div>
+        ${a.cancelError ? `<div role="alert" style="padding:0 12px 9px;color:#ff9a9a;font-size:11.5px;">${esc(a.cancelError)}</div>` : ''}
         <div style="display:${a.expanded ? 'block' : 'none'};padding:4px 12px 11px;border-top:1px solid var(--c-border);">${_stepsLog(steps, thinking)}</div>
       </div>`;
       html += artifactHTML(a);
@@ -770,7 +957,20 @@
     }
     // Inline document preview: a mini first-page thumbnail; click to render the
     // PDF right inside the chat (no new tab). Non-PDF falls back to an open chip.
+    function artifactDownloadUrl(url) {
+      const value = String(url || '');
+      return value + (value.includes('?') ? '&' : '?') + 'download=1';
+    }
     function artifactHTML(a) {
+      const many = Array.isArray(a.artifacts) ? a.artifacts.filter(art => art && (art.url || art.name)) : [];
+      if (many.length > 1) {
+        return `<div style="margin-top:8px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--c-muted);">${many.length} verified deliverables</div><div data-artifact-list style="display:flex;flex-direction:column;gap:7px;margin-top:7px;width:100%;max-width:420px;">${many.map((art, index) => {
+          const name = String(art.name || art.path || ('Deliverable ' + (index + 1)));
+          const url = String(art.url || '');
+          const icon = String(art.kind || '') === 'web' ? 'ph-browser' : String(art.kind || '') === 'image' ? 'ph-image' : 'ph-file-text';
+          return `<div style="display:flex;align-items:stretch;gap:7px;"><button type="button" data-artifact-open="${index}" data-artifact-url="${esc(url)}" data-artifact-name="${esc(name)}" data-artifact-kind="${esc(String(art.kind || ''))}" ${url ? '' : 'disabled'} style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;padding:10px 12px;border:1px solid var(--c-border-2);border-radius:11px;background:var(--c-surface);color:var(--c-text);font-family:inherit;text-align:left;cursor:${url ? 'pointer' : 'default'};opacity:${url ? '1' : '.72'};"><span style="width:30px;height:30px;border-radius:8px;background:var(--c-accent-soft);color:var(--c-accent);display:grid;place-items:center;flex:0 0 auto;"><i class="ph ${icon}" style="font-size:16px;"></i></span><span style="min-width:0;flex:1;"><span style="display:block;font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(name)}</span><span style="display:block;margin-top:2px;font-size:11px;color:var(--c-muted);">${url ? 'Open verified result' : 'Verified result recorded'}</span></span>${url ? '<i class="ph ph-arrow-right" style="font-size:14px;color:var(--c-muted);"></i>' : ''}</button>${url ? `<a data-artifact-download href="${esc(artifactDownloadUrl(url))}" download="${esc(name)}" title="Download ${esc(name)}" style="display:grid;place-items:center;width:42px;border:1px solid var(--c-border-2);border-radius:11px;background:var(--c-surface);color:var(--c-accent);text-decoration:none;"><i class="ph ph-download-simple" style="font-size:17px;"></i><span class="sr-only">Download ${esc(name)}</span></a>` : ''}</div>`;
+        }).join('')}</div>`;
+      }
       const art = a.artifact; if (!art || !(art.url || art.name)) return '';
       const url = art.url || '', name = art.name || 'document';
       // No URL → just show the name (nothing to open). With a URL → ALWAYS render
@@ -778,19 +978,23 @@
       if (!url) {
         return `<span style="display:inline-flex;align-items:center;gap:8px;margin-top:8px;padding:8px 12px;border:1px solid var(--c-border-2);border-radius:10px;background:var(--c-surface);color:var(--c-text);font-size:12.5px;width:max-content;"><i class="ph ph-file-text" style="color:var(--c-accent);font-size:15px;"></i> ${esc(name)}</span>`;
       }
+      if (_isTextArtifact(art.kind, url, name)) {
+        return `<div style="display:flex;align-items:stretch;gap:7px;margin-top:8px;width:100%;max-width:390px;"><button type="button" data-artifact-open="0" data-artifact-url="${esc(url)}" data-artifact-name="${esc(name)}" data-artifact-kind="${esc(String(art.kind || ''))}" style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;padding:11px 13px;border:1px solid var(--c-border-2);border-radius:12px;background:var(--c-surface);color:var(--c-text);cursor:pointer;text-align:left;font-family:inherit;"><i class="ph ph-file-text" style="color:var(--c-accent);font-size:17px;"></i><span style="flex:1;min-width:0;"><span style="display:block;font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(name)}</span><span style="display:block;margin-top:2px;font-size:11.5px;color:var(--c-muted);">Open UTF-8 preview</span></span><i class="ph ph-arrow-right" style="font-size:14px;color:var(--c-muted);"></i></button><a data-artifact-download href="${esc(artifactDownloadUrl(url))}" download="${esc(name)}" title="Download ${esc(name)}" style="display:grid;place-items:center;width:42px;border:1px solid var(--c-border-2);border-radius:12px;background:var(--c-surface);color:var(--c-accent);text-decoration:none;"><i class="ph ph-download-simple" style="font-size:17px;"></i><span class="sr-only">Download ${esc(name)}</span></a></div>`;
+      }
       const src = url + '#toolbar=0&navpanes=0&view=FitH';
       if (a.artifactOpen) {
         return `<div style="margin-top:8px;border:1px solid var(--c-border-2);border-radius:12px;overflow:hidden;background:var(--c-surface);width:100%;max-width:560px;">
           <div style="display:flex;align-items:center;gap:8px;padding:8px 11px;border-bottom:1px solid var(--c-border);">
             <i class="ph ph-file-text" style="color:var(--c-accent);font-size:15px;flex:0 0 auto;"></i>
             <span style="flex:1;min-width:0;font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(name)}</span>
+            <a data-artifact-download href="${esc(artifactDownloadUrl(url))}" download="${esc(name)}" title="Download ${esc(name)}" style="color:var(--c-accent);display:flex;"><i class="ph ph-download-simple" style="font-size:14px;"></i><span class="sr-only">Download ${esc(name)}</span></a>
             <a href="${esc(url)}" target="_blank" rel="noopener" title="Open in new tab" style="color:var(--c-muted);display:flex;"><i class="ph ph-arrow-square-out" style="font-size:14px;"></i></a>
             <button data-artifact-toggle title="Collapse" style="border:0;background:transparent;color:var(--c-muted);cursor:pointer;display:flex;padding:0;"><i class="ph ph-caret-up" style="font-size:14px;"></i></button>
           </div>
           <iframe src="${esc(src)}" title="${esc(name)}" style="display:block;width:100%;height:600px;border:0;background:#fff;"></iframe>
         </div>`;
       }
-      return `<button data-artifact-toggle title="Preview ${esc(name)}" style="margin-top:8px;display:flex;align-items:stretch;width:100%;max-width:340px;border:1px solid var(--c-border-2);border-radius:12px;overflow:hidden;background:var(--c-surface);cursor:pointer;text-align:left;font-family:inherit;padding:0;">
+      return `<div style="display:flex;align-items:stretch;gap:7px;margin-top:8px;width:100%;max-width:390px;"><button data-artifact-toggle title="Preview ${esc(name)}" style="display:flex;align-items:stretch;min-width:0;flex:1;border:1px solid var(--c-border-2);border-radius:12px;overflow:hidden;background:var(--c-surface);cursor:pointer;text-align:left;font-family:inherit;padding:0;">
         <span style="position:relative;width:86px;height:96px;flex:0 0 auto;background:#fff;overflow:hidden;border-right:1px solid var(--c-border);">
           <iframe src="${esc(src)}" tabindex="-1" aria-hidden="true" scrolling="no" style="position:absolute;top:0;left:0;width:245px;height:317px;border:0;transform:scale(0.351);transform-origin:top left;pointer-events:none;"></iframe>
         </span>
@@ -798,7 +1002,7 @@
           <span style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--c-text);min-width:0;"><i class="ph ph-file-text" style="color:var(--c-accent);font-size:15px;flex:0 0 auto;"></i> <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(name)}</span></span>
           <span style="font-size:11.5px;color:var(--c-muted);">Click to preview in chat</span>
         </span>
-      </button>`;
+      </button><a data-artifact-download href="${esc(artifactDownloadUrl(url))}" download="${esc(name)}" title="Download ${esc(name)}" style="display:grid;place-items:center;width:42px;border:1px solid var(--c-border-2);border-radius:12px;background:var(--c-surface);color:var(--c-accent);text-decoration:none;"><i class="ph ph-download-simple" style="font-size:17px;"></i><span class="sr-only">Download ${esc(name)}</span></a></div>`;
     }
     function _thinkingCard(a, thinking, live) {
       return `<div style="border:1px solid var(--c-border);border-radius:10px;background:var(--c-surface);overflow:hidden;width:100%;max-width:560px;">
@@ -811,9 +1015,15 @@
     function _stepsLog(steps, thinking) {
       const statusWord = (st) => st === 'running' ? 'working' : st === 'failed' ? 'failed' : st === 'cancelled' ? 'cancelled' : 'done';
       const statusCol = (st) => st === 'failed' ? '#ff7a7a' : st === 'cancelled' ? 'var(--c-muted)' : st === 'running' ? 'var(--c-dim)' : 'var(--c-accent)';
+      // With a SINGLE handoff the card header already reads "Handed off to
+      // <worker>" + latest action — repeating the same milestone inside the
+      // expanded log looked like a duplicated task card. Only multi-worker
+      // logs need the per-worker milestone rows.
+      const soleHandoff = steps.filter(s => s.kind === 'handoff').length === 1;
       let h = '';
       steps.forEach(s => {
         if (s.kind === 'handoff') {
+          if (soleHandoff) return;
           // big milestone — no spinner here (the header carries the one spinner)
           h += `<div style="display:flex;align-items:center;gap:8px;padding:8px 0 2px;font-size:13px;">
             <i class="ph ph-arrow-bend-down-right" style="color:var(--c-accent);font-size:15px;flex:0 0 auto;"></i>
@@ -842,22 +1052,85 @@
       if (cancelBtn) cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); cancelTask(idx); });
       const artTog = ref.activityEl.querySelector('[data-artifact-toggle]');
       if (artTog) artTog.addEventListener('click', (e) => { e.stopPropagation(); m.activity.artifactOpen = !m.activity.artifactOpen; renderActivity(idx); });
+      ref.activityEl.querySelectorAll('[data-artifact-open]').forEach(button => {
+        button.addEventListener('click', (e) => {
+          e.stopPropagation();
+          void canvasRender(button.dataset.artifactUrl || '', button.dataset.artifactName || 'result', button.dataset.artifactKind || '');
+        });
+      });
     }
-    function cancelTask(idx) {
+    async function requestTaskCancel(sessionId, executionId) {
+      const url = '/api/v2/chat/session/' + encodeURIComponent(sessionId) + '/delegations/' + encodeURIComponent(executionId) + '/cancel';
+      const response = await fetch(url, { method: 'POST', headers: { Accept: 'application/json' } });
+      let payload;
+      try { payload = await response.json(); }
+      catch (error) { throw new Error('Thomas returned an unreadable cancellation response (HTTP ' + response.status + ')'); }
+      if (!response.ok || payload.ok !== true) throw new Error(String(payload.error || ('HTTP ' + response.status)));
+      return payload;
+    }
+    async function cancelTask(idx) {
       const m = state.messages[idx]; const a = m && m.activity; if (!a) return;
-      a.cancelled = true;
-      // Abort the in-flight stream if this message is the one currently streaming.
-      if (m.streaming && abortController) { try { abortController.abort(); } catch (e) {} }
-      a.steps.forEach(s => { if (s.status === 'running') s.status = 'cancelled'; });
-      canvasStop('Cancelled.');
-      renderActivity(idx);
-      // Best-effort: tell the model to stop the running task on the next turn. There
-      // is no direct cancel endpoint yet, so this stops the UI from tracking it.
+      if (a.cancelling) return;
+      const executionIds = Array.from(new Set(a.steps.filter(s => s.kind === 'handoff' && s.status === 'running' && s.id).map(s => String(s.id))));
+      a.cancelling = true; a.cancelError = ''; renderActivity(idx);
+      if (!executionIds.length) {
+        if (m.streaming && abortController) abortController.abort();
+        a.steps.forEach(s => { if (s.status === 'running') s.status = 'cancelled'; });
+        a.cancelled = true; a.cancelling = false; canvasStop('Cancelled.'); renderActivity(idx);
+        return;
+      }
+
+      const results = await Promise.allSettled(executionIds.map(id => requestTaskCancel(state.sessionId || '', id)));
+      const cancelledIds = new Set(executionIds.filter((_id, index) => results[index].status === 'fulfilled'));
+      a.steps.forEach(s => { if (s.status === 'running' && cancelledIds.has(String(s.id))) s.status = 'cancelled'; });
+      if (cancelledIds.size) {
+        a.cancelled = true;
+        if (m.streaming && abortController) abortController.abort();
+        canvasStop('Cancelled.');
+      }
+      const failedCount = executionIds.length - cancelledIds.size;
+      a.cancelError = failedCount ? `Couldn’t cancel ${failedCount === 1 ? 'the task' : failedCount + ' tasks'}. It may have already finished.` : '';
+      a.cancelling = false; renderActivity(idx);
     }
     function addToolStep(idx, name) { const a = state.messages[idx].activity; if (!a) return; a.steps.push({ kind: 'tool', label: String(name || 'tool'), status: 'running' }); renderActivity(idx); }
     function finishToolStep(idx, ok) { const a = state.messages[idx].activity; if (!a) return; for (let i = a.steps.length - 1; i >= 0; i--) { if (a.steps[i].kind === 'tool' && a.steps[i].status === 'running') { a.steps[i].status = ok === false ? 'failed' : 'completed'; break; } } renderActivity(idx); }
+    function _completionVerified(row) {
+      const proof = String((row && row.proof_status) || '').toLowerCase();
+      return !!(row && row.receipt && row.receipt.ok === true && (proof === 'verified' || proof === 'attached'));
+    }
+    function _mergeArtifacts(activity, row) {
+      const incoming = Array.isArray(row && row.artifacts) ? row.artifacts.slice() : [];
+      if (!incoming.length && row && (row.artifact_url || row.artifact_name)) incoming.push({ id: String(row.execution_id || '') + ':primary', url: String(row.artifact_url || ''), name: String(row.artifact_name || 'result'), kind: String(row.artifact_kind || '') });
+      if (!incoming.length) return;
+      // The streaming completion event may carry a temporary `:primary` id while
+      // the poll response carries the stable proof-artifact id for the same file.
+      // Canonicalize by file identity first so one verified result is never shown
+      // twice merely because it arrived through both channels.
+      const artifactKey = art => String(art.url || art.path || art.name || art.id || '');
+      const byId = new Map((activity.artifacts || []).map(art => [artifactKey(art), art]));
+      incoming.forEach(art => byId.set(artifactKey(art), art));
+      activity.artifacts = Array.from(byId.values());
+      activity.artifact = activity.artifacts[0] || null;
+    }
+    function _maybeCollapseActivity(activity) {
+      const handoffs = (activity.steps || []).filter(step => step && step.kind === 'handoff');
+      const expected = Math.max(1, Number(activity.expectedHandoffCount || 1));
+      if (handoffs.length >= expected && handoffs.every(step => step.status === 'completed' || step.status === 'failed')) {
+        activity.expanded = false;
+      }
+    }
+    function _settleActivityForReply(activity) {
+      const handoffs = (activity.steps || []).filter(step => step && step.kind === 'handoff');
+      if (!handoffs.length) activity.expanded = false;
+      else _maybeCollapseActivity(activity);
+    }
+    function _canvasReviewed(row, done) {
+      return !!(done && _completionVerified(row) && String(row.canvas_review_status || '').toLowerCase() === 'passed' && String(row.canvas_html || '').trim());
+    }
     function handleHandoff(idx, evt) {
       const a = state.messages[idx].activity; if (!a) return;
+      const expected = Number(evt.runtime_profile && evt.runtime_profile.group_expected_count);
+      if (Number.isFinite(expected) && expected > 0) a.expectedHandoffCount = Math.max(Number(a.expectedHandoffCount || 1), expected);
       if (evt.session_id) state.sessionId = String(evt.session_id);
       const id = String(evt.execution_id || evt.specialist_id || ('h' + a.steps.length));
       let s = _handoffStep(a, id);
@@ -866,21 +1139,27 @@
       const sum = evt.last_progress || evt.summary || evt.task;
       if (sum) s.label = String(sum).replace(/^\s*\[[^\]]+\]\s*/, '').trim();
       const t = evt.type;
-      if (t === 'delegation_completed') s.status = 'completed';
+      if (t === 'delegation_completed') s.status = _completionVerified(evt) ? 'completed' : 'running';
       else if (t === 'delegation_failed') s.status = 'failed';
-      else if (evt.state) { const st = String(evt.state).toLowerCase(); s.status = (st === 'completed' || st === 'done') ? 'completed' : (st === 'failed' ? 'failed' : 'running'); }
+      else if (evt.state) { const st = String(evt.state).toLowerCase(); s.status = (st === 'completed' || st === 'done') ? (_completionVerified(evt) ? 'completed' : 'running') : (st === 'failed' ? 'failed' : 'running'); }
+      if (s.status === 'running') a.expanded = true;
+      else _maybeCollapseActivity(a);
+      if (t === 'delegation_completed' && s.status === 'running') s.label = 'Reviewing the result before presenting it';
       // The worker — not the chatbot — opens the Canvas, and only once it's
       // actually started building something renderable. Its real progress text
       // flows straight in; no fake placeholder.
       if (evt.is_canvas) {
         a.wantsCanvas = true;
+        const reviewedDone = _canvasReviewed(evt, String(evt.canvas_status || '') === 'done' || s.status === 'completed');
         if (s.status === 'failed') canvasStop((s.worker || 'The worker') + ' couldn’t finish this.');
-        else canvasLiveHTML(evt.canvas_html || '', String(evt.canvas_status || '') === 'done' || s.status === 'completed');
-      } else if (a.wantsCanvas && s.status === 'running' && canvasState.mode !== 'render') canvasBuilding(s.worker, s.label);
+        else if (String(evt.canvas_status || '').toLowerCase() === 'streaming' && evt.canvas_mode === 'construct' && String(evt.canvas_review_status || '').toLowerCase() === 'pending' && evt.canvas_shell) canvasConstruct(id, evt.canvas_shell || '', evt.canvas_elements || [], false, '');
+        else if (reviewedDone && evt.canvas_mode === 'construct') canvasConstruct(id, evt.canvas_shell || '', evt.canvas_elements || [], true, evt.canvas_html || '');
+        else if (reviewedDone) canvasLiveHTML(evt.canvas_html || '', true);
+      } else if (a.wantsCanvas && s.status === 'running') { /* review stays in the activity card */ }
       else if (a.wantsCanvas && s.status === 'failed') canvasStop((s.worker || 'The worker') + ' couldn’t finish this.');
       // A non-visual deliverable (document/file) is presented as a click-to-preview
       // chip in the chat — it does NOT auto-open the Canvas. (Calvin, 2026-06-28)
-      if (evt.artifact_url || evt.artifact_name) { a.artifact = { url: String(evt.artifact_url || ''), name: String(evt.artifact_name || 'result'), kind: String(evt.artifact_kind || '') }; }
+      if (_completionVerified(evt)) _mergeArtifacts(a, evt);
       renderActivity(idx);
     }
     function handleTaskContract(idx, evt) {
@@ -898,49 +1177,77 @@
     // dropped server-side). Poll the delegations endpoint to reconcile.
     function reconcileHandoff(idx, row) {
       const a = state.messages[idx] && state.messages[idx].activity; if (!a) return;
+      const expected = Number(row.runtime_profile && row.runtime_profile.group_expected_count);
+      if (Number.isFinite(expected) && expected > 0) a.expectedHandoffCount = Math.max(Number(a.expectedHandoffCount || 1), expected);
       const rid = String(row.execution_id || row.id || ''); if (!rid) return;
       // STRICT match by execution_id only: a turn reconciles ONLY the worker it
       // actually started, so a later turn never inherits an earlier task's result.
       const s = _handoffStep(a, rid); if (!s) return;
       const rstate = String(row.state || row.status || '').toLowerCase();
-      s.status = (rstate === 'completed' || rstate === 'done' || rstate === 'succeeded' || rstate === 'passed') ? 'completed'
+      s.status = (rstate === 'completed' || rstate === 'done' || rstate === 'succeeded' || rstate === 'passed') ? (_completionVerified(row) ? 'completed' : 'running')
         : (rstate === 'failed' || rstate === 'error' || rstate === 'blocked') ? 'failed' : 'running';
+      if (s.status === 'running') a.expanded = true;
+      else _maybeCollapseActivity(a);
       if (row.bot_name && !s.worker) s.worker = String(row.bot_name);
       const sum = row.last_progress || row.summary; if (sum) s.label = String(sum).replace(/^\s*\[[^\]]+\]\s*/, '').trim();
+      if ((rstate === 'completed' || rstate === 'done' || rstate === 'succeeded' || rstate === 'passed') && s.status === 'running') s.label = 'Reviewing the result before presenting it';
       if (row.is_canvas) {
         a.wantsCanvas = true;
         const _cdone = String(row.canvas_status || '') === 'done' || s.status === 'completed';
         if (s.status === 'failed') canvasStop((s.worker || 'The worker') + ' couldn’t finish this.');
-        else if (row.canvas_mode === 'construct') canvasConstruct(rid, row.canvas_shell || '', row.canvas_elements || [], _cdone, row.canvas_html || '');
-        else canvasLiveHTML(row.canvas_html || '', _cdone);
-      } else if (a.wantsCanvas && s.status === 'running' && canvasState.mode !== 'render') canvasBuilding(s.worker, s.label);
+        else if (String(row.canvas_status || '').toLowerCase() === 'streaming' && row.canvas_mode === 'construct' && String(row.canvas_review_status || '').toLowerCase() === 'pending' && row.canvas_shell) canvasConstruct(rid, row.canvas_shell || '', row.canvas_elements || [], false, '');
+        else if (_canvasReviewed(row, _cdone) && row.canvas_mode === 'construct') canvasConstruct(rid, row.canvas_shell || '', row.canvas_elements || [], true, row.canvas_html || '');
+        else if (_canvasReviewed(row, _cdone)) canvasLiveHTML(row.canvas_html || '', true);
+      } else if (a.wantsCanvas && s.status === 'running') { /* do not auto-open an unreviewed Canvas */ }
       else if (a.wantsCanvas && s.status === 'failed') canvasStop((s.worker || 'The worker') + ' couldn’t finish this.');
       // A non-visual deliverable (document/file) is presented as a click-to-preview
       // chip in the chat — it does NOT auto-open the Canvas. (Calvin, 2026-06-28)
-      if (row.artifact_url || row.artifact_name) { a.artifact = { url: String(row.artifact_url || ''), name: String(row.artifact_name || 'result'), kind: String(row.artifact_kind || '') }; }
+      if (_completionVerified(row)) _mergeArtifacts(a, row);
       // Proactively ANNOUNCE completion once: Thomas posts a model-authored "it's done"
       // bubble the moment the worker finishes, instead of going silent until the user's next
       // message. Fires once per step here; the backend's reported_to_chat_at guards globally.
-      if ((s.status === 'completed' || s.status === 'failed') && !s._announced) {
-        s._announced = true;
-        announceCompletion(rid);
-      }
+      if (s.status === 'completed' || s.status === 'failed') queueCompletionAnnouncement(s, rid);
       renderActivity(idx);
     }
     // Ask the backend to author (in Thomas's voice) a short "it's done" note for a finished
     // delegation and drop it into the thread as a Thomas bubble.
     async function announceCompletion(eid) {
-      const sid = state.sessionId; if (!sid || !eid) return;
+      const sid = state.sessionId; if (!sid || !eid) return false;
       try {
         const r = await fetch('/api/v2/chat/session/' + encodeURIComponent(sid) + '/delegations/' + encodeURIComponent(eid) + '/announce', { method: 'POST' });
-        if (!r.ok) return;
+        if (!r.ok) {
+          console.warn('Thomas completion announcement failed', r.status);
+          return false;
+        }
         const d = await r.json();
         if (d && d.ok && d.message) {
-          state.messages.push({ role: 'assistant', text: String(d.message), model: state.modelLabel || 'gpt-5.5' });
+          state.messages.push({ role: 'assistant', text: String(d.message), model: state.modelLabel || 'GPT-5.6 Sol' });
           appendMessage(state.messages[state.messages.length - 1]);
           scrollEnd();
+          return true;
         }
-      } catch (e) {}
+        if (d && d.ok && d.skipped === 'already_reported') return true;
+        console.warn('Thomas completion announcement remains retryable', d && (d.skipped || d.error));
+      } catch (e) {
+        console.warn('Thomas completion announcement failed', e);
+      }
+      return false;
+    }
+    function queueCompletionAnnouncement(step, eid, attempt = 0) {
+      if (!step || step._announced || step._announcementPending || step._announcementRetry) return;
+      step._announcementPending = true;
+      announceCompletion(eid).then(done => {
+        step._announcementPending = false;
+        if (done) {
+          step._announced = true;
+          return;
+        }
+        const delay = Math.min(30000, 1000 * (2 ** Math.min(attempt, 5)));
+        step._announcementRetry = setTimeout(() => {
+          step._announcementRetry = null;
+          queueCompletionAnnouncement(step, eid, attempt + 1);
+        }, delay);
+      });
     }
     async function pollDelegations(idx) {
       const sid = state.sessionId; if (!sid) return;
@@ -968,6 +1275,18 @@
     // ---------- Send / stream (wired to the real Thomas backend: POST /api/v2/chat, NDJSON) ----------
     function send() {
       const text = state.input.trim(); if (!text || state.streaming) return;
+      if (window.ThomasUnifiedModes && window.ThomasUnifiedModes.send(text, {
+        profile: state.profile,
+        modelId: state.modelId,
+        modelLabel: state.modelLabel,
+        dials: Object.assign({}, state.dials),
+        docs: state.docs.slice(),
+        images: state.images.slice(),
+      })) {
+        state.input = ''; inputEl.value = ''; state.docs = []; state.images = [];
+        renderAttachments(); autosize(); syncDynamic();
+        return;
+      }
       state.messages.push({ role: 'user', text });
       state.input = ''; inputEl.value = '';
       syncView(); appendMessage(state.messages[state.messages.length - 1]);
@@ -988,13 +1307,134 @@
       if (typeof evt.content === 'string') return evt.content;
       return '';
     }
+    function applyModelRuntimeReceipt(idx, runtime) {
+      const active = runtime && runtime.active && typeof runtime.active === 'object' ? runtime.active : {};
+      const observedId = String(active.model || '').trim();
+      if (!observedId) return;
+      const choice = profilesData.flatMap(profile => Array.isArray(profile.models) ? profile.models : []).find(model => String(model && model.id || '') === observedId);
+      const observedLabel = String(choice && (choice.display_name || choice.id) || observedId).split('/').pop();
+      const label = observedLabel + (runtime.failover_used === true ? ' · observed failover' : ' · observed');
+      state.messages[idx].model = label;
+      const modelEl = msgRefs[idx] && msgRefs[idx].modelEl;
+      if (modelEl) {
+        modelEl.textContent = label;
+        modelEl.title = runtime.failover_used === true ? 'Observed runtime model after failover' : 'Observed runtime model';
+      }
+    }
+    function isChatGPTOAuthProfile(profileName) {
+      const key = String(profileName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (['chatgpt', 'codex', 'openaicodex'].includes(key)) return true;
+      const profile = profilesData.find(p => String(p && p.name || '').toLowerCase().replace(/[^a-z0-9]/g, '') === key);
+      const provider = String(profile && profile.provider || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      return ['chatgpt', 'codex', 'openaicodex'].includes(provider);
+    }
+    function shouldPromptChatGPTConnection(assistantText) {
+      if (!isChatGPTOAuthProfile(state.profile)) return false;
+      const normalized = String(assistantText || '').replace(/[*_`>#]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (!normalized || normalized.length > 500) return false;
+      return /^(?:the )?chatgpt(?: oauth| model)? (?:is not|isn't) connected\b/i.test(normalized);
+    }
+    async function maybePromptChatGPTConnection(assistantText) {
+      if (!shouldPromptChatGPTConnection(assistantText)) return false;
+      try {
+        const response = await fetch('/api/openai-codex/status?profile=' + encodeURIComponent(state.profile), { cache: 'no-store' });
+        const status = await response.json();
+        // Natural-language output is never authoritative auth state. Only a
+        // fresh, typed status response may open the reconnect prompt.
+        if (response.ok && status && status.needs_login === true && status.logged_in !== true) {
+          showChatGPTConnectionPrompt();
+          return true;
+        }
+      } catch (error) {
+        // A status lookup failure must not falsely tell a signed-in user to reconnect.
+      }
+      return false;
+    }
+    function closeChatGPTConnectionPrompt() {
+      const overlay = document.getElementById('tc-chatgpt-connect-prompt');
+      if (overlay) overlay.style.display = 'none';
+    }
+    function ensureChatGPTConnectionPrompt() {
+      let overlay = document.getElementById('tc-chatgpt-connect-prompt');
+      if (overlay) return overlay;
+      overlay = document.createElement('div');
+      overlay.id = 'tc-chatgpt-connect-prompt';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+      overlay.setAttribute('aria-labelledby', 'tc-chatgpt-connect-title');
+      overlay.style.cssText = 'display:none;position:absolute;inset:0;z-index:120;align-items:center;justify-content:center;padding:24px;background:rgba(2,4,12,.72);backdrop-filter:blur(8px);';
+      overlay.innerHTML = `<section style="width:min(460px,100%);border:1px solid var(--c-border-2);border-radius:18px;background:var(--c-menu-bg);box-shadow:var(--c-shadow);padding:22px;color:var(--c-text);">
+        <div style="display:flex;align-items:flex-start;gap:14px;">
+          <span style="width:42px;height:42px;border-radius:12px;background:var(--c-accent);color:var(--c-accent-ink);display:grid;place-items:center;flex:0 0 auto;"><i class="ph ph-plugs-connected" style="font-size:22px;"></i></span>
+          <span style="min-width:0;flex:1;">
+            <h2 id="tc-chatgpt-connect-title" style="margin:0 0 6px;font:700 19px/1.25 var(--font-head);">Connect ChatGPT to Thomas</h2>
+            <p style="margin:0;color:var(--c-dim);font-size:13.5px;line-height:1.55;">Your ChatGPT or Codex app sign-in is separate from Thomas's local connection. Connect once here so Thomas can use your ChatGPT models.</p>
+          </span>
+          <button id="tc-chatgpt-connect-close" type="button" aria-label="Close" class="hv-soft" style="width:32px;height:32px;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--c-muted);display:grid;place-items:center;cursor:pointer;"><i class="ph ph-x" style="font-size:17px;"></i></button>
+        </div>
+        <p id="tc-chatgpt-connect-status" role="status" style="margin:18px 0 0;padding:11px 12px;border-radius:10px;background:var(--c-surface);color:var(--c-dim);font-size:12.5px;line-height:1.5;">A ChatGPT sign-in window will open. If you're already signed in, approve Thomas and return here.</p>
+        <div style="display:flex;justify-content:flex-end;gap:9px;margin-top:18px;">
+          <button id="tc-chatgpt-connect-later" type="button" class="hv-soft" style="padding:9px 13px;border:1px solid var(--c-border-2);border-radius:10px;background:transparent;color:var(--c-text);font:600 13px var(--font-sans);cursor:pointer;">Not now</button>
+          <button id="tc-chatgpt-connect-start" type="button" style="padding:9px 14px;border:1px solid var(--c-accent-line);border-radius:10px;background:var(--c-accent);color:var(--c-accent-ink);font:700 13px var(--font-sans);cursor:pointer;">Connect ChatGPT</button>
+        </div>
+      </section>`;
+      shell.appendChild(overlay);
+      overlay.addEventListener('click', e => { if (e.target === overlay) closeChatGPTConnectionPrompt(); });
+      overlay.querySelector('#tc-chatgpt-connect-close').addEventListener('click', closeChatGPTConnectionPrompt);
+      overlay.querySelector('#tc-chatgpt-connect-later').addEventListener('click', closeChatGPTConnectionPrompt);
+      overlay.querySelector('#tc-chatgpt-connect-start').addEventListener('click', connectChatGPTFromPrompt);
+      return overlay;
+    }
+    function showChatGPTConnectionPrompt() {
+      const overlay = ensureChatGPTConnectionPrompt();
+      const status = overlay.querySelector('#tc-chatgpt-connect-status');
+      const button = overlay.querySelector('#tc-chatgpt-connect-start');
+      status.textContent = "A ChatGPT sign-in window will open. If you're already signed in, approve Thomas and return here.";
+      status.style.color = 'var(--c-dim)';
+      button.disabled = false;
+      button.textContent = 'Connect ChatGPT';
+      overlay.style.display = 'flex';
+      requestAnimationFrame(() => button.focus());
+    }
+    async function connectChatGPTFromPrompt() {
+      const overlay = ensureChatGPTConnectionPrompt();
+      const status = overlay.querySelector('#tc-chatgpt-connect-status');
+      const button = overlay.querySelector('#tc-chatgpt-connect-start');
+      button.disabled = true;
+      button.textContent = 'Waiting for ChatGPT...';
+      status.textContent = 'Complete the ChatGPT approval window. Thomas will finish the connection automatically.';
+      status.style.color = 'var(--c-dim)';
+      try {
+        const res = await fetch('/api/openai-codex/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ profile: state.profile || 'openai_codex', timeout_s: 300 }),
+        });
+        let data = {}; try { data = await res.json(); } catch (e) {}
+        if (res.ok && data.ok && data.logged_in !== false) {
+          status.textContent = 'Connected. Thomas can now use your ChatGPT models.';
+          status.style.color = 'var(--c-accent)';
+          button.textContent = 'Connected';
+          return;
+        }
+        const pending = !!(data.pending || data.needs_paste);
+        status.textContent = pending
+          ? 'The sign-in is still waiting. Finish it in the browser, then choose Connect ChatGPT again.'
+          : String(data.error || 'ChatGPT connection failed. Please try again.');
+      } catch (err) {
+        status.textContent = String(err && err.message || 'ChatGPT connection failed. Please try again.');
+      }
+      status.style.color = '#ff9a9a';
+      button.disabled = false;
+      button.textContent = 'Try again';
+    }
     let _pendingCanvasIntent = false; // set on send(): does THIS turn want a renderable result?
     async function streamReal(text) {
-      const base = { role: 'assistant', text: '', model: state.modelLabel || 'gpt-5.5', streaming: true, activity: { thinking: '', steps: [], expanded: false, artifact: null, wantsCanvas: _pendingCanvasIntent } };
+      const base = { role: 'assistant', text: '', model: state.modelLabel || 'GPT-5.6 Sol', streaming: true, activity: { thinking: '', steps: [], expanded: false, artifact: null, wantsCanvas: _pendingCanvasIntent } };
       _pendingCanvasIntent = false;
       state.messages.push(base);
       const idx = state.messages.length - 1;
-      state.streaming = true; syncDynamic();
+      state.streaming = true; setExternalBusy();
       appendMessage(base); scrollEnd();
       abortController = new AbortController();
       let acc = '', sawText = false;
@@ -1007,6 +1447,7 @@
         const payload = {
           message: text,
           session_id: state.sessionId || undefined,
+          surface_mode: 'chat',
           profile: state.profile || undefined,
           model: state.profile || undefined,
           model_id: state.modelId || undefined,
@@ -1033,7 +1474,7 @@
             const type = evt.type;
             if (type === 'text' || type === 'agent_text' || type === 'delta' || type === 'assistant_delta' || type === 'message_delta') {
               const c = chunkText(evt);
-              if (c) { if (!sawText) { sawText = true; const a = state.messages[idx].activity; if (a) { a.expanded = false; renderActivity(idx); } } acc += c; setText(acc); }
+              if (c) { if (!sawText) { sawText = true; const a = state.messages[idx].activity; if (a) { _settleActivityForReply(a); renderActivity(idx); } } acc += c; setText(acc); }
                 // NOTE: Thomas's streamed text — including his planning/thinking on a
                 // complex task — stays in the chat bubble (and the collapsible thinking
                 // card). It is NEVER rendered into the Canvas. The Canvas is reserved for
@@ -1043,7 +1484,9 @@
             } else if (type === 'tool_start') {
               addToolStep(idx, evt.name); scrollEnd();
             } else if (type === 'tool_result') {
-              finishToolStep(idx, true);
+              finishToolStep(idx, evt.ok !== false);
+            } else if (type === 'model_runtime') {
+              applyModelRuntimeReceipt(idx, evt.runtime);
             } else if (type === 'delegation_started' || type === 'delegation_progress' || type === 'delegation_completed' || type === 'delegation_failed') {
               handleHandoff(idx, evt); scrollEnd();
             } else if (type === 'delegation') {
@@ -1060,13 +1503,14 @@
           }
         }
         if (!acc.trim()) { setText('— (no text returned)'); }
+        await maybePromptChatGPTConnection(acc);
       } catch (err) {
         if (err && err.name === 'AbortError') acc += (acc ? '\n\n' : '') + '— [stopped]';
         else acc += (acc ? '\n\n' : '') + '⚠ ' + ((err && err.message) || 'request failed');
         setText(acc);
       } finally {
         state.messages[idx].streaming = false; state.streaming = false; abortController = null;
-        updateStreamingBubble(idx); renderActivity(idx); syncDynamic(); scrollEnd();
+        updateStreamingBubble(idx); renderActivity(idx); setExternalBusy(); scrollEnd();
         const fa = state.messages[idx].activity;
         canvasDocumentDone(); // settle a live DOCUMENT (no-op for visual/worker canvases)
         if (fa && fa.steps.some(s => s.kind === 'handoff' && s.status === 'running')) pollDelegations(idx);
@@ -1078,16 +1522,90 @@
 
     // ---------- Top-level actions ----------
     function newChat() {
+      if (window.ThomasUnifiedModes && window.ThomasUnifiedModes.newConversation()) return;
+      chatSelectionToken += 1;
       showChat();
       if (abortController) { try { abortController.abort(); } catch (e) {} abortController = null; }
       if (timer) { clearInterval(timer); timer = null; }
       state.messages = []; state.activeChat = null; state.streaming = false; state.input = ''; state.artifactOpen = false; state.sessionId = null;
       inputEl.value = ''; threadEl.innerHTML = ''; msgRefs.length = 0;
-      closeCanvas(); renderChats(); syncView(); autosize(); syncDynamic();
+      resetCanvasForConversation(); renderChats(); syncView(); autosize(); syncDynamic();
       // ask the backend for a fresh session (harmless 404 on the static preview)
       fetch('/api/session/new', { method: 'POST' }).then(r => r.ok ? r.json() : null).then(d => { if (d) state.sessionId = d.session_id || (d.data && d.data.session_id) || state.sessionId; }).catch(() => {});
     }
+    async function restoreVerifiedChatArtifacts(chatId, sessionId, selectionToken) {
+      const sid = String(sessionId || '');
+      if (!sid) return;
+      try {
+        const r = await fetch('/api/v2/chat/session/' + encodeURIComponent(sid) + '/delegations');
+        if (!r.ok) return;
+        const d = await r.json();
+        if (selectionToken !== chatSelectionToken || state.activeChat !== chatId || String(state.sessionId || '') !== sid) return;
+        const sessionRows = (Array.isArray(d.delegations) ? d.delegations : [])
+          .filter(row => String(row.session_id || '') === sid && _completionVerified(row))
+          .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+        const reviewedCanvasRows = sessionRows.filter(row => _canvasReviewed(row, true));
+        const reviewedCanvas = reviewedCanvasRows.length ? reviewedCanvasRows[reviewedCanvasRows.length - 1] : null;
+        // The in-memory Canvas stream is lost when Thomas restarts, but its reviewed
+        // execution record and verified HTML artifact remain durable. Preserve that
+        // artifact as the explicit-open fallback; selection itself still stays closed.
+        const durableCanvasRows = sessionRows.map(row => {
+          const profile = row && row.runtime_profile && typeof row.runtime_profile === 'object' ? row.runtime_profile : {};
+          const wasCanvas = row && (row.is_canvas === true || profile.canvas === true || String(profile.canvas || '').toLowerCase() === 'true');
+          const webArtifact = (Array.isArray(row && row.artifacts) ? row.artifacts : []).find(artifact => {
+            const kind = String((artifact && artifact.kind) || '').toLowerCase();
+            const name = String((artifact && (artifact.name || artifact.path)) || '');
+            return !!(artifact && artifact.url && (kind === 'web' || /\.html?(?:$|[?#])/i.test(name)));
+          });
+          return wasCanvas && webArtifact ? { row, artifact: webArtifact } : null;
+        }).filter(Boolean);
+        const durableCanvasEntry = durableCanvasRows.length ? durableCanvasRows[durableCanvasRows.length - 1] : null;
+        const durableCanvas = durableCanvasEntry && durableCanvasEntry.row;
+        const durableCanvasArtifact = durableCanvasEntry && durableCanvasEntry.artifact;
+        state.restoredCanvas = reviewedCanvas ? {
+          chatId,
+          sessionId: sid,
+          executionId: String(reviewedCanvas.execution_id || ''),
+          mode: String(reviewedCanvas.canvas_mode || 'live'),
+          html: String(reviewedCanvas.canvas_html || ''),
+          shell: String(reviewedCanvas.canvas_shell || ''),
+          elements: Array.isArray(reviewedCanvas.canvas_elements) ? reviewedCanvas.canvas_elements.slice() : [],
+        } : durableCanvas ? {
+          chatId,
+          sessionId: sid,
+          executionId: String(durableCanvas.execution_id || ''),
+          mode: 'render',
+          url: String(durableCanvasArtifact.url || ''),
+          name: String(durableCanvasArtifact.name || durableCanvasArtifact.path || 'Canvas'),
+          kind: String(durableCanvasArtifact.kind || 'web'),
+        } : null;
+        const rows = sessionRows.filter(row => Array.isArray(row.artifacts) && row.artifacts.length);
+        if (!rows.length) return;
+        let idx = state.messages.length - 1;
+        while (idx >= 0 && state.messages[idx].role !== 'assistant') idx -= 1;
+        if (idx < 0) return;
+        const activity = { thinking: '', steps: [], expanded: false, artifacts: [], artifact: null, artifactOpen: false, wantsCanvas: false, expectedHandoffCount: rows.length };
+        rows.forEach(row => {
+          const verifiedNames = row.artifacts.map(art => String((art && (art.name || art.path)) || '')).filter(Boolean);
+          const verifiedLabel = verifiedNames.length === 1 ? ('Verified ' + verifiedNames[0]) : (verifiedNames.length > 1 ? (verifiedNames.length + ' verified deliverables') : 'Verified result');
+          activity.steps.push({
+            kind: 'handoff',
+            id: String(row.execution_id || ''),
+            worker: String(row.bot_name || row.specialist_id || 'worker'),
+            label: verifiedLabel || 'Verified result',
+            status: 'completed',
+          });
+          _mergeArtifacts(activity, row);
+        });
+        if (!activity.artifacts.length || selectionToken !== chatSelectionToken || state.activeChat !== chatId) return;
+        state.messages[idx].activity = activity;
+        threadEl.innerHTML = ''; msgRefs.length = 0;
+        state.messages.forEach((message, messageIndex) => threadEl.appendChild(buildMessageNode(message, messageIndex)));
+        syncDynamic(); scrollEnd();
+      } catch (e) {}
+    }
     function selectChat(id) {
+      const selectionToken = ++chatSelectionToken;
       showChat();
       if (abortController) { try { abortController.abort(); } catch (e) {} abortController = null; }
       if (timer) { clearInterval(timer); timer = null; }
@@ -1096,12 +1614,17 @@
       if (c && c.sessionId) state.sessionId = c.sessionId;
       inputEl.value = ''; threadEl.innerHTML = ''; msgRefs.length = 0;
       state.messages = c ? c.msgs.map(m => Object.assign({}, m)) : [];
-      closeCanvas(); renderChats(); syncView();
+      resetCanvasForConversation(); renderChats(); syncView();
       state.messages.forEach((m, i) => threadEl.appendChild(buildMessageNode(m, i)));
       autosize(); syncDynamic(); scrollEnd();
+      if (c && c.sessionId) restoreVerifiedChatArtifacts(id, c.sessionId, selectionToken);
     }
     function fillAndSend(text) { state.input = text; inputEl.value = text; autosize(); send(); }
     function toggleSidebar() {
+      if (window.matchMedia('(max-width: 760px)').matches) {
+        shell.classList.toggle('is-mobile-sidebar-open');
+        return;
+      }
       const cur = shell.style.getPropertyValue('--sidebar-margin');
       shell.style.setProperty('--sidebar-margin', cur === '-280px' ? '0px' : '-280px');
     }
@@ -1114,20 +1637,59 @@
     let canvasState = { mode: 'blank', worker: '', progress: '', url: '', name: '' };
     function openCanvas() { state.artifactOpen = true; canvasEl.style.display = 'flex'; canvasEl.style.animation = 'tc-slide-in .3s cubic-bezier(.4,0,.2,1) both'; shell.classList.add('tc-canvas-open'); renderCanvas(); }
     function closeCanvas() { state.artifactOpen = false; canvasEl.style.display = 'none'; shell.classList.remove('tc-canvas-open'); }
+    function resetCanvasForConversation() {
+      closeCanvas();
+      state.restoredCanvas = null;
+      canvasState = { mode: 'blank', worker: '', progress: '', url: '', name: '' };
+      _build = { execId: '', els: [], delivered: 0, ready: false, done: false };
+      canvasBody.innerHTML = '';
+    }
     function canvasBuilding(worker, progress) {
       if (canvasState.mode === 'render' || canvasState.mode === 'live') return; // finished/live stays put
       canvasState = { mode: 'building', worker: String(worker || canvasState.worker || ''), progress: String(progress || canvasState.progress || ''), url: '', name: '' };
       if (!state.artifactOpen) openCanvas(); else renderCanvas();
     }
-    function canvasRender(url, name) {
+    function _isTextArtifact(kind, url, name) {
+      return String(kind || '').toLowerCase() === 'text' || /\.(?:md|markdown|txt|csv|json|log|rst)(?:$|[?#\s])/i.test(String(url || '') + ' ' + String(name || ''));
+    }
+    async function canvasRender(url, name, kind) {
       if (!url) return;
+      if (_isTextArtifact(kind, url, name)) {
+        const selectionToken = chatSelectionToken;
+        const chatId = state.activeChat;
+        const sessionId = String(state.sessionId || '');
+        try {
+          const response = await fetch(String(url), { headers: { Accept: 'text/plain; charset=utf-8, text/markdown; charset=utf-8' } });
+          if (!response.ok) throw new Error('Text preview unavailable');
+          const utf8Body = new Blob([await response.arrayBuffer()], { type: 'text/plain;charset=utf-8' });
+          const markdown = new TextDecoder('utf-8', { fatal: false }).decode(await utf8Body.arrayBuffer());
+          if (selectionToken !== chatSelectionToken || state.activeChat !== chatId || String(state.sessionId || '') !== sessionId) return;
+          canvasState = { mode: 'document', worker: '', progress: '', url: '', name: String(name || 'Document'), md: markdown, live: false };
+          if (!state.artifactOpen) openCanvas(); else renderCanvas();
+          return;
+        } catch (e) { /* fall back to the browser's native viewer */ }
+      }
       canvasState = { mode: 'render', worker: canvasState.worker, progress: '', url: String(url), name: String(name || 'document') };
       if (!state.artifactOpen) openCanvas(); else renderCanvas();
+    }
+    function openConversationCanvas() {
+      const restored = state.restoredCanvas;
+      if (canvasState.mode === 'blank' && restored && restored.chatId === state.activeChat && restored.sessionId === String(state.sessionId || '')) {
+        if (restored.mode === 'render' && restored.url) {
+          canvasState = { mode: 'render', worker: '', progress: '', url: restored.url, name: restored.name || 'Canvas', kind: restored.kind || 'web' };
+        } else if (restored.mode === 'construct') {
+          _build = { execId: restored.executionId, els: restored.elements || [], delivered: 0, ready: false, done: true };
+          canvasState = { mode: 'construct', worker: '', name: 'Canvas', shell: restored.shell || '', finalHtml: restored.html || '', done: true, execId: restored.executionId };
+        } else {
+          canvasState = { mode: 'live', worker: '', progress: '', url: '', name: 'Canvas', html: restored.html || '', live: false, _written: 0, _fresh: false };
+        }
+      }
+      openCanvas();
     }
     // When the worker stops without a renderable result (failed / cancelled), the
     // Canvas must not spin forever — show an honest end state instead.
     function canvasStop(reason) {
-      if (canvasState.mode !== 'building' && canvasState.mode !== 'live') return;
+      if (canvasState.mode !== 'building' && canvasState.mode !== 'live' && canvasState.mode !== 'construct') return;
       canvasState = { mode: 'ended', worker: canvasState.worker, progress: String(reason || 'This didn’t finish.'), url: '', name: '' };
       if (state.artifactOpen) renderCanvas();
     }
@@ -1265,11 +1827,14 @@
     }
     function mdToHtml(md) {
       const lines = String(md || '').replace(/\r/g, '').split('\n');
-      let html = '', list = null;
+      let html = '', list = null, code = null;
       const closeList = () => { if (list) { html += '</' + list + '>'; list = null; } };
+      const closeCode = () => { if (code) { html += '<pre><code>' + esc(code.join('\n')) + '</code></pre>'; code = null; } };
       for (const raw of lines) {
         const line = raw.replace(/\s+$/, '');
         let m;
+        if (/^\s*```/.test(line)) { closeList(); if (code) closeCode(); else code = []; continue; }
+        if (code) { code.push(raw); continue; }
         if (/^\s*$/.test(line)) { closeList(); continue; }
         if ((m = line.match(/^\s*(#{1,3})\s+(.*)$/))) { closeList(); const n = m[1].length; html += '<h' + n + '>' + _mdInline(m[2]) + '</h' + n + '>'; continue; }
         if (/^\s*(---+|\*\*\*+|___+)\s*$/.test(line)) { closeList(); html += '<hr>'; continue; }
@@ -1278,6 +1843,7 @@
         closeList(); html += '<p>' + _mdInline(line) + '</p>';
       }
       closeList();
+      closeCode();
       return html;
     }
     function renderCanvas() {
@@ -1288,14 +1854,14 @@
         if (!f) {
           // Re-opening an already-built canvas → show the static final doc (no re-build).
           if (canvasState.done && canvasState.finalHtml) {
-            canvasBody.innerHTML = '<iframe class="tc-live-frame" sandbox="allow-scripts" style="flex:1;min-height:480px;width:100%;border:0;border-radius:10px;background:#fff;"></iframe>';
+            canvasBody.innerHTML = '<iframe class="tc-live-frame" sandbox="allow-scripts" style="flex:0 0 auto;height:min(68vh,720px);width:100%;border:0;border-radius:10px;background:#fff;"></iframe>';
             const sf = canvasBody.querySelector('iframe.tc-live-frame');
             sf.setAttribute('data-doc-key', 'static');
             sf.setAttribute('srcdoc', _staticDoc(_injectReveal(canvasState.finalHtml)));
             return;
           }
           // Otherwise mount the empty shell and (re-)arm streaming into it.
-          canvasBody.innerHTML = '<iframe class="tc-build-frame" sandbox="allow-scripts" style="flex:1;min-height:480px;width:100%;border:0;border-radius:10px;background:#fff;"></iframe>';
+          canvasBody.innerHTML = '<iframe class="tc-build-frame" sandbox="allow-scripts" style="flex:0 0 auto;height:min(68vh,720px);width:100%;border:0;border-radius:10px;background:#fff;"></iframe>';
           f = canvasBody.querySelector('iframe.tc-build-frame');
           f.setAttribute('srcdoc', canvasState.shell);
           _build.ready = false; _build.delivered = 0;  // the fresh iframe re-handshakes + gets all elements
@@ -1328,7 +1894,7 @@
         let f = canvasBody.querySelector('iframe.tc-live-frame');
         if (!f || f.getAttribute('data-doc-key') !== _key) {
           const _seen = _canvasShown.has(_key);
-          canvasBody.innerHTML = '<iframe class="tc-live-frame" sandbox="allow-scripts" style="flex:1;min-height:480px;width:100%;border:0;border-radius:10px;background:#fff;"></iframe>';
+          canvasBody.innerHTML = '<iframe class="tc-live-frame" sandbox="allow-scripts" style="flex:0 0 auto;height:min(68vh,720px);width:100%;border:0;border-radius:10px;background:#fff;"></iframe>';
           f = canvasBody.querySelector('iframe.tc-live-frame');
           f.setAttribute('data-doc-key', _key);
           f.setAttribute('srcdoc', _seen ? _staticDoc(_finalDoc) : _finalDoc);
@@ -1345,7 +1911,7 @@
       }
       if (canvasState.mode === 'render' && canvasState.url) {
         canvasStatus.textContent = canvasState.name || 'Rendered';
-        canvasBody.innerHTML = `<iframe src="${esc(canvasState.url)}#toolbar=0&navpanes=0&view=FitH" title="${esc(canvasState.name || '')}" style="flex:1;min-height:480px;width:100%;border:0;border-radius:10px;background:#fff;"></iframe>`;
+        canvasBody.innerHTML = `<iframe src="${esc(canvasState.url)}#toolbar=0&navpanes=0&view=FitH" title="${esc(canvasState.name || '')}" style="flex:0 0 auto;height:min(72vh,760px);width:100%;border:0;border-radius:10px;background:#fff;"></iframe>`;
         return;
       }
       if (canvasState.mode === 'building') {
@@ -1458,7 +2024,7 @@
     function saveDials() { try { localStorage.setItem('thomas_dials', JSON.stringify(state.dials)); } catch (e) {} }
     const DIAL_FIELDS = [
       { key: 'autonomy', label: 'Autonomy', num: true, opts: [[1, '1 · Chat'], [2, '2 · Assist'], [3, '3 · Agent'], [4, '4 · Full autonomy']] },
-      { key: 'effort', label: 'Reasoning effort', opts: [['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Max']] },
+      { key: 'effort', label: 'Reasoning effort', opts: [['none', 'None'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'xHigh'], ['max', 'Max']] },
       { key: 'tokenEconomy', label: 'Token economy', opts: [['cheap', 'Cheap'], ['balanced', 'Balanced'], ['max', 'Max']] },
       { key: 'fileAccess', label: 'File access', opts: [['read_only', 'Read only'], ['workspace', 'Workspace'], ['project', 'Project'], ['pc', 'Full PC'], ['full', 'Full']] },
       { key: 'guardrails', label: 'Guardrails', opts: [['open', 'Open'], ['guarded', 'Guarded'], ['fortress', 'Fortress']] },
@@ -1553,16 +2119,25 @@
     // ---------- Wire up ----------
     inputEl.addEventListener('input', e => { state.input = e.target.value; autosize(); syncDynamic(); });
     inputEl.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
-    document.getElementById('tc-send').addEventListener('click', () => { if (state.streaming) { if (abortController) { try { abortController.abort(); } catch (e) {} } } else { send(); } });
-    document.getElementById('tc-search').addEventListener('input', e => { state.search = e.target.value; });
+    document.getElementById('tc-send').addEventListener('click', () => {
+      const unified = window.ThomasUnifiedModes;
+      if (unified && unified.mode() !== 'chat' && unified.stop()) return;
+      if (state.streaming) { if (abortController) { try { abortController.abort(); } catch (e) {} } }
+      else { send(); }
+    });
+    document.getElementById('tc-search').addEventListener('input', e => { state.search = e.target.value; renderChats(); });
     document.getElementById('tc-newchat').addEventListener('click', newChat);
     document.getElementById('tc-newchat-top').addEventListener('click', newChat);
     document.getElementById('tc-sidebar-toggle').addEventListener('click', toggleSidebar);
-    document.getElementById('tc-canvas-btn').addEventListener('click', () => openCanvas());
+    document.getElementById('tc-settings').addEventListener('click', () => openWorkspace('settings'));
+    document.getElementById('tc-canvas-btn').addEventListener('click', openConversationCanvas);
     document.getElementById('tc-canvas-close').addEventListener('click', closeCanvas);
     document.getElementById('tc-theme-btn').addEventListener('click', toggleThemeMenu);
     document.getElementById('tc-model-btn').addEventListener('click', toggleModelMenu);
     document.getElementById('tc-tools-btn').addEventListener('click', toggleToolsMenu);
+    document.getElementById('tc-code-project-btn').addEventListener('click', () => {
+      if (window.ThomasUnifiedModes) window.ThomasUnifiedModes.pickProject();
+    });
     document.getElementById('tc-attach-btn').addEventListener('click', () => document.getElementById('tc-file-input').click());
     document.getElementById('tc-file-input').addEventListener('change', (e) => { onFiles(e.target.files); e.target.value = ''; });
     document.addEventListener('mousedown', e => {
@@ -1576,7 +2151,7 @@
       return (Array.isArray(list) ? list : []).map(m => ({
         role: (m.role === 'assistant' ? 'assistant' : 'user'),
         text: String(m.content != null ? m.content : (m.text || '')),
-        model: (m.role === 'assistant' ? (state.modelLabel || 'gpt-5.5') : ''),
+        model: (m.role === 'assistant' ? (state.modelLabel || 'GPT-5.6 Sol') : ''),
       }));
     }
     // Pull the real recent-chat list (legacy store + live v2 sessions) into the sidebar.
@@ -1584,16 +2159,16 @@
     // a reload, with its real title + date. (chat history fix, 2026-06-28)
     async function refreshChats() {
       try {
-        const r = await fetch('/api/chats');
+        const r = await fetch('/api/chats?mode=chat');
         if (!r.ok) return;
         const d = await r.json();
         const rows = d.chats || (d.data && d.data.chats) || [];
-        if (!Array.isArray(rows) || !rows.length) return;
+        if (!Array.isArray(rows)) return;
         const active = state.activeChat;
         chatList = rows.map(row => {
           const msgs = mapRealMessages(row.messages);
           const firstUser = msgs.find(m => m.role === 'user');
-          return { id: String(row.id || row.session_id || ''), title: String(row.title || 'Untitled chat'), preview: String(row.preview || (firstUser ? firstUser.text : '')).slice(0, 60), msgs, sessionId: row.sessionId || row.session_id || null, updatedAt: Number(row.updatedAt || row.createdAt || 0) };
+          return { id: String(row.id || row.session_id || ''), title: String(row.title || 'Untitled chat'), preview: String(row.preview || (firstUser ? firstUser.text : '')).slice(0, 60), msgs, sessionId: row.sessionId || row.session_id || null, surfaceMode: String(row.surfaceMode || 'chat'), contextId: String(row.contextId || ''), updatedAt: Number(row.updatedAt || row.createdAt || 0) };
         }).filter(c => c.id);
         state.activeChat = active;
         renderChats();
@@ -1606,14 +2181,16 @@
         if (r.ok) {
           const d = await r.json();
           profilesData = Array.isArray(d.profiles) ? d.profiles : [];
+          await hydrateProfileModels();
           const prefs = d.preferences || {};
-          const active = prefs.active_profile || d.default || '';
+          const active = String(prefs.active_profile || d.default || '').trim().toLowerCase();
           const usable = (p) => !!p && (!!p.has_api_key || p.provider === 'openai_codex' || p.name === 'local');
           // Prefer the configured active profile; if it isn't usable (e.g. a keyless
           // cloud provider, or an unreachable local), fall back to the first profile
-          // that can actually answer (a keyed provider). User can re-pick via the dropdown.
-          let pick = profilesData.find(p => p.name === active);
-          if (!usable(pick)) pick = profilesData.find(p => !!p.has_api_key) || pick || profilesData[0];
+          // that can actually answer. Profile names are case-insensitive because the
+          // preferences API historically returned display-cased values such as "Local".
+          let pick = profilesData.find(p => String(p.name || '').trim().toLowerCase() === active);
+          if (!usable(pick)) pick = profilesData.find(usable) || profilesData[0];
           if (pick) setProfile(pick);
           renderModelMenu();
         }
@@ -1625,6 +2202,39 @@
         const r = await fetch('/api/session/new', { method: 'POST' });
         if (r.ok) { const d = await r.json(); state.sessionId = d.session_id || (d.data && d.data.session_id) || state.sessionId; }
       } catch (e) {}
+    }
+
+    function modeChanged(nextMode) {
+      state.surfaceMode = nextMode;
+      state.search = '';
+      const search = document.getElementById('tc-search'); if (search) search.value = '';
+      showChat();
+      if (nextMode !== 'chat') resetCanvasForConversation();
+      const projectButton = document.getElementById('tc-code-project-btn');
+      if (projectButton) {
+        projectButton.hidden = nextMode !== 'code';
+        projectButton.style.display = nextMode === 'code' ? 'inline-flex' : 'none';
+      }
+      renderChats();
+      syncDynamic();
+    }
+    function setExternalBusy() {
+      if (window.ThomasUnifiedModes && window.ThomasUnifiedModes.refreshChrome) window.ThomasUnifiedModes.refreshChrome();
+      syncDynamic();
+    }
+    function announceModeStatus(message) {
+      const surface = document.getElementById('tc-mode-surface');
+      if (surface) surface.setAttribute('aria-label', String(message || 'Mode workspace'));
+    }
+    if (window.ThomasUnifiedModes) {
+      window.ThomasUnifiedModes.connect({
+        announce: announceModeStatus,
+        getContext: () => ({ profile: state.profile, modelId: state.modelId, modelLabel: state.modelLabel, dials: Object.assign({}, state.dials) }),
+        isBusy: () => !!state.streaming,
+        modeChanged,
+        renderHistory: renderChats,
+        setBusy: setExternalBusy,
+      });
     }
 
     // ---------- Init ----------

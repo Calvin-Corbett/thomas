@@ -673,68 +673,6 @@ function Open-BootDoctorRescue {
   }
 }
 
-function Get-ThomasListenersOnPort([int]$P) {
-  $hits = Get-ThomasListeners
-  if (-not $hits) { return @() }
-  return @($hits | Where-Object { [int]$_.Port -eq $P })
-}
-
-function Test-ThomasProcessCommand([string]$CommandLine) {
-  $cmd = [string]$CommandLine
-  if ([string]::IsNullOrWhiteSpace($cmd)) { return $false }
-  return $cmd -match '(?i)(-m\s+thomas(\.server)?(\s+serve)?\b|-m\s+thomas\.tray_agent\b|\bthomas(\.exe)?\s+serve\b)'
-}
-
-function Get-ThomasListeners {
-  $hits = @()
-  $listeners = Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue
-  if (-not $listeners) { return $hits }
-  foreach ($l in $listeners) {
-    $owningPid = [int]$l.OwningProcess
-    if ($owningPid -le 0) { continue }
-    $cmd = $null
-    try {
-      $cmd = (Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $owningPid) -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CommandLine)
-    } catch { }
-    if (Test-ThomasProcessCommand $cmd) {
-      $hits += [pscustomobject]@{
-        Port = [int]$l.LocalPort
-        Pid = $owningPid
-        CommandLine = $cmd
-      }
-    }
-  }
-  return $hits
-}
-
-function Get-ThomasHealthyCandidate {
-  param([int]$PreferredPort)
-
-  $listeners = @(Get-ThomasListeners)
-  if (-not $listeners.Count) { return $null }
-
-  $ports = @($listeners | Select-Object -ExpandProperty Port -Unique | Sort-Object)
-  $orderedPorts = @()
-  if ($ports -contains $PreferredPort) { $orderedPorts += $PreferredPort }
-  $orderedPorts += @($ports | Where-Object { [int]$_ -ne $PreferredPort })
-
-  foreach ($candidatePort in $orderedPorts) {
-    if (Wait-ThomasHttpOnPort -P ([int]$candidatePort)) {
-      return [pscustomobject]@{
-        Port = [int]$candidatePort
-        Listeners = @($listeners | Where-Object { [int]$_.Port -eq [int]$candidatePort })
-        AllListeners = $listeners
-      }
-    }
-  }
-
-  return [pscustomobject]@{
-    Port = $null
-    Listeners = @()
-    AllListeners = $listeners
-  }
-}
-
 Ensure-Installed
 
 function Invoke-FirstRunQuickSetup {
@@ -880,6 +818,10 @@ function Show-DefaultModelWarning {
     return
   }
 
+  if ($defaultModel -eq "openai_codex") {
+    return
+  }
+
   $envName = Get-CloudEnvVarName $defaultModel
   $envValue = [Environment]::GetEnvironmentVariable($envName, "Process")
   if (-not $envValue) { $envValue = [Environment]::GetEnvironmentVariable($envName, "User") }
@@ -918,34 +860,9 @@ if (Uses-OllamaLocal) {
 Show-DefaultModelWarning
 
 # Ã¢â€â‚¬Ã¢â€â‚¬ ALWAYS start fresh Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-# Kill ALL existing Thomas servers and tray agents so we always run the
-# current version from this working tree.  The old "reuse" logic caused
-# stale servers to persist after code updates.
-$allListeners = @(Get-ThomasListeners)
-if ($allListeners.Count -gt 0) {
-  $allPorts = @($allListeners | Select-Object -ExpandProperty Port -Unique)
-  Write-Host ("[thomas] Stopping {0} existing Thomas instance(s) on port(s): {1}" -f $allListeners.Count, ($allPorts -join ", "))
-  foreach ($existingPort in $allPorts) {
-    Stop-ThomasServerOnPort ([int]$existingPort) | Out-Null
-  }
-  # Also kill any orphaned tray agents that aren't listening on a port
-  try {
-    $pyProcs = Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'" -ErrorAction SilentlyContinue
-    foreach ($proc in $pyProcs) {
-      $procCmd = [string]$proc.CommandLine
-      if ($procCmd -and $procCmd -match '(?i)-m\s+thomas\.tray_agent\b') {
-        $procId = [int]$proc.ProcessId
-        if ($procId -gt 0) {
-          Write-Host ("[thomas] Stopping orphaned tray agent (pid {0})" -f $procId)
-          try { Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue } catch { }
-        }
-      }
-    }
-  } catch { }
-  Start-Sleep -Milliseconds 800
-}
-
-# Also ensure the target port is clear (non-Thomas process might hold it)
+# Always start the requested Thomas surface from this working tree without
+# enumerating or stopping unrelated listeners on other ports.
+# Stop-ThomasServerOnPort also stops a tray agent bound to this exact port.
 Stop-ThomasServerOnPort $Port | Out-Null
 
 $FreePort = Find-FreePort $Port
@@ -1084,6 +1001,22 @@ function Start-DetachedThomasServer {
     [Parameter(Mandatory = $true)][string]$BindAddress,
     [Parameter(Mandatory = $true)][int]$ServerPort
   )
+
+  # Idle self-improvement engines (code-issue, self-upgrade, UI-workflow,
+  # local-agent, workspace-sync) make continuous background LLM calls that
+  # burn the ChatGPT subscription while nobody is using Thomas (observed:
+  # one POST to chatgpt.com every ~19s, 24/7). Default them OFF for
+  # launcher-started servers until interactive use is reliable. To re-enable,
+  # set the variable to "1" in the shell before running run-ui.
+  foreach ($quietVar in @(
+      'THOMAS_CODE_ISSUE_ENGINE_ENABLED',
+      'THOMAS_SELF_UPGRADE_ENGINE_ENABLED',
+      'THOMAS_UI_WORKFLOW_ENGINE_ENABLED',
+      'THOMAS_LOCAL_AGENT_ENGINE_ENABLED',
+      'THOMAS_WORKSPACE_SYNC_ENGINE_ENABLED',
+      'THOMAS_WORKSPACE_SYNC_AUTO_PUSH')) {
+    if (-not (Test-Path "Env:$quietVar")) { Set-Item "Env:$quietVar" '0' }
+  }
 
   $logDir = Join-Path $Root 'runtime\logs'
   New-Item -ItemType Directory -Force -Path $logDir | Out-Null

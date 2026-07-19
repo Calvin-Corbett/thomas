@@ -10,6 +10,7 @@ tool registration pattern — try/except with graceful fallback).
 from __future__ import annotations
 
 import logging
+from copy import copy
 from typing import Any
 
 from thomas.marketplace.orchestrator.protocol import (
@@ -71,6 +72,25 @@ class SpecialistRegistry:
     def get(self, specialist_id: str) -> SpecialistProtocol | None:
         """Get a specialist by ID."""
         return self._specialists.get(specialist_id)
+
+    def bound_to_llm(self, llm: Any) -> SpecialistRegistry:
+        """Return a request-scoped registry whose specialists use ``llm``.
+
+        Registered specialists are long-lived process objects. Mutating their ``llm``
+        attribute for each chat request lets concurrent sessions replace one another's
+        model while a turn is running. Shallow copies preserve each specialist's tools
+        and configuration while isolating the per-request model binding. Registry health
+        and execution counters remain shared process-level telemetry.
+        """
+        bound = SpecialistRegistry()
+        bound._health = self._health
+        bound._execution_count = self._execution_count
+        bound._specialists = {}
+        for specialist_id, specialist in self._specialists.items():
+            request_specialist = copy(specialist)
+            request_specialist.llm = llm
+            bound._specialists[specialist_id] = request_specialist
+        return bound
 
     def find_by_capability(self, capability: str) -> list[SpecialistProtocol]:
         """Find all specialists with a given capability tag."""

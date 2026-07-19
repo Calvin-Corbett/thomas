@@ -88,6 +88,13 @@ def _base_config(tmp_path: Path) -> AppConfig:
     )
 
 
+def test_secret_store_root_respects_shared_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    shared_root = tmp_path / "shared-secrets"
+    monkeypatch.setenv("THOMAS_SECRET_ROOT", str(shared_root))
+
+    assert app_core._secret_store_root(_base_config(tmp_path / "memory")) == shared_root.resolve()
+
+
 async def _start_client(app: web.Application) -> TestClient:
     client = TestClient(TestServer(app))
     await client.start_server()

@@ -25,3 +25,12 @@ def test_chat_capabilities_surface_updated_autonomy_labels() -> None:
     labels = [str(item["label"]) for item in options]
     assert "L3 Agent" in labels
     assert "L4 Full Autonomy" in labels
+
+
+def test_chat_capabilities_surface_all_gpt56_reasoning_efforts() -> None:
+    cfg = ModelConfig(name="chatgpt", provider="openai_codex", model="gpt-5.6-sol", reasoning_effort="xhigh")
+    controls = profile_chat_control_map(cfg)
+
+    effort = controls["model"]["reasoning_effort"]
+    assert effort["default_value"] == "xhigh"
+    assert [item["value"] for item in effort["options"]] == ["none", "low", "medium", "high", "xhigh", "max"]

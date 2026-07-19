@@ -29,3 +29,65 @@
 ## Outcome
 
 - Pending implementation.
+
+## Failure Records
+### 2026-07-16T21:39:32+00:00 - auto_checks: Surface parity gate
+
+- runner: `auto_checks`
+- step: `Surface parity gate`
+- exit_code: `1`
+- command: `'C:\Users\corbe\AppData\Local\Programs\Python\Python312\python.exe' scripts/forge/gates/surface_parity.py`
+### 2026-07-16T21:39:32+00:00 - auto_checks: Surface parity gate
+
+- runner: `auto_checks`
+- step: `Surface parity gate`
+- exit_code: `1`
+- command: `'C:\Users\corbe\AppData\Local\Programs\Python\Python312\python.exe' scripts/forge/gates/surface_parity.py`
+### 2026-07-16T22:28:48+00:00 - auto_checks: Surface parity gate
+
+- runner: `auto_checks`
+- step: `Surface parity gate`
+- exit_code: `1`
+- command: `'C:\Users\corbe\AppData\Local\Programs\Python\Python312\python.exe' scripts/forge/gates/surface_parity.py`
+### 2026-07-16T22:28:48+00:00 - auto_checks: Surface parity gate
+
+- runner: `auto_checks`
+- step: `Surface parity gate`
+- exit_code: `1`
+- command: `'C:\Users\corbe\AppData\Local\Programs\Python\Python312\python.exe' scripts/forge/gates/surface_parity.py`
+### 2026-07-16T22:51:30+00:00 - auto_checks: Surface parity gate
+
+- runner: `auto_checks`
+- step: `Surface parity gate`
+- exit_code: `1`
+- command: `'C:\Users\corbe\AppData\Local\Programs\Python\Python312\python.exe' scripts/forge/gates/surface_parity.py`
+### 2026-07-16T22:51:30+00:00 - auto_checks: Surface parity gate
+
+- runner: `auto_checks`
+- step: `Surface parity gate`
+- exit_code: `1`
+- command: `'C:\Users\corbe\AppData\Local\Programs\Python\Python312\python.exe' scripts/forge/gates/surface_parity.py`
+### 2026-07-17T00:03:38+00:00 - auto_checks: Surface parity gate
+
+- runner: `auto_checks`
+- step: `Surface parity gate`
+- exit_code: `1`
+- command: `'C:\Users\corbe\AppData\Local\Programs\Python\Python312\python.exe' scripts/forge/gates/surface_parity.py`
+### 2026-07-17T00:03:38+00:00 - auto_checks: Surface parity gate
+
+- runner: `auto_checks`
+- step: `Surface parity gate`
+- exit_code: `1`
+- command: `'C:\Users\corbe\AppData\Local\Programs\Python\Python312\python.exe' scripts/forge/gates/surface_parity.py`
+### 2026-07-18T19:59:21+00:00 - doc: Module audit gate
+
+- runner: `doc`
+- step: `Module audit gate`
+- exit_code: `1`
+- command: `'C:\Users\corbe\AppData\Local\Programs\Python\Python312\python.exe' scripts/forge/gates/module_audit_gate.py`
+### 2026-07-18T20:00:46+00:00 - doc: Plan structure gate
+
+- runner: `doc`
+- step: `Plan structure gate`
+- exit_code: `1`
+- command: `'C:\Users\corbe\AppData\Local\Programs\Python\Python312\python.exe' scripts/forge/gates/plan_structure_gate.py`

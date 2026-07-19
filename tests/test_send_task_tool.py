@@ -35,14 +35,14 @@ class _FakeLLM:
         return _gen()
 
 
-async def _run(scripts, send_task):
+async def _run(scripts, send_task, operate=None):
     spec = ReasoningSpecialist(config=None, llm=_FakeLLM(scripts))
     contract = DelegationContract(
         specialist_id="reasoning",
         task_description="x",
         allowed_tools={"reasoning"},
         timeout_seconds=0,
-        input_context={"send_task": send_task},
+        input_context={"send_task": send_task, "operate": operate},
     )
     token = CapabilityToken(
         specialist_id="reasoning",
@@ -106,6 +106,86 @@ class TestSendTaskTool(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(llm.calls[0]["tools"])
         self.assertIsNone(llm.calls[1]["tools"])
 
+    async def test_post_dispatch_completion_claim_is_rewritten_before_emission(self):
+        async def send_task(*, title, instructions, surface=""):
+            return None
+
+        scripts = [
+            [
+                StreamEvent(
+                    type="tool_call_end",
+                    data={
+                        "id": "c1",
+                        "name": "send_task",
+                        "arguments": '{"title":"Build three files","instructions":"Build them"}',
+                    },
+                ),
+                StreamEvent(type="done"),
+            ],
+            [
+                StreamEvent(type="token", data={"text": "Done — I built all three files and they are ready."}),
+                StreamEvent(type="done"),
+            ],
+        ]
+
+        events, _ = await _run(scripts, send_task)
+        visible = "".join(str(event.get("text") or "") for event in events if event.get("type") == "text")
+        done = next(event for event in events if event.get("type") == "done")
+        self.assertIn("running now", visible)
+        self.assertNotIn("built all three", visible.lower())
+        self.assertIn("running now", str(done.get("content") or ""))
+
+    async def test_pre_tool_completion_claim_is_never_streamed(self):
+        async def send_task(*, title, instructions, surface=""):
+            return None
+
+        scripts = [
+            [
+                StreamEvent(type="token", data={"text": "Done — I built all three files."}),
+                StreamEvent(
+                    type="tool_call_end",
+                    data={
+                        "id": "c1",
+                        "name": "send_task",
+                        "arguments": '{"title":"Build three files","instructions":"Build them"}',
+                    },
+                ),
+                StreamEvent(type="done"),
+            ],
+            [
+                StreamEvent(type="token", data={"text": "The three builds are running now."}),
+                StreamEvent(type="done"),
+            ],
+        ]
+
+        events, _ = await _run(scripts, send_task)
+        visible = "".join(str(event.get("text") or "") for event in events if event.get("type") == "text")
+        self.assertNotIn("built all three", visible.lower())
+        self.assertIn("running now", visible.lower())
+
+    async def test_text_form_tool_call_drops_false_pre_call_completion_claim(self):
+        async def send_task(*, title, instructions, surface=""):
+            return None
+
+        scripts = [
+            [
+                StreamEvent(
+                    type="token",
+                    data={
+                        "text": (
+                            "Done — I built all three files. send_task "
+                            '{"title":"Build three files","instructions":"Build them"}'
+                        )
+                    },
+                ),
+                StreamEvent(type="done"),
+            ]
+        ]
+        events, _ = await _run(scripts, send_task)
+        visible = "".join(str(event.get("text") or "") for event in events if event.get("type") == "text")
+        self.assertNotIn("built all three", visible.lower())
+        self.assertTrue(any(event.get("type") == "task_request" for event in events))
+
     async def test_no_tool_call_means_no_dispatch_no_fake(self):
         called = {"n": 0}
 
@@ -128,6 +208,49 @@ class TestSendTaskTool(unittest.IsolatedAsyncioTestCase):
         scripts = [[StreamEvent(type="token", data={"text": "hi there"}), StreamEvent(type="done")]]
         _, llm = await _run(scripts, None)
         self.assertIsNone(llm.calls[0]["tools"])  # no send_task wired -> no tools offered
+
+    async def test_governed_operator_call_returns_effect_receipt_to_model(self):
+        captured = {}
+
+        async def operate(*, action, key="", value=None):
+            captured.update({"action": action, "key": key, "value": value})
+            return {
+                "ok": True,
+                "action": action,
+                "reversible": True,
+                "evidence": {"previous_value": "light", "observed_value": value},
+            }
+
+        scripts = [
+            [
+                StreamEvent(
+                    type="tool_call_end",
+                    data={
+                        "id": "op1",
+                        "name": "operate",
+                        "arguments": '{"action":"preferences.set","key":"theme","value":"dark"}',
+                    },
+                ),
+                StreamEvent(type="done"),
+            ],
+            [
+                StreamEvent(type="token", data={"text": "Done — your theme is dark, and I verified it."}),
+                StreamEvent(type="done"),
+            ],
+        ]
+
+        events, llm = await _run(scripts, None, operate=operate)
+
+        self.assertEqual(
+            captured,
+            {"action": "preferences.set", "key": "theme", "value": "dark"},
+        )
+        receipt = next(e for e in events if e.get("type") == "tool_result" and e.get("name") == "operate")
+        self.assertTrue(receipt.get("ok"))
+        done = next(e for e in events if e.get("type") == "done")
+        self.assertIn("verified", done.get("content", ""))
+        offered = {spec["function"]["name"] for spec in llm.calls[0]["tools"]}
+        self.assertIn("operate", offered)
 
 
 if __name__ == "__main__":

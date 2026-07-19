@@ -5,6 +5,7 @@ Contains the EmailCalendarService class and email operation methods.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from typing import Any
 
@@ -25,6 +26,8 @@ class _EmailCalendarService:
     def __init__(self, provider: _Provider, config: Any) -> None:
         self.provider = provider
         self.config = config
+        self._send_idempotency_cache: dict[str, dict[str, Any]] = {}
+        self._send_idempotency_lock = asyncio.Lock()
 
     async def email_read(self, count: int, filter: str | None, folder: str) -> list[dict[str, Any]]:
         """Read recent email messages."""
@@ -36,11 +39,33 @@ class _EmailCalendarService:
             raise ToolError("message_id is required.")
         return await self.provider.email_get(message_id=message_id)
 
-    async def email_send(self, to: str, subject: str, body: str) -> dict[str, Any]:
+    async def email_send(
+        self,
+        to: str,
+        subject: str,
+        body: str,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
         """Send an email."""
         if not to or not subject:
             raise ToolError("to and subject are required.")
-        return await self.provider.email_send(to=to, subject=subject, body=body)
+        key = str(idempotency_key or "").strip()
+        if not key:
+            return await self.provider.email_send(to=to, subject=subject, body=body)
+
+        async with self._send_idempotency_lock:
+            cached = self._send_idempotency_cache.get(key)
+            if cached is not None:
+                return {**cached, "idempotent_replay": True}
+            result = await self.provider.email_send(to=to, subject=subject, body=body)
+            stored = dict(result or {})
+            stored["idempotency_key"] = key
+            stored["idempotent_replay"] = False
+            self._send_idempotency_cache[key] = stored
+            if len(self._send_idempotency_cache) > 512:
+                oldest = next(iter(self._send_idempotency_cache))
+                self._send_idempotency_cache.pop(oldest, None)
+            return dict(stored)
 
     async def email_reply(self, message_id: str, body: str) -> dict[str, Any]:
         """Reply to an email."""

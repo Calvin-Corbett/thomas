@@ -4,9 +4,29 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Thomas Agent Settings</title>
-  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@1.4.0/src/index.css" />
+  <style>
+    /* Local, deterministic icon fallback: Settings must work fully offline. */
+    .ph { display: inline-grid; place-items: center; width: 1.1em; font-style: normal; font-weight: 700; }
+    .ph::before { content: "\2022"; }
+    .ph-magnifying-glass::before { content: "\2315"; }
+    .ph-gear::before { content: "\2699"; }
+    .ph-cpu::before { content: "\25A3"; }
+    .ph-plug::before { content: "\238B"; }
+    .ph-robot::before { content: "\25C9"; }
+    .ph-shield-check::before { content: "\25C6"; }
+    .ph-palette::before { content: "\25D2"; }
+    .ph-wrench::before { content: "\25C7"; }
+    .ph-check::before { content: "\2713"; }
+    .ph-arrow-counterclockwise::before { content: "\21B6"; }
+    .ph-eye::before { content: "\25C9"; }
+    .ph-trash::before, .ph-x::before { content: "\00D7"; }
+    .ph-download::before { content: "\2193"; }
+    .ph-warning::before { content: "!"; }
+    .ph-floppy-disk::before, .ph-desktop::before { content: "\25A3"; }
+    .ph-arrow-clockwise::before { content: "\21BB"; }
+  </style>
   
-  <link rel="stylesheet" href="settings.style01.css">
+  <link rel="stylesheet" href="/static/settings.style01.css">
 
 </head>
 <body>
@@ -101,6 +121,10 @@
               </div>
               <div class="setting-control">
                 <select id="defaultModel" class="dropdown-select">
+                  <option value="gpt-5.6-sol">GPT-5.6 Sol</option>
+                  <option value="gpt-5.6-terra">GPT-5.6 Terra</option>
+                  <option value="gpt-5.6-luna">GPT-5.6 Luna</option>
+                  <option value="gpt-5.5">GPT-5.5</option>
                   <option value="gpt-4">OpenAI GPT-4</option>
                   <option value="gpt-3.5">OpenAI GPT-3.5 Turbo</option>
                   <option value="claude-opus">Anthropic Claude Opus 4.6</option>
@@ -117,7 +141,8 @@
               </div>
               <div class="setting-control">
                 <select id="defaultProvider" class="dropdown-select">
-                  <option value="openai">OpenAI</option>
+                  <option value="openai_codex">ChatGPT / Codex (signed in)</option>
+                  <option value="openai">OpenAI API (API key)</option>
                   <option value="anthropic">Anthropic</option>
                   <option value="google">Google</option>
                   <option value="ollama">Ollama</option>
@@ -220,6 +245,10 @@
               </div>
               <div class="setting-control">
                 <select id="openaiModel" class="dropdown-select">
+                  <option value="gpt-5.6-sol">GPT-5.6 Sol</option>
+                  <option value="gpt-5.6-terra">GPT-5.6 Terra</option>
+                  <option value="gpt-5.6-luna">GPT-5.6 Luna</option>
+                  <option value="gpt-5.5">GPT-5.5</option>
                   <option value="gpt-4">GPT-4</option>
                   <option value="gpt-3.5">GPT-3.5 Turbo</option>
                   <option value="gpt-4-turbo">GPT-4 Turbo</option>
@@ -1050,7 +1079,7 @@
   </div>
 
   
-  <script src="settings.script01.js"></script>
+  <script src="/static/settings.script01.js"></script>
 
 </body>
 </html>

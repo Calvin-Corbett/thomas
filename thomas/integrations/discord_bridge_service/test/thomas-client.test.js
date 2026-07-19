@@ -28,9 +28,13 @@ test("ThomasClient resolves once the done event arrives", async () => {
   const originalFetch = global.fetch;
   const encoder = new TextEncoder();
   let streamCancelled = false;
+  let requestedUrl = "";
+  let requestedPayload = {};
 
-  global.fetch = async () =>
-    new Response(
+  global.fetch = async (url, options) => {
+    requestedUrl = String(url);
+    requestedPayload = JSON.parse(String(options?.body || "{}"));
+    return new Response(
       new ReadableStream({
         start(controller) {
           controller.enqueue(encoder.encode(JSON.stringify({ type: "text", text: "pong" }) + "\n"));
@@ -47,6 +51,7 @@ test("ThomasClient resolves once the done event arrives", async () => {
         },
       },
     );
+  };
 
   try {
     const client = new ThomasClient({
@@ -63,6 +68,10 @@ test("ThomasClient resolves once the done event arrives", async () => {
 
     assert.equal(result.text, "pong");
     assert.equal(streamCancelled, true);
+    assert.equal(requestedUrl, "http://127.0.0.1:8899/api/v2/chat");
+    assert.equal(requestedPayload.session_id, "test-session");
+    assert.equal(requestedPayload.message, "Say only: pong");
+    assert.equal("text" in requestedPayload, false);
   } finally {
     global.fetch = originalFetch;
   }

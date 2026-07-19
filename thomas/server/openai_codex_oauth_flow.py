@@ -34,6 +34,14 @@ OPENAI_CODEX_SCOPES = os.environ.get(
 OPENAI_CODEX_ORIGINATOR = os.environ.get("THOMAS_OPENAI_CODEX_ORIGINATOR", "thomas")
 
 _TOKEN_SECRET_PREFIX = "__openai_codex_oauth__:"
+_CANONICAL_OPENAI_CODEX_PROFILE = "openai_codex"
+_OPENAI_CODEX_PROFILE_ALIASES = (
+    _CANONICAL_OPENAI_CODEX_PROFILE,
+    "chatgpt",
+    "codex",
+    "openai-codex",
+    "forgecode",
+)
 
 
 @dataclass(frozen=True)
@@ -49,11 +57,35 @@ class OAuthStart:
 
 def normalize_openai_codex_profile(profile: str | None = None) -> str:
     value = str(profile or "").strip()
-    return value or "chatgpt"
+    return value or _CANONICAL_OPENAI_CODEX_PROFILE
+
+
+def canonical_openai_codex_secret_profile(profile: str | None = None) -> str:
+    """Return the shared secret identity for compatible ChatGPT/Codex profiles."""
+
+    value = normalize_openai_codex_profile(profile)
+    if value.casefold() in _OPENAI_CODEX_PROFILE_ALIASES:
+        return _CANONICAL_OPENAI_CODEX_PROFILE
+    return value
+
+
+def _raw_openai_codex_secret_key(profile: str) -> str:
+    return f"{_TOKEN_SECRET_PREFIX}{profile}"
 
 
 def openai_codex_secret_key(profile: str | None = None) -> str:
-    return f"{_TOKEN_SECRET_PREFIX}{normalize_openai_codex_profile(profile)}"
+    return _raw_openai_codex_secret_key(canonical_openai_codex_secret_profile(profile))
+
+
+def openai_codex_secret_key_candidates(profile: str | None = None) -> tuple[str, ...]:
+    """Return canonical-first keys plus legacy alias keys for migration reads."""
+
+    value = normalize_openai_codex_profile(profile)
+    canonical = canonical_openai_codex_secret_profile(value)
+    profiles = (
+        (canonical, *_OPENAI_CODEX_PROFILE_ALIASES) if canonical == _CANONICAL_OPENAI_CODEX_PROFILE else (canonical,)
+    )
+    return tuple(dict.fromkeys(_raw_openai_codex_secret_key(item) for item in profiles))
 
 
 def generate_pkce_pair() -> tuple[str, str]:

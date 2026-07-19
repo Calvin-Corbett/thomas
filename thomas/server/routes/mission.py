@@ -24,6 +24,9 @@ from .mission_support import _discover_repo_root
 from .mission_tasks import build_mission_task_handlers
 from .mission_workflows import build_mission_workflow_handlers
 
+APP_MISSION_REQUIRE_STORE = web.AppKey("mission_require_store", object)
+APP_MISSION_WAKEUP_ENGINE = web.AppKey("mission_wakeup_engine", object)
+
 
 async def _serve_mission_page(web_dir: Path) -> web.StreamResponse:
     """Serve the mission.html page."""
@@ -63,6 +66,8 @@ def register_mission_routes(
     )
 
     _mission_bootstrap_autonomy, _mission_require_store, _mission_wakeup_engine = build_mission_autonomy_helpers(app)
+    app[APP_MISSION_REQUIRE_STORE] = _mission_require_store
+    app[APP_MISSION_WAKEUP_ENGINE] = _mission_wakeup_engine
 
     # Build handlers from modular mission modules
     (

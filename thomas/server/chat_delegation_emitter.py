@@ -25,6 +25,9 @@ class _DelegationEmitter:
                 "is_canvas": bool(record.get("is_canvas")),
                 "canvas_html": record.get("canvas_html", ""),
                 "canvas_status": record.get("canvas_status", ""),
+                "canvas_review_status": record.get("canvas_review_status", ""),
+                "proof_status": record.get("proof_status", "missing"),
+                "receipt": record.get("receipt") or {},
                 **bot.to_event_dict(),
             }
         )
@@ -45,6 +48,9 @@ class _DelegationEmitter:
                 "is_canvas": bool(record.get("is_canvas")),
                 "canvas_html": record.get("canvas_html", ""),
                 "canvas_status": record.get("canvas_status", ""),
+                "canvas_review_status": record.get("canvas_review_status", ""),
+                "proof_status": record.get("proof_status", "missing"),
+                "receipt": record.get("receipt") or {},
                 **bot.to_event_dict(),
             }
         )
@@ -63,11 +69,16 @@ class _DelegationEmitter:
                 "artifact_url": record.get("artifact_url", ""),
                 "artifact_name": record.get("artifact_name", ""),
                 "artifact_kind": record.get("artifact_kind", ""),
+                "artifacts": record.get("artifacts") or [],
+                "proof_status": record.get("proof_status", "missing"),
+                "proof": record.get("proof") or {},
+                "receipt": record.get("receipt") or {},
                 "runtime_profile": record.get("runtime_profile") or {},
                 "specialist_id": specialist_id,
                 "is_canvas": bool(record.get("is_canvas")),
                 "canvas_html": record.get("canvas_html", ""),
                 "canvas_status": record.get("canvas_status", ""),
+                "canvas_review_status": record.get("canvas_review_status", ""),
                 **bot.to_event_dict(),
             }
         )
@@ -83,6 +94,9 @@ class _DelegationEmitter:
                 "state": "failed",
                 "summary": record.get("summary", ""),
                 "last_progress": text,
+                "proof_status": record.get("proof_status", "failed"),
+                "proof": record.get("proof") or {},
+                "receipt": record.get("receipt") or {},
                 "runtime_profile": record.get("runtime_profile") or {},
                 "specialist_id": specialist_id,
                 **bot.to_event_dict(),

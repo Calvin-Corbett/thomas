@@ -323,6 +323,8 @@ async def _run_chat(
     model_name: str | None,
     *,
     autonomy_level: int = 3,
+    max_iterations: int | None = None,
+    job_type: str | None = None,
 ) -> None:
     """Run a single chat interaction with streaming output."""
     # Resolve via sys.modules so tests that monkeypatch the symbols on
@@ -367,7 +369,11 @@ async def _run_chat(
     try:
         tool_active = False
         tool_args: dict[str, str] = {}
-        async for event in agent.run(prompt):
+        async for event in agent.run(
+            prompt,
+            max_iterations=max_iterations,
+            job_type=job_type,
+        ):
             if event.type == EventType.AGENT_START:
                 route = event.data.get("route", {}) if isinstance(event.data.get("route"), dict) else {}
                 mode = route.get("mode") or event.data.get("mode") or "auto"
@@ -415,6 +421,10 @@ async def _run_chat(
                 ms = event.data["duration_ms"]
                 status = "\033[32mok\033[0m" if ok else "\033[31mfailed\033[0m"
                 sys.stdout.write(f"\033[90m[{name}: {status} {ms:.0f}ms]\033[0m\n")
+                if not ok:
+                    failure_detail = str(event.data.get("result_text") or event.data.get("result") or "").strip()
+                    if failure_detail:
+                        sys.stdout.write(f"{failure_detail[:1000]}\n")
                 sys.stdout.flush()
                 tool_active = False
                 tool_id = str(event.data.get("tool_id", ""))

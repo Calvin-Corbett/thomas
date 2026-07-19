@@ -616,7 +616,7 @@ def test_virtual_office_workspace_wires_editor_roster_and_agents() -> None:
     assert "function officeDraftJoinAgentChatChunks(chunksRaw = [])" in js
     assert "function officeDraftBuildAgentChatRequestPayload(agent, userTextRaw)" in js
     assert "async function officeDraftRequestAgentChatReply(agent, userTextRaw)" in js
-    assert "const chatEndpoint = window.__THOMAS_CHAT_V2__ === false ? '/api/chat' : '/api/v2/chat';" in js
+    assert "const chatEndpoint = '/api/v2/chat';" in js
     assert "payload.session_id = officeDraftAgentChatSessionId(agent);" in js
     assert "payload.office_agent_chat = {" in js
     assert "payload.model_id = modelId || undefined;" in js

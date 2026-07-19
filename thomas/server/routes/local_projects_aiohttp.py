@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
+import secrets
 import shutil
 import subprocess
+import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -18,6 +22,15 @@ from thomas.server.routes.deliverable_aiohttp import (
     deliverable_entry,
     deliverable_kind,
     deliverable_url,
+)
+from thomas.server.routes.local_project_workspace import (
+    _find_session_owner,
+    _library_entry_status,
+    _library_file_receipt,
+    _save_project_workspace,
+    _session_preview,
+    _workspace_state,
+    build_project_chat_context,
 )
 from thomas.server.routes.local_projects_helpers_aiohttp import (
     _MAX_PROJECTS,
@@ -384,6 +397,257 @@ def register_local_project_routes(
             }
         )
 
+    async def api_local_project_context(request: web.Request) -> web.Response:
+        require_api_access(request)
+        require_loopback(request)
+        payload = await read_json(request)
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="payload must be a JSON object")
+        project_id = _safe_text(request.match_info.get("project_id"))
+        projects = _refresh_projects(request.app)
+        index, project = _find_project(projects, project_id)
+        workspace = _workspace_state(project)
+        if "objective" in payload:
+            workspace["objective"] = _safe_text(payload.get("objective"))[:2000]
+        if "instructions" in payload:
+            workspace["instructions"] = _safe_text(payload.get("instructions"))[:4000]
+        _save_project_workspace(request.app, projects, index, project, workspace)
+        return web.json_response({"ok": True, "project_id": project_id, "workspace": workspace})
+
+    async def api_local_project_chat_attach(request: web.Request) -> web.Response:
+        require_api_access(request)
+        require_loopback(request)
+        payload = await read_json(request)
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="payload must be a JSON object")
+        project_id = _safe_text(request.match_info.get("project_id"))
+        session_id = _safe_text(payload.get("session_id") or payload.get("sessionId"))
+        if not session_id:
+            raise web.HTTPBadRequest(text="session_id is required")
+        projects = _refresh_projects(request.app)
+        index, project = _find_project(projects, project_id)
+        owner = _find_session_owner(projects, session_id)
+        if owner and owner != project_id:
+            raise web.HTTPConflict(text="session is already attached to a different project")
+        preview = await _session_preview(request.app, session_id, message_limit=2)
+        if not preview["available"]:
+            raise web.HTTPNotFound(text="persisted chat session not found")
+        workspace = _workspace_state(project)
+        chats = workspace["chats"]
+        existing = next((row for row in chats if _safe_text(row.get("session_id")) == session_id), None)
+        record = existing or {"session_id": session_id, "attached_at": _utc_now_iso()}
+        record["title"] = _safe_text(payload.get("title"))[:200] or _safe_text(record.get("title")) or "Project chat"
+        record["pinned"] = bool(payload.get("pinned", record.get("pinned", False)))
+        if existing is None:
+            chats.append(record)
+        workspace["chats"] = chats[-100:]
+        _save_project_workspace(request.app, projects, index, project, workspace)
+        return web.json_response({"ok": True, "project_id": project_id, "chat": record, "preview": preview})
+
+    async def api_local_project_chat_update(request: web.Request) -> web.Response:
+        require_api_access(request)
+        require_loopback(request)
+        payload = await read_json(request)
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="payload must be a JSON object")
+        project_id = _safe_text(request.match_info.get("project_id"))
+        session_id = _safe_text(request.match_info.get("session_id"))
+        projects = _refresh_projects(request.app)
+        index, project = _find_project(projects, project_id)
+        workspace = _workspace_state(project)
+        record = next(
+            (row for row in workspace["chats"] if _safe_text(row.get("session_id")) == session_id),
+            None,
+        )
+        if record is None:
+            raise web.HTTPNotFound(text="chat is not attached to this project")
+        if "title" in payload:
+            record["title"] = _safe_text(payload.get("title"))[:200] or "Project chat"
+        if "pinned" in payload:
+            record["pinned"] = bool(payload.get("pinned"))
+        _save_project_workspace(request.app, projects, index, project, workspace)
+        return web.json_response({"ok": True, "project_id": project_id, "chat": record})
+
+    async def api_local_project_chat_remove(request: web.Request) -> web.Response:
+        require_api_access(request)
+        require_loopback(request)
+        project_id = _safe_text(request.match_info.get("project_id"))
+        session_id = _safe_text(request.match_info.get("session_id"))
+        projects = _refresh_projects(request.app)
+        index, project = _find_project(projects, project_id)
+        workspace = _workspace_state(project)
+        before = len(workspace["chats"])
+        workspace["chats"] = [row for row in workspace["chats"] if _safe_text(row.get("session_id")) != session_id]
+        if len(workspace["chats"]) == before:
+            raise web.HTTPNotFound(text="chat is not attached to this project")
+        _save_project_workspace(request.app, projects, index, project, workspace)
+        return web.json_response({"ok": True, "project_id": project_id, "removed_session_id": session_id})
+
+    async def api_local_project_library_add(request: web.Request) -> web.Response:
+        require_api_access(request)
+        require_loopback(request)
+        payload = await read_json(request)
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="payload must be a JSON object")
+        project_id = _safe_text(request.match_info.get("project_id"))
+        projects = _refresh_projects(request.app)
+        index, project = _find_project(projects, project_id)
+        receipt = _library_file_receipt(
+            project,
+            _safe_text(payload.get("path")),
+            title=_safe_text(payload.get("title")),
+        )
+        workspace = _workspace_state(project)
+        workspace["library"] = [row for row in workspace["library"] if _safe_text(row.get("id")) != receipt["id"]] + [
+            receipt
+        ]
+        _save_project_workspace(request.app, projects, index, project, workspace)
+        return web.json_response({"ok": True, "project_id": project_id, "entry": receipt})
+
+    async def api_local_project_library_remove(request: web.Request) -> web.Response:
+        require_api_access(request)
+        require_loopback(request)
+        project_id = _safe_text(request.match_info.get("project_id"))
+        entry_id = _safe_text(request.match_info.get("entry_id"))
+        projects = _refresh_projects(request.app)
+        index, project = _find_project(projects, project_id)
+        workspace = _workspace_state(project)
+        before = len(workspace["library"])
+        workspace["library"] = [row for row in workspace["library"] if _safe_text(row.get("id")) != entry_id]
+        if len(workspace["library"]) == before:
+            raise web.HTTPNotFound(text="library entry not found")
+        _save_project_workspace(request.app, projects, index, project, workspace)
+        return web.json_response({"ok": True, "project_id": project_id, "removed_entry_id": entry_id})
+
+    async def api_local_project_resume(request: web.Request) -> web.Response:
+        require_api_access(request)
+        require_loopback(request)
+        project_id = _safe_text(request.match_info.get("project_id"))
+        projects = _refresh_projects(request.app)
+        _, project = _find_project(projects, project_id)
+        workspace = _workspace_state(project)
+        chat_previews = [
+            {
+                **dict(chat),
+                **await _session_preview(request.app, _safe_text(chat.get("session_id"))),
+            }
+            for chat in workspace["chats"]
+        ]
+        library = [_library_entry_status(project, row) for row in workspace["library"]]
+        return web.json_response(
+            {
+                "ok": True,
+                "project_id": project_id,
+                "project_name": _safe_text(project.get("name")),
+                "objective": workspace["objective"],
+                "instructions": workspace["instructions"],
+                "chats": chat_previews,
+                "pinned_chats": [row for row in chat_previews if bool(row.get("pinned"))],
+                "library": library,
+                "stale_library_count": sum(1 for row in library if row.get("stale")),
+                "updated_at": workspace["updated_at"],
+            }
+        )
+
+    async def api_local_project_share_create(request: web.Request) -> web.Response:
+        require_api_access(request)
+        require_loopback(request)
+        payload = await read_json(request)
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="payload must be a JSON object")
+        project_id = _safe_text(request.match_info.get("project_id"))
+        projects = _refresh_projects(request.app)
+        index, project = _find_project(projects, project_id)
+        workspace = _workspace_state(project)
+        include_all_chats = bool(payload.get("include_all_chats", False))
+        chat_rows = (
+            workspace["chats"] if include_all_chats else [row for row in workspace["chats"] if row.get("pinned")]
+        )
+        chats = []
+        for row in chat_rows:
+            preview = await _session_preview(request.app, _safe_text(row.get("session_id")))
+            if preview["available"]:
+                chats.append({"title": _safe_text(row.get("title")), "messages": preview["messages"]})
+        library = []
+        for row in workspace["library"]:
+            status = _library_entry_status(project, row)
+            if not status["stale"]:
+                library.append(
+                    {
+                        "title": status["title"],
+                        "path": status["path"],
+                        "sha256": status["sha256"],
+                    }
+                )
+        ttl = max(60, min(_safe_int(payload.get("expires_in_seconds"), 3600), 7 * 24 * 3600))
+        share_id = secrets.token_urlsafe(12)
+        token = secrets.token_urlsafe(24)
+        snapshot = {
+            "schema_version": "thomas.project.share.v1",
+            "share_id": share_id,
+            "project_id": project_id,
+            "project_name": _safe_text(project.get("name")),
+            "objective": workspace["objective"],
+            "chats": chats,
+            "library": library,
+            "created_at": _utc_now_iso(),
+            "expires_at_epoch": int(time.time()) + ttl,
+            "permissions": ["read"],
+        }
+        share_record = {
+            "share_id": share_id,
+            "token_sha256": hashlib.sha256(token.encode("utf-8")).hexdigest(),
+            "expires_at_epoch": snapshot["expires_at_epoch"],
+            "created_at": snapshot["created_at"],
+            "snapshot": json.loads(json.dumps(snapshot, ensure_ascii=False)),
+        }
+        workspace["shares"].append(share_record)
+        _save_project_workspace(request.app, projects, index, project, workspace)
+        return web.json_response(
+            {
+                "ok": True,
+                "project_id": project_id,
+                "share_id": share_id,
+                "token": token,
+                "expires_at_epoch": snapshot["expires_at_epoch"],
+                "permissions": ["read"],
+            }
+        )
+
+    async def api_local_project_share_get(request: web.Request) -> web.Response:
+        require_loopback(request)
+        share_id = _safe_text(request.match_info.get("share_id"))
+        token = _safe_text(request.query.get("token"))
+        record = None
+        for project in _refresh_projects(request.app):
+            workspace = _workspace_state(project)
+            record = next((row for row in workspace["shares"] if _safe_text(row.get("share_id")) == share_id), None)
+            if record is not None:
+                break
+        if record is None:
+            raise web.HTTPNotFound(text="share not found")
+        supplied = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        if not token or not secrets.compare_digest(supplied, _safe_text(record.get("token_sha256"))):
+            raise web.HTTPForbidden(text="invalid share token")
+        if _safe_int(record.get("expires_at_epoch"), 0) < int(time.time()):
+            raise web.HTTPGone(text="share expired")
+        return web.json_response({"ok": True, "share": dict(record.get("snapshot") or {})})
+
+    async def api_local_project_share_revoke(request: web.Request) -> web.Response:
+        require_api_access(request)
+        require_loopback(request)
+        project_id = _safe_text(request.match_info.get("project_id"))
+        share_id = _safe_text(request.match_info.get("share_id"))
+        projects = _refresh_projects(request.app)
+        index, project = _find_project(projects, project_id)
+        workspace = _workspace_state(project)
+        before = len(workspace["shares"])
+        workspace["shares"] = [row for row in workspace["shares"] if _safe_text(row.get("share_id")) != share_id]
+        if len(workspace["shares"]) == before:
+            raise web.HTTPNotFound(text="share not found")
+        _save_project_workspace(request.app, projects, index, project, workspace)
+        return web.json_response({"ok": True, "project_id": project_id, "revoked_share_id": share_id})
+
     app.router.add_get("/api/local/projects", api_local_projects_list)
     app.router.add_post("/api/local/projects/import", api_local_projects_import)
     app.router.add_post("/api/local/projects/link", api_local_projects_import)
@@ -392,4 +656,14 @@ def register_local_project_routes(
     app.router.add_patch("/api/local/projects/{project_id}/layout", api_local_project_layout)
     app.router.add_post("/api/local/projects/{project_id}/action", api_local_project_action)
     app.router.add_post("/api/local/projects/{project_id}/launch", api_local_project_action)
+    app.router.add_patch("/api/local/projects/{project_id}/context", api_local_project_context)
+    app.router.add_post("/api/local/projects/{project_id}/chats", api_local_project_chat_attach)
+    app.router.add_patch("/api/local/projects/{project_id}/chats/{session_id}", api_local_project_chat_update)
+    app.router.add_delete("/api/local/projects/{project_id}/chats/{session_id}", api_local_project_chat_remove)
+    app.router.add_post("/api/local/projects/{project_id}/library", api_local_project_library_add)
+    app.router.add_delete("/api/local/projects/{project_id}/library/{entry_id}", api_local_project_library_remove)
+    app.router.add_get("/api/local/projects/{project_id}/resume", api_local_project_resume)
+    app.router.add_post("/api/local/projects/{project_id}/shares", api_local_project_share_create)
+    app.router.add_delete("/api/local/projects/{project_id}/shares/{share_id}", api_local_project_share_revoke)
+    app.router.add_get("/api/local/project-shares/{share_id}", api_local_project_share_get)
     app.router.add_delete("/api/local/projects/{project_id}", api_local_projects_delete)

@@ -2,7 +2,8 @@
 
 A forge event is a single JSON object printed on its own line to the dispatch process's
 stdout, flushed the instant it is produced. Each is ``{"fc": <kind>, ...}`` where kind is:
-  * ``say``         — the agent's natural-language message text
+  * ``say``         — a natural-language progress update from the agent
+  * ``final``       — the agent's completed conversational handoff
   * ``reason``      — the agent's private reasoning (rendered collapsed/optional)
   * ``insight``     — a MID-TASK INSIGHT: the model's salient interim observation,
                       surfaced LIVE from the SAME reasoning stream as ``reason``.
@@ -335,7 +336,7 @@ def translate_claude_event(line: str, state: _StreamState | None = None) -> list
         if is_err:
             events.append({FORGE_EVENT_KEY: "error", "text": txt or "claude reported an error"})
         elif txt:
-            events.append({FORGE_EVENT_KEY: "say", "text": txt})
+            events.append({FORGE_EVENT_KEY: "final", "text": txt})
     return events
 
 

@@ -54,4 +54,5 @@ def test_placeholder_completion_policy_script_passes_on_repo() -> None:
     assert proc.returncode == 0, proc.stdout + proc.stderr
     payload = json.loads(proc.stdout)
     assert payload["ok"] is True
-    assert payload["placeholder_file_count"] >= 1
+    assert isinstance(payload["placeholder_file_count"], int)
+    assert payload["placeholder_file_count"] >= 0

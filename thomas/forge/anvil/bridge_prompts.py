@@ -1,4 +1,5 @@
 """Prompt composition helpers for all evolve bridge dispatch paths."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -39,7 +40,16 @@ def _format_history(history: Any) -> str:
     return "\n\n".join(lines[-12:])  # keep the most recent turns; bound prompt size
 
 
-def compose_headless_prompt(goal: str, *, definition: str = "", plan: str = "", history: Any = None) -> str:
+def compose_headless_prompt(
+    goal: str,
+    *,
+    definition: str = "",
+    plan: str = "",
+    history: Any = None,
+    file_access: str = "project",
+    guardrails: str = "guarded",
+    autonomy_level: int = 3,
+) -> str:
     """Compose one turn for Thomas Code — a conversational coding ASSISTANT, not a
     forced build order.
 
@@ -63,7 +73,9 @@ def compose_headless_prompt(goal: str, *, definition: str = "", plan: str = "", 
         "change something. For a greeting, a question, or small talk, just reply in "
         "plain language — do NOT read or edit any files, and do NOT explore the repo. "
         "You decide, turn by turn, whether this message calls for a conversational "
-        "reply or for real edits."
+        "reply or for real edits. During a longer edit task, give the user brief, plain-language "
+        "progress updates at meaningful milestones (for example after inspection, implementation, "
+        "and verification). Explain the outcome, not raw tool output or internal counters."
     ]
     history_text = _format_history(history)
     if history_text:
@@ -73,6 +85,27 @@ def compose_headless_prompt(goal: str, *, definition: str = "", plan: str = "", 
         parts.append("## Success definition\n" + definition.strip())
     if plan.strip():
         parts.append("## Converged implementation plan\n" + plan.strip())
+    access_rules = {
+        "read_only": "read-only: inspect and plan, but do not write files",
+        "workspace": "workspace: write only inside the selected Code workspace",
+        "project": "project: write only inside the selected project",
+        "pc": "PC: write inside the selected project or the user's home folders",
+        "full": "full: write to non-system paths while preserving Thomas runtime protections",
+    }
+    guardrail_rules = {
+        "open": "permissive: shell may be available after the route's explicit risky-action approval",
+        "guarded": "standard: shell is unavailable and external or destructive actions require approval",
+        "fortress": "strict: shell is unavailable, risky actions require approval, and tool calls are serialized",
+    }
+    access = str(file_access or "project").strip().lower()
+    guard = str(guardrails or "guarded").strip().lower()
+    parts.append(
+        "## Enforced Code execution policy\n"
+        f"File access = {access_rules.get(access, access_rules['project'])}.\n"
+        f"Guardrails = {guardrail_rules.get(guard, guardrail_rules['guarded'])}.\n"
+        f"Autonomy level = {max(1, min(4, int(autonomy_level)))}. "
+        "Do not claim access or permissions broader than these enforced settings."
+    )
     parts.append(
         "When — and only when — the user asks you to build or change something, you are "
         "an edit-only builder and the EDIT step of a reason→edit→verify loop: make the "
@@ -100,6 +133,7 @@ def compose_fix_prompt(goal: str, failure: str) -> str:
         "check on the changed files and it FAILED with this output:\n\n"
         f"{tail}\n\n"
         "Fix the changed files so this check passes. You are an edit-only builder — "
-        "Read/Write/Edit only; the engine re-runs the same check after your edit. Do not "
-        "modify protected files or gate scripts."
+        "Read/Write/Edit only; the engine re-runs the same check after your edit. Preserve "
+        "the existing implementation: do not replace or truncate a substantial file into "
+        "a stub to silence the verifier. Do not modify protected files or gate scripts."
     )

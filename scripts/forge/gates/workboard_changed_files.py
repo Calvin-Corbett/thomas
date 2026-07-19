@@ -42,6 +42,36 @@ def _runtime_protection_disabled() -> bool:
 
 DEFAULT_MAX_CHANGED_FILES = 200
 DEFAULT_BULK_ALLOW_ENV = "THOMAS_ALLOW_BULK_CHANGED_FILES"
+# Same server-side approval pattern as bulk_commit_guard / commit_growth_guard:
+# in diff-range mode an approval trailer in the committed history (reviewed,
+# immutable) authorizes a bulk change set. The env override remains for
+# operator-controlled environments; agents cannot set CI env, so the trailer is
+# the sanctioned path for approved large landings.
+APPROVAL_TRAILERS = ("thomas-bulk-change-approved:", "thomas-bulk-approved:", "thomas-breakglass:")
+
+
+def _bulk_trailer_approval(base: str | None, head: str | None) -> tuple[bool, str]:
+    """Return (approved, reason) from approval trailers in base..head commits."""
+    if not base or not head:
+        return False, ""
+    proc = subprocess.run(
+        ["git", "log", "--format=%B", f"{base}..{head}"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        return False, ""
+    for line in (proc.stdout or "").splitlines():
+        lowered = line.strip().lower()
+        for trailer in APPROVAL_TRAILERS:
+            if lowered.startswith(trailer):
+                reason = line.strip()[len(trailer) :].strip()
+                if reason:
+                    return True, reason
+    return False, ""
+
+
 FALLBACK_SCOPE_ENV = "THOMAS_WORKBOARD_SCOPE_FALLBACK"
 FALLBACK_REASON_ENV = "THOMAS_WORKBOARD_SCOPE_FALLBACK_REASON"
 AGENT_ENV_KEYS: tuple[str, ...] = (
@@ -352,6 +382,8 @@ def run(argv: Sequence[str] | None = None) -> int:
     max_changed_files = max(1, int(args.max_changed_files or DEFAULT_MAX_CHANGED_FILES))
     bulk_allow_env = str(args.bulk_allow_env or DEFAULT_BULK_ALLOW_ENV).strip() or DEFAULT_BULK_ALLOW_ENV
     bulk_override = _is_truthy(os.getenv(bulk_allow_env, ""))
+    if not bulk_override:
+        bulk_override, _trailer_reason = _bulk_trailer_approval(args.base, args.head)
     fallback_scopes = _fallback_scopes_from_env()
     fallback_reason = _fallback_reason_from_env()
     fallback_agent = _fallback_agent_from_env()

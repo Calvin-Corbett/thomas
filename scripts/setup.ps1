@@ -2,7 +2,7 @@
   [switch]$SkipInstall,
   [switch]$SkipDoctor,
   [switch]$WithTestDeps,
-  [ValidateSet("auto", "local", "codex", "openai", "anthropic")]
+  [ValidateSet("auto", "local", "codex", "openai_codex", "openai", "anthropic")]
   [string]$Profile = "auto",
   [switch]$Easy,
   [switch]$AutoInstallTools,
@@ -252,6 +252,20 @@ function Get-CloudEnvVarName {
   return "THOMAS_MODELS_" + $ModelName.ToUpperInvariant() + "_API_KEY"
 }
 
+function Test-OpenAICodexTokenConfigured {
+  param([string]$PythonExe)
+
+  $probe = @"
+from thomas.server.openai_codex_oauth import _default_secret_store, has_openai_codex_token
+
+store = _default_secret_store()
+profiles = ("openai_codex", "chatgpt", None)
+raise SystemExit(0 if any(has_openai_codex_token(store, profile) for profile in profiles) else 1)
+"@
+  $code = Invoke-NativeQuiet $PythonExe @("-c", $probe)
+  return [int]$code -eq 0
+}
+
 function Test-CloudKeyConfigured {
   param(
     [string]$TomlText,
@@ -337,6 +351,12 @@ function Test-ProfileReady {
       }
       return [pscustomobject]@{ Ready = $true; Message = "Codex profile is ready."; Action = "" }
     }
+    "openai_codex" {
+      if (-not (Test-OpenAICodexTokenConfigured -PythonExe $PythonExe)) {
+        return [pscustomobject]@{ Ready = $false; Message = "ChatGPT OAuth is not connected."; Action = "Run: .\\.venv\\Scripts\\python.exe scripts\\oauth_signin.py" }
+      }
+      return [pscustomobject]@{ Ready = $true; Message = "ChatGPT OAuth profile is ready."; Action = "" }
+    }
     "openai" {
       if (-not (Test-CloudKeyConfigured -TomlText $TomlText -ModelName "openai")) {
         return [pscustomobject]@{ Ready = $false; Message = "OpenAI profile has no API key configured."; Action = "Set THOMAS_MODELS_OPENAI_API_KEY or add models.openai.api_key." }
@@ -370,11 +390,20 @@ function Resolve-EasyProfile {
   )
 
   $configured = Get-ConfiguredProfileNames -TomlText $TomlText
+  if ($CurrentModel.Trim().ToLowerInvariant() -eq "openai_codex") {
+    $status = Test-ProfileReady -ModelName "openai_codex" -TomlText $TomlText -PythonExe $PythonExe
+    return [pscustomobject]@{
+      Profile = "openai_codex"
+      Ready = [bool]$status.Ready
+      Reason = [string]$status.Message
+    }
+  }
+
   $priority = @()
   if (-not [string]::IsNullOrWhiteSpace($CurrentModel)) {
     $priority += $CurrentModel
   }
-  $priority += @("codex", "local", "openrouter", "groq", "openai", "anthropic")
+  $priority += @("openai_codex", "codex", "local", "openrouter", "groq", "openai", "anthropic")
   $priority += $configured
 
   $seen = @{}

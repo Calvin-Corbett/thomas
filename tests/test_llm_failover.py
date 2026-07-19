@@ -2,6 +2,14 @@ import asyncio
 
 from thomas.core.config import ModelConfig
 from thomas.core.llm import LLMClient, LLMError, StreamEvent
+from thomas.core.llm_shared import callable_accepts_keyword
+
+
+def test_keyword_detection_rejects_positional_only_parameters() -> None:
+    def _positional_only(turn_user_content, /):  # noqa: ANN001
+        return turn_user_content
+
+    assert callable_accepts_keyword(_positional_only, "turn_user_content") is False
 
 
 class _FailoverTestClient(LLMClient):
@@ -97,6 +105,19 @@ def test_llm_failover_retries_primary_on_next_turn() -> None:
     assert events2 == ["token", "done"]
     # First turn falls back; second turn starts from primary again.
     assert client.calls == ["primary", "fallback", "primary"]
+    aggregate = client.runtime_trace()
+    assert aggregate["failover_used"] is True
+    assert [attempt["profile"] for attempt in aggregate["attempts"]] == ["primary", "fallback", "primary"]
+
+    client.reset_runtime_trace()
+    empty_trace = client.runtime_trace()
+    assert empty_trace["attempts"] == []
+    assert empty_trace["active"] == {}
+    assert empty_trace["failover_used"] is False
+    asyncio.run(run_once())
+    reset_trace = client.runtime_trace()
+    assert reset_trace["failover_used"] is False
+    assert [attempt["profile"] for attempt in reset_trace["attempts"]] == ["primary"]
 
 
 def test_llm_runtime_trace_without_failover_reports_single_success() -> None:
@@ -124,3 +145,6 @@ def test_llm_runtime_trace_without_failover_reports_single_success() -> None:
     assert len(attempts) == 1
     assert attempts[0].get("profile") == "primary"
     assert attempts[0].get("status") == "success"
+    client.reset_runtime_trace()
+    assert client.runtime_trace()["attempts"] == []
+    assert client.runtime_trace()["active"] == {}

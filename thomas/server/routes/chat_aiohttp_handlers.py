@@ -42,8 +42,13 @@ def register_chat_routes(
     app: web.Application,
     *,
     deps: ChatRouteDeps,
+    register_primary_chat: bool = True,
 ) -> None:
-    """Register chat routes with the aiohttp application."""
+    """Register legacy chat helpers and, for isolated compatibility apps, V1 chat.
+
+    The production server passes ``register_primary_chat=False`` so `/api/chat`
+    is owned by the V2 route bundle and cannot execute this parallel engine.
+    """
 
     async def api_chat(request: web.Request) -> web.StreamResponse:
         # This endpoint can execute tool-calling flows, including file writes.
@@ -254,7 +259,8 @@ def register_chat_routes(
         deps.require_api_access(request)
         return web.json_response({"commands": serialize_web_slash_specs()})
 
-    app.router.add_post("/api/chat", api_chat)
+    if register_primary_chat:
+        app.router.add_post("/api/chat", api_chat)
     app.router.add_get("/api/chat/plan/{session_id}", api_chat_plan_state)
     app.router.add_get("/api/chat/slash-commands", api_chat_slash_commands)
 

@@ -264,7 +264,7 @@ class ModelConfig:
     temperature: float = 0.1
     top_p: float = 0.95
     timeout_s: float = 120.0
-    reasoning_effort: str = ""  # codex: low|medium|high|xhigh (empty = provider default)
+    reasoning_effort: str = ""  # GPT-5.6: none|low|medium|high|xhigh|max (empty = provider default)
 
     def validate(self) -> list[str]:
         errors: list[str] = []
@@ -793,7 +793,7 @@ def load_config(
         models["openai_codex"] = ModelConfig(
             name="openai_codex",
             provider="openai_codex",
-            model="gpt-5.5",
+            model="gpt-5.6-sol",
             max_tokens=16384,
             context_window=200000,
             temperature=0.1,

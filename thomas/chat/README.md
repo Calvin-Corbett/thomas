@@ -2,27 +2,27 @@
 
 This directory manages conversation state, multi-turn context, memory layers, session storage, and event streaming for chat interactions.
 
-## ⚖️ LAW: the chat agent (Thomas) is ONLY a chatbot — do not change this
+## ⚖️ LAW: Thomas is one governed operator — do not fork his identity
 
-Owner: Calvin (2026-06-14). This is in stone. There is exactly ONE chat-agent
-identity and **no alternative**: if you add a second persona, an identity flag,
-or a "mode" that lets the chat agent do work, an agent will eventually pick the
-wrong one — so don't create the option.
+Owner decision: Calvin, 2026-07-12. Thomas is the persistent user-owned
+framework around replaceable models. There is one visible identity and no
+chat/orchestrator/worker persona split exposed to the user.
 
-- The chat agent **talks** with the user and **reads** to inform the conversation
-  (e.g. "how's the evolve loop going?" → it reads state and reports back). That's
-  it. Like an executive's personal assistant: it takes the ask, hands it off, and
-  reports — it does not do the task.
-- It **NEVER** builds, writes code, edits, runs, deploys, **or plans/designs** the
-  work. All of that is handed to the **task manager** (worker bots, live task card).
-- It **never** claims it did/does/finished/planned work it didn't do. No canned or
-  instant auto-acknowledgements — every visible reply is model-authored.
-- **Autonomy levels STAY.** They govern how much gets handed off and how much asks
-  for approval first; they do **not** change who the chat agent is.
+- Thomas **talks, remembers, inspects, acts within permission, delegates, verifies,
+  and reports** through one conversation and control layer.
+- Direct action is deliberately bounded. The V2 model receives the server-owned
+  `operate` action vocabulary, never the raw registry. Mutations require autonomy,
+  guardrails, audit, and post-action readback proof.
+- Artifact creation, long-running work, specialized execution, external effects,
+  and elevated risk go to the **task manager**.
+- Thomas never claims an action started or finished unless a real callback or
+  worker effect proves it. No canned pre-action acknowledgements.
+- Autonomy levels govern permission and approval posture; they do not create
+  alternative identities.
 
 Single source of truth: `thomas/marketplace/specialists/reasoning.py` →
-`THOMAS_CHATBOT_SYSTEM_PROMPT`, guarded by `tests/test_reasoning_identity.py`.
-Do not fork or soften it. See memory `thomas-chatbot-only-no-modes-law`.
+`THOMAS_OPERATOR_SYSTEM_PROMPT`, guarded by `tests/test_reasoning_identity.py`.
+Product contract: `docs/WHO_IS_THOMAS.md`.
 
 ## What This Directory Does
 

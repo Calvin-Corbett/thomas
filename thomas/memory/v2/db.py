@@ -89,6 +89,13 @@ class SqliteDB:
         with self._lock:
             self._conn.close()
 
+    def interrupt(self) -> None:
+        """Interrupt a long-running SQLite operation from another thread."""
+        # sqlite3.Connection.interrupt() is explicitly safe to call from a
+        # different thread.  Do not take ``_lock`` here: the query being
+        # interrupted may currently own it.
+        self._conn.interrupt()
+
     def now_ms(self) -> int:
         return int(time.time() * 1000)
 

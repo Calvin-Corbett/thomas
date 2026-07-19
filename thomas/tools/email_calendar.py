@@ -457,6 +457,10 @@ class EmailSendTool(Tool):
             "to": {"type": "string"},
             "subject": {"type": "string"},
             "body": {"type": "string"},
+            "idempotency_key": {
+                "type": "string",
+                "description": "Stable key that makes retries return the first provider result without sending twice.",
+            },
         },
         "required": ["to", "subject", "body"],
         "additionalProperties": False,
@@ -470,6 +474,7 @@ class EmailSendTool(Tool):
             to=to,
             subject=str(params.get("subject") or "").strip(),
             body=str(params.get("body") or ""),
+            idempotency_key=str(params.get("idempotency_key") or "").strip() or None,
         )
 
 

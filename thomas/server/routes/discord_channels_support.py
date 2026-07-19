@@ -13,6 +13,7 @@ from aiohttp import web
 
 from thomas.integrations.discord_bridge_runtime import DiscordBridgeRuntime
 from thomas.server.app_keys import ChatSession
+from thomas.server.routes.chat_v2_usage import session_usage_for_session, terminal_usage_fields
 
 _WHITESPACE_RE = re.compile(r"\s+")
 _SEARCH_PATTERNS = (
@@ -214,31 +215,71 @@ async def stream_static_chat_response(
     session.conversation.append({"role": "assistant", "content": str(reply_text or "")})
     session.last_user_message = str(user_text or "")
     session.last_assistant_message = str(reply_text or "")
+    return await stream_static_chat_events(
+        request=request,
+        sid=sid,
+        reply_text=reply_text,
+        token_economy_meta=token_economy_meta,
+        start_t=start_t,
+    )
+
+
+async def stream_static_chat_events(
+    *,
+    request: web.Request,
+    sid: str,
+    reply_text: str,
+    token_economy_meta: dict[str, Any],
+    start_t: float,
+    headers: dict[str, str] | None = None,
+    done_fields: dict[str, Any] | None = None,
+    prior_session_tokens: Any = 0,
+    mode: str = "auto",
+) -> web.StreamResponse:
     run_id = f"discord-quick-{secrets.token_urlsafe(8)}"
+    response_headers = {
+        "Content-Type": "application/x-ndjson; charset=utf-8",
+        "Cache-Control": "no-cache",
+    }
+    response_headers.update(headers or {})
     response = web.StreamResponse(
         status=200,
-        headers={
-            "Content-Type": "application/x-ndjson; charset=utf-8",
-            "Cache-Control": "no-cache",
-        },
+        headers=response_headers,
     )
     await response.prepare(request)
+    usage_fields = terminal_usage_fields(
+        session_usage=session_usage_for_session(
+            request.app,
+            sid,
+            persisted_total=prior_session_tokens,
+        )
+    )
+    done_event = {
+        "type": "done",
+        "text": reply_text,
+        "iterations": 1,
+        "tool_calls": 0,
+        **usage_fields,
+        "token_report": {"token_economy": dict(token_economy_meta or {})},
+        "elapsed_ms": float((time.monotonic() - start_t) * 1000.0),
+        "session_id": sid,
+        "seq": 2,
+        "run_id": run_id,
+        "token_economy": dict(token_economy_meta or {}),
+    }
+    done_event.update(done_fields or {})
+    done_event.update(usage_fields)
     events = [
-        {"type": "text", "text": reply_text, "seq": 0, "run_id": run_id},
         {
-            "type": "done",
-            "text": reply_text,
-            "iterations": 1,
-            "tool_calls": 0,
-            "usage": {},
-            "run_usage": {},
-            "session_usage": {},
-            "token_report": {"token_economy": dict(token_economy_meta or {})},
-            "elapsed_ms": float((time.monotonic() - start_t) * 1000.0),
-            "session_id": sid,
-            "seq": 1,
+            "type": "route",
+            "route": {"path": "static", "confidence": 1.0},
+            "mode": mode,
+            "token_economy": dict(token_economy_meta or {}),
+            "seq": 0,
             "run_id": run_id,
         },
+        {"type": "text", "text": reply_text, "seq": 1, "run_id": run_id},
+        done_event,
     ]
     for event in events:
         await response.write(json.dumps(event, ensure_ascii=False).encode("utf-8") + b"\n")
@@ -246,17 +287,15 @@ async def stream_static_chat_response(
     return response
 
 
-async def maybe_handle_discord_chat_command(
+def resolve_discord_chat_command(
     *,
-    request: web.Request,
-    session: ChatSession,
-    sid: str,
     text: str,
     cfg: Any,
-    token_economy_meta: dict[str, Any],
-    start_t: float,
+    sid: str,
     request_context: DiscordRequestContext,
-) -> web.StreamResponse | None:
+) -> str | None:
+    """Resolve a Discord-owned command without binding it to a chat engine."""
+
     command = match_discord_chat_command(text)
     if command is None:
         return None
@@ -270,15 +309,7 @@ async def maybe_handle_discord_chat_command(
             context=request_context.history_metadata(),
             tool_calls=0,
         )
-        return await stream_static_chat_response(
-            request=request,
-            session=session,
-            sid=sid,
-            user_text=text,
-            reply_text=reply_text,
-            token_economy_meta=token_economy_meta,
-            start_t=start_t,
-        )
+        return reply_text
 
     kind = command["kind"]
     if kind == "status":
@@ -310,6 +341,28 @@ async def maybe_handle_discord_chat_command(
             context=request_context.history_metadata(),
             tool_calls=0,
         )
+    return reply_text
+
+
+async def maybe_handle_discord_chat_command(
+    *,
+    request: web.Request,
+    session: ChatSession,
+    sid: str,
+    text: str,
+    cfg: Any,
+    token_economy_meta: dict[str, Any],
+    start_t: float,
+    request_context: DiscordRequestContext,
+) -> web.StreamResponse | None:
+    reply_text = resolve_discord_chat_command(
+        text=text,
+        cfg=cfg,
+        sid=sid,
+        request_context=request_context,
+    )
+    if reply_text is None:
+        return None
     return await stream_static_chat_response(
         request=request,
         session=session,

@@ -86,6 +86,18 @@ class CapabilityToken:
         """Check if this token allows a specific tool."""
         if not self.allowed_tools:
             return True  # empty = unrestricted
+        # Reasoning tokens already grant the narrow read capabilities below.
+        # Treat their web counterparts as the same bounded reads so the chat
+        # layer can research without expanding into write or execution tools.
+        reasoning_read_bundle = {"fs.read_file", "fs.list_dir", "fs.search"}
+        if self.specialist_id == "reasoning" and reasoning_read_bundle.issubset(self.allowed_tools):
+            read_aliases = {
+                "web.search": "fs.search",
+                "web.fetch": "fs.read_file",
+            }
+            required_capability = read_aliases.get(tool_name)
+            if required_capability is not None:
+                return required_capability in self.allowed_tools
         return tool_name in self.allowed_tools
 
     def permits_action(self, action: str) -> bool:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -28,6 +29,20 @@ def _write_config(tmp_path: Path, body: str) -> Path:
     path = tmp_path / "agent_safety.toml"
     path.write_text(body.strip() + "\n", encoding="utf-8")
     return path
+
+
+def _approve_breakglass(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        skip_gate,
+        "authorize_breakglass",
+        lambda **_: SimpleNamespace(
+            ok=True,
+            message="approved test authorization",
+            actor="WORKSTATION\\fixture",
+            method="test-fixture",
+            cancelled=False,
+        ),
+    )
 
 
 def test_validate_agent_changes_uses_configured_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -83,6 +98,7 @@ def test_skip_policy_reads_limits_and_protected_hooks_from_config(
     monkeypatch.setattr(skip_gate, "_staged_files", lambda: ["scripts/forge/gates/precommit_skip_policy.py"])
     monkeypatch.setattr(skip_gate, "_run_git", lambda _args: "mock")
     monkeypatch.setattr(skip_gate, "_quickbuilder_active", lambda: True)
+    _approve_breakglass(monkeypatch)
     clear_config_cache()
 
     rc = skip_gate.run(["--audit-log", str(audit_log), "--json"])
@@ -122,6 +138,7 @@ def test_skip_policy_quickbuilder_note_is_human_output_only(
     monkeypatch.setattr(skip_gate, "_staged_files", lambda: ["scripts/forge/gates/precommit_skip_policy.py"])
     monkeypatch.setattr(skip_gate, "_run_git", lambda _args: "mock")
     monkeypatch.setattr(skip_gate, "_quickbuilder_active", lambda: True)
+    _approve_breakglass(monkeypatch)
     clear_config_cache()
 
     rc = skip_gate.run(["--audit-log", str(audit_log)])

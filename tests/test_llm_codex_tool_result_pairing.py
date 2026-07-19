@@ -77,3 +77,50 @@ def test_tool_call_missing_name_orphans_then_drops_output() -> None:
     assert not any(i.get("type") == "function_call_output" for i in items), (
         "output for an un-emitted call must be dropped, not sent orphaned"
     )
+
+
+def test_chat_style_image_blocks_are_normalized_for_responses() -> None:
+    """The Codex OAuth transport must send Responses-native multimodal input."""
+    owner = _Owner()
+    data_url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "What is shown?"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": data_url, "detail": "high"},
+                },
+            ],
+        }
+    ]
+
+    _instructions, items = _responses_input_from_messages(owner, messages)
+
+    assert items == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "What is shown?"},
+                {"type": "input_image", "image_url": data_url, "detail": "high"},
+            ],
+        }
+    ]
+
+
+def test_responses_native_image_blocks_remain_native() -> None:
+    owner = _Owner()
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "Inspect it."},
+                {"type": "input_image", "image_url": "https://example.test/image.png"},
+            ],
+        }
+    ]
+
+    _instructions, items = _responses_input_from_messages(owner, messages)
+
+    assert items[0]["content"] == messages[0]["content"]

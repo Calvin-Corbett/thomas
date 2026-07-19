@@ -2,7 +2,7 @@
     // State and Helpers
     const PREFERENCES_API = '/api/preferences';
     const BREAKGLASS_OPT_IN_API = '/api/security/breakglass-opt-in';
-    const SETTINGS_EXTENSION_SCRIPT = 'settings.isolated-desktop.js';
+    const SETTINGS_EXTENSION_SCRIPT = '/static/settings.isolated-desktop.js';
     const settings = {};
     let currentSection = 'general';
     let pendingConfirmAction = null;
@@ -10,14 +10,14 @@
     function defaultLegacySettings() {
       return {
         agentName: 'Thomas-Main',
-        defaultModel: 'claude-opus',
-        defaultProvider: 'anthropic',
+        defaultModel: 'gpt-5.6-sol',
+        defaultProvider: 'openai_codex',
         theme: 'dark',
         language: 'en',
         workflowMode: 'guided',
         startupBehavior: false,
         openaiKey: '',
-        openaiModel: 'gpt-4',
+        openaiModel: 'gpt-5.6-sol',
         anthropicKey: '',
         anthropicModel: 'claude-opus',
         googleKey: '',
@@ -131,6 +131,7 @@
 
     function toUiProvider(activeProfile) {
       const raw = String(activeProfile || '').toLowerCase();
+      if (raw === 'openai_codex' || raw.includes('codex')) return 'openai_codex';
       if (raw.includes('openai')) return 'openai';
       if (raw.includes('google')) return 'google';
       if (raw.includes('ollama') || raw.includes('local')) return 'ollama';

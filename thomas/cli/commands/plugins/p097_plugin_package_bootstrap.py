@@ -69,6 +69,28 @@ def register(app: typer.Typer) -> None:
             "--skill-example",
             help="Repeatable usage example for generated SKILL.md.",
         ),
+        assistant_instructions: str = typer.Option(
+            "", "--assistant-instructions", help="Tailored instructions for the generated assistant plugin."
+        ),
+        conversation_starter: list[str] | None = typer.Option(
+            None, "--conversation-starter", help="Repeatable starter shown for the generated assistant."
+        ),
+        knowledge_file: list[Path] | None = typer.Option(
+            None, "--knowledge-file", help="Repeatable local knowledge file copied into the plugin package."
+        ),
+        allow_tool: list[str] | None = typer.Option(
+            None, "--allow-tool", help="Repeatable Thomas tool permission granted to this assistant."
+        ),
+        allow_app: list[str] | None = typer.Option(
+            None, "--allow-app", help="Repeatable connected-app permission granted to this assistant."
+        ),
+        allow_api: list[str] | None = typer.Option(
+            None, "--allow-api", help="Repeatable external API permission granted to this assistant."
+        ),
+        share: bool = typer.Option(False, "--share-bundle", help="Create a portable .thomas-plugin.zip bundle."),
+        share_bundle_path: Path | None = typer.Option(
+            None, "--share-bundle-path", help="Optional output path for the portable plugin bundle."
+        ),
         validate: bool = typer.Option(
             True, "--validate/--skip-validate", help="Validate generated artifacts before returning."
         ),
@@ -88,7 +110,15 @@ def register(app: typer.Typer) -> None:
                     skill_intents=skill_intent or (),
                     skill_tools=skill_tool or (),
                     skill_examples=skill_example or (),
+                    assistant_instructions=assistant_instructions,
+                    conversation_starters=conversation_starter or (),
+                    knowledge_files=knowledge_file or (),
+                    allowed_tools=allow_tool or (),
+                    allowed_apps=allow_app or (),
+                    allowed_apis=allow_api or (),
                     create_manifest=make_manifest,
+                    create_share_bundle=share,
+                    share_bundle_path=share_bundle_path,
                     plugin_version=version,
                     validate=validate,
                     install_after_bootstrap=install,
@@ -118,3 +148,5 @@ def register(app: typer.Typer) -> None:
                 typer.echo(f"Bootstrapped plugin manifest at: {result.manifest_file}")
             if result.installed_path:
                 typer.echo(f"Installed generated plugin at: {result.installed_path}")
+            if result.share_bundle_file:
+                typer.echo(f"Created share bundle at: {result.share_bundle_file}")

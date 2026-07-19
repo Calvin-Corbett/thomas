@@ -11,6 +11,7 @@ from typing import Any
 from aiohttp import web
 
 from thomas.core.config import AppConfig
+from thomas.server.app_keys import APP_SELF_BASE_URL
 
 
 def build_mission_autonomy_helpers(app: web.Application):
@@ -71,7 +72,11 @@ def build_mission_autonomy_helpers(app: web.Application):
                     ).strip()
                     or None
                 )
-                adapter_cfg = ChatAdapterConfig(api_token=api_token)
+                self_base_url = str(app.get(APP_SELF_BASE_URL) or "").strip()
+                adapter_cfg = ChatAdapterConfig(
+                    base_url=self_base_url or "http://127.0.0.1:8080",
+                    api_token=api_token,
+                )
                 chat_adapter = ChatAdapter(app=app, cfg=adapter_cfg)
                 engine = AutonomyEngine(
                     store=store,

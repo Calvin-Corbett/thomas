@@ -12,16 +12,28 @@ Route: GET /deliverable/{execution_id}            -> the workspace entry file
 
 from __future__ import annotations
 
+import asyncio
+import base64
 import ipaddress
+import re
+import secrets
+import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import quote
 
 from aiohttp import web
 
 from thomas.core import task_bot_runtime
+from thomas.server.app_keys import APP_DELIVERABLE_PREVIEW_SERVICE
 
 # Must match thomas/server/chat_delegation.py::_ensure_task_workspace.
 _WORKSPACES_BASE = Path.home() / ".thomas" / "workspaces"
 _ENTRY_PREFERENCES = ("index.html", "game.html", "main.html")
+_PREVIEW_CAPABILITY_TTL_SECONDS = 3600
+_MAX_ACTIVE_PREVIEW_GRANTS = 32
+_PREVIEW_CAPABILITY_RE = re.compile(r"^[a-z2-7]{52}$")
 
 # Build/helper files are NOT the deliverable — a worker that writes
 # build_cookie_pdf.py + cookies.pdf must surface the PDF, not the script. These
@@ -207,6 +219,13 @@ _STORAGE_SHIM = (
     "catch(e){try{Object.defineProperty(window,n,{value:S(),configurable:true});}catch(_){}}}"
     "fix('localStorage');fix('sessionStorage');})();</script>"
 )
+_FAVICON_SHIM = (
+    '<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' '
+    "viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%238b8cff'/%3E"
+    "%3Ctext x='50' y='72' text-anchor='middle' font-family='sans-serif' font-size='64' "
+    "font-weight='700' fill='white'%3ET%3C/text%3E%3C/svg%3E\">"
+)
+_HEAD_SHIM = _FAVICON_SHIM + _STORAGE_SHIM
 
 
 def _inject_storage_shim(html: str) -> str:
@@ -217,13 +236,13 @@ def _inject_storage_shim(html: str) -> str:
     if head != -1:
         close = lower.find(">", head)
         if close != -1:
-            return html[: close + 1] + _STORAGE_SHIM + html[close + 1 :]
+            return html[: close + 1] + _HEAD_SHIM + html[close + 1 :]
     htmltag = lower.find("<html")
     if htmltag != -1:
         close = lower.find(">", htmltag)
         if close != -1:
-            return html[: close + 1] + _STORAGE_SHIM + html[close + 1 :]
-    return _STORAGE_SHIM + html
+            return html[: close + 1] + _HEAD_SHIM + html[close + 1 :]
+    return _HEAD_SHIM + html
 
 
 def deliverable_url(execution_id: str) -> str:
@@ -245,6 +264,281 @@ def _is_loopback(request: web.Request) -> bool:
         return False
 
 
+@dataclass
+class _PreviewGrant:
+    capability: str
+    subject_key: str
+    workspace: Path
+    entry: str
+    allowed_files: frozenset[str] | None
+    expires_at: float
+    runner: web.AppRunner
+    port: int
+    cleanup_task: asyncio.Task[None] | None = None
+
+
+class DeliverablePreviewService:
+    """Preview-only loopback origin for untrusted generated web applications."""
+
+    def __init__(
+        self,
+        *,
+        ttl_seconds: int = _PREVIEW_CAPABILITY_TTL_SECONDS,
+        max_grants: int = _MAX_ACTIVE_PREVIEW_GRANTS,
+    ) -> None:
+        self._ttl_seconds = max(1, int(ttl_seconds))
+        self._max_grants = max(1, int(max_grants))
+        self._grants: dict[str, _PreviewGrant] = {}
+        self._subject_capabilities: dict[str, str] = {}
+        self._main_origin = ""
+        self._lock = asyncio.Lock()
+
+    def configure(self, *, main_origin: str) -> None:
+        self._main_origin = str(main_origin or "").rstrip("/")
+
+    async def stop(self) -> None:
+        async with self._lock:
+            grants = list(self._grants.values())
+            self._grants.clear()
+            self._subject_capabilities.clear()
+        tasks = [grant.cleanup_task for grant in grants if grant.cleanup_task is not None]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        for grant in grants:
+            await grant.runner.cleanup()
+
+    async def preview_url(self, execution_id: str, tail: str) -> str:
+        safe_execution_id = _safe_id(execution_id)
+        workspace = _workspace_dir(safe_execution_id)
+        if workspace is None:
+            raise FileNotFoundError("deliverable workspace is unavailable")
+        return await self.preview_directory_url(
+            subject_id=f"task:{safe_execution_id}",
+            workspace=workspace,
+            tail=tail,
+        )
+
+    async def preview_directory_url(
+        self,
+        *,
+        subject_id: str,
+        workspace: Path,
+        tail: str,
+        allowed_files: set[str] | frozenset[str] | None = None,
+    ) -> str:
+        """Create an isolated preview for a directory and optional file allowlist."""
+        if not self._main_origin:
+            raise RuntimeError("deliverable preview service is not configured")
+        root = Path(workspace).resolve()
+        if not root.is_dir():
+            raise FileNotFoundError("deliverable workspace is unavailable")
+        entry = str(Path(str(tail or "").replace("\\", "/")).as_posix()).lstrip("/")
+        allowed = self._normalize_allowed_files(allowed_files)
+        target = self._target_path(root, entry, allowed)
+        if not target.is_file():
+            raise FileNotFoundError("deliverable preview entry is unavailable")
+        subject_key = f"{subject_id}\0{root}"
+        now = time.time()
+        async with self._lock:
+            await self._drop_expired(now)
+            capability = self._subject_capabilities.get(subject_key, "")
+            grant = self._grants.get(capability)
+            if grant is None or grant.expires_at <= now or grant.workspace != root or grant.allowed_files != allowed:
+                if grant is not None:
+                    await self._remove_grant(grant)
+                while len(self._grants) >= self._max_grants:
+                    oldest = min(self._grants.values(), key=lambda item: item.expires_at)
+                    await self._remove_grant(oldest)
+                grant = await self._start_grant(
+                    subject_key=subject_key,
+                    workspace=root,
+                    entry=entry,
+                    allowed_files=allowed,
+                    expires_at=now + self._ttl_seconds,
+                )
+                capability = grant.capability
+                self._grants[capability] = grant
+                self._subject_capabilities[subject_key] = capability
+                grant.cleanup_task = asyncio.create_task(
+                    self._expire_grant(capability, grant.expires_at),
+                    name=f"thomas-preview-expiry-{capability[:10]}",
+                )
+        safe_tail = "/".join(quote(part, safe="") for part in Path(tail).parts)
+        return f"http://127.0.0.1:{grant.port}/__enter/{capability}/{safe_tail}"
+
+    @staticmethod
+    def _normalize_allowed_files(
+        allowed_files: set[str] | frozenset[str] | None,
+    ) -> frozenset[str] | None:
+        if allowed_files is None:
+            return None
+        normalized: set[str] = set()
+        for raw in allowed_files:
+            rel = Path(str(raw or "").replace("\\", "/").lstrip("/"))
+            if not rel.is_absolute() and rel.parts and ".." not in rel.parts:
+                normalized.add(rel.as_posix())
+        return frozenset(normalized)
+
+    async def _drop_expired(self, now: float) -> None:
+        expired = [grant for grant in self._grants.values() if grant.expires_at <= now]
+        for grant in expired:
+            await self._remove_grant(grant)
+
+    async def _remove_grant(self, grant: _PreviewGrant) -> None:
+        self._grants.pop(grant.capability, None)
+        if self._subject_capabilities.get(grant.subject_key) == grant.capability:
+            self._subject_capabilities.pop(grant.subject_key, None)
+        cleanup_task = grant.cleanup_task
+        if cleanup_task is not None and cleanup_task is not asyncio.current_task() and not cleanup_task.done():
+            cleanup_task.cancel()
+        await grant.runner.cleanup()
+
+    async def _expire_grant(self, capability: str, expires_at: float) -> None:
+        try:
+            await asyncio.sleep(max(0.0, expires_at - time.time()))
+            async with self._lock:
+                grant = self._grants.get(capability)
+                if grant is not None and grant.expires_at <= time.time():
+                    await self._remove_grant(grant)
+        except asyncio.CancelledError:
+            return
+
+    async def _start_grant(
+        self,
+        *,
+        subject_key: str,
+        workspace: Path,
+        entry: str,
+        allowed_files: frozenset[str] | None,
+        expires_at: float,
+    ) -> _PreviewGrant:
+        capability = base64.b32encode(secrets.token_bytes(32)).decode("ascii").rstrip("=").lower()
+        cookie_name = f"thomas_preview_{capability}"
+        grant_ref: dict[str, _PreviewGrant] = {}
+        preview_app = web.Application()
+
+        async def enter(request: web.Request) -> web.StreamResponse:
+            grant = grant_ref["grant"]
+            if not _is_loopback(request) or time.time() >= grant.expires_at:
+                raise web.HTTPNotFound(text="preview capability expired or invalid")
+            supplied = str(request.match_info.get("capability", "") or "")
+            if not _PREVIEW_CAPABILITY_RE.fullmatch(supplied) or not secrets.compare_digest(supplied, capability):
+                raise web.HTTPNotFound(text="preview capability expired or invalid")
+            tail = self._safe_tail(request, grant)
+            self._target(grant, tail)
+            response = web.HTTPFound(location="/" + "/".join(quote(part, safe="") for part in Path(tail).parts))
+            response.headers.update(
+                {
+                    "Cache-Control": "private, no-store, max-age=0",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
+                    "Referrer-Policy": "no-referrer",
+                    "Clear-Site-Data": '"cache", "storage"',
+                    "X-Content-Type-Options": "nosniff",
+                }
+            )
+            response.set_cookie(
+                cookie_name,
+                "1",
+                max_age=self._ttl_seconds,
+                httponly=True,
+                samesite="Strict",
+                path="/",
+            )
+            raise response
+
+        async def serve(request: web.Request) -> web.StreamResponse:
+            grant = grant_ref["grant"]
+            if not _is_loopback(request) or time.time() >= grant.expires_at:
+                raise web.HTTPNotFound(text="preview capability expired or invalid")
+            if (
+                str(request.headers.get("Service-Worker") or "").strip().lower() == "script"
+                or str(request.headers.get("Sec-Fetch-Dest") or "").strip().lower() == "serviceworker"
+            ):
+                raise web.HTTPNotFound(text="preview service workers are disabled")
+            if not secrets.compare_digest(str(request.cookies.get(cookie_name) or ""), "1"):
+                raise web.HTTPNotFound(text="preview capability required")
+            target = self._target(grant, self._safe_tail(request, grant))
+            response = self._file_response(target)
+            self._apply_headers(response)
+            return response
+
+        preview_app.router.add_get("/__enter/{capability}/{tail:.*}", enter)
+        preview_app.router.add_get("/{tail:.*}", serve)
+        runner = web.AppRunner(preview_app, access_log=None)
+        await runner.setup()
+        site = web.TCPSite(runner, host="127.0.0.1", port=0)
+        try:
+            await site.start()
+            sockets = list(getattr(getattr(site, "_server", None), "sockets", ()) or ())
+            if not sockets:
+                raise RuntimeError("preview server did not expose a listening socket")
+            grant = _PreviewGrant(
+                capability=capability,
+                subject_key=subject_key,
+                workspace=workspace,
+                entry=entry,
+                allowed_files=allowed_files,
+                expires_at=expires_at,
+                runner=runner,
+                port=int(sockets[0].getsockname()[1]),
+            )
+            grant_ref["grant"] = grant
+            return grant
+        except (AttributeError, OSError, RuntimeError, TypeError, ValueError):
+            await runner.cleanup()
+            raise
+
+    @staticmethod
+    def _safe_tail(request: web.Request, grant: _PreviewGrant) -> str:
+        return str(request.match_info.get("tail", "") or grant.entry).replace("\\", "/").lstrip("/")
+
+    @staticmethod
+    def _target(grant: _PreviewGrant, tail: str) -> Path:
+        return DeliverablePreviewService._target_path(grant.workspace, tail, grant.allowed_files)
+
+    @staticmethod
+    def _target_path(workspace: Path, tail: str, allowed_files: frozenset[str] | None) -> Path:
+        rel = Path(tail)
+        if rel.is_absolute() or any(part == ".." for part in rel.parts):
+            raise web.HTTPNotFound(text="preview file not found")
+        normalized = rel.as_posix()
+        if allowed_files is not None and normalized not in allowed_files:
+            raise web.HTTPNotFound(text="preview file not found")
+        target = (workspace / rel).resolve()
+        if not target.is_file() or not (target == workspace or workspace in target.parents):
+            raise web.HTTPNotFound(text="preview file not found")
+        return target
+
+    def _file_response(self, target: Path) -> web.StreamResponse:
+        if target.suffix.lower() in {".html", ".htm"}:
+            try:
+                html = target.read_text(encoding="utf-8", errors="replace")
+            except OSError as exc:
+                raise web.HTTPNotFound(text="preview file not found") from exc
+            return web.Response(body=_inject_storage_shim(html).encode("utf-8"), content_type="text/html")
+        return web.FileResponse(target)
+
+    def _apply_headers(self, response: web.StreamResponse) -> None:
+        frame_ancestors = self._main_origin or "'none'"
+        response.headers["Content-Security-Policy"] = (
+            "sandbox allow-scripts allow-forms allow-same-origin; "
+            "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' blob:; "
+            "style-src 'self' 'unsafe-inline' data:; img-src 'self' data: blob:; "
+            "font-src 'self' data:; media-src 'self' data: blob:; connect-src 'self'; "
+            "worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; "
+            f"frame-ancestors {frame_ancestors}"
+        )
+        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Cache-Control"] = "private, no-store, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+
+
 async def handle_deliverable(request: web.Request) -> web.StreamResponse:
     # Worker output is untrusted generated content; only ever serve it to the local UI.
     if not _is_loopback(request):
@@ -260,6 +554,8 @@ async def handle_deliverable(request: web.Request) -> web.StreamResponse:
     # Path-traversal guard: resolved file must stay inside the workspace dir.
     if not (target == wd or wd in target.parents) or not target.is_file():
         raise web.HTTPNotFound(text="File not found in deliverable.")
+    query = getattr(request, "query", {})
+    download = str(query.get("download") or "").strip().lower() in {"1", "true", "yes"}
     # Worker output is UNTRUSTED and served same-origin with the chat UI. Force it into
     # a sandbox (opaque origin) at the RESPONSE layer so it can never reach the host
     # app's DOM/cookies/localStorage regardless of how a client frames it (preview
@@ -274,7 +570,7 @@ async def handle_deliverable(request: web.Request) -> web.StreamResponse:
     # first interaction. Inject a tiny in-memory storage shim that ONLY activates when
     # the real one is unavailable, so those apps actually run WITHOUT weakening the
     # sandbox (no allow-same-origin; the shim never touches host data). HTML only.
-    if target.suffix.lower() in (".html", ".htm"):
+    if not download and target.suffix.lower() in (".html", ".htm"):
         try:
             html = target.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -285,9 +581,60 @@ async def handle_deliverable(request: web.Request) -> web.StreamResponse:
             return response
     response = web.FileResponse(target)
     response.headers["Content-Security-Policy"] = csp
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    if download:
+        filename = re.sub(r"[^A-Za-z0-9._ -]", "_", target.name).strip() or "thomas-result"
+        response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
 
 
-def register_deliverable_routes(app: web.Application) -> None:
-    app.router.add_get("/deliverable/{execution_id}", handle_deliverable)
-    app.router.add_get("/deliverable/{execution_id}/{tail:.*}", handle_deliverable)
+def register_deliverable_routes(
+    app: web.Application,
+    *,
+    require_api_access: Callable[[web.Request], None],
+) -> DeliverablePreviewService:
+    """Register deliverables behind the server's configured access-mode guard."""
+    if not callable(require_api_access):
+        raise TypeError("require_api_access must be callable")
+    preview_service = DeliverablePreviewService()
+    app[APP_DELIVERABLE_PREVIEW_SERVICE] = preview_service
+
+    async def _preview_redirect(request: web.Request) -> web.HTTPFound | None:
+        query = getattr(request, "query", {})
+        if str(query.get("download") or "").strip().lower() in {"1", "true", "yes"}:
+            return None
+        execution_id = str(request.match_info.get("execution_id", "") or "")
+        wd = _workspace_dir(execution_id)
+        if wd is None:
+            return None
+        tail = str(request.match_info.get("tail", "") or (deliverable_entry(execution_id) or ""))
+        target = (wd / tail).resolve()
+        if (
+            target.suffix.lower() not in {".html", ".htm"}
+            or not target.is_file()
+            or not (target == wd or wd in target.parents)
+        ):
+            return None
+        try:
+            location = await preview_service.preview_url(execution_id, tail)
+        except (FileNotFoundError, RuntimeError):
+            raise web.HTTPServiceUnavailable(text="Generated preview service is not ready") from None
+        return web.HTTPFound(
+            location=location,
+            headers={
+                "Cache-Control": "private, no-store, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
+
+    async def guarded_deliverable(request: web.Request) -> web.StreamResponse:
+        require_api_access(request)
+        redirect = await _preview_redirect(request)
+        if redirect is not None:
+            raise redirect
+        return await handle_deliverable(request)
+
+    app.router.add_get("/deliverable/{execution_id}", guarded_deliverable)
+    app.router.add_get("/deliverable/{execution_id}/{tail:.*}", guarded_deliverable)
+    return preview_service

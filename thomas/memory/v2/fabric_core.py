@@ -391,6 +391,166 @@ class MemoryFabricV2(MemoryFabricV2Retrieval):
         with self.db.transact() as conn:
             conn.execute("UPDATE profile_hints SET pinned=? WHERE key=?", (int(pinned), key))
 
+    def forget_profile_hint(self, key: str) -> dict[str, int | bool]:
+        """Delete a profile hint and cached/retrievable references to its current value."""
+        clean_key = str(key or "").strip()
+        if not clean_key:
+            return {"forgotten": False}
+        counts: dict[str, int | bool] = {"forgotten": False}
+        with self.db.transact() as conn:
+            row = conn.execute("SELECT value FROM profile_hints WHERE key=?", (clean_key,)).fetchone()
+            value = str(row["value"] or "").strip() if row is not None else ""
+            counts["profile_hints"] = max(
+                0,
+                int(conn.execute("DELETE FROM profile_hints WHERE key=?", (clean_key,)).rowcount),
+            )
+            counts["contradictions"] = max(
+                0,
+                int(
+                    conn.execute(
+                        "DELETE FROM contradictions WHERE "
+                        "(left_kind='profile_hint' AND left_id=?) OR "
+                        "(right_kind='profile_hint' AND right_id=?)",
+                        (clean_key, clean_key),
+                    ).rowcount
+                ),
+            )
+            if value:
+                contains = f"%{value}%"
+                prefers = f"%prefers {value}%"
+                counts["episodes"] = max(
+                    0,
+                    int(
+                        conn.execute(
+                            "DELETE FROM episodes WHERE content=? OR content LIKE ? OR content LIKE ?",
+                            (value, contains.replace(value, f"{clean_key}%{value}"), prefers),
+                        ).rowcount
+                    ),
+                )
+                counts["semantic_facts"] = max(
+                    0,
+                    int(conn.execute("DELETE FROM semantic_facts WHERE obj=?", (value,)).rowcount),
+                )
+                counts["pins"] = max(
+                    0,
+                    int(
+                        conn.execute(
+                            "DELETE FROM pins WHERE ref_id=? OR note=? OR note LIKE ?",
+                            (value, value, contains),
+                        ).rowcount
+                    ),
+                )
+                counts["retrieval_traces"] = max(
+                    0,
+                    int(
+                        conn.execute(
+                            "DELETE FROM retrieval_traces WHERE query LIKE ? OR results_json LIKE ?",
+                            (contains, contains),
+                        ).rowcount
+                    ),
+                )
+                counts["packs"] = max(
+                    0,
+                    int(conn.execute("DELETE FROM packs WHERE text LIKE ?", (contains,)).rowcount),
+                )
+            counts["forgotten"] = bool(value or int(counts["profile_hints"]))
+        return counts
+
+    def forget_thread(self, thread_id: str) -> dict[str, int | bool]:
+        """Delete every thread-scoped memory row and promoted row sourced from that thread."""
+
+        clean_thread = str(thread_id or "").strip()
+        if not clean_thread:
+            return {"forgotten": False}
+        counts: dict[str, int | bool] = {"forgotten": False}
+        with self.db.transact() as conn:
+            episode_ids = [
+                int(row["id"])
+                for row in conn.execute("SELECT id FROM episodes WHERE thread_id=?", (clean_thread,)).fetchall()
+            ]
+            episode_placeholders = ",".join("?" for _ in episode_ids)
+            if episode_ids:
+                fact_rows = conn.execute(
+                    f"SELECT id FROM semantic_facts WHERE thread_id=? OR provenance_episode_id IN ({episode_placeholders})",
+                    (clean_thread, *episode_ids),
+                ).fetchall()
+                hint_rows = conn.execute(
+                    f"SELECT key FROM profile_hints WHERE source_episode_id IN ({episode_placeholders})",
+                    tuple(episode_ids),
+                ).fetchall()
+            else:
+                fact_rows = conn.execute("SELECT id FROM semantic_facts WHERE thread_id=?", (clean_thread,)).fetchall()
+                hint_rows = []
+            fact_ids = [str(int(row["id"])) for row in fact_rows]
+            hint_keys = [str(row["key"]) for row in hint_rows]
+
+            contradiction_ids: set[int] = set()
+            for kind, values in (("fact", fact_ids), ("profile_hint", hint_keys)):
+                if not values:
+                    continue
+                placeholders = ",".join("?" for _ in values)
+                rows = conn.execute(
+                    f"SELECT id FROM contradictions WHERE "
+                    f"(left_kind=? AND left_id IN ({placeholders})) OR "
+                    f"(right_kind=? AND right_id IN ({placeholders}))",
+                    (kind, *values, kind, *values),
+                ).fetchall()
+                contradiction_ids.update(int(row["id"]) for row in rows)
+            if contradiction_ids:
+                placeholders = ",".join("?" for _ in contradiction_ids)
+                values = tuple(sorted(contradiction_ids))
+                counts["contradiction_reviews"] = max(
+                    0,
+                    int(
+                        conn.execute(
+                            f"DELETE FROM contradiction_reviews WHERE contradiction_id IN ({placeholders})", values
+                        ).rowcount
+                    ),
+                )
+                counts["contradictions"] = max(
+                    0,
+                    int(conn.execute(f"DELETE FROM contradictions WHERE id IN ({placeholders})", values).rowcount),
+                )
+
+            if episode_ids:
+                counts["profile_hints"] = max(
+                    0,
+                    int(
+                        conn.execute(
+                            f"DELETE FROM profile_hints WHERE source_episode_id IN ({episode_placeholders})",
+                            tuple(episode_ids),
+                        ).rowcount
+                    ),
+                )
+                counts["semantic_facts"] = max(
+                    0,
+                    int(
+                        conn.execute(
+                            f"DELETE FROM semantic_facts WHERE thread_id=? OR provenance_episode_id IN "
+                            f"({episode_placeholders})",
+                            (clean_thread, *episode_ids),
+                        ).rowcount
+                    ),
+                )
+            else:
+                counts["profile_hints"] = 0
+                counts["semantic_facts"] = max(
+                    0,
+                    int(conn.execute("DELETE FROM semantic_facts WHERE thread_id=?", (clean_thread,)).rowcount),
+                )
+
+            for table in ("pins", "packs", "retrieval_traces", "thread_settings", "maintenance_state"):
+                counts[table] = max(
+                    0,
+                    int(conn.execute(f"DELETE FROM {table} WHERE thread_id=?", (clean_thread,)).rowcount),
+                )
+            counts["episodes"] = max(
+                0,
+                int(conn.execute("DELETE FROM episodes WHERE thread_id=?", (clean_thread,)).rowcount),
+            )
+        counts["forgotten"] = any(int(value) > 0 for key, value in counts.items() if key != "forgotten")
+        return counts
+
     def add_pin(self, kind: str, ref_id: str, thread_id: str | None = None, note: str = "") -> int:
         now = _now_ms()
         cur = self.db.execute(

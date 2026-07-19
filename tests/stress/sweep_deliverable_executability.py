@@ -18,17 +18,14 @@ browser will actually load.
 from __future__ import annotations
 
 import asyncio
+import sys
 import tempfile
 from pathlib import Path
 
 from _harness import Recorder
-from aiohttp import web
+from aiohttp import ClientError, ClientSession, CookieJar, web
 
 A = "deliverable-executability"
-
-# CORP values a browser will NOT block for a first-party sub-resource on an IP
-# host. `same-site` is the one that breaks (NotSameSite on 127.0.0.1).
-BROWSER_SAFE_CORP = {"cross-origin", "same-origin"}
 
 
 def _extract_security_middleware():
@@ -49,19 +46,140 @@ def _extract_security_middleware():
     return None
 
 
-async def _corp_for(mw, path: str) -> str:
+async def _headers_for(
+    mw,
+    path: str,
+    *,
+    mode: str = "no-cors",
+    origin: str = "",
+    destination: str = "",
+) -> dict[str, str]:
     class _Req:
         def __init__(self, p: str) -> None:
             self.path = p
             self.method = "GET"
             self.remote = "127.0.0.1"
-            self.headers: dict = {}
+            self.headers = {
+                "Sec-Fetch-Site": "cross-site",
+                "Sec-Fetch-Mode": mode,
+                "Sec-Fetch-Dest": destination or ("style" if p.endswith(".css") else "script"),
+            }
+            if origin:
+                self.headers["Origin"] = origin
 
     async def handler(_req):
         return web.Response(body=b"x", content_type="text/css")
 
     resp = await mw(_Req(path), handler)
-    return str(resp.headers.get("Cross-Origin-Resource-Policy", "")).strip().lower()
+    return {str(key): str(value) for key, value in resp.headers.items()}
+
+
+async def _preview_origin_probes(rec: Recorder) -> None:
+    """Drive a real preview-only server, including its capability handshake."""
+    from thomas.server.routes import deliverable_aiohttp as da
+
+    original_base = da._WORKSPACES_BASE
+    service = da.DeliverablePreviewService()
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            workspace = base / "exec-preview-sweep"
+            (workspace / "assets").mkdir(parents=True)
+            (workspace / "src").mkdir()
+            (workspace / "index.html").write_text(
+                '<!doctype html><link rel="stylesheet" href="/assets/styles.css">'
+                '<script type="module" src="/src/main.js"></script><main>Playable</main>',
+                encoding="utf-8",
+            )
+            (workspace / "assets" / "styles.css").write_text("body{color:#fff}", encoding="utf-8")
+            (workspace / "src" / "main.js").write_text(
+                "fetch('/data.json'); new Worker('/worker.js', {type:'module'});",
+                encoding="utf-8",
+            )
+            (workspace / "data.json").write_text('{"ready":true}', encoding="utf-8")
+            (workspace / "worker.js").write_text("self.postMessage('ready')", encoding="utf-8")
+            da._WORKSPACES_BASE = base
+            main_origin = "http://127.0.0.1:8899"
+            service.configure(main_origin=main_origin)
+            entry_url = await service.preview_url("exec-preview-sweep", "index.html")
+
+            async with ClientSession(cookie_jar=CookieJar(unsafe=True)) as client:
+                preview = await client.get(entry_url)
+                preview_origin = f"{preview.url.scheme}://{preview.url.host}:{preview.url.port}"
+                csp = str(preview.headers.get("Content-Security-Policy") or "")
+                preview_headers_ok = (
+                    preview.status == 200
+                    and str(preview.headers.get("Cross-Origin-Resource-Policy") or "") == "same-origin"
+                    and "allow-same-origin" in csp
+                    and "worker-src 'self' blob:" in csp
+                    and f"frame-ancestors {main_origin}" in csp
+                    and "Access-Control-Allow-Origin" not in preview.headers
+                )
+                rec.add(
+                    case="generated app opens on a dedicated capability-gated origin",
+                    dimension=A,
+                    expected="200 on an ephemeral loopback origin with same-origin CORP and constrained CSP",
+                    actual=(
+                        f"status={preview.status} origin={preview_origin} "
+                        f"CORP={preview.headers.get('Cross-Origin-Resource-Policy')!r} CSP={csp!r}"
+                    ),
+                    passed=preview_headers_ok and preview_origin != main_origin,
+                    severity="critical",
+                    evidence="DeliverablePreviewService.preview_url -> capability handshake -> isolated preview server",
+                )
+
+                asset_results: list[str] = []
+                assets_ok = True
+                for path in ("/assets/styles.css", "/src/main.js", "/data.json", "/worker.js"):
+                    response = await client.get(preview_origin + path)
+                    asset_results.append(f"{path}={response.status}")
+                    assets_ok = assets_ok and response.status == 200
+                rec.add(
+                    case="root-relative CSS, modules, data, and workers load from the preview origin",
+                    dimension=A,
+                    expected="all four first-party resources return 200",
+                    actual=" ".join(asset_results),
+                    passed=assets_ok,
+                    severity="critical",
+                    evidence="real HTTP requests against the per-execution preview origin",
+                )
+
+                api = await client.get(preview_origin + "/api/models")
+                rec.add(
+                    case="preview origin does not expose Thomas API routes",
+                    dimension=A,
+                    expected="GET /api/models returns 404 on preview server",
+                    actual=f"status={api.status}",
+                    passed=api.status == 404,
+                    severity="critical",
+                    evidence="preview server registers only capability entry and workspace file routes",
+                )
+
+            async with ClientSession() as no_cookie_client:
+                preview_origin = entry_url.split("/__enter/", 1)[0]
+                denied = await no_cookie_client.get(preview_origin + "/index.html")
+                rec.add(
+                    case="preview files require the high-entropy handshake cookie",
+                    dimension=A,
+                    expected="direct file request without handshake returns 404",
+                    actual=f"status={denied.status}",
+                    passed=denied.status == 404,
+                    severity="critical",
+                    evidence="fresh client without the HttpOnly preview capability cookie",
+                )
+    except (ClientError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        rec.add(
+            case="construct and exercise the dedicated preview origin",
+            dimension=A,
+            expected="preview probe completes without infrastructure error",
+            actual=f"{type(exc).__name__}: {exc}",
+            passed=False,
+            severity="critical",
+            evidence="DeliverablePreviewService end-to-end sweep",
+        )
+    finally:
+        da._WORKSPACES_BASE = original_base
+        await service.stop()
 
 
 def run() -> Recorder:
@@ -92,28 +210,12 @@ def run() -> Recorder:
         )
         return rec
 
-    # A real multi-file generated app: index.html pulls in these first-party
-    # sub-resources. Each must be served with a browser-loadable CORP.
-    sub_resources = [
-        "/deliverable/exec-demo/styles.css",
-        "/deliverable/exec-demo/src/game.js",
-    ]
-    for asset in sub_resources:
-        corp = asyncio.run(_corp_for(mw, asset))
-        passed = corp in BROWSER_SAFE_CORP
-        rec.add(
-            case=f"multi-file app sub-resource '{asset}' is not browser-blocked",
-            dimension=A,
-            expected=f"Cross-Origin-Resource-Policy in {sorted(BROWSER_SAFE_CORP)} (loads on 127.0.0.1)",
-            actual=f"Cross-Origin-Resource-Policy={corp!r}",
-            passed=passed,
-            severity="critical",
-            evidence="same-site CORP -> ERR_BLOCKED_BY_RESPONSE.NotSameSite on IP host (app_middleware_handlers.py security_headers)",
-        )
+    asyncio.run(_preview_origin_probes(rec))
 
     # Negative control: a normal app page (NOT under /deliverable/) keeps the
     # strict same-site default — we only relax for generated deliverables.
-    main_corp = asyncio.run(_corp_for(mw, "/static/css/components.css"))
+    main_headers = asyncio.run(_headers_for(mw, "/static/css/components.css"))
+    main_corp = str(main_headers.get("Cross-Origin-Resource-Policy", "")).strip().lower()
     rec.add(
         case="main-app asset keeps strict same-site CORP (fix is scoped)",
         dimension=A,
@@ -271,6 +373,8 @@ def _verify_probes(rec: Recorder) -> None:
 
 
 if __name__ == "__main__":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="backslashreplace")
     r = run()
     for row in r.rows:
         print(("PASS" if row.passed else "FAIL"), "|", row.case, "->", row.actual)

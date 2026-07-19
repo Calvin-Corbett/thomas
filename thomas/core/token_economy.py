@@ -210,7 +210,8 @@ def apply_token_economy_policy(
 def loop_context_budgets(level: Any, mode: Any) -> tuple[int, int | None, int]:
     """Return (mode_budget, hard_budget, emergency_budget).
 
-    Budgets scale with pass count — more passes need more token room.
+    The mode and emergency values are telemetry thresholds. Per-request model
+    context fit, rather than cumulative task usage, is the hard safety boundary.
     """
     applied = normalize_token_economy_level(level)
     run_mode = normalize_mode(mode, default="auto")
@@ -223,15 +224,8 @@ def loop_context_budgets(level: Any, mode: Any) -> tuple[int, int | None, int]:
     multiplier = {"cheap": 0.6, "optimal": 1.0, "max": 2.0}[applied]
     mode_budget = max(40_000, int(base_mode_budget * multiplier))
 
-    if applied == "cheap":
-        hard_budget: int | None = 250_000
-    elif applied == "optimal":
-        hard_budget = 650_000
-    else:
-        hard_budget = None
-
     emergency_budget = 1_800_000
-    return mode_budget, hard_budget, emergency_budget
+    return mode_budget, None, emergency_budget
 
 
 def loop_tool_spec_budgets(level: Any, mode: Any) -> tuple[int, int]:
@@ -249,20 +243,15 @@ def loop_tool_spec_budgets(level: Any, mode: Any) -> tuple[int, int]:
 
 
 def loop_iteration_prompt_caps(level: Any, mode: Any) -> tuple[int, int | None]:
-    """Return (warn_cap, hard_cap) for prompt tokens spent in a single iteration."""
+    """Return a warning threshold while per-call context fit remains the hard cap."""
     applied = normalize_token_economy_level(level)
     run_mode = normalize_mode(mode, default="auto")
 
     base_warn = {"fast": 8_000, "auto": 12_000, "thinking": 18_000}.get(run_mode, 12_000)
-    base_hard = {"fast": 16_000, "auto": 24_000, "thinking": 36_000}.get(run_mode, 24_000)
     multiplier = {"cheap": 0.75, "optimal": 1.0, "max": 2.0}[applied]
 
     warn_cap = max(4_000, int(base_warn * multiplier))
-    if applied == "max":
-        hard_cap: int | None = None
-    else:
-        hard_cap = max(warn_cap + 2_000, int(base_hard * multiplier))
-    return warn_cap, hard_cap
+    return warn_cap, None
 
 
 # ── Effort dial — public vocabulary + Autonomy coupling + cost ──────────────────

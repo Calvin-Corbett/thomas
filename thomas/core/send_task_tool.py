@@ -183,6 +183,43 @@ RECALL_TOOL: dict = {
 }
 RECALL_TOOL_NAME = "recall"
 
+
+# Thomas's bounded inline operating surface. This intentionally names product
+# actions rather than exposing the full registry: the V2 server maps each action
+# to an existing tool behind guardrails and returns a post-action evidence receipt.
+OPERATE_TOOL: dict = {
+    "type": "function",
+    "function": {
+        "name": "operate",
+        "description": (
+            "Perform a small, reversible action that belongs to Thomas himself instead of "
+            "creating a background task. Use this for reading, listing, or changing the "
+            "user's Thomas preferences when they ask. Never use it for files, shell commands, "
+            "external messages, purchases, account changes, or artifact creation; send those "
+            "to the task manager. A successful call returns effect evidence including readback."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["preferences.get", "preferences.list", "preferences.set"],
+                    "description": "The bounded Thomas-owned action to perform.",
+                },
+                "key": {
+                    "type": "string",
+                    "description": "Preference key for preferences.get or preferences.set.",
+                },
+                "value": {
+                    "description": "New preference value for preferences.set.",
+                },
+            },
+            "required": ["action"],
+        },
+    },
+}
+OPERATE_TOOL_NAME = "operate"
+
 __all__ = [
     "SEND_TASK_TOOL",
     "SEND_TASK_TOOL_NAME",
@@ -192,4 +229,6 @@ __all__ = [
     "REMEMBER_TOOL_NAME",
     "RECALL_TOOL",
     "RECALL_TOOL_NAME",
+    "OPERATE_TOOL",
+    "OPERATE_TOOL_NAME",
 ]

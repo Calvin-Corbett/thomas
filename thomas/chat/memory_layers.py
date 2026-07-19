@@ -17,6 +17,7 @@ framework (Feb 2026).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import time
@@ -120,11 +121,33 @@ class MemoryCoordinator:
         *,
         semantic_refresh_interval: int = 3,
         context_budget: int = 4_000,
+        policy: Any = None,
     ) -> None:
         self._memory = memory_engine
         self._session_id = session_id
         self._semantic_interval = semantic_refresh_interval
-        self._context_budget = context_budget
+        policy_budget = int(getattr(policy, "context_budget", 0) or 0)
+        self._context_budget = min(context_budget, policy_budget) if policy_budget > 0 else context_budget
+        self._include_thread = bool(getattr(policy, "include_thread", True))
+        self._include_global = bool(getattr(policy, "include_global", True))
+        self._include_profile = bool(getattr(policy, "include_profile", True))
+        self._pins_only = bool(getattr(policy, "pins_only", False))
+        self._pins_policy_applied = not self._pins_only
+        if self._pins_only and self._memory is not None:
+            setter = getattr(self._memory, "set_thread_memory_policy", None)
+            if callable(setter):
+                try:
+                    setter(
+                        self._session_id,
+                        include_thread=self._include_thread,
+                        include_global=self._include_global,
+                        include_profile=self._include_profile,
+                        pins_only=True,
+                        max_pack_tokens=self._context_budget,
+                    )
+                    self._pins_policy_applied = True
+                except (OSError, RuntimeError, TypeError, ValueError) as exc:
+                    log.warning("Pins-only memory policy could not be applied: %s", exc)
 
         # Caches
         self._semantic_cache: str = ""
@@ -146,12 +169,16 @@ class MemoryCoordinator:
                 value = result.get(key)
                 if value:
                     return str(value)
+            if any(key in result for key in ("text", "pack_text", "content")):
+                return ""
         if isinstance(result, (list, tuple)):
             return "\n".join(str(item) for item in result if item is not None)
         for attr in ("text", "pack_text", "content"):
             value = getattr(result, attr, None)
             if value:
                 return str(value)
+        if any(hasattr(result, attr) for attr in ("text", "pack_text", "content")):
+            return ""
         return str(result)
 
     async def _retrieve_memory_text(
@@ -177,7 +204,10 @@ class MemoryCoordinator:
         last_type_error: TypeError | None = None
         for attempt in attempts:
             try:
-                result = attempt()
+                # The production memory fabric is synchronous and may spend time in
+                # SQLite retrieval.  Running it on aiohttp's event-loop thread makes
+                # unrelated routes (including health checks) wait behind that query.
+                result = await asyncio.to_thread(attempt)
                 if isawaitable(result):
                     result = await result
                 return self._memory_result_text(result)
@@ -327,7 +357,7 @@ class MemoryCoordinator:
         Uses the memory engine to search for relevant past interactions
         scoped to this session/thread.
         """
-        if self._memory is None:
+        if self._memory is None or (not self._include_thread and not self._pins_only) or not self._pins_policy_applied:
             return ""
 
         try:
@@ -370,7 +400,9 @@ class MemoryCoordinator:
         domain knowledge changes slowly.  Uses full memory engine with
         all signals (FTS + sparse vec + knowledge graph).
         """
-        if self._memory is None:
+        # The current backend cannot distinguish global from profile semantic
+        # results.  Require both scopes instead of leaking one the user disabled.
+        if self._memory is None or self._pins_only or not (self._include_global and self._include_profile):
             return ""
 
         # Check if we need to refresh

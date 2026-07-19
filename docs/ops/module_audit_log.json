@@ -1,26 +1,34 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-05-22T18:28:56+00:00",
+  "updated_at": "2026-07-18T22:19:07+00:00",
   "latest_by_module": {
     "agent": {
-      "id": "4ad944b3250a40bc9be9ce63dc1a0d4b",
+      "id": "57b1f6f886114dd9ba83c89f94bfd1b8",
       "module": "agent",
-      "audited_at": "2026-05-22T01:35:24+00:00",
-      "auditor": "claude",
+      "audited_at": "2026-07-18T22:19:06+00:00",
+      "auditor": "codex",
       "status": "pass",
-      "summary": "0.16.3: re-record with line-ending agnostic hash (CRLF/LF fix)",
-      "run_id": "",
+      "summary": "Final unified lifecycle audit for agent",
+      "run_id": "THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718",
       "files_touched": [
-        "thomas/agent/guarded_tools.py"
+        "thomas/agent/loop.py",
+        "thomas/agent/loop_completion.py",
+        "thomas/agent/loop_core.py",
+        "thomas/agent/loop_execution.py",
+        "thomas/agent/loop_tool_protocol.py"
       ],
       "file_hashes": {
-        "thomas/agent/guarded_tools.py": "700323529af13c467e1c1eb1649a648be86f9a53fdf8e0b7e822cb1d36596278"
+        "thomas/agent/loop.py": "191639be323e95c0ba20da355125d1da564f2f51a225c9065fae051165c2eb78",
+        "thomas/agent/loop_completion.py": "3daa7602b56037e6365dce813080d747c4e2aa273eac1977471a065754edc19b",
+        "thomas/agent/loop_core.py": "f42f36e9c22a51a93520e64f03d6fffd6964baa91f1a9733bc8589c4bfa54062",
+        "thomas/agent/loop_execution.py": "82b94b0b62aa57cd6c8ac2dca261f146cf29978e05913588c94f7ab1ad316823",
+        "thomas/agent/loop_tool_protocol.py": "01a31fd668763d303e0705cd5eaddf8bdd7cba9885c3060305d8727339b81649"
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "d211cc44687f50b6270511231c622727e7f743649e09e47d475fb2a3875e91d0",
+      "prev_signature": "75275d1ae044079ed226dc186d9a1987dc4b172e0e056bb67dfe2e93be13d600",
       "signature_scheme": "sha256",
-      "signature": "7c739ea9a52ef6ef455251cb5e50975a37ca9de9b4e05d3cd30870f027ddac6d"
+      "signature": "04e3db03a4dbb5f70d057ddbb4b5d60e192ca5a47c7ab22ed1562a852858113c"
     },
     "autonomy": {
       "id": "403f260c96524847a295b589d40c1780",
@@ -41,22 +49,24 @@
       "signature": "9e4b4747995a853b47d4ff5f42702ea8015113bb62f7d913565b5efd14c9a615"
     },
     "core": {
-      "id": "c7c60a3a0d194a20aa7364306355f082",
+      "id": "67de11f82a2d4fef90c1dca5c41036c2",
       "module": "core",
-      "audited_at": "2026-02-25T02:15:32+00:00",
-      "auditor": "Codex 2",
-      "status": "warn",
-      "summary": "24h module audit sweep from architecture debt map",
-      "run_id": "timing-check",
-      "files_touched": [],
-      "file_hashes": {},
-      "issues": [
-        "api_importer.py exceeds 1500 lines, llm.py exceeds 1000 lines, rag_index.py exceeds 1400 lines, scheduler.py exceeds 900 lines, search_history.py exceeds 900 lines; core imports tools/codex/server --should be inverted"
+      "audited_at": "2026-07-18T22:19:07+00:00",
+      "auditor": "codex",
+      "status": "pass",
+      "summary": "Final unified lifecycle audit for core",
+      "run_id": "THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718",
+      "files_touched": [
+        "thomas/core/token_economy.py"
       ],
-      "issue_count": 1,
-      "prev_signature": "ea44489fa807b1d71dd4fdb1a83cc2fb6bdcdc51b63a2b315e5db7b72d364623",
+      "file_hashes": {
+        "thomas/core/token_economy.py": "48e04d59efac34d5c4454645acf52f51560ce9352f9ee37e000f5cd5901fad07"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "7551f9d7b85a36d43099aaa85eaea5ef8d79bfe93dfda5956fcdb81c3313d751",
       "signature_scheme": "sha256",
-      "signature": "f6839a58329bc796536c671911bd5f75b1c27e9c7873659cc36cc1522baa4df1"
+      "signature": "e8b6d3c88916eb4a94d2e62005793a5f08bf5879ac5b666a13dfc3761d6ee96e"
     },
     "demo": {
       "id": "b82c7ea449d54d0d88d21107598c2f1b",
@@ -183,24 +193,26 @@
       "signature": "ec14b0943a8ec36390701f155e22e7cb0aeec16083ae0f65c66c5445a0555361"
     },
     "preferences": {
-      "id": "5feb4d9f44a24a7ca24fa8745d62d824",
+      "id": "f0c015f748b34d16af8ac90d8bab690a",
       "module": "preferences",
-      "audited_at": "2026-05-22T14:22:26+00:00",
-      "auditor": "claude",
+      "audited_at": "2026-07-18T22:19:07+00:00",
+      "auditor": "codex",
       "status": "pass",
-      "summary": "0.16.10: env-aware allow_third_party_agent_access default (inlined, no marketplace import)",
-      "run_id": "",
+      "summary": "Final unified lifecycle audit for preferences",
+      "run_id": "THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718",
       "files_touched": [
-        "thomas/preferences/_db.py"
+        "thomas/preferences/_db.py",
+        "thomas/preferences/_prefs.py"
       ],
       "file_hashes": {
-        "thomas/preferences/_db.py": "d381f4733796df31b6dc0deb9af5d54c0d34bd82eaf870be5ab99d174ae399d9"
+        "thomas/preferences/_db.py": "9826fb09fae6019fd01adcc8de89a0d526bfb4169e8cbccd1a23b77162b30536",
+        "thomas/preferences/_prefs.py": "8a10d60efbc086cc8f36af5375e50a65925bd5bbdba53919e3846731339e8e11"
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "1e96bf3329fb1d6ac3be7ad5b424ee54142f747328d4a2ed0a74ee071642f1fc",
+      "prev_signature": "c526c8901adc69a131bd8296650dfb02b0cdd721a482a3f4083d064ce0704f35",
       "signature_scheme": "sha256",
-      "signature": "b62fc0d16fe8fea0522f52f861a44e29734cfdc54bb690a994187e771956972a"
+      "signature": "257b7e3aee1e48f43c4363e3387fdb29a3bd78ce7d3085b6c2a8ded808791c2e"
     },
     "realtime": {
       "id": "6932faa0381742e6b423206b9aacf14d",
@@ -219,24 +231,54 @@
       "signature": "565aeeea4b99a17e0f249e3183a0e24faf509a87baa566922abc9bddb35cacbb"
     },
     "server": {
-      "id": "d9b0d36ffdef4c0ba122e88a25572444",
+      "id": "e32d423932b34727a4abe6273af96f27",
       "module": "server",
-      "audited_at": "2026-05-22T18:28:56+00:00",
-      "auditor": "claude",
+      "audited_at": "2026-07-18T22:19:07+00:00",
+      "auditor": "codex",
       "status": "pass",
-      "summary": "0.16.7: webhooks_routes reload chain so decorators re-attach to fresh router (Pattern 24)",
-      "run_id": "",
+      "summary": "Final unified lifecycle audit for server",
+      "run_id": "THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718",
       "files_touched": [
-        "thomas/server/routes/webhooks.py"
+        "thomas/server/app_keys.py",
+        "thomas/server/app_lifecycle.py",
+        "thomas/server/app_middleware_handlers.py",
+        "thomas/server/app_middleware_security.py",
+        "thomas/server/chat_delegation_artifact_verification.py",
+        "thomas/server/chat_delegation_deliverable.py",
+        "thomas/server/chat_delegation_deliverable_postprocess.py",
+        "thomas/server/chat_delegation_result_policy.py",
+        "thomas/server/chat_delegation_runner.py",
+        "thomas/server/routes/chat_v2_announcements.py",
+        "thomas/server/routes/deliverable_aiohttp.py",
+        "thomas/server/routes/evolve_agent_http_support.py",
+        "thomas/server/routes/evolve_agent_routes.py",
+        "thomas/server/web/chat.html",
+        "thomas/server/web/js/unified_code_mode.js",
+        "thomas/server/web/js/unified_work_mode.js"
       ],
       "file_hashes": {
-        "thomas/server/routes/webhooks.py": "c52068c20a11e44163e0db24657785b87701a462068214cd9acd0223395546a3"
+        "thomas/server/app_keys.py": "2f0000047ff8acb1609064e56fb2eeaee1537a0edb31084904dda145d124c852",
+        "thomas/server/app_lifecycle.py": "a0aaae06d323beb1d2de8961dfae1ac25947d4351d7d4db1fc8f0cc7a3f2ffa9",
+        "thomas/server/app_middleware_handlers.py": "4c2c511f8e9657a194c0e007f65a8e528b5f9da7fb67fba85b720ebacc1ebd31",
+        "thomas/server/app_middleware_security.py": "70b0069d7df324321c7c50e76556c3413d6bdd324a4846b81a46c38fb7d77734",
+        "thomas/server/chat_delegation_artifact_verification.py": "e0c8f5717e36071b862008cc748fd07e60e7860452eafa399ea43ef1e0f6107c",
+        "thomas/server/chat_delegation_deliverable.py": "a939524f3e6de81a7bfdf783a7ec9dbe066865c613e696974ac1490e18137340",
+        "thomas/server/chat_delegation_deliverable_postprocess.py": "fd3876977930496de3c529543a85330b7055b6ee3b8a98ae26030ff7174711b1",
+        "thomas/server/chat_delegation_result_policy.py": "f11f4895ec3a1cec8c011beb7f07412c4949ba153aed611fc9c9c025d4c19cb3",
+        "thomas/server/chat_delegation_runner.py": "81a2f996c9353dff1092db33ffd81c8b7ac637b6cd85929b84dbde6038ddc741",
+        "thomas/server/routes/chat_v2_announcements.py": "05da942b15ec76b1e6b93b3db9733295b361f747d85f6c8b8b9dd587a4bfd438",
+        "thomas/server/routes/deliverable_aiohttp.py": "e835859a2f9980319b8fa2dc03d1ed3254991137d16de4e8b1897cba0515967a",
+        "thomas/server/routes/evolve_agent_http_support.py": "ef72c39834309417c90c192ca8ca32c1a3782249df5059076b3135e521aacf7e",
+        "thomas/server/routes/evolve_agent_routes.py": "b60e47c66cdb5cea1ed512e2bd9a06fb2cf51c418804f2f00522fa5d256322f4",
+        "thomas/server/web/chat.html": "af1d213824bac117edf7bbd2e058a56310cf71791d34a45c048f9a85ffbb8f45",
+        "thomas/server/web/js/unified_code_mode.js": "4f6e8d77863928d522286f4c57ef093b85d441c56cea92b4a1374888edc3cbe2",
+        "thomas/server/web/js/unified_work_mode.js": "f07a7af708a211b52c857c05ba9ee1c0e053fc389723b9ee3bc9191f6f8ca268"
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "4bff6765c0b4998e83ff47189b21e62536e63e4934a655d748b80cdedb3526ed",
+      "prev_signature": "889bced4ba255d3f13068a8bf551dfd220166e10c11ab95019b45b6d40b7d10f",
       "signature_scheme": "sha256",
-      "signature": "d299e35d4288be44b10f6bb39f8bf7059a9c58660e1c2f7377cf150fe303943a"
+      "signature": "43f2a82a9a9294f77470fde24221082162c28a1cabe3344792ab3dba88a68848"
     },
     "tools": {
       "id": "6baf6ae9bb2242c2825e72fd9c76ad31",
@@ -1938,6 +1980,452 @@
       "prev_signature": "4bff6765c0b4998e83ff47189b21e62536e63e4934a655d748b80cdedb3526ed",
       "signature_scheme": "sha256",
       "signature": "d299e35d4288be44b10f6bb39f8bf7059a9c58660e1c2f7377cf150fe303943a"
+    },
+    {
+      "id": "de5e29d2c2f94dcb9ab08b87a90ad4b0",
+      "module": "agent",
+      "audited_at": "2026-07-18T20:00:37+00:00",
+      "auditor": "codex",
+      "status": "pass",
+      "summary": "Reviewed effort-bounded loop completion, context pressure, and raw-token advisory behavior",
+      "run_id": "THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718",
+      "files_touched": [
+        "thomas/agent/loop.py",
+        "thomas/agent/loop_completion.py",
+        "thomas/agent/loop_execution.py"
+      ],
+      "file_hashes": {
+        "thomas/agent/loop.py": "191639be323e95c0ba20da355125d1da564f2f51a225c9065fae051165c2eb78",
+        "thomas/agent/loop_completion.py": "3daa7602b56037e6365dce813080d747c4e2aa273eac1977471a065754edc19b",
+        "thomas/agent/loop_execution.py": "a08c1d5eed76665998c9408c346857d387ff3c64218f32d2745c94d8945d026e"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "7c739ea9a52ef6ef455251cb5e50975a37ca9de9b4e05d3cd30870f027ddac6d",
+      "signature_scheme": "sha256",
+      "signature": "add9b290d839deb9b9e9ceea183827b369056271387caca72b2766fe243ab492"
+    },
+    {
+      "id": "69f90f6f760a456b911f85be830c2989",
+      "module": "core",
+      "audited_at": "2026-07-18T20:00:37+00:00",
+      "auditor": "codex",
+      "status": "pass",
+      "summary": "Reviewed advisory token telemetry and explicit opt-in spending cap behavior",
+      "run_id": "THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718",
+      "files_touched": [
+        "thomas/core/token_economy.py"
+      ],
+      "file_hashes": {
+        "thomas/core/token_economy.py": "48e04d59efac34d5c4454645acf52f51560ce9352f9ee37e000f5cd5901fad07"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "f6839a58329bc796536c671911bd5f75b1c27e9c7873659cc36cc1522baa4df1",
+      "signature_scheme": "sha256",
+      "signature": "7f5e7946d918c4f702129c68beca97511b809eba88f4e22f9ad774482d9a8881"
+    },
+    {
+      "id": "fa473a17389c4a4294086d762ff7d8f9",
+      "module": "preferences",
+      "audited_at": "2026-07-18T20:00:37+00:00",
+      "auditor": "codex",
+      "status": "pass",
+      "summary": "Reviewed token throttle defaults, one-time migration, malformed-row retry, and preference compatibility",
+      "run_id": "THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718",
+      "files_touched": [
+        "thomas/preferences/_db.py",
+        "thomas/preferences/_prefs.py"
+      ],
+      "file_hashes": {
+        "thomas/preferences/_db.py": "9826fb09fae6019fd01adcc8de89a0d526bfb4169e8cbccd1a23b77162b30536",
+        "thomas/preferences/_prefs.py": "8a10d60efbc086cc8f36af5375e50a65925bd5bbdba53919e3846731339e8e11"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "b62fc0d16fe8fea0522f52f861a44e29734cfdc54bb690a994187e771956972a",
+      "signature_scheme": "sha256",
+      "signature": "c997392839f0e9ada1edff8d84fa0123ca5bb9395e6c9c7acbc968b73a17361d"
+    },
+    {
+      "id": "018f9e57769c407f82693be95069398e",
+      "module": "server",
+      "audited_at": "2026-07-18T20:00:38+00:00",
+      "auditor": "codex",
+      "status": "pass",
+      "summary": "Reviewed Chat answer integrity, structured rendering, and persistent Code and Work lifecycle behavior",
+      "run_id": "THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718",
+      "files_touched": [
+        "thomas/server/chat_delegation_deliverable.py",
+        "thomas/server/chat_delegation_result_policy.py",
+        "thomas/server/routes/chat_v2_announcements.py",
+        "thomas/server/web/chat.html",
+        "thomas/server/web/js/unified_code_mode.js",
+        "thomas/server/web/js/unified_work_mode.js"
+      ],
+      "file_hashes": {
+        "thomas/server/chat_delegation_deliverable.py": "a013daccc5ebe03646ce82b50a6f7f4d6051850751b154fddec56a3f72f921f0",
+        "thomas/server/chat_delegation_result_policy.py": "25969d15625c948779d8254d2cad394fe6bbfc097f663d87eaa48ca3b0c65587",
+        "thomas/server/routes/chat_v2_announcements.py": "05da942b15ec76b1e6b93b3db9733295b361f747d85f6c8b8b9dd587a4bfd438",
+        "thomas/server/web/chat.html": "54ab638aff781ca12e769f5f25e24e07deefc348c3d29612a12d7dc315237c00",
+        "thomas/server/web/js/unified_code_mode.js": "a53685cdba9f8de866632a4e55b827b094df25cbdb9f7050d0db8f9992180be4",
+        "thomas/server/web/js/unified_work_mode.js": "f07a7af708a211b52c857c05ba9ee1c0e053fc389723b9ee3bc9191f6f8ca268"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "d299e35d4288be44b10f6bb39f8bf7059a9c58660e1c2f7377cf150fe303943a",
+      "signature_scheme": "sha256",
+      "signature": "be0f7abb0fc27ef9bb4d2cc0e55edafa866c079c5b5cc2f19b54db4dbf30c23d"
+    },
+    {
+      "id": "25e7975a8b05485daa5f2baf0595a076",
+      "module": "agent",
+      "audited_at": "2026-07-18T21:59:52+00:00",
+      "auditor": "codex",
+      "status": "pass",
+      "summary": "Unified mode lifecycle, pass-budget, and tool-loop review",
+      "run_id": "THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718",
+      "files_touched": [
+        "thomas/agent/loop_completion.py",
+        "thomas/agent/loop_execution.py",
+        "thomas/agent/loop_tool_protocol.py"
+      ],
+      "file_hashes": {
+        "thomas/agent/loop_completion.py": "3daa7602b56037e6365dce813080d747c4e2aa273eac1977471a065754edc19b",
+        "thomas/agent/loop_execution.py": "ce6ef7a032cd90d71c3dcf46c9b72cae3da9e38f4cdd46d4226ef321675222f6",
+        "thomas/agent/loop_tool_protocol.py": "01a31fd668763d303e0705cd5eaddf8bdd7cba9885c3060305d8727339b81649"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "add9b290d839deb9b9e9ceea183827b369056271387caca72b2766fe243ab492",
+      "signature_scheme": "sha256",
+      "signature": "5f15df816320ee095fb7baceebd84f4ef3ec129be5aed6b031fae551e1491031"
+    },
+    {
+      "id": "919a6fa29afd44b4919418c10bbdbec1",
+      "module": "core",
+      "audited_at": "2026-07-18T21:59:53+00:00",
+      "auditor": "codex",
+      "status": "pass",
+      "summary": "Token economy telemetry and context-boundary review",
+      "run_id": "THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718",
+      "files_touched": [
+        "thomas/core/token_economy.py"
+      ],
+      "file_hashes": {
+        "thomas/core/token_economy.py": "48e04d59efac34d5c4454645acf52f51560ce9352f9ee37e000f5cd5901fad07"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "7f5e7946d918c4f702129c68beca97511b809eba88f4e22f9ad774482d9a8881",
+      "signature_scheme": "sha256",
+      "signature": "ec969ef2569d6a88bd1428039f38e5c89d248462c48b343209d9c4bda88378a1"
+    },
+    {
+      "id": "9e2ad223ac974301b150d48f81e25914",
+      "module": "preferences",
+      "audited_at": "2026-07-18T21:59:55+00:00",
+      "auditor": "codex",
+      "status": "pass",
+      "summary": "Opt-in cumulative token throttle migration review",
+      "run_id": "THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718",
+      "files_touched": [
+        "thomas/preferences/_db.py",
+        "thomas/preferences/_prefs.py"
+      ],
+      "file_hashes": {
+        "thomas/preferences/_db.py": "9826fb09fae6019fd01adcc8de89a0d526bfb4169e8cbccd1a23b77162b30536",
+        "thomas/preferences/_prefs.py": "8a10d60efbc086cc8f36af5375e50a65925bd5bbdba53919e3846731339e8e11"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "c997392839f0e9ada1edff8d84fa0123ca5bb9395e6c9c7acbc968b73a17361d",
+      "signature_scheme": "sha256",
+      "signature": "0c6b812965cc2e09ceae4b329d6dd532df99426f5fa8cacccf63840ce5a6b000"
+    },
+    {
+      "id": "b226b6306003464b83e782c7c3d8a7d3",
+      "module": "server",
+      "audited_at": "2026-07-18T21:59:57+00:00",
+      "auditor": "codex",
+      "status": "pass",
+      "summary": "Unified Chat Code Work lifecycle and isolated preview security review",
+      "run_id": "THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718",
+      "files_touched": [
+        "thomas/server/app_keys.py",
+        "thomas/server/app_lifecycle.py",
+        "thomas/server/app_middleware_handlers.py",
+        "thomas/server/app_middleware_security.py",
+        "thomas/server/chat_delegation_artifact_verification.py",
+        "thomas/server/chat_delegation_deliverable.py",
+        "thomas/server/chat_delegation_deliverable_postprocess.py",
+        "thomas/server/chat_delegation_result_policy.py",
+        "thomas/server/routes/chat_v2_announcements.py",
+        "thomas/server/routes/deliverable_aiohttp.py",
+        "thomas/server/routes/evolve_agent_http_support.py",
+        "thomas/server/routes/evolve_agent_routes.py",
+        "thomas/server/web/chat.html",
+        "thomas/server/web/js/unified_code_mode.js",
+        "thomas/server/web/js/unified_work_mode.js"
+      ],
+      "file_hashes": {
+        "thomas/server/app_keys.py": "2f0000047ff8acb1609064e56fb2eeaee1537a0edb31084904dda145d124c852",
+        "thomas/server/app_lifecycle.py": "a0aaae06d323beb1d2de8961dfae1ac25947d4351d7d4db1fc8f0cc7a3f2ffa9",
+        "thomas/server/app_middleware_handlers.py": "4c2c511f8e9657a194c0e007f65a8e528b5f9da7fb67fba85b720ebacc1ebd31",
+        "thomas/server/app_middleware_security.py": "70b0069d7df324321c7c50e76556c3413d6bdd324a4846b81a46c38fb7d77734",
+        "thomas/server/chat_delegation_artifact_verification.py": "241aed23a400d83f198acf53e55fe257417912a5aea5e4885ec9b1bf914c27ba",
+        "thomas/server/chat_delegation_deliverable.py": "a939524f3e6de81a7bfdf783a7ec9dbe066865c613e696974ac1490e18137340",
+        "thomas/server/chat_delegation_deliverable_postprocess.py": "c953ef4ebfb3a6fca4718fc5224c3da048c2fa0abb9b2b624ff85ed2aff0c51e",
+        "thomas/server/chat_delegation_result_policy.py": "f11f4895ec3a1cec8c011beb7f07412c4949ba153aed611fc9c9c025d4c19cb3",
+        "thomas/server/routes/chat_v2_announcements.py": "05da942b15ec76b1e6b93b3db9733295b361f747d85f6c8b8b9dd587a4bfd438",
+        "thomas/server/routes/deliverable_aiohttp.py": "4c62793a0020f000fabde7c8ca23fc99d165fe3b0156e8b0e3152def1bcd7735",
+        "thomas/server/routes/evolve_agent_http_support.py": "ef72c39834309417c90c192ca8ca32c1a3782249df5059076b3135e521aacf7e",
+        "thomas/server/routes/evolve_agent_routes.py": "b60e47c66cdb5cea1ed512e2bd9a06fb2cf51c418804f2f00522fa5d256322f4",
+        "thomas/server/web/chat.html": "af1d213824bac117edf7bbd2e058a56310cf71791d34a45c048f9a85ffbb8f45",
+        "thomas/server/web/js/unified_code_mode.js": "4f6e8d77863928d522286f4c57ef093b85d441c56cea92b4a1374888edc3cbe2",
+        "thomas/server/web/js/unified_work_mode.js": "f07a7af708a211b52c857c05ba9ee1c0e053fc389723b9ee3bc9191f6f8ca268"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "be0f7abb0fc27ef9bb4d2cc0e55edafa866c079c5b5cc2f19b54db4dbf30c23d",
+      "signature_scheme": "sha256",
+      "signature": "42b1ce804ba20eb78a12d92260f480e8d894956bd2955886f12f5eb222028661"
+    },
+    {
+      "id": "c5793ff8950948aea0effbb67d1438fe",
+      "module": "agent",
+      "audited_at": "2026-07-18T22:00:40+00:00",
+      "auditor": "codex",
+      "status": "pass",
+      "summary": "Final unified lifecycle audit for agent",
+      "run_id": "THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718",
+      "files_touched": [
+        "thomas/agent/loop.py",
+        "thomas/agent/loop_completion.py",
+        "thomas/agent/loop_execution.py",
+        "thomas/agent/loop_tool_protocol.py"
+      ],
+      "file_hashes": {
+        "thomas/agent/loop.py": "191639be323e95c0ba20da355125d1da564f2f51a225c9065fae051165c2eb78",
+        "thomas/agent/loop_completion.py": "3daa7602b56037e6365dce813080d747c4e2aa273eac1977471a065754edc19b",
+        "thomas/agent/loop_execution.py": "ce6ef7a032cd90d71c3dcf46c9b72cae3da9e38f4cdd46d4226ef321675222f6",
+        "thomas/agent/loop_tool_protocol.py": "01a31fd668763d303e0705cd5eaddf8bdd7cba9885c3060305d8727339b81649"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "5f15df816320ee095fb7baceebd84f4ef3ec129be5aed6b031fae551e1491031",
+      "signature_scheme": "sha256",
+      "signature": "75275d1ae044079ed226dc186d9a1987dc4b172e0e056bb67dfe2e93be13d600"
+    },
+    {
+      "id": "25547305b12e41c8bd14b9d748e8a638",
+      "module": "core",
+      "audited_at": "2026-07-18T22:00:40+00:00",
+      "auditor": "codex",
+      "status": "pass",
+      "summary": "Final unified lifecycle audit for core",
+      "run_id": "THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718",
+      "files_touched": [
+        "thomas/core/token_economy.py"
+      ],
+      "file_hashes": {
+        "thomas/core/token_economy.py": "48e04d59efac34d5c4454645acf52f51560ce9352f9ee37e000f5cd5901fad07"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "ec969ef2569d6a88bd1428039f38e5c89d248462c48b343209d9c4bda88378a1",
+      "signature_scheme": "sha256",
+      "signature": "7551f9d7b85a36d43099aaa85eaea5ef8d79bfe93dfda5956fcdb81c3313d751"
+    },
+    {
+      "id": "cedfba3c2fd340859cdeb9ad430d7c7d",
+      "module": "preferences",
+      "audited_at": "2026-07-18T22:00:41+00:00",
+      "auditor": "codex",
+      "status": "pass",
+      "summary": "Final unified lifecycle audit for preferences",
+      "run_id": "THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718",
+      "files_touched": [
+        "thomas/preferences/_db.py",
+        "thomas/preferences/_prefs.py"
+      ],
+      "file_hashes": {
+        "thomas/preferences/_db.py": "9826fb09fae6019fd01adcc8de89a0d526bfb4169e8cbccd1a23b77162b30536",
+        "thomas/preferences/_prefs.py": "8a10d60efbc086cc8f36af5375e50a65925bd5bbdba53919e3846731339e8e11"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "0c6b812965cc2e09ceae4b329d6dd532df99426f5fa8cacccf63840ce5a6b000",
+      "signature_scheme": "sha256",
+      "signature": "c526c8901adc69a131bd8296650dfb02b0cdd721a482a3f4083d064ce0704f35"
+    },
+    {
+      "id": "354bbcb86ba44bf59f5eef393e68e7ca",
+      "module": "server",
+      "audited_at": "2026-07-18T22:00:41+00:00",
+      "auditor": "codex",
+      "status": "pass",
+      "summary": "Final unified lifecycle audit for server",
+      "run_id": "THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718",
+      "files_touched": [
+        "thomas/server/app_keys.py",
+        "thomas/server/app_lifecycle.py",
+        "thomas/server/app_middleware_handlers.py",
+        "thomas/server/app_middleware_security.py",
+        "thomas/server/chat_delegation_artifact_verification.py",
+        "thomas/server/chat_delegation_deliverable.py",
+        "thomas/server/chat_delegation_deliverable_postprocess.py",
+        "thomas/server/chat_delegation_result_policy.py",
+        "thomas/server/routes/chat_v2_announcements.py",
+        "thomas/server/routes/deliverable_aiohttp.py",
+        "thomas/server/routes/evolve_agent_http_support.py",
+        "thomas/server/routes/evolve_agent_routes.py",
+        "thomas/server/web/chat.html",
+        "thomas/server/web/js/unified_code_mode.js",
+        "thomas/server/web/js/unified_work_mode.js"
+      ],
+      "file_hashes": {
+        "thomas/server/app_keys.py": "2f0000047ff8acb1609064e56fb2eeaee1537a0edb31084904dda145d124c852",
+        "thomas/server/app_lifecycle.py": "a0aaae06d323beb1d2de8961dfae1ac25947d4351d7d4db1fc8f0cc7a3f2ffa9",
+        "thomas/server/app_middleware_handlers.py": "4c2c511f8e9657a194c0e007f65a8e528b5f9da7fb67fba85b720ebacc1ebd31",
+        "thomas/server/app_middleware_security.py": "70b0069d7df324321c7c50e76556c3413d6bdd324a4846b81a46c38fb7d77734",
+        "thomas/server/chat_delegation_artifact_verification.py": "241aed23a400d83f198acf53e55fe257417912a5aea5e4885ec9b1bf914c27ba",
+        "thomas/server/chat_delegation_deliverable.py": "a939524f3e6de81a7bfdf783a7ec9dbe066865c613e696974ac1490e18137340",
+        "thomas/server/chat_delegation_deliverable_postprocess.py": "c953ef4ebfb3a6fca4718fc5224c3da048c2fa0abb9b2b624ff85ed2aff0c51e",
+        "thomas/server/chat_delegation_result_policy.py": "f11f4895ec3a1cec8c011beb7f07412c4949ba153aed611fc9c9c025d4c19cb3",
+        "thomas/server/routes/chat_v2_announcements.py": "05da942b15ec76b1e6b93b3db9733295b361f747d85f6c8b8b9dd587a4bfd438",
+        "thomas/server/routes/deliverable_aiohttp.py": "4c62793a0020f000fabde7c8ca23fc99d165fe3b0156e8b0e3152def1bcd7735",
+        "thomas/server/routes/evolve_agent_http_support.py": "ef72c39834309417c90c192ca8ca32c1a3782249df5059076b3135e521aacf7e",
+        "thomas/server/routes/evolve_agent_routes.py": "b60e47c66cdb5cea1ed512e2bd9a06fb2cf51c418804f2f00522fa5d256322f4",
+        "thomas/server/web/chat.html": "af1d213824bac117edf7bbd2e058a56310cf71791d34a45c048f9a85ffbb8f45",
+        "thomas/server/web/js/unified_code_mode.js": "4f6e8d77863928d522286f4c57ef093b85d441c56cea92b4a1374888edc3cbe2",
+        "thomas/server/web/js/unified_work_mode.js": "f07a7af708a211b52c857c05ba9ee1c0e053fc389723b9ee3bc9191f6f8ca268"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "42b1ce804ba20eb78a12d92260f480e8d894956bd2955886f12f5eb222028661",
+      "signature_scheme": "sha256",
+      "signature": "889bced4ba255d3f13068a8bf551dfd220166e10c11ab95019b45b6d40b7d10f"
+    },
+    {
+      "id": "57b1f6f886114dd9ba83c89f94bfd1b8",
+      "module": "agent",
+      "audited_at": "2026-07-18T22:19:06+00:00",
+      "auditor": "codex",
+      "status": "pass",
+      "summary": "Final unified lifecycle audit for agent",
+      "run_id": "THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718",
+      "files_touched": [
+        "thomas/agent/loop.py",
+        "thomas/agent/loop_completion.py",
+        "thomas/agent/loop_core.py",
+        "thomas/agent/loop_execution.py",
+        "thomas/agent/loop_tool_protocol.py"
+      ],
+      "file_hashes": {
+        "thomas/agent/loop.py": "191639be323e95c0ba20da355125d1da564f2f51a225c9065fae051165c2eb78",
+        "thomas/agent/loop_completion.py": "3daa7602b56037e6365dce813080d747c4e2aa273eac1977471a065754edc19b",
+        "thomas/agent/loop_core.py": "f42f36e9c22a51a93520e64f03d6fffd6964baa91f1a9733bc8589c4bfa54062",
+        "thomas/agent/loop_execution.py": "82b94b0b62aa57cd6c8ac2dca261f146cf29978e05913588c94f7ab1ad316823",
+        "thomas/agent/loop_tool_protocol.py": "01a31fd668763d303e0705cd5eaddf8bdd7cba9885c3060305d8727339b81649"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "75275d1ae044079ed226dc186d9a1987dc4b172e0e056bb67dfe2e93be13d600",
+      "signature_scheme": "sha256",
+      "signature": "04e3db03a4dbb5f70d057ddbb4b5d60e192ca5a47c7ab22ed1562a852858113c"
+    },
+    {
+      "id": "67de11f82a2d4fef90c1dca5c41036c2",
+      "module": "core",
+      "audited_at": "2026-07-18T22:19:07+00:00",
+      "auditor": "codex",
+      "status": "pass",
+      "summary": "Final unified lifecycle audit for core",
+      "run_id": "THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718",
+      "files_touched": [
+        "thomas/core/token_economy.py"
+      ],
+      "file_hashes": {
+        "thomas/core/token_economy.py": "48e04d59efac34d5c4454645acf52f51560ce9352f9ee37e000f5cd5901fad07"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "7551f9d7b85a36d43099aaa85eaea5ef8d79bfe93dfda5956fcdb81c3313d751",
+      "signature_scheme": "sha256",
+      "signature": "e8b6d3c88916eb4a94d2e62005793a5f08bf5879ac5b666a13dfc3761d6ee96e"
+    },
+    {
+      "id": "f0c015f748b34d16af8ac90d8bab690a",
+      "module": "preferences",
+      "audited_at": "2026-07-18T22:19:07+00:00",
+      "auditor": "codex",
+      "status": "pass",
+      "summary": "Final unified lifecycle audit for preferences",
+      "run_id": "THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718",
+      "files_touched": [
+        "thomas/preferences/_db.py",
+        "thomas/preferences/_prefs.py"
+      ],
+      "file_hashes": {
+        "thomas/preferences/_db.py": "9826fb09fae6019fd01adcc8de89a0d526bfb4169e8cbccd1a23b77162b30536",
+        "thomas/preferences/_prefs.py": "8a10d60efbc086cc8f36af5375e50a65925bd5bbdba53919e3846731339e8e11"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "c526c8901adc69a131bd8296650dfb02b0cdd721a482a3f4083d064ce0704f35",
+      "signature_scheme": "sha256",
+      "signature": "257b7e3aee1e48f43c4363e3387fdb29a3bd78ce7d3085b6c2a8ded808791c2e"
+    },
+    {
+      "id": "e32d423932b34727a4abe6273af96f27",
+      "module": "server",
+      "audited_at": "2026-07-18T22:19:07+00:00",
+      "auditor": "codex",
+      "status": "pass",
+      "summary": "Final unified lifecycle audit for server",
+      "run_id": "THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718",
+      "files_touched": [
+        "thomas/server/app_keys.py",
+        "thomas/server/app_lifecycle.py",
+        "thomas/server/app_middleware_handlers.py",
+        "thomas/server/app_middleware_security.py",
+        "thomas/server/chat_delegation_artifact_verification.py",
+        "thomas/server/chat_delegation_deliverable.py",
+        "thomas/server/chat_delegation_deliverable_postprocess.py",
+        "thomas/server/chat_delegation_result_policy.py",
+        "thomas/server/chat_delegation_runner.py",
+        "thomas/server/routes/chat_v2_announcements.py",
+        "thomas/server/routes/deliverable_aiohttp.py",
+        "thomas/server/routes/evolve_agent_http_support.py",
+        "thomas/server/routes/evolve_agent_routes.py",
+        "thomas/server/web/chat.html",
+        "thomas/server/web/js/unified_code_mode.js",
+        "thomas/server/web/js/unified_work_mode.js"
+      ],
+      "file_hashes": {
+        "thomas/server/app_keys.py": "2f0000047ff8acb1609064e56fb2eeaee1537a0edb31084904dda145d124c852",
+        "thomas/server/app_lifecycle.py": "a0aaae06d323beb1d2de8961dfae1ac25947d4351d7d4db1fc8f0cc7a3f2ffa9",
+        "thomas/server/app_middleware_handlers.py": "4c2c511f8e9657a194c0e007f65a8e528b5f9da7fb67fba85b720ebacc1ebd31",
+        "thomas/server/app_middleware_security.py": "70b0069d7df324321c7c50e76556c3413d6bdd324a4846b81a46c38fb7d77734",
+        "thomas/server/chat_delegation_artifact_verification.py": "e0c8f5717e36071b862008cc748fd07e60e7860452eafa399ea43ef1e0f6107c",
+        "thomas/server/chat_delegation_deliverable.py": "a939524f3e6de81a7bfdf783a7ec9dbe066865c613e696974ac1490e18137340",
+        "thomas/server/chat_delegation_deliverable_postprocess.py": "fd3876977930496de3c529543a85330b7055b6ee3b8a98ae26030ff7174711b1",
+        "thomas/server/chat_delegation_result_policy.py": "f11f4895ec3a1cec8c011beb7f07412c4949ba153aed611fc9c9c025d4c19cb3",
+        "thomas/server/chat_delegation_runner.py": "81a2f996c9353dff1092db33ffd81c8b7ac637b6cd85929b84dbde6038ddc741",
+        "thomas/server/routes/chat_v2_announcements.py": "05da942b15ec76b1e6b93b3db9733295b361f747d85f6c8b8b9dd587a4bfd438",
+        "thomas/server/routes/deliverable_aiohttp.py": "e835859a2f9980319b8fa2dc03d1ed3254991137d16de4e8b1897cba0515967a",
+        "thomas/server/routes/evolve_agent_http_support.py": "ef72c39834309417c90c192ca8ca32c1a3782249df5059076b3135e521aacf7e",
+        "thomas/server/routes/evolve_agent_routes.py": "b60e47c66cdb5cea1ed512e2bd9a06fb2cf51c418804f2f00522fa5d256322f4",
+        "thomas/server/web/chat.html": "af1d213824bac117edf7bbd2e058a56310cf71791d34a45c048f9a85ffbb8f45",
+        "thomas/server/web/js/unified_code_mode.js": "4f6e8d77863928d522286f4c57ef093b85d441c56cea92b4a1374888edc3cbe2",
+        "thomas/server/web/js/unified_work_mode.js": "f07a7af708a211b52c857c05ba9ee1c0e053fc389723b9ee3bc9191f6f8ca268"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "889bced4ba255d3f13068a8bf551dfd220166e10c11ab95019b45b6d40b7d10f",
+      "signature_scheme": "sha256",
+      "signature": "43f2a82a9a9294f77470fde24221082162c28a1cabe3344792ab3dba88a68848"
     }
   ]
 }

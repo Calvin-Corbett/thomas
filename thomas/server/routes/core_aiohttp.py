@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +25,7 @@ def register_core_routes(
     *,
     web_dir: Path,
     handlers: Mapping[str, Any],
+    require_api_access: Callable[[web.Request], None],
 ) -> None:
     app.router.add_get("/", handlers["index"])
     if "classic" in handlers:
@@ -47,7 +48,7 @@ def register_core_routes(
     # offer a one-click "Play" — loopback-only, path-traversal-safe.
     from thomas.server.routes.deliverable_aiohttp import register_deliverable_routes
 
-    register_deliverable_routes(app)
+    register_deliverable_routes(app, require_api_access=require_api_access)
     for method, path, handler_name in _ROUTES:
         handler = handlers[handler_name]
         getattr(app.router, f"add_{method}")(path, handler)

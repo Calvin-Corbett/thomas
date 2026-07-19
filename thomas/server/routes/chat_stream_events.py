@@ -19,6 +19,7 @@ from thomas.observability.task_ledger import (
     derive_active_goal,
     extract_missing_inputs,
 )
+from thomas.server.model_runtime_receipt import model_runtime_receipt
 from thomas.server.routes.vibe_trace import (
     build_vibe_trace_event,
     tool_node_id,
@@ -67,6 +68,9 @@ async def stream_agent_events(
     apply_usage_budget: Callable[[int], Awaitable[dict[str, Any] | None]],
     normalize_usage_payload: Callable[[Any], dict[str, int]],
 ) -> TaskJournal | None:
+    reset_runtime_trace = getattr(llm, "reset_runtime_trace", None)
+    if callable(reset_runtime_trace):
+        reset_runtime_trace()
     await send_timing("llm_client_ready")
 
     async def emit_vibe(
@@ -483,44 +487,11 @@ async def stream_agent_events(
         if isinstance(compaction_report, dict):
             token_report["memory_compaction"] = compaction_report
 
-        runtime_trace_fn = getattr(llm, "runtime_trace", None)
-        if callable(runtime_trace_fn):
-            try:
-                runtime_model = runtime_trace_fn()
-            except Exception:
-                runtime_model = {
-                    "requested": requested_runtime,
-                    "active": {
-                        "profile": str(getattr(llm.config, "name", "") or ""),
-                        "provider": str(getattr(llm.config, "provider", "") or ""),
-                        "model": str(getattr(llm.config, "model", "") or ""),
-                        "base_url": str(getattr(llm.config, "base_url", "") or ""),
-                    },
-                    "failover_enabled": bool(failover_enabled_for_chat),
-                    "failover_used": False,
-                    "attempts": [],
-                }
-        else:
-            runtime_model = {
-                "requested": requested_runtime,
-                "active": {
-                    "profile": str(getattr(llm.config, "name", "") or ""),
-                    "provider": str(getattr(llm.config, "provider", "") or ""),
-                    "model": str(getattr(llm.config, "model", "") or ""),
-                    "base_url": str(getattr(llm.config, "base_url", "") or ""),
-                },
-                "failover_enabled": bool(failover_enabled_for_chat),
-                "failover_used": False,
-                "attempts": [],
-            }
-        if not isinstance(runtime_model, dict):
-            runtime_model = {
-                "requested": requested_runtime,
-                "active": requested_runtime,
-                "failover_enabled": bool(failover_enabled_for_chat),
-                "failover_used": False,
-                "attempts": [],
-            }
+        runtime_model = model_runtime_receipt(
+            llm,
+            requested_profile=str(requested_runtime.get("profile") or ""),
+            requested_model_id=str(requested_runtime.get("model") or ""),
+        )
         runtime_model["strict_primary_chat"] = bool(
             not bool(runtime_model.get("failover_enabled")) and cfg.failover.enabled
         )

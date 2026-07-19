@@ -47,9 +47,37 @@ class TestServerSettingsPage(AioHTTPTestCase):
         self.assertIn("General Settings", text)
         self.assertIn("Models & Providers", text)
         self.assertIn("Workflow Mode", text)
+        self.assertIn('value="gpt-5.6-sol">GPT-5.6 Sol', text)
+        self.assertIn('value="gpt-5.6-terra">GPT-5.6 Terra', text)
+        self.assertIn('value="gpt-5.6-luna">GPT-5.6 Luna', text)
+        self.assertNotIn("GPT-5.6 Luna (when available)", text)
+        self.assertIn('value="gpt-5.5">GPT-5.5', text)
+        self.assertIn('value="openai_codex">ChatGPT / Codex (signed in)', text)
         self.assertIn("Isolated Desktop Mode", text)
         self.assertIn("Install Host Service", text)
         self.assertIn("Open Viewer", text)
+        self.assertIn('href="/static/settings.style01.css"', text)
+        self.assertIn('src="/static/settings.script01.js"', text)
+        self.assertNotIn("unpkg.com", text)
+        self.assertIn("Local, deterministic icon fallback", text)
+
+    async def test_chat_shell_boots_without_parser_blocking_cdn_assets(self):
+        resp = await self.client.get("/")
+
+        self.assertEqual(resp.status, 200)
+        text = await resp.text()
+        self.assertIn("Thomas Chat", text)
+        self.assertIn("the chat shell must boot offline", text)
+        self.assertNotIn("fonts.googleapis.com", text)
+        self.assertNotIn("fonts.gstatic.com", text)
+        self.assertNotIn("unpkg.com", text)
+
+    async def test_favicon_route_is_available_to_ui_and_json_tabs(self):
+        resp = await self.client.get("/favicon.ico")
+
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(resp.content_type, "image/svg+xml")
+        self.assertIn("<svg", await resp.text())
 
     async def test_settings_page_scroll_layout_guards_present(self):
         root = Path(__file__).resolve().parents[1]
@@ -100,8 +128,11 @@ class TestServerSettingsPage(AioHTTPTestCase):
 
         self.assertIn("const PREFERENCES_API = '/api/preferences';", script)
         self.assertIn("buildPreferencesPatch", script)
+        self.assertIn("defaultModel: 'gpt-5.6-sol'", script)
+        self.assertIn("defaultProvider: 'openai_codex'", script)
+        self.assertIn("raw === 'openai_codex'", script)
         self.assertIn("method: 'PATCH'", script)
-        self.assertIn("settings.isolated-desktop.js", script)
+        self.assertIn("const SETTINGS_EXTENSION_SCRIPT = '/static/settings.isolated-desktop.js';", script)
         self.assertIn("/api/onboarding/desktop/status", isolated_desktop_script)
         self.assertIn("/api/onboarding/desktop/install", isolated_desktop_script)
         self.assertIn("/api/onboarding/desktop/trust", isolated_desktop_script)

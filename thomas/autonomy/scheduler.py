@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from zoneinfo import ZoneInfo
+
+from thomas.core.timezones import resolve_timezone
 
 
 def _as_datetime(value: Any) -> datetime | None:
@@ -56,10 +57,7 @@ def compute_next_run(schedule: dict[str, Any] | None, now: datetime | None = Non
 
     if stype in {"daily", "weekly"}:
         tz_name = str(schedule.get("tz") or "UTC").strip() or "UTC"
-        try:
-            zone = ZoneInfo(tz_name)
-        except Exception as exc:
-            raise ValueError(f"invalid timezone: {tz_name}") from exc
+        zone = resolve_timezone(tz_name)
         hour, minute = _parse_hhmm(schedule.get("at"))
         local_now = current.astimezone(zone)
         target = local_now.replace(hour=hour, minute=minute, second=0, microsecond=0)

@@ -117,7 +117,8 @@ class TestTurnoverAnalysis:
             date(2024, 12, 31),
         )
 
-        assert voluntary + involuntary == 1
+        assert voluntary == 1
+        assert involuntary == 0
 
     def test_turnover_by_department(self, analysis: TurnoverAnalysis) -> None:
         """Test turnover by department."""

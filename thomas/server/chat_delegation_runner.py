@@ -8,6 +8,13 @@ from pathlib import Path
 from typing import Any
 
 from thomas.core import task_bot_runtime
+from thomas.server.chat_delegation_artifact_verification import (
+    _hidden_completion_review_passes,
+    _reconcile_missing_marker_literals,
+    _reconcile_requested_artifact_from_evidence,
+    _requested_artifact_issues,
+    _sanitize_terminal_summary,
+)
 from thomas.server.chat_delegation_deliverable import (
     _FAILURE_LANGUAGE_RE,
     _artifacts_from_created,
@@ -25,6 +32,7 @@ from thomas.server.chat_delegation_deliverable import (
     runtime_executability_warning,
 )
 from thomas.server.chat_delegation_emitter import _DelegationEmitter, _ThreadsafeDelegationEmitter
+from thomas.server.chat_delegation_exhaustive_runner import _run_exhaustive_worker
 from thomas.server.chat_delegation_live_repo import (
     _LIVE_REPO_WRITE_TOOLS,
     _live_repo_changes_are_docs_only,
@@ -33,6 +41,12 @@ from thomas.server.chat_delegation_live_repo import (
     _live_repo_workspace_mtimes,
     _prompt_allows_docs_only_completion,
     _with_live_repo_change_requirement,
+)
+from thomas.server.chat_delegation_result_policy import (
+    should_finalize_exact_artifact_tool_result as _should_finalize_exact_artifact_tool_result,
+)
+from thomas.server.chat_delegation_result_policy import (
+    worker_text_is_confirmed_answer as _worker_text_is_confirmed_answer,
 )
 from thomas.server.chat_delegation_session import (
     _TERMINAL_TASK_STATES,
@@ -44,40 +58,93 @@ from thomas.server.chat_delegation_session import (
 from thomas.server.chat_delegation_worker_config import (
     _WORKER_FIRST_EVENT_TIMEOUT_S,
     _WORKER_IDLE_EVENT_TIMEOUT_S,
+    _WORKER_STREAM_CLOSE_TIMEOUT_S,
+    _WORKER_WATCHDOG_GRACE_S,
     _replan_prompt,
     _self_recovery_attempts,
 )
+from thomas.server.model_runtime_receipt import validate_model_runtime_receipt
+from thomas.server.work_connector_runtime import execution_work_context_id
 from thomas.server.worker_runtime import run_agent_worker_events
 
 log = logging.getLogger(__name__)
 
+_MAX_EFFORT_IDLE_EVENT_TIMEOUT_S = 360.0
 
-def _worker_text_is_confirmed_answer(result_text_parts: list[str]) -> bool:
-    worker_line = _worker_summary_line(result_text_parts)
-    if not worker_line:
-        return False
-    if _FAILURE_LANGUAGE_RE.search(worker_line):
-        return False
-    if _claims_file_creation(worker_line) or _claims_action_success(worker_line):
-        return False
-    return True
+
+def _record_tool_outcome(
+    tool_name: str,
+    *,
+    ok: bool,
+    succeeded_tools: list[str],
+    failed_tools: list[str],
+) -> None:
+    """Keep every failed action visible; a later same-named call is not proof of recovery."""
+    target = succeeded_tools if ok else failed_tools
+    if tool_name not in target:
+        target.append(tool_name)
+
+
+def _supervisor_worker_timeout_s(worker_kwargs: dict[str, Any], *, has_progress: bool) -> float:
+    """Return a bounded watchdog window appropriate to the active worker tier."""
+
+    base = _WORKER_IDLE_EVENT_TIMEOUT_S if has_progress else _WORKER_FIRST_EVENT_TIMEOUT_S
+    effort = str(worker_kwargs.get("effort") or "").strip().lower()
+    if has_progress and effort in {"max", "exhaustive"}:
+        return max(base, _MAX_EFFORT_IDLE_EVENT_TIMEOUT_S)
+    return base
 
 
 async def _next_worker_event(stream: Any, *, saw_event: bool) -> dict[str, Any] | None:
     timeout_s = _WORKER_IDLE_EVENT_TIMEOUT_S if saw_event else _WORKER_FIRST_EVENT_TIMEOUT_S
-    try:
-        return await asyncio.wait_for(stream.__anext__(), timeout=max(0.001, float(timeout_s)))
-    except StopAsyncIteration:
-        return None
-    except asyncio.TimeoutError as exc:
-        close = getattr(stream, "aclose", None)
-        if callable(close):
-            try:
-                await close()
-            except (RuntimeError, OSError, ValueError, TypeError):
-                log.debug("worker event stream close failed after timeout", exc_info=True)
-        phase = "first event" if not saw_event else "next event"
-        raise _WorkerRetry(f"provider-native worker produced no {phase} within {timeout_s:g}s") from exc
+    next_task = asyncio.create_task(stream.__anext__())
+    done, _pending = await asyncio.wait({next_task}, timeout=max(0.001, float(timeout_s)))
+    if done:
+        try:
+            return next_task.result()
+        except StopAsyncIteration:
+            return None
+
+    def _consume_background_result(task: asyncio.Task[Any]) -> None:
+        try:
+            task.result()
+        except (asyncio.CancelledError, StopAsyncIteration):
+            pass
+        except (RuntimeError, OSError, ValueError, TypeError):
+            log.debug("worker event stream background cleanup failed", exc_info=True)
+
+    next_task.cancel()
+    cancelled, _pending = await asyncio.wait({next_task}, timeout=_WORKER_STREAM_CLOSE_TIMEOUT_S)
+    if cancelled:
+        _consume_background_result(next_task)
+    else:
+        next_task.add_done_callback(_consume_background_result)
+    await _close_worker_event_stream(stream, consume_result=_consume_background_result)
+    phase = "first event" if not saw_event else "next event"
+    raise _WorkerRetry(f"provider-native worker produced no {phase} within {timeout_s:g}s")
+
+
+async def _close_worker_event_stream(
+    stream: Any,
+    *,
+    consume_result: Callable[[asyncio.Task[Any]], None] | None = None,
+) -> None:
+    close = getattr(stream, "aclose", None)
+    if callable(close):
+        try:
+            close_task = asyncio.ensure_future(close())
+            closed, _pending = await asyncio.wait({close_task}, timeout=_WORKER_STREAM_CLOSE_TIMEOUT_S)
+            if closed:
+                if consume_result is not None:
+                    consume_result(close_task)
+                else:
+                    close_task.result()
+            else:
+                close_task.cancel()
+                if consume_result is not None:
+                    close_task.add_done_callback(consume_result)
+        except (RuntimeError, OSError, ValueError, TypeError):
+            log.debug("worker event stream close failed", exc_info=True)
 
 
 def _run_worker_thread_entry(runner: Callable[..., Awaitable[None]], app: Any, kwargs: dict[str, Any]) -> None:
@@ -114,8 +181,26 @@ async def _run_agent_worker_supervised(
         record = task_bot_runtime.get_execution(execution_id, repo_root)
         if str((record or {}).get("state") or "").strip().lower() in _TERMINAL_TASK_STATES:
             return
+        if task_bot_runtime.is_cancel_requested(execution_id, repo_root=repo_root):
+            summary = "Cancelled by user."
+            task_bot_runtime.fail_execution(
+                execution_id,
+                actor=bot.name,
+                summary=summary,
+                blocker="cancelled",
+                repo_root=repo_root,
+            )
+            failed = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
+            try:
+                await emitter.failed(failed, specialist_id=specialist_id, bot=bot, text=summary)
+            except (RuntimeError, OSError, ValueError, TypeError):
+                log.debug("provider-native cancellation emit failed for %s", execution_id, exc_info=True)
+            if not thread_task.done():
+                thread_task.cancel()
+            return
         has_progress = _worker_has_started_progress(record)
-        timeout_s = _WORKER_IDLE_EVENT_TIMEOUT_S if has_progress else _WORKER_FIRST_EVENT_TIMEOUT_S
+        worker_timeout_s = _supervisor_worker_timeout_s(worker_kwargs, has_progress=has_progress)
+        timeout_s = worker_timeout_s + _WORKER_WATCHDOG_GRACE_S
         age_s = _heartbeat_age_s(record)
         if age_s is not None and age_s >= timeout_s:
             phase = "further progress" if has_progress else "first event"
@@ -149,22 +234,24 @@ async def _finalize_worker_completion(
     emitter: Any,
     execution_id: str,
     work_dir: Path | None,
+    prompt: str,
     attempt_baseline: dict[str, tuple[int, int]],
     result_text_parts: list[str],
     tools_used: list[str],
     succeeded_tools: list[str],
     failed_tools: list[str],
+    tool_outputs: dict[str, list[str]],
     bot: Any,
     specialist_id: str,
     repo_root: str | Path | None,
 ) -> None:
-    """Terminal-exit path for normal (non-live-repo) worker runs.
-
-    Builds an honest result summary, attaches produced files as proof artifacts,
-    then completes only with real evidence — no evidence means failed, not faked.
-    """
+    """Finalize a normal worker with honest evidence and proof artifacts."""
     created = _resolve_created(work_dir, attempt_baseline, result_text_parts, tools_used)
-    # Render Markdown report deliverables to PDF off the event loop (launches Chromium).
+    created = _reconcile_requested_artifact_from_evidence(prompt, work_dir, created, tool_outputs)
+    created = _reconcile_missing_marker_literals(prompt, work_dir, created)
+    artifact_issues = _requested_artifact_issues(prompt, work_dir, created, tool_outputs)
+    if artifact_issues:
+        raise _WorkerRetry("requested artifact verification failed: " + "; ".join(artifact_issues))
     _report_pdfs = await asyncio.to_thread(render_report_pdfs, work_dir, created)
     if _report_pdfs:
         created = list(created) + [p for p in _report_pdfs if p not in created]
@@ -174,11 +261,28 @@ async def _finalize_worker_completion(
         created,
         succeeded_tools=succeeded_tools,
         failed_tools=failed_tools,
+        prompt=prompt,
     )
-    result_summary += executability_warning(work_dir, created)
-    result_summary += await asyncio.to_thread(runtime_executability_warning, work_dir, created)
+    result_summary = _sanitize_terminal_summary(result_summary, created)
+    _exec_warnings = executability_warning(work_dir, created)
+    _exec_warnings += await asyncio.to_thread(runtime_executability_warning, work_dir, created)
+    result_summary += _exec_warnings
+    verified_success = bool(created) or _worker_text_is_confirmed_answer(
+        result_text_parts, prompt=prompt, succeeded_tools=succeeded_tools, failed_tools=failed_tools
+    )
+    verified_success &= _hidden_completion_review_passes(
+        prompt, work_dir, created, result_summary, verified_success, failed_tools, succeeded_tools=succeeded_tools
+    )
     artifacts = _artifacts_from_created(created)
-    if artifacts:
+    # The engine's own artifact verification just PASSED (issues would have
+    # raised _WorkerRetry above, _hidden_completion_review_passes agreed, and
+    # no executability warning fired). A leftover failure-flavored hedge from
+    # the worker's prose then reads as a contradiction next to the "verified"
+    # banner — the engine's verdict is authoritative, so it owns the summary.
+    if created and verified_success and not _exec_warnings and _FAILURE_LANGUAGE_RE.search(result_summary):
+        _names = ", ".join(Path(p).name for p in created[:5])
+        result_summary = f"Created {_names} — verified by the engine's artifact checks."
+    if artifacts and verified_success:
         try:
             task_bot_runtime.attach_proof(
                 execution_id,
@@ -188,9 +292,9 @@ async def _finalize_worker_completion(
                 actor=bot.name,
                 repo_root=repo_root,
             )
-        except (RuntimeError, OSError, ValueError, TypeError):
-            log.debug("attach_proof failed for %s", execution_id, exc_info=True)
-    verified_success = bool(created) or bool(succeeded_tools) or _worker_text_is_confirmed_answer(result_text_parts)
+        except (RuntimeError, OSError, ValueError, TypeError) as exc:
+            log.warning("Artifact proof persistence failed for %s (%s)", execution_id, type(exc).__name__)
+            raise _WorkerRetry("artifact proof persistence failed") from exc
     completion_payload = task_bot_runtime.complete_execution(
         execution_id,
         actor=bot.name,
@@ -243,8 +347,11 @@ async def _finalize_live_repo_completion(
         raise _WorkerRetry(
             "self-development task changed only documentation files; live code or test files must change"
         )
-
     result_summary = _live_repo_result_summary(result_text_parts, changed)
+    if not _hidden_completion_review_passes(
+        prompt, repo_root, changed, result_summary, True, failed_tools, succeeded_tools=succeeded_tools
+    ):
+        raise _WorkerRetry("self-development hidden completion review failed")
     artifacts = _artifacts_from_created(changed)
     if artifacts:
         try:
@@ -256,8 +363,9 @@ async def _finalize_live_repo_completion(
                 actor=bot.name,
                 repo_root=repo_root,
             )
-        except (RuntimeError, OSError, ValueError, TypeError):
-            log.debug("attach_proof failed for %s", execution_id, exc_info=True)
+        except (RuntimeError, OSError, ValueError, TypeError) as exc:
+            log.warning("Live-repo proof persistence failed for %s (%s)", execution_id, type(exc).__name__)
+            raise _WorkerRetry("live-repo proof persistence failed") from exc
     task_bot_runtime.complete_execution(
         execution_id,
         actor=bot.name,
@@ -285,22 +393,58 @@ async def _run_agent_worker(
     work_dir: Path | None = None,
     requires_live_repo_change: bool = False,
     profile: str | None = None,
+    model_id: str | None = None,
+    reasoning_effort: str | None = None,
+    memory_enabled: bool = True,
     effort: str = "diligent",
     autonomy_level: int = 4,
     file_access: int | None = None,
     guardrails: str = "",
     guardrail_modes: dict[str, str] | None = None,
+    runtime_policy: dict[str, Any] | None = None,
+    preflight_events: list[dict[str, Any]] | None = None,
+    preflight_baseline: dict[str, tuple[int, int]] | None = None,
 ) -> None:
-    # Each attempt accumulates worker output and tool outcomes so the completed task
-    # carries a real result. At max autonomy the worker gets bounded replan retries.
+    base_tools_used: list[str] = []
+    base_succeeded_tools: list[str] = []
+    base_failed_tools: list[str] = []
+    base_tool_outputs: dict[str, list[str]] = {}
+    for event in preflight_events or []:
+        event_type = str(event.get("type") or "")
+        tool_name = str(event.get("name") or "tool")
+        if event_type == "tool_start":
+            if tool_name not in base_tools_used:
+                base_tools_used.append(tool_name)
+            progress = f"Using {tool_name}â€¦"
+        elif event_type == "tool_output":
+            if event.get("ok") is False:
+                if tool_name not in base_failed_tools:
+                    base_failed_tools.append(tool_name)
+                progress = f"{tool_name} failed; continuing."
+            else:
+                if tool_name not in base_succeeded_tools:
+                    base_succeeded_tools.append(tool_name)
+                result_text = str(event.get("result_text") or "")
+                if result_text:
+                    base_tool_outputs.setdefault(tool_name, []).append(result_text)
+                progress = f"Finished {tool_name}; continuing."
+        else:
+            continue
+        task_bot_runtime.update_execution(
+            execution_id, progress_summary=progress, actor=bot.name, repo_root=repo_root, force=True
+        )
+        record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
+        await emitter.progress(record, specialist_id=specialist_id, bot=bot, text=progress)
     max_attempts = _self_recovery_attempts(autonomy_level)
     last_error = ""
     for attempt in range(1, max_attempts + 1):
         result_text_parts: list[str] = []
-        tools_used: list[str] = []
-        succeeded_tools: list[str] = []
-        failed_tools: list[str] = []
+        tools_used = list(base_tools_used)
+        succeeded_tools = list(base_succeeded_tools)
+        failed_tools = list(base_failed_tools)
+        tool_outputs = {name: list(values) for name, values in base_tool_outputs.items()}
         saw_event = False
+        worker_runtime_received = False
         progress = (
             "Preparing live repo change baseline."
             if requires_live_repo_change
@@ -311,7 +455,6 @@ async def _run_agent_worker(
         )
         record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
         await emitter.progress(record, specialist_id=specialist_id, bot=bot, text=progress)
-        # Snapshot BEFORE this attempt so we only report files this attempt touched.
         attempt_baseline = (
             _live_repo_workspace_mtimes(repo_root) if requires_live_repo_change else _workspace_mtimes(work_dir)
         )
@@ -325,6 +468,7 @@ async def _run_agent_worker(
             )
         if requires_live_repo_change:
             attempt_prompt = _with_live_repo_change_requirement(attempt_prompt)
+        event_stream = None
         try:
             event_stream = run_agent_worker_events(
                 app,
@@ -332,15 +476,20 @@ async def _run_agent_worker(
                 instructions=instructions,
                 work_dir=work_dir or repo_root,
                 profile=profile,
+                model_id=model_id,
+                reasoning_effort=reasoning_effort,
                 effort=effort,
                 role=specialist_id,
-                session_id=execution_id,
+                session_id=f"{execution_id}-attempt-{attempt}",
                 execution_id=execution_id,
                 autonomy_level=autonomy_level,
                 file_access=file_access,
                 guardrails=guardrails,
                 guardrail_modes=guardrail_modes,
                 job_type="self_development" if requires_live_repo_change else None,
+                memory_enabled=memory_enabled,
+                work_context_id=execution_work_context_id(execution_id, repo_root),
+                runtime_policy=runtime_policy,
             ).__aiter__()
             while True:
                 event = await _next_worker_event(event_stream, saw_event=saw_event)
@@ -362,7 +511,26 @@ async def _run_agent_worker(
                     record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
                     await emitter.failed(record, specialist_id=specialist_id, bot=bot, text="Cancelled by user.")
                     return
-                if event_type == "text":
+                if event_type == "model_runtime":
+                    runtime = validate_model_runtime_receipt(
+                        event.get("runtime"),
+                        requested_profile=str(profile or ""),
+                        requested_model_id=str(model_id or ""),
+                    )
+                    if runtime is None:
+                        raise _WorkerFatal("provider-native worker emitted an invalid model runtime receipt")
+                    current = task_bot_runtime.get_execution(execution_id, repo_root) or {}
+                    runtime_profile = dict(current.get("runtime_profile") or {})
+                    runtime_profile["model_runtime"] = runtime
+                    task_bot_runtime.update_execution(
+                        execution_id,
+                        runtime_profile=runtime_profile,
+                        actor=bot.name,
+                        repo_root=repo_root,
+                        force=True,
+                    )
+                    worker_runtime_received = True
+                elif event_type == "text":
                     chunk = str(event.get("text") or "")
                     if chunk:
                         result_text_parts.append(chunk)
@@ -389,28 +557,58 @@ async def _run_agent_worker(
                 elif event_type == "tool_output":
                     last_tool = str(event.get("name") or (tools_used[-1] if tools_used else "tool"))
                     # Track tool outcomes so a failed action isn't reported as success.
-                    if event.get("ok") is False:
-                        if last_tool not in failed_tools:
-                            failed_tools.append(last_tool)
+                    tool_ok = event.get("ok") is not False
+                    _record_tool_outcome(
+                        last_tool,
+                        ok=tool_ok,
+                        succeeded_tools=succeeded_tools,
+                        failed_tools=failed_tools,
+                    )
+                    if not tool_ok:
                         progress = f"{last_tool} failed; continuing."
                     else:
-                        if last_tool in failed_tools:
-                            failed_tools.remove(last_tool)
-                        if last_tool not in succeeded_tools:
-                            succeeded_tools.append(last_tool)
+                        result_text = str(event.get("result_text") or "")
+                        if result_text:
+                            tool_outputs.setdefault(last_tool, []).append(result_text)
                         progress = f"Finished {last_tool}; continuing."
                     task_bot_runtime.update_execution(
                         execution_id, progress_summary=progress, actor=bot.name, repo_root=repo_root, force=True
                     )
                     record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
                     await emitter.progress(record, specialist_id=specialist_id, bot=bot, text=progress)
+                    if not requires_live_repo_change and _should_finalize_exact_artifact_tool_result(
+                        prompt,
+                        last_tool=last_tool,
+                        succeeded_tools=succeeded_tools,
+                        failed_tools=failed_tools,
+                    ):
+                        if not worker_runtime_received:
+                            raise _WorkerRetry("provider-native worker model runtime receipt missing")
+                        log.info("worker %s verifying exact artifact after file tool success", execution_id)
+                        await _finalize_worker_completion(
+                            emitter,
+                            execution_id,
+                            work_dir,
+                            prompt,
+                            attempt_baseline,
+                            result_text_parts,
+                            tools_used,
+                            succeeded_tools,
+                            failed_tools,
+                            tool_outputs,
+                            bot,
+                            specialist_id,
+                            repo_root,
+                        )
+                        return
                 elif event_type == "error":
-                    err_msg = str(event.get("error") or "provider-native delegation failed")
                     # Deterministic terminal states are non-retryable upstream.
                     if event.get("retryable") is False:
-                        raise _WorkerFatal(err_msg)
-                    raise _WorkerRetry(err_msg)
+                        raise _WorkerFatal("provider-native worker reported a non-retryable error")
+                    raise _WorkerRetry("provider-native worker reported a retryable error")
                 elif event_type == "done":
+                    if not worker_runtime_received:
+                        raise _WorkerRetry("provider-native worker model runtime receipt missing")
                     if requires_live_repo_change:
                         await _finalize_live_repo_completion(
                             emitter,
@@ -430,11 +628,13 @@ async def _run_agent_worker(
                             emitter,
                             execution_id,
                             work_dir,
+                            prompt,
                             attempt_baseline,
                             result_text_parts,
                             tools_used,
                             succeeded_tools,
                             failed_tools,
+                            tool_outputs,
                             bot,
                             specialist_id,
                             repo_root,
@@ -442,6 +642,8 @@ async def _run_agent_worker(
                     return
 
             # Stream ended without a terminal event — evidence gate decides success.
+            if not worker_runtime_received:
+                raise _WorkerRetry("provider-native worker model runtime receipt missing")
             if requires_live_repo_change:
                 await _finalize_live_repo_completion(
                     emitter,
@@ -461,11 +663,13 @@ async def _run_agent_worker(
                     emitter,
                     execution_id,
                     work_dir,
+                    prompt,
                     attempt_baseline,
                     result_text_parts,
                     tools_used,
                     succeeded_tools,
                     failed_tools,
+                    tool_outputs,
                     bot,
                     specialist_id,
                     repo_root,
@@ -492,14 +696,14 @@ async def _run_agent_worker(
             _WorkerFatal,
         ) as exc:
             if not isinstance(exc, (_WorkerRetry, _WorkerFatal)):
-                log.warning("Background worker run raised %s: %s", type(exc).__name__, exc, exc_info=True)
+                log.warning("Background worker run raised %s", type(exc).__name__)
                 frames = traceback.extract_tb(exc.__traceback__)
                 if frames:
                     frame = frames[-1]
                     site = f"{Path(frame.filename).name}:{frame.lineno}"
-                    last_error = f"{type(exc).__name__}: {exc} at {site}"
+                    last_error = f"{type(exc).__name__} at {site}"
                 else:
-                    last_error = f"{type(exc).__name__}: {exc}"
+                    last_error = type(exc).__name__
             else:
                 last_error = str(exc)
             # Non-retryable: fatal signals and setup errors before the first event.
@@ -531,146 +735,6 @@ async def _run_agent_worker(
                 record, specialist_id=specialist_id, bot=bot, text=f"Background execution failed: {last_error}"
             )
             return
-
-
-async def _run_exhaustive_worker(
-    app: Any,
-    *,
-    execution_id: str,
-    prompt: str,
-    specialist_id: str,
-    bot: Any,
-    emitter: _DelegationEmitter,
-    instructions: str,
-    repo_root: Path,
-    work_dir: Path | None = None,
-    requires_live_repo_change: bool = False,
-    profile: str | None = None,
-    effort: str = "exhaustive",
-    autonomy_level: int = 4,
-    file_access: int | None = None,
-    guardrails: str = "",
-    guardrail_modes: dict[str, str] | None = None,
-) -> None:
-    """Run a task at Exhaustive Effort through the full pipeline (build -> verify ->
-    adversarial review -> bounded remediation). Falls back to single worker on error.
-    """
-    from thomas.server.exhaustive_runtime import run_exhaustive_pipeline
-
-    tools_used: list[str] = []
-    work = work_dir or repo_root
-    live_repo_baseline = _live_repo_workspace_mtimes(repo_root) if requires_live_repo_change else {}
-
-    async def _on_tool(name: str) -> None:
-        if name not in tools_used:
-            tools_used.append(name)
-        progress = f"Using {name}…"
-        task_bot_runtime.update_execution(
-            execution_id, progress_summary=progress, actor=bot.name, repo_root=repo_root, force=True
-        )
-        record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
-        await emitter.progress(record, specialist_id=specialist_id, bot=bot, text=progress)
-
-    async def _on_stage(event: dict[str, Any]) -> None:
-        progress = f"Exhaustive: {str(event.get('stage') or '').replace('_', ' ')}…"
-        task_bot_runtime.update_execution(
-            execution_id, progress_summary=progress, actor=bot.name, repo_root=repo_root, force=True
-        )
-        record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
-        await emitter.progress(record, specialist_id=specialist_id, bot=bot, text=progress)
-
-    try:
-        ctx = await run_exhaustive_pipeline(
-            app,
-            prompt=prompt,
-            instructions=instructions,
-            work_dir=work,
-            profile=profile,
-            effort=effort,
-            specialist_id=specialist_id,
-            autonomy_level=autonomy_level,
-            file_access=file_access,
-            guardrails=guardrails,
-            guardrail_modes=guardrail_modes,
-            job_type="self_development" if requires_live_repo_change else None,
-            emit_stage=_on_stage,
-            on_tool=_on_tool,
-        )
-        if ctx.aborted:
-            raise RuntimeError(f"exhaustive pipeline aborted: {ctx.aborted}")
-        created = (
-            _live_repo_files_changed_since(repo_root, live_repo_baseline)
-            if requires_live_repo_change
-            else _snapshot_workspace_files(work)
-        )
-        if requires_live_repo_change and not created:
-            raise RuntimeError("exhaustive self-development changed no live repo files")
-        if (
-            requires_live_repo_change
-            and _live_repo_changes_are_docs_only(created)
-            and not _prompt_allows_docs_only_completion(prompt)
-        ):
-            raise RuntimeError(
-                "exhaustive self-development changed only documentation files; live code or test files must change"
-            )
-        result_summary = (
-            _live_repo_result_summary([ctx.result], created)
-            if requires_live_repo_change
-            else _build_result_summary([ctx.result], tools_used, created) + executability_warning(work, created)
-        )
-        artifacts = _artifacts_from_created(created)
-        if artifacts:
-            try:
-                task_bot_runtime.attach_proof(
-                    execution_id,
-                    artifacts=artifacts,
-                    summary=result_summary,
-                    status="verified",
-                    actor=bot.name,
-                    repo_root=repo_root,
-                )
-            except (RuntimeError, OSError, ValueError, TypeError):
-                log.debug("attach_proof failed for %s", execution_id, exc_info=True)
-        # Pipeline completing without abort and returning a result IS evidence of real work.
-        verified_success = bool(created) or bool(tools_used) or bool(str(ctx.result or "").strip())
-        task_bot_runtime.complete_execution(
-            execution_id,
-            actor=bot.name,
-            summary=result_summary,
-            repo_root=repo_root,
-            verified_success=verified_success,
-        )
-        record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
-        if str((record or {}).get("state") or "") == "completed":
-            await emitter.completed(record, specialist_id=specialist_id, bot=bot, text=result_summary)
-        else:
-            await emitter.failed(record, specialist_id=specialist_id, bot=bot, text=result_summary)
-    except asyncio.CancelledError:
-        task_bot_runtime.fail_execution(
-            execution_id,
-            actor=bot.name,
-            summary="Background execution cancelled.",
-            blocker="cancelled",
-            repo_root=repo_root,
-        )
-        raise
-    except (RuntimeError, OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
-        log.warning("Exhaustive pipeline failed; falling back to single worker: %s", exc, exc_info=True)
-        await _run_agent_worker(
-            app,
-            execution_id=execution_id,
-            prompt=prompt,
-            specialist_id=specialist_id,
-            bot=bot,
-            emitter=emitter,
-            instructions=instructions,
-            repo_root=repo_root,
-            work_dir=work_dir,
-            requires_live_repo_change=requires_live_repo_change,
-            profile=profile,
-            effort=effort,
-            autonomy_level=autonomy_level,
-            file_access=file_access,
-            guardrails=guardrails,
-            guardrail_modes=guardrail_modes,
-        )
+        finally:
+            if event_stream is not None:
+                await _close_worker_event_stream(event_stream)

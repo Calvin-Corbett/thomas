@@ -340,7 +340,7 @@ function moduleRenderMyStuffSurface(container) {
     const config = moduleGetSpecialSurfaceConfig('my_stuff');
     return moduleRenderEmbeddedSurface(container, config || {
         title: 'Project Board',
-        src: '/static/my_stuff.html?v=20260618-paper-apps-4',
+        src: '/static/my_stuff.html?v=20260624-forge-builds-1',
         surfaceMode: 'immersive',
     });
 }
@@ -724,7 +724,16 @@ function moduleChannelsCatalogOrder(entriesRaw) {
     const appended = entries
         .map((entry) => safeString(entry?.id).toLowerCase())
         .filter((id) => id && !stored.includes(id));
-    return stored.concat(appended);
+    const ordered = stored.concat(appended);
+    const promoteAfter = (id, anchor) => {
+        const itemIndex = ordered.indexOf(id);
+        const anchorIndex = ordered.indexOf(anchor);
+        if (itemIndex < 0 || anchorIndex < 0 || itemIndex === anchorIndex + 1) return;
+        ordered.splice(itemIndex, 1);
+        ordered.splice(ordered.indexOf(anchor) + 1, 0, id);
+    };
+    promoteAfter('paper_trading', 'mission');
+    return ordered;
 }
 
 function modulePersistChannelsCatalogOrderFromDom() {

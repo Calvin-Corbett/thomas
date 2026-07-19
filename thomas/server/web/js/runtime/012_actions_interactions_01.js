@@ -899,7 +899,7 @@ function vibeCodeHandleTraceEvent(evt) {
 }
 
 /**
- * Stream an assistant response from the /api/chat endpoint.
+ * Stream an assistant response from the canonical /api/v2/chat endpoint.
  *
  * Extracted from handleSend() so that edit-message, regenerate, and retry
  * flows can reuse the same streaming + rendering logic without duplication.

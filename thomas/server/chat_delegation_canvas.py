@@ -5,36 +5,49 @@ the task manager routes the task here instead of the slow file-building agent wo
 This worker does NOT build files step-by-step with tools — it streams a single
 self-contained HTML document straight to the Canvas, so the user WATCHES it draw
 itself live (the Claude-design effect). Its growing output is held in a per-execution
-store that the /delegations poll surfaces, and the final HTML is written to the task
-workspace so it also becomes a normal downloadable deliverable.
+store that the /delegations poll surfaces and writes the final HTML to the task workspace.
 """
 
 from __future__ import annotations
 
-import asyncio
 import re
 import threading
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-# --------------------------------------------------------------------------- #
+from thomas.server.chat_delegation_canvas_client import (
+    CANVAS_LLM_LOCK as _CANVAS_LLM_LOCK,
+)
+from thomas.server.chat_delegation_canvas_client import (
+    LLM_CACHE as _LLM_CACHE,
+)
+from thomas.server.chat_delegation_canvas_client import (
+    build_canvas_llm,
+    start_canvas_keepalive,
+)
+from thomas.server.chat_delegation_canvas_client import canvas_diag as _diag
+from thomas.server.chat_delegation_canvas_client import evict_canvas_llm as _evict_canvas_llm
+from thomas.server.chat_delegation_canvas_intent import is_canvas_task
+from thomas.server.chat_delegation_canvas_review import review_canvas_html
+
 # Per-execution streaming store (process-local; the poll handler reads it).
-# The canvas worker runs in the same process as the web app, so a module-level
-# dict guarded by a lock is visible to both the worker and the poll handler.
-# --------------------------------------------------------------------------- #
 _LOCK = threading.Lock()
 _STORE: dict[str, dict[str, Any]] = {}
 
+
 # The gpt-5.5 / codex-OAuth provider silently HANGS (no first token, no error) when
-# multiple streaming calls overlap. Serialize canvas generations through one lock so
+# Serialize canvas generations through one lock so overlapping calls cannot compete,
 # they never compete, and reuse one LLM client per profile to avoid connection churn.
-_CANVAS_LLM_LOCK = asyncio.Lock()
-_LLM_CACHE: dict[str, Any] = {}
-
-
 def canvas_start(execution_id: str, title: str = "") -> None:
     with _LOCK:
-        _STORE[str(execution_id)] = {"html": "", "status": "streaming", "title": str(title or "")}
+        _STORE[str(execution_id)] = {
+            "html": "",
+            "status": "streaming",
+            "review_status": "pending",
+            "review_issues": [],
+            "review_evidence": {},
+            "title": str(title or ""),
+        }
 
 
 def canvas_append(execution_id: str, chunk: str) -> None:
@@ -49,6 +62,15 @@ def canvas_set_html(execution_id: str, html: str) -> None:
         rec = _STORE.get(str(execution_id))
         if rec is not None:
             rec["html"] = str(html or "")
+
+
+def canvas_set_plan(execution_id: str, plan: str) -> None:
+    """Persist the reviewed planner spec for matching PDF/data export."""
+
+    with _LOCK:
+        rec = _STORE.get(str(execution_id))
+        if rec is not None:
+            rec["plan"] = str(plan or "")
 
 
 def canvas_set_shell(execution_id: str, shell: dict[str, Any]) -> None:
@@ -83,6 +105,23 @@ def canvas_finish(execution_id: str, status: str = "done") -> None:
             rec["status"] = str(status or "done")
 
 
+def canvas_set_review(execution_id: str, evidence: dict[str, Any]) -> None:
+    """Persist structured semantic-review evidence beside the streamed render."""
+
+    payload = dict(evidence or {})
+    issues = payload.get("issues") if isinstance(payload.get("issues"), list) else []
+    with _LOCK:
+        rec = _STORE.get(str(execution_id))
+        if rec is not None:
+            rec["review_status"] = str(payload.get("status") or "failed")
+            rec["review_issues"] = [
+                str(issue.get("message") if isinstance(issue, dict) else issue)
+                for issue in issues
+                if str(issue).strip()
+            ]
+            rec["review_evidence"] = payload
+
+
 def canvas_get(execution_id: str) -> dict[str, Any] | None:
     """Return {'html','status','title'} for an execution, or None if not a canvas task."""
     with _LOCK:
@@ -98,19 +137,6 @@ def canvas_get(execution_id: str) -> dict[str, Any] | None:
 # this is consulted ONLY when no surface was declared (narration backstop / forced launch).
 # Kept to COMPOUND/unambiguous visual forms so it never grabs document/code/planning requests
 # that merely carry a verb like design/draw/render (the old over-trigger bug).
-_VISUAL_RE = re.compile(
-    r"\b(pie\s*chart|bar\s*chart|line\s*chart|flow\s*chart|"
-    r"mock\s*up|wireframe|infographic|logo|landing\s*page|illustration|"
-    r"picture\s+of|image\s+of|ui\s+(?:design|mockup)|diagram\s+of)\b",
-    re.I,
-)
-
-
-def is_canvas_task(prompt: str) -> bool:
-    """True when the request is a visual/design task the Canvas should render live."""
-    return bool(_VISUAL_RE.search(str(prompt or "")))
-
-
 # --------------------------------------------------------------------------- #
 # Deterministic renderer — compile a planner choreography spec (JSON) into ONE
 # self-contained, self-animating HTML document with NO second LLM call. This is
@@ -261,7 +287,10 @@ def _render_element(el: Any, i: int, sw: int, sh: int) -> tuple[str, str] | None
         x, y = _num(g.get("x")), _num(g.get("y"))
         svg = str(g.get("svg") or "")
         mcls = motion if motion in ("rise-fade", "scale-in", "grow-y", "grow-x", "sweep") else "rise-fade"
-        return ("div", f'<div class="el {mcls}" style="{common};left:{x:.0f}px;top:{y:.0f}px">{svg}</div>')
+        return (
+            "div",
+            f'<div class="el raw-el {mcls}" style="{common};left:{x:.0f}px;top:{y:.0f}px">{svg}</div>',
+        )
     # box | shape | bar | image -> positioned div
     x, y = _num(g.get("x")), _num(g.get("y"))
     w = _num(g.get("w"), 80)
@@ -425,7 +454,8 @@ def build_construction_shell(sw: int, sh: int, bg: str, stagger: int = 70) -> st
         "#tc-stage{position:relative;contain:layout paint;overflow:hidden;margin:0 auto;"
         "font-family:Arial,Helvetica,sans-serif;color:#263238;transform-origin:top left}"
         ".tc-onevec{position:absolute;inset:0;width:100%;height:100%;overflow:visible}"
-        ".el{position:absolute;transition:opacity .42s ease-out,transform .42s ease-out;will-change:opacity,transform}"
+        ".el{position:absolute;pointer-events:none;transition:opacity .42s ease-out,transform .42s ease-out;will-change:opacity,transform}"
+        ".raw-el [role='button'],.raw-el button,.raw-el a,.raw-el input,.raw-el select,.raw-el textarea{pointer-events:auto}"
         ".vec{transition:opacity .5s ease-out,transform .55s ease-out,stroke-dashoffset .6s ease-out;"
         "transform-box:fill-box;transform-origin:center;will-change:opacity,transform,stroke-dashoffset}"
         ".tc-pre.rise-fade,.tc-pre.count-up{opacity:0}"
@@ -494,9 +524,10 @@ _CANVAS_CSS_TEMPLATE = (
     "pointer-events:none;z-index:60;transition:opacity __REVEAL__ms ease-out}"
     "#tc-stage[data-reveal='play']::after{opacity:0}"
     ".tc-vec{position:absolute;inset:0;width:100%;height:100%;overflow:visible}"
-    ".el{position:absolute;transition-property:opacity,transform;transition-duration:var(--dur,460ms);"
+    ".el{position:absolute;pointer-events:none;transition-property:opacity,transform;transition-duration:var(--dur,460ms);"
     "transition-timing-function:var(--ease,ease-out);transition-delay:calc(var(--i,0)*__STAGGER__ms);"
     "will-change:opacity,transform}"
+    ".raw-el [role='button'],.raw-el button,.raw-el a,.raw-el input,.raw-el select,.raw-el textarea{pointer-events:auto}"
     ".vec{transition-property:opacity,transform,stroke-dashoffset;transition-duration:var(--dur,560ms);"
     "transition-timing-function:var(--ease,ease-out);transition-delay:calc(var(--i,0)*__STAGGER__ms);"
     "transform-box:fill-box;transform-origin:center;will-change:opacity,transform,stroke-dashoffset}"
@@ -734,313 +765,30 @@ def _conforms_to_contract(html: str) -> bool:
     return True
 
 
-def build_canvas_llm(root: Path, profile: str | None) -> Any | None:
-    """Get a WARM, cached LLMClient for ``profile``. A cold OAuth client stalls on its
-    first token (the chat works because its session client is already warm), so we keep
-    one warm client per profile and only rebuild it if it actually breaks (see
-    _evict_canvas_llm, called on a stall)."""
-    key = str(profile or "")
-    cached = _LLM_CACHE.get(key)
-    if cached is not None:
-        return cached
-    try:
-        from thomas.core.config import load_config
-        from thomas.core.llm_client import LLMClient
-
-        cfg = load_config(Path(root) / "thomas.toml")
-        model_cfg = cfg.get_model(profile or None)
-        # The canvas stages (especially render: transcribe a plan into HTML) are mostly
-        # mechanical. gpt-5.5 reasons BEFORE emitting any output token, so heavy effort
-        # delays the first token past our timeout. Low effort keeps it responsive.
-        try:
-            from dataclasses import replace as _replace
-
-            model_cfg = _replace(model_cfg, reasoning_effort="low")
-        except Exception:
-            pass
-        try:
-            _diag(
-                f"[build] profile={profile!r} provider={getattr(model_cfg, 'provider', None)!r} "
-                f"model={getattr(model_cfg, 'model', None)!r} base_url={getattr(model_cfg, 'base_url', None)!r} "
-                f"has_api_key={bool(getattr(model_cfg, 'api_key', None))} "
-                f"backend={getattr(model_cfg, 'backend', None)!r}"
-            )
-        except Exception:
-            pass
-        client = LLMClient(model_cfg)
-        _LLM_CACHE[key] = client
-        return client
-    except (OSError, ValueError, TypeError, KeyError, AttributeError, ImportError):
-        return None
-
-
-def _evict_canvas_llm(profile: str | None) -> None:
-    _LLM_CACHE.pop(str(profile or ""), None)
-
-
-def _diag(msg: str) -> None:
-    """Append a line to _canvas_diag.log for runtime debugging of the canvas worker.
-    Off by default; set THOMAS_CANVAS_DIAG=1 to enable (used to trace stream stalls)."""
-    import os
-
-    if not os.environ.get("THOMAS_CANVAS_DIAG"):
-        return
-    try:
-        with open(Path(__file__).resolve().parents[2] / "_canvas_diag.log", "a", encoding="utf-8") as f:
-            f.write(msg + "\n")
-    except Exception:
-        pass
-
-
-# --------------------------------------------------------------------------- #
-# Keep-alive: the chat's gpt-5.5 connection is fast because it's used every turn.
-# The dedicated canvas client goes idle between requests and its OAuth stream then
-# stalls on the next first token. A tiny periodic ping keeps that one connection
-# warm, so real canvas requests never cold-start.
-# --------------------------------------------------------------------------- #
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_keepalive_started = False
-
-
-def start_canvas_keepalive(root: Path | None = None) -> None:
-    """Start (once) the background task that keeps the canvas LLM connection warm."""
-    global _keepalive_started
-    if _keepalive_started:
-        return
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        return  # no running loop yet; caller will retry from an async context
-    _keepalive_started = True
-    loop.create_task(_keepalive_loop(Path(root) if root else _REPO_ROOT))
-
-
-async def _keepalive_loop(root: Path) -> None:
-    import contextlib
-
-    while True:
-        try:
-            client = build_canvas_llm(root, None)
-            if client is not None and hasattr(client, "stream_chat"):
-                async with _CANVAS_LLM_LOCK:  # never compete with a real generation
-                    aiter = client.stream_chat(
-                        messages=[{"role": "user", "content": "Reply with the single word: ok"}],
-                        tools=None,
-                    ).__aiter__()
-                    got = 0
-                    try:
-                        while got < 2:
-                            await asyncio.wait_for(aiter.__anext__(), timeout=12)
-                            got += 1
-                    except (StopAsyncIteration, asyncio.TimeoutError):
-                        pass
-                    except Exception:  # noqa: BLE001 - a failed ping is harmless
-                        pass
-                    with contextlib.suppress(Exception):
-                        await aiter.aclose()
-        except Exception:  # noqa: BLE001 - keep the loop alive no matter what
-            pass
-        await asyncio.sleep(18)
-
-
 async def run_canvas_worker(
     *,
     execution_id: str,
     prompt: str,
     root: Path,
     profile: str | None = None,
+    model_id: str | None = None,
     emit_progress: Callable[[str], Awaitable[None]] | None = None,
+    record_runtime: Callable[[dict[str, Any]], None] | None = None,
     session_llm: Any = None,
+    runtime_policy: dict[str, Any] | None = None,
 ) -> str:
-    """Stream a self-contained HTML document for ``prompt`` into the per-execution
-    store (so the Canvas can render it live), and return the final cleaned HTML.
+    """Run the Canvas generator while preserving this module's public API."""
 
-    Raises RuntimeError if no streaming LLM is available or generation errors.
-    """
-    canvas_start(execution_id, title=str(prompt or "")[:80])
-    # Use a DEDICATED canvas client (pinned key ""), NOT the chat's session client: the
-    # chat's stream loop breaks early without closing, so its connection stays "busy" and
-    # a second stream on it hangs. A dedicated client kept warm by the keep-alive avoids
-    # both that conflict and the cold-start stall.
-    profile = None
-    _ = session_llm  # accepted for API compatibility; intentionally not reused (see above)
-    llm = build_canvas_llm(root, profile)
-    if llm is None or not hasattr(llm, "stream_chat"):
-        canvas_finish(execution_id, "failed")
-        raise RuntimeError("No streaming LLM available for the canvas worker")
+    from thomas.server.chat_delegation_canvas_worker import run_canvas_worker as run_worker
 
-    # The render stage reads a large plan and reasons before its first token, so the
-    # time-to-first-token is much longer than a small prompt. Give it real room rather
-    # than killing it at 8s (the old value that made every render attempt "stall").
-    _FIRST_TOKEN_TIMEOUT_S = 75.0
-    _IDLE_TIMEOUT_S = 30.0
-    _MAX_ATTEMPTS = 2
-    _BACKOFF_S = 1.5  # let a throttled provider breathe before the next attempt
-
-    class _Stall(Exception):
-        pass
-
-    async def _stream(
-        stage_messages: list[dict[str, Any]],
-        *,
-        to_canvas: bool,
-        label: str,
-        on_text: Callable[[str], None] | None = None,
-    ) -> str:
-        """Retryable streaming call against the warm client. Returns the accumulated text.
-        When to_canvas, tokens are also appended to the per-execution store for the poll.
-        on_text(accumulated) is called as tokens arrive (used to stream the live construction).
-        Raises _Stall if every attempt hangs (no first token) or errors."""
-        last_err = "stalled"
-        for _attempt in range(_MAX_ATTEMPTS):
-            parts: list[str] = []
-            count = 0
-            got_first = False
-            try:
-                _diag(
-                    f"[stream] {label} a{_attempt}: opening; client={type(llm).__name__} failover={getattr(llm, '_failover_enabled', '?')}"
-                )
-                aiter = llm.stream_chat(messages=stage_messages, tools=None).__aiter__()
-                _evn = 0
-                while True:
-                    timeout = _IDLE_TIMEOUT_S if got_first else _FIRST_TOKEN_TIMEOUT_S
-                    try:
-                        ev = await asyncio.wait_for(aiter.__anext__(), timeout=timeout)
-                    except StopAsyncIteration:
-                        _diag(f"[stream] {label} a{_attempt}: StopAsyncIteration after {_evn} events, {count} tokens")
-                        break
-                    except asyncio.TimeoutError as exc:
-                        raise _Stall("no first token" if not got_first else "stalled mid-stream") from exc
-                    etype = str(getattr(ev, "type", "") or "")
-                    data = getattr(ev, "data", {}) or {}
-                    _evn += 1
-                    if _evn <= 8:
-                        _peek = (
-                            (str(data.get("text") or data.get("error") or "")[:50])
-                            if isinstance(data, dict)
-                            else str(data)[:50]
-                        )
-                        _diag(
-                            f"[stream] {label} a{_attempt}: ev#{_evn} type={etype!r} keys={list(data.keys()) if isinstance(data, dict) else type(data).__name__} peek={_peek!r}"
-                        )
-                    if etype == "token":
-                        tok = str(data.get("text", "") or "")
-                        if tok:
-                            got_first = True
-                            parts.append(tok)
-                            if to_canvas:
-                                canvas_append(execution_id, tok)
-                            count += 1
-                            if on_text is not None and count % 8 == 0:
-                                try:
-                                    on_text("".join(parts))
-                                except Exception:
-                                    pass
-                            if emit_progress is not None and count % 30 == 0:
-                                try:
-                                    await emit_progress(label)
-                                except Exception:
-                                    pass
-                    elif etype == "error":
-                        raise _Stall(str(data.get("error") or "provider error"))
-                text = "".join(parts)
-                if on_text is not None:
-                    try:
-                        on_text(text)  # final flush — catch the last elements
-                    except Exception:
-                        pass
-                if text.strip():
-                    return text
-                last_err = "empty output"
-            except _Stall as exc:
-                last_err = str(exc)
-                _diag(f"[stream] {label} a{_attempt}: STALL {exc}")
-            except Exception as exc:  # noqa: BLE001 - any provider error -> retry
-                last_err = f"{type(exc).__name__}: {exc}"
-                _diag(f"[stream] {label} a{_attempt}: EXC {type(exc).__name__}: {exc}")
-            if _attempt < _MAX_ATTEMPTS - 1:
-                await asyncio.sleep(_BACKOFF_S)
-        raise _Stall(f"{_MAX_ATTEMPTS} attempts: {last_err}")
-
-    # Serialize the whole two-stage generation behind one lock (the provider hangs when
-    # streams overlap). STAGE 1 plans; STAGE 2 (the render bot) renders the plan.
-    await _CANVAS_LLM_LOCK.acquire()
-    try:
-        if emit_progress is not None:
-            try:
-                await emit_progress("Planning the design…")
-            except Exception:
-                pass
-        # STAGE 1 — planning worker. As it WRITES the recipe, we stream each finished element
-        # into the live construction shell, so the user WATCHES the visual assemble itself in
-        # real time (the Claude-design effect) rather than seeing a canned entrance at the end.
-        _build_state: dict[str, Any] = {"n": 0, "sw": 720, "sh": 520, "shell": False}
-
-        def _on_plan(acc: str) -> None:
-            st = _partial_stage(acc)
-            if st:
-                _build_state["sw"], _build_state["sh"] = st["w"], st["h"]
-                if not _build_state["shell"]:
-                    canvas_set_shell(execution_id, {**st, "stagger": 70})
-                    _build_state["shell"] = True
-            if not _build_state["shell"]:
-                return  # hold until we know the stage size, so elements land in the right place
-            for el in stream_elements(acc, _build_state["n"]):
-                rendered = _render_element(el, _build_state["n"], _build_state["sw"], _build_state["sh"])
-                _build_state["n"] += 1
-                if rendered is not None:
-                    canvas_add_element(execution_id, rendered[0], rendered[1])
-
-        plan = await _stream(
-            [{"role": "system", "content": _PLAN_SYSTEM}, {"role": "user", "content": str(prompt or "")}],
-            to_canvas=False,
-            label="Building it on the canvas…",
-            on_text=_on_plan,
-        )
-        # STAGE 2 — DETERMINISTIC renderer (NO second LLM call): compile the spec into the
-        # self-animating HTML in code. This is the big speed win (~140s -> ~15-25s) and it can
-        # never drop the contract. The LLM render bot stays only as a fallback if the spec
-        # somehow won't compile.
-        if emit_progress is not None:
-            try:
-                await emit_progress("Drawing it on the canvas…")
-            except Exception:
-                pass
-        html = ""
-        try:
-            built = build_canvas_html(plan)
-            if built.strip() and _conforms_to_contract(built):
-                html = built
-                _diag(f"[render] deterministic OK, {len(html)} chars")
-        except (ValueError, KeyError, TypeError, AttributeError) as exc:  # noqa: BLE001
-            _diag(f"[render] deterministic compile failed: {exc}")
-        if not html.strip():
-            # FALLBACK — the old LLM render bot, when the spec won't compile deterministically.
-            _diag("[render] falling back to LLM render bot")
-            render_user = f"USER REQUEST:\n{str(prompt or '')}\n\nDESIGN PLAN TO RENDER EXACTLY:\n{plan}"
-            for _render_pass in range(2):
-                html_text = await _stream(
-                    [{"role": "system", "content": _RENDER_SYSTEM}, {"role": "user", "content": render_user}],
-                    to_canvas=True,
-                    label="Drawing it on the canvas…",
-                )
-                html = extract_html(html_text)
-                if html.strip() and _conforms_to_contract(html):
-                    break
-                render_user += (
-                    "\n\nIMPORTANT: your previous attempt did NOT follow the render contract. The "
-                    'document MUST contain <div id="tc-stage" data-reveal="pending"> wrapping the visual, '
-                    'every animatable element must carry style="--i:N", and a final script must flip '
-                    'data-reveal to "play" after document.fonts.ready + a double requestAnimationFrame, '
-                    "with a setTimeout(...,2500) safety net. Redo it following the contract exactly."
-                )
-        if not html.strip():
-            raise _Stall("render produced empty HTML")
-        canvas_set_html(execution_id, html)
-        canvas_finish(execution_id, "done")
-        return html
-    except _Stall as exc:
-        canvas_finish(execution_id, "failed")
-        raise RuntimeError(f"canvas generation failed: {exc}")
-    finally:
-        _CANVAS_LLM_LOCK.release()
+    return await run_worker(
+        execution_id=execution_id,
+        prompt=prompt,
+        root=root,
+        profile=profile,
+        model_id=model_id,
+        emit_progress=emit_progress,
+        record_runtime=record_runtime,
+        session_llm=session_llm,
+        runtime_policy=runtime_policy,
+    )

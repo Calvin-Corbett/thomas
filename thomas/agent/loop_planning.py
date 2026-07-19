@@ -166,10 +166,17 @@ def sanitize_assistant_text(
         flags["thought_leak"] = True
         changed = True
 
-    out, artifact_changed = strip_tool_call_artifacts(out, prompt_text=prompt_text)
-    if artifact_changed:
-        flags["tool_artifact"] = True
-        changed = True
+    # Preserve only registry-validated text tool calls for the execution loop,
+    # which recovers them into real calls immediately after presentation
+    # sanitization. Unknown or merely tool-shaped JSON still gets stripped.
+    from thomas.agent.loop_execution import _recover_text_tool_calls
+
+    recoverable_calls, _ = _recover_text_tool_calls(out, getattr(agent, "tools", None))
+    if not recoverable_calls:
+        out, artifact_changed = strip_tool_call_artifacts(out, prompt_text=prompt_text)
+        if artifact_changed:
+            flags["tool_artifact"] = True
+            changed = True
 
     if not blocked_response:
         out, directness_changed = apply_directness_constraints(out, prompt_text=prompt_text)

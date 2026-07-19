@@ -4,8 +4,10 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from thomas.core import task_bot_runtime
+from thomas.core.action_receipt import delegated_action_receipt
 from thomas.server.chat_delegation_worker_config import TASK_MANAGER_BACKEND
 
 log = logging.getLogger(__name__)
@@ -27,20 +29,68 @@ def _normalize_record(payload: dict[str, Any] | None) -> dict[str, Any]:
     bot_name = str(row.get("bot_name") or "").strip() or (bot_id[:1].upper() + bot_id[1:] if bot_id else "")
     execution_id = str(row.get("execution_id") or "")
     runtime_profile = row.get("runtime_profile") if isinstance(row.get("runtime_profile"), dict) else {}
+    proof = dict(row.get("proof") or {}) if isinstance(row.get("proof"), dict) else {}
+    proof_artifacts = proof.get("artifacts") if isinstance(proof.get("artifacts"), list) else []
+    proof_status = str(row.get("proof_status") or proof.get("status") or "missing").strip().lower()
+    state = str(row.get("state") or "requested").strip().lower()
+    reviewed_success = bool(
+        state in {"completed", "verified", "done", "succeeded", "passed"}
+        and proof_status in {"verified", "attached"}
+        and proof_artifacts
+    )
     # If the worker produced a deliverable in its isolated workspace, expose a one-click
     # URL + its name and KIND so the chat can present it natively.
     artifact_url = ""
     artifact_name = ""
     artifact_kind = ""
+    artifacts: list[dict[str, str]] = []
     try:
         from thomas.server.routes.deliverable_aiohttp import deliverable_entry, deliverable_kind, deliverable_url
 
-        artifact_url = deliverable_url(execution_id)
-        entry = deliverable_entry(execution_id) or ""
-        artifact_name = entry.rsplit("/", 1)[-1]
-        artifact_kind = deliverable_kind(execution_id)
+        if reviewed_success:
+            artifact_url = deliverable_url(execution_id)
+            entry = deliverable_entry(execution_id) or ""
+            artifact_name = entry.rsplit("/", 1)[-1]
+            artifact_kind = deliverable_kind(execution_id)
     except (ImportError, RuntimeError, OSError, ValueError, TypeError, AttributeError):
         artifact_url = artifact_name = artifact_kind = ""
+    for index, raw_artifact in enumerate(proof_artifacts if reviewed_success else []):
+        if not isinstance(raw_artifact, dict):
+            continue
+        path = str(raw_artifact.get("path") or raw_artifact.get("file") or "").strip().replace("\\", "/")
+        if not path or path.startswith("/") or ".." in Path(path).parts:
+            continue
+        suffix = Path(path).suffix.lower()
+        kind = (
+            "web"
+            if suffix in {".html", ".htm"}
+            else "pdf"
+            if suffix == ".pdf"
+            else "image"
+            if suffix in {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"}
+            else "text"
+            if suffix in {".md", ".txt", ".csv", ".json", ".log", ".rst"}
+            else "file"
+        )
+        artifacts.append(
+            {
+                "id": f"{execution_id}:{index}:{path}",
+                "path": path,
+                "name": Path(path).name,
+                "kind": str(raw_artifact.get("kind") or kind),
+                "url": f"/deliverable/{quote(execution_id, safe='')}/{quote(path, safe='/')}",
+            }
+        )
+    if not artifacts and (artifact_url or artifact_name):
+        artifacts.append(
+            {
+                "id": f"{execution_id}:primary",
+                "path": artifact_name,
+                "name": artifact_name or "result",
+                "kind": artifact_kind,
+                "url": artifact_url,
+            }
+        )
     # Live canvas worker: surface the streaming HTML so the frontend Canvas renders it
     # as it draws (and knows this delegation is a canvas task to auto-open for).
     canvas_html = ""
@@ -48,6 +98,9 @@ def _normalize_record(payload: dict[str, Any] | None) -> dict[str, Any]:
     canvas_mode = ""
     canvas_shell = ""
     canvas_elements: list[dict[str, Any]] = []
+    canvas_review_status = ""
+    canvas_review_issues: list[str] = []
+    canvas_review_evidence: dict[str, Any] = {}
     is_canvas = False
     try:
         from thomas.server.chat_delegation_canvas import canvas_get
@@ -61,9 +114,25 @@ def _normalize_record(payload: dict[str, Any] | None) -> dict[str, Any]:
             _shell = _cv.get("shell") if isinstance(_cv.get("shell"), dict) else {}
             canvas_shell = str(_shell.get("html") or "")
             canvas_elements = list(_cv.get("elements") or [])
+            canvas_review_status = str(_cv.get("review_status") or "")
+            canvas_review_issues = [str(issue) for issue in (_cv.get("review_issues") or [])]
+            canvas_review_evidence = (
+                dict(_cv.get("review_evidence")) if isinstance(_cv.get("review_evidence"), dict) else {}
+            )
+            reviewed_canvas = reviewed_success and canvas_review_status.lower() == "passed"
+            partial_construction = bool(
+                canvas_status.lower() == "streaming"
+                and canvas_mode == "construct"
+                and canvas_review_status.lower() in {"", "pending"}
+            )
+            if not reviewed_canvas:
+                canvas_html = ""
+                if not partial_construction:
+                    canvas_shell = ""
+                    canvas_elements = []
     except (ImportError, RuntimeError, ValueError, TypeError, AttributeError):
         is_canvas = False
-    return {
+    normalized = {
         "execution_id": execution_id,
         "is_canvas": is_canvas,
         "canvas_html": canvas_html,
@@ -71,8 +140,13 @@ def _normalize_record(payload: dict[str, Any] | None) -> dict[str, Any]:
         "canvas_mode": canvas_mode,
         "canvas_shell": canvas_shell,
         "canvas_elements": canvas_elements,
+        "canvas_review_status": canvas_review_status,
+        "canvas_review_issues": canvas_review_issues,
+        "canvas_review_evidence": canvas_review_evidence,
         "task_id": str(row.get("task_id") or ""),
         "session_id": str(row.get("conversation_id") or row.get("thread_id") or ""),
+        "execution_intent": str(row.get("execution_intent") or "task.execute"),
+        "visibility": str(row.get("visibility") or "background"),
         "backend_type": str(row.get("backend_type") or TASK_MANAGER_BACKEND),
         "state": str(row.get("state") or "requested"),
         "summary": summary,
@@ -80,13 +154,21 @@ def _normalize_record(payload: dict[str, Any] | None) -> dict[str, Any]:
         "artifact_url": artifact_url,
         "artifact_name": artifact_name,
         "artifact_kind": artifact_kind,
+        "artifacts": artifacts,
         "bot_id": bot_id,
         "bot_name": bot_name,
         "runtime_profile": dict(runtime_profile),
+        "proof_status": str(row.get("proof_status") or "missing"),
+        "proof": proof,
+        "blocker": str(row.get("blocker") or ""),
+        "pending_instructions": list(row.get("pending_instructions") or []),
+        "cancel_requested": bool(row.get("cancel_requested")),
         "reported_to_chat_at": str(row.get("reported_to_chat_at") or ""),
         "created_at": str(row.get("created_at") or ""),
         "updated_at": str(row.get("updated_at") or ""),
     }
+    normalized["receipt"] = delegated_action_receipt(normalized).to_dict()
+    return normalized
 
 
 def _execution_is_terminal(execution_id: str, repo_root: Path) -> bool:
@@ -227,13 +309,25 @@ def apply_task_update(
     root = _resolve_repo_root(repo_root)
     try:
         if cancel:
-            task_bot_runtime.request_cancel(eid, actor="user", repo_root=root)
-            return {"ok": True, "execution_id": eid, "action": "cancel"}
+            record = task_bot_runtime.request_cancel(eid, actor="user", repo_root=root)
+            normalized = _normalize_record(record)
+            return {
+                "ok": True,
+                "execution_id": eid,
+                "action": "cancel",
+                "receipt": normalized["receipt"],
+            }
         text = str(update or "").strip()
         if not text:
             return {"ok": False, "error": "No update instruction was provided."}
-        task_bot_runtime.steer_execution(eid, text, actor="user", repo_root=root)
-        return {"ok": True, "execution_id": eid, "action": "steer"}
+        record = task_bot_runtime.steer_execution(eid, text, actor="user", repo_root=root)
+        normalized = _normalize_record(record)
+        return {
+            "ok": True,
+            "execution_id": eid,
+            "action": "steer",
+            "receipt": normalized["receipt"],
+        }
     except ValueError as exc:
         return {"ok": False, "execution_id": eid, "error": str(exc)}
     except FileNotFoundError as exc:

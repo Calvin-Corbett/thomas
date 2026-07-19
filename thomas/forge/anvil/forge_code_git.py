@@ -6,20 +6,25 @@ Code UI uses these to show the actual diff of a build, the actual list of files
 a run touched, and to perform a real revert that restores a file to its
 committed state on disk.
 
-All operations are defensive: a failing ``git`` invocation, a missing repo, or
-an unexpected exception yields a safe default (empty list/str/dict, or an
-``ok: false`` result) rather than raising -- this code runs inside the aiohttp
-server and must never take it down.
+Low-level process calls stay defensive, but workspace-state readers fail
+closed with :class:`ForgeCodeGitError` when Git cannot prove the current
+state. Routes translate that typed failure into a structured service error so
+the UI can never mistake missing evidence for a clean run.
 """
 
 from __future__ import annotations
 
+import hashlib
 import os
 import subprocess
 from pathlib import Path
 
 # Default timeout (seconds) for a single git invocation.
 _DEFAULT_TIMEOUT = 30
+
+
+class ForgeCodeGitError(RuntimeError):
+    """Git evidence could not be read reliably."""
 
 
 def _run_git(root: str | Path, args: list[str], timeout: int = _DEFAULT_TIMEOUT) -> tuple[int, str, str]:
@@ -50,42 +55,68 @@ def _run_git(root: str | Path, args: list[str], timeout: int = _DEFAULT_TIMEOUT)
         return 1, "", str(exc)
 
 
-def _unquote(path: str) -> str:
-    """Strip the surrounding quotes git adds for paths with special chars."""
-    if len(path) >= 2 and path.startswith('"') and path.endswith('"'):
-        return path[1:-1]
-    return path
-
-
 def _parse_porcelain(output: str) -> list[tuple[str, str]]:
-    """Parse ``git status --porcelain`` into ``(two_char_status, path)`` pairs.
+    """Parse NUL-delimited porcelain v1 into ``(two_char_status, path)`` pairs.
 
-    Handles rename/copy entries ("old -> new") by returning the *new* path, and
-    unquotes paths git wraps in double quotes. A line shorter than the minimum
-    "XY <path>" shape is skipped.
+    ``-z`` disables Git's C-style filename quoting, so Unicode and unusual path
+    characters remain usable artifact paths. Rename/copy records include a
+    second NUL field for the source path; the destination is the first field.
     """
     entries: list[tuple[str, str]] = []
-    for line in output.splitlines():
-        if len(line) < 4:
+    records = output.split("\0")
+    index = 0
+    while index < len(records):
+        record = records[index]
+        index += 1
+        if len(record) < 4:
             continue
-        status = line[:2]
-        rest = line[3:]
-        if " -> " in rest:
-            rest = rest.split(" -> ", 1)[1]
-        path = _unquote(rest.strip())
+        status = record[:2]
+        path = record[3:]
         if path:
             entries.append((status, path))
+        if "R" in status or "C" in status:
+            index += 1
     return entries
 
 
+_STATUS_ARGS = ["status", "--porcelain=v1", "-z", "--untracked-files=all"]
+_RUNTIME_BOOKKEEPING_PREFIXES = (".thomas/evolve/agent/",)
+
+
+def _status_entries(root: str | Path) -> list[tuple[str, str]]:
+    rc, out, err = _run_git(root, _STATUS_ARGS)
+    if rc != 0:
+        detail = (err or out).strip() or f"git status exited {rc}"
+        raise ForgeCodeGitError(f"git status could not confirm workspace state: {detail}")
+    return _parse_porcelain(out)
+
+
+def _content_fingerprint(root: str | Path, path: str, status: str) -> str:
+    target = Path(root).resolve() / path
+    try:
+        if target.is_symlink():
+            payload = f"symlink:{os.readlink(target)}".encode("utf-8", errors="surrogatepass")
+            digest = hashlib.sha256(payload).hexdigest()
+        elif target.is_file():
+            hasher = hashlib.sha256()
+            with target.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    hasher.update(chunk)
+            digest = hasher.hexdigest()
+        else:
+            digest = "missing"
+    except OSError as exc:
+        raise ForgeCodeGitError(f"could not fingerprint changed file {path}: {exc}") from exc
+    return f"{status}\0{digest}"
+
+
 def snapshot(root: str | Path) -> dict[str, str]:
-    """Return ``{path: two_char_status}`` from ``git status --porcelain`` now.
+    """Return ``{path: status_and_content_fingerprint}`` for changed files.
 
     This is a point-in-time fingerprint of the working tree, used to later
     diff a run's effect via :func:`delta_since`.
     """
-    _rc, out, _err = _run_git(root, ["status", "--porcelain"])
-    return {path: status for status, path in _parse_porcelain(out)}
+    return {path: _content_fingerprint(root, path, status) for status, path in _status_entries(root)}
 
 
 def changed_files(root: str | Path) -> list[str]:
@@ -94,15 +125,14 @@ def changed_files(root: str | Path) -> list[str]:
     Includes both tracked modifications and untracked new files. This is
     ground truth at call time -- it re-reads git on every call.
     """
-    _rc, out, _err = _run_git(root, ["status", "--porcelain"])
-    return sorted({path for _status, path in _parse_porcelain(out)})
+    return sorted({path for _status, path in _status_entries(root)})
 
 
 def delta_since(root: str | Path, snap: dict[str, str]) -> list[str]:
     """Return paths a run newly touched relative to ``snap``.
 
     A path is included when it is changed *now* and is either absent from
-    ``snap`` or present with a different two-char status code.
+    ``snap`` or present with a different status/content fingerprint.
     """
     current = snapshot(root)
     snap = snap or {}
@@ -110,10 +140,24 @@ def delta_since(root: str | Path, snap: dict[str, str]) -> list[str]:
     return sorted(changed)
 
 
+def project_delta_since(root: str | Path, snap: dict[str, str]) -> list[str]:
+    """Return only user-project paths touched since ``snap``.
+
+    Thomas stores Code transcripts inside the selected repository. Those
+    bookkeeping writes are durable evidence, but they are not user-project
+    changes and must never inflate completion or artifact counts.
+    """
+
+    return [
+        path
+        for path in delta_since(root, snap)
+        if not str(path).replace("\\", "/").lower().startswith(_RUNTIME_BOOKKEEPING_PREFIXES)
+    ]
+
+
 def is_untracked(root: str | Path, file: str) -> bool:
     """True iff ``file`` currently appears as untracked (``??``) in git."""
-    _rc, out, _err = _run_git(root, ["status", "--porcelain"])
-    return any(status == "??" and path == file for status, path in _parse_porcelain(out))
+    return any(status == "??" and path == file for status, path in _status_entries(root))
 
 
 def file_is_dirty(root: str | Path, file: str) -> bool:
@@ -141,18 +185,29 @@ def unified_diff(root: str | Path, file: str) -> str:
         # (os.devnull would be "nul" on Windows, which git reads as a real
         # path). --no-index exits 1 because the files differ; the diff is on
         # stdout regardless.
-        _rc, out, _err = _run_git(root, ["diff", "--no-index", "--", "/dev/null", file])
+        rc, out, err = _run_git(root, ["diff", "--no-index", "--", "/dev/null", file])
+        if rc not in {0, 1}:
+            raise ForgeCodeGitError(f"git diff could not confirm {file}: {(err or out).strip() or f'exited {rc}'}")
         if out.strip():
             return out
         # Defensive fallback for an environment where the above did not work.
-        _rc, out, _err = _run_git(root, ["diff", "--no-index", "--", os.devnull, file])
+        rc, out, err = _run_git(root, ["diff", "--no-index", "--", os.devnull, file])
+        if rc not in {0, 1}:
+            raise ForgeCodeGitError(f"git diff could not confirm {file}: {(err or out).strip() or f'exited {rc}'}")
         return out if out.strip() else ""
 
-    _rc, out, _err = _run_git(root, ["diff", "--", file])
-    if out.strip():
-        return out
-    _rc, cached, _cerr = _run_git(root, ["diff", "--cached", "--", file])
-    return cached if cached.strip() else ""
+    rc, out, err = _run_git(root, ["diff", "--", file])
+    if rc != 0:
+        raise ForgeCodeGitError(f"git diff could not confirm {file}: {(err or out).strip() or f'exited {rc}'}")
+    rc, cached, err = _run_git(root, ["diff", "--cached", "--", file])
+    if rc != 0:
+        raise ForgeCodeGitError(f"git diff could not confirm {file}: {(err or cached).strip() or f'exited {rc}'}")
+    return "\n".join(part.rstrip() for part in (cached, out) if part.strip())
+
+
+def change_evidence(root: str | Path, files: list[str]) -> list[dict[str, object]]:
+    """Return fail-closed diff evidence for the requested changed files."""
+    return [{"file": file, "untracked": is_untracked(root, file), "diff": unified_diff(root, file)} for file in files]
 
 
 def _safe_target(root: str | Path, file: str) -> Path | None:

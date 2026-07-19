@@ -1,3 +1,65 @@
+function isChatGPTConnectionProfile(profileName = '') {
+    const normalizeProfileKey = (value) => safeString(value).toLowerCase().replace(/[^a-z0-9]/g, '');
+    const requestedKey = normalizeProfileKey(profileName);
+    if (['chatgpt', 'codex', 'openaicodex'].includes(requestedKey)) return true;
+
+    const profile = (availableModelProfiles || []).find((item) => (
+        normalizeProfileKey(item?.name) === requestedKey
+    ));
+    return ['chatgpt', 'codex', 'openaicodex'].includes(normalizeProfileKey(profile?.provider));
+}
+
+function shouldPromptChatGPTConnectionRecovery(assistantText = '', payload = {}) {
+    if (!isChatGPTConnectionProfile(payload?.profile || payload?.model)) return false;
+    const normalized = safeString(assistantText)
+        .replace(/[*_`>#]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (!normalized || normalized.length > 500) return false;
+    return /^(?:the )?chatgpt(?: oauth| model)? (?:is not|isn't) connected\b/i.test(normalized);
+}
+
+async function promptChatGPTConnectionRecovery(payload = {}) {
+    const profileName = safeString(payload?.profile || payload?.model);
+    ensureChatVisible();
+    notifyUser('Thomas needs its own ChatGPT connection. Opening Easy Setup...', {
+        tone: 'warning',
+        durationMs: 4200,
+    });
+    await openEasySetup({ source: 'chatgpt_connection_recovery', force: true, restart: true });
+    handleEasySetupPathSelect('codex');
+    if (easySetupConnectionStatus) {
+        setEasySetupStatus(
+            easySetupConnectionStatus,
+            'Your ChatGPT or Codex app sign-in is separate from Thomas. Sign in here, then run connection test.',
+            'error'
+        );
+    }
+    setAssistantSuggestions({
+        title: 'Connect ChatGPT to Thomas',
+        context: 'connection_recovery',
+        dismissible: true,
+        options: [
+            {
+                label: 'Open ChatGPT setup',
+                kind: 'action',
+                tone: 'primary',
+                onChoose: async () => {
+                    ensureChatVisible();
+                    await openEasySetup({ source: 'chatgpt_connection_recovery_action', force: true, restart: true });
+                    handleEasySetupPathSelect('codex');
+                },
+            },
+            {
+                label: 'Why sign in again?',
+                kind: 'option',
+                send_prompt: 'Explain why Thomas needs a separate ChatGPT connection even when I am already signed into ChatGPT or Codex.',
+            },
+        ],
+    });
+    pushDebugEvent('chat', `Opened ChatGPT connection recovery for ${profileName || 'active profile'}`);
+}
+
 async function streamChatResponse(payload, { userContext = '', existingBubbleId = '' } = {}) {
     let bubbleId = existingBubbleId || ('msg-' + Date.now());
     let bubbleRow = null;
@@ -8,7 +70,7 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
 
         // Wire AbortController for stop generation
         currentAbortController = new AbortController();
-        const chatEndpoint = window.__THOMAS_CHAT_V2__ === false ? '/api/chat' : '/api/v2/chat';
+        const chatEndpoint = '/api/v2/chat';
         const res = await fetch(chatEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -842,6 +904,9 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
         });
         syncActiveChatSidebarEntry();
         void persistActiveChat({ quiet: true });
+        if (shouldPromptChatGPTConnectionRecovery(assistantFinalText, payload)) {
+            await promptChatGPTConnectionRecovery(payload);
+        }
 
     } catch (err) {
         if (err.name === 'AbortError') {

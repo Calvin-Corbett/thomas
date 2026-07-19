@@ -32,6 +32,7 @@ _DEFAULT_TITLE = "Untitled build"
 #   image    -> the image rendered inline
 #   markdown -> the chat's markdown renderer
 #   data     -> a compact scrollable table/preview
+#   pdf/document/spreadsheet/presentation -> durable downloadable output
 _ARTIFACT_KINDS: dict[str, str] = {
     "html": "html",
     "htm": "html",
@@ -45,6 +46,10 @@ _ARTIFACT_KINDS: dict[str, str] = {
     "markdown": "markdown",
     "csv": "data",
     "json": "data",
+    "pdf": "pdf",
+    "docx": "document",
+    "xlsx": "spreadsheet",
+    "pptx": "presentation",
 }
 
 
@@ -52,7 +57,7 @@ def detect_artifacts(changed_files: list[str] | None) -> list[dict]:
     """Classify a run's written files into renderable artifact descriptors.
 
     Returns ``[{"file", "kind", "ext"}]`` for every changed file whose extension
-    maps to a renderable preview (html/image/markdown/data) -- and NOTHING for a
+    maps to a renderable or downloadable result -- and NOTHING for a
     run that only touched code (``.py`` etc.), so an ordinary edit never gets a
     fabricated preview. This is the single detector the transcript trusts: it is
     recorded onto the agent turn (so a resumed conversation re-renders identically)
@@ -133,15 +138,14 @@ def _write_conversation(root: str | Path, conversation: dict) -> dict:
     return conversation
 
 
-def new_conversation(
-    root: str | Path,
+def draft_conversation(
     *,
     title: str | None = None,
     source_evolve_item: dict | None = None,
 ) -> dict:
-    """Allocate a fresh conversation, persist it, and return the full dict."""
+    """Allocate a fresh in-memory conversation without making it durable."""
     now = _now_iso()
-    conversation = {
+    return {
         "id": _new_id(),
         "title": title or _DEFAULT_TITLE,
         "created_at": now,
@@ -149,7 +153,40 @@ def new_conversation(
         "source_evolve_item": source_evolve_item,
         "turns": [],
     }
-    return _write_conversation(root, conversation)
+
+
+def new_conversation(
+    root: str | Path,
+    *,
+    title: str | None = None,
+    source_evolve_item: dict | None = None,
+) -> dict:
+    """Allocate a fresh conversation, persist it, and return the full dict."""
+    return _write_conversation(root, draft_conversation(title=title, source_evolve_item=source_evolve_item))
+
+
+def _user_turn(text: str, *, request_id: str = "", request_fingerprint: str = "") -> dict:
+    turn = {"role": "user", "text": text, "ts": _now_iso()}
+    if request_id:
+        turn.update({"request_id": request_id, "request_fingerprint": request_fingerprint})
+    return turn
+
+
+def persist_draft_with_user_turn(
+    root: str | Path,
+    conversation: dict,
+    text: str,
+    *,
+    request_id: str = "",
+    request_fingerprint: str = "",
+) -> dict:
+    """Persist a new draft and its first user turn in one conversation write."""
+    started = dict(conversation)
+    started["turns"] = [_user_turn(text, request_id=request_id, request_fingerprint=request_fingerprint)]
+    if started.get("title") == _DEFAULT_TITLE:
+        started["title"] = derive_title(text)
+    started["updated_at"] = _now_iso()
+    return _write_conversation(root, started)
 
 
 def load_conversation(root: str | Path, cid: str) -> dict | None:
@@ -246,18 +283,51 @@ def delete_conversation(root: str | Path, cid: str) -> bool:
         return False
 
 
-def append_user_turn(root: str | Path, cid: str, text: str) -> dict | None:
+def append_user_turn(
+    root: str | Path,
+    cid: str,
+    text: str,
+    *,
+    request_id: str = "",
+    request_fingerprint: str = "",
+) -> dict | None:
     """Append a user turn; title the conversation from the first message."""
     conversation = load_conversation(root, cid)
     if conversation is None:
         return None
     turns = conversation.setdefault("turns", [])
+    if request_id:
+        prior = next((turn for turn in turns if turn.get("request_id") == request_id), None)
+        if prior is not None:
+            if prior.get("text") != text or prior.get("request_fingerprint") != request_fingerprint:
+                raise ValueError("request_id belongs to a different user turn")
+            return conversation
     is_first = len(turns) == 0
-    turns.append({"role": "user", "text": text, "ts": _now_iso()})
+    turns.append(_user_turn(text, request_id=request_id, request_fingerprint=request_fingerprint))
     if is_first and conversation.get("title") == _DEFAULT_TITLE:
         conversation["title"] = derive_title(text)
     conversation["updated_at"] = _now_iso()
     return _write_conversation(root, conversation)
+
+
+def rollback_user_turn(
+    root: str | Path,
+    cid: str,
+    request_id: str,
+    *,
+    before: dict,
+    after: dict,
+) -> bool:
+    """Restore the exact pre-append snapshot if no concurrent edit intervened."""
+    current = load_conversation(root, cid)
+    turns = (current or {}).get("turns") or []
+    if current != after or not turns:
+        return False
+    last = turns[-1]
+    if last.get("role") != "user" or last.get("request_id") != request_id:
+        return False
+    _write_conversation(root, dict(before))
+    return True
 
 
 def append_agent_turn(
@@ -267,10 +337,11 @@ def append_agent_turn(
     model: str,
     transcript: str,
     changed_files: list[str],
-    returncode: int,
+    returncode: int | None,
     ok: bool,
     noop: bool,
     reason: str,
+    run_id: str = "",
 ) -> dict | None:
     """Append an agent turn carrying the model used and the run outcome."""
     conversation = load_conversation(root, cid)
@@ -283,7 +354,7 @@ def append_agent_turn(
             "ts": _now_iso(),
             "transcript": transcript,
             "changed_files": list(changed_files or []),
-            # Renderable previews this run produced (html/image/markdown/data),
+            # Renderable/downloadable results this run produced,
             # recorded so a resumed conversation re-renders the artifact cards
             # exactly as the live run showed them. Empty for a code-only run.
             "artifacts": detect_artifacts(changed_files),
@@ -291,6 +362,7 @@ def append_agent_turn(
             "ok": ok,
             "noop": noop,
             "reason": reason,
+            "run_id": str(run_id or ""),
         }
     )
     conversation["updated_at"] = _now_iso()
@@ -301,13 +373,14 @@ def _agent_reply_text(turn: dict) -> str:
     """Best-effort natural-language reply for one agent turn.
 
     The stored transcript is a mix of forge-event JSON lines and the dispatch
-    CLI's own echo; the conversational reply is carried by the ``say`` forge
-    events. We join those (de-duping the CLI's doubled final message) so history
-    carries the AGENT'S MESSAGE, never tool calls, results, or reasoning. Falls
-    back to the recorded ``reason`` when no say-text is present (e.g. a build that
-    only edited files). Defensive: a malformed line is skipped, never raised on.
+    CLI's own echo. New transcripts identify the completed handoff with an
+    explicit ``final`` event; legacy transcripts only have ``say`` events. Prefer
+    the last final so progress chatter never pollutes the next prompt, then fall
+    back to de-duplicated say text and finally the recorded reason. Defensive: a
+    malformed line is skipped, never raised on.
     """
     says: list[str] = []
+    finals: list[str] = []
     for raw in str(turn.get("transcript") or "").split("\n"):
         line = raw.strip()
         if not line or line[0] != "{":
@@ -316,12 +389,14 @@ def _agent_reply_text(turn: dict) -> str:
             obj = json.loads(line)
         except (ValueError, TypeError):
             continue
-        if isinstance(obj, dict) and obj.get("fc") == "say":
+        if isinstance(obj, dict) and obj.get("fc") in {"final", "say"}:
             text = str(obj.get("text") or "").strip()
-            if text and (not says or says[-1] != text):
+            if obj.get("fc") == "final" and text:
+                finals.append(text)
+            elif text and (not says or says[-1] != text):
                 says.append(text)
     joined = "\n\n".join(says).strip()
-    return joined or str(turn.get("reason") or "").strip()
+    return (finals[-1] if finals else joined) or str(turn.get("reason") or "").strip()
 
 
 def history_turns(root: str | Path, cid: str, *, drop_last_user: bool = True) -> list[dict]:

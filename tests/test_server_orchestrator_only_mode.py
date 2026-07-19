@@ -8,55 +8,38 @@ from unittest.mock import patch
 from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
-from thomas.core.events import AgentEvent, EventType
 from thomas.server.app import create_app
 
 
-def _parse_ndjson(blob: str):
-    out = []
-    for raw in str(blob or "").splitlines():
-        line = raw.strip()
-        if not line:
-            continue
-        out.append(json.loads(line))
-    return out
+def _parse_ndjson(blob: str) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in str(blob or "").splitlines() if line.strip()]
 
 
-class _FakeAgentLoopConversation:
-    initialized = False
-    captured: dict[str, Any] = {}
+class _FakeBrain:
+    calls: list[dict[str, Any]] = []
 
-    def __init__(self, *args, **kwargs):  # noqa: ANN002, ANN003
-        _ = args
-        self._ctor_kwargs = dict(kwargs or {})
-        _FakeAgentLoopConversation.initialized = True
-        _FakeAgentLoopConversation.captured = {"ctor_kwargs": dict(self._ctor_kwargs)}
+    def __init__(self, **_kwargs: Any) -> None:
+        pass
 
-    async def run(self, prompt, *, mode="auto", tools_policy="auto", token_economy="optimal", **kwargs):  # noqa: ANN001
-        _ = prompt
-        _ = token_economy
-        _FakeAgentLoopConversation.captured["run_kwargs"] = {
-            "mode": str(mode),
-            "tools_policy": str(tools_policy),
-            **dict(kwargs or {}),
-        }
-        yield AgentEvent(
-            type=EventType.AGENT_START,
-            data={
-                "route": {"path": "casual_chat", "confidence": 1.0},
-                "mode": str(mode),
-                "tools_policy": str(tools_policy),
-                "autonomy_level": int(self._ctor_kwargs.get("autonomy_level", 3) or 3),
-                "autonomy_name": "Standard",
-            },
-        )
-        yield AgentEvent.agent_done(
-            text="CONVO_OK",
+    async def process_message(self, *, conversation, prompt, dispatcher, **kwargs):  # noqa: ANN001
+        self.calls.append({"prompt": prompt, **kwargs})
+        conversation = conversation.append_message("user", prompt)
+        conversation = conversation.append_message("assistant", "CONVO_OK")
+        await dispatcher.emit_text("CONVO_OK")
+        await dispatcher.emit_done(
+            session_id=str(kwargs.get("session_id") or ""),
+            conversation_version=conversation.version,
+            thinking_summary="canonical_v2",
             iterations=1,
             tool_calls=0,
-            usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
-            token_report={"mode": str(mode)},
+            mode=str(kwargs.get("mode") or ""),
+            autonomy_level=int(kwargs.get("autonomy_level") or 0),
         )
+        return conversation
+
+
+async def _no_background_delegation(*_args: Any, **_kwargs: Any) -> None:
+    return None
 
 
 class TestServerOrchestratorOnlyMode(AioHTTPTestCase):
@@ -64,8 +47,7 @@ class TestServerOrchestratorOnlyMode(AioHTTPTestCase):
         super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self._prev_db_path = os.environ.get("THOMAS_DB_PATH")
-        self._db_path = f"{self._tmpdir.name}\\prefs_orch_only.sqlite"
-        os.environ["THOMAS_DB_PATH"] = self._db_path
+        os.environ["THOMAS_DB_PATH"] = f"{self._tmpdir.name}\\prefs_orch_only.sqlite"
 
     def tearDown(self) -> None:
         if self._prev_db_path is None:
@@ -91,90 +73,46 @@ class TestServerOrchestratorOnlyMode(AioHTTPTestCase):
             memory=MemoryConfig(root=self._tmpdir.name),
             server=ServerConfig(access_mode="local"),
         )
-        with patch(
-            "thomas.server.routes.chat_v2.register_chat_v2_routes", side_effect=RuntimeError("legacy-chat-required")
+        return create_app(cfg)
+
+    async def _post(self, payload: dict[str, Any]):
+        _FakeBrain.calls = []
+        with (
+            patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain),
+            patch("thomas.server.routes.chat_v2.start_background_delegation", _no_background_delegation),
         ):
-            return create_app(cfg)
+            return await self.client.post("/api/chat", json=payload)
 
-    async def _new_session_id(self) -> str:
-        sess_resp = await self.client.post("/api/session/new")
-        self.assertEqual(sess_resp.status, 200)
-        sid = str((await sess_resp.json()).get("session_id") or "")
-        self.assertTrue(sid)
-        return sid
-
-    async def test_non_task_chat_defaults_to_agent_loop(self):
-        _FakeAgentLoopConversation.initialized = False
-        _FakeAgentLoopConversation.captured = {}
-        sid = await self._new_session_id()
-
-        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopConversation):
-            resp = await self.client.post(
-                "/api/chat",
-                json={
-                    "session_id": sid,
-                    "profile": "local",
-                    "mode": "fast",
-                    "text": "hey just chatting",
-                },
-            )
-
+    async def test_non_task_chat_uses_the_canonical_v2_brain(self):
+        resp = await self._post({"profile": "local", "mode": "fast", "text": "hey just chatting"})
         self.assertEqual(resp.status, 200)
         events = _parse_ndjson(await resp.text())
-        self.assertTrue(events)
-        done_events = [e for e in events if e.get("type") == "done"]
-        self.assertEqual(len(done_events), 1)
-        self.assertEqual(str(done_events[0].get("text") or ""), "CONVO_OK")
-        self.assertTrue(_FakeAgentLoopConversation.initialized)
+        self.assertEqual(resp.headers.get("X-Thomas-Chat-Engine"), "v2")
+        self.assertTrue(any(event.get("type") == "done" for event in events))
+        self.assertEqual(_FakeBrain.calls[0].get("mode"), "fast")
 
-    async def test_explicit_swarm_mode_uses_agent_loop_with_normalized_mode(self):
-        _FakeAgentLoopConversation.initialized = False
-        _FakeAgentLoopConversation.captured = {}
-        sid = await self._new_session_id()
-
-        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopConversation):
-            resp = await self.client.post(
-                "/api/chat",
-                json={
-                    "session_id": sid,
-                    "profile": "local",
-                    "mode": "swarm",
-                    "text": "run this in swarm mode",
-                },
-            )
-
+    async def test_explicit_swarm_mode_migrates_to_v2_max(self):
+        resp = await self._post({"profile": "local", "mode": "swarm", "text": "run this in swarm mode"})
         self.assertEqual(resp.status, 200)
         events = _parse_ndjson(await resp.text())
-        done_events = [e for e in events if e.get("type") == "done"]
-        self.assertEqual(len(done_events), 1)
-        self.assertEqual(str(done_events[0].get("text") or ""), "CONVO_OK")
-        self.assertTrue(_FakeAgentLoopConversation.initialized)
-        run_kwargs = dict((_FakeAgentLoopConversation.captured or {}).get("run_kwargs") or {})
-        self.assertEqual(str(run_kwargs.get("mode") or ""), "auto")
+        migrated = [event for event in events if event.get("type") == "mode_migrated"]
+        self.assertEqual(migrated[0].get("from"), "swarm")
+        self.assertEqual(migrated[0].get("to"), "max")
+        self.assertEqual(_FakeBrain.calls[0].get("mode"), "max")
 
-    async def test_l4_task_like_request_uses_agent_loop_and_keeps_autonomy(self):
-        _FakeAgentLoopConversation.initialized = False
-        _FakeAgentLoopConversation.captured = {}
-        sid = await self._new_session_id()
-
-        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopConversation):
-            resp = await self.client.post(
-                "/api/chat",
-                json={
-                    "session_id": sid,
-                    "profile": "local",
-                    "autonomy_level": 4,
-                    "text": "implement the endpoint and update the tests",
-                },
-            )
-
+    async def test_l4_task_request_keeps_autonomy_on_the_v2_brain(self):
+        resp = await self._post(
+            {
+                "profile": "local",
+                "autonomy_level": 4,
+                "text": "implement the endpoint and update the tests",
+            }
+        )
         self.assertEqual(resp.status, 200)
-        events = _parse_ndjson(await resp.text())
-        route_events = [e for e in events if e.get("type") == "route"]
-        self.assertEqual(len(route_events), 1)
-        self.assertEqual(int(route_events[0].get("autonomy_level") or 0), 4)
-        self.assertEqual(str(route_events[0].get("no_human_mode") or ""), "allow")
-        self.assertTrue(_FakeAgentLoopConversation.initialized)
+        await resp.text()
+        call = _FakeBrain.calls[0]
+        self.assertEqual(int(call.get("autonomy_level") or 0), 4)
+        self.assertTrue(callable(call.get("send_task")))
 
 
 if __name__ == "__main__":

@@ -79,8 +79,11 @@ class TestServerChatControls(AioHTTPTestCase):
         control_meta = (done.get("token_report") or {}).get("control") or {}
         self.assertEqual(str(control_meta.get("actor") or ""), "control_parser")
         self.assertFalse(bool(control_meta.get("no_op", True)))
-        seqs = [int(e.get("seq")) for e in events]
-        self.assertEqual(seqs, sorted(seqs))
+        action_events = [e for e in events if e.get("type") == "operator_action"]
+        self.assertEqual(len(action_events), 1)
+        self.assertEqual(action_events[0].get("kind"), "inline")
+        self.assertEqual(action_events[0].get("action"), "ui.configure")
+        self.assertTrue(action_events[0].get("reversible"))
 
     async def test_chat_control_updates_mode_via_stream_event(self):
         sess_resp = await self.client.post("/api/session/new")
@@ -162,7 +165,7 @@ class TestServerChatControls(AioHTTPTestCase):
         text = await resp.text()
         self.assertIn("unknown profile", text)
 
-    async def test_chat_control_updates_batch_mode_via_stream_event(self):
+    async def test_chat_control_migrates_retired_batch_mode_to_max(self):
         sess_resp = await self.client.post("/api/session/new")
         self.assertEqual(sess_resp.status, 200)
         sid = str((await sess_resp.json()).get("session_id") or "")
@@ -182,7 +185,9 @@ class TestServerChatControls(AioHTTPTestCase):
         patch_events = [e for e in events if e.get("type") == "ui_state_patch"]
         self.assertEqual(len(patch_events), 1)
         patch = patch_events[0].get("patch") or {}
-        self.assertEqual(str(patch.get("mode") or ""), "batch")
+        self.assertEqual(str(patch.get("mode") or ""), "max")
+        text = "".join(str(event.get("text") or "") for event in events if event.get("type") == "text")
+        self.assertIn("batch execution mode is retired", text)
 
     async def test_chat_control_updates_autonomy_level_via_stream_event(self):
         sess_resp = await self.client.post("/api/session/new")
@@ -254,7 +259,7 @@ class TestServerChatControls(AioHTTPTestCase):
         patch_events = [e for e in events if e.get("type") == "ui_state_patch"]
         self.assertEqual(len(patch_events), 1)
         patch = patch_events[0].get("patch") or {}
-        self.assertEqual(str(patch.get("mode") or ""), "batch")
+        self.assertEqual(str(patch.get("mode") or ""), "max")
 
 
 if __name__ == "__main__":

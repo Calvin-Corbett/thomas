@@ -171,14 +171,13 @@ export class ThomasClient {
         headers.Authorization = `Bearer ${this.apiToken}`;
       }
 
-      const response = await fetch(`${this.baseUrl}/api/chat`, {
+      const response = await fetch(`${this.baseUrl}/api/v2/chat`, {
         method: "POST",
         headers,
         signal: controller.signal,
         body: JSON.stringify({
           session_id: sessionId,
           message: prompt,
-          text: prompt,
           channel: "discord",
           source: "discord_bridge",
           client: "discord_bot",

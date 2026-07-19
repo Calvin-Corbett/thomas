@@ -23,6 +23,7 @@ except ImportError:
 # core/models layers can use them without importing the server layer. They are
 # re-exported here so existing `from thomas.server.openai_codex_oauth import ...`
 # callers keep working.
+from thomas.core.codex_auth import register_access_token_resolver
 from thomas.core.codex_provider import (
     OPENAI_CODEX_BASE_URL,
     OPENAI_CODEX_PROVIDER,
@@ -44,6 +45,7 @@ from thomas.server.openai_codex_oauth_flow import (
     generate_pkce_pair,
     normalize_openai_codex_profile,
     openai_codex_secret_key,
+    openai_codex_secret_key_candidates,
     parse_oauth_callback,
     start_oauth_flow,
 )
@@ -152,13 +154,66 @@ def normalize_token_payload(raw: dict[str, Any], *, previous: dict[str, Any] | N
 def read_openai_codex_token(secret_store: Any, profile: str | None = None) -> dict[str, Any] | None:
     if secret_store is None or not hasattr(secret_store, "get"):
         return None
-    raw = secret_store.get(openai_codex_secret_key(profile))
-    if not raw:
+    for key in openai_codex_secret_key_candidates(profile):
+        raw = secret_store.get(key)
+        if not raw:
+            continue
+        try:
+            obj = json.loads(str(raw))
+        except (TypeError, ValueError):
+            continue
+        if isinstance(obj, dict):
+            return obj
+    return None
+
+
+def import_local_codex_token(
+    secret_store: Any,
+    profile: str | None = None,
+    *,
+    codex_home: str | Path | None = None,
+) -> dict[str, Any] | None:
+    """Adopt the current Windows-user Codex login into Thomas's secret store.
+
+    Codex and Thomas run as the same local owner but historically kept separate
+    OAuth files. That made a valid Codex app login look disconnected in Thomas
+    and caused a redundant sign-in prompt. Import only the OAuth token object,
+    never ``OPENAI_API_KEY``, and persist it through ``SecretStore`` so subsequent
+    server restarts use Thomas's normal encrypted/guarded storage path.
+    """
+
+    if read_openai_codex_token(secret_store, profile) is not None:
+        return read_openai_codex_token(secret_store, profile)
+    if str(os.environ.get("THOMAS_IMPORT_LOCAL_CODEX_AUTH", "1")).strip().casefold() in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }:
+        return None
+    configured = str(codex_home or os.environ.get("CODEX_HOME") or "").strip()
+    root = Path(configured).expanduser() if configured else Path.home() / ".codex"
+    source = root / "auth.json"
+    try:
+        if not source.is_file() or source.stat().st_size > 1024 * 1024:
+            return None
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+    tokens = payload.get("tokens") if isinstance(payload, dict) else None
+    if not isinstance(tokens, dict):
+        return None
+    imported = {
+        "access_token": str(tokens.get("access_token") or "").strip(),
+        "refresh_token": str(tokens.get("refresh_token") or "").strip(),
+        "id_token": str(tokens.get("id_token") or "").strip(),
+        "account_id": str(tokens.get("account_id") or "").strip(),
+    }
+    if not imported["access_token"] and not imported["refresh_token"]:
         return None
     try:
-        obj = json.loads(str(raw))
-        return obj if isinstance(obj, dict) else None
-    except (TypeError, ValueError):
+        return write_openai_codex_token(secret_store, profile, imported, persist=True)
+    except (OpenAICodexOAuthError, OSError, RuntimeError, TypeError, ValueError):
         return None
 
 
@@ -176,13 +231,19 @@ def write_openai_codex_token(
     if not normalized.get("access_token") and not normalized.get("refresh_token"):
         raise OpenAICodexOAuthError("OAuth response did not include an access or refresh token.")
     raw = json.dumps(normalized, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
-    secret_store.set(openai_codex_secret_key(profile), raw, persist=bool(persist))
+    canonical_key = openai_codex_secret_key(profile)
+    secret_store.set(canonical_key, raw, persist=bool(persist))
+    if persist and hasattr(secret_store, "clear"):
+        for legacy_key in openai_codex_secret_key_candidates(profile):
+            if legacy_key != canonical_key:
+                secret_store.clear(legacy_key)
     return normalized
 
 
 def clear_openai_codex_token(secret_store: Any, profile: str | None = None) -> None:
     if secret_store is not None and hasattr(secret_store, "clear"):
-        secret_store.clear(openai_codex_secret_key(profile))
+        for key in openai_codex_secret_key_candidates(profile):
+            secret_store.clear(key)
 
 
 def token_is_access_ready(token_payload: dict[str, Any] | None, *, leeway_s: float = 60.0) -> bool:
@@ -242,10 +303,17 @@ async def exchange_code_for_tokens(
     }
     if not data["code"] or not data["code_verifier"]:
         raise OpenAICodexOAuthError("OAuth code and code verifier are required.")
-    async with httpx.AsyncClient(timeout=float(timeout_s)) as client:
-        resp = await client.post(endpoint, data=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
+    try:
+        async with httpx.AsyncClient(timeout=float(timeout_s)) as client:
+            resp = await client.post(
+                endpoint,
+                data=data,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+    except (httpx.HTTPError, OSError) as exc:
+        raise OpenAICodexOAuthError("Token exchange could not reach the OAuth service.") from exc
     if int(resp.status_code) >= 400:
-        raise OpenAICodexOAuthError(f"Token exchange failed with HTTP {int(resp.status_code)}: {resp.text[:400]}")
+        raise OpenAICodexOAuthError(f"Token exchange failed with HTTP {int(resp.status_code)}.")
     try:
         obj = resp.json()
     except Exception as e:
@@ -270,10 +338,17 @@ async def refresh_openai_codex_token(
     }
     if not data["refresh_token"]:
         raise OpenAICodexOAuthError("Refresh token is required.")
-    async with httpx.AsyncClient(timeout=float(timeout_s)) as client:
-        resp = await client.post(endpoint, data=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
+    try:
+        async with httpx.AsyncClient(timeout=float(timeout_s)) as client:
+            resp = await client.post(
+                endpoint,
+                data=data,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+    except (httpx.HTTPError, OSError) as exc:
+        raise OpenAICodexOAuthError("Token refresh could not reach the OAuth service.") from exc
     if int(resp.status_code) >= 400:
-        raise OpenAICodexOAuthError(f"Token refresh failed with HTTP {int(resp.status_code)}: {resp.text[:400]}")
+        raise OpenAICodexOAuthError(f"Token refresh failed with HTTP {int(resp.status_code)}.")
     try:
         obj = resp.json()
     except Exception as e:
@@ -290,7 +365,7 @@ async def ensure_openai_codex_access_token(
     leeway_s: float = 60.0,
 ) -> str:
     store = secret_store if secret_store is not None else _default_secret_store()
-    token = read_openai_codex_token(store, profile)
+    token = read_openai_codex_token(store, profile) or import_local_codex_token(store, profile)
     if token_is_access_ready(token, leeway_s=leeway_s):
         return str(token.get("access_token") or "").strip()
     if not token_is_refreshable(token):
@@ -298,6 +373,15 @@ async def ensure_openai_codex_access_token(
     refreshed = await refresh_openai_codex_token(str(token.get("refresh_token") or ""))
     normalized = write_openai_codex_token(store, profile, refreshed, persist=True)
     return str(normalized.get("access_token") or "").strip()
+
+
+async def _resolve_registered_access_token(profile: str | None = None) -> str:
+    """Bridge the server-owned secret store into the core transport boundary."""
+
+    return await ensure_openai_codex_access_token(profile)
+
+
+register_access_token_resolver(_resolve_registered_access_token)
 
 
 def public_token_status(token_payload: dict[str, Any] | None) -> dict[str, Any]:

@@ -26,6 +26,18 @@ from thomas.server.app_keys import (
     APP_SESSION_LOCKS_LOCK,
     APP_TASK_LEDGER,
 )
+from thomas.server.app_middleware_security import (
+    _BEARER_TOKEN_RE as _BEARER_TOKEN_RE,
+)
+from thomas.server.app_middleware_security import (
+    _is_generated_artifact_asset_request,
+    cors_origin_for_request,
+    resource_policy_for_request,
+    security_headers_config,
+)
+from thomas.server.app_middleware_security import (
+    _is_sandboxed_artifact_asset_request as _is_sandboxed_artifact_asset_request,
+)
 
 from .app_helpers import _resolve_runtime_config
 
@@ -33,8 +45,6 @@ if TYPE_CHECKING:
     from aiohttp import web
 
 log = logging.getLogger(__name__)
-
-_BEARER_TOKEN_RE = __import__("re").compile(r"^Bearer\s+([^\s]+)\s*$", __import__("re").IGNORECASE)
 
 
 def setup_middleware_and_handlers(
@@ -49,27 +59,7 @@ def setup_middleware_and_handlers(
 
     from aiohttp import web
 
-    _security_headers_enabled = __import__("thomas.server.app_helpers", fromlist=["_env_flag"])._env_flag(
-        "THOMAS_SECURITY_HEADERS_ENABLED", True
-    )
-    _frame_options = str(os.environ.get("THOMAS_FRAME_OPTIONS", "SAMEORIGIN") or "").strip()
-    _security_headers: dict[str, str] = {
-        "X-Content-Type-Options": "nosniff",
-        "Referrer-Policy": "strict-origin-when-cross-origin",
-        "Content-Security-Policy": (
-            "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' blob: https://cdn.jsdelivr.net https://unpkg.com; "
-            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://fonts.googleapis.com; "
-            "img-src 'self' data: blob:; "
-            "font-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://fonts.gstatic.com; "
-            "connect-src 'self'"
-        ),
-        "Cross-Origin-Opener-Policy": "same-origin",
-        "Cross-Origin-Resource-Policy": "same-site",
-        "X-Permitted-Cross-Domain-Policies": "none",
-    }
-    if _frame_options:
-        _security_headers["X-Frame-Options"] = _frame_options
+    _security_headers_enabled, _security_headers = security_headers_config()
 
     @web.middleware
     async def exception_logger(request: web.Request, handler):  # type: ignore[no-untyped-def]
@@ -91,15 +81,17 @@ def setup_middleware_and_handlers(
         if _security_headers_enabled and not bool(getattr(resp, "prepared", False)):
             for header_name, header_value in _security_headers.items():
                 resp.headers.setdefault(header_name, header_value)
-            # Generated user apps under /deliverable/ are multi-file (index.html +
-            # styles.css + src/*.js). On a bare-IP host like 127.0.0.1 there is no
+            # Generated Code previews are multi-file (index.html + styles.css +
+            # src/*.js). On a bare-IP host like 127.0.0.1 there is no
             # registrable "site", so Cross-Origin-Resource-Policy: same-site makes
             # Chromium block those same-origin sub-resources as NotSameSite — the app
             # loads index.html but its stylesheet and scripts are refused, rendering a
             # blank/white page. Serve generated-app assets with a CORP that does not
             # depend on the same-site computation so multi-file apps actually render.
-            if request.path.startswith("/deliverable/"):
-                resp.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
+            resp.headers["Cross-Origin-Resource-Policy"] = resource_policy_for_request(request)
+            allowed_origin = cors_origin_for_request(request)
+            if allowed_origin is not None:
+                resp.headers["Access-Control-Allow-Origin"] = allowed_origin
         return resp
 
     app.middlewares.append(security_headers)
@@ -272,11 +264,17 @@ def setup_middleware_and_handlers(
     def _require_same_origin_browser_request(request: web.Request) -> None:
         """Reject cross-origin browser requests to localhost-only endpoints."""
         fetch_site = str(request.headers.get("Sec-Fetch-Site") or "").strip().lower()
-        if fetch_site and fetch_site not in {"same-origin", "none"}:
+        if (
+            fetch_site
+            and fetch_site not in {"same-origin", "none"}
+            and not _is_generated_artifact_asset_request(request)
+        ):
             raise web.HTTPForbidden(text="Cross-site browser requests are not allowed.")
 
         raw_origin = str(request.headers.get("Origin") or "").strip()
         if not raw_origin:
+            return
+        if cors_origin_for_request(request) is not None:
             return
 
         try:

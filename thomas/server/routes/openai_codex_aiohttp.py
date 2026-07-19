@@ -20,6 +20,7 @@ from thomas.server.openai_codex_oauth import (
     clear_openai_codex_token,
     exchange_code_for_tokens,
     has_openai_codex_token,
+    import_local_codex_token,
     parse_oauth_callback,
     public_token_status,
     read_openai_codex_token,
@@ -148,7 +149,7 @@ def register_openai_codex_routes(
         require_api_access(request)
         profile = _profile_from_request(request)
         secrets = request.app[APP_SECRETS]
-        token = read_openai_codex_token(secrets, profile)
+        token = read_openai_codex_token(secrets, profile) or import_local_codex_token(secrets, profile)
         payload = {
             "provider": OPENAI_CODEX_PROVIDER,
             "profile": profile,

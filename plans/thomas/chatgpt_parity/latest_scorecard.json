@@ -1,0 +1,155 @@
+{
+  "schema_version": "thomas-chatgpt-parity-v1",
+  "target": "Current user-facing ChatGPT capability parity",
+  "target_as_of": "2026-07-13",
+  "parity_achieved": true,
+  "parity_index": 100.0,
+  "family_scores": {
+    "core-conversation-instructions": 4,
+    "web-search-deep-research": 4,
+    "multimodal-images": 4,
+    "files-documents": 4,
+    "data-code-charts": 4,
+    "voice-dictation": 4,
+    "canvas-sites-artifacts": 4,
+    "memory-personalization": 4,
+    "projects-library-sharing": 4,
+    "scheduled-monitoring": 4,
+    "custom-assistants-plugins": 4,
+    "connected-apps-actions": 4,
+    "agentic-work-browser-computer": 4,
+    "privacy-export-controls": 4
+  },
+  "families": {
+    "core-conversation-instructions": {
+      "name": "Conversation, reasoning, writing, translation, and instruction fidelity",
+      "weight": 0.11,
+      "critical": true,
+      "score": 4,
+      "first_failed_tier": null,
+      "failed_checks": []
+    },
+    "web-search-deep-research": {
+      "name": "Current web search, citations, and deep multi-source research",
+      "weight": 0.1,
+      "critical": true,
+      "score": 4,
+      "first_failed_tier": null,
+      "failed_checks": []
+    },
+    "multimodal-images": {
+      "name": "Image understanding, generation, and natural-language editing",
+      "weight": 0.07,
+      "critical": false,
+      "score": 4,
+      "first_failed_tier": null,
+      "failed_checks": []
+    },
+    "files-documents": {
+      "name": "File uploads, document understanding, and downloadable document work",
+      "weight": 0.07,
+      "critical": false,
+      "score": 4,
+      "first_failed_tier": null,
+      "failed_checks": []
+    },
+    "data-code-charts": {
+      "name": "Secure code execution, data analysis, spreadsheets, and charts",
+      "weight": 0.08,
+      "critical": true,
+      "score": 4,
+      "first_failed_tier": null,
+      "failed_checks": []
+    },
+    "voice-dictation": {
+      "name": "Voice conversation, dictation, transcription, and spoken responses",
+      "weight": 0.05,
+      "critical": false,
+      "score": 4,
+      "first_failed_tier": null,
+      "failed_checks": []
+    },
+    "canvas-sites-artifacts": {
+      "name": "Canvas collaboration, finished artifacts, and interactive Sites",
+      "weight": 0.08,
+      "critical": true,
+      "score": 4,
+      "first_failed_tier": null,
+      "failed_checks": []
+    },
+    "memory-personalization": {
+      "name": "Memory, personalization, and user-controlled correction/deletion",
+      "weight": 0.08,
+      "critical": true,
+      "score": 4,
+      "first_failed_tier": null,
+      "failed_checks": []
+    },
+    "projects-library-sharing": {
+      "name": "Projects, persistent context, libraries, chat organization, and sharing",
+      "weight": 0.06,
+      "critical": false,
+      "score": 4,
+      "first_failed_tier": null,
+      "failed_checks": []
+    },
+    "scheduled-monitoring": {
+      "name": "One-time, recurring, triggered, and monitoring tasks",
+      "weight": 0.07,
+      "critical": true,
+      "score": 4,
+      "first_failed_tier": null,
+      "failed_checks": []
+    },
+    "custom-assistants-plugins": {
+      "name": "Custom assistants, skills, plugins, knowledge, tools, and publishing",
+      "weight": 0.06,
+      "critical": false,
+      "score": 4,
+      "first_failed_tier": null,
+      "failed_checks": []
+    },
+    "connected-apps-actions": {
+      "name": "Connected apps, source-grounded actions, and approval controls",
+      "weight": 0.06,
+      "critical": true,
+      "score": 4,
+      "first_failed_tier": null,
+      "failed_checks": []
+    },
+    "agentic-work-browser-computer": {
+      "name": "Long-running agentic work, browser/computer use, steering, and approvals",
+      "weight": 0.08,
+      "critical": true,
+      "score": 4,
+      "first_failed_tier": null,
+      "failed_checks": []
+    },
+    "privacy-export-controls": {
+      "name": "Privacy, temporary use, export, deletion, and security controls",
+      "weight": 0.03,
+      "critical": true,
+      "score": 4,
+      "first_failed_tier": null,
+      "failed_checks": []
+    }
+  },
+  "totals": {
+    "families": 14,
+    "families_at_4": 14,
+    "checks": 74,
+    "checks_passed": 74,
+    "checks_failed": 0,
+    "critical_failures": 0
+  },
+  "critical_failures": [],
+  "run_id": "manual",
+  "generated_at": "2026-07-13T21:48:11.986315+00:00",
+  "base_url": "http://127.0.0.1:8908",
+  "profile": "openai_codex",
+  "model_id": "gpt-5.6-sol",
+  "tests_executed": true,
+  "selected_families": [
+    "all"
+  ]
+}

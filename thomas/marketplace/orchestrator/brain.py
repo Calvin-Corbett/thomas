@@ -19,6 +19,7 @@ import asyncio
 import json
 import logging
 import re
+import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -64,6 +65,18 @@ _CODE_PHRASE_FACT_RE = re.compile(
 )
 
 
+def _chat_failure_message(error: str | None) -> str:
+    """Turn provider failures into useful guidance without leaking internals."""
+    detail = str(error or "").strip().lower()
+    if "oauth" in detail and ("not connected" in detail or "sign in" in detail):
+        return "The ChatGPT model isn't connected yet. Choose the Local model or sign in through Easy Setup."
+    if "rate-limit" in detail or "rate limit" in detail or "status 429" in detail:
+        return "The selected model is temporarily rate-limited. Please wait a moment or choose another model."
+    if any(token in detail for token in ("connection", "connecterror", "timed out", "timeout")):
+        return "I couldn't reach the selected model. I retried once; please check that it is running and try again."
+    return "I couldn't get an answer from the selected model. I retried once; please try again or choose another model."
+
+
 def _wants_background_status(prompt: str) -> bool:
     import re
 
@@ -74,6 +87,8 @@ def _should_answer_background_status_directly(prompt: str, active_tasks: list[di
     import re
 
     text = str(prompt or "").strip().lower()
+    if "[internal structured response contract]" in text:
+        return False
     if not _wants_background_status(text):
         return False
     if active_tasks:
@@ -300,10 +315,13 @@ def _completion_detail(row: dict[str, Any]) -> str:
     failed -> 'Bot's task "ask" FAILED. Reason: ...' so the model reports it honestly."""
     bot = str(row.get("bot_name") or row.get("bot_id") or "A worker").strip() or "A worker"
     ask = str(row.get("summary") or "").strip()
-    result = str(row.get("last_progress") or "").strip()
+    receipt = row.get("receipt") if isinstance(row.get("receipt"), dict) else {}
+    evidence = receipt.get("evidence") if isinstance(receipt.get("evidence"), dict) else {}
+    proof = evidence.get("proof") if isinstance(evidence.get("proof"), dict) else {}
+    result = str(proof.get("summary") or evidence.get("last_progress") or row.get("last_progress") or "").strip()
     state = str(row.get("state") or "").strip().lower()
     if state in _FAILED_STATES:
-        reason = result or str(row.get("blocker") or "").strip()
+        reason = str(receipt.get("error") or result or row.get("blocker") or "").strip()
         detail = f'{bot}’s task "{ask}" FAILED.' if ask else f"{bot}’s task FAILED."
         if reason and reason.lower() not in _GENERIC_PROGRESS:
             detail += f" Reason: {reason}"
@@ -389,11 +407,13 @@ class OrchestratorBrain:
         llm: Any,
         memory_engine: Any,
         registry: SpecialistRegistry,
+        runtime_policy: Any = None,
     ) -> None:
         self.config = config
         self.llm = llm
         self.memory_engine = memory_engine
         self.registry = registry
+        self.runtime_policy = runtime_policy
 
     async def process_message(
         self,
@@ -413,6 +433,8 @@ class OrchestratorBrain:
         background_ack_only: bool = False,
         send_task: Any = None,
         update_task: Any = None,
+        operate: Any = None,
+        display_prompt: str | None = None,
     ) -> ConversationManager:
         """Process a user message.
 
@@ -420,7 +442,6 @@ class OrchestratorBrain:
         still start background work in parallel, but the user-facing reply stays
         conversational here.
         """
-        _ = images
         _ = is_first_message
         # background_ack_only used to short-circuit to a canned "Working on that
         # now." line and skip the model entirely. That is gone: every visible
@@ -429,7 +450,10 @@ class OrchestratorBrain:
         _ = background_ack_only
         turn_start = time.monotonic()
 
-        conversation = conversation.append_message("user", prompt)
+        # Private/project context may enrich the model prompt, but history must
+        # preserve exactly what the user typed. Callers opt into a separate
+        # display prompt so internal context never reappears as a user message.
+        conversation = conversation.append_message("user", display_prompt if display_prompt is not None else prompt)
 
         try:
             decision = should_dispatch(
@@ -505,7 +529,9 @@ class OrchestratorBrain:
             active_task_digest=active_task_digest,
             send_task=send_task,
             update_task=update_task,
+            operate=operate,
             completion_note=completion_note,
+            images=images,
         )
         _mark_completions_reported(session_id, fresh_completions)
         return conversation
@@ -541,6 +567,7 @@ class OrchestratorBrain:
                 self.memory_engine,
                 session_id,
                 context_budget=_MODE_BUDGETS.get("fast", 1_500),
+                policy=getattr(self.runtime_policy, "memory", None),
             )
             await memory_coord.capture_episode(
                 turn_number=conversation.length // 2,
@@ -582,13 +609,16 @@ class OrchestratorBrain:
         active_task_digest: str = "",
         send_task: Any = None,
         update_task: Any = None,
+        operate: Any = None,
         completion_note: str = "",
+        images: list[dict[str, Any]] | None = None,
     ) -> ConversationManager:
         """Handle direct Thomas replies without visible delegation."""
         memory_coord = MemoryCoordinator(
             self.memory_engine,
             session_id,
             context_budget=_MODE_BUDGETS.get("fast", 1_500),
+            policy=getattr(self.runtime_policy, "memory", None),
         )
 
         memory_ctx = await memory_coord.refresh(
@@ -665,9 +695,11 @@ class OrchestratorBrain:
             stream_text_events=True,
             send_task=send_task,
             update_task=update_task,
+            operate=operate,
+            images=images,
         )
 
-        final_text = result.content if result.ok else "Sorry, I had trouble with that."
+        final_text = result.content if result.ok else _chat_failure_message(result.error)
         if result.ok:
             # The model authored the reply (and, with the completion note in its
             # context above, the finished-work report is part of it). It already
@@ -689,12 +721,13 @@ class OrchestratorBrain:
             metadata={"specialists": ["reasoning"], "mode": reply_kind},
         )
 
+        result_tool_calls = list(getattr(result, "tool_calls", []) or [])
         await memory_coord.capture_episode(
             turn_number=conversation.length // 2,
             user_message=prompt,
             assistant_response=final_text[:500],
             thinking=reply_kind,
-            tool_calls=[],
+            tool_calls=result_tool_calls,
             specialist="reasoning",
         )
 
@@ -705,7 +738,7 @@ class OrchestratorBrain:
             thinking_summary=reply_kind,
             total_thinking_ms=0,
             iterations=1,
-            tool_calls=0,
+            tool_calls=len(result_tool_calls),
             tokens_used=result.tokens_used,
             specialists_used=["reasoning"],
             total_elapsed_ms=elapsed,
@@ -744,6 +777,7 @@ class OrchestratorBrain:
             self.memory_engine,
             session_id,
             context_budget=_MODE_BUDGETS.get(mode, 4_000),
+            policy=getattr(self.runtime_policy, "memory", None),
         )
 
         # ── Refresh memory ────────────────────────────────────────
@@ -800,6 +834,7 @@ class OrchestratorBrain:
                 mode=mode,
                 autonomy_level=autonomy_level,
                 token_economy=token_economy,
+                images=images,
             )
         else:
             for specialist_id in route.specialists:
@@ -814,6 +849,7 @@ class OrchestratorBrain:
                     mode=mode,
                     autonomy_level=autonomy_level,
                     token_economy=token_economy,
+                    images=images,
                 )
                 all_results.append(result)
                 if result.ok:
@@ -984,6 +1020,8 @@ class OrchestratorBrain:
         stream_text_events: bool = False,
         send_task: Any = None,
         update_task: Any = None,
+        operate: Any = None,
+        images: list[dict[str, Any]] | None = None,
     ) -> DelegationResult:
         """Dispatch to a single specialist with contract + token."""
         specialist = self.registry.get(specialist_id)
@@ -1003,7 +1041,8 @@ class OrchestratorBrain:
         # profile extraction + global fact promotion. Recall then searches the current session,
         # this durable store, and the global/profile layer. Without this a remembered fact was
         # a session-scoped "system note" that vanished on the next chat (cross-session loss).
-        _mem = self.memory_engine
+        runtime_memory = getattr(self.runtime_policy, "memory", None)
+        _mem = self.memory_engine if bool(getattr(runtime_memory, "enabled", True)) else None
         _mem_thread = str(session_id or "default")
         _user_mem_thread = "user_memory"
 
@@ -1014,23 +1053,29 @@ class OrchestratorBrain:
             payload = str(text or "").strip()
             if not payload:
                 return False
+            include_thread = bool(getattr(runtime_memory, "include_thread", True))
+            include_global = bool(getattr(runtime_memory, "include_global", True))
+            include_profile = bool(getattr(runtime_memory, "include_profile", True))
+            if not any((include_thread, include_global, include_profile)):
+                return False
+            target_thread = _user_mem_thread if include_global or include_profile else _mem_thread
             try:
                 eid = _mem.add_event(
-                    thread=_user_mem_thread,
+                    thread=target_thread,
                     etype="user_fact",
                     text=payload,
                     metadata={"source": "user_remember", "origin_session": _mem_thread},
                 )
-                # Best-effort: also promote to a durable GLOBAL fact when it parses as one.
-                try:
-                    _mem.auto_promote_event_memory(
-                        thread_id=_user_mem_thread,
-                        etype="user_fact",
-                        text=payload,
-                        source_episode_id=int(eid) if eid else None,
-                    )
-                except Exception:
-                    pass
+                if include_global:
+                    try:
+                        _mem.auto_promote_event_memory(
+                            thread_id=target_thread,
+                            etype="user_fact",
+                            text=payload,
+                            source_episode_id=int(eid) if eid else None,
+                        )
+                    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+                        log.debug("remember promotion failed", exc_info=True)
                 return True
             except Exception:
                 log.debug("remember failed", exc_info=True)
@@ -1040,38 +1085,54 @@ class OrchestratorBrain:
             if _mem is None:
                 return ""
             try:
-                # current conversation, the durable user-memory store, then global + profile
-                hits: list[str] = []
-                for thr in (_mem_thread, _user_mem_thread, None):
-                    try:
-                        res = _mem.retrieve(query=str(query or ""), thread=thr)
-                    except Exception:
-                        res = None
-                    txt = str(getattr(res, "text", None) or res or "").strip()
-                    if txt and txt not in hits:
-                        hits.append(txt)
-                return "\n\n".join(hits).strip()
+                include_thread = bool(getattr(runtime_memory, "include_thread", True))
+                include_global = bool(getattr(runtime_memory, "include_global", True))
+                include_profile = bool(getattr(runtime_memory, "include_profile", True))
+                if not any((include_thread, include_global, include_profile)):
+                    return ""
+                setter = getattr(_mem, "set_thread_memory_policy", None)
+                if callable(setter):
+                    setter(
+                        _mem_thread,
+                        include_thread=include_thread,
+                        include_global=include_global,
+                        include_profile=include_profile,
+                        pins_only=bool(getattr(runtime_memory, "pins_only", False)),
+                        max_results=int(getattr(runtime_memory, "retrieval_top_k", 5) or 5),
+                        max_pack_tokens=int(getattr(runtime_memory, "context_budget", 1200) or 1200),
+                    )
+                res = _mem.retrieve(query=str(query or ""), thread=_mem_thread)
+                return str(getattr(res, "text", None) or res or "").strip()
             except Exception:
                 log.debug("recall failed", exc_info=True)
                 return ""
 
         # Create contract
+        runtime_tools = getattr(self.runtime_policy, "tools", None)
+        runtime_quality = getattr(self.runtime_policy, "quality", None)
+        max_iterations = int(getattr(runtime_quality, "max_agent_iterations", 0) or 10)
         contract = DelegationContract(
             specialist_id=specialist_id,
             task_description=prompt[:500],
             allowed_tools=specialist.capabilities,
-            timeout_seconds=120,
-            max_iterations=10,
+            timeout_seconds=float(getattr(runtime_tools, "tool_timeout_s", 120) or 120),
+            max_iterations=max_iterations,
             input_context={
                 "memory": memory_ctx.to_system_injection(),
                 "mode": mode,
                 "token_economy": str(token_economy or "optimal"),
+                "system_instructions": str(getattr(self.runtime_policy, "instruction_context", lambda: "")() or ""),
+                "profile_type": str(getattr(self.runtime_policy, "profile_type", "adaptive") or "adaptive"),
+                "review_depth": str(getattr(self.runtime_policy, "review_depth", "adaptive") or "adaptive"),
                 # The send_task callback (organic, no-regex dispatch). When present,
                 # the reasoning model can hand work off via the send_task tool.
                 "send_task": send_task,
                 # The update_task callback: the model re-directs a RUNNING task (steer
                 # or cancel), picking the right one by ref instead of a blind guess.
                 "update_task": update_task,
+                # Thomas's bounded direct-action callback. The server owns the
+                # allowlist, policy runner, audit, and post-action readback proof.
+                "operate": operate,
                 # Thomas's OWN memory — store/recall inline, never a task.
                 "remember": _remember_cb,
                 "recall": _recall_cb,
@@ -1083,14 +1144,14 @@ class OrchestratorBrain:
                     "level": int(autonomy_level),
                     "directive": chat_delegation_directive(autonomy_level),
                 },
+                "images": list(images or []),
             },
         )
 
-        # Issue capability token. The reasoning specialist IS the chat layer (Calvin's
-        # chatbot-only law): it may READ the repo to ground answers, but never write or
-        # run shell. Scope its token to read-only filesystem tools + send_task so the
-        # boundary is enforced (not just prompted). Other specialists keep their
-        # declared capabilities.
+        # Issue capability token. The reasoning specialist is Thomas's conversation
+        # and control layer: it may read the repo, use Thomas-owned memory/task controls,
+        # and call the bounded server-owned operator. It never receives raw write/shell
+        # tools. Other specialists keep their declared capabilities.
         if specialist_id == "reasoning":
             allowed_tools = {
                 "fs.read_file",
@@ -1100,6 +1161,7 @@ class OrchestratorBrain:
                 "update_task",
                 "remember",
                 "recall",
+                "operate",
             }
         else:
             allowed_tools = set(specialist.capabilities)
@@ -1138,31 +1200,64 @@ class OrchestratorBrain:
             specialist_thinking: list[str] = []
             iterations = 0
 
-            async for event in specialist.execute(
-                contract=contract,
-                token=token,
-                prompt=prompt,
-                conversation_context=conversation.get_context_window(max_tokens=8_000),
-                memory_context=memory_ctx.to_system_injection(),
-            ):
-                event_type = event.get("type", "")
+            # A provider can fail before producing a single token (for example a
+            # transient local-model connection reset). One retry is safe only while
+            # nothing visible or effectful has happened. This prevents a momentary
+            # pre-output failure from becoming the opaque "Sorry" response while also
+            # ensuring tools and partial answers are never replayed.
+            for attempt in range(2):
+                result.error = None
+                content_parts = []
+                tool_calls = []
+                specialist_thinking = []
+                iterations = 0
+                retry_safe = True
 
-                # Pass through events to frontend
-                if event_type == "text":
-                    chunk = str(event.get("text", "") or "")
-                    content_parts.append(chunk)
-                    if stream_text_events and chunk:
-                        await dispatcher.emit_text(chunk)
-                elif event_type == "thinking":
-                    specialist_thinking.append(event.get("text", ""))
-                elif event_type in ("tool_start", "tool_result", "tool_args"):
-                    await dispatcher.emit(event)
-                    if event_type == "tool_result":
-                        tool_calls.append(event)
-                elif event_type == "done":
-                    iterations = event.get("iterations", 0)
-                elif event_type == "error":
-                    result.error = event.get("error", "Unknown specialist error")
+                async for event in specialist.execute(
+                    contract=contract,
+                    token=token,
+                    prompt=prompt,
+                    conversation_context=conversation.get_context_window(max_tokens=8_000),
+                    memory_context=memory_ctx.to_system_injection(),
+                ):
+                    event_type = event.get("type", "")
+
+                    # Pass through events to frontend
+                    if event_type == "text":
+                        chunk = str(event.get("text", "") or "")
+                        content_parts.append(chunk)
+                        if chunk:
+                            retry_safe = False
+                        if stream_text_events and chunk:
+                            await dispatcher.emit_text(chunk)
+                    elif event_type == "thinking":
+                        specialist_thinking.append(event.get("text", ""))
+                    elif event_type in ("tool_start", "tool_result", "tool_args"):
+                        retry_safe = False
+                        await dispatcher.emit(event)
+                        if event_type == "tool_result":
+                            tool_calls.append(event)
+                    elif event_type == "done":
+                        iterations = event.get("iterations", 0)
+                    elif event_type == "error":
+                        result.error = event.get("error", "Unknown specialist error")
+                    else:
+                        # Unknown specialist events may represent a real side effect
+                        # (task_request/task_update), so never replay after one.
+                        retry_safe = False
+
+                if result.error is not None and retry_safe and attempt == 0:
+                    log.warning(
+                        "Specialist %s failed before output; retrying once: %s",
+                        specialist_id,
+                        result.error,
+                    )
+                    await asyncio.sleep(0)
+                    continue
+                break
+
+            if result.error is not None:
+                log.error("Specialist %s returned an error: %s", specialist_id, result.error)
 
             elapsed = int((time.monotonic() - start) * 1000)
             result.content = "".join(content_parts)
@@ -1215,6 +1310,7 @@ class OrchestratorBrain:
         mode: str,
         autonomy_level: int,
         token_economy: str,
+        images: list[dict[str, Any]] | None = None,
     ) -> list[DelegationResult]:
         """Dispatch to multiple specialists in parallel."""
         thinking.start(DelegationPhase.DELEGATING.value)
@@ -1233,6 +1329,7 @@ class OrchestratorBrain:
                 mode=mode,
                 autonomy_level=autonomy_level,
                 token_economy=token_economy,
+                images=images,
             )
             for sid in specialists
         ]

@@ -607,6 +607,7 @@ def mark_verified(
     return update_execution(
         execution_id,
         state="verified",
+        blocker="",
         proof_status="verified",
         progress_summary=summary or str(payload.get("progress_summary") or ""),
         heartbeat=True,
@@ -664,6 +665,7 @@ def complete_execution(
     return update_execution(
         execution_id,
         state="completed",
+        blocker="",
         proof_status="verified",
         progress_summary=summary or str(payload.get("progress_summary") or ""),
         heartbeat=False,

@@ -9,7 +9,7 @@ from typing import Any
 from .bridge_config import emergency_stop_active, emergency_stop_path
 from .bridge_prompts import compose_headless_prompt
 from .build_verify import _verify_and_iterate
-from .dispatch_claude_cli import CliDispatchResult, _git_changed_files
+from .dispatch_claude_cli import CliDispatchResult, _is_action_refusal, _is_conversational_reply
 from .forge_event_stream import (
     FORGE_EVENT_KEY,
     _StreamState,
@@ -30,18 +30,14 @@ OPENAI_CODEX_PROFILE = "openai_codex"
 
 
 def chatgpt_oauth_connected() -> bool:
-    """True iff the user's ChatGPT OAuth token is connected (access-ready or refreshable).
+    """Fail closed when a frontend has not injected its trusted OAuth check.
 
-    Reads the SecretStore via the OAuth helper. Defensive: ANY failure (store
-    unavailable, import error) is treated as "not connected" so the caller surfaces
-    the honest connect-ChatGPT message rather than crashing or spewing OAuth errors.
+    Forge is deliberately independent of the HTTP server and its secret store.
+    Server and CLI entry points that can safely inspect owner credentials pass a
+    ``token_check`` callback to :func:`dispatch_via_agent_loop`; direct library
+    callers must do the same for a live run. Preview calls need no credential.
     """
-    try:
-        from thomas.server.openai_codex_oauth import _default_secret_store, has_openai_codex_token
-
-        return bool(has_openai_codex_token(_default_secret_store()))
-    except (ImportError, RuntimeError, OSError, ValueError, TypeError):
-        return False
+    return False
 
 
 def _summarize_agent_event_tool(name: str, args: Any) -> str:
@@ -162,13 +158,46 @@ class _AgentLoopForgeTranslator:
             self.final_text = str(data.get("text") or "")
             if self._say_buf:
                 self._flush_say()
-            elif self.final_text:
-                self._emit({FORGE_EVENT_KEY: "say", "text": self.final_text})
+            if self.final_text:
+                self._emit({FORGE_EVENT_KEY: "final", "text": self.final_text})
 
     def close(self) -> None:
         """Drain any trailing reasoning/say buffered when the stream ends."""
         self._flush_think()
         self._flush_say()
+
+
+async def _translate_agent_stream(
+    agent: Any,
+    prompt: str,
+    *,
+    intent_text: str | None = None,
+    timeout: float,
+    tools_policy: str,
+    token_economy: str = "optimal",
+    translator: _AgentLoopForgeTranslator,
+) -> None:
+    """Translate one agent run while enforcing its advertised wall-clock limit."""
+    import asyncio
+
+    from thomas.core.events import EventType
+
+    try:
+        async with asyncio.timeout(max(0.01, float(timeout))):
+            async for event in agent.run(
+                prompt,
+                intent_text=intent_text,
+                mode="auto",
+                tools_policy=tools_policy,
+                token_economy=token_economy,
+                job_type="coding",
+            ):
+                translator.feed(getattr(event.type, "value", ""), event.data)
+    except TimeoutError:
+        translator.feed(
+            EventType.AGENT_ERROR.value,
+            {"error": f"Agent run exceeded the {int(timeout)}-second execution limit."},
+        )
 
 
 def _run_agent_loop_pass(
@@ -177,7 +206,14 @@ def _run_agent_loop_pass(
     timeout: int,
     emit: Callable[[dict[str, Any]], None],
     *,
+    intent_text: str | None = None,
     profile: str = OPENAI_CODEX_PROFILE,
+    allow_shell: bool = False,
+    file_access: str = "project",
+    guardrails: str = "guarded",
+    autonomy_level: int = 3,
+    token_economy: str = "optimal",
+    oauth_access_token: str = "",
 ) -> tuple[int, str]:
     """Run ONE in-process AgentLoop edit pass on the ``openai_codex`` provider.
 
@@ -192,7 +228,22 @@ def _run_agent_loop_pass(
     """
     import asyncio
 
-    return asyncio.run(_agent_loop_pass_async(prompt, cwd, timeout, emit, profile=profile))
+    return asyncio.run(
+        _agent_loop_pass_async(
+            prompt,
+            cwd,
+            timeout,
+            emit,
+            intent_text=intent_text,
+            profile=profile,
+            allow_shell=allow_shell,
+            file_access=file_access,
+            guardrails=guardrails,
+            autonomy_level=autonomy_level,
+            token_economy=token_economy,
+            oauth_access_token=oauth_access_token,
+        )
+    )
 
 
 async def _agent_loop_pass_async(
@@ -201,31 +252,62 @@ async def _agent_loop_pass_async(
     timeout: int,
     emit: Callable[[dict[str, Any]], None],
     *,
+    intent_text: str | None = None,
     profile: str = OPENAI_CODEX_PROFILE,
+    allow_shell: bool = False,
+    file_access: str = "project",
+    guardrails: str = "guarded",
+    autonomy_level: int = 3,
+    token_economy: str = "optimal",
+    oauth_access_token: str = "",
 ) -> tuple[int, str]:
     from thomas.agent.loop import AgentLoop
     from thomas.core.config import load_config
+    from thomas.core.file_access import parse_file_access_level
     from thomas.core.llm_client import LLMClient
     from thomas.tools.code_search import register_code_search_tools
     from thomas.tools.diff import register_diff_tools
     from thomas.tools.filesystem import register_filesystem_tools
     from thomas.tools.registry import ToolRegistry
+    from thomas.tools.shell import register_shell_tools
 
     config = load_config(Path(cwd) / "thomas.toml")
     # Edits must land in the dispatched repo, and ONLY there — confine the
     # toolset's sandbox to cwd and keep shell OFF (edit-only, like SAFE_CLI_TOOLS).
     config.tools.sandbox_root = str(cwd)
-    config.tools.allow_shell = False
+    config.tools.allow_shell = bool(allow_shell)
+    config.tools.file_access = parse_file_access_level(file_access)
     model_cfg = config.get_model(profile)
+    if oauth_access_token:
+        model_cfg.api_key = oauth_access_token
     llm = LLMClient(model_cfg, fallback_configs=[], failover_enabled=False)
 
     sandbox = config.tools.sandbox_path
     tools = ToolRegistry()
-    register_filesystem_tools(tools, sandbox, config.tools.max_file_size)
+    register_filesystem_tools(
+        tools,
+        sandbox,
+        config.tools.max_file_size,
+        file_access=config.tools.file_access,
+        project_root=Path(cwd),
+        home_dir=Path.home(),
+    )
     register_diff_tools(tools, sandbox)
     register_code_search_tools(tools, sandbox)
+    if allow_shell:
+        register_shell_tools(tools, sandbox, config.tools.shell_timeout, allowed=True)
 
-    agent = AgentLoop(config, llm, tools, conversation=[], memory=None)
+    guardrail_mode = str(guardrails or "guarded").strip().lower()
+    max_parallel_tools = {"open": 6, "guarded": 3, "fortress": 1}.get(guardrail_mode, 3)
+    agent = AgentLoop(
+        config,
+        llm,
+        tools,
+        conversation=[],
+        memory=None,
+        autonomy_level=autonomy_level,
+        max_parallel_tools=max_parallel_tools,
+    )
 
     # ONE translator carries the per-run insight gate + buffers and maps each
     # AgentEvent to the SAME forge events the claude path emits — INCLUDING the
@@ -233,8 +315,16 @@ async def _agent_loop_pass_async(
     # shared ``_thinking_to_events`` rule.
     translator = _AgentLoopForgeTranslator(emit)
     try:
-        async for event in agent.run(prompt, mode="auto", tools_policy="auto", job_type="coding"):
-            translator.feed(getattr(event.type, "value", ""), event.data)
+        tools_policy = "always" if guardrail_mode == "open" else "auto"
+        await _translate_agent_stream(
+            agent,
+            prompt,
+            intent_text=intent_text,
+            timeout=timeout,
+            tools_policy=tools_policy,
+            token_economy=token_economy,
+            translator=translator,
+        )
     finally:
         translator.close()
         await llm.close()
@@ -258,6 +348,12 @@ def dispatch_via_agent_loop(
     max_fix_iters: int = 2,
     history: Any = None,
     token_check: Any = None,
+    allow_shell: bool = False,
+    file_access: str = "project",
+    guardrails: str = "guarded",
+    autonomy_level: int = 3,
+    token_economy: str = "optimal",
+    oauth_access_token: str = "",
 ) -> CliDispatchResult:
     """Dispatch a build to the GPT brain IN-PROCESS via Thomas's own AgentLoop.
 
@@ -277,12 +373,21 @@ def dispatch_via_agent_loop(
 
     ``runner`` is injectable for tests: a callable ``(prompt, cwd, timeout, emit)
     -> (rc:int, text:str)`` that stands in for the in-process loop pass.
-    ``token_check`` is injectable too (``() -> bool``); it defaults to a real
-    SecretStore probe.
+    ``token_economy`` controls the bounded AgentLoop pass count.
+    ``token_check`` is injectable too (``() -> bool``). Live entry points must
+    inject a trusted check; absent one, this library layer fails closed.
     """
     from .forge_event_stream import _default_emit
 
-    prompt = compose_headless_prompt(goal, definition=definition, plan=plan, history=history)
+    prompt = compose_headless_prompt(
+        goal,
+        definition=definition,
+        plan=plan,
+        history=history,
+        file_access=file_access,
+        guardrails=guardrails,
+        autonomy_level=autonomy_level,
+    )
     if dry_run:
         return CliDispatchResult(False, "dry-run (agent loop not invoked)", prompt)
 
@@ -296,12 +401,41 @@ def dispatch_via_agent_loop(
     if not is_connected():
         return CliDispatchResult(False, CHATGPT_NOT_CONNECTED_MSG, prompt)
 
-    emit = emit or _default_emit
+    emit_sink = emit or _default_emit
+    saw_reply = False
+    saw_refusal = False
+    saw_tool_activity = False
+
+    def emit_event(event: dict[str, Any]) -> None:
+        nonlocal saw_reply, saw_refusal, saw_tool_activity
+        kind = str(event.get(FORGE_EVENT_KEY) or "")
+        if kind in {"final", "say"}:
+            reply_text = str(event.get("text") or "")
+            if _is_conversational_reply(reply_text):
+                saw_reply = True
+            if _is_action_refusal(reply_text):
+                saw_refusal = True
+        elif kind in {"tool", "tool_result"}:
+            saw_tool_activity = True
+        emit_sink(event)
 
     def _run_pass(p: str) -> tuple[int, str]:
         if runner is not None:
-            return runner(p, str(cwd), timeout, emit)
-        return _run_agent_loop_pass(p, str(cwd), timeout, emit, profile=profile)
+            return runner(p, str(cwd), timeout, emit_event)
+        return _run_agent_loop_pass(
+            p,
+            str(cwd),
+            timeout,
+            emit_event,
+            intent_text=goal,
+            profile=profile,
+            allow_shell=allow_shell,
+            file_access=file_access,
+            guardrails=guardrails,
+            autonomy_level=autonomy_level,
+            token_economy=token_economy,
+            oauth_access_token=oauth_access_token,
+        )
 
     from thomas.forge.anvil import forge_code_git
 
@@ -313,22 +447,30 @@ def dispatch_via_agent_loop(
         # in-process Python — owns the real check regardless of the brain.
         if verify and rc == 0:
             vrc = _verify_and_iterate(
-                cwd, snap_before, emit, _run_pass, goal, verifier=verifier, max_fix_iters=max_fix_iters
+                cwd, snap_before, emit_event, _run_pass, goal, verifier=verifier, max_fix_iters=max_fix_iters
             )
             if vrc != 0:
                 rc, verify_failed = vrc, True
     except (RuntimeError, OSError, ValueError, TypeError) as exc:
         return CliDispatchResult(False, f"refused: agent loop run failed: {exc}", prompt)
 
-    changed = _git_changed_files(str(cwd))
+    changed = forge_code_git.project_delta_since(cwd, snap_before)
+    action_refused = saw_refusal
+    conversation_reply = rc == 0 and not changed and saw_reply and not saw_tool_activity and not action_refused
     if rc != 0:
         reason = f"verification failed (exit {rc}) after fix attempts" if verify_failed else f"agent loop exited {rc}"
+    elif action_refused:
+        detail = " after leaving partial file changes" if changed else ""
+        reason = f"GPT could not complete the requested action{detail}"
     elif not changed:
-        reason = "GPT ran but made NO repo changes (no-op) — nothing to review"
+        if conversation_reply:
+            reason = "GPT replied without changing files"
+        else:
+            reason = "GPT ran but made NO repo changes (no-op) — nothing to review"
     else:
-        reason = f"dispatched via GPT (ChatGPT OAuth, in-process; {len(changed)} file(s) changed, verified)"
+        reason = f"dispatched via GPT (ChatGPT OAuth, in-process; {len(changed)} file(s) changed; engine checks passed)"
     return CliDispatchResult(
-        ok=(rc == 0),
+        ok=(rc == 0 and not action_refused and (bool(changed) or conversation_reply)),
         reason=reason,
         prompt=prompt,
         returncode=rc,

@@ -8,9 +8,28 @@ into a fresh attempt (bounded); below L4 it does a single pass and reports.
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from thomas.server import chat_delegation as cd
+from thomas.server import chat_delegation_runner
+
+
+def _model_runtime_event() -> dict[str, object]:
+    return {
+        "type": "model_runtime",
+        "runtime": {
+            "requested": {"profile": "test", "provider": "fixture", "model": "test-model"},
+            "active": {"profile": "test", "provider": "fixture", "model": "test-model"},
+            "attempts": [
+                {
+                    "profile": "test",
+                    "provider": "fixture",
+                    "model": "test-model",
+                    "status": "success",
+                }
+            ],
+        },
+    }
 
 
 class _FakeEmitter:
@@ -32,13 +51,17 @@ class _FakeEmitter:
 def _scripted_events(scripts: list[list[dict]]):
     """Return an async-generator stand-in for run_agent_worker_events that plays
     one scripted attempt per call, plus a state dict counting invocations."""
-    state = {"calls": 0}
+    state = {"calls": 0, "closed": 0}
 
     async def gen(app, **kwargs):  # noqa: ANN001, ANN003
         idx = state["calls"]
         state["calls"] += 1
-        for event in scripts[min(idx, len(scripts) - 1)]:
-            yield event
+        try:
+            yield _model_runtime_event()
+            for event in scripts[min(idx, len(scripts) - 1)]:
+                yield event
+        finally:
+            state["closed"] += 1
 
     return gen, state
 
@@ -67,8 +90,11 @@ class TestSelfRecovery(unittest.IsolatedAsyncioTestCase):
                 instructions="inst",
                 repo_root=Path("."),
                 work_dir=None,
+                profile="test",
+                model_id="test-model",
                 autonomy_level=autonomy_level,
             )
+        self.assertEqual(state["closed"], state["calls"])
         return emitter, state
 
     async def test_l4_retries_then_succeeds(self):
@@ -87,7 +113,8 @@ class TestSelfRecovery(unittest.IsolatedAsyncioTestCase):
         emitter, state = await self._run(scripts, autonomy_level=4)
         self.assertEqual(state["calls"], 3)  # full L4 budget exhausted
         self.assertIsNotNone(emitter.failed_text)
-        self.assertIn("always fails", emitter.failed_text)
+        self.assertIn("provider-native worker reported a retryable error", emitter.failed_text)
+        self.assertNotIn("always fails", emitter.failed_text)
 
     async def test_below_l4_does_not_retry(self):
         scripts = [[{"type": "error", "error": "one shot only"}]]
@@ -133,7 +160,67 @@ class TestSelfRecovery(unittest.IsolatedAsyncioTestCase):
         emitter, state = await self._run(scripts, autonomy_level=4)
         self.assertEqual(state["calls"], 1)  # no retry despite L4
         self.assertIsNotNone(emitter.failed_text)
-        self.assertIn("suspicious prompt denied", emitter.failed_text)
+        self.assertIn("provider-native worker reported a non-retryable error", emitter.failed_text)
+        self.assertNotIn("suspicious prompt denied", emitter.failed_text)
+
+    async def test_user_cancellation_closes_the_active_worker_stream(self):
+        emitter = _FakeEmitter()
+        bot = types.SimpleNamespace(name="Taylor", id="taylor")
+        gen, state = _scripted_events([[{"type": "done"}]])
+        with (
+            patch.object(cd, "run_agent_worker_events", new=gen),
+            patch.object(cd.task_bot_runtime, "update_execution", lambda *a, **k: None),
+            patch.object(cd.task_bot_runtime, "get_execution", lambda *a, **k: {"execution_id": "e"}),
+            patch.object(cd.task_bot_runtime, "is_cancel_requested", lambda *a, **k: True),
+            patch.object(cd.task_bot_runtime, "fail_execution", lambda *a, **k: None),
+            patch.object(cd, "_normalize_record", lambda payload: dict(payload or {})),
+        ):
+            await cd._run_agent_worker(
+                None,
+                execution_id="e",
+                prompt="do the thing",
+                specialist_id="coding",
+                bot=bot,
+                emitter=emitter,
+                instructions="inst",
+                repo_root=Path("."),
+                autonomy_level=4,
+            )
+        self.assertEqual(state, {"calls": 1, "closed": 1})
+        self.assertEqual(emitter.failed_text, "Cancelled by user.")
+
+    async def test_exact_artifact_early_completion_closes_the_worker_stream(self):
+        emitter = _FakeEmitter()
+        bot = types.SimpleNamespace(name="Taylor", id="taylor")
+        gen, state = _scripted_events(
+            [
+                [
+                    {"type": "tool_start", "name": "fs.write_file"},
+                    {"type": "tool_output", "name": "fs.write_file", "ok": True, "result_text": "Wrote report.md"},
+                ]
+            ]
+        )
+        finalize = AsyncMock()
+        with (
+            patch.object(cd, "run_agent_worker_events", new=gen),
+            patch.object(chat_delegation_runner, "_finalize_worker_completion", finalize),
+            patch.object(cd.task_bot_runtime, "update_execution", lambda *a, **k: None),
+            patch.object(cd.task_bot_runtime, "get_execution", lambda *a, **k: {"execution_id": "e"}),
+            patch.object(cd, "_normalize_record", lambda payload: dict(payload or {})),
+        ):
+            await cd._run_agent_worker(
+                None,
+                execution_id="e",
+                prompt="Create report.md.",
+                specialist_id="coding",
+                bot=bot,
+                emitter=emitter,
+                instructions="inst",
+                repo_root=Path("."),
+                autonomy_level=4,
+            )
+        self.assertEqual(state, {"calls": 1, "closed": 1})
+        finalize.assert_awaited_once()
 
     async def test_setup_error_before_any_event_fails_immediately(self):
         # MR6: a config/setup error raised before any worker event is deterministic —

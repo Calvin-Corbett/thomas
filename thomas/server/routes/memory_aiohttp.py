@@ -119,8 +119,18 @@ def register_memory_routes(
         key = str(request.match_info.get("key") or "").strip()
         if not key:
             raise web.HTTPBadRequest(text="missing key")
-        mem.unpin(key)
-        return web.json_response({"ok": True, "key": key})
+        forget_fn = getattr(mem, "forget_pin", None)
+        purged = dict(forget_fn(key)) if callable(forget_fn) else {}
+        if not callable(forget_fn):
+            mem.unpin(key)
+        return web.json_response(
+            {
+                "ok": True,
+                "key": key,
+                "forgotten": bool(purged.get("forgotten", False)) if purged else True,
+                "purged": purged,
+            }
+        )
 
     async def api_memory_contradictions(request: web.Request) -> web.Response:
         require_api_access(request)

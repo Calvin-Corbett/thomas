@@ -9,6 +9,7 @@ from thomas.plugins.p098_plugin_manifest_schema import (
     PluginManifestSchemaError,
     PluginManifestSchemaRequest,
     build_plugin_manifest_schema,
+    validate_plugin_manifest,
 )
 
 
@@ -37,6 +38,48 @@ def test_build_plugin_manifest_schema_include_examples() -> None:
     assert "examples" in schema
     assert isinstance(schema["examples"], list)
     assert schema["examples"], "expected at least one example"
+
+
+def _assistant_manifest() -> dict:
+    return {
+        "schema_version": "v1",
+        "plugin": {
+            "id": "launch-guide",
+            "name": "Launch Guide",
+            "version": "1.0.0",
+            "description": "Owner launch guide",
+        },
+        "runtime": {"kind": "python", "entrypoint": "launch_guide.plugin:get_plugin"},
+        "tools": [],
+        "assistant": {
+            "instructions": "Use the attached launch handbook.",
+            "conversation_starters": ["Show the launch checklist."],
+            "knowledge_files": ["knowledge/handbook.md"],
+        },
+        "permissions": {"tools": ["files.read"], "apps": [], "apis": []},
+    }
+
+
+def test_validate_plugin_manifest_accepts_custom_assistant_contract() -> None:
+    assert validate_plugin_manifest(_assistant_manifest())["assistant"]["knowledge_files"] == ["knowledge/handbook.md"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("knowledge", "../owner-secret.txt"),
+        ("permission", "*"),
+    ],
+)
+def test_validate_plugin_manifest_rejects_unsafe_paths_and_authority(field: str, value: str) -> None:
+    manifest = _assistant_manifest()
+    if field == "knowledge":
+        manifest["assistant"]["knowledge_files"] = [value]
+    else:
+        manifest["permissions"]["tools"] = [value]
+    with pytest.raises(PluginManifestSchemaError) as exc:
+        validate_plugin_manifest(manifest)
+    assert exc.value.code == "invalid_manifest"
 
 
 def test_build_plugin_manifest_schema_invalid_draft_is_deterministic() -> None:

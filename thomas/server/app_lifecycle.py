@@ -16,7 +16,14 @@ import time as _time
 from typing import Any
 
 from thomas.core.config import AppConfig
-from thomas.server.app_keys import APP_CRASH_COUNT, APP_DIAGNOSTICS, APP_RESTART_REQUESTED, APP_SHUTDOWN_EVENT
+from thomas.server.app_keys import (
+    APP_CRASH_COUNT,
+    APP_DELIVERABLE_PREVIEW_SERVICE,
+    APP_DIAGNOSTICS,
+    APP_RESTART_REQUESTED,
+    APP_SELF_BASE_URL,
+    APP_SHUTDOWN_EVENT,
+)
 
 log = logging.getLogger(__name__)
 
@@ -40,6 +47,7 @@ async def serve_async(
 
     app = create_app(config)
     app[APP_CRASH_COUNT] = crash_count
+    app[APP_SELF_BASE_URL] = f"http://{host}:{port}"
 
     # Shutdown event -- set by restart endpoint or signal handler
     shutdown_event = asyncio.Event()
@@ -48,6 +56,9 @@ async def serve_async(
 
     runner = web.AppRunner(app)
     await runner.setup()
+    preview_service = app.get(APP_DELIVERABLE_PREVIEW_SERVICE)
+    if preview_service is not None:
+        preview_service.configure(main_origin=f"http://{host}:{port}")
 
     # ── Port binding with retry (handles TIME_WAIT from previous instance) ──
     max_bind_attempts = 5
@@ -64,6 +75,8 @@ async def serve_async(
             if attempt == max_bind_attempts:
                 print(f"[thomas] Port {port} still busy after {max_bind_attempts} attempts. Giving up.")
                 await runner.cleanup()
+                if preview_service is not None:
+                    await preview_service.stop()
                 raise
             delay = attempt * 1.0
             print(
@@ -98,6 +111,8 @@ async def serve_async(
             await asyncio.sleep(1)
     finally:
         await runner.cleanup()
+        if preview_service is not None:
+            await preview_service.stop()
         if app.get(APP_RESTART_REQUESTED):
             raise _ServerRestartRequested()
 

@@ -1,7 +1,11 @@
 import asyncio
 
+import httpx
+import pytest
+
 from thomas.core.config import ModelConfig
 from thomas.core.llm import LLMClient, StreamEvent
+from thomas.core.llm_shared import LLMError
 
 
 class _FakeStreamResponse:
@@ -32,6 +36,30 @@ class _FakeClient:
     def stream(self, method, url, json=None, params=None, headers=None):  # noqa: ANN001
         self.last_request = {"method": method, "url": url, "json": json, "params": params, "headers": headers or {}}
         return _FakeStreamResponse(self._lines, status_code=self._status_code)
+
+
+class _TransportFailureResponse(_FakeStreamResponse):
+    async def aiter_lines(self):
+        for line in self._lines:
+            yield line
+        raise httpx.RemoteProtocolError("peer closed incomplete response")
+
+
+class _EnterTransportFailureResponse(_FakeStreamResponse):
+    async def __aenter__(self):
+        raise httpx.RemoteProtocolError("peer closed before response headers")
+
+
+class _SequenceClient:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.request_count = 0
+        self.last_request = None
+
+    def stream(self, method, url, json=None, params=None, headers=None):  # noqa: ANN001
+        self.request_count += 1
+        self.last_request = {"method": method, "url": url, "json": json, "params": params, "headers": headers or {}}
+        return self.responses.pop(0)
 
 
 class _TestableLLMClient(LLMClient):
@@ -102,6 +130,11 @@ def test_openai_stream_accepts_dict_tool_arguments() -> None:
     assert "README.md" in ends[0].data["arguments"]
 
 
+def test_openai_compatible_stream_rejects_eof_without_done() -> None:
+    with pytest.raises(LLMError, match=r"before the \[DONE\] confirmation"):
+        _collect_events(_make_client([]))
+
+
 def test_stream_chat_accepts_coroutine_stream_openai(monkeypatch) -> None:
     cfg = ModelConfig(
         name="openai_compat",
@@ -155,8 +188,9 @@ def test_openai_codex_responses_stream_parses_text_usage_and_tools() -> None:
         name="chatgpt",
         provider="openai_codex",
         base_url="https://chatgpt.com/backend-api/codex",
-        model="gpt-5.5",
+        model="gpt-5.6-sol",
         api_key="access-token",
+        reasoning_effort="xhigh",
     )
     fake_client = _FakeClient(lines)
     llm = _TestableLLMClient(cfg, fake_client)
@@ -176,7 +210,8 @@ def test_openai_codex_responses_stream_parses_text_usage_and_tools() -> None:
 
     assert fake_client.last_request["url"] == "https://chatgpt.com/backend-api/codex/responses"
     assert fake_client.last_request["headers"]["Authorization"] == "Bearer access-token"
-    assert fake_client.last_request["json"]["model"] == "gpt-5.5"
+    assert fake_client.last_request["json"]["model"] == "gpt-5.6-sol"
+    assert fake_client.last_request["json"]["reasoning"] == {"effort": "xhigh"}
     assert fake_client.last_request["json"]["tools"][0]["name"] == "fs_read_file"
     assert [e.type for e in events].count("done") == 1
     token_events = [e for e in events if e.type == "token"]
@@ -185,3 +220,135 @@ def test_openai_codex_responses_stream_parses_text_usage_and_tools() -> None:
     assert ends[0].data["name"] == "fs.read_file"
     assert ends[0].data["arguments"] == '{"path":"README.md"}'
     assert llm.session_usage.total_tokens == 7
+
+
+def _codex_client(fake_client, *, retries: int) -> LLMClient:
+    cfg = ModelConfig(
+        name="chatgpt",
+        provider="openai_codex",
+        base_url="https://chatgpt.com/backend-api/codex",
+        model="gpt-5.6-sol",
+        api_key="access-token",
+    )
+    llm = _TestableLLMClient(cfg, fake_client)
+    llm._max_retries = retries
+    llm._base_retry_delay = 0
+    return llm
+
+
+def test_openai_codex_retries_transport_disconnect_before_any_event() -> None:
+    fake_client = _SequenceClient(
+        [
+            _TransportFailureResponse([]),
+            _FakeStreamResponse(
+                [
+                    "event: response.completed",
+                    'data: {"type":"response.completed","response":{"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}',
+                    "",
+                ]
+            ),
+        ]
+    )
+
+    events = _collect_events(_codex_client(fake_client, retries=2))
+
+    assert fake_client.request_count == 2
+    assert [event.type for event in events].count("done") == 1
+
+
+def test_openai_codex_transport_failure_entering_stream_keeps_real_error() -> None:
+    fake_client = _SequenceClient([_EnterTransportFailureResponse([])])
+
+    async def run_once() -> None:
+        with pytest.raises(LLMError, match="before any usable output") as raised:
+            async for _event in _codex_client(fake_client, retries=1).stream_chat(
+                [{"role": "user", "content": "continue"}]
+            ):
+                pass
+        assert "UnboundLocalError" not in str(raised.value)
+
+    asyncio.run(run_once())
+
+
+def test_openai_codex_does_not_retry_or_leak_traceback_after_partial_output() -> None:
+    fake_client = _SequenceClient(
+        [
+            _TransportFailureResponse(
+                [
+                    "event: response.output_text.delta",
+                    'data: {"type":"response.output_text.delta","delta":"partial"}',
+                    "",
+                ]
+            )
+        ]
+    )
+    events = []
+
+    async def run_once() -> None:
+        with pytest.raises(LLMError, match="disconnected after partial output") as raised:
+            async for event in _codex_client(fake_client, retries=2).stream_chat(
+                [{"role": "user", "content": "continue"}]
+            ):
+                events.append(event)
+        assert "Traceback" not in str(raised.value)
+
+    asyncio.run(run_once())
+
+    assert fake_client.request_count == 1
+    assert [event.data.get("text") for event in events if event.type == "token"] == ["partial"]
+
+
+def test_openai_codex_requires_confirmed_terminal_event() -> None:
+    fake_client = _SequenceClient([_FakeStreamResponse([])])
+
+    async def run_once() -> None:
+        with pytest.raises(LLMError, match="before confirming the response completed"):
+            async for _event in _codex_client(fake_client, retries=1).stream_chat(
+                [{"role": "user", "content": "continue"}]
+            ):
+                pass
+
+    asyncio.run(run_once())
+    assert fake_client.request_count == 1
+
+
+def test_openai_codex_rejects_incomplete_terminal_response() -> None:
+    fake_client = _SequenceClient(
+        [
+            _FakeStreamResponse(
+                [
+                    "event: response.incomplete",
+                    'data: {"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}}}',
+                    "",
+                ]
+            )
+        ]
+    )
+
+    async def run_once() -> None:
+        with pytest.raises(LLMError, match=r"incomplete \(max_output_tokens\)"):
+            async for _event in _codex_client(fake_client, retries=1).stream_chat(
+                [{"role": "user", "content": "continue"}]
+            ):
+                pass
+
+    asyncio.run(run_once())
+
+
+def test_openai_codex_keeps_confirmed_completion_after_transport_close() -> None:
+    fake_client = _SequenceClient(
+        [
+            _TransportFailureResponse(
+                [
+                    "event: response.completed",
+                    'data: {"type":"response.completed","response":{"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}',
+                    "",
+                ]
+            )
+        ]
+    )
+
+    events = _collect_events(_codex_client(fake_client, retries=2))
+
+    assert fake_client.request_count == 1
+    assert [event.type for event in events] == ["usage", "done"]

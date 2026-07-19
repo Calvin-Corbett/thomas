@@ -271,6 +271,12 @@ async def handle_post_loop_completion(
         state.error = block_error
         return
 
+    # Errors and exhausted pass budgets are incomplete outcomes. Never append a
+    # success event after an AGENT_ERROR; Code and Work must not present partial
+    # changes as finished work.
+    if state.error:
+        return
+
     # Yield final completion event
     yield AgentEvent.agent_done(
         text=state.text_response,

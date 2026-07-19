@@ -15,8 +15,10 @@ from thomas.tools.diff import register_diff_tools
 from thomas.tools.filesystem import register_filesystem_tools
 from thomas.tools.git import register_git_tools
 from thomas.tools.registry import ToolRegistry
+from thomas.tools.resilient_web_search import get_resilient_web_search_tool
 from thomas.tools.shell import register_shell_tools
 from thomas.tools.ssh import register_ssh_tools
+from thomas.tools.web_search import get_web_fetch_tool
 
 if TYPE_CHECKING:
     from aiohttp import web
@@ -142,6 +144,13 @@ def _build_tools(config: AppConfig) -> ToolRegistry:
         register_browser_tools(registry)
     except (ImportError, ModuleNotFoundError):
         pass
+
+    # Web research is a core chat capability, not an optional domain module.
+    # The implementations already fail with actionable ToolResults when an
+    # upstream provider is unavailable, so always expose both tools to chat and
+    # worker runtimes instead of leaving the existing implementation orphaned.
+    registry.register(get_resilient_web_search_tool())
+    registry.register(get_web_fetch_tool())
 
     # Register all optional domain module tools
     register_all_optional_tools(registry)

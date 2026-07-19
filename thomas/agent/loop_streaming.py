@@ -29,6 +29,9 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+_MEMORY_RETRIEVAL_TIMEOUT_S = 10.0
+_MEMORY_INTERRUPT_JOIN_S = 0.5
+
 _MEMORY_POLICY_WARNED_SET: set[int] = set()
 _MEMORY_RELEVANCE_STOPWORDS = {
     "a",
@@ -121,6 +124,9 @@ def retrieve_memory(
     """
     if agent._memory is None or not agent._memory.started:
         return ""
+    if bool(getattr(agent, "_memory_retrieval_policy_blocked", False)):
+        log.warning("Memory retrieval skipped because the requested policy was not applied")
+        return ""
 
     start_time = time.time()
     try:
@@ -144,10 +150,17 @@ def retrieve_memory(
 
         retrieval_thread = threading.Thread(target=_do_retrieve, daemon=True)
         retrieval_thread.start()
-        retrieval_thread.join(timeout=10.0)
+        retrieval_thread.join(timeout=_MEMORY_RETRIEVAL_TIMEOUT_S)
 
         if retrieval_thread.is_alive():
-            log.warning("Memory retrieval timed out after 10s")
+            log.warning("Memory retrieval timed out after %.1fs", _MEMORY_RETRIEVAL_TIMEOUT_S)
+            interrupt = getattr(agent._memory, "interrupt_retrieval", None)
+            if callable(interrupt):
+                try:
+                    interrupt()
+                except (OSError, RuntimeError) as exc:
+                    log.debug("Memory retrieval interrupt failed: %s", exc)
+                retrieval_thread.join(timeout=_MEMORY_INTERRUPT_JOIN_S)
             # FIX (2026-03-18): Return empty instead of a message that gets
             # injected into the prompt and confuses the model.
             return ""
@@ -187,11 +200,15 @@ def retrieve_memory(
 
 def apply_memory_policy(agent: AgentLoop, route: RouteDecision) -> None:
     """Apply per-turn memory policy to backends that support it."""
+    agent._memory_retrieval_policy_blocked = False
     if agent._memory is None or not agent._memory.started:
         return
 
+    pref_pins_only = getattr(agent, "_memory_pins_only_pref", None)
+    pins_only = bool(pref_pins_only) if pref_pins_only is not None else False
     setter = getattr(agent._memory, "set_thread_memory_policy", None)
     if not callable(setter):
+        agent._memory_retrieval_policy_blocked = pins_only
         return
 
     include_thread = True
@@ -211,8 +228,6 @@ def apply_memory_policy(agent: AgentLoop, route: RouteDecision) -> None:
     if economy_include_profile_cap is not None:
         include_profile = bool(include_profile) and bool(economy_include_profile_cap)
 
-    pref_pins_only = getattr(agent, "_memory_pins_only_pref", None)
-    pins_only = bool(pref_pins_only) if pref_pins_only is not None else False
     pref_max_pack_tokens = getattr(agent, "_memory_max_pack_tokens_pref", None)
     pref_max_results = getattr(agent, "_memory_max_results_pref", None)
     pref_decay_half_life_hours = getattr(agent, "_memory_decay_half_life_hours_pref", None)
@@ -225,7 +240,11 @@ def apply_memory_policy(agent: AgentLoop, route: RouteDecision) -> None:
 
     budget_tokens = max(300, int(pref_max_pack_tokens or route.memory_budget_tokens))
     path = str(getattr(route, "path", "") or "")
-    if _should_preserve_context(agent) and path in {"casual_chat", "personal_context", "assistant_meta", "general"}:
+    if (
+        pref_include_global is None
+        and _should_preserve_context(agent)
+        and path in {"casual_chat", "personal_context", "assistant_meta", "general"}
+    ):
         include_global = True
         budget_tokens = max(budget_tokens, 1500)
 
@@ -288,6 +307,9 @@ def apply_memory_policy(agent: AgentLoop, route: RouteDecision) -> None:
             target_key = "budget_tokens"
         if _accepts_kwarg(target_key, signature):
             policy_kwargs[target_key] = value
+    if pins_only and "pins_only" not in policy_kwargs:
+        agent._memory_retrieval_policy_blocked = True
+        return
 
     try:
         setter(agent._thread_id, **policy_kwargs)
@@ -301,6 +323,7 @@ def apply_memory_policy(agent: AgentLoop, route: RouteDecision) -> None:
                 setter(agent._thread_id, **fallback_kwargs)
                 return
             except Exception as fallback_err:
+                agent._memory_retrieval_policy_blocked = pins_only
                 if not warning_issued and warning_key not in _MEMORY_POLICY_WARNED_SET:
                     _MEMORY_POLICY_WARNED_SET.add(warning_key)
                     warning_issued = True
@@ -313,6 +336,7 @@ def apply_memory_policy(agent: AgentLoop, route: RouteDecision) -> None:
             warning_issued = True
             agent._memory_policy_warning_issued = True
             log.warning("Memory policy set failed: %s", e)
+        agent._memory_retrieval_policy_blocked = pins_only
 
 
 def retrieve_library(agent: AgentLoop, prompt: str, route: RouteDecision) -> str:

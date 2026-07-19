@@ -151,7 +151,7 @@
             const secret = secretMap[profile.name] || {};
             const provider = (profile.provider || '').toLowerCase();
 
-            if (provider === 'codex') {
+            if (provider === 'codex' || provider === 'openai_codex') {
                 await renderCodexProfile(panel, profile);
             } else if (provider.includes('openai') || provider.includes('anthropic') || provider.includes('groq') || provider.includes('google') || provider.includes('compat')) {
                 renderApiKeyProfile(panel, profile, secret);
@@ -168,7 +168,7 @@
     async function renderCodexProfile(panel, profile) {
         let status = { logged_in: false };
         try {
-            status = await fetch('/api/openai-codex/status').then(r => r.json());
+            status = await fetch('/api/openai-codex/status?profile=' + encodeURIComponent(profile.name)).then(r => r.json());
         } catch { /* fall through */ }
 
         if (status.logged_in) {
@@ -194,11 +194,11 @@
                 </div>`;
 
             panel.querySelector('#msdLogout')?.addEventListener('click', async () => {
-                await codexLogout(panel);
+                await codexLogout(panel, profile);
             });
             panel.querySelector('#msdSwitchAccount')?.addEventListener('click', async () => {
-                await codexLogout(panel);
-                await codexLogin(panel);
+                await codexLogout(panel, profile);
+                await codexLogin(panel, profile);
             });
         } else {
             panel.innerHTML = `
@@ -213,24 +213,32 @@
                     <button type="button" class="msd-btn msd-btn-primary" id="msdLogin">Sign In with ChatGPT</button>
                 </div>`;
 
-            panel.querySelector('#msdLogin')?.addEventListener('click', () => codexLogin(panel));
+            panel.querySelector('#msdLogin')?.addEventListener('click', () => codexLogin(panel, profile));
         }
     }
 
-    async function codexLogout(panel) {
+    async function codexLogout(panel, profile) {
         const actions = panel.querySelector('.msd-actions');
         if (actions) actions.innerHTML = '<span class="msd-loading"><i class="ph ph-spinner msd-spin"></i> Logging out…</span>';
         try {
-            await fetch('/api/openai-codex/logout', { method: 'POST' });
+            await fetch('/api/openai-codex/logout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ profile: profile.name }),
+            });
         } catch { /* ignore */ }
         await loadPanelContent(panel);
     }
 
-    async function codexLogin(panel) {
+    async function codexLogin(panel, profile) {
         const actions = panel.querySelector('.msd-actions');
         if (actions) actions.innerHTML = '<span class="msd-loading"><i class="ph ph-spinner msd-spin"></i> Opening browser…</span>';
         try {
-            await fetch('/api/openai-codex/login', { method: 'POST' });
+            await fetch('/api/openai-codex/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ profile: profile.name }),
+            });
         } catch { /* ignore */ }
         await loadPanelContent(panel);
     }

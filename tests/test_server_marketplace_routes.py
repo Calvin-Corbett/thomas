@@ -332,9 +332,10 @@ class TestServerMarketplaceRoutes(AioHTTPTestCase):
         resp = await self.client.get("/")
         self.assertEqual(resp.status, 200)
         body = await resp.text()
-        self.assertIn("/static/js/app.js?v=", body)
+        self.assertIn("/static/js/unified_mode_shell.js?v=", body)
+        self.assertIn("/static/css/unified_modes.css?v=", body)
         self.assertNotIn("__THOMAS_WEB_BUILD__", body)
-        self.assertNotIn("app.js?v=__THOMAS_VERSION__", body)
+        self.assertNotIn("unified_mode_shell.js?v=__THOMAS_VERSION__", body)
 
     async def test_marketplace_import_from_file_installs_signed_bundle_and_dependency(self):
         download_resp = await self.client.get(f"/api/marketplace/plugins/{ACTIVE_TEST_PLUGIN_ID}/download")

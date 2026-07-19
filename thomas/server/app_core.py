@@ -73,12 +73,7 @@ log = logging.getLogger(__name__)
 
 _BEARER_TOKEN_RE = re.compile(r"^Bearer\s+([^\s]+)\s*$", re.IGNORECASE)
 
-try:
-    from thomas.server.routes.chat_aiohttp import AgentLoop as _DEFAULT_APP_AGENT_LOOP
-except (ImportError, ModuleNotFoundError, AttributeError, RuntimeError):  # pragma: no cover
-    from thomas.agent.loop import AgentLoop as _DEFAULT_APP_AGENT_LOOP
-
-AgentLoop = _DEFAULT_APP_AGENT_LOOP
+from thomas.agent.loop import AgentLoop
 
 try:
     from thomas.models.capabilities import supports as model_supports
@@ -122,6 +117,13 @@ def _require_api_access(request: Any) -> None:
     closure(request)
 
 
+def _secret_store_root(config: AppConfig) -> Path:
+    override = str(os.environ.get("THOMAS_SECRET_ROOT") or "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return config.memory.root_path / ".thomas"
+
+
 def create_app(config: AppConfig | None = None):
     """Create and configure the aiohttp application with all routes and middleware."""
     from aiohttp import web
@@ -156,8 +158,8 @@ def create_app(config: AppConfig | None = None):
     app[APP_TOOLS] = _build_tools(config)
     app[APP_MEMORY] = _build_memory(config)
     try:
-        app[APP_SECRETS] = SecretStore(config.memory.root_path / ".thomas")
-    except Exception as secret_exc:
+        app[APP_SECRETS] = SecretStore(_secret_store_root(config))
+    except (AttributeError, ImportError, KeyError, OSError, RuntimeError, TypeError, ValueError) as secret_exc:
         log.warning("SecretStore initialization failed: %s", secret_exc)
         app[APP_SECRETS] = _FallbackSecretStore()
     app[APP_CHAT_AUTOPILOT_LAST_BY_GOAL_LOCK] = asyncio.Lock()

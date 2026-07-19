@@ -9,6 +9,7 @@ Provides:
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
@@ -126,6 +127,16 @@ def select_tools(
     final_selection = {t.name: t for t in core_tools}
     for t in relevant_candidates:
         final_selection[t.name] = t
+
+    # Exact registered tool names in the task are an explicit contract, not a
+    # fuzzy relevance hint. Guarantee them even when the semantic top-K budget is
+    # saturated by broad core tools (for example browser.open + browser.extract
+    # in a multi-step background task).
+    prompt_casefold = str(prompt or "").casefold()
+    for tool in all_tools:
+        name = str(tool.name or "").casefold()
+        if name and re.search(rf"(?<![\w.]){re.escape(name)}(?![\w.])", prompt_casefold):
+            final_selection[tool.name] = tool
 
     # 4. Fallback for "Project Related" prompts
     # If the prompt mentions specific domains not caught by search, add them?

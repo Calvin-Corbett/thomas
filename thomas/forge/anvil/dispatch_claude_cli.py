@@ -44,6 +44,40 @@ class CliDispatchResult:
         }
 
 
+def _is_conversational_reply(text: str) -> bool:
+    """Distinguish a real reply from a bare, unproved completion claim."""
+
+    normalized = str(text or "").strip().lower().rstrip(".!?")
+    if not normalized:
+        return False
+    if normalized in {"done", "finished", "complete", "completed", "built", "fixed", "updated", "implemented"}:
+        return False
+    return True
+
+
+def _is_action_refusal(text: str) -> bool:
+    """Recognize an explicit inability report so it cannot masquerade as success."""
+
+    normalized = " ".join(str(text or "").lower().split())
+    inability = any(marker in normalized for marker in ("i can't", "i cannot", "i couldn’t", "i couldn't", "unable to"))
+    blocker = any(
+        marker in normalized
+        for marker in (
+            "tool isn't available",
+            "tool is not available",
+            "tool unavailable",
+            "tool isn't registered",
+            "tool is not registered",
+            "no file tool",
+            "no write tool",
+            "don't have access",
+            "do not have access",
+            "required file tool",
+        )
+    )
+    return inability and blocker
+
+
 def dispatch_via_claude_cli(
     goal: str,
     *,
@@ -62,6 +96,9 @@ def dispatch_via_claude_cli(
     verifier: Any = None,
     max_fix_iters: int = 2,
     history: Any = None,
+    file_access: str = "project",
+    guardrails: str = "guarded",
+    autonomy_level: int = 3,
 ) -> CliDispatchResult:
     """Dispatch a build task to Claude Code HEADLESSLY (``claude -p``) — the safe,
     observable bridge that needs no GUI/PC control.
@@ -86,7 +123,15 @@ def dispatch_via_claude_cli(
     """
     import shutil
 
-    prompt = compose_headless_prompt(goal, definition=definition, plan=plan, history=history)
+    prompt = compose_headless_prompt(
+        goal,
+        definition=definition,
+        plan=plan,
+        history=history,
+        file_access=file_access,
+        guardrails=guardrails,
+        autonomy_level=autonomy_level,
+    )
     if dry_run:
         return CliDispatchResult(False, "dry-run (claude not invoked)", prompt)
 
@@ -98,7 +143,23 @@ def dispatch_via_claude_cli(
     if not claude:
         return CliDispatchResult(False, "refused: claude CLI not found on PATH", prompt)
 
-    emit = emit or _default_emit
+    emit_sink = emit or _default_emit
+    saw_reply = False
+    saw_refusal = False
+    saw_tool_activity = False
+
+    def emit_event(event: dict[str, Any]) -> None:
+        nonlocal saw_reply, saw_refusal, saw_tool_activity
+        kind = str(event.get(FORGE_EVENT_KEY) or "")
+        if kind in {"final", "say"}:
+            reply_text = str(event.get("text") or "")
+            if _is_conversational_reply(reply_text):
+                saw_reply = True
+            if _is_action_refusal(reply_text):
+                saw_refusal = True
+        elif kind in {"tool", "tool_result"}:
+            saw_tool_activity = True
+        emit_sink(event)
 
     def _run_pass(p: str) -> tuple[int, str]:
         # stream-json + verbose => one structured JSON event per line as they
@@ -137,13 +198,13 @@ def dispatch_via_claude_cli(
             for ln in str(out_).splitlines():
                 if ln.strip():
                     for ev in translate(ln):
-                        emit(ev)
+                        emit_event(ev)
             return rc_, out_
         # Wrap the prompt as a stream-json user message — the input form claude
         # expects under --input-format stream-json. A raw stdin prompt is ignored
         # in stream-json mode (empty turn / no edits, which silently no-ops a build).
         stdin_payload = json.dumps({"type": "user", "message": {"role": "user", "content": p}}) + "\n"
-        return _stream_cli(cmd, str(cwd), timeout, translate, emit, stdin_text=stdin_payload)
+        return _stream_cli(cmd, str(cwd), timeout, translate, emit_event, stdin_text=stdin_payload)
 
     from thomas.forge.anvil import forge_code_git
 
@@ -155,40 +216,33 @@ def dispatch_via_claude_cli(
         # is already a failure to surface). The engine runs the real check.
         if verify and rc == 0:
             vrc = _verify_and_iterate(
-                cwd, snap_before, emit, _run_pass, goal, verifier=verifier, max_fix_iters=max_fix_iters
+                cwd, snap_before, emit_event, _run_pass, goal, verifier=verifier, max_fix_iters=max_fix_iters
             )
             if vrc != 0:
                 rc, verify_failed = vrc, True
     except (RuntimeError, OSError, subprocess.SubprocessError, ValueError, TypeError) as exc:
         return CliDispatchResult(False, f"refused: claude run failed: {exc}", prompt)
 
-    changed = _git_changed_files(str(cwd))
+    changed = forge_code_git.project_delta_since(cwd, snap_before)
+    action_refused = saw_refusal
+    conversation_reply = rc == 0 and not changed and saw_reply and not saw_tool_activity and not action_refused
     if rc != 0:
         reason = f"verification failed (exit {rc}) after fix attempts" if verify_failed else f"claude exited {rc}"
+    elif action_refused:
+        detail = " after leaving partial file changes" if changed else ""
+        reason = f"Claude could not complete the requested action{detail}"
     elif not changed:
-        reason = "claude ran but made NO repo changes (no-op) — nothing to review"
+        if conversation_reply:
+            reason = "Claude replied without changing files"
+        else:
+            reason = "claude ran but made NO repo changes (no-op) — nothing to review"
     else:
-        reason = f"dispatched via claude CLI ({len(changed)} file(s) changed, verified)"
+        reason = f"dispatched via claude CLI ({len(changed)} file(s) changed; engine checks passed)"
     return CliDispatchResult(
-        ok=(rc == 0),
+        ok=(rc == 0 and not action_refused and (bool(changed) or conversation_reply)),
         reason=reason,
         prompt=prompt,
         returncode=rc,
         changed_files=changed,
         stdout_tail=str(out)[-2000:],
     )
-
-
-def _git_changed_files(cwd: str) -> list[str]:
-    try:
-        p = subprocess.run(
-            ["git", "-C", cwd, "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            encoding="utf-8",
-            errors="replace",
-        )
-        return [ln[3:].strip() for ln in (p.stdout or "").splitlines() if ln.strip()]
-    except (OSError, subprocess.SubprocessError, RuntimeError, ValueError, TypeError):
-        return []

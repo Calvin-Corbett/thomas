@@ -496,7 +496,7 @@ function moduleRenderMarketplaceCatalogV3(container) {
 const MODULE_SPECIAL_SURFACE_CONFIGS = Object.freeze({
     my_stuff: Object.freeze({
         title: 'Project Board',
-        src: '/static/static/my_stuff.html?v=20260624-forge-builds-1',
+        src: '/static/my_stuff.html?v=20260624-forge-builds-1',
         surfaceMode: 'immersive',
     }),
 });
@@ -630,7 +630,16 @@ function moduleWorkspaceNavOrder(entriesRaw) {
     const appended = moduleWorkspaceNavFallbackOrder(entries)
         .map((entry) => safeString(entry?.workspace_id).toLowerCase())
         .filter((id) => id && !stored.includes(id));
-    return stored.concat(appended);
+    const ordered = stored.concat(appended);
+    const promoteAfter = (id, anchor) => {
+        const itemIndex = ordered.indexOf(id);
+        const anchorIndex = ordered.indexOf(anchor);
+        if (itemIndex < 0 || anchorIndex < 0 || itemIndex === anchorIndex + 1) return;
+        ordered.splice(itemIndex, 1);
+        ordered.splice(ordered.indexOf(anchor) + 1, 0, id);
+    };
+    promoteAfter('paper_trading', 'mission');
+    return ordered;
 }
 
 function modulePersistWorkspaceNavOrderFromDom() {

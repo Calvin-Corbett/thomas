@@ -367,6 +367,7 @@ class AutonomyEngine:
             chat_adapter=self.chat_adapter,
             session_id=job.session_id,
             default_profile=str(payload.get("profile") or "").strip() or None,
+            execution_context=payload,
         )
         try:
             result = await runner.run(payload)

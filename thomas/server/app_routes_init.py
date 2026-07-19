@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
 import mimetypes
 import re
+import sqlite3
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -91,6 +93,8 @@ def _v2_sessions_as_chats(sessions_dir: Path, *, limit: int = 300) -> list[dict[
                 "id": sid,
                 "sessionId": sid,
                 "title": title,
+                "surfaceMode": str(meta.get("surface_mode") or "chat"),
+                "contextId": str(meta.get("context_id") or ""),
                 "model": str(meta.get("model_id") or ""),
                 "messages": msgs,
                 "createdAt": updated_ms,
@@ -202,7 +206,7 @@ def _setup_routes_and_handlers(
                     snapshot["active_goal"] = derive_active_goal(fallback_user_text, current_goal="")
                 progress_text = str(snapshot.get("last_progress") or fallback_assistant_text or "").strip()
                 inferred_missing = extract_missing_inputs(progress_text)
-                if inferred_missing:
+                if inferred_missing and not list(snapshot.get("missing_inputs") or []):
                     snapshot["status"] = "blocked"
                     snapshot["missing_inputs"] = inferred_missing
                     if not str(snapshot.get("last_progress") or "").strip():
@@ -306,14 +310,32 @@ def _setup_routes_and_handlers(
             except (TypeError, ValueError):
                 return 0
 
+        requested_surface = str(request.query.get("mode") or "").strip().lower()
+        requested_context = str(request.query.get("context_id") or "").strip()
+        if requested_surface and requested_surface not in {"chat", "work"}:
+            raise web.HTTPBadRequest(text="mode must be chat or work")
+
         by_id: dict[str, dict[str, Any]] = {}
         for chat in [*legacy, *live]:
             cid = str(chat.get("id") or chat.get("sessionId") or "").strip()
             if not cid:
                 continue
+            surface = str(chat.get("surfaceMode") or chat.get("surface_mode") or "chat").strip().lower()
+            context_id = str(chat.get("contextId") or chat.get("context_id") or "").strip()
+            if requested_surface and surface != requested_surface:
+                continue
+            if requested_context and context_id != requested_context:
+                continue
+            # Preserve the exact legacy response contract for callers that never
+            # opted into namespaced histories. V2 rows already carry these keys.
+            row = dict(chat)
+            if "surfaceMode" in chat or "surface_mode" in chat:
+                row["surfaceMode"] = surface
+            if "contextId" in chat or "context_id" in chat:
+                row["contextId"] = context_id
             prev = by_id.get(cid)
-            if prev is None or _ms(chat) >= _ms(prev):
-                by_id[cid] = chat
+            if prev is None or _ms(row) >= _ms(prev):
+                by_id[cid] = row
         chats = sorted(by_id.values(), key=_ms, reverse=True)
         return web.json_response({"chats": chats})
 
@@ -456,29 +478,12 @@ def _setup_routes_and_handlers(
 
     def _register_chat_and_session_routes(app_ref: web.Application, cfg_ref: AppConfig) -> None:
         """Register the live session/chat route bundles when their deps are available."""
-        if not all(
-            callable(dep)
-            for dep in (
-                _require_api_access,
-                _read_json,
-                _session_lock_for,
-                _begin_session_run,
-                _end_session_run,
-                _task_ledger_update,
-                _model_cfg_with_secrets,
-                _failover_cfgs_with_secrets,
-                _resolve_natural_model_switch_request,
-                _chat_file_for,
-                _read_chat_from_disk,
-                _save_chat_to_disk,
-                _build_tools,
-            )
-        ):
+        _ = cfg_ref
+        if not all(callable(dep) for dep in (_require_api_access, _read_json, _task_ledger_update)):
             log.warning("Chat/session route registration skipped: missing runtime dependencies")
             return
 
         try:
-            from thomas.server.routes.chat_aiohttp import ChatRouteDeps, register_chat_routes
             from thomas.server.routes.sessions_aiohttp import register_sessions_routes
 
             def _task_ledger_update_compat(
@@ -508,51 +513,27 @@ def _setup_routes_and_handlers(
                     log.debug("Task ledger compat update failed: %s", e)
                 _task_ledger_update(session_id, active_goal, status or "in_progress")
 
-            def _model_cfg_for_profile(profile: str) -> Any:
-                model_cfg = cfg_ref.models.get(profile)
-                if model_cfg is None:
-                    raise KeyError(profile)
-                return _model_cfg_with_secrets(cfg_ref, profile, model_cfg)
-
-            def _failover_cfgs_for_profile(profile: str) -> list[Any]:
-                return list(_failover_cfgs_with_secrets(cfg_ref, profile) or [])
-
-            async def _resolve_model_switch(text: str, current_profile: str = "") -> str | None:
-                return await _resolve_natural_model_switch_request(
-                    text,
-                    user_id="default",
-                    session_id=current_profile,
-                )
-
-            def _build_tools_for_runtime(runtime_cfg: AppConfig) -> Any:
-                return _build_tools(runtime_cfg)
-
             register_sessions_routes(
                 app_ref,
                 require_api_access=_require_api_access,
                 read_json=_read_json,
                 task_ledger_update=_task_ledger_update_compat,
             )
-            register_chat_routes(
+        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
+            log.warning("Session routes unavailable: %s", e)
+
+        # Session lifecycle is a core dependency for Chat, Work onboarding, and
+        # several automation surfaces.  Keep it registered even when an optional
+        # chat helper (for example CLI slash-command presentation) is unavailable.
+        try:
+            from thomas.server.routes.chat_auxiliary import register_chat_auxiliary_routes
+
+            register_chat_auxiliary_routes(
                 app_ref,
-                deps=ChatRouteDeps(
-                    require_api_access=_require_api_access,
-                    read_json=_read_json,
-                    session_lock_for=_session_lock_for,
-                    begin_session_run=_begin_session_run,
-                    end_session_run=_end_session_run,
-                    task_ledger_update=_task_ledger_update_compat,
-                    model_cfg_with_secrets=_model_cfg_for_profile,
-                    failover_cfgs_with_secrets=_failover_cfgs_for_profile,
-                    resolve_natural_model_switch=_resolve_model_switch,
-                    chat_file_for=_chat_file_for,
-                    read_chat_from_disk=_read_chat_from_disk,
-                    save_chat_to_disk=_save_chat_to_disk,
-                    build_tools=_build_tools_for_runtime,
-                ),
+                require_api_access=_require_api_access,
             )
         except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
-            log.warning("Chat/session routes unavailable: %s", e)
+            log.warning("Chat auxiliary routes unavailable: %s", e)
 
     _register_chat_and_session_routes(app, config)
 
@@ -949,10 +930,13 @@ def _setup_routes_and_handlers(
 
     def _register_deliverable_routes(app_ref: web.Application) -> None:
         """Serve worker-built deliverables (generated games/apps) for one-click Play."""
+        if not callable(_require_api_access):
+            log.warning("Deliverable routes unavailable: missing API access guard")
+            return
         try:
             from thomas.server.routes.deliverable_aiohttp import register_deliverable_routes
 
-            register_deliverable_routes(app_ref)
+            register_deliverable_routes(app_ref, require_api_access=_require_api_access)
         except (ImportError, ModuleNotFoundError, RuntimeError) as e:
             log.warning("Deliverable routes unavailable: %s", e)
 
@@ -960,6 +944,9 @@ def _setup_routes_and_handlers(
 
     def _register_chat_v2_routes(app_ref: web.Application, cfg_ref: AppConfig) -> None:
         """Register the unified V2 chat routes when the supporting modules are available."""
+        if not callable(_require_api_access):
+            log.warning("Chat V2 routes unavailable: missing API access guard")
+            return
         try:
             from thomas.server.routes.chat_v2 import register_chat_v2_routes
 
@@ -970,6 +957,7 @@ def _setup_routes_and_handlers(
                 memory=app_ref.get(APP_MEMORY),
                 tools=app_ref.get(APP_TOOLS),
                 chat_store_dir=cfg_ref.memory.root_path / ".thomas" / "sessions_v2",
+                require_api_access=_require_api_access,
             )
         except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
             log.warning("Chat V2 routes unavailable: %s", e)
@@ -991,8 +979,124 @@ def _setup_routes_and_handlers(
         except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
             log.warning("Evolve loop routes unavailable: %s", e)
 
+    def _register_work_routes(app_ref: web.Application) -> None:
+        """Register native Work metadata and delegate every automation to Mission."""
+
+        if not callable(_require_api_access):
+            log.warning("Work routes unavailable: missing API access guard")
+            return
+        try:
+            from thomas.autonomy.scheduler import compute_next_run
+            from thomas.server.routes.mission import APP_MISSION_REQUIRE_STORE, APP_MISSION_WAKEUP_ENGINE
+            from thomas.server.routes.work import register_work_routes
+
+            async def submit_to_mission(payload: dict[str, Any]) -> dict[str, Any]:
+                require_store = app_ref.get(APP_MISSION_REQUIRE_STORE)
+                if not callable(require_store):
+                    raise RuntimeError("Mission store is unavailable")
+                store = await require_store(auto_enable=True)
+                now = datetime.now(timezone.utc)
+                schedule = payload.get("schedule") if isinstance(payload.get("schedule"), dict) else None
+                run_at = None
+                if payload.get("run_at"):
+                    run_at = datetime.fromisoformat(str(payload["run_at"]).replace("Z", "+00:00"))
+                    run_at = run_at if run_at.tzinfo else run_at.replace(tzinfo=timezone.utc)
+                next_run_at = compute_next_run(schedule, now) if schedule else (run_at or now)
+                if next_run_at is None:
+                    raise RuntimeError("Mission schedule does not produce a future run")
+                job_payload = dict(payload.get("payload") or {})
+                for key in ("goal", "prompt", "workflow", "profile", "model_id"):
+                    if payload.get(key):
+                        job_payload[key] = payload[key]
+                delivery_id = str(job_payload.get("work_event_delivery_id") or "").strip()
+                mission_job_id = (
+                    hashlib.sha256(f"thomas-work:{delivery_id}".encode()).hexdigest()[:32] if delivery_id else ""
+                )
+                existing_job = None
+                if mission_job_id:
+                    try:
+                        existing_job = store.get_job(mission_job_id)
+                    except KeyError:
+                        existing_job = None
+                    if (
+                        existing_job is not None
+                        and str(existing_job.payload.get("work_event_delivery_id") or "") != delivery_id
+                    ):
+                        raise RuntimeError("Mission idempotency identity conflict")
+                try:
+                    job = existing_job or store.create_job(
+                        name=str(payload.get("name") or "Work automation"),
+                        kind=str(payload.get("kind") or "workflow_task"),
+                        payload=job_payload,
+                        schedule=schedule,
+                        next_run_at=next_run_at,
+                        risk_class=str(payload.get("risk_class") or "low"),
+                        requires_approval=bool(payload.get("requires_approval")),
+                        parent_id=str(payload.get("parent_id") or "") or None,
+                        session_id=str(payload.get("session_id") or "") or None,
+                        job_id=mission_job_id or None,
+                    )
+                except sqlite3.IntegrityError:
+                    if not mission_job_id:
+                        raise
+                    job = store.get_job(mission_job_id)
+                    if str(job.payload.get("work_event_delivery_id") or "") != delivery_id:
+                        raise RuntimeError("Mission idempotency identity conflict") from None
+                wakeup = app_ref.get(APP_MISSION_WAKEUP_ENGINE)
+                if callable(wakeup):
+                    wakeup()
+                return {"job_id": str(getattr(job, "id", "") or "")}
+
+            async def read_mission_status(job_id: str) -> dict[str, Any] | None:
+                require_store = app_ref.get(APP_MISSION_REQUIRE_STORE)
+                if not callable(require_store):
+                    raise RuntimeError("Mission store is unavailable")
+                try:
+                    store = await require_store(auto_enable=True)
+                except web.HTTPNotFound as exc:
+                    raise RuntimeError("Mission store is unavailable") from exc
+                try:
+                    job = store.get_job(job_id)
+                except KeyError:
+                    return None
+                return {
+                    "id": str(getattr(job, "id", "") or ""),
+                    "status": str(getattr(job, "status", "") or ""),
+                    "result": getattr(job, "result", None) or {},
+                    "error": getattr(job, "error", None) or {},
+                    "updated_at": str(getattr(job, "updated_at", "") or ""),
+                }
+
+            async def cancel_mission(job_id: str) -> dict[str, Any]:
+                require_store = app_ref.get(APP_MISSION_REQUIRE_STORE)
+                if not callable(require_store):
+                    raise RuntimeError("Mission store is unavailable")
+                store = await require_store(auto_enable=True)
+                try:
+                    store.get_job(job_id)
+                except KeyError as exc:
+                    raise RuntimeError("Mission job is unavailable") from exc
+                store.cancel_job(job_id, actor="work")
+                job = store.get_job(job_id)
+                return {
+                    "id": str(getattr(job, "id", "") or ""),
+                    "status": str(getattr(job, "status", "") or ""),
+                    "updated_at": str(getattr(job, "updated_at", "") or ""),
+                }
+
+            register_work_routes(
+                app_ref,
+                require_api_access=_require_api_access,
+                mission_submitter=submit_to_mission,
+                mission_status_provider=read_mission_status,
+                mission_canceller=cancel_mission,
+            )
+        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
+            log.warning("Work routes unavailable: %s", e)
+
     _register_chat_v2_routes(app, config)
     _register_mission_routes(app, config)
+    _register_work_routes(app)
     _register_evolve_loop_routes(app)
 
     # Server restart endpoint
@@ -1008,6 +1112,20 @@ def _setup_routes_and_handlers(
     # Register routes
     app.router.add_post("/api/server/restart", api_server_restart)
     app.router.add_get("/", index)
+
+    async def favicon(_request: web.Request) -> web.Response:
+        return web.Response(
+            text=(
+                "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
+                "<rect width='100' height='100' rx='24' fill='#8b8cff'/>"
+                "<text x='50' y='72' text-anchor='middle' font-family='sans-serif' "
+                "font-size='64' font-weight='700' fill='white'>T</text></svg>"
+            ),
+            content_type="image/svg+xml",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    app.router.add_get("/favicon.ico", favicon)
     if classic is not None:
         app.router.add_get("/classic", classic)
     app.router.add_get("/mission", index)

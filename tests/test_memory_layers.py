@@ -1,8 +1,13 @@
+import asyncio
+import threading
+import time
 import unittest
 from types import SimpleNamespace
 
 from thomas.chat.conversation import ConversationManager
 from thomas.chat.memory_layers import MemoryCoordinator
+from thomas.core.config import AppConfig, MemoryConfig, ModelConfig
+from thomas.memory.autonomy import AutonomyMemoryEngine
 
 
 class _EventMemory:
@@ -21,6 +26,28 @@ class _FabricStyleMemory:
     def retrieve(self, thread_id: str, query: str, budget_tokens: int | None = None):
         self.calls.append((thread_id, query, budget_tokens))
         return SimpleNamespace(pack_text=f"fabric memory: {thread_id} / {query} / {budget_tokens}")
+
+
+class _BlockingMemory:
+    def __init__(self) -> None:
+        self.entered = threading.Event()
+        self.release = threading.Event()
+
+    def retrieve(self, **_kwargs: object) -> str:
+        self.entered.set()
+        self.release.wait(timeout=1.0)
+        return "memory result"
+
+
+class _PinsMemory:
+    def __init__(self) -> None:
+        self.policy: dict[str, object] = {}
+
+    def set_thread_memory_policy(self, thread_id: str, **policy: object) -> None:
+        self.policy = {"thread_id": thread_id, **policy}
+
+    def retrieve(self, **_kwargs: object) -> str:
+        return "PIN(note:favorite): burnt orange"
 
 
 class _RowsCursor:
@@ -52,6 +79,28 @@ class _FabricStyleMemoryWithRows(_FabricStyleMemory):
 
 
 class TestMemoryCoordinator(unittest.IsolatedAsyncioTestCase):
+    async def test_sync_retrieval_does_not_block_the_event_loop(self) -> None:
+        memory = _BlockingMemory()
+        coordinator = MemoryCoordinator(memory, "session-responsive")
+        started = time.monotonic()
+
+        task = asyncio.create_task(
+            coordinator._retrieve_memory_text(
+                query="slow retrieval",
+                thread_id="session-responsive",
+                budget=300,
+                mode="auto",
+            )
+        )
+        while not memory.entered.is_set() and time.monotonic() - started < 0.25:
+            await asyncio.sleep(0.01)
+
+        elapsed = time.monotonic() - started
+        memory.release.set()
+        self.assertTrue(memory.entered.is_set())
+        self.assertLess(elapsed, 0.25)
+        self.assertEqual("memory result", await task)
+
     async def test_refresh_reads_fabric_v2_retrieve_signature(self) -> None:
         memory = _FabricStyleMemory()
         coordinator = MemoryCoordinator(memory, "session-fabric", context_budget=900)
@@ -68,6 +117,83 @@ class TestMemoryCoordinator(unittest.IsolatedAsyncioTestCase):
             ],
             memory.calls,
         )
+
+    async def test_pins_only_policy_injects_pinned_context_automatically(self) -> None:
+        memory = _PinsMemory()
+        policy = SimpleNamespace(
+            include_thread=True,
+            include_global=False,
+            include_profile=False,
+            pins_only=True,
+            context_budget=900,
+        )
+        coordinator = MemoryCoordinator(memory, "session-pins", context_budget=900, policy=policy)
+        conversation = ConversationManager().append_message("user", "What should I use?")
+
+        ctx = await coordinator.refresh("What should I use?", conversation, iteration=0)
+
+        self.assertIn("burnt orange", ctx.episodic)
+        self.assertEqual(memory.policy["thread_id"], "session-pins")
+        self.assertTrue(memory.policy["pins_only"])
+        self.assertFalse(ctx.semantic)
+
+    async def test_pins_only_fails_closed_when_backend_cannot_apply_scope(self) -> None:
+        policy = SimpleNamespace(
+            include_thread=True,
+            include_global=False,
+            include_profile=False,
+            pins_only=True,
+            context_budget=900,
+        )
+        memory = _FabricStyleMemory()
+        coordinator = MemoryCoordinator(memory, "session-pins", context_budget=900, policy=policy)
+        conversation = ConversationManager().append_message("user", "What should I use?")
+
+        ctx = await coordinator.refresh("What should I use?", conversation, iteration=0)
+
+        self.assertFalse(ctx.episodic)
+        self.assertFalse(memory.calls)
+
+    async def test_pins_only_real_backend_excludes_unpinned_profile_hints(self) -> None:
+        config = AppConfig(
+            models={"local": ModelConfig(name="local", model="dummy")},
+            default_model="local",
+            memory=MemoryConfig(root=str(self._temporaryDirectory.name)),
+        )
+        memory = AutonomyMemoryEngine(config, enable_legacy=False, enable_v2=True)
+        memory.start()
+        try:
+            memory.pin("favorite.color", "burnt orange")
+            memory._fabric_v2.upsert_profile_hints(
+                thread_id=None,
+                hints=[{"key": "unapproved.private", "value": "SHOULD_NOT_APPEAR", "confidence": 1.0}],
+                source_episode_id=None,
+            )
+            policy = SimpleNamespace(
+                include_thread=True,
+                include_global=False,
+                include_profile=False,
+                pins_only=True,
+                context_budget=900,
+            )
+            coordinator = MemoryCoordinator(memory, "session-real-pins", context_budget=900, policy=policy)
+            conversation = ConversationManager().append_message("user", "What should I use?")
+
+            ctx = await coordinator.refresh("What should I use?", conversation, iteration=0)
+
+            self.assertIn("burnt orange", ctx.episodic)
+            self.assertNotIn("SHOULD_NOT_APPEAR", ctx.episodic)
+            self.assertFalse(ctx.semantic)
+        finally:
+            memory.close()
+
+    def setUp(self) -> None:
+        import tempfile
+
+        self._temporaryDirectory = tempfile.TemporaryDirectory()
+
+    def tearDown(self) -> None:
+        self._temporaryDirectory.cleanup()
 
     async def test_recall_prompt_includes_recent_thread_memory_fallback(self) -> None:
         memory = _FabricStyleMemoryWithRows(

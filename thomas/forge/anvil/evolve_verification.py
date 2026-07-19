@@ -258,7 +258,7 @@ def write_locked_case(root, rel, payload):
     cases.mkdir(parents=True)
     case_path = corpus / rel
     case_path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
-    digest = hashlib.sha256(case_path.read_bytes()).hexdigest()
+    digest = hashlib.sha256(case_path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
     (corpus / "LOCK.json").write_text(
         json.dumps({"version": 1, "files": {rel: digest}}, sort_keys=True),
         encoding="utf-8",

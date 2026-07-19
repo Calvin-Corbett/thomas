@@ -1,28 +1,13 @@
-"""HTTP API for the *directed* Evolve agent -- Thomas's self-builder.
-
-This is the direct engineering seam. The Evolve chat talks straight to the
-Evolve agent (Thomas's own autonomy-4 agent loop), bypassing the normal
-``chat -> dispatcher -> task-manager`` route: self-development is not a task to
-hand off, it is a direct engineering session.
-
-In *directed* mode the agent runs against the LIVE repo and edits it directly --
-git + the existing gates are the safety net and the user is in the loop watching
-the stream. Its work (reasoning, tool calls, edits) is streamed back over SSE so
-the user can see it and steer it -- the Codex/Claude-Code engineering experience,
-powered entirely by Thomas's own model (no external CLIs).
-
-Autonomous mode stays in the existing green/blue loop (``evolve_loop_routes``).
-"""
+"""Directed Evolve-agent HTTP API for Thomas's live self-builder."""
 
 from __future__ import annotations
 
 import asyncio
-import codecs
-import contextlib
+import hashlib
+import hmac
 import json
 import logging
-import os
-import subprocess
+import secrets
 import sys
 import time
 from collections.abc import Callable
@@ -31,7 +16,54 @@ from typing import Any
 
 from aiohttp import web
 
-from thomas.forge.anvil import forge_code_deliverables, forge_code_git, forge_code_store
+from thomas.forge.anvil import (
+    forge_code_deliverables,
+    forge_code_git,
+    forge_code_projects,
+    forge_code_store,
+    forge_code_tree,
+)
+from thomas.forge.anvil.forge_code_http_stream import (
+    IncrementalLineDecoder as _IncrementalLineDecoder,
+)
+from thomas.forge.anvil.forge_code_http_stream import line_to_sse_payload as _line_to_sse_payload
+from thomas.forge.anvil.forge_code_settings import ForgeCodeSettings, ForgeCodeSettingsError
+from thomas.server.app_keys import APP_DELIVERABLE_PREVIEW_SERVICE
+
+from .evolve_agent_http_support import (
+    conversation_artifact_allowlist,
+    git_status_unavailable_response,
+    prepare_code_oauth_credential,
+    validate_active_run_request,
+)
+from .evolve_agent_registration import register_evolve_agent_handler_map
+from .evolve_agent_runtime import (
+    _action_receipt,
+    _agent_dir,
+    _agent_launch,
+    _attach_code_activity_release,
+    _authorize_conversation_revert,
+    _await_recording,
+    _code_action_hash,
+    _conversation_changed_files,
+    _default_repo_root,
+    _delete_action_receipt,
+    _drain,
+    _drain_and_record,
+    _finish_approval_execution,
+    _kill_tree,
+    _recording_active,
+    _recording_status,
+    _release_code_activity_lease,
+    _release_code_start_gate,
+    _request_id,
+    _risky_code_action,
+    _run_replay_available,
+    _save_action_receipt,
+    _sse_frame,
+    _terminate_process,
+    _transcript_path,
+)
 
 log = logging.getLogger(__name__)
 
@@ -41,217 +73,10 @@ APP_EVOLVE_AGENT_SESSION = "evolve_agent_session"
 APP_EVOLVE_AGENT_CONVO = "evolve_agent_convo"
 APP_EVOLVE_AGENT_SNAPSHOT = "evolve_agent_snapshot"
 APP_EVOLVE_AGENT_MODEL = "evolve_agent_model"
-
-
-def _default_repo_root() -> Path:
-    # thomas/server/routes/evolve_agent_routes.py -> repo root is parents[3]
-    return Path(__file__).resolve().parents[3]
-
-
-def _agent_dir(root: Path) -> Path:
-    d = root / ".thomas" / "evolve" / "agent"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
-def _transcript_path(root: Path) -> Path:
-    return _agent_dir(root) / "transcript.txt"
-
-
-async def _drain(proc: Any, transcript: Path) -> None:
-    """Stream the agent's combined stdout into the transcript file, line by line,
-    flushing so the SSE tail sees output as it happens."""
-    try:
-        with open(transcript, "ab") as fh:
-            assert proc.stdout is not None
-            while True:
-                line = await proc.stdout.readline()
-                if not line:
-                    break
-                fh.write(line)
-                fh.flush()
-    except Exception:  # noqa: BLE001 - draining is best-effort; never crash the server
-        log.warning("evolve agent: transcript drain failed", exc_info=True)
-    finally:
-        with contextlib.suppress(Exception):
-            await proc.wait()
-
-
-async def _drain_and_record(
-    proc: Any,
-    transcript: Path,
-    root: Path,
-    cid: str,
-    model: str,
-    snap: dict[str, str],
-    app: web.Application,
-) -> None:
-    """Drain the live transcript, then record the run outcome onto the conversation.
-
-    The outcome is computed from *git truth* at the moment the build finishes:
-    a run that exits 0 but touched nothing is a no-op, exits 0 with changes is a
-    success, and a non-zero exit is a failure. Recording is wrapped so a bad
-    store/git call can never crash the server or lose the transcript.
-    """
-    await _drain(proc, transcript)
-    try:
-        rc = proc.returncode or 0
-        try:
-            text = transcript.read_text(encoding="utf-8", errors="replace")
-        except Exception:  # noqa: BLE001 - transcript read is best-effort
-            text = ""
-        changed = forge_code_git.delta_since(root, snap)
-        noop = rc == 0 and not changed
-        ok = rc == 0 and bool(changed)
-        if noop:
-            reason = "no change made"
-        elif rc:
-            reason = f"exited {rc}"
-        else:
-            reason = f"{len(changed)} file(s) changed"
-        forge_code_store.append_agent_turn(
-            root,
-            cid,
-            model=model,
-            transcript=text,
-            changed_files=changed,
-            returncode=rc,
-            ok=ok,
-            noop=noop,
-            reason=reason,
-        )
-        # Close the loop into "My Stuff": a SUCCESSFUL run that produced a coherent
-        # deliverable (the detector decides -- a built page/doc/image/data file, not
-        # a code-only edit) becomes a durable, openable entry pointing back at this
-        # conversation. A code-only or failed run registers nothing. The title is the
-        # conversation's own (model-derived) name -- the build's purpose.
-        if ok:
-            conv = forge_code_store.load_conversation(root, cid) or {}
-            forge_code_deliverables.register_from_run(
-                root,
-                conversation_id=cid,
-                changed_files=changed,
-                title=str(conv.get("title") or ""),
-                model=model,
-            )
-    except Exception:  # noqa: BLE001 - recording must never crash the server
-        log.warning("evolve agent: recording run outcome failed", exc_info=True)
-
-
-def _line_to_sse_payload(line: str) -> dict[str, Any]:
-    """Map one transcript line to an SSE payload for the live stream.
-
-    A *forge event* line (``{"fc": <kind>, ...}`` emitted by the bridge as the CLI
-    streams) becomes a typed frame: it stays ``type:"output"`` (so progressive
-    output frames are still counted as such) but carries a ``kind``
-    (say/tool/tool_result/error/meta) plus its fields, which the browser renders
-    with a distinct transcript class. Any other line is forwarded as plain output
-    text (e.g. the CLI's own summary echo). Parsing is fully defensive: a
-    malformed line degrades to plain text rather than breaking the stream.
-    """
-    stripped = line.strip()
-    if not stripped:
-        return {}
-    if stripped[0] == "{":
-        try:
-            obj = json.loads(stripped)
-        except Exception:  # noqa: BLE001 - not a forge event -> fall through to plain text
-            obj = None
-        if isinstance(obj, dict) and obj.get("fc"):
-            payload: dict[str, Any] = {
-                "type": "output",
-                "kind": str(obj.get("fc")),
-                "text": str(obj.get("text") or ""),
-            }
-            if obj.get("name"):
-                payload["name"] = str(obj.get("name"))
-            if obj.get("is_error"):
-                payload["is_error"] = True
-            # A token-progressive ``say`` fragment (claude partial-message / GPT
-            # TEXT_DELTA): carry the flag so the browser APPENDS it incrementally
-            # instead of treating it as a whole finished block.
-            if obj.get("delta"):
-                payload["delta"] = True
-            return payload
-    return {"type": "output", "text": line}
-
-
-class _IncrementalLineDecoder:
-    """Turn a stream of arbitrary UTF-8 *byte* chunks into complete text lines,
-    holding any partial trailing multibyte char AND any partial trailing line
-    across feeds.
-
-    The build subprocess emits each forge event as one UTF-8 JSON line, but the
-    transcript is tailed in arbitrary byte chunks (``fh.read()`` returns whatever
-    bytes are on disk so far). A multibyte char can straddle that boundary -- an
-    em-dash is 3 bytes (E2 80 94), an emoji 4 -- so a per-chunk
-    ``bytes.decode(..., errors="replace")`` would mangle each split half into the
-    U+FFFD replacement char (the Perf-45 narration glitch). Feeding every chunk
-    through ONE stateful incremental decoder keeps the partial sequence buffered
-    until the bytes that complete it arrive, so unicode renders intact in the
-    live transcript.
-    """
-
-    def __init__(self) -> None:
-        self._decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
-        self._buf = ""
-
-    def feed(self, chunk: bytes) -> list[str]:
-        """Decode ``chunk`` and return only the lines it newly COMPLETES.
-
-        A partial trailing line (no terminating newline yet) and a partial
-        trailing multibyte char are both retained for the next feed.
-        """
-        if chunk:
-            self._buf += self._decoder.decode(chunk)
-        *lines, self._buf = self._buf.split("\n")
-        return lines
-
-    def flush(self) -> list[str]:
-        """Final drain at end-of-stream.
-
-        Flush any genuinely-truncated trailing byte sequence exactly once
-        (``final=True``) and return any remaining complete lines plus a final
-        newline-less remainder (dropped if it is only whitespace).
-        """
-        self._buf += self._decoder.decode(b"", final=True)
-        parts = self._buf.split("\n")
-        self._buf = ""
-        remainder = parts.pop() if parts else ""
-        if remainder.strip():
-            parts.append(remainder)
-        return parts
-
-
-def _kill_tree(proc: Any) -> None:
-    """Kill the whole build process tree -- the dispatch python AND any
-    ``claude -p`` grandchild -- not just the immediate child.
-
-    The claude brain spawns a headless ``claude -p`` child; the GPT brain runs
-    in-process (no grandchild). Stopping only ``proc`` would orphan a headless CLI
-    it spawned, leaving the real build still running. Prefer psutil (cross-platform
-    recursive kill);
-    fall back to ``taskkill /T`` on Windows and ``terminate()`` elsewhere. Every
-    path is defensive: a process that already exited must not raise.
-    """
-    try:
-        import psutil
-
-        parent = psutil.Process(proc.pid)
-        for child in parent.children(recursive=True):
-            with contextlib.suppress(Exception):
-                child.kill()
-        with contextlib.suppress(Exception):
-            parent.kill()
-    except Exception:  # noqa: BLE001 - psutil missing or process gone; fall back
-        with contextlib.suppress(Exception):
-            if os.name == "nt":
-                subprocess.run(
-                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                    capture_output=True,
-                )
-            else:
-                proc.terminate()
+APP_EVOLVE_AGENT_PROJECT = "evolve_agent_project"
+APP_EVOLVE_AGENT_SETTINGS = "evolve_agent_settings"
+APP_EVOLVE_AGENT_APPROVALS = "evolve_agent_approvals"
+APP_EVOLVE_AGENT_LOCK = "evolve_agent_lock"
 
 
 def build_evolve_agent_handlers(
@@ -260,12 +85,74 @@ def build_evolve_agent_handlers(
     require_api_access: Callable[[web.Request], None],
     root_resolver: Callable[[], Path] = _default_repo_root,
 ) -> dict[str, Any]:
+    if APP_EVOLVE_AGENT_APPROVALS not in app:
+        app[APP_EVOLVE_AGENT_APPROVALS] = {}
+    if APP_EVOLVE_AGENT_LOCK not in app:
+        app[APP_EVOLVE_AGENT_LOCK] = asyncio.Lock()
+    artifact_capability_secret = secrets.token_bytes(32)
+    artifact_capability_ttl_seconds = 3600
+
     def _root() -> Path:
         return Path(root_resolver())
+
+    def _project_for_conversation(cid: str) -> Path:
+        return forge_code_projects.conversation_project(_root(), cid)
+
+    def _load_conversation(cid: str) -> tuple[Path, dict[str, Any] | None]:
+        project = _project_for_conversation(cid)
+        return project, forge_code_store.load_conversation(project, cid)
 
     def _running() -> bool:
         proc = app.get(APP_EVOLVE_AGENT_TASK)
         return proc is not None and proc.returncode is None
+
+    def _track_process(
+        proc: Any,
+        transcript: Path,
+        project_root: Path,
+        cid: str,
+        model: str,
+        snap: dict[str, str],
+        catalog_root: Path,
+        request_id: str,
+        run_id: str,
+        message: str,
+        settings: dict[str, Any],
+        activity_token: str,
+    ) -> None:
+        generation = int((app.get(APP_EVOLVE_AGENT_SESSION) or {}).get("generation") or 0) + 1
+        app[APP_EVOLVE_AGENT_SESSION] = {
+            "generation": generation,
+            "run_id": run_id,
+            "request_id": request_id,
+            "started_at": time.time(),
+            "message": message,
+            "project_root": str(project_root),
+            "conversation_id": cid,
+            "settings": settings,
+            "snapshot": snap,
+            "transcript": str(transcript),
+            "proc": proc,
+        }
+        app[APP_EVOLVE_AGENT_TASK], app[APP_EVOLVE_AGENT_CONVO] = proc, cid
+        app[APP_EVOLVE_AGENT_MODEL], app[APP_EVOLVE_AGENT_PROJECT] = model, str(project_root)
+        app[APP_EVOLVE_AGENT_SETTINGS], app[APP_EVOLVE_AGENT_SNAPSHOT] = settings, snap
+        task = asyncio.ensure_future(
+            _drain_and_record(
+                proc,
+                transcript,
+                project_root,
+                cid,
+                model,
+                snap,
+                app,
+                catalog_root=catalog_root,
+                request_id=request_id,
+                run_id=run_id,
+            )
+        )
+        _attach_code_activity_release(task, app, activity_token)
+        app[APP_EVOLVE_AGENT_DRAIN] = {"generation": generation, "run_id": run_id, "task": task}
 
     async def send(request: web.Request) -> web.Response:
         require_api_access(request)
@@ -276,95 +163,303 @@ def build_evolve_agent_handlers(
         message = str((body or {}).get("message") or "").strip()
         if not message:
             return web.json_response({"ok": False, "error": "empty message"}, status=400)
-        if _running():
-            return web.json_response({"ok": False, "error": "agent is already working"}, status=409)
-        # Both engines build through the headless CLI bridge: it runs on the operator's
-        # OWN Claude/GPT subscription (no in-process OAuth needed) and honours the brain
-        # picker. "agent" = build directly; "funnel" = converge a plan across isolated
-        # agents first, then build. Pressing Send in the Code UI is the explicit
-        # authorization the bridge requires (THOMAS_CLAUDE_BRIDGE_ENABLED).
-        engine = str((body or {}).get("engine") or "agent").strip().lower()
-        model = str((body or {}).get("model") or "claude:sonnet").strip()
-        effort = str((body or {}).get("effort") or "medium").strip()
-        conversation_id = str((body or {}).get("conversation_id") or "").strip()
-        source_evolve_item = (body or {}).get("source_evolve_item")
-        if not isinstance(source_evolve_item, dict):
-            source_evolve_item = None
+        async with app[APP_EVOLVE_AGENT_LOCK]:
+            return await _start_run(body if isinstance(body, dict) else {}, message)
 
-        root = _root()
+    async def _start_run(body: dict[str, Any], message: str) -> web.Response:
+        catalog_root = _root()
+        approval_id = str(body.get("approval_id") or "").strip()
+        request_id = _request_id(body, fallback=approval_id)
+        action_hash = _code_action_hash(message, body)
+        replay = _action_receipt(catalog_root, "run", request_id)
+        if replay is not None:
+            if replay.get("action_hash") != action_hash:
+                conflict = {
+                    "ok": False,
+                    "error": "request_id belongs to a different Code action",
+                    "code": "idempotency_conflict",
+                }
+                return web.json_response(conflict, status=409)
+            if not _run_replay_available(
+                replay, app.get(APP_EVOLVE_AGENT_SESSION), _running(), app.get(APP_EVOLVE_AGENT_DRAIN)
+            ):
+                return web.json_response(
+                    {
+                        "ok": False,
+                        "error": "the prior Code run cannot be verified after restart",
+                        "code": "run_recovery_required",
+                        "run_state": replay.get("state"),
+                    },
+                    status=409,
+                )
+            persistence = replay.get("persistence") if isinstance(replay.get("persistence"), dict) else {}
+            return web.json_response(
+                {**(replay.get("response") or {}), **persistence, "replayed": True, "run_state": replay.get("state")}
+            )
+        recording = app.get(APP_EVOLVE_AGENT_DRAIN)
+        if _running() or _recording_active(recording):
+            code = "agent_result_recording" if _recording_active(recording) else "agent_already_running"
+            return web.json_response(
+                {"ok": False, "error": "another Code run is still active", "code": code}, status=409
+            )
+        approval_to_consume: dict[str, Any] | None = None
+        risk = _risky_code_action(message)
+        if risk:
+            approvals = app[APP_EVOLVE_AGENT_APPROVALS]
+            approval = approvals.get(approval_id) if approval_id else None
+            valid = bool(
+                isinstance(approval, dict)
+                and approval.get("state") == "approved"
+                and approval.get("action_hash") == action_hash
+                and float(approval.get("expires_at") or 0) >= time.time()
+            )
+            if not valid:
+                approval_id = f"approval-{secrets.token_urlsafe(10)}"
+                approvals[approval_id] = {
+                    "id": approval_id,
+                    "state": "pending",
+                    "action_hash": action_hash,
+                    "risk": risk,
+                    "summary": f"Allow Code mode to {risk}?",
+                    "expires_at": time.time() + 600,
+                }
+                return web.json_response(
+                    {
+                        "ok": False,
+                        "error": "explicit approval is required for this external or destructive action",
+                        "code": "approval_required",
+                        "approval": {
+                            key: value for key, value in approvals[approval_id].items() if key != "action_hash"
+                        },
+                    },
+                    status=409,
+                )
+            approval_to_consume = approval
+        try:
+            settings = ForgeCodeSettings.from_payload(body)
+        except ForgeCodeSettingsError as exc:
+            return web.json_response({"ok": False, "error": str(exc), "code": "invalid_settings"}, status=400)
 
-        # Resolve the conversation this turn belongs to: resume the requested one
-        # when it exists, else open a fresh build. The user turn is recorded now;
-        # the agent turn (with its git-truth outcome) is recorded when the build
-        # finishes (see _drain_and_record).
-        conv = forge_code_store.load_conversation(root, conversation_id) if conversation_id else None
-        if conv is None:
-            conv = forge_code_store.new_conversation(root, source_evolve_item=source_evolve_item)
+        conversation_id = str(body.get("conversation_id") or "").strip()
+        source_evolve_item = body.get("source_evolve_item")
+        source_evolve_item = source_evolve_item if isinstance(source_evolve_item, dict) else None
+
+        requested_project = body.get("project_root")
+        try:
+            if conversation_id:
+                project_root, conv = _load_conversation(conversation_id)
+                if conv is None:
+                    project_root = forge_code_projects.validate_project_root(
+                        requested_project,
+                        fallback=catalog_root,
+                    )
+                elif requested_project:
+                    selected = forge_code_projects.validate_project_root(requested_project, fallback=catalog_root)
+                    if selected != project_root:
+                        return web.json_response(
+                            {
+                                "ok": False,
+                                "error": "project_root cannot change inside an existing Code conversation",
+                                "code": "project_change_requires_new_conversation",
+                            },
+                            status=409,
+                        )
+            else:
+                # New conversation, no explicit project -> scratch repo, never
+                # Thomas's own source tree (the catalog root).
+                _fallback = (
+                    catalog_root if requested_project else forge_code_projects.default_scratch_project(catalog_root)
+                )
+                project_root = forge_code_projects.validate_project_root(requested_project, fallback=_fallback)
+                conv = None
+        except forge_code_projects.ForgeCodeProjectError as exc:
+            return web.json_response({"ok": False, "error": str(exc), "code": "invalid_project_root"}, status=400)
+
+        created_conversation = conv is None
+        if created_conversation:
+            conv = forge_code_store.draft_conversation(source_evolve_item=source_evolve_item)
         cid = conv["id"]
-        app[APP_EVOLVE_AGENT_CONVO] = cid
-        app[APP_EVOLVE_AGENT_MODEL] = model
-        forge_code_store.append_user_turn(root, cid, message)
-
-        # Fingerprint the working tree BEFORE the build so we can attribute the
-        # exact set of files this run touched (delta_since) when it completes.
-        snap = forge_code_git.snapshot(root)
-        app[APP_EVOLVE_AGENT_SNAPSHOT] = snap
-
-        transcript = _transcript_path(root)
-        transcript.write_bytes(b"")  # fresh transcript for this turn; the stream tails it (append)
-        env = dict(os.environ)
-        env["THOMAS_CLAUDE_BRIDGE_ENABLED"] = "1"
-        # Force the child's stdio to UTF-8 regardless of the host's code page. On
-        # Windows the spawned interpreter would otherwise default sys.stdout to
-        # cp1252, so an em-dash/curly-quote in a forge event would go out as a
-        # cp1252 byte (e.g. 0x97) — invalid UTF-8 to the byte-level reader below,
-        # which renders it as the U+FFFD replacement char. PYTHONUTF8 puts the
-        # interpreter in UTF-8 mode; PYTHONIOENCODING pins the stdio encoding even
-        # on interpreters that don't honor the former. This is the belt to the
-        # bridge's own UTF-8 byte emit (suspenders) — either alone fixes it.
-        env["PYTHONUTF8"] = "1"
-        env["PYTHONIOENCODING"] = "utf-8"
-        cmd = [
-            "-m",
-            "thomas",
-            "evolve",
-            "dispatch",
-            message,
-            "--via",
-            "cli",
-            "--execute",
-            "--yes",
-            "--model",
-            model,
-            "--effort",
-            effort,
-            # Hand the conversation id down so the dispatched turn loads its prior
-            # turns as history -- a real multi-turn exchange, not a one-shot. The
-            # current user turn was just recorded above; the composer drops it so
-            # it is not duplicated alongside the goal.
-            "--conversation-id",
+        capability_report = settings.capability_report()
+        try:
+            snap = forge_code_git.snapshot(project_root)
+        except forge_code_git.ForgeCodeGitError as exc:
+            log.warning("Code launch could not confirm Git workspace state: %s", exc)
+            return git_status_unavailable_response(exc)
+        run_id = f"run-{secrets.token_urlsafe(12)}"
+        transcript = _transcript_path(catalog_root, run_id)
+        oauth_access_token, auth_error = await prepare_code_oauth_credential(app, settings.family)
+        if auth_error is not None:
+            return auth_error
+        cmd, env = _agent_launch(
+            settings,
+            project_root,
             cid,
-        ]
-        if engine == "funnel":
-            cmd.append("--use-funnel")
-        proc = await asyncio.create_subprocess_exec(
-            sys.executable,
-            *cmd,
-            cwd=str(root),
-            env=env,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
+            package_root=Path(__file__).resolve().parents[3],
         )
-        app[APP_EVOLVE_AGENT_TASK] = proc
-        app[APP_EVOLVE_AGENT_DRAIN] = asyncio.ensure_future(
-            _drain_and_record(proc, transcript, root, cid, model, snap, app)
+        start_token = secrets.token_urlsafe(24)
+        env["THOMAS_CODE_START_GATE"] = "pipe"
+        env["THOMAS_CODE_START_TOKEN"] = start_token
+        env["THOMAS_CODE_RUN_ID"] = run_id
+        env["THOMAS_CODE_REQUEST_ID"] = request_id
+        response = {
+            "ok": True,
+            "started": True,
+            "request_id": request_id,
+            "run_id": run_id,
+            "run_state": "running",
+            "conversation_id": cid,
+            "project_root": str(project_root),
+            "settings": capability_report,
+        }
+        reservation = {"state": "launching", "action_hash": action_hash, "response": response}
+        if approval_to_consume is not None:
+            approval_to_consume.update({"state": "executing", "executing_at": time.time()})
+        proc, persisted, activity_token, gate_release_state = None, None, "", {"payload_write_attempted": False}
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable,
+                *cmd,
+                cwd=str(project_root),
+                env=env,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            _save_action_receipt(catalog_root, "run", request_id, reservation)
+            if _action_receipt(catalog_root, "run", request_id) != reservation:
+                raise RuntimeError("Code launch receipt could not be verified")
+            transcript.write_bytes(b"")
+            turn_identity = {"request_id": request_id, "request_fingerprint": action_hash}
+            persisted = (
+                forge_code_store.persist_draft_with_user_turn(project_root, conv, message, **turn_identity)
+                if created_conversation
+                else forge_code_store.append_user_turn(project_root, cid, message, **turn_identity)
+            )
+            if persisted is None:
+                raise RuntimeError("Code user turn could not be persisted")
+            if forge_code_projects.conversation_metadata(catalog_root, cid) is None:
+                forge_code_projects.bind_conversation(catalog_root, cid, project_root, settings=capability_report)
+            else:
+                forge_code_projects.update_conversation_settings(catalog_root, cid, capability_report)
+            _save_action_receipt(catalog_root, "run", request_id, {**reservation, "state": "running"})
+            activity_token = await _release_code_start_gate(
+                app, proc, start_token, oauth_access_token, run_id, message, gate_release_state
+            )
+        except (asyncio.CancelledError, OSError, RuntimeError, TypeError, ValueError):
+            termination = {}
+            if proc is not None:
+                termination = await asyncio.shield(_terminate_process(proc))
+            delivered = bool(gate_release_state["payload_write_attempted"])
+            activity_token = str(gate_release_state.get("activity_token") or activity_token)
+            if delivered and proc is not None:
+                _track_process(
+                    proc,
+                    transcript,
+                    project_root,
+                    cid,
+                    settings.model_id or settings.dispatch_model,
+                    snap,
+                    catalog_root,
+                    request_id,
+                    run_id,
+                    message,
+                    capability_report,
+                    activity_token,
+                )
+                activity_token = ""
+            if activity_token:
+                _release_code_activity_lease(app, activity_token)
+            if delivered:
+                retry_safe = False
+            elif created_conversation:
+                retry_safe = forge_code_store.delete_conversation(project_root, cid)
+            elif persisted is not None:
+                retry_safe = forge_code_store.rollback_user_turn(
+                    project_root, cid, request_id, before=conv, after=persisted
+                )
+            else:
+                retry_safe = forge_code_store.load_conversation(project_root, cid) == conv
+            if retry_safe:
+                _delete_action_receipt(catalog_root, "run", request_id)
+            _finish_approval_execution(approval_to_consume, succeeded=delivered)
+            raise
+        _finish_approval_execution(approval_to_consume, succeeded=True)
+        _track_process(
+            proc,
+            transcript,
+            project_root,
+            cid,
+            settings.model_id or settings.dispatch_model,
+            snap,
+            catalog_root,
+            request_id,
+            run_id,
+            message,
+            capability_report,
+            activity_token,
         )
-        app[APP_EVOLVE_AGENT_SESSION] = {"started_at": time.time(), "message": message}
-        return web.json_response({"ok": True, "started": True, "conversation_id": cid})
+        return web.json_response(response)
+
+    async def approve(request: web.Request) -> web.Response:
+        require_api_access(request)
+        try:
+            body = await request.json()
+        except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+            body = {}
+        approval_id = str((body or {}).get("approval_id") or "").strip()
+        approvals = app[APP_EVOLVE_AGENT_APPROVALS]
+        approval = approvals.get(approval_id)
+        if not isinstance(approval, dict) or float(approval.get("expires_at") or 0) < time.time():
+            return web.json_response({"ok": False, "error": "approval is missing or expired"}, status=404)
+        if approval.get("state") != "pending":
+            return web.json_response({"ok": False, "error": "approval is no longer pending"}, status=409)
+        approval["state"] = "approved"
+        approval["approved_at"] = time.time()
+        return web.json_response(
+            {
+                "ok": True,
+                "approval": {
+                    key: value for key, value in approval.items() if key not in {"message_hash", "action_hash"}
+                },
+            }
+        )
+
+    async def steer(request: web.Request) -> web.Response:
+        require_api_access(request)
+        try:
+            body = await request.json()
+        except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+            body = {}
+        message = str((body or {}).get("message") or "").strip()
+        if not message:
+            return web.json_response({"ok": False, "error": "empty steering message"}, status=400)
+        if not _running():
+            return web.json_response({"ok": False, "error": "no Code task is running"}, status=409)
+        stale = validate_active_run_request(body, app.get(APP_EVOLVE_AGENT_SESSION))
+        if stale is not None:
+            return stale
+        proc = app.get(APP_EVOLVE_AGENT_TASK)
+        if proc is not None and proc.returncode is None:
+            asyncio.get_running_loop().run_in_executor(None, _kill_tree, proc)
+        return web.json_response(
+            {"ok": True, "stop_requested": True, "restart_required": True, "message": message}, status=202
+        )
 
     async def stream(request: web.Request) -> web.StreamResponse:
         require_api_access(request)
-        transcript = _transcript_path(_root())
+        session = dict(app.get(APP_EVOLVE_AGENT_SESSION) or {})
+        run_id = str(session.get("run_id") or "legacy")
+        if request.query.get("run_id") and request.query["run_id"] != run_id:
+            return web.json_response(
+                {"ok": False, "error": "that Code run is not active", "code": "run_not_active"}, status=409
+            )
+        try:
+            cursor = max(0, int(request.query.get("cursor") or 0))
+        except ValueError:
+            return web.json_response({"ok": False, "error": "invalid stream cursor"}, status=400)
+        transcript = Path(session.get("transcript") or _transcript_path(_root()))
+        proc = session.get("proc") or app.get(APP_EVOLVE_AGENT_TASK)
+        recording = app.get(APP_EVOLVE_AGENT_DRAIN)
         resp = web.StreamResponse(
             status=200,
             headers={
@@ -376,17 +471,16 @@ def build_evolve_agent_handlers(
         )
         await resp.prepare(request)
         pos = 0
-        # A STATEFUL utf-8 line decoder: each file read returns an arbitrary number
-        # of bytes that may split a multibyte char (an em-dash "—" is 3 bytes, an
-        # emoji 4), so a per-chunk ``bytes.decode`` would emit U+FFFD (�) for the
-        # split halves. The incremental decoder holds the partial sequence until
-        # the next chunk completes it, so unicode renders correctly across reads.
+        sequence = 0
         linedec = _IncrementalLineDecoder()
 
         async def _emit_line(line: str) -> None:
+            nonlocal sequence
             payload = _line_to_sse_payload(line)
             if payload:
-                await resp.write(("data: " + json.dumps(payload) + "\n\n").encode("utf-8"))
+                sequence += 1
+                if sequence > cursor:
+                    await resp.write(_sse_frame(payload, run_id, sequence))
 
         try:
             while not (request.transport is None or request.transport.is_closing()):
@@ -397,17 +491,13 @@ def build_evolve_agent_handlers(
                         chunk = fh.read()
                         pos = fh.tell()
                 if chunk:
-                    # Emit each COMPLETE line as its own (possibly typed) frame so the
-                    # transcript fills progressively and structure is preserved.
                     for line in linedec.feed(chunk):
                         await _emit_line(line)
                     # Data was flowing — loop again IMMEDIATELY (no poll delay) to
-                    # drain the rest of the burst, so a fast run's tokens are not
-                    # paced by the idle interval. We only sleep when the file is
-                    # momentarily empty (below).
                     await asyncio.sleep(0)
                     continue
-                if not _running():
+                if proc is None or proc.returncode is not None:
+                    persistence = await _await_recording(recording)
                     # Final drain: the child may have flushed its last lines after
                     # our read above but before we noticed it exited — pick them up.
                     if transcript.exists():
@@ -418,41 +508,28 @@ def build_evolve_agent_handlers(
                         if tail:
                             for line in linedec.feed(tail):
                                 await _emit_line(line)
-                    # Flush any bytes the decoder is still holding (a truncated
-                    # trailing sequence) so nothing is silently dropped.
                     for line in linedec.flush():
                         await _emit_line(line)
-                    proc = app.get(APP_EVOLVE_AGENT_TASK)
-                    rc = proc.returncode if proc is not None else None
-                    # Carry the real run outcome, computed from git truth at done
-                    # time, so the UI can render success/no-op/failure without a
-                    # second round-trip.
-                    snap = app.get(APP_EVOLVE_AGENT_SNAPSHOT) or {}
-                    changed = forge_code_git.delta_since(_root(), snap)
-                    await resp.write(
-                        (
-                            "data: "
-                            + json.dumps(
+                    sequence += 1
+                    if sequence > cursor:
+                        await resp.write(
+                            _sse_frame(
                                 {
                                     "type": "done",
-                                    "returncode": rc,
-                                    "changed_files": changed,
-                                    # Renderable previews this run produced, so the
-                                    # UI can show artifact cards immediately (the
-                                    # same set is also recorded on the agent turn).
-                                    "artifacts": forge_code_store.detect_artifacts(changed),
-                                    "conversation_id": app.get(APP_EVOLVE_AGENT_CONVO) or "",
-                                    "noop": rc == 0 and not changed,
-                                }
+                                    **persistence,
+                                    "conversation_id": session.get("conversation_id")
+                                    or app.get(APP_EVOLVE_AGENT_CONVO)
+                                    or "",
+                                    "project_root": session.get("project_root")
+                                    or app.get(APP_EVOLVE_AGENT_PROJECT)
+                                    or "",
+                                    "settings": session.get("settings") or app.get(APP_EVOLVE_AGENT_SETTINGS) or {},
+                                },
+                                run_id,
+                                sequence,
                             )
-                            + "\n\n"
-                        ).encode("utf-8")
-                    )
+                        )
                     break
-                # Idle: nothing on disk yet. Poll TIGHTLY (was 0.4s) so the FIRST
-                # token surfaces fast (TTFT) and subsequent tokens feel live, not
-                # ~400ms-quantized. A burst short-circuits this via the `continue`
-                # above, so this only paces the genuinely-empty gaps.
                 await asyncio.sleep(0.05)
         except (ConnectionResetError, asyncio.CancelledError, RuntimeError):
             pass
@@ -461,47 +538,62 @@ def build_evolve_agent_handlers(
     async def status(request: web.Request) -> web.Response:
         require_api_access(request)
         sess = app.get(APP_EVOLVE_AGENT_SESSION) or {}
+        drain_task = app.get(APP_EVOLVE_AGENT_DRAIN)
         return web.json_response(
             {
                 "ok": True,
                 "running": _running(),
-                "session": {"message": sess.get("message", ""), "started_at": sess.get("started_at")},
+                **_recording_status(drain_task),
+                "run_id": sess.get("run_id") or "",
+                "generation": sess.get("generation") or 0,
+                "session": {
+                    "message": sess.get("message", ""),
+                    "started_at": sess.get("started_at"),
+                    "project_root": sess.get("project_root", ""),
+                },
+                "settings": app.get(APP_EVOLVE_AGENT_SETTINGS) or {},
             }
         )
 
     async def stop(request: web.Request) -> web.Response:
         require_api_access(request)
+        if _running():
+            try:
+                body = await request.json()
+            except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+                body = {}
+            stale = validate_active_run_request(body, app.get(APP_EVOLVE_AGENT_SESSION))
+            if stale is not None:
+                return stale
         proc = app.get(APP_EVOLVE_AGENT_TASK)
-        if proc is not None and proc.returncode is None:
-            # Sub-1s perceived Stop: the process-tree kill (psutil / taskkill /T)
-            # can take a beat and would block the event loop, so we hand it to a
-            # worker thread and return the "stopped" reply IMMEDIATELY — we do NOT
-            # await the kill. The client has already optimistically flipped to idle
-            # and closed its EventSource, so nothing depends on the kill finishing
-            # before this response lands.
-            def _kill() -> None:
-                with contextlib.suppress(Exception):
-                    _kill_tree(proc)
-
-            with contextlib.suppress(Exception):
-                asyncio.get_running_loop().run_in_executor(None, _kill)
-        return web.json_response({"ok": True, "stopped": True})
+        receipt = await _terminate_process(proc)
+        if receipt["termination_confirmed"]:
+            receipt.update(await _await_recording(app.get(APP_EVOLVE_AGENT_DRAIN)))
+        status_code = (
+            200 if receipt["termination_confirmed"] else 202 if receipt["state"] == "termination_pending" else 409
+        )
+        return web.json_response(receipt, status=status_code)
 
     async def deliverables_list(request: web.Request) -> web.Response:
-        """List Forge Code build deliverables for the "My Stuff" surface.
-
-        Each entry is a real, openable build output (carrying its title, kind,
-        ``open_url`` artifact-preview link, and a ``deep_link`` back to the
-        originating Code conversation). Code-only runs are never present here --
-        registration is gated on the artifact detector at run completion.
-        """
+        """List real, openable Forge Code build outputs for the My Stuff surface."""
         require_api_access(request)
         return web.json_response({"ok": True, "deliverables": forge_code_deliverables.list_deliverables(_root())})
 
     async def conversations_list(request: web.Request) -> web.Response:
         require_api_access(request)
-        root = _root()
-        summaries = forge_code_store.list_conversations(root)
+        catalog_root = _root()
+        by_id: dict[str, dict[str, Any]] = {}
+        for project_root in forge_code_projects.conversation_roots(catalog_root):
+            for summary in forge_code_store.list_conversations(project_root):
+                cid = str(summary.get("id") or "")
+                if not cid or cid in by_id:
+                    continue
+                metadata = forge_code_projects.conversation_metadata(catalog_root, cid) or {}
+                enriched = dict(summary)
+                enriched["project_root"] = str(metadata.get("project_root") or project_root)
+                enriched["settings"] = metadata.get("settings") or {}
+                by_id[cid] = enriched
+        summaries = sorted(by_id.values(), key=lambda row: str(row.get("updated_at") or ""), reverse=True)
         return web.json_response(
             {
                 "ok": True,
@@ -513,10 +605,17 @@ def build_evolve_agent_handlers(
     async def conversation_get(request: web.Request) -> web.Response:
         require_api_access(request)
         cid = request.match_info.get("cid", "")
-        conv = forge_code_store.load_conversation(_root(), cid)
+        try:
+            project_root, conv = _load_conversation(cid)
+        except forge_code_projects.ForgeCodeProjectError as exc:
+            return web.json_response({"ok": False, "error": str(exc), "code": "project_unavailable"}, status=409)
         if conv is None:
             return web.json_response({"ok": False, "error": "not found"}, status=404)
-        return web.json_response({"ok": True, "conversation": conv})
+        metadata = forge_code_projects.conversation_metadata(_root(), cid) or {}
+        enriched = dict(conv)
+        enriched["project_root"] = str(project_root)
+        enriched["settings"] = metadata.get("settings") or {}
+        return web.json_response({"ok": True, "conversation": enriched})
 
     async def conversation_new(request: web.Request) -> web.Response:
         require_api_access(request)
@@ -528,8 +627,22 @@ def build_evolve_agent_handlers(
         source = (body or {}).get("source_evolve_item")
         if not isinstance(source, dict):
             source = None
-        conv = forge_code_store.new_conversation(_root(), title=title or None, source_evolve_item=source or None)
-        return web.json_response({"ok": True, "conversation": conv})
+        try:
+            project_root = forge_code_projects.validate_project_root((body or {}).get("project_root"), fallback=_root())
+            settings = ForgeCodeSettings.from_payload(body if isinstance(body, dict) else {})
+        except (forge_code_projects.ForgeCodeProjectError, ForgeCodeSettingsError) as exc:
+            return web.json_response({"ok": False, "error": str(exc), "code": "invalid_code_configuration"}, status=400)
+        conv = forge_code_store.new_conversation(
+            project_root,
+            title=title or None,
+            source_evolve_item=source or None,
+        )
+        report = settings.capability_report()
+        forge_code_projects.bind_conversation(_root(), conv["id"], project_root, settings=report)
+        enriched = dict(conv)
+        enriched["project_root"] = str(project_root)
+        enriched["settings"] = report
+        return web.json_response({"ok": True, "conversation": enriched})
 
     async def conversation_rename(request: web.Request) -> web.Response:
         require_api_access(request)
@@ -541,7 +654,11 @@ def build_evolve_agent_handlers(
         title = str((body or {}).get("title") or "").strip()
         if not title:
             return web.json_response({"ok": False, "error": "empty title"}, status=400)
-        conv = forge_code_store.rename_conversation(_root(), cid, title)
+        try:
+            project_root = _project_for_conversation(cid)
+        except forge_code_projects.ForgeCodeProjectError as exc:
+            return web.json_response({"ok": False, "error": str(exc), "code": "project_unavailable"}, status=409)
+        conv = forge_code_store.rename_conversation(project_root, cid, title)
         if conv is None:
             return web.json_response({"ok": False, "error": "not found"}, status=404)
         return web.json_response({"ok": True, "conversation": conv})
@@ -549,33 +666,46 @@ def build_evolve_agent_handlers(
     async def conversation_delete(request: web.Request) -> web.Response:
         require_api_access(request)
         cid = request.match_info.get("cid", "")
-        removed = forge_code_store.delete_conversation(_root(), cid)
+        try:
+            project_root = _project_for_conversation(cid)
+        except forge_code_projects.ForgeCodeProjectError as exc:
+            return web.json_response({"ok": False, "error": str(exc), "code": "project_unavailable"}, status=409)
+        removed = forge_code_store.delete_conversation(project_root, cid)
         if not removed:
             return web.json_response({"ok": False, "error": "not found"}, status=404)
+        forge_code_projects.forget_conversation(_root(), cid)
         return web.json_response({"ok": True, "deleted": True, "id": cid})
 
-    def _conversation_changed_files(root: Path, cid: str) -> set[str] | None:
-        """Union of the files THIS conversation's build(s) actually wrote.
+    async def conversation_tree(request: web.Request) -> web.Response:
+        require_api_access(request)
+        cid = request.match_info.get("cid", "")
+        try:
+            project_root, conv = _load_conversation(cid)
+            if conv is None:
+                return web.json_response({"ok": False, "error": "not found"}, status=404)
+            tree = forge_code_tree.list_project_tree(
+                project_root,
+                request.query.get("path", ""),
+                limit=int(request.query.get("limit", "250")),
+            )
+        except (forge_code_projects.ForgeCodeProjectError, forge_code_tree.ForgeCodeTreeError, ValueError) as exc:
+            return web.json_response({"ok": False, "error": str(exc), "code": "invalid_tree_path"}, status=400)
+        return web.json_response({"ok": True, **tree})
 
-        Returns the set recorded across the conversation's agent turns
-        (``changed_files``, the per-turn git delta captured when each build
-        finished), or ``None`` when the conversation is unknown -- the caller
-        then falls back to the whole dirty tree.
-        """
-        conv = forge_code_store.load_conversation(root, cid) if cid else None
-        if conv is None:
-            return None
-        files: set[str] = set()
-        for turn in conv.get("turns") or []:
-            if turn.get("role") == "agent":
-                for f in turn.get("changed_files") or []:
-                    if f:
-                        files.add(str(f))
-        return files
+    async def conversation_file(request: web.Request) -> web.Response:
+        require_api_access(request)
+        cid = request.match_info.get("cid", "")
+        try:
+            project_root, conv = _load_conversation(cid)
+            if conv is None:
+                return web.json_response({"ok": False, "error": "not found"}, status=404)
+            result = forge_code_tree.read_project_file(project_root, request.query.get("path", ""))
+        except (forge_code_projects.ForgeCodeProjectError, forge_code_tree.ForgeCodeTreeError) as exc:
+            return web.json_response({"ok": False, "error": str(exc), "code": "invalid_file_path"}, status=400)
+        return web.json_response({"ok": True, **result})
 
     async def changes(request: web.Request) -> web.Response:
         require_api_access(request)
-        root = _root()
         # SCOPE to the active conversation's OWN build output, not the whole dirty
         # tree. The set of files this run wrote is recorded per agent turn
         # (changed_files); we intersect it with what git STILL reports as dirty so
@@ -583,21 +713,24 @@ def build_evolve_agent_handlers(
         # narrowed to this run's set. With no conversation context we fall back to
         # the full dirty tree (prior behavior) rather than show nothing.
         cid = request.query.get("cid") or app.get(APP_EVOLVE_AGENT_CONVO) or ""
-        scoped = _conversation_changed_files(root, str(cid))
-        dirty = forge_code_git.changed_files(root)
+        try:
+            root = _project_for_conversation(str(cid)) if cid else Path(app.get(APP_EVOLVE_AGENT_PROJECT) or _root())
+        except forge_code_projects.ForgeCodeProjectError as exc:
+            return web.json_response({"ok": False, "error": str(exc), "code": "project_unavailable"}, status=409)
+        conv = forge_code_store.load_conversation(root, str(cid)) if cid else None
+        scoped = _conversation_changed_files(conv)
+        try:
+            dirty = forge_code_git.changed_files(root)
+        except forge_code_git.ForgeCodeGitError as exc:
+            return git_status_unavailable_response(exc)
         if scoped is not None:
             files = [f for f in dirty if f in scoped]
         else:
             files = dirty
-        out: list[dict[str, Any]] = []
-        for f in files:
-            out.append(
-                {
-                    "file": f,
-                    "untracked": forge_code_git.is_untracked(root, f),
-                    "diff": forge_code_git.unified_diff(root, f),
-                }
-            )
+        try:
+            out = forge_code_git.change_evidence(root, files)
+        except forge_code_git.ForgeCodeGitError as exc:
+            return git_status_unavailable_response(exc)
         return web.json_response({"ok": True, "changed": out})
 
     async def revert(request: web.Request) -> web.Response:
@@ -609,7 +742,56 @@ def build_evolve_agent_handlers(
         file = str((body or {}).get("file") or "").strip()
         if not file:
             return web.json_response({"ok": False, "error": "no file"}, status=400)
-        return web.json_response(forge_code_git.revert_file(_root(), file))
+        cid = str((body or {}).get("conversation_id") or app.get(APP_EVOLVE_AGENT_CONVO) or "")
+        if not cid:
+            return web.json_response(
+                {"ok": False, "error": "conversation_id is required", "code": "conversation_required"}, status=400
+            )
+        approval_id = str((body or {}).get("approval_id") or "").strip()
+        request_id = _request_id(body if isinstance(body, dict) else {}, fallback=approval_id)
+        scope = {"conversation_id": cid, "file": file.replace("\\", "/"), "approval_id": approval_id}
+        replay = _action_receipt(_root(), "revert", request_id)
+        if replay is not None:
+            if replay.get("scope") != scope:
+                return web.json_response(
+                    {"ok": False, "error": "request_id belongs to another revert", "code": "idempotency_conflict"},
+                    status=409,
+                )
+            return web.json_response({**(replay.get("result") or {}), "replayed": True})
+        try:
+            root, conversation = _load_conversation(cid)
+        except forge_code_projects.ForgeCodeProjectError as exc:
+            return web.json_response({"ok": False, "error": str(exc), "code": "project_unavailable"}, status=409)
+        if conversation is None:
+            return web.json_response({"ok": False, "error": "not found", "code": "conversation_not_found"}, status=404)
+        metadata = forge_code_projects.conversation_metadata(_root(), cid)
+        approvals = app[APP_EVOLVE_AGENT_APPROVALS]
+        approval = approvals.get(approval_id)
+        if isinstance(approval, dict) and approval.get("state") == "consumed" and approval.get("operation") == scope:
+            return web.json_response({**(approval.get("result") or {}), "replayed": True})
+        file, error, status_code = _authorize_conversation_revert(
+            root=root,
+            conversation_id=cid,
+            file=file,
+            conversation=conversation,
+            metadata=metadata,
+            approvals=approvals,
+            approval_id=approval_id,
+        )
+        if error is not None:
+            return web.json_response(error, status=status_code)
+        result = None
+        try:
+            result = forge_code_git.revert_file(root, file)
+            scope["file"] = file
+            approval = approvals.get(approval_id)
+            if isinstance(approval, dict):
+                approval.update({"operation": scope, "result": result})
+            _save_action_receipt(_root(), "revert", request_id, {"scope": scope, "result": result})
+            return web.json_response(result)
+        finally:
+            approval = approvals.get(approval_id)
+            _finish_approval_execution(approval, succeeded=isinstance(result, dict) and result.get("ok") is True)
 
     async def keep(request: web.Request) -> web.Response:
         require_api_access(request)
@@ -622,49 +804,99 @@ def build_evolve_agent_handlers(
             return web.json_response({"ok": False, "error": "no file"}, status=400)
         # Keep is a deliberate no-op on disk: the change already lives in the
         # working tree, so "keep" just acknowledges it and leaves it untouched.
-        return web.json_response({"ok": True, "kept": True, "file": file})
+        cid = str((body or {}).get("conversation_id") or app.get(APP_EVOLVE_AGENT_CONVO) or "")
+        try:
+            root = _project_for_conversation(cid) if cid else Path(app.get(APP_EVOLVE_AGENT_PROJECT) or _root())
+        except forge_code_projects.ForgeCodeProjectError as exc:
+            return web.json_response({"ok": False, "error": str(exc), "code": "project_unavailable"}, status=409)
+        return web.json_response({"ok": True, "kept": True, "file": file, "project_root": str(root)})
 
-    async def artifact(request: web.Request) -> web.StreamResponse:
-        """Serve ONE file a build produced, same-origin, for the transcript preview.
+    def _artifact_capability(cid: str, bucket: int | None = None) -> str:
+        current_bucket = int(time.time() // artifact_capability_ttl_seconds) if bucket is None else bucket
+        payload = f"{cid}:{current_bucket}".encode()
+        return hmac.new(artifact_capability_secret, payload, hashlib.sha256).hexdigest()
 
-        This backs the artifact card's <iframe>/<img>/markdown/data preview. It is
-        deliberately narrow: a path is served only when it is a file THIS build
-        actually wrote -- it must appear in the conversation's recorded
-        ``changed_files`` (git-truth captured when the build finished) OR in git's
-        CURRENT dirty set (covering the brief window before the agent turn is
-        persisted). It is never an arbitrary repo file, and a path that escapes the
-        repo root is refused.
+    def _valid_artifact_capability(cid: str, capability: str) -> bool:
+        current_bucket = int(time.time() // artifact_capability_ttl_seconds)
+        return any(
+            hmac.compare_digest(capability, _artifact_capability(cid, bucket))
+            for bucket in (current_bucket, current_bucket - 1)
+        )
 
-        The bytes are the REAL built file -- no templating, no fabrication. Built
-        output is untrusted, so (exactly like the deliverable route) it is forced
-        into a sandboxed opaque origin at the response layer: a built HTML page can
-        render in the preview iframe but can never reach the host app's
-        DOM/cookies/localStorage. CORP ``same-site`` keeps the same-origin
-        <iframe>/<img> load working (the "CORP white-screen" fix) without exposing
-        the artifact cross-site.
-        """
-        require_api_access(request)
-        root = _root()
-        cid = request.match_info.get("cid", "")
-        tail = (request.match_info.get("tail", "") or "").strip()
+    def _artifact_scope(cid: str, tail: str) -> tuple[Path, Path, set[str]]:
+        try:
+            root = _project_for_conversation(cid)
+        except forge_code_projects.ForgeCodeProjectError as exc:
+            raise web.HTTPNotFound(text=str(exc)) from exc
+        tail = str(tail or "").strip()
         if not tail:
             raise web.HTTPNotFound(text="no artifact path")
         rel = tail.replace("\\", "/")
-        allowed = _conversation_changed_files(root, str(cid)) or set()
-        allowed |= set(forge_code_git.changed_files(root))
+        allowed = conversation_artifact_allowlist(root, forge_code_store.load_conversation(root, str(cid)))
         if rel not in allowed:
             raise web.HTTPNotFound(text="not an artifact of this build")
         root_resolved = root.resolve()
         target = (root_resolved / rel).resolve()
         if not target.is_file() or not target.is_relative_to(root_resolved):
             raise web.HTTPNotFound(text="artifact file not found")
+        return root_resolved, target, allowed
+
+    def _artifact_file_response(cid: str, tail: str) -> web.FileResponse:
+        _root_resolved, target, _allowed = _artifact_scope(cid, tail)
         response = web.FileResponse(target)
-        response.headers["Content-Security-Policy"] = "sandbox allow-scripts allow-forms"
+        response.headers["Content-Security-Policy"] = (
+            "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline' data:; img-src 'self' data:; font-src 'self' data:; "
+            "media-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'"
+        )
         response.headers["Cross-Origin-Resource-Policy"] = "same-site"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
+
+    async def artifact(request: web.Request) -> web.StreamResponse:
+        """Enter an isolated preview origin or download one verified artifact."""
+        require_api_access(request)
+        cid = str(request.match_info.get("cid", "") or "")
+        tail = str(request.match_info.get("tail", "") or "")
+        if Path(tail).suffix.lower() not in {".html", ".htm"}:
+            return _artifact_file_response(cid, tail)
+        root, _target, allowed = _artifact_scope(cid, tail)
+        preview_service = app.get(APP_DELIVERABLE_PREVIEW_SERVICE)
+        if preview_service is None:
+            raise web.HTTPServiceUnavailable(text="Code preview service is not ready")
+        try:
+            location = await preview_service.preview_directory_url(
+                subject_id=f"code:{cid}",
+                workspace=root,
+                tail=tail,
+                allowed_files=allowed,
+            )
+        except (FileNotFoundError, RuntimeError):
+            raise web.HTTPServiceUnavailable(text="Code preview service is not ready") from None
+        raise web.HTTPFound(
+            location=location,
+            headers={"Cache-Control": "private, no-store, max-age=0", "Pragma": "no-cache", "Expires": "0"},
+        )
+
+    async def artifact_content(request: web.Request) -> web.StreamResponse:
+        """Serve one artifact only when its expiring conversation capability is valid."""
+        require_api_access(request)
+        cid = str(request.match_info.get("cid", "") or "")
+        capability = str(request.match_info.get("capability", "") or "")
+        if not _valid_artifact_capability(cid, capability):
+            raise web.HTTPNotFound(text="preview capability expired or invalid")
+        response = _artifact_file_response(cid, str(request.match_info.get("tail", "") or ""))
+        response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
+        response.headers["Cache-Control"] = "private, no-store, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
         return response
 
     return {
         "send": send,
+        "approve": approve,
+        "steer": steer,
         "stream": stream,
         "status": status,
         "stop": stop,
@@ -674,10 +906,13 @@ def build_evolve_agent_handlers(
         "conversation_new": conversation_new,
         "conversation_rename": conversation_rename,
         "conversation_delete": conversation_delete,
+        "conversation_tree": conversation_tree,
+        "conversation_file": conversation_file,
         "changes": changes,
         "revert": revert,
         "keep": keep,
         "artifact": artifact,
+        "artifact_content": artifact_content,
     }
 
 
@@ -687,25 +922,5 @@ def register_evolve_agent_routes(
     require_api_access: Callable[[web.Request], None],
     root_resolver: Callable[[], Path] = _default_repo_root,
 ) -> None:
-    """Register the directed Evolve-agent API onto the aiohttp app."""
     handlers = build_evolve_agent_handlers(app, require_api_access=require_api_access, root_resolver=root_resolver)
-    app.router.add_post("/api/evolve/agent/send", handlers["send"])
-    app.router.add_get("/api/evolve/agent/stream", handlers["stream"])
-    app.router.add_get("/api/evolve/agent/status", handlers["status"])
-    app.router.add_post("/api/evolve/agent/stop", handlers["stop"])
-    # "My Stuff": list the build deliverables this Forge Code agent has produced.
-    app.router.add_get("/api/evolve/agent/deliverables", handlers["deliverables_list"])
-    # Conversation history: list / resume / open-new.
-    app.router.add_get("/api/evolve/agent/conversations", handlers["conversations_list"])
-    app.router.add_post("/api/evolve/agent/conversations/new", handlers["conversation_new"])
-    app.router.add_get("/api/evolve/agent/conversations/{cid}", handlers["conversation_get"])
-    # Rename (inline edit) and delete from the history sidebar.
-    app.router.add_post("/api/evolve/agent/conversations/{cid}/rename", handlers["conversation_rename"])
-    app.router.add_delete("/api/evolve/agent/conversations/{cid}", handlers["conversation_delete"])
-    # Git-truth review surface: see the diff, revert a file, or keep it.
-    app.router.add_get("/api/evolve/agent/changes", handlers["changes"])
-    app.router.add_post("/api/evolve/agent/revert", handlers["revert"])
-    app.router.add_post("/api/evolve/agent/keep", handlers["keep"])
-    # Same-origin artifact preview source for the transcript's artifact cards
-    # (sandboxed built output: HTML page / image / markdown / data file).
-    app.router.add_get("/api/evolve/agent/artifact/{cid}/{tail:.*}", handlers["artifact"])
+    register_evolve_agent_handler_map(app, handlers)

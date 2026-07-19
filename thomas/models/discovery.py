@@ -263,8 +263,12 @@ def _handshake_openai_codex(cfg: ModelConfig, *, max_results: int = 200) -> Mode
             error="Not signed in to ChatGPT OAuth. Run Easy Setup or connect the ChatGPT profile.",
             models=[],
         )
-    model_id = str(getattr(cfg, "model", "") or "").strip() or "gpt-5.5"
-    return ModelsHandshake(ok=True, status="ok", url=url, http_status=None, models=[model_id][:max_results])
+    from thomas.models.catalog_rules import OPENAI_CODEX_CHATGPT_VERIFIED_MODELS
+
+    model_id = str(getattr(cfg, "model", "") or "").strip() or "gpt-5.6-sol"
+    models = [model_id, *OPENAI_CODEX_CHATGPT_VERIFIED_MODELS]
+    unique_models = list(dict.fromkeys(models))
+    return ModelsHandshake(ok=True, status="ok", url=url, http_status=None, models=unique_models[:max_results])
 
 
 def discover_models(cfg: ModelConfig, *, timeout_s: float = 2.0) -> list[DiscoveredModel]:

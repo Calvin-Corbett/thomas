@@ -7,6 +7,127 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed
+
+- `release_update` gate: the per-commit helper lane now accepts branch-wide release proof (version bumped + changelog updated relative to the merge-base with the canonical branch) instead of demanding the three release files dirty in every product-surface commit — the structural catch-22 that stranded agent work since 2026-06-26. Direct canonical-branch commits still require release files in the change set; enforcement manifest re-blessed for the edited gate.
+
+### Changed
+
+- Merged `dev` (land.py lane, gate-surface green, evolve monolith split) into the unified 0.19.0 branch; version resolves to 0.19.0, both monolith splits coexist (`evolve_charter`/`evolve_arch_sync`/`evolve_prompts` from dev + `evolve_charter_store`/`evolve_architecture_health` from the branch), enforcement manifest regenerated for the merged scripts, and the dropped dev-side debt annotations restored. `reasoning.py` slimmed under the soft limit by extracting `reasoning_task_briefs.py` (single source for raw-ask vs per-worker briefs).
+- Fresh chats default to Agent autonomy (dial 3) with a one-time migration for stored dial state, so an out-of-box ask executes instead of replying "raise autonomy and resend"; guardrails stay Guarded. (Thomas-Agent: claude)
+- Raised Code execution budgets to cheap 600s/balanced 1800s/max 3600s with fix iterations 1/2/3, single-sourced in `forge_code_settings.EXECUTION_TIMEOUTS_S`, so real builds stop dying at the wall mid-run.
+- Code's running action feed now shows every progress note inline (collapse engages only past the 120-event ring), matching the owner's Codex-style presentation spec; the mode-contract Node test asserts the new behavior.
+- Test suites aligned with the repaired contracts: full-feed lifecycle assertions, CSS module-split references, new execution-budget dials, plus codex's announcement-retry and markdown-renderer Node harnesses.
+
+### Fixed
+
+- Multi-task chat asks: when one turn dispatches several `send_task` calls, each worker now receives its own brief (raw ask attached as context) instead of every worker rebuilding the full request — the cause of duplicate deliverable storms.
+- Agent loop lifecycle slice (codex WIP, integrated): tool-protocol module extracted (`thomas/agent/loop_tool_protocol.py`), completion/execution hardening for incomplete provider streams, token-economy pass scaling, and preference runtime repairs (`_db.py`/`_prefs.py`, file-write default honesty).
+- New Code conversations with no chosen project bind to a dedicated scratch git repository under the user data dir (`projects/scratch`) instead of Thomas's own source tree; a one-time client migration clears the auto-stored repo path.
+- Verified-deliverable cards no longer show a contradictory failure-flavored worker hedge above the engine's "verified" banner; when artifact checks pass with no executability warnings, the engine's verdict owns the summary line.
+- Server delegation slice (codex WIP, integrated): isolated-preview security middleware (`app_middleware_security.py`), deliverable postprocess module, artifact-verification and result-policy hardening, chat announcement retry, and evolve-agent route/http support repairs.
+- The consolidated activity card no longer appears duplicated while a single worker runs (the expanded step log echoed the header's handoff milestone).
+- Retired the Canvas "keepalive" that ran REAL model inference ("Reply with the single word: ok") against the ChatGPT backend every 18 seconds from boot — ~4,800 wasted subscription calls per day — while holding the canvas LLM lock ahead of real work (`chat_delegation_canvas_client.py`); the cached client warms on first use instead.
+- Removed 13 leftover QA scheduler fixtures (every-minute CHECK-MONITOR/SKIP-STALE crons and seven parity-schedule tasks) from persisted state; resurrected at every boot since 2026-07-13, each firing was executed through the model.
+- `run-ui.ps1` launcher now defaults the idle self-improvement engines (code-issue, self-upgrade, UI-workflow, local-agent, workspace-sync) OFF for detached servers unless explicitly re-enabled via environment, pending reliable interactive use.
+
+### Fixed
+
+- Ran generated Chat and Code web apps on capability-gated preview-only loopback origins so root-relative CSS, ES modules, data requests, and workers execute without sharing Thomas's API origin; scoped Code dependencies to recorded build files and added live browser proof.
+- Stopped optional skill and redundant read-enrichment failures from overriding verified requested artifacts, while keeping explicit skill requests, writes, and shell actions fail closed.
+- Removed the guessed provider TPM default and made real provider rate-limit responses pause and resume in the same task; hardened artifact evidence against stale duplicate basenames and unrelated same-tool successes, and bounded/expired preview origins with service-worker and stale-storage defenses.
+- Replaced implicit raw-token task ceilings with advisory usage telemetry and effort-bounded passes, preserved explicit opt-in spending caps, kept active Chat/Code/Work tasks alive across mode switches, made text-only worker verification distinguish plans from claimed side effects and file deliverables, and rendered verified Chat Markdown as structured, injection-safe results.
+- Separated Code's exact current intent from its policy/history wrapper for routing, memory, and tool selection while retaining full model context and full-context suspicious-prompt authorization with fail-closed gate errors.
+- Kept active Code and established Work turns running across presentation-only Chat, Code, and Work switches, restored hidden Code completions into durable history, and replaced Code's permanent project/result columns with a chat-first activity drawer.
+- Recast Code as the familiar Thomas Chat conversation with quiet project and result rails, concise in-process milestones, mobile controls, and one collapsed technical record; hardened the same multi-turn path against missing-file loops, incomplete model streams, stale-history ordering, edit-permission gaps, false clean Git evidence, and blocking workspace-sync locks.
+- Completed the local 0.19.0 unified Chat checkpoint with canonical model and token receipts, resumable run lifecycles, task-ledger state, bounded exhaustive review, safer Canvas completion, and consistent early-return behavior across standard, UI-control, and Discord conversations.
+- Hardened the shared agent/runtime foundation with bounded tool history, scoped token budgets, durable model receipts, fail-closed execution evidence, safer streaming, and browser-backed artifact verification.
+- Rebuilt Work around confirmed goals and durable per-job workflow maps, with resumable onboarding, explicit flow selection, Mission-backed manual/scheduled/event execution, duplicate-run protection, shared job chat, All Work navigation, and live conversational progress; redesigned Code as a Thomas conversation with project-aware actions and collapsed technical evidence.
+- Made the scoped agent commit helper honor required SSH signing, restored direct publish-preflight invocation, and reconciled reviewed enforcement hashes through the guarded protected-release route.
+- Guarded private deliverable previews and downloads with the configured server access policy, including remote-mode bearer authentication before handler execution, and made Chat V2 read-route registration fail closed when its access guard is unavailable.
+- Connected every persistent Chat V2 turn to the public task ledger with causal in-progress, complete, blocked, safe-failure, and Max-review-pending transitions while keeping temporary chats non-retained and observability failures non-fatal.
+- Normalized usage receipts across standard, UI-control, Discord, and exhaustive-Max completions so every terminal event preserves durable cumulative session totals instead of resetting or omitting them.
+- Made Work and Mission daily/weekly automations resolve IANA timezones reliably on Windows, including daylight-saving transitions, and corrected the default weekday schedule to Monday through Friday.
+- Kept core Chat/Work session routes available when an optional chat helper cannot import, so Work onboarding no longer fails with a misleading 404.
+- Made Code-mode HTML verification honest and browser-backed: changed pages now receive an offline isolated Chrome/Edge boot-and-interaction smoke with runtime, console, resource, keyboard, and pointer evidence, while unavailable browser checks are reported as static-only instead of being mislabeled as fully verified.
+- Scoped the local UI launcher restart to its requested port so running another Thomas checkout no longer stops unrelated local servers.
+- Replaced canned multi-turn parity checks with a persisted context-revision contract and isolated every run in an immutable profile-attributed proof bundle; targeted family reruns can no longer overwrite canonical evidence or masquerade as full parity.
+- Hardened live Chat artifact execution so separate requested deliverables are graded through separate workers, verified artifacts can recover from redundant read failures, chart markers do not trigger false data-pair checks, and explicitly named SVG files route to the file-capable worker instead of Canvas.
+- Added secret-safe observed-model receipts, evaluator/worktree hashes, atomic canonical publication, and bounded workspace-side-effect restoration to the 14-family organic parity audit.
+- Completed the audited local 0.18.0 checkpoint across Chat, Code, and Work support services, including memory retrieval, plugins, orchestration, CLI evolution, desktop launch helpers, and bridge integration.
+- Checkpointed the shared agent, specialist, scheduler, tool, voice, evolution, and server bootstrap runtime used by all three unified modes.
+- Checkpointed the integrated virtual office with agent chat and command lifecycle, deterministic placement and navigation, persisted layouts, route-aware maps, polished assets, and compact default workspaces.
+- Checkpointed the unified Chat, Code, and Work selector shell with mode-scoped history, Code projects, Work job tiles, model settings, shared runtime state, and dedicated mode styling.
+- Checkpointed Work mode with job-scoped chat, connectors, reusable accounts, per-job skill pools, automations, onboarding missions, validation, storage, and autonomy workflows.
+- Checkpointed the model catalog and ChatGPT OAuth runtime so selectable variants, capabilities, streaming tool-result pairing, and the existing signed-in connection share one provider contract.
+- Checkpointed Forge inside the unified Code experience, including project history, settings, streamed runs, verification, file-tree access, and evolution safety controls.
+- Completed the 0.18.0 Chat and Canvas support checkpoint with artifact verification, task separation, result policies, Canvas review rules, voice failure handling, and local-project workspace controls.
+- Checkpointed the unified Chat and Canvas runtime with isolated delegation workspaces, streamed visual construction, durable artifacts, file and memory controls, and fail-closed voice upload handling. This is an integration checkpoint, not a completed parity claim.
+- Refreshed the signed-in ChatGPT model catalog from live provider evidence so GPT-5.6 Luna is selectable alongside Sol and Terra instead of remaining disabled by a stale `Model not found` result.
+- Made the live server honor `THOMAS_SECRET_ROOT`, matching the OAuth helper and isolated verification runtimes so a clean worktree can reuse the user's existing encrypted ChatGPT connection instead of prompting for another sign-in.
+- Preserved `openai_codex` as the Easy Setup profile on first launch and suppressed the API-key warning for that OAuth-backed profile.
+
+## [0.18.0] - 2026-07-13
+
+### Added
+
+- Added a fail-closed current-ChatGPT parity gate covering 14 capability families and 74 live checks, plus an independent ten-point headed-browser evidence scorecard that cannot mask a base-rubric failure.
+- Added persistent project context, one-project chat binding, pinned chat and file libraries, stale-file exclusion, and revocable read-only project sharing.
+- Added temporary-chat privacy isolation and deletion receipts that purge thread memory, together with offline Windows speech recognition and synthesis, barge-in metadata, and honest voice availability reporting.
+- Added installable custom-assistant packages with bounded knowledge files, explicit tool/app/API permissions, share bundles, and deterministic validation and cleanup.
+
+### Fixed
+
+- Fixed ChatGPT/Codex OAuth multimodal turns by translating Thomas' chat-style image blocks into the Responses API `input_text` and `input_image` request schema.
+- Preserved attached images through Thomas's conversational and actionable specialist routes, including an instruction-hierarchy guard that treats text embedded in images as untrusted visual evidence.
+- Made scheduler catch-up runs use unique missed timestamps and persisted skip-misfire schedule advancement even when no task fired, preventing duplicate recovery work and repeated stale windows after restart.
+- Added idempotency keys for email sends and tamper-evident signed action receipts, so retries cannot duplicate a provider action and altered or unsigned completion claims fail verification.
+- Reused the active `openai_codex` ChatGPT OAuth connection in the model settings UI instead of querying the empty legacy `chatgpt` credential slot and falsely prompting an already signed-in user to connect again. Status, login, logout, and provider detection now stay scoped to the selected model profile.
+- Kept attached document bodies out of generated-artifact requirement inference, so input files can contain dirty rows, source literals, and filenames without Thomas incorrectly demanding that every input value or attachment be copied into the cleaned output.
+- Made memory deletion forget the pinned value across profile hints, episodes, facts, pins, retrieval traces, and cached packs instead of merely hiding the pin while fresh chats could still recall it.
+
+## [0.17.4] - 2026-07-13
+
+### Added
+
+- Added the GPT-5.6 Sol, Terra, and Luna family to Thomas's model catalog and the root chat selector. Sol is now the local ChatGPT default; Luna remains visible but disabled with the signed-in connection's verified `Model not found` explanation instead of failing silently.
+- Added the complete GPT-5.6 reasoning-effort ladder (`none`, `low`, `medium`, `high`, `xhigh`, and `max`) to model metadata and the live AI-settings menu.
+
+### Fixed
+
+- Preserved `xhigh` and `max` exactly in ChatGPT Responses requests instead of collapsing `xhigh` to `high`, and made the chat Memory toggle actually disable long-term memory for that turn.
+
+## [0.17.3] - 2026-07-13
+
+### Fixed
+
+- Added ChatGPT OAuth recovery to the actual root `chat.html` client. When its active ChatGPT profile returns Thomas's disconnected response, the live page now opens a native connection prompt, explains why a separate local authorization is needed, and starts Thomas's real OAuth endpoint so an existing ChatGPT browser session can approve access.
+
+## [0.17.2] - 2026-07-13
+
+### Fixed
+
+- Detect Thomas-authored ChatGPT OAuth connection failures at the end of a chat response and open Easy Setup directly on the ChatGPT path, with a persistent recovery action in the conversation. The prompt now explains that an existing ChatGPT or Codex app session does not automatically populate Thomas's separate local OAuth store, while profile scoping and exact failure matching avoid treating ordinary conversation text as an authentication error.
+
+## [0.17.1] - 2026-07-13
+
+### Fixed (ChatGPT parity adversarial loop, 2026-07-12)
+
+- Registered `web.search` and `web.fetch` in the shared server/worker registry, added a bounded Bing fallback when the primary search provider returns no rows, and exposed source-backed research as a read-only inline chat action. Provider-style text calls such as `{"name":"web_search"}` are suppressed and executed, so current-information requests return cited answers instead of raw JSON, opaque refusal, or a no-evidence background task.
+- Made explicit browser-to-artifact background recipes deterministic and fail closed: exact named tools are always exposed, read-only browser steps run on the server event loop, workspace-scoped write/read receipts produce the requested artifact, and completion rejects typo names, placeholders, or content that does not match captured browser evidence. The live ChatGPT-parity gate now verifies progress, receipts, grounded Markdown/PDF artifacts, and download integrity.
+- Made multi-artifact completion fail closed per requested file: quoted markers, CSV rows, and HTML element IDs must exist in the correct artifact; missing-file recovery immediately writes and reads back every exact filename; and terminal receipts replace stale "please wait" narration with evidence-derived completion text. Delegated tasks that explicitly mandate named tools now expose only that per-run tool contract, preventing small local models from replacing real calls with prose when unrelated schemas overload the prompt; validated JSON text tool calls are recovered before presentation sanitization can erase their name and arguments, clearly filename-associated fenced artifacts fall back to workspace-confined write/read calls, and explicit missing marker tokens can be inserted evidence-only before the full verifier reruns. The live canvas/artifact parity gate now opens the document, spreadsheet, slide deck, and site, then clicks both HTML artifacts in Thomas's real browser runtime and preserves screenshots.
+
+## [0.17.0] - 2026-07-12
+
+### Added (Thomas Coherence Passage, 2026-07-12)
+
+- Added the canonical governed-operator contract and tracked migration plan: Thomas is the persistent user-owned framework, models are replaceable engines, conversation is the single control relationship, bounded reversible actions may run inline under permission and proof, and heavy or elevated work remains delegated.
+- Added one canonical action receipt for inline and delegated work so V2 status, completion narration, and clients share session identity, proof, approval, interruptibility, and honest success/failure state.
+- Migrated the main web runtime, virtual-office agent chat, Infinite Companion, and Discord bridge directly to `/api/v2/chat`; removed the inert frontend V2 switch and its fallback to the duplicate V1 execution path.
+- Retired the live V1 conversation engine: `/api/chat` is now a deprecated compatibility URL owned by the V2 handler, while the legacy route bundle retains only auxiliary plan/slash endpoints. Conversational UI controls now run in V2 with reversible receipts, and direct `batch`/`swarm` requests migrate explicitly to `max` without constructing the retired provider-batch runtime.
+- Isolated production startup from the compatibility-only V1 engine modules: plan-state and slash-command helpers now register through an engine-free auxiliary bundle, while delegated steering, cancellation requests, artifact proof, and completion report-once state rebuild through the durable task ledger and canonical receipt.
+- Fixed chat startup selecting the first catalog entry when the saved profile used display casing such as `Local`; Thomas now resolves saved profile names case-insensitively and falls back to the first actually usable profile instead of silently choosing a keyless provider.
+
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
 ### Added (Landing Lane, 2026-07-15)

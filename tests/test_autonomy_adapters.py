@@ -32,7 +32,7 @@ class TestAutonomyChatAdapter(AioHTTPTestCase):
             await resp.write_eof()
             return resp
 
-        app.router.add_post("/api/chat", api_chat)
+        app.router.add_post("/api/v2/chat", api_chat)
         return app
 
     async def test_generate_json_parses_plain_ndjson_text(self):
@@ -48,7 +48,12 @@ class TestAutonomyChatAdapter(AioHTTPTestCase):
         self.assertIsInstance(out, dict)
         self.assertIs(out.get("ok"), True)
         self.assertEqual(str(out.get("mode") or ""), "plain")
-        self.assertEqual(str(self._last_payload.get("text") or ""), "plain_json_case")
+        structured_text = str(self._last_payload.get("text") or "")
+        self.assertIn("[Internal structured response contract]", structured_text)
+        self.assertIn("plain_json_case", structured_text)
+        self.assertIn('"type": "object"', structured_text)
+        self.assertIs(self._last_payload.get("temporary"), True)
+        self.assertEqual(str(self._last_payload.get("mode") or ""), "fast")
         self.assertEqual(str(self._last_payload.get("profile") or ""), "local")
 
     async def test_generate_json_parses_fenced_json(self):

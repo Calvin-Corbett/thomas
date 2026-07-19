@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
+import json
 import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -118,11 +120,13 @@ class WorkflowRunner:
         capabilities_by_profile: Mapping[str, Mapping[str, bool]] | None = None,
         approval_broker: Any = None,
         no_human_mode: str = "human",
+        execution_context: Mapping[str, Any] | None = None,
     ):
         self._chat = chat_adapter
         self._session_id = session_id
         self._default_profile = _text(default_profile)
         self._approval_broker = approval_broker  # optional ApprovalBroker for step gates
+        self._execution_context = dict(execution_context or {})
         self._no_human_mode = _normalize_no_human_mode(
             os.environ.get("THOMAS_AUTONOMY_NO_HUMAN_MODE")
             or os.environ.get("THOMAS_NO_HUMAN_MODE")
@@ -136,6 +140,58 @@ class WorkflowRunner:
                 continue
             if isinstance(caps, Mapping):
                 self._caps[p] = {str(k): bool(v) for k, v in caps.items()}
+
+    def _execution_prompt(self, system_prompt: str) -> str:
+        if not self._execution_context:
+            return system_prompt
+        context = {
+            key: self._execution_context.get(key)
+            for key in (
+                "model_id",
+                "reasoning_effort",
+                "autonomy_level",
+                "file_access",
+                "thomas_guardrails",
+                "memory",
+                "token_economy",
+                "private_skills",
+                "job_memory",
+                "connector_bindings",
+                "settings",
+                "work_app_id",
+                "work_job_id",
+            )
+            if key in self._execution_context
+        }
+        return (
+            system_prompt.rstrip()
+            + "\n\n[Verified Work execution context]\n"
+            + json.dumps(context, ensure_ascii=False, sort_keys=True)
+        )
+
+    def _adapter_execution_kwargs(self) -> dict[str, Any]:
+        controls = {
+            "model_id": self._execution_context.get("model_id"),
+            "reasoning_effort": self._execution_context.get("reasoning_effort"),
+            "autonomy_level": self._execution_context.get("autonomy_level"),
+            "file_access": self._execution_context.get("file_access"),
+            "thomas_guardrails": self._execution_context.get("thomas_guardrails"),
+            "memory": self._execution_context.get("memory"),
+            "token_economy": self._execution_context.get("token_economy"),
+            "private_skills": self._execution_context.get("private_skills"),
+            "job_memory": self._execution_context.get("job_memory"),
+            "connector_bindings": self._execution_context.get("connector_bindings"),
+            "work_app_id": self._execution_context.get("work_app_id"),
+            "work_job_id": self._execution_context.get("work_job_id"),
+        }
+        controls = {key: value for key, value in controls.items() if value is not None}
+        try:
+            parameters = inspect.signature(self._chat.generate_json).parameters
+        except (TypeError, ValueError):
+            return {"model_id": controls["model_id"]} if controls.get("model_id") else {}
+        if any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()):
+            return controls
+        return {key: value for key, value in controls.items() if key in parameters}
 
     def _profile_supports_capability(self, profile: str, capability: str) -> bool:
         p = _text(profile)
@@ -161,6 +217,14 @@ class WorkflowRunner:
         default = _text(self._default_profile)
         candidates: list[str] = []
         seen: set[str] = set()
+
+        # Worker decomposition is model-authored. Without a trusted profile
+        # registry, never treat a descriptive model suggestion (for example
+        # "Independent QA reviewer") as a configured Thomas model profile.
+        # An owner-selected default remains authoritative; otherwise the chat
+        # route resolves its configured default.
+        if not self._caps:
+            preferred = default
 
         def _push(profile: str, *, requires_capability: bool) -> None:
             p = _text(profile)
@@ -272,11 +336,12 @@ class WorkflowRunner:
                 tried.add(key)
                 try:
                     out = await self._chat.generate_json(
-                        system_prompt=system_prompt,
+                        system_prompt=self._execution_prompt(system_prompt),
                         user_prompt=user_prompt,
                         session_id=self._session_id,
                         schema_hint=schema_hint,
                         profile=(candidate or None),
+                        **self._adapter_execution_kwargs(),
                     )
                     if not isinstance(out, dict):
                         raise WorkflowExecutionError("workflow step returned non-object JSON")
@@ -529,6 +594,16 @@ class WorkflowRunner:
                 }
 
         results = await asyncio.gather(*[_run_worker(w) for w in workers])
+        worker_errors = [item for item in results if not bool(item.get("ok", True))]
+        if worker_errors and not _as_bool(payload.get("allow_partial"), default=False):
+            summaries = "; ".join(
+                f"{_text(item.get('name'), default='worker')}: {_text(item.get('error'), default='failed')}"
+                for item in worker_errors[:3]
+            )
+            raise WorkflowExecutionError(
+                f"parallel workflow failed closed because {len(worker_errors)} of {len(results)} workers failed"
+                + (f": {summaries}" if summaries else "")
+            )
 
         synthesize = _as_bool(payload.get("synthesize"), default=True)
         synthesis = ""
@@ -555,7 +630,7 @@ class WorkflowRunner:
             "pattern": "parallel",
             "goal": goal,
             "workers": results,
-            "worker_errors": [x for x in results if not bool(x.get("ok", True))],
+            "worker_errors": worker_errors,
             "final_output": synthesis or "\n\n".join(_text(x.get("output")) for x in results if _text(x.get("output"))),
         }
 
@@ -611,6 +686,7 @@ class WorkflowRunner:
                     for w in workers
                 ],
                 "synthesize": True,
+                "allow_partial": _as_bool(payload.get("allow_partial"), default=False),
                 "synthesis_capability": _text(payload.get("synthesis_capability"), default="chat"),
                 "synthesis_profile": _text(payload.get("synthesis_profile")),
             }

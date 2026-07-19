@@ -227,7 +227,7 @@ class AdvancedMemoryPrefs(BaseModel):
 class AdvancedCostPrefs(BaseModel):
     session_token_budget: int = Field(default=200000, ge=1000, le=5000000)
     daily_token_budget: int = Field(default=2000000, ge=10000, le=50000000)
-    throttle_on_budget: bool = True
+    throttle_on_budget: bool = False
     low_cost_mode: bool = False
     max_retries: int = Field(default=2, ge=0, le=20)
     retry_backoff_ms: int = Field(default=800, ge=0, le=120000)

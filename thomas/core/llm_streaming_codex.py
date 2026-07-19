@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from thomas.core.llm_shared import TokenUsage
+from thomas.core.llm_shared import LLMError, TokenUsage
 
 
 def _responses_content(value: Any) -> Any:
@@ -23,6 +23,79 @@ def _responses_content(value: Any) -> Any:
         return json.dumps(value, ensure_ascii=False)
     except Exception:
         return str(value)
+
+
+def _responses_input_content(value: Any) -> Any:
+    """Normalize chat-style multimodal blocks for the Responses API.
+
+    Thomas' chat surfaces use the Chat Completions shapes ``text`` and
+    ``image_url``. The Codex OAuth transport targets the Responses API, whose
+    equivalent input types are ``input_text`` and ``input_image`` and whose
+    image URL is a string rather than a nested object.
+    """
+    if not isinstance(value, list):
+        return _responses_content(value)
+
+    normalized: list[Any] = []
+    for part in value:
+        if isinstance(part, str):
+            normalized.append({"type": "input_text", "text": part})
+            continue
+        if not isinstance(part, dict):
+            normalized.append(_responses_content(part))
+            continue
+
+        part_type = str(part.get("type") or "").strip()
+        if part_type == "text":
+            normalized.append({"type": "input_text", "text": str(part.get("text") or "")})
+            continue
+        if part_type == "image_url":
+            raw_image = part.get("image_url")
+            if isinstance(raw_image, dict):
+                image_url = str(raw_image.get("url") or "").strip()
+                detail = str(raw_image.get("detail") or "").strip().lower()
+            else:
+                image_url = str(raw_image or "").strip()
+                detail = ""
+            if not image_url:
+                continue
+            image_part: dict[str, Any] = {"type": "input_image", "image_url": image_url}
+            if detail in {"auto", "low", "high"}:
+                image_part["detail"] = detail
+            normalized.append(image_part)
+            continue
+        if part_type == "input_image":
+            image_part = dict(part)
+            raw_image = image_part.get("image_url")
+            if isinstance(raw_image, dict):
+                image_part["image_url"] = str(raw_image.get("url") or "")
+                if not image_part.get("detail") and raw_image.get("detail"):
+                    image_part["detail"] = raw_image.get("detail")
+            normalized.append(image_part)
+            continue
+        normalized.append(dict(part))
+    return normalized
+
+
+def _usable_responses_user_content(value: Any) -> Any | None:
+    """Return only non-empty user content that the Responses API accepts."""
+    normalized = _responses_input_content(value)
+    if isinstance(normalized, str):
+        return normalized if normalized.strip() else None
+    if not isinstance(normalized, list):
+        return normalized if normalized not in (None, "") else None
+
+    usable: list[Any] = []
+    for part in normalized:
+        if isinstance(part, dict):
+            part_type = str(part.get("type") or "")
+            if part_type == "input_text":
+                if str(part.get("text") or "").strip():
+                    usable.append(part)
+            elif part_type == "input_image":
+                if str(part.get("image_url") or "").strip():
+                    usable.append(part)
+    return usable or None
 
 
 def _responses_input_from_messages(owner: Any, messages: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
@@ -41,8 +114,9 @@ def _responses_input_from_messages(owner: Any, messages: list[dict[str, Any]]) -
         if not isinstance(msg, dict):
             continue
         role = str(msg.get("role") or "").strip()
-        content = _responses_content(msg.get("content", ""))
-        if role == "system":
+        raw_content = msg.get("content", "")
+        content = _responses_input_content(raw_content) if role == "user" else _responses_content(raw_content)
+        if role in {"system", "developer"}:
             if content:
                 instructions.append(str(content))
             continue
@@ -74,7 +148,7 @@ def _responses_input_from_messages(owner: Any, messages: list[dict[str, Any]]) -
                             }
                         )
             continue
-        if role in {"user", "developer"}:
+        if role == "user":
             out.append({"role": "user", "content": content})
         elif content:
             out.append({"role": role or "user", "content": content})
@@ -135,8 +209,31 @@ def _build_openai_codex_request(
     owner: Any,
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]] | None,
+    *,
+    turn_user_content: Any = None,
 ) -> dict[str, Any]:
     instructions, input_items = _responses_input_from_messages(owner, messages)
+    user_indexes = [index for index, item in enumerate(input_items) if item.get("role") == "user"]
+    anchor = _usable_responses_user_content(turn_user_content)
+    if turn_user_content is not None and anchor is None:
+        raise LLMError(
+            "ChatGPT/Codex request has no usable current-turn input because the explicit current turn is empty or unsupported.",
+            retryable=False,
+        )
+    if anchor is not None:
+        latest_user_content = input_items[user_indexes[-1]].get("content") if user_indexes else None
+        if latest_user_content != anchor:
+            # Retained assistant/tool work belongs to older history. The
+            # explicit current request must remain the final semantic input,
+            # never be inserted before a stale assistant reply.
+            input_items.append({"role": "user", "content": anchor})
+    elif not user_indexes:
+        raise LLMError(
+            "ChatGPT/Codex request has no usable current-turn input after history reconciliation.",
+            retryable=False,
+        )
+    # The execution layer passes the current turn explicitly. Never cache it on
+    # the shared client: that could leak a prior task, compactor prompt, or image.
     body: dict[str, Any] = {
         "model": owner.config.model,
         "input": input_items,
@@ -148,7 +245,7 @@ def _build_openai_codex_request(
         body["instructions"] = instructions
     effort = str(getattr(owner.config, "reasoning_effort", "") or "").strip().lower()
     if effort:
-        body["reasoning"] = {"effort": "high" if effort == "xhigh" else effort}
+        body["reasoning"] = {"effort": effort}
     converted_tools = _responses_tools(owner, tools)
     if converted_tools:
         body["tools"] = converted_tools

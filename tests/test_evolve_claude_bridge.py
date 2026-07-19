@@ -200,7 +200,7 @@ def test_cli_dispatch_dry_run_does_not_invoke_claude():
     assert "do X" in res.prompt
 
 
-def test_cli_dispatch_runs_with_safe_toolset_and_reports():
+def test_cli_dispatch_runs_with_safe_toolset_and_reports(clean_git_repo):
     from thomas.forge.anvil.evolve_claude_bridge import SAFE_CLI_TOOLS, dispatch_via_claude_cli
 
     captured = {}
@@ -208,9 +208,12 @@ def test_cli_dispatch_runs_with_safe_toolset_and_reports():
     def runner(cmd, cwd, to):
         captured["cmd"] = cmd
         captured["cwd"] = cwd
+        (clean_git_repo / "feature.py").write_text("VALUE = 1\n", encoding="utf-8")
         return 0, "built the change"
 
-    res = dispatch_via_claude_cli("add a docstring", cwd="/repo", dry_run=False, runner=runner, claude_bin="claude")
+    res = dispatch_via_claude_cli(
+        "add a docstring", cwd=clean_git_repo, dry_run=False, runner=runner, claude_bin="claude"
+    )
     assert res.ok is True and res.returncode == 0
     assert captured["cmd"][:2] == ["claude", "-p"]
     assert "--allowedTools" in captured["cmd"]
@@ -221,23 +224,23 @@ def test_cli_dispatch_runs_with_safe_toolset_and_reports():
         assert tool in captured["cmd"]
 
 
-def test_cli_dispatch_reports_failure_on_nonzero_exit():
+def test_cli_dispatch_reports_failure_on_nonzero_exit(clean_git_repo):
     from thomas.forge.anvil.evolve_claude_bridge import dispatch_via_claude_cli
 
     res = dispatch_via_claude_cli(
-        "do X", cwd="/repo", dry_run=False, runner=lambda c, w, t: (2, "boom"), claude_bin="claude"
+        "do X", cwd=clean_git_repo, dry_run=False, runner=lambda c, w, t: (2, "boom"), claude_bin="claude"
     )
     assert res.ok is False and res.returncode == 2
 
 
-def test_cli_dispatch_reports_noop_when_nothing_changed():
+def test_cli_dispatch_reports_noop_when_nothing_changed(clean_git_repo):
     from thomas.forge.anvil.evolve_claude_bridge import dispatch_via_claude_cli
 
-    # rc=0 but no repo changes (cwd is not a git repo -> empty change set) => no-op surfaced.
+    # rc=0 with no repo changes and no conversational reply => no-op surfaced.
     res = dispatch_via_claude_cli(
-        "do X", cwd="/repo", dry_run=False, runner=lambda c, w, t: (0, "done"), claude_bin="claude"
+        "do X", cwd=clean_git_repo, dry_run=False, runner=lambda c, w, t: (0, "done"), claude_bin="claude"
     )
-    assert res.ok is True
+    assert res.ok is False
     assert res.changed_files == []
     assert "no-op" in res.reason  # watcher is told nothing changed
 
@@ -349,6 +352,74 @@ def test_hi_yields_chat_reply_with_no_edits_and_no_verify_loop(tmp_path):
     assert res.returncode == 0 and res.ok is True
 
 
+def test_gpt_hi_yields_chat_reply_without_failed_build_state(tmp_path):
+    from thomas.forge.anvil.evolve_claude_bridge import dispatch_via_agent_loop
+
+    _init_repo(tmp_path)
+    (tmp_path / "anchor.txt").write_text("anchor\n", encoding="utf-8")
+    _commit_all(tmp_path)
+
+    def runner(prompt, cwd, timeout, emit):
+        emit({"fc": "say", "text": "Hey! What are we working on?"})
+        return 0, "Hey! What are we working on?"
+
+    res = dispatch_via_agent_loop(
+        "hi",
+        cwd=tmp_path,
+        dry_run=False,
+        runner=runner,
+        token_check=lambda: True,
+    )
+
+    assert res.ok is True
+    assert res.changed_files == []
+    assert "replied without changing files" in res.reason
+
+
+@pytest.mark.parametrize("engine", ["claude", "gpt"])
+@pytest.mark.parametrize("leaves_partial_change", [False, True])
+def test_action_refusal_without_tool_activity_is_not_a_success(tmp_path, engine, leaves_partial_change):
+    import json
+
+    from thomas.forge.anvil.evolve_claude_bridge import dispatch_via_agent_loop, dispatch_via_claude_cli
+
+    _init_repo(tmp_path)
+    (tmp_path / "anchor.txt").write_text("anchor\n", encoding="utf-8")
+    _commit_all(tmp_path)
+    refusal = "I can't create the app because the required file tool isn't available."
+    if engine == "claude":
+
+        def runner(*_args):
+            if leaves_partial_change:
+                (tmp_path / "partial.html").write_text("<main>unfinished</main>\n", encoding="utf-8")
+            return 0, "\n".join(
+                [
+                    json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": refusal}]}}),
+                    json.dumps({"type": "result", "result": refusal, "is_error": False}),
+                ]
+            )
+
+        result = dispatch_via_claude_cli(
+            "Build a web app", cwd=tmp_path, dry_run=False, runner=runner, claude_bin="claude"
+        )
+    else:
+
+        def runner(_prompt, _cwd, _timeout, emit):
+            if leaves_partial_change:
+                (tmp_path / "partial.html").write_text("<main>unfinished</main>\n", encoding="utf-8")
+            emit({"fc": "final", "text": refusal})
+            return 0, refusal
+
+        result = dispatch_via_agent_loop(
+            "Build a web app", cwd=tmp_path, dry_run=False, runner=runner, token_check=lambda: True
+        )
+
+    assert result.ok is False
+    assert result.changed_files == (["partial.html"] if leaves_partial_change else [])
+    assert "could not complete" in result.reason
+    assert ("partial file changes" in result.reason) is leaves_partial_change
+
+
 def test_real_build_request_still_edits_and_verifies_with_history(tmp_path):
     """A genuine build request still edits the tree AND the engine verifies it —
     even when prior conversation history is threaded through."""
@@ -386,13 +457,13 @@ def test_real_build_request_still_edits_and_verifies_with_history(tmp_path):
     # both halves of the loop fired: a real edit AND the engine's verify run
     assert any(e.get("fc") == "tool" and e.get("name") == "Write" for e in events)
     assert any(e.get("fc") == "tool" and e.get("name") == "run" for e in events)
-    assert "verified" in res.reason
+    assert "engine checks passed" in res.reason
 
 
 # -- streaming forge-event protocol (SC-AL-2 / SC-TR-1) ----------------------
 
 
-def test_claude_cmd_requests_streaming_json():
+def test_claude_cmd_requests_streaming_json(clean_git_repo):
     """The live claude invocation must ask for incremental structured events."""
     from thomas.forge.anvil.evolve_claude_bridge import dispatch_via_claude_cli
 
@@ -402,7 +473,7 @@ def test_claude_cmd_requests_streaming_json():
         captured["cmd"] = cmd
         return 0, ""
 
-    dispatch_via_claude_cli("do x", cwd="/repo", dry_run=False, runner=runner, claude_bin="claude")
+    dispatch_via_claude_cli("do x", cwd=clean_git_repo, dry_run=False, runner=runner, claude_bin="claude")
     cmd = captured["cmd"]
     # --output-format stream-json --verbose => one JSON event per line as it happens.
     assert "--output-format" in cmd
@@ -441,6 +512,11 @@ def test_translate_claude_event_distinguishes_say_tool_result_and_error():
 
     err = translate_claude_event(json.dumps({"type": "result", "subtype": "error", "result": "boom", "is_error": True}))
     assert err == [{"fc": "error", "text": "boom"}]
+
+    final = translate_claude_event(
+        json.dumps({"type": "result", "subtype": "success", "result": "Built and verified the app.", "is_error": False})
+    )
+    assert final == [{"fc": "final", "text": "Built and verified the app."}]
 
 
 def test_translate_reasoning_yields_distinct_insight_and_keeps_full_reason():
@@ -488,7 +564,7 @@ def test_thin_reasoning_emits_reason_but_no_fabricated_insight():
     assert "insight" not in kinds  # nothing salient -> no fabricated insight
 
 
-def test_cli_dispatch_streams_insight_distinct_from_say_tool_result():
+def test_cli_dispatch_streams_insight_distinct_from_say_tool_result(clean_git_repo):
     """End to end (buffered path): a POST-OBSERVATION reasoning event yields a
     ``fc:insight``, surfaced DISTINCT from say/tool/tool_result.
 
@@ -546,7 +622,7 @@ def test_cli_dispatch_streams_insight_distinct_from_say_tool_result():
     events: list[dict] = []
     dispatch_via_claude_cli(
         "do x",
-        cwd="/repo",
+        cwd=clean_git_repo,
         dry_run=False,
         runner=lambda c, w, t: (0, stream),
         claude_bin="claude",
@@ -564,7 +640,7 @@ def test_cli_dispatch_streams_insight_distinct_from_say_tool_result():
         assert k in kinds
 
 
-def test_pre_observation_plan_suppressed_post_observation_insight_surfaces_and_dedupes():
+def test_pre_observation_plan_suppressed_post_observation_insight_surfaces_and_dedupes(clean_git_repo):
     """The structural fix end to end (buffered path).
 
     A run's FIRST reasoning block is the model's PLAN — an enumerated list of
@@ -658,7 +734,7 @@ def test_pre_observation_plan_suppressed_post_observation_insight_surfaces_and_d
     events: list[dict] = []
     dispatch_via_claude_cli(
         "do x",
-        cwd="/repo",
+        cwd=clean_git_repo,
         dry_run=False,
         runner=lambda c, w, t: (0, stream),
         claude_bin="claude",
@@ -687,7 +763,7 @@ def test_translate_claude_event_never_crashes_on_garbage():
     assert out == [{"fc": "say", "text": "not json at all {{{"}]
 
 
-def test_cli_dispatch_emits_structured_events_in_order():
+def test_cli_dispatch_emits_structured_events_in_order(clean_git_repo):
     """End to end (buffered path): the captured CLI stream is translated into
     distinct forge events the route can re-stream and the UI can render."""
     import json
@@ -715,7 +791,7 @@ def test_cli_dispatch_emits_structured_events_in_order():
     events: list[dict] = []
     dispatch_via_claude_cli(
         "do x",
-        cwd="/repo",
+        cwd=clean_git_repo,
         dry_run=False,
         runner=lambda c, w, t: (0, stream),
         claude_bin="claude",
@@ -846,8 +922,57 @@ def test_agent_loop_dispatch_edits_and_verifies_via_in_process_loop(tmp_path):
     # the loop's edit AND the engine's verify run both reached the SAME stream
     assert any(e.get("fc") == "say" and "Editing" in e.get("text", "") for e in events)
     assert any(e.get("fc") == "tool" and e.get("name") == "run" for e in events)  # engine verify
-    assert "verified" in res.reason
+    assert "engine checks passed" in res.reason
     assert "ChatGPT OAuth" in res.reason  # surfaced as the GPT brain, not a CLI
+
+
+def test_agent_loop_dispatch_does_not_claim_preexisting_dirty_files(tmp_path):
+    from thomas.forge.anvil.evolve_claude_bridge import dispatch_via_agent_loop
+
+    _init_repo(tmp_path)
+    (tmp_path / "anchor.txt").write_text("anchor\n", encoding="utf-8")
+    _commit_all(tmp_path)
+    (tmp_path / "already-dirty.txt").write_text("older work\n", encoding="utf-8")
+
+    res = dispatch_via_agent_loop(
+        "make a new change",
+        cwd=tmp_path,
+        dry_run=False,
+        verify=False,
+        runner=lambda *_args: (0, "claimed done"),
+        token_check=lambda: True,
+    )
+
+    assert res.ok is False
+    assert res.changed_files == []
+    assert "NO repo changes" in res.reason
+
+
+def test_agent_loop_dispatch_ignores_thomas_conversation_bookkeeping(tmp_path):
+    from thomas.forge.anvil.evolve_claude_bridge import dispatch_via_agent_loop
+
+    _init_repo(tmp_path)
+    (tmp_path / "anchor.txt").write_text("anchor\n", encoding="utf-8")
+    _commit_all(tmp_path)
+
+    def runner(*_args):
+        metadata = tmp_path / ".thomas" / "evolve" / "agent" / "conversations" / "conversation.json"
+        metadata.parent.mkdir(parents=True)
+        metadata.write_text("{}\n", encoding="utf-8")
+        return 0, "claimed done"
+
+    res = dispatch_via_agent_loop(
+        "inspect without changing the project",
+        cwd=tmp_path,
+        dry_run=False,
+        verify=False,
+        runner=runner,
+        token_check=lambda: True,
+    )
+
+    assert res.ok is False
+    assert res.changed_files == []
+    assert "NO repo changes" in res.reason
 
 
 def test_agent_loop_default_path_uses_agentloop_and_llmclient_not_subprocess(tmp_path, monkeypatch):
@@ -952,6 +1077,14 @@ def _commit_all(root):
     _run_git(root, ["commit", "-m", "base"])
 
 
+@pytest.fixture
+def clean_git_repo(tmp_path):
+    _init_repo(tmp_path)
+    (tmp_path / "anchor.txt").write_text("anchor\n", encoding="utf-8")
+    _commit_all(tmp_path)
+    return tmp_path
+
+
 def test_compose_headless_prompt_is_honest_about_engine_verify():
     """The prompt no longer falsely claims nothing is ever run: the engine verifies."""
     from thomas.forge.anvil.evolve_claude_bridge import compose_headless_prompt
@@ -1014,6 +1147,119 @@ def test_verify_python_changes_actually_executes_the_module(tmp_path):
     assert sentinel.exists()  # the module was IMPORTED (executed), not just compiled
 
 
+def test_verifier_checks_web_artifacts_instead_of_claiming_nothing_to_verify(tmp_path):
+    from thomas.forge.anvil.evolve_claude_bridge import verify_python_changes
+
+    (tmp_path / "index.html").write_text(
+        "<!doctype html><button id='play'>Play</button><script src='game.js'></script>",
+        encoding="utf-8",
+    )
+    (tmp_path / "game.js").write_text(
+        "document.querySelector('#play').onclick = (event) => { event.currentTarget.textContent = 'Playing'; };\n",
+        encoding="utf-8",
+    )
+    events: list[dict] = []
+
+    ok, rc, summary = verify_python_changes(tmp_path, ["index.html", "game.js"], events.append)
+
+    assert ok is True and rc == 0
+    assert "STATIC_VERIFY_OK: 2 files checked" in summary
+    assert "BROWSER_SMOKE_" in summary
+    assert any(event.get("fc") == "tool_result" and not event.get("is_error") for event in events)
+
+
+def test_verifier_rejects_broken_javascript(tmp_path):
+    from thomas.forge.anvil.evolve_claude_bridge import verify_python_changes
+
+    (tmp_path / "broken.js").write_text("function broken( {\n", encoding="utf-8")
+    events: list[dict] = []
+
+    ok, rc, _summary = verify_python_changes(tmp_path, ["broken.js"], events.append)
+
+    assert ok is False and rc != 0
+
+
+def test_verifier_smokes_existing_html_when_linked_javascript_changes(tmp_path):
+    from thomas.forge.anvil.evolve_claude_bridge import verify_python_changes
+
+    (tmp_path / "index.html").write_text(
+        "<!doctype html><main id='status'>Loading</main><script src='game.js'></script>", encoding="utf-8"
+    )
+    (tmp_path / "game.js").write_text("document.getElementById('status').textContent = 'Game ready';", encoding="utf-8")
+    events: list[dict] = []
+
+    ok, rc, summary = verify_python_changes(tmp_path, ["game.js"], events.append)
+
+    assert ok is True and rc == 0
+    assert "BROWSER_SMOKE_OK" in summary
+    assert any(event.get("fc") == "tool" and "real-browser smoke" in event.get("text", "") for event in events)
+
+
+def test_browser_smoke_discovers_nested_html_owner_by_resolved_asset_path(tmp_path):
+    from thomas.forge.anvil.build_verify import _browser_smoke_files
+
+    app = tmp_path / "apps" / "foo"
+    assets = app / "assets"
+    assets.mkdir(parents=True)
+    (app / "index.html").write_text("<script src='assets/app.js'></script>", encoding="utf-8")
+    (assets / "app.js").write_text("window.ready = true;\n", encoding="utf-8")
+    decoy = tmp_path / "other"
+    decoy.mkdir()
+    (decoy / "index.html").write_text("<!-- assets/app.js --><p>app.js is documentation</p>", encoding="utf-8")
+
+    assert _browser_smoke_files(tmp_path, ["apps/foo/assets/app.js"]) == ["apps/foo/index.html"]
+
+
+def test_browser_smoke_discovers_owner_after_more_than_twenty_four_decoys(tmp_path):
+    from thomas.forge.anvil.build_verify import _browser_smoke_files
+
+    for index in range(30):
+        folder = tmp_path / f"decoy-{index:02d}"
+        folder.mkdir()
+        (folder / "index.html").write_text("<p>decoy</p>", encoding="utf-8")
+    owner = tmp_path / "zz-owner"
+    owner.mkdir()
+    (owner / "index.html").write_text("<link rel='stylesheet' href='app.css'>", encoding="utf-8")
+    (owner / "app.css").write_text("body { color: gold; }", encoding="utf-8")
+
+    assert _browser_smoke_files(tmp_path, ["zz-owner/app.css"]) == ["zz-owner/index.html"]
+
+
+def test_verifier_rejects_html_with_obvious_inline_boot_failure(tmp_path):
+    """Parseable HTML is not verified when its inline app aborts at boot."""
+    from thomas.forge.anvil.evolve_claude_bridge import verify_python_changes
+
+    (tmp_path / "broken.html").write_text(
+        "<!doctype html><main>Looks valid</main><script>\nthrow new Error('boot failed');\n</script>",
+        encoding="utf-8",
+    )
+    events: list[dict] = []
+
+    ok, rc, summary = verify_python_changes(tmp_path, ["broken.html"], events.append)
+
+    assert ok is False and rc != 0
+    assert "obvious JavaScript boot failure" in summary
+    assert any(event.get("fc") == "tool_result" and event.get("is_error") for event in events)
+
+
+def test_verifier_does_not_misclassify_nested_or_quoted_throw_text(tmp_path):
+    """A handler may throw later; only an unconditional top-level boot throw fails."""
+    from thomas.forge.anvil.evolve_claude_bridge import verify_python_changes
+
+    (tmp_path / "valid.html").write_text(
+        "<!doctype html><script>\n"
+        "const copy = \"throw new Error('not code')\";\n"
+        "function failOnClick() {\n  throw new Error('later');\n}\n"
+        "</script><button>Ready</button>",
+        encoding="utf-8",
+    )
+
+    events: list[dict] = []
+    ok, rc, _summary = verify_python_changes(tmp_path, ["valid.html"], events.append)
+
+    assert ok is True and rc == 0
+
+
 def test_cli_dispatch_runs_verify_after_edit(tmp_path):
     """One send: the fake edit pass writes a file, then the ENGINE verifies it.
 
@@ -1051,7 +1297,7 @@ def test_cli_dispatch_runs_verify_after_edit(tmp_path):
     assert any(e.get("fc") == "tool" and e.get("name") == "Write" for e in events)
     assert any(e.get("fc") == "tool" and e.get("name") == "run" for e in events)
     assert any(e.get("fc") == "tool_result" and not e.get("is_error") for e in events)
-    assert "verified" in res.reason
+    assert "engine checks passed" in res.reason
 
 
 def test_cli_dispatch_iterates_then_succeeds_when_first_edit_fails_verify(tmp_path):
@@ -1123,6 +1369,147 @@ def test_cli_dispatch_surfaces_failure_when_verify_never_passes(tmp_path):
     )
     assert res.ok is False and res.returncode != 0
     assert "verification failed" in res.reason
+
+
+def test_verification_fix_restores_catastrophically_truncated_web_source(tmp_path):
+    """A repair pass cannot turn a substantial app stylesheet into a tiny stub."""
+    from thomas.forge.anvil import forge_code_git
+    from thomas.forge.anvil.build_verify import _verify_and_iterate
+
+    _init_repo(tmp_path)
+    (tmp_path / "anchor.txt").write_text("anchor\n", encoding="utf-8")
+    _commit_all(tmp_path)
+    snap_before = forge_code_git.snapshot(tmp_path)
+    original = "\n".join(f".panel-{index} {{ color: rgb({index % 255}, 20, 30); }}" for index in range(80))
+    (tmp_path / "styles.css").write_text(original, encoding="utf-8")
+    events: list[dict] = []
+
+    def verifier(cwd, changed, emit):
+        return False, 1, "BROWSER_SMOKE_FAILED: linked stylesheet did not load"
+
+    def destructive_fix(_prompt):
+        (tmp_path / "styles.css").write_text('@import url("./style.css");\n', encoding="utf-8")
+        return 0, "repaired"
+
+    rc = _verify_and_iterate(
+        tmp_path,
+        snap_before,
+        events.append,
+        destructive_fix,
+        "build the app",
+        verifier=verifier,
+        max_fix_iters=1,
+    )
+
+    assert rc != 0
+    assert (tmp_path / "styles.css").read_text(encoding="utf-8") == original
+    assert any("destructive truncation" in event.get("text", "") for event in events)
+
+
+def test_verification_fix_restores_previously_clean_owner_truncated_by_repair(tmp_path):
+    from thomas.forge.anvil import forge_code_git
+    from thomas.forge.anvil.build_verify import _verify_and_iterate
+
+    _init_repo(tmp_path)
+    original_html = "<main>" + ("substantial application markup " * 150) + "</main>\n"
+    (tmp_path / "index.html").write_text(original_html, encoding="utf-8")
+    (tmp_path / "game.js").write_text("window.ready = true;\n", encoding="utf-8")
+    _commit_all(tmp_path)
+    snap_before = forge_code_git.snapshot(tmp_path)
+    (tmp_path / "game.js").write_text("window.ready = false;\n", encoding="utf-8")
+    events: list[dict] = []
+
+    def verifier(_cwd, _changed, _emit):
+        return False, 1, "browser failed"
+
+    def destructive_fix(_prompt):
+        (tmp_path / "index.html").write_text("<main>stub</main>\n", encoding="utf-8")
+        return 0, "repaired"
+
+    rc = _verify_and_iterate(
+        tmp_path,
+        snap_before,
+        events.append,
+        destructive_fix,
+        "repair app",
+        verifier=verifier,
+        max_fix_iters=1,
+    )
+
+    assert rc != 0
+    assert (tmp_path / "index.html").read_text(encoding="utf-8") == original_html
+    assert any("destructive truncation" in event.get("text", "") for event in events)
+
+
+@pytest.mark.parametrize("repair_exit", ["nonzero", "exception"])
+def test_verification_restores_clean_owner_when_destructive_repair_does_not_exit_cleanly(tmp_path, repair_exit):
+    from thomas.forge.anvil import forge_code_git
+    from thomas.forge.anvil.build_verify import _verify_and_iterate
+
+    _init_repo(tmp_path)
+    original_html = "<main>" + ("substantial application markup " * 150) + "</main>\n"
+    (tmp_path / "index.html").write_text(original_html, encoding="utf-8")
+    (tmp_path / "game.js").write_text("window.ready = true;\n", encoding="utf-8")
+    _commit_all(tmp_path)
+    snap_before = forge_code_git.snapshot(tmp_path)
+    (tmp_path / "game.js").write_text("window.ready = false;\n", encoding="utf-8")
+    events: list[dict] = []
+
+    def verifier(_cwd, _changed, _emit):
+        return False, 1, "browser failed"
+
+    def destructive_fix(_prompt):
+        (tmp_path / "index.html").write_text("<main>stub</main>\n", encoding="utf-8")
+        if repair_exit == "exception":
+            raise RuntimeError("repair crashed")
+        return 9, "repair failed"
+
+    rc = _verify_and_iterate(
+        tmp_path,
+        snap_before,
+        events.append,
+        destructive_fix,
+        "repair app",
+        verifier=verifier,
+        max_fix_iters=1,
+    )
+
+    assert rc != 0
+    assert (tmp_path / "index.html").read_text(encoding="utf-8") == original_html
+    assert any("destructive truncation" in event.get("text", "") for event in events)
+
+
+def test_verification_fix_restores_previously_clean_file_deleted_by_repair(tmp_path):
+    from thomas.forge.anvil import forge_code_git
+    from thomas.forge.anvil.build_verify import _verify_and_iterate
+
+    _init_repo(tmp_path)
+    original_css = ".panel { color: gold; }\n" * 80
+    (tmp_path / "styles.css").write_text(original_css, encoding="utf-8")
+    (tmp_path / "game.js").write_text("window.ready = true;\n", encoding="utf-8")
+    _commit_all(tmp_path)
+    snap_before = forge_code_git.snapshot(tmp_path)
+    (tmp_path / "game.js").write_text("window.ready = false;\n", encoding="utf-8")
+
+    def verifier(_cwd, _changed, _emit):
+        return False, 1, "browser failed"
+
+    def destructive_fix(_prompt):
+        (tmp_path / "styles.css").unlink()
+        return 0, "repaired"
+
+    rc = _verify_and_iterate(
+        tmp_path,
+        snap_before,
+        lambda _event: None,
+        destructive_fix,
+        "repair app",
+        verifier=verifier,
+        max_fix_iters=1,
+    )
+
+    assert rc != 0
+    assert (tmp_path / "styles.css").read_text(encoding="utf-8") == original_css
 
 
 # -- multibyte encoding: subprocess byte-read survives UTF-8 AND cp1252 ---------
@@ -1396,7 +1783,104 @@ def _run_gpt_translator(events):
     return out, tr
 
 
-def test_gpt_path_thinking_yields_same_post_observation_insight_as_claude():
+def test_gpt_agent_stream_enforces_wall_clock_timeout():
+    import asyncio
+    from types import SimpleNamespace
+
+    from thomas.core.events import EventType as ET
+    from thomas.forge.anvil.dispatch_agent_loop import _AgentLoopForgeTranslator, _translate_agent_stream
+
+    class SlowAgent:
+        async def run(self, *_args, **_kwargs):
+            yield SimpleNamespace(type=ET.TOOL_START, data={"tool_name": "fs.read_file", "args": {}})
+            await asyncio.sleep(0.2)
+            yield SimpleNamespace(type=ET.AGENT_DONE, data={"text": "too late"})
+
+    emitted: list[dict] = []
+    translator = _AgentLoopForgeTranslator(emitted.append)
+    asyncio.run(
+        _translate_agent_stream(
+            SlowAgent(),
+            "build it",
+            timeout=0.01,
+            tools_policy="auto",
+            translator=translator,
+        )
+    )
+    translator.close()
+
+    assert translator.rc == 1
+    assert translator.final_text == ""
+    assert any(event["fc"] == "error" and "execution limit" in event["text"] for event in emitted)
+
+
+def test_gpt_agent_stream_keeps_model_context_separate_from_current_intent():
+    import asyncio
+    from types import SimpleNamespace
+
+    from thomas.core.events import EventType as ET
+    from thomas.forge.anvil.dispatch_agent_loop import _AgentLoopForgeTranslator, _translate_agent_stream
+
+    class CapturingAgent:
+        def __init__(self) -> None:
+            self.prompt = ""
+            self.intent_text = ""
+
+        async def run(self, prompt, **kwargs):
+            self.prompt = prompt
+            self.intent_text = str(kwargs.get("intent_text") or "")
+            yield SimpleNamespace(type=ET.AGENT_DONE, data={"text": "done"})
+
+    agent = CapturingAgent()
+    emitted: list[dict] = []
+    translator = _AgentLoopForgeTranslator(emitted.append)
+    asyncio.run(
+        _translate_agent_stream(
+            agent,
+            "policy + history + current goal",
+            intent_text="make me a playable Viking game",
+            timeout=1,
+            tools_policy="auto",
+            translator=translator,
+        )
+    )
+    translator.close()
+
+    assert agent.prompt == "policy + history + current goal"
+    assert agent.intent_text == "make me a playable Viking game"
+    assert translator.rc == 0
+
+
+def test_agent_loop_dispatch_entrypoint_forwards_exact_goal_as_intent(monkeypatch, tmp_path):
+    from thomas.forge.anvil import dispatch_agent_loop as dispatch_module
+    from thomas.forge.anvil.evolve_claude_bridge import dispatch_via_agent_loop
+
+    _init_repo(tmp_path)
+    (tmp_path / "anchor.txt").write_text("anchor\n", encoding="utf-8")
+    _commit_all(tmp_path)
+    captured = {}
+
+    def fake_run(prompt, cwd, timeout, emit, *, intent_text=None, **_kwargs):  # noqa: ANN001
+        captured.update(prompt=prompt, cwd=cwd, timeout=timeout, intent_text=intent_text)
+        return 0, "done"
+
+    monkeypatch.setattr(dispatch_module, "_run_agent_loop_pass", fake_run)
+    goal = "make me a playable Viking game"
+    dispatch_via_agent_loop(
+        goal,
+        cwd=tmp_path,
+        dry_run=False,
+        verify=False,
+        token_check=lambda: True,
+        history=[{"role": "user", "text": "what tools did you use in this conversation?"}],
+    )
+
+    assert goal in captured["prompt"]
+    assert "what tools did you use" in captured["prompt"]
+    assert captured["intent_text"] == goal
+
+
+def test_gpt_path_thinking_yields_same_post_observation_insight_as_claude(clean_git_repo):
     """ENGINE PARITY (operator gap #3): a GPT build run surfaces the SAME genuine
     post-observation insight card + collapsed reasoning a claude run does.
 
@@ -1449,6 +1933,7 @@ def test_gpt_path_thinking_yields_same_post_observation_insight_as_claude():
     # shown, just not promoted to an insight), and reasoning is its own kind
     assert any(e["fc"] == "reason" and "Create" in e["text"] for e in gpt_out)
     assert tr.rc == 0 and tr.final_text == "Done."
+    assert gpt_out[-1] == {"fc": "final", "text": "Done."}
 
     # --- PARITY: the claude engine on the equivalent scenario emits the SAME card ---
     claude_stream = "\n".join(
@@ -1524,7 +2009,7 @@ def test_gpt_path_thinking_yields_same_post_observation_insight_as_claude():
     claude_events: list[dict] = []
     dispatch_via_claude_cli(
         "do x",
-        cwd="/repo",
+        cwd=clean_git_repo,
         dry_run=False,
         runner=lambda c, w, t: (0, claude_stream),
         claude_bin="claude",

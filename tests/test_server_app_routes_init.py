@@ -423,19 +423,13 @@ def test_optional_route_registration_wires_runtime_dependencies(
 
         return _inner
 
-    chat_deps: dict[str, object] = {}
-
-    class _ChatRouteDeps:
-        def __init__(self, **kwargs):  # noqa: ANN003
-            chat_deps.update(kwargs)
-
     monkeypatch.setitem(
         sys.modules, "thomas.server.routes.gateway", SimpleNamespace(register_gateway_routes=_record("gateway"))
     )
     monkeypatch.setitem(
         sys.modules,
-        "thomas.server.routes.chat_aiohttp",
-        SimpleNamespace(ChatRouteDeps=_ChatRouteDeps, register_chat_routes=_record("chat")),
+        "thomas.server.routes.chat_auxiliary",
+        SimpleNamespace(register_chat_auxiliary_routes=_record("chat_aux")),
     )
     monkeypatch.setitem(
         sys.modules,
@@ -578,17 +572,14 @@ def test_optional_route_registration_wires_runtime_dependencies(
         locals_dict=locals_dict,
     )
 
-    assert {"gateway", "sessions", "chat", "models", "setup", "third_party", "preferences", "onboarding"}.issubset(
+    assert {"gateway", "sessions", "chat_aux", "models", "setup", "third_party", "preferences", "onboarding"}.issubset(
         called.keys()
     )
     assert {"memory_routes", "search", "secrets", "local_projects", "marketplace", "plugin_hosting"}.issubset(
         called.keys()
     )
     assert {"life_manager", "mission", "observability", "chat_v2"}.issubset(called.keys())
-    assert callable(chat_deps["read_json"])
-    assert callable(chat_deps["task_ledger_update"])
-    assert callable(chat_deps["resolve_natural_model_switch"])
-    assert chat_deps["build_tools"](cfg) == [{"name": "shell"}]
+    assert callable(called["chat_aux"]["kwargs"]["require_api_access"])
 
 
 @pytest.mark.asyncio
@@ -850,19 +841,16 @@ def test_route_registration_logs_module_failures(tmp_path: Path, monkeypatch: py
 
         return _inner
 
-    class _ChatRouteDeps:
-        def __init__(self, **kwargs):  # noqa: ANN003
-            self.kwargs = kwargs
-
+    session_calls: list[object] = []
     monkeypatch.setitem(
         sys.modules,
-        "thomas.server.routes.chat_aiohttp",
-        SimpleNamespace(ChatRouteDeps=_ChatRouteDeps, register_chat_routes=_boom("chat", KeyError("chat"))),
+        "thomas.server.routes.chat_auxiliary",
+        SimpleNamespace(register_chat_auxiliary_routes=_boom("chat-aux", KeyError("chat-aux"))),
     )
     monkeypatch.setitem(
         sys.modules,
         "thomas.server.routes.sessions_aiohttp",
-        SimpleNamespace(register_sessions_routes=lambda *args, **kwargs: None),
+        SimpleNamespace(register_sessions_routes=lambda *args, **kwargs: session_calls.append((args, kwargs))),
     )
     monkeypatch.setitem(
         sys.modules,
@@ -1007,7 +995,9 @@ def test_route_registration_logs_module_failures(tmp_path: Path, monkeypatch: py
         )
 
     text = caplog.text
-    assert "Chat/session routes unavailable:" in text
+    assert session_calls, "session lifecycle must register even when optional chat helpers fail"
+    assert "Chat auxiliary routes unavailable:" in text
+    assert "Session routes unavailable:" not in text
     assert "Models routes unavailable:" in text
     assert "Setup routes unavailable:" in text
     assert "Third-party access routes unavailable:" in text

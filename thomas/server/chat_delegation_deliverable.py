@@ -12,114 +12,31 @@ tests) continue to resolve unchanged.
 
 from __future__ import annotations
 
-import logging
-import os
 import re
 from pathlib import Path
 from typing import Any
 
-log = logging.getLogger(__name__)
-
-
-def _snapshot_workspace_files(work_dir: Path | None, *, limit: int = 24) -> list[str]:
-    """List the deliverable files the worker actually wrote to its workspace.
-
-    Sourced from DISK (not the worker's claims), so the result reported to chat
-    names only files that really exist — closing the "card says done but the file
-    isn't there" gap. Returns workspace-relative POSIX paths; directories and
-    dot/hidden files are excluded.
-    """
-    if work_dir is None:
-        return []
-    base = Path(work_dir)
-    if not base.exists() or not base.is_dir():
-        return []
-    files: list[str] = []
-    try:
-        for path in sorted(base.rglob("*")):
-            if not path.is_file():
-                continue
-            rel = path.relative_to(base)
-            if any(part.startswith(".") for part in rel.parts):
-                continue
-            files.append(rel.as_posix())
-            if len(files) >= limit:
-                break
-    except (OSError, RuntimeError, ValueError) as exc:
-        # Best-effort: a snapshot failure must never sink an otherwise-good result.
-        log.debug("workspace snapshot error in %s: %s", work_dir, exc)
-        return files
-    return files
-
-
-def _workspace_mtimes(
-    work_dir: Path | None,
-    *,
-    ignored_prefixes: tuple[str, ...] = (),
-    ignored_parts: frozenset[str] = frozenset(),
-) -> dict[str, tuple[int, int]]:
-    """Map of workspace-relative file -> (mtime_ns, size), for detecting files created
-    OR modified during a given attempt — so a legitimately RE-WRITTEN same-name file
-    still counts as this attempt's deliverable, while an untouched orphan from a failed
-    prior attempt is excluded (its mtime AND size are unchanged). Pairing mtime with
-    size also catches a same-second rewrite on coarse-mtime filesystems (FAT / some
-    network mounts) where the size changes but the second-resolution mtime does not."""
-    out: dict[str, tuple[int, int]] = {}
-    if work_dir is None:
-        return out
-    base = Path(work_dir)
-    if not base.exists() or not base.is_dir():
-        return out
-    normalized_prefixes = tuple(str(prefix or "").replace("\\", "/").lstrip("/") for prefix in ignored_prefixes)
-
-    def _ignored_rel(rel: str) -> bool:
-        rel = rel.replace("\\", "/").lstrip("/")
-        if not rel:
-            return False
-        if any(part in ignored_parts for part in rel.split("/")):
-            return True
-        return any(rel.startswith(prefix) for prefix in normalized_prefixes if prefix)
-
-    try:
-        for root, dirs, files in os.walk(base):
-            root_path = Path(root)
-            try:
-                rel_root = "" if root_path == base else root_path.relative_to(base).as_posix().rstrip("/") + "/"
-            except ValueError:
-                continue
-            dirs[:] = [
-                dirname
-                for dirname in dirs
-                if not dirname.startswith(".")
-                and dirname not in ignored_parts
-                and not _ignored_rel(rel_root + dirname + "/")
-            ]
-            for filename in files:
-                if filename.startswith("."):
-                    continue
-                path = root_path / filename
-                rel = path.relative_to(base)
-                if any(part.startswith(".") for part in rel.parts):
-                    continue
-                rel_posix = rel.as_posix()
-                if _ignored_rel(rel_posix):
-                    continue
-                try:
-                    st = path.stat()
-                    out[rel_posix] = (st.st_mtime_ns, st.st_size)
-                except OSError:
-                    continue
-    except (OSError, RuntimeError, ValueError) as exc:
-        log.debug("workspace mtimes walk error in %s: %s", work_dir, exc)
-        return out
-    return out
-
-
-def _files_changed_since(work_dir: Path | None, baseline: dict[str, tuple[int, int]], *, limit: int = 24) -> list[str]:
-    """Files created OR modified since the baseline (mtime, size) snapshot (sorted, capped)."""
-    after = _workspace_mtimes(work_dir)
-    return sorted(f for f, m in after.items() if baseline.get(f) != m)[:limit]
-
+from thomas.server.chat_delegation_deliverable_postprocess import (
+    _SKIP_MD_TO_PDF as _SKIP_MD_TO_PDF,
+)
+from thomas.server.chat_delegation_deliverable_postprocess import (
+    executability_warning as executability_warning,
+)
+from thomas.server.chat_delegation_deliverable_postprocess import (
+    render_report_pdfs as render_report_pdfs,
+)
+from thomas.server.chat_delegation_deliverable_postprocess import (
+    runtime_executability_warning as runtime_executability_warning,
+)
+from thomas.server.chat_delegation_workspace import (
+    files_changed_since as _files_changed_since,
+)
+from thomas.server.chat_delegation_workspace import (
+    snapshot_workspace_files as _snapshot_workspace_files,
+)
+from thomas.server.chat_delegation_workspace import (
+    workspace_mtimes as _workspace_mtimes,
+)
 
 # Real file extensions recognized in a creation claim. An ALLOWLIST (not "any
 # letter-led suffix") so dotted abbreviations and version labels — U.S., e.g., i.e.,
@@ -303,6 +220,7 @@ _HIGH_STAKES_RE = re.compile(
 # success claim credible. Used to reject "an unrelated read_file proves the email sent".
 _ACTION_TOOL_HINTS: dict[str, tuple[str, ...]] = {
     "email": ("mail", "email", "smtp", "gmail", "send"),
+    "mail": ("mail", "email", "smtp", "gmail", "send"),
     "sent": ("mail", "email", "send", "message", "sms", "text", "slack", "telegram"),
     "deploy": ("deploy", "ship", "release", "publish", "vercel", "netlify"),
     "post": ("post", "publish", "http", "tweet", "slack"),
@@ -315,7 +233,68 @@ _ACTION_TOOL_HINTS: dict[str, tuple[str, ...]] = {
     "transfer": ("transfer", "bank", "pay", "wallet", "stripe", "plaid"),
     "pay": ("pay", "stripe", "charge", "transfer", "bank", "wallet"),
     "charge": ("charge", "stripe", "pay", "bank"),
+    "purchase": ("purchase", "buy", "order", "checkout", "commerce"),
+    "buy": ("purchase", "buy", "order", "checkout", "commerce"),
+    "order": ("purchase", "buy", "order", "checkout", "commerce"),
+    "restart": ("restart", "reboot", "service", "system", "shell"),
+    "reboot": ("restart", "reboot", "service", "system", "shell"),
+    "delete": ("delete", "remove", "filesystem", "database", "shell"),
+    "remove": ("delete", "remove", "filesystem", "database", "shell"),
+    "test": ("test", "pytest", "jest", "vitest", "check", "shell"),
+    "build": ("build", "compile", "check", "shell", "npm"),
+    "compile": ("build", "compile", "check", "shell"),
+    "crm": ("crm", "customer", "account"),
+    "account": ("crm", "account", "customer", "identity", "admin"),
 }
+
+_DIRECT_REQUEST_VERB_RE = re.compile(
+    r"(?:^|[\n.!?]\s*)(?:please\s+)?(?:go\s+ahead\s+and\s+)?(?P<imperative>[a-z][a-z-]{2,})\b|"
+    r"\b(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:go\s+ahead\s+and\s+)?"
+    r"(?P<modal>[a-z][a-z-]{2,})\b|"
+    r"\bi\s+(?:need|want|would\s+like)\s+(?:you\s+to\s+)?(?P<need>[a-z][a-z-]{2,})\b",
+    re.I,
+)
+_SIDE_EFFECT_VERBS = frozenset(
+    {
+        "book",
+        "buy",
+        "commit",
+        "configure",
+        "connect",
+        "delete",
+        "deploy",
+        "disconnect",
+        "email",
+        "install",
+        "mail",
+        "message",
+        "order",
+        "pay",
+        "publish",
+        "purchase",
+        "push",
+        "reboot",
+        "refund",
+        "remove",
+        "reserve",
+        "restart",
+        "schedule",
+        "send",
+        "ship",
+        "text",
+        "transfer",
+        "uninstall",
+        "upload",
+        "download",
+    }
+)
+_MUTATION_VERBS = frozenset({"add", "create", "open", "provision", "register", "set", "update"})
+_EXTERNAL_EFFECT_TARGET_RE = re.compile(
+    r"\b(?:account|booking|calendar|client|contract|crm|customer|database|deployment|email|invoice|"
+    r"message|order|payment|production|record|reservation|server|service|subscription|tenant|user)\b",
+    re.I,
+)
+_DRAFT_TARGET_RE = re.compile(r"\b(?:draft|template|copy|wording)\b", re.IGNORECASE)
 _FAILURE_LANGUAGE_RE = re.compile(
     r"\b(?:could ?n'?t|cannot|can't|can ?not|unable|failed|fail|error|errored|"
     r"not connected|no(?:t)? (?:able|configured|set ?up|wired)|wasn'?t able|"
@@ -333,6 +312,12 @@ _OUTCOME_CLAIM_RE = re.compile(
     r"no errors|0 (?:errors|failures)|passes? all|all checks? pass\w*|it works)\b",
     re.I,
 )
+_NOMINAL_HIGH_STAKES_OUTCOME_RE = re.compile(
+    r"\b(?:payment|charge|refund|reservation|booking|order|purchase|transfer|deposit|withdrawal)\b"
+    r"[^.!?\n]{0,40}\b(?:is|was|has\s+been|was\s+successfully)?\s*"
+    r"(?:complete[dn]?|confirmed|processed|successful|approved|refunded|reserved|booked)\b",
+    re.IGNORECASE,
+)
 
 
 def _claims_action_success(text: str) -> bool:
@@ -342,31 +327,93 @@ def _claims_action_success(text: str) -> bool:
     s = str(text or "")
     if _FAILURE_LANGUAGE_RE.search(s):
         return False
-    return bool(_ACTION_CLAIM_RE.search(s) or _OUTCOME_CLAIM_RE.search(s))
+    return bool(_ACTION_CLAIM_RE.search(s) or _OUTCOME_CLAIM_RE.search(s) or _NOMINAL_HIGH_STAKES_OUTCOME_RE.search(s))
 
 
-def _has_action_or_outcome_claim(text: str) -> bool:
-    """Whether the text asserts a side-effecting action or verification outcome ANYWHERE
-    — independent of co-occurring failure language. (A success claim that sits next to an
-    unrelated sub-step failure, e.g. 'I sent the email but the logo failed to attach',
-    must still be detected so the success half is hedged, not echoed as fact.)"""
-    s = str(text or "")
-    return bool(_ACTION_CLAIM_RE.search(s) or _OUTCOME_CLAIM_RE.search(s) or _HIGH_STAKES_RE.search(s))
+def _requests_action_execution(text: str) -> bool:
+    """Whether the user directly asked Thomas to perform a side effect.
+
+    This is intentionally speech-act aware: ``explain how to deploy`` and ``do not
+    deploy`` do not match, while imperatives and direct ``can you``/``I need you to``
+    requests do. A direct action request needs a matching successful tool receipt;
+    plausible prose alone is never completion evidence.
+    """
+    prompt = str(text or "")
+    match = _DIRECT_REQUEST_VERB_RE.search(prompt)
+    if not match:
+        return False
+    verb = str(match.group("imperative") or match.group("modal") or match.group("need") or "").lower()
+    return verb in _SIDE_EFFECT_VERBS or bool(
+        verb in _MUTATION_VERBS and _EXTERNAL_EFFECT_TARGET_RE.search(prompt) and not _DRAFT_TARGET_RE.search(prompt)
+    )
+
+
+_NONASSERTIVE_SECTION_RE = re.compile(
+    r"^\s*(?:(?:[-*+]|#{1,6})\s*)?(?:\*{1,2})?"
+    r"(?:user action|expected (?:behavior|result)|failure signal|proof artifact|procedure|"
+    r"instructions?|test steps?|example)(?P<colon>\s*:)?(?:\*{1,2})?(?P<rest>.*)$",
+    re.IGNORECASE,
+)
+_NONASSERTIVE_MODAL_RE = re.compile(
+    r"\b(?:should|would|could|can|must|will|may|might|needs?\s+to|is\s+expected\s+to|"
+    r"is\s+required\s+to)\b",
+    re.IGNORECASE,
+)
+_FIRST_PERSON_RE = re.compile(r"\b(?:i|we)\b", re.IGNORECASE)
+_PROCEDURAL_CONTEXT_RE = re.compile(
+    r"^\s*(?:[-*+]\s*)?(?:the\s+)?(?:expected (?:behavior|result)|failure signal|example|scenario)"
+    r"\s+(?:is|would\s+be|counts\s+as|indicates)\b|"
+    r"\b(?:which|that)\s+(?:is|would be|counts as|indicates)\s+(?:an?\s+)?failure signal\b",
+    re.IGNORECASE,
+)
 
 
 def _claim_sentence(text: str) -> str:
-    """The first sentence/line that carries an action/outcome/file claim — so the surfaced
-    line quotes the CLAIM ('I transferred $5000'), not a trailing sign-off."""
-    for part in re.split(r"(?<=[.!?])\s+|\n+", str(text or "")):
-        s = " ".join(part.split())
-        if s and (
-            _ACTION_CLAIM_RE.search(s)
-            or _OUTCOME_CLAIM_RE.search(s)
-            or _HIGH_STAKES_RE.search(s)
-            or _claims_file_creation(s)
-        ):
-            return s
-    return _worker_summary_line([text])
+    """Return the first asserted action/outcome claim, excluding plan instructions.
+
+    Markdown QA plans commonly describe actions under ``Expected behavior`` and
+    ``Failure signal`` headings. Those mentions are requirements, not claims that a
+    worker performed the action. File-creation claims remain on their separate,
+    final-line evidence path.
+    """
+    skip_next_nonassertive_line = False
+    for raw_line in str(text or "").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        section = _NONASSERTIVE_SECTION_RE.match(line)
+        if section and (section.group("colon") or not section.group("rest").strip()):
+            # A field label on its own governs its one following value. Keeping
+            # this deliberately bounded prevents a procedural block from hiding
+            # later real-world success claims elsewhere in the answer.
+            skip_next_nonassertive_line = not section.group("rest").strip()
+            continue
+        if skip_next_nonassertive_line:
+            skip_next_nonassertive_line = False
+            continue
+        for part in re.split(r"(?<=[.!?])\s+", line):
+            sentence = " ".join(part.split())
+            if not sentence or _PROCEDURAL_CONTEXT_RE.search(sentence):
+                continue
+            matches = [
+                match
+                for pattern in (_ACTION_CLAIM_RE, _OUTCOME_CLAIM_RE, _NOMINAL_HIGH_STAKES_OUTCOME_RE)
+                if (match := pattern.search(sentence)) is not None
+            ]
+            if not matches:
+                continue
+            first_claim = min(match.start() for match in matches)
+            modal = _NONASSERTIVE_MODAL_RE.search(sentence)
+            first_person = _FIRST_PERSON_RE.search(sentence)
+            if modal and modal.start() < first_claim and not (first_person and first_person.start() < first_claim):
+                continue
+            return sentence
+    return ""
+
+
+def _has_action_or_outcome_claim(text: str) -> bool:
+    """Whether text contains an asserted action/outcome claim in its own context."""
+    return bool(_claim_sentence(text))
 
 
 def _tool_corresponds(succeeded_tools: list[str] | None, text: str) -> bool:
@@ -400,6 +447,18 @@ def _worker_summary_line(result_text_parts: list[str] | None) -> str:
     return " ".join((lines[-1] if lines else raw).split())
 
 
+_INTERNAL_META_LINE_RE = re.compile(
+    r"^\s*(?:thinking\s*:|\[thinking\])",
+    re.IGNORECASE,
+)
+
+
+def _worker_answer_text(result_text_parts: list[str] | None) -> str:
+    """Preserve the final text deliverable without leaking explicit model meta-talk."""
+    raw = "".join(str(part) for part in (result_text_parts or []) if part is not None).strip()
+    return "\n".join(line for line in raw.splitlines() if not _INTERNAL_META_LINE_RE.match(line)).strip()
+
+
 def _build_result_summary(
     result_text_parts: list[str],
     tools_used: list[str],
@@ -407,6 +466,7 @@ def _build_result_summary(
     *,
     succeeded_tools: list[str] | None = None,
     failed_tools: list[str] | None = None,
+    prompt: str = "",
 ) -> str:
     """Condense a background worker's actual output into a result line for chat.
 
@@ -432,20 +492,37 @@ def _build_result_summary(
         if len(created_files) > len(shown):
             files_str += f" (+{len(created_files) - len(shown)} more)"
         base = f"Created {files_str}."
-        summary = f"{base} {worker_line}" if (worker_line and not all(n in worker_line for n in shown)) else base
+        if worker_line and _has_action_or_outcome_claim(worker_line):
+            summary = f"{base} Worker also claims: {worker_line} — not independently verified."
+        else:
+            summary = f"{base} {worker_line}" if (worker_line and not all(n in worker_line for n in shown)) else base
         return _cap(summary, 400)
 
-    # Detect SIDE-EFFECTING / outcome claims across the WHOLE worker answer, not just the
-    # last line — so a success claim followed by a friendly sign-off ("I transferred
-    # $5000.\nLet me know!") is not erased, and one sitting next to an unrelated sub-step
-    # failure is still hedged. The action/outcome/high-stakes regexes are PAST-TENSE, so
-    # they don't fire on discarded musings ("I could create a file…") the way a present-
-    # tense file-claim scan would — file claims stay scoped to the final line below.
+    # Detect SIDE-EFFECTING / outcome claims across the worker answer, while keeping
+    # procedural plan sections distinct from assertions. A success claim followed by a
+    # friendly sign-off ("I transferred $5000.\nLet me know!") is still caught.
     full_text = " ".join(str(p) for p in (result_text_parts or []) if p is not None).strip()
-    high_stakes = bool(_HIGH_STAKES_RE.search(full_text))
+    claim = _claim_sentence(full_text)
 
-    if _has_action_or_outcome_claim(full_text):
-        claim = _claim_sentence(full_text) or worker_line
+    # The worker can evade past-tense claim matching with prose such as
+    # "Production is live" or "Restart complete." The user's direct execution
+    # request still establishes that this is an action outcome, so fail closed
+    # unless a corresponding successful tool receipt exists.
+    if _requests_action_execution(prompt) and not claim:
+        claim = worker_line or "The requested action was reported complete."
+        if failed_tools:
+            return _cap(
+                f"A tool failed ({', '.join(failed_tools[:3])}) — could not confirm completion. Worker said: {claim}",
+                440,
+            )
+        if succeeded_tools and _tool_corresponds(succeeded_tools, f"{prompt}\n{full_text}"):
+            return _cap(claim, 360)
+        return _cap(
+            f"Worker reported: {claim} — not independently verified (no confirmed tool result for this action).",
+            460,
+        )
+
+    if claim:
         # A real tool failed -> never assert the success half as fact.
         if failed_tools:
             return _cap(
@@ -454,7 +531,7 @@ def _build_result_summary(
             )
         # Money / booking / destructive / deploy -> NEVER stated as fact from a generic
         # tool success; the chat layer cannot confirm the side-effect occurred.
-        if high_stakes:
+        if _HIGH_STAKES_RE.search(claim):
             return _cap(
                 f"Worker claims: {claim} — NOT independently verified. Don't treat this as confirmed until you check.",
                 460,
@@ -474,8 +551,9 @@ def _build_result_summary(
         # Unverified FILE-creation claim (final line) with an empty workspace -> hedge.
         if _claims_file_creation(worker_line):
             return _cap(f"Worker reported: {worker_line} — but no file was found in the workspace.", 400)
-        # Benign informational answer -> pass through.
-        return _cap(worker_line, 300)
+        # A verified text-only deliverable is the result, not a status line. Keep
+        # its headings, lists, and requested marker so Chat can present it intact.
+        return _cap(_worker_answer_text(result_text_parts), 64_000)
 
     if failed_tools:
         return f"A tool failed ({', '.join(failed_tools[:3])}) — the task did not complete."
@@ -485,105 +563,6 @@ def _build_result_summary(
         # Tool(s) were invoked but no outcome was confirmed — do NOT assert "Done".
         return f"Ran {', '.join(tools_used[:5])}, but no result was confirmed."
     return "No actions were taken — nothing to report."
-
-
-def executability_warning(work_dir: Path | None, created_files: list[str] | None) -> str:
-    """Pre-flight check that a produced web app is actually runnable.
-
-    Claude Code's signature discipline is "don't claim done on something you
-    haven't seen run." Applied at the deliverable boundary: if this task produced
-    an HTML app, verify the entry document is non-empty and every first-party asset
-    it references exists. Returns a user-facing warning string when the app is not
-    runnable (so the result reads "Created index.html ⚠ …may render blank: missing
-    src/game.js" instead of a clean false "done"); empty string when there is no web
-    deliverable, when it verifies clean, or on ANY verifier error — verification must
-    never break the finalize path.
-    """
-    try:
-        if work_dir is None:
-            return ""
-        files = [str(f) for f in (created_files or []) if str(f).strip()]
-        htmls = [f for f in files if f.lower().endswith(".html")]
-        if not htmls:
-            return ""
-        from thomas.server.deliverable_verify import verify_web_deliverable
-
-        entry = next((f for f in htmls if Path(f).name.lower() == "index.html"), htmls[0])
-        result = verify_web_deliverable(work_dir, entry=entry)
-        if result.ok:
-            return ""
-        return " ⚠ Heads up: this app may not open correctly — " + "; ".join(result.problems[:3]) + "."
-    except Exception:  # noqa: BLE001 — a verification fault must never break finalize
-        return ""
-
-
-_SKIP_MD_TO_PDF = {"readme.md", "license.md", "changelog.md", "contributing.md", "agents.md"}
-
-
-def render_report_pdfs(work_dir: Path | None, created_files: list[str] | None) -> list[str]:
-    """Render top-level Markdown report deliverables to readable PDFs.
-
-    A user handed `report.md` sees raw `### headings` and `**bold**`; the readable
-    artifact is a PDF. For every top-level report `.md` this task produced (skipping
-    project boilerplate like README/LICENSE, and anything nested in a code project's
-    subfolder), render a sibling `.pdf` and return the new workspace-relative paths to
-    fold into the deliverable list. Best-effort: returns [] on any failure, never
-    raises, and is BLOCKING (launches Chromium) — call OFF the event loop.
-    """
-    try:
-        if work_dir is None:
-            return []
-        base = Path(work_dir)
-        from thomas.server.deliverable_render import render_markdown_to_pdf
-
-        new_pdfs: list[str] = []
-        for rel in created_files or []:
-            rel = str(rel or "").strip().replace("\\", "/")
-            if not rel.lower().endswith(".md") or "/" in rel:  # top-level reports only
-                continue
-            if Path(rel).name.lower() in _SKIP_MD_TO_PDF:
-                continue
-            md_abs = base / rel
-            pdf_abs = md_abs.with_suffix(".pdf")
-            if pdf_abs.exists():  # the worker already produced a PDF — don't duplicate
-                continue
-            out = render_markdown_to_pdf(md_abs, pdf_abs)
-            if out is not None and Path(out).is_file():
-                new_pdfs.append(Path(out).name)
-        return new_pdfs
-    except Exception:  # noqa: BLE001 — rendering must never break finalize
-        return []
-
-
-def runtime_executability_warning(work_dir: Path | None, created_files: list[str] | None) -> str:
-    """Headless smoke-load of a produced web app — the "open it and watch it run"
-    check that catches JS crashes and blank renders the static check can't see.
-
-    Gated by ``THOMAS_RUNTIME_VERIFY`` (off by default: it launches a browser, ~1-3s).
-    Returns a warning when the app crashes on load or renders blank; empty string
-    otherwise, when disabled, or on ANY error. This is BLOCKING (launches Chromium) —
-    call it OFF the event loop (``await asyncio.to_thread(...)``).
-    """
-    try:
-        import os
-
-        if str(os.environ.get("THOMAS_RUNTIME_VERIFY", "")).strip().lower() not in ("1", "true", "yes", "on"):
-            return ""
-        if work_dir is None:
-            return ""
-        files = [str(f) for f in (created_files or []) if str(f).strip()]
-        htmls = [f for f in files if f.lower().endswith(".html")]
-        if not htmls:
-            return ""
-        from thomas.server.deliverable_runtime_verify import runtime_smoke_load
-
-        entry = next((f for f in htmls if Path(f).name.lower() == "index.html"), htmls[0])
-        r = runtime_smoke_load(work_dir, entry=entry)
-        if r.ok or r.skipped:
-            return ""
-        return " ⚠ The app did not run cleanly when opened — " + (r.reason or "runtime check failed") + "."
-    except Exception:  # noqa: BLE001 — runtime verification must never break finalize
-        return ""
 
 
 # Unambiguous follow-up phrases: these almost always reference an earlier turn and

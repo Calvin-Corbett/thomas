@@ -191,6 +191,80 @@ def _git_show_text(rev: str, rel_path: str) -> str | None:
     return proc.stdout
 
 
+def _merge_base_with_canonical(head: str = "HEAD") -> str | None:
+    """Merge-base with the canonical branch, or None when unresolvable."""
+    for ref in ("dev-origin/dev", "origin/dev", "dev", "origin/main", "main"):
+        proc = subprocess.run(
+            ["git", "merge-base", head, ref],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        base = str(proc.stdout or "").strip()
+        if proc.returncode == 0 and base:
+            # On the canonical branch itself the merge-base IS head — no
+            # branch-wide window exists, so the fallback must not engage.
+            if base != _rev_parse(head):
+                return base
+            return None
+    return None
+
+
+def _rev_parse(rev: str) -> str:
+    proc = subprocess.run(["git", "rev-parse", rev], cwd=ROOT, capture_output=True, text=True)
+    return str(proc.stdout or "").strip()
+
+
+def _branch_release_proof(current_py: str, current_init: str) -> str | None:
+    """Return a PASS note when the BRANCH already carries the release update.
+
+    The per-commit helper lane (--changed-file) used to demand pyproject.toml,
+    thomas/__init__.py, and CHANGELOG.md be dirty in EVERY product-surface
+    commit. Once a version bump landed, those files were clean, so every later
+    product commit through the sanctioned helper was structurally blocked (the
+    stranded-work catch-22, recurring on the workboard since 2026-06-26).
+    A branch that has ALREADY bumped the version and updated the changelog
+    relative to its merge-base with the canonical branch satisfies the gate's
+    actual contract; direct commits on the canonical branch still require the
+    release files in the change set. (Calvin approval, 2026-07-18.)
+    """
+
+    base = _merge_base_with_canonical()
+    if not base:
+        return None
+    base_py = _git_show_text(base, "pyproject.toml")
+    base_init = _git_show_text(base, "thomas/__init__.py")
+    if base_py is None or base_init is None:
+        return None
+    try:
+        prior_py = _version_from_pyproject_text(base_py)
+    except (ValueError, KeyError, TypeError):
+        return None
+    prior_init = _version_from_init_text(base_init)
+    if not (prior_py and prior_init and current_py and current_init):
+        return None
+    if current_py == prior_py or current_init == prior_init:
+        return None
+    diff = subprocess.run(
+        ["git", "diff", "--name-only", f"{base}...HEAD", "--", "CHANGELOG.md"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    changelog_changed = bool(str(diff.stdout or "").strip())
+    if not changelog_changed:
+        dirty = subprocess.run(
+            ["git", "diff", "--name-only", "--", "CHANGELOG.md"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        changelog_changed = bool(str(dirty.stdout or "").strip())
+    if not changelog_changed:
+        return None
+    return f"release metadata already updated branch-wide ({prior_py} -> {current_py} since {base[:12]})"
+
+
 def _check_release_hygiene_script() -> tuple[bool, str]:
     proc = subprocess.run(
         [sys.executable, "scripts/forge/gates/release_hygiene.py"],
@@ -256,15 +330,19 @@ def run(argv: Sequence[str] | None = None) -> int:
     missing = sorted(REQUIRED_FILES - changed_set)
     violations: list[str] = []
 
-    if missing:
-        violations.append(
-            "product-surface changes require release updates; missing changed files: " + ", ".join(missing)
-        )
-
     py_text = _read(ROOT / "pyproject.toml")
     init_text = _read(ROOT / "thomas" / "__init__.py")
     current_py = _version_from_pyproject_text(py_text)
     current_init = _version_from_init_text(init_text)
+
+    if missing:
+        branch_proof = _branch_release_proof(current_py, current_init) if resolved_base == "<manual>" else None
+        if branch_proof:
+            print(f"Release update gate: note — {branch_proof}")
+        else:
+            violations.append(
+                "product-surface changes require release updates; missing changed files: " + ", ".join(missing)
+            )
 
     base_py = _git_show_text(resolved_base, "pyproject.toml") if resolved_base != "<manual>" else None
     base_init = _git_show_text(resolved_base, "thomas/__init__.py") if resolved_base != "<manual>" else None

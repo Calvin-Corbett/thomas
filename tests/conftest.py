@@ -3,6 +3,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 # Ensure repo root is importable when running pytest from arbitrary working dirs.
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -58,6 +60,15 @@ if _has_module("pytest_asyncio"):
 
 if _has_module("aiohttp.pytest_plugin"):
     pytest_plugins.append("aiohttp.pytest_plugin")
+
+
+@pytest.fixture(autouse=True)
+def _runtime_protection_defaults_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate gate tests from this checkout's signed owner preference."""
+
+    from scripts.forge.gates import _runtime_guard
+
+    monkeypatch.setattr(_runtime_guard, "runtime_protection_disabled", lambda _root: False)
 
 
 def _add_ini_if_missing(parser, name: str, help_text: str) -> None:

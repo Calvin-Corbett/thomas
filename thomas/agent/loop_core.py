@@ -42,6 +42,7 @@ from thomas.core.tokens import (
     estimate_message_tokens,
     estimate_messages_tokens,
     estimate_tools_tokens,
+    fit_messages_to_hard_cap,
     trim_messages_to_budget,
 )
 from thomas.library import ResearchLibrary, default_library_root
@@ -99,12 +100,7 @@ _TOKEN_PATTERN = re.compile(r"\b\d{6,12}:[A-Za-z0-9_-]{20,}\b")
 _NUMERIC_ID_PATTERN = re.compile(r"\s*-?\d{5,}\s*")
 _FILE_PATH_PATTERN = re.compile(r"[A-Za-z]:\\\\|/|\\\\|\\.py\b|\\.js\b|\\.ts\b|\\.json\b|\\.toml\b|\\.md\b")
 
-_TPM_WINDOW_SECONDS = 60.0
 _TPM_HEADROOM_DEFAULT = 0.90
-_TPM_MAX_AUTO_WAIT_S = 20.0
-_PROVIDER_DEFAULT_TPM_LIMITS: dict[str, int] = {
-    "anthropic": 30_000,
-}
 
 
 @lru_cache(maxsize=1)
@@ -125,6 +121,7 @@ class LoopState:
     iteration: int = 0
     total_tool_calls: int = 0
     text_response: str = ""
+    aggregate_response: str = ""
     finished: bool = False
     error: str | None = None
     token_estimate: int = 0
@@ -436,15 +433,40 @@ class AgentLoop:
 
         messages = [system_msg] + trimmed
         state.token_estimate = estimate_messages_tokens(messages) + tools_tokens
-        # Model-aware hard cap for safety and long-session budget control.
-        # This is the final firewall. If we are over this, we MUST trim,
-        # regardless of what the config or memory says.
-        hard_cap = max(1000, int(self._context_window))
-        while estimate_messages_tokens(messages) > hard_cap and len(messages) > 2:
-            # Drop the oldest message (after system prompt)
-            # We keep index 0 (system) and index -1 (latest user query/tool result) ideally,
-            # but here we just pop from index 1 (oldest conversation history)
-            messages.pop(1)
+        # Final context firewall. Tool schemas and the response allowance share
+        # the same provider window as messages, so reserve both before trimming.
+        message_hard_cap = int(self._context_window) - tools_tokens - response_reserve
+        try:
+            try:
+                messages = fit_messages_to_hard_cap(
+                    messages,
+                    hard_cap=message_hard_cap,
+                    anchor_source=all_messages,
+                )
+            except ValueError:
+                if not memory_text:
+                    raise
+                # Retrieved memory is optional context. Drop it as one complete,
+                # well-formed section before considering required prompt text.
+                messages[0] = self._build_system_message(
+                    "",
+                    include_purpose=include_purpose,
+                    route_path=route_path,
+                    skills_context=skills_context,
+                    include_autonomy_profile=include_autonomy_profile,
+                    include_editing_policy=include_editing_policy,
+                    include_project_instructions=include_project_instructions,
+                )
+                messages = fit_messages_to_hard_cap(
+                    messages,
+                    hard_cap=message_hard_cap,
+                    anchor_source=all_messages,
+                )
+        except ValueError as exc:
+            raise ValueError(
+                "Model context window cannot fit the required instructions and latest request after reserving "
+                f"{tools_tokens} tool-schema tokens and {response_reserve} response tokens: {exc}"
+            ) from exc
         state.token_estimate = estimate_messages_tokens(messages) + tools_tokens
 
         return messages
@@ -550,7 +572,7 @@ class AgentLoop:
         return 3000
 
     def _provider_tpm_limit(self) -> int:
-        """Best-effort provider prompt-token per-minute limit."""
+        """Return only an explicitly configured local provider TPM policy."""
         cfg = self.llm.config
         profile_key = re.sub(r"[^A-Za-z0-9_]", "_", str(getattr(cfg, "name", "") or "").upper())
         for env_key in (
@@ -568,11 +590,7 @@ class AgentLoop:
                     return parsed
             except ValueError:
                 continue
-        provider = str(getattr(cfg, "provider", "") or "").strip().lower()
-        try:
-            return int(_PROVIDER_DEFAULT_TPM_LIMITS.get(provider, 0) or 0)
-        except (TypeError, ValueError):
-            return 0
+        return 0
 
     def _provider_tpm_headroom(self) -> float:
         """Get TPM headroom multiplier from env or default."""

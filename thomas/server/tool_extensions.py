@@ -155,14 +155,24 @@ _OPTIONAL_TOOL_MODULES = [
 
 
 def _try_import(module_path: str, func_name: str):
-    try:
-        mod = __import__(module_path, fromlist=[func_name])
-        return getattr(mod, func_name)
-    except (ImportError, ModuleNotFoundError, AttributeError):
-        return None
-    except Exception as exc:
-        _log.debug("Skipping optional tool module %s.%s: %s", module_path, func_name, exc)
-        return None
+    candidates = [module_path]
+    if module_path.startswith("thomas.") and not module_path.startswith(
+        ("thomas.marketplace.", "thomas.tools.", "thomas.forge.")
+    ):
+        candidates.append(f"thomas.marketplace.{module_path.removeprefix('thomas.')}")
+
+    for candidate in candidates:
+        try:
+            mod = __import__(candidate, fromlist=[func_name])
+            fn = getattr(mod, func_name, None)
+            if callable(fn):
+                return fn
+        except (ImportError, ModuleNotFoundError, AttributeError):
+            continue
+        except (OSError, RuntimeError, SyntaxError, TypeError, ValueError) as exc:
+            _log.warning("Skipping broken optional tool module %s.%s: %s", candidate, func_name, exc)
+            return None
+    return None
 
 
 def _register_self_extend(registry) -> None:
@@ -231,6 +241,17 @@ def _register_email_calendar(registry) -> None:
         _log.info("Registered %d email/calendar tools", registered)
 
 
+def _register_work_google_drive(registry) -> None:
+    """Register Drive tools that execute only through a Work-bound registry."""
+    try:
+        from thomas.tools.google_drive import get_tools
+
+        for tool in get_tools():
+            registry.register(tool)
+    except (AttributeError, ImportError, KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        _log.debug("Skipping Work Google Drive tools: %s", exc)
+
+
 def register_all_optional_tools(registry) -> int:
     """Register all optional domain tools. Returns count of successfully registered modules."""
     count = 0
@@ -247,6 +268,7 @@ def register_all_optional_tools(registry) -> int:
     # module table above).
     _register_self_extend(registry)
     _register_email_calendar(registry)
+    _register_work_google_drive(registry)
 
     _log.info("Loaded %d/%d optional tool modules", count, len(_OPTIONAL_TOOL_MODULES))
     if count < _OPTIONAL_TOOL_LOW_LOAD_WARNING_THRESHOLD:

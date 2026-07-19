@@ -18,9 +18,7 @@ def _option(value: str, label: str) -> dict[str, str]:
 
 def _normalize_reasoning_effort(value: str) -> str:
     raw = str(value or "").strip().lower()
-    if raw == "max":
-        return "xhigh"
-    return raw if raw in {"low", "medium", "high", "xhigh"} else ""
+    return raw if raw in {"none", "low", "medium", "high", "xhigh", "max"} else ""
 
 
 def profile_chat_control_map(cfg: ModelConfig) -> dict[str, Any]:
@@ -36,11 +34,12 @@ def profile_chat_control_map(cfg: ModelConfig) -> dict[str, Any]:
             "label": "Reasoning" if provider in {"openai_codex", "openai-codex"} else "Reasoning Effort",
             "default_value": reasoning_default or ("medium" if provider in {"openai_codex", "openai-codex"} else ""),
             "options": [
-                _option("", "Auto"),
+                _option("none", "None"),
                 _option("low", "Low"),
                 _option("medium", "Medium"),
                 _option("high", "High"),
                 _option("xhigh", "xHigh"),
+                _option("max", "Max"),
             ],
         }
 

@@ -114,6 +114,15 @@ def test_detect_artifacts_only_for_renderable_output():
     }
     assert "thomas/x.py" not in kinds  # code is never an artifact
 
+    # Finished document families are first-class output artifacts too.
+    documents = detect_artifacts(["report.pdf", "brief.docx", "forecast.xlsx", "deck.pptx", "notes.txt"])
+    assert {artifact["file"]: artifact["kind"] for artifact in documents} == {
+        "report.pdf": "pdf",
+        "brief.docx": "document",
+        "forecast.xlsx": "spreadsheet",
+        "deck.pptx": "presentation",
+    }
+
 
 def test_agent_turn_records_artifacts_for_html_not_for_code(tmp_path):
     """A recorded agent turn carries the artifact descriptors so a resumed

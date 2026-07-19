@@ -7,9 +7,12 @@ from unittest.mock import Mock, patch
 
 from aiohttp.test_utils import AioHTTPTestCase
 
+from thomas.chat.conversation import ConversationManager
+from thomas.chat.session_store import SessionMeta
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
 from thomas.server.app import create_app
 from thomas.server.routes import local_projects_aiohttp as local_projects
+from thomas.server.routes.chat_v2 import APP_SESSION_STORE
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -33,8 +36,16 @@ class TestServerLocalProjectsRoutes(AioHTTPTestCase):
         self._tmpdir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self._projects_root = Path(self._tmpdir.name) / "linked-projects"
         self._projects_root.mkdir(parents=True, exist_ok=True)
+        self._state_dir_patch = patch.dict(
+            "os.environ",
+            {
+                "THOMAS_HOME": self._tmpdir.name,
+                "THOMAS_STATE_DIR": self._tmpdir.name,
+            },
+        )
         self._task_list_patch = patch.object(local_projects.task_bot_runtime, "list_executions", return_value=[])
         self._task_get_patch = patch.object(local_projects.task_bot_runtime, "get_execution", return_value=None)
+        self._state_dir_patch.start()
         self._task_list_patch.start()
         self._task_get_patch.start()
 
@@ -42,6 +53,7 @@ class TestServerLocalProjectsRoutes(AioHTTPTestCase):
         try:
             self._task_get_patch.stop()
             self._task_list_patch.stop()
+            self._state_dir_patch.stop()
             self._tmpdir.cleanup()
         finally:
             super().tearDown()
@@ -198,6 +210,117 @@ class TestServerLocalProjectsRoutes(AioHTTPTestCase):
         listed_body = await listed.json()
         self.assertEqual(listed_body.get("projects") or [], [])
 
+    async def test_project_workspace_resumes_chats_library_and_scoped_shares(self):
+        project_a_root = self._write_project(
+            "ProjectA",
+            {
+                "README.md": "# Project A\n\nPROJECT-LIBRARY-MARKER-936",
+            },
+        )
+        project_b_root = self._write_project("ProjectB", {"README.md": "# Project B"})
+        project_a = await (
+            await self.client.post("/api/local/projects/import", json={"path": str(project_a_root)})
+        ).json()
+        project_b = await (
+            await self.client.post("/api/local/projects/import", json={"path": str(project_b_root)})
+        ).json()
+        project_a_id = str(project_a["project"]["id"])
+        project_b_id = str(project_b["project"]["id"])
+
+        store = self.app[APP_SESSION_STORE]
+        prior = ConversationManager().append_message(
+            "user",
+            "PROJECT-CHAT-MARKER-17\n\n[Bound project context]\nSTALE-HIDDEN-CONTEXT-99",
+        )
+        prior = prior.append_message("assistant", "Stored in Project A.")
+        await store.save("project-chat-a", prior, SessionMeta(session_id="project-chat-a"), force=True)
+
+        context_response = await self.client.patch(
+            f"/api/local/projects/{project_a_id}/context",
+            json={"objective": "Ship Project A", "instructions": "Prefer burnt orange."},
+        )
+        self.assertEqual(context_response.status, 200)
+        attach = await self.client.post(
+            f"/api/local/projects/{project_a_id}/chats",
+            json={"session_id": "project-chat-a", "title": "Launch chat", "pinned": True},
+        )
+        self.assertEqual(attach.status, 200)
+        isolation = await self.client.post(
+            f"/api/local/projects/{project_b_id}/chats",
+            json={"session_id": "project-chat-a", "title": "Cross-project leak"},
+        )
+        self.assertEqual(isolation.status, 409)
+
+        library = await self.client.post(
+            f"/api/local/projects/{project_a_id}/library",
+            json={"path": "README.md", "title": "Owner brief"},
+        )
+        self.assertEqual(library.status, 200)
+        library_entry = (await library.json())["entry"]
+
+        context, receipt = await local_projects.build_project_chat_context(
+            self.app,
+            project_id=project_a_id,
+            session_id="project-chat-b",
+            session_store=store,
+        )
+        self.assertIn("Ship Project A", context)
+        self.assertIn("PROJECT-CHAT-MARKER-17", context)
+        self.assertNotIn("STALE-HIDDEN-CONTEXT-99", context)
+        self.assertIn("PROJECT-LIBRARY-MARKER-936", context)
+        self.assertEqual(receipt["prior_chats"], 1)
+        self.assertEqual(receipt["fresh_library_files"], 1)
+
+        resume = await self.client.get(f"/api/local/projects/{project_a_id}/resume")
+        self.assertEqual(resume.status, 200)
+        resume_payload = await resume.json()
+        self.assertEqual(resume_payload["objective"], "Ship Project A")
+        self.assertEqual(resume_payload["pinned_chats"][0]["session_id"], "project-chat-a")
+        self.assertEqual(resume_payload["stale_library_count"], 0)
+
+        share = await self.client.post(
+            f"/api/local/projects/{project_a_id}/shares",
+            json={"expires_in_seconds": 600},
+        )
+        self.assertEqual(share.status, 200)
+        share_receipt = await share.json()
+        share_id = share_receipt["share_id"]
+        token = share_receipt["token"]
+        denied = await self.client.get(f"/api/local/project-shares/{share_id}?token=wrong")
+        self.assertEqual(denied.status, 403)
+        shared = await self.client.get(f"/api/local/project-shares/{share_id}?token={token}")
+        self.assertEqual(shared.status, 200)
+        shared_payload = (await shared.json())["share"]
+        self.assertEqual(shared_payload["permissions"], ["read"])
+        self.assertNotIn("root_path", json.dumps(shared_payload))
+        self.assertIn("PROJECT-CHAT-MARKER-17", json.dumps(shared_payload))
+
+        project_a_root.joinpath("README.md").write_text("# Changed", encoding="utf-8")
+        stale_resume = await self.client.get(f"/api/local/projects/{project_a_id}/resume")
+        self.assertEqual((await stale_resume.json())["stale_library_count"], 1)
+
+        revoked = await self.client.delete(f"/api/local/projects/{project_a_id}/shares/{share_id}")
+        self.assertEqual(revoked.status, 200)
+        after_revoke = await self.client.get(f"/api/local/project-shares/{share_id}?token={token}")
+        self.assertEqual(after_revoke.status, 404)
+
+        removed = await self.client.delete(f"/api/local/projects/{project_a_id}/library/{library_entry['id']}")
+        self.assertEqual(removed.status, 200)
+
+    async def test_project_library_rejects_paths_outside_project(self):
+        project_root = self._write_project("IsolatedProject", {"README.md": "inside"})
+        outside = Path(self._tmpdir.name) / "outside-secret.txt"
+        outside.write_text("do not import", encoding="utf-8")
+        imported = await self.client.post("/api/local/projects/import", json={"path": str(project_root)})
+        project_id = str((await imported.json())["project"]["id"])
+
+        response = await self.client.post(
+            f"/api/local/projects/{project_id}/library",
+            json={"path": "../outside-secret.txt"},
+        )
+
+        self.assertEqual(response.status, 400)
+
     async def test_generated_web_deliverables_are_my_stuff_projects(self):
         execution_id = "exec-generated123"
         generated_root = Path(self._tmpdir.name) / "generated" / execution_id
@@ -323,3 +446,20 @@ def test_run_command_wraps_windows_batch_shims() -> None:
     assert result["command"] == ["pnpm", "install"]
     assert result["launched_command"] == ["cmd.exe", "/c", "pnpm", "install"]
     popen.assert_called_once()
+
+
+def test_local_project_routes_use_semantic_modules_below_architecture_limits() -> None:
+    route_dir = ROOT / "thomas" / "server" / "routes"
+    existing = (
+        route_dir / "local_projects_aiohttp.py",
+        route_dir / "local_projects_helpers_aiohttp.py",
+    )
+    extracted = (
+        route_dir / "local_project_workspace.py",
+        route_dir / "local_project_folder_picker.py",
+    )
+
+    for path in existing:
+        assert len(path.read_text(encoding="utf-8").splitlines()) < 800, path
+    for path in extracted:
+        assert len(path.read_text(encoding="utf-8").splitlines()) <= 300, path

@@ -146,6 +146,15 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _corpus_sha256(path: Path) -> str:
+    """Hash locked text canonically across Git's LF/CRLF materialization."""
+
+    payload = path.read_bytes()
+    if path.suffix.lower() in {".json", ".md", ".txt"}:
+        payload = payload.replace(b"\r\n", b"\n")
+    return hashlib.sha256(payload).hexdigest()
+
+
 def _corpus_lock_findings(candidate_root: Path) -> list[SupervisorFinding]:
     corpus_root = candidate_root / CORPUS_DIR
     lock_path = corpus_root / CORPUS_LOCK_FILE
@@ -236,7 +245,7 @@ def _corpus_lock_findings(candidate_root: Path) -> list[SupervisorFinding]:
             )
             continue
         try:
-            actual = _sha256(path)
+            actual = _corpus_sha256(path)
         except OSError as exc:
             findings.append(
                 SupervisorFinding(

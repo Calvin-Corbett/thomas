@@ -414,6 +414,19 @@ class AutonomyMemoryEngine:
 
         return _MemoryText(text="")
 
+    def interrupt_retrieval(self) -> bool:
+        """Interrupt an over-budget Memory Fabric query without waiting on its DB lock."""
+        fabric = self._fabric_v2
+        db = getattr(fabric, "db", None) if fabric is not None else None
+        interrupt = getattr(db, "interrupt", None)
+        if not callable(interrupt):
+            return False
+        try:
+            interrupt()
+            return True
+        except (RuntimeError, OSError):
+            return False
+
     def ingest_pending(self) -> dict[str, Any]:
         self._require_started()
         if self._legacy is not None:
@@ -800,6 +813,43 @@ class AutonomyMemoryEngine:
                 self._fabric_v2.pin_profile_hint(k, pinned=False)
             except (RuntimeError, OSError) as e:
                 log.warning("Memory Fabric v2 unpin failed: %s", e)
+
+    def forget_pin(self, key: str) -> dict[str, Any]:
+        """Forget a pinned value instead of only hiding its pinned flag."""
+        self._require_started()
+        k = str(key or "").strip()
+        if not k:
+            return {"forgotten": False}
+        result: dict[str, Any] = {"forgotten": False}
+        if self._legacy is not None:
+            try:
+                self._legacy.unpin(k)
+            except (RuntimeError, OSError) as e:
+                log.warning("Legacy memory forget pin failed: %s", e)
+        if self._fabric_v2 is not None:
+            try:
+                forget_fn = getattr(self._fabric_v2, "forget_profile_hint", None)
+                if callable(forget_fn):
+                    result = dict(forget_fn(k))
+                else:
+                    self._fabric_v2.pin_profile_hint(k, pinned=False)
+            except (RuntimeError, OSError) as e:
+                log.warning("Memory Fabric v2 forget pin failed: %s", e)
+        return result
+
+    def forget_thread(self, thread_id: str) -> dict[str, Any]:
+        """Forget all retrievable v2 memory owned by one chat thread."""
+
+        self._require_started()
+        tid = str(thread_id or "").strip()
+        if not tid or self._fabric_v2 is None:
+            return {"forgotten": False}
+        try:
+            forget_fn = getattr(self._fabric_v2, "forget_thread", None)
+            return dict(forget_fn(tid)) if callable(forget_fn) else {"forgotten": False}
+        except (RuntimeError, OSError) as e:
+            log.warning("Memory Fabric v2 forget_thread failed: %s", e)
+            return {"forgotten": False, "error": type(e).__name__}
 
     def list_pins(self) -> list[tuple[str, str, int]]:
         self._require_started()

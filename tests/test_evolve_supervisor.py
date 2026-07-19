@@ -26,7 +26,6 @@ from evolve_supervisor.coverage_floor import (
     select_blast_radius_tests,
     select_dependent_smoke_tests,
 )
-
 from thomas.forge.anvil import doppelganger, evolve_autonomy, evolve_loop
 
 
@@ -38,7 +37,7 @@ def _write_locked_corpus(root: Path) -> None:
         json.dumps({"case_id": "known_good_minimal", "expected": "promote_or_hold"}, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    digest = hashlib.sha256((cases / "known_good_minimal.json").read_bytes()).hexdigest()
+    digest = hashlib.sha256((cases / "known_good_minimal.json").read_bytes().replace(b"\r\n", b"\n")).hexdigest()
     (corpus / "LOCK.json").write_text(
         json.dumps(
             {
@@ -1123,6 +1122,21 @@ def test_evolve_corpus_runner_passes_locked_seed_corpus() -> None:
     repo_root = Path(__file__).resolve().parents[1]
 
     result = run_evolve_corpus(repo_root)
+
+    assert result.ok is True, result.to_dict()
+    assert result.case_count == 7
+
+
+def test_evolve_corpus_runner_accepts_windows_line_endings(tmp_path: Path) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    corpus_root = tmp_path / "evolve_corpus"
+    shutil.copytree(repo_root / "evolve_corpus", corpus_root)
+    lock = json.loads((corpus_root / "LOCK.json").read_text(encoding="utf-8"))
+    for relative_path in lock["files"]:
+        path = corpus_root / relative_path
+        path.write_bytes(path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+
+    result = run_evolve_corpus(tmp_path)
 
     assert result.ok is True, result.to_dict()
     assert result.case_count == 7

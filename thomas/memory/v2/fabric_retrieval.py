@@ -59,7 +59,12 @@ class MemoryFabricV2Retrieval:
                     )
                 )
             pack = self._build_pack(
-                thread_id, query, items, budget_tokens=budget_tokens, include_profile=settings.include_profile
+                thread_id,
+                query,
+                items,
+                budget_tokens=budget_tokens,
+                include_profile=True,
+                profile_pinned_only=True,
             )
             pack_id = None
             latency_ms = _now_ms() - start_ms
@@ -217,30 +222,29 @@ class MemoryFabricV2Retrieval:
                 else []
             )
 
-        if self.episodes_fts_enabled:
-            fts_query = " ".join(query_toks)
-            try:
-                rows = self.db.execute(
-                    """
-                    SELECT e.* FROM episodes e
-                    INNER JOIN episodes_fts fts ON e.id = fts.rowid
-                    WHERE e.thread_id=? AND fts.episodes_fts MATCH ?
-                    ORDER BY rank
-                    LIMIT ?
-                    """,
-                    (thread_id, fts_query, int(limit)),
-                ).fetchall()
-                if rows:
-                    return [dict(r) for r in rows]
-            except (OSError, RuntimeError):
-                self.episodes_fts_enabled = False
-
-        return [
-            dict(r)
-            for r in self.db.execute(
-                "SELECT * FROM episodes WHERE thread_id=? ORDER BY ts_ms DESC LIMIT ?", (thread_id, int(limit))
+        # The FTS table contains every thread.  A MATCH over a long task prompt
+        # can therefore scan/rank the global corpus before SQLite applies the
+        # thread filter, monopolising the shared connection.  Pull a bounded,
+        # index-backed window for this thread and rank it in memory instead.
+        # Older durable knowledge remains available through semantic facts.
+        candidate_limit = max(int(limit), min(1000, max(100, int(limit) * 20)))
+        recent = [
+            dict(row)
+            for row in self.db.execute(
+                "SELECT * FROM episodes WHERE thread_id=? ORDER BY ts_ms DESC LIMIT ?",
+                (thread_id, candidate_limit),
             ).fetchall()
         ]
+        ranked = sorted(
+            recent,
+            key=lambda row: (
+                _overlap_boost(query_toks, str(row.get("content") or "")),
+                int(row.get("ts_ms") or 0),
+            ),
+            reverse=True,
+        )
+        relevant = [row for row in ranked if _overlap_boost(query_toks, str(row.get("content") or "")) > 0.0]
+        return (relevant or recent)[: int(limit)]
 
     def _search_facts(
         self,
@@ -287,8 +291,12 @@ class MemoryFabricV2Retrieval:
             ).fetchall()
         ]
 
-    def _get_profile_hints(self, limit: int = 50) -> list[dict[str, Any]]:
-        cur = self.db.execute("SELECT * FROM profile_hints ORDER BY last_seen_ts_ms DESC LIMIT ?", (int(limit),))
+    def _get_profile_hints(self, limit: int = 50, *, pinned_only: bool = False) -> list[dict[str, Any]]:
+        where = "WHERE pinned=1 " if pinned_only else ""
+        cur = self.db.execute(
+            f"SELECT * FROM profile_hints {where}ORDER BY last_seen_ts_ms DESC LIMIT ?",  # noqa: S608
+            (int(limit),),
+        )
         return [dict(r) for r in cur.fetchall()]
 
     def _mark_retrieved(self, items: list[RetrievalItem], now_ms: int) -> None:
@@ -313,12 +321,13 @@ class MemoryFabricV2Retrieval:
         items: list[RetrievalItem],
         budget_tokens: int = 800,
         include_profile: bool = True,
+        profile_pinned_only: bool = False,
     ) -> str:
         sections = {}
         profile_tokens = 0
 
         if include_profile:
-            profile_hints = self._get_profile_hints(limit=50)
+            profile_hints = self._get_profile_hints(limit=50, pinned_only=profile_pinned_only)
             if profile_hints:
                 profile_lines = ["[Profile]"]
                 for h in profile_hints:

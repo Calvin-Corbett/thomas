@@ -1053,7 +1053,7 @@ async function handleSend() {
             status: 'complete',
         });
         // Fire and forget — don't block, don't abort current stream
-        const chatEndpoint = window.__THOMAS_CHAT_V2__ ? '/api/v2/chat' : '/api/chat';
+        const chatEndpoint = '/api/v2/chat';
         fetch(chatEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

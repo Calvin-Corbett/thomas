@@ -18,9 +18,11 @@ Key properties:
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
+import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
@@ -52,6 +54,7 @@ class PluginUninstallCleanupError(Exception):
 
 
 CleanupStatus = Literal["removed", "not_found", "dry_run"]
+ManagedCleanupStatus = Literal["removed", "not_found", "state_cleaned"]
 
 
 class PluginUninstallCleanupInput(TypedDict, total=False):
@@ -110,6 +113,34 @@ class PluginUninstallCleanupResult:
             "extensions_dir": str(self.extensions_dir),
             "removed": [str(p) for p in self.removed],
             "pruned_empty_dirs": [str(p) for p in self.pruned_empty_dirs],
+        }
+
+
+@dataclass(frozen=True)
+class ManagedPluginUninstallRequest:
+    """Remove a plugin installed by p102 and its runtime manifest entry."""
+
+    plugin_id: str
+    install_root: Path
+
+
+@dataclass(frozen=True)
+class ManagedPluginUninstallResult:
+    plugin_id: str
+    status: ManagedCleanupStatus
+    install_root: Path
+    manifest_path: Path
+    removed_path: Path | None = None
+    manifest_updated: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "plugin_id": self.plugin_id,
+            "status": self.status,
+            "install_root": str(self.install_root),
+            "manifest_path": str(self.manifest_path),
+            "removed_path": str(self.removed_path) if self.removed_path else None,
+            "manifest_updated": self.manifest_updated,
         }
 
 
@@ -283,6 +314,134 @@ def _remove_path(path: Path) -> None:
             message="failed to remove plugin artifacts",
             details={"path": str(path), "exc": exc.__class__.__name__},
         ) from exc
+
+
+def _read_managed_manifest(manifest_path: Path) -> dict[str, Any]:
+    if not manifest_path.exists():
+        return {"version": 1, "plugins": {}}
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise PluginUninstallCleanupError(
+            code="bad_manifest",
+            message="installed plugin manifest could not be read",
+            details={"manifest_path": str(manifest_path), "reason": type(exc).__name__},
+        ) from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("plugins"), dict):
+        raise PluginUninstallCleanupError(
+            code="bad_manifest",
+            message="installed plugin manifest has an invalid structure",
+            details={"manifest_path": str(manifest_path)},
+        )
+    return payload
+
+
+def _write_managed_manifest_atomic(manifest_path: Path, payload: Mapping[str, Any]) -> None:
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = manifest_path.with_suffix(manifest_path.suffix + ".tmp")
+    try:
+        temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        os.replace(temporary, manifest_path)
+    except (OSError, TypeError, ValueError) as exc:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise PluginUninstallCleanupError(
+            code="filesystem_error",
+            message="failed to update installed plugin manifest",
+            details={"manifest_path": str(manifest_path), "reason": type(exc).__name__},
+        ) from exc
+
+
+def uninstall_plugin_from_install_root(req: ManagedPluginUninstallRequest) -> ManagedPluginUninstallResult:
+    """Atomically remove p102 payload and state, rolling the payload back on state-write failure."""
+
+    plugin_id = _normalize_plugin_id(req.plugin_id)
+    if "/" in plugin_id:
+        raise PluginUninstallCleanupError(
+            code="invalid_input",
+            message="managed plugin_id must be a single path segment",
+            details={"field": "plugin_id"},
+        )
+    install_root = Path(req.install_root).expanduser().resolve()
+    manifest_path = install_root / "installed_plugins.json"
+    payload = _read_managed_manifest(manifest_path)
+    plugins = dict(payload.get("plugins") or {})
+    record = plugins.get(plugin_id)
+    plugin_dir = (install_root / plugin_id).resolve()
+    _ensure_inside_root(install_root, plugin_dir)
+
+    if isinstance(record, Mapping):
+        recorded_path = str(record.get("installed_path") or "").strip()
+        if recorded_path:
+            try:
+                recorded_resolved = Path(recorded_path).expanduser().resolve()
+            except (OSError, RuntimeError, ValueError) as exc:
+                raise PluginUninstallCleanupError(
+                    code="bad_manifest",
+                    message="installed plugin record contains an invalid path",
+                    details={"plugin_id": plugin_id, "reason": type(exc).__name__},
+                ) from exc
+            if recorded_resolved != plugin_dir:
+                raise PluginUninstallCleanupError(
+                    code="bad_manifest",
+                    message="installed plugin record points outside its managed slot",
+                    details={"plugin_id": plugin_id, "installed_path": recorded_path},
+                )
+
+    payload_exists = plugin_dir.exists() or plugin_dir.is_symlink()
+    record_exists = plugin_id in plugins
+    if not payload_exists and not record_exists:
+        return ManagedPluginUninstallResult(
+            plugin_id=plugin_id,
+            status="not_found",
+            install_root=install_root,
+            manifest_path=manifest_path,
+        )
+
+    tomb_parent: Path | None = None
+    tombstone: Path | None = None
+    if payload_exists:
+        install_root.mkdir(parents=True, exist_ok=True)
+        tomb_parent = Path(tempfile.mkdtemp(prefix=f".uninstalling-{plugin_id}-", dir=str(install_root)))
+        tombstone = tomb_parent / plugin_id
+        try:
+            os.replace(plugin_dir, tombstone)
+        except OSError as exc:
+            shutil.rmtree(tomb_parent, ignore_errors=True)
+            raise PluginUninstallCleanupError(
+                code="filesystem_error",
+                message="failed to stage plugin payload for removal",
+                details={"path": str(plugin_dir), "reason": type(exc).__name__},
+            ) from exc
+
+    plugins.pop(plugin_id, None)
+    next_payload = dict(payload)
+    next_payload["version"] = int(payload.get("version") or 1)
+    next_payload["plugins"] = dict(sorted(plugins.items()))
+    try:
+        _write_managed_manifest_atomic(manifest_path, next_payload)
+    except PluginUninstallCleanupError:
+        if tombstone is not None and tombstone.exists() and not plugin_dir.exists():
+            try:
+                os.replace(tombstone, plugin_dir)
+            except OSError:
+                pass
+        if tomb_parent is not None:
+            shutil.rmtree(tomb_parent, ignore_errors=True)
+        raise
+
+    if tomb_parent is not None:
+        shutil.rmtree(tomb_parent, ignore_errors=True)
+    return ManagedPluginUninstallResult(
+        plugin_id=plugin_id,
+        status="removed" if payload_exists else "state_cleaned",
+        install_root=install_root,
+        manifest_path=manifest_path,
+        removed_path=plugin_dir if payload_exists else None,
+        manifest_updated=record_exists,
+    )
 
 
 def _prune_empty_parents(start: Path, stop_at: Path) -> tuple[Path, ...]:
@@ -484,9 +643,12 @@ __all__ = [
     "PluginUninstallCleanupResult",
     "PluginUninstallCleanupInput",
     "PluginUninstallCleanupOutput",
+    "ManagedPluginUninstallRequest",
+    "ManagedPluginUninstallResult",
     "INPUT_JSON_SCHEMA",
     "OUTPUT_JSON_SCHEMA",
     "run_plugin_uninstall_cleanup",
+    "uninstall_plugin_from_install_root",
     "parse_tool_input",
     "tool_entrypoint",
     "register_with_registry",

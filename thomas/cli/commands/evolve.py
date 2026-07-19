@@ -544,6 +544,16 @@ def evolve_dispatch_command(
         gpt_brain = provider in ("codex", "gpt", "chatgpt", "openai_codex")
         if gpt_brain:
             from thomas.forge.anvil.evolve_claude_bridge import dispatch_via_agent_loop
+            from thomas.server.openai_codex_oauth import (
+                _default_secret_store,
+                has_openai_codex_token,
+            )
+
+            def _chatgpt_connected() -> bool:
+                try:
+                    return bool(has_openai_codex_token(_default_secret_store(), "openai_codex"))
+                except (RuntimeError, OSError, ValueError, TypeError):
+                    return False
 
             res = dispatch_via_agent_loop(
                 goal,
@@ -553,6 +563,7 @@ def evolve_dispatch_command(
                 timeout=900,
                 dry_run=not live,
                 history=history,
+                token_check=_chatgpt_connected,
             )
         else:
             res = dispatch_via_claude_cli(

@@ -10,6 +10,7 @@ from typing import Any
 
 import httpx
 
+from thomas.core.codex_auth import resolve_access_token
 from thomas.core.codex_provider import OPENAI_CODEX_BASE_URL
 from thomas.core.llm_shared import LLMError, StreamEvent, TokenUsage, ToolCallAccumulator
 from thomas.core.llm_streaming_codex import (
@@ -17,7 +18,6 @@ from thomas.core.llm_streaming_codex import (
     _extract_responses_usage,
     _response_item,
 )
-from thomas.server.openai_codex_oauth import ensure_openai_codex_access_token
 
 log = logging.getLogger(__name__)
 
@@ -34,8 +34,6 @@ async def stream_openai(
     if not path.startswith("/"):
         path = "/" + path
     url = base + path
-    body = owner._build_openai_request(messages, tools, stream=True)
-
     client = await owner._get_client()
     params = owner.config.query or None
     last_error: Exception | None = None
@@ -43,7 +41,14 @@ async def stream_openai(
     base_delay = max(0.0, float(owner._base_retry_delay))
 
     for attempt in range(max_retries):
+        lease = await owner.begin_budget_attempt(messages, tools)
         try:
+            body = owner._build_openai_request(
+                messages,
+                tools,
+                stream=True,
+                max_output_tokens=getattr(lease, "output_cap", None),
+            )
             async with client.stream("POST", url, json=body, params=params) as resp:
                 if resp.status_code != 200:
                     error_body = await resp.aread()
@@ -272,16 +277,14 @@ async def stream_openai(
                     for ev in pending_events:
                         yield ev
 
-                # Stream completed without [DONE].
+                # EOF is not proof of completion. A truncated provider stream must
+                # never be promoted to a successful turn.
                 if not done_emitted:
-                    for tc in tool_calls.values():
-                        if not tc.finished:
-                            tc.finished = True
-                            yield StreamEvent(
-                                type="tool_call_end",
-                                data={"id": tc.id, "name": tc.name, "arguments": tc.arguments},
-                            )
-                    yield StreamEvent(type="done")
+                    raise LLMError(
+                        "OpenAI-compatible stream ended before the [DONE] confirmation.",
+                        status=503,
+                        retryable=True,
+                    )
                 return
 
         except httpx.HTTPStatusError as e:
@@ -305,6 +308,8 @@ async def stream_openai(
                     await asyncio.sleep(delay)
                 continue
             raise LLMError(f"Connection failed after {max_retries} attempts: {e}")
+        finally:
+            await owner.finish_budget_attempt(lease)
 
     raise last_error or LLMError("Request failed after retries")
 
@@ -313,14 +318,15 @@ async def stream_openai_codex(
     owner: Any,
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]] | None = None,
+    *,
+    turn_user_content: Any = None,
 ) -> AsyncIterator[StreamEvent]:
     """Stream through ChatGPT's native Codex Responses endpoint."""
     base = str(owner.config.base_url or OPENAI_CODEX_BASE_URL).rstrip("/")
     url = base + "/responses"
-    body = _build_openai_codex_request(owner, messages, tools)
     access_token = str(getattr(owner.config, "api_key", "") or "").strip()
     if not access_token:
-        access_token = await ensure_openai_codex_access_token(getattr(owner.config, "name", "") or "chatgpt")
+        access_token = await resolve_access_token(getattr(owner.config, "name", "") or "chatgpt")
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json",
@@ -332,7 +338,24 @@ async def stream_openai_codex(
     base_delay = max(0.0, float(owner._base_retry_delay))
 
     for attempt in range(max_retries):
+        stream_event_emitted = False
+        done_emitted = False
+        lease = await owner.begin_budget_attempt(messages, tools)
         try:
+            output_cap = int(getattr(lease, "output_cap", owner.config.max_tokens) or 0)
+            if lease is not None and output_cap < max(1, int(owner.config.max_tokens or 1)):
+                await owner.abort_budget_attempt(lease)
+                lease = None
+                raise LLMError(
+                    "ChatGPT/Codex cannot safely enforce the reduced output budget for this request.",
+                    status=429,
+                )
+            body = _build_openai_codex_request(
+                owner,
+                messages,
+                tools,
+                turn_user_content=turn_user_content,
+            )
             async with client.stream("POST", url, json=body, headers=headers) as resp:
                 if resp.status_code != 200:
                     error_body = await resp.aread()
@@ -376,7 +399,6 @@ async def stream_openai_codex(
                 item_to_call: dict[str, str] = {}
                 event_name = ""
                 data_lines: list[str] = []
-                done_emitted = False
 
                 async def _emit_pending_tool_ends() -> list[StreamEvent]:
                     pending: list[StreamEvent] = []
@@ -480,10 +502,19 @@ async def stream_openai_codex(
                                         data={"id": tc.id, "name": tc.name, "arguments": tc.arguments},
                                     )
                                 )
-                    elif event_type in {"response.completed", "response.incomplete"}:
+                    elif event_type == "response.completed":
                         events.extend(await _emit_pending_tool_ends())
                         events.append(StreamEvent(type="done"))
                         done_emitted = True
+                    elif event_type == "response.incomplete":
+                        response = chunk.get("response")
+                        details = response.get("incomplete_details") if isinstance(response, dict) else None
+                        reason = details.get("reason") if isinstance(details, dict) else None
+                        raise LLMError(
+                            f"ChatGPT/Codex response was incomplete ({reason or 'unknown reason'}). Retry this turn.",
+                            status=503,
+                            retryable=True,
+                        )
                     elif event_type in {"response.failed", "error"}:
                         err = chunk.get("error")
                         if isinstance(err, dict):
@@ -497,6 +528,7 @@ async def stream_openai_codex(
                     if line == "":
                         if data_lines:
                             for ev in await _process_sse("\n".join(data_lines), event_name):
+                                stream_event_emitted = True
                                 yield ev
                             data_lines = []
                             event_name = ""
@@ -508,12 +540,26 @@ async def stream_openai_codex(
 
                 if data_lines:
                     for ev in await _process_sse("\n".join(data_lines), event_name):
+                        stream_event_emitted = True
                         yield ev
 
                 if not done_emitted:
-                    for ev in await _emit_pending_tool_ends():
-                        yield ev
-                    yield StreamEvent(type="done")
+                    last_error = LLMError(
+                        "ChatGPT/Codex disconnected before confirming the response completed. Retry this turn.",
+                        status=503,
+                        retryable=True,
+                    )
+                    if not stream_event_emitted and attempt < max_retries - 1:
+                        log.warning(
+                            "ChatGPT/Codex stream ended before a terminal event; retrying request %d/%d",
+                            attempt + 2,
+                            max_retries,
+                        )
+                        delay = base_delay * (2**attempt)
+                        if delay > 0:
+                            await asyncio.sleep(delay)
+                        continue
+                    raise last_error
                 return
 
         except httpx.HTTPStatusError as e:
@@ -523,14 +569,29 @@ async def stream_openai_codex(
                     await asyncio.sleep(delay)
                 continue
             raise LLMError(str(e), status=e.response.status_code)
-        except (httpx.ConnectError, httpx.ReadTimeout) as e:
+        except httpx.TransportError as e:
             last_error = e
-            if attempt < max_retries - 1:
+            if done_emitted:
+                return
+            if not stream_event_emitted and attempt < max_retries - 1:
+                log.warning(
+                    "ChatGPT/Codex stream failed before usable output (%s); retrying request %d/%d",
+                    type(e).__name__,
+                    attempt + 2,
+                    max_retries,
+                )
                 delay = base_delay * (2**attempt)
                 if delay > 0:
                     await asyncio.sleep(delay)
                 continue
-            raise LLMError(f"ChatGPT/Codex connection failed after {max_retries} attempts: {e}")
+            phase = "after partial output" if stream_event_emitted else "before any usable output"
+            raise LLMError(
+                f"ChatGPT/Codex stream disconnected {phase}. Retry this turn.",
+                status=503,
+                retryable=True,
+            ) from e
+        finally:
+            await owner.finish_budget_attempt(lease)
 
     raise last_error or LLMError("ChatGPT/Codex request failed after retries")
 
@@ -541,27 +602,30 @@ async def stream_anthropic(
     tools: list[dict[str, Any]] | None = None,
 ) -> AsyncIterator[StreamEvent]:
     url = f"{owner.config.base_url.rstrip('/')}/messages"
-    body = owner._build_anthropic_request(messages, tools, stream=True)
-
-    # Debug: log tool configuration sent to Anthropic
-    tool_names = [t["name"] for t in body.get("tools", [])]
-    if tool_names:
-        log.debug(
-            "Anthropic request: %d tools [%s], tool_choice=%s",
-            len(tool_names),
-            ", ".join(tool_names[:5]),
-            body.get("tool_choice"),
-        )
-    else:
-        log.debug("Anthropic request: NO tools sent")
-
     client = await owner._get_client()
     last_error: Exception | None = None
     max_retries = max(1, int(owner._max_retries))
     base_delay = max(0.0, float(owner._base_retry_delay))
 
     for attempt in range(max_retries):
+        lease = await owner.begin_budget_attempt(messages, tools)
         try:
+            body = owner._build_anthropic_request(
+                messages,
+                tools,
+                stream=True,
+                max_output_tokens=getattr(lease, "output_cap", None),
+            )
+            tool_names = [t["name"] for t in body.get("tools", [])]
+            if tool_names:
+                log.debug(
+                    "Anthropic request: %d tools [%s], tool_choice=%s",
+                    len(tool_names),
+                    ", ".join(tool_names[:5]),
+                    body.get("tool_choice"),
+                )
+            else:
+                log.debug("Anthropic request: NO tools sent")
             async with client.stream("POST", url, json=body) as resp:
                 if resp.status_code != 200:
                     error_body = await resp.aread()
@@ -712,6 +776,8 @@ async def stream_anthropic(
             )
             if delay > 0:
                 await asyncio.sleep(delay)
+        finally:
+            await owner.finish_budget_attempt(lease)
 
     raise LLMError(
         f"Anthropic request failed after {max_retries} attempts: {last_error}",
