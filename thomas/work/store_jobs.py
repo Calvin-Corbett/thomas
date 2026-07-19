@@ -247,6 +247,15 @@ class WorkJobMixin:
                 dashboard["metrics"] = _clean_object_list(payload["metrics"], field="metrics")
             if "sections" in payload:
                 dashboard["sections"] = _clean_object_list(payload["sections"], field="sections")
+            # AI-designed surfaces: a one-line headline, action buttons bound to
+            # the job's OWN workflows, and inboxes. Same bounded-object handling
+            # as metrics/sections; artifacts stay append-only elsewhere.
+            if "headline" in payload:
+                dashboard["headline"] = str(payload.get("headline") or "").strip()[:200]
+            if "actions" in payload:
+                dashboard["actions"] = _clean_object_list(payload["actions"], field="actions")
+            if "inboxes" in payload:
+                dashboard["inboxes"] = _clean_object_list(payload["inboxes"], field="inboxes")
             job["updated_at"] = utc_now_iso()
             self._append_activity(
                 job,

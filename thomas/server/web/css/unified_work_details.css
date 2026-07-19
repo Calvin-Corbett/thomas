@@ -143,6 +143,37 @@
   font-size: 10px;
   line-height: 1.45;
 }
+.tc-work-dashboard-headline {
+  margin: 0 0 8px;
+  color: var(--c-dim);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.tc-work-dashboard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.tc-work-dashboard-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border: 1px solid var(--c-accent-line);
+  border-radius: 8px;
+  background: var(--c-accent-soft);
+  color: inherit;
+  font: 600 11px var(--font-sans);
+  cursor: pointer;
+}
+.tc-work-dashboard-action:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+.tc-work-dashboard-inbox strong i {
+  color: var(--c-accent);
+}
 .tc-work-activity-card {
   margin-top: 12px;
 }

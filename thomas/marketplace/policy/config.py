@@ -36,7 +36,12 @@ def _env_bool(name: str, default: bool | None = None) -> bool | None:
 
 @dataclass
 class GuardrailsSettings:
-    enabled: bool = False
+    # Default ON per product decision D6 (PRODUCT_READY_PUSH_2026-07-15,
+    # executed with Calvin's 2026-07-18 go-ahead): with guardrails reporting
+    # unavailable, /api/health showed "degraded" on every boot and Work-mode
+    # autonomy handoffs dead-ended. Opt out via THOMAS_GUARDRAILS=0 or
+    # policy.toml [guardrails] enabled=false.
+    enabled: bool = True
     approval_timeout_s: int = 60
     no_human_mode: str = "human"
     # If true, only certain tools require approvals; otherwise use rules.

@@ -218,6 +218,8 @@
     root.querySelector('#tc-work-automation-form')?.addEventListener('submit', event => { event.preventDefault(); void safely(() => createAutomation(new FormData(event.currentTarget))); });
     root.querySelector('#tc-work-skill-form')?.addEventListener('submit', event => { event.preventDefault(); void safely(() => createSkill(new FormData(event.currentTarget))); });
     root.querySelector('#tc-work-dashboard-form')?.addEventListener('submit', event => { event.preventDefault(); void safely(() => updateDashboard(new FormData(event.currentTarget))); });
+    root.querySelector('[data-work-dashboard-design]')?.addEventListener('click', () => { void safely(designDashboard); });
+    root.querySelectorAll('[data-work-dashboard-run]').forEach(button => button.addEventListener('click', () => { void safely(() => runDashboardAction(button.dataset.workDashboardRun)); }));
     root.querySelectorAll('form input, form textarea, form select').forEach(element => {
       element.addEventListener('input', () => { state.formDirty = true; });
       element.addEventListener('change', () => { state.formDirty = true; });
@@ -594,6 +596,10 @@
   async function requestPromotion(id) { await request(jobUrl(`/skills/${encodeURIComponent(id)}/promotion/request`), { method: 'POST' }); await openJob(state.activeApp.id, state.activeJob.id); }
   async function approvePromotion(id) { await request(jobUrl(`/skills/${encodeURIComponent(id)}/promotion/approve`), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ approved_by: 'local_owner' }) }); await openJob(state.activeApp.id, state.activeJob.id); }
   async function updateDashboard(form) { const fields = Object.fromEntries(form.entries()); const dashboard = state.activeJob.dashboard || {}; const metrics = [...(dashboard.metrics || [])]; const sections = [...(dashboard.sections || [])]; if (String(fields.metric_label || '').trim()) metrics.push({ label: fields.metric_label, value: fields.metric_value }); if (String(fields.section_title || '').trim()) sections.push({ title: fields.section_title, text: fields.section_text }); if (!String(fields.metric_label || '').trim() && !String(fields.section_title || '').trim()) return; await request(jobUrl('/dashboard'), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ metrics, sections }) }); await openJob(state.activeApp.id, state.activeJob.id); }
+  // The AI designs this job's dashboard server-side from its real context;
+  // buttons it creates only ever bind to the job's own workflows.
+  async function designDashboard() { await request(jobUrl('/dashboard/design'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }); await openJob(state.activeApp.id, state.activeJob.id); }
+  async function runDashboardAction(actionId) { await request(jobUrl(`/dashboard/actions/${encodeURIComponent(actionId)}/run`), { method: 'POST' }); await openJob(state.activeApp.id, state.activeJob.id); }
   function automationPayload(form, enabled) {
     const fields = Object.fromEntries(form.entries());
     const kind = fields.trigger || 'manual';

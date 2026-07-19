@@ -192,8 +192,15 @@
     }
 
     function dashboardHtml() {
-      const sections = ((state.activeJob.dashboard || {}).sections || []).map(row => `<div class="tc-work-dashboard-section"><strong>${esc(row.title || row.name || 'Section')}</strong><p>${esc(row.text || row.description || '')}</p></div>`).join('');
-      return `<section class="tc-work-card"><header><span><i class="ph ph-squares-four"></i> Dashboard</span><small>customize this job</small></header>${sections}<form id="tc-work-dashboard-form" class="tc-work-mini-form"><input name="metric_label" aria-label="Metric label" placeholder="Metric label"><input name="metric_value" aria-label="Metric value" placeholder="Metric value"><input name="section_title" aria-label="Section title" placeholder="Section title"><textarea name="section_text" aria-label="Dashboard note" placeholder="Dashboard note"></textarea><button>Save dashboard item</button></form></section>`;
+      const dashboard = state.activeJob.dashboard || {};
+      const headline = dashboard.headline ? `<p class="tc-work-dashboard-headline">${esc(dashboard.headline)}</p>` : '';
+      const sections = (dashboard.sections || []).map(row => `<div class="tc-work-dashboard-section"><strong>${esc(row.title || row.name || 'Section')}</strong><p>${esc(row.text || row.description || '')}</p></div>`).join('');
+      // AI-designed action buttons: each is bound server-side to one of THIS
+      // job's workflows and runs through Mission — never a free-form command.
+      const actions = (dashboard.actions || []).map(row => `<button class="tc-work-dashboard-action" data-work-dashboard-run="${esc(row.id)}" title="${esc(row.description || '')}" ${state.actionBusy ? 'disabled' : ''}><i class="ph ph-lightning"></i> ${esc(row.label || 'Run')}</button>`).join('');
+      const inboxes = (dashboard.inboxes || []).map(row => `<div class="tc-work-dashboard-section tc-work-dashboard-inbox"><strong><i class="ph ph-tray"></i> ${esc(row.label || 'Inbox')}</strong><p>${esc(row.description || '')}${row.source ? ` <small>· ${esc(row.source)}</small>` : ''}</p></div>`).join('');
+      const designLabel = (dashboard.metrics || []).length || (dashboard.actions || []).length ? 'Redesign with AI' : 'Design my dashboard';
+      return `<section class="tc-work-card"><header><span><i class="ph ph-squares-four"></i> Dashboard</span><small>designed for this job</small></header>${headline}${actions ? `<div class="tc-work-dashboard-actions">${actions}</div>` : ''}${sections}${inboxes}<button class="tc-work-primary is-compact" data-work-dashboard-design ${state.actionBusy ? 'disabled' : ''}><i class="ph ph-sparkle"></i> ${designLabel}</button><form id="tc-work-dashboard-form" class="tc-work-mini-form"><input name="metric_label" aria-label="Metric label" placeholder="Metric label"><input name="metric_value" aria-label="Metric value" placeholder="Metric value"><input name="section_title" aria-label="Section title" placeholder="Section title"><textarea name="section_text" aria-label="Dashboard note" placeholder="Dashboard note"></textarea><button>Save dashboard item</button></form></section>`;
     }
 
     function activityHtml() {

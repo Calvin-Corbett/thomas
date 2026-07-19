@@ -779,6 +779,16 @@ def register_work_routes(
     ]
     for method, path, handler in routes:
         app.router.add_route(method, path, _expected_errors(handler))
+    from thomas.server.routes.work_dashboard_runtime import register_work_dashboard_routes
+
+    register_work_dashboard_routes(
+        app,
+        guard=guard,
+        work_store=work_store,
+        expected_errors=_expected_errors,
+        ok=_ok,
+        deploy_automation=_deploy_automation,
+    )
     return work_store
 
 

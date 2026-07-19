@@ -7,8 +7,13 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Generative per-job dashboards (Work mode, pillar 3): a new `dashboard/design` endpoint has an LLM read one job's real context (onboarding, workflows, automations, connectors) and design a bespoke dashboard — headline, metrics, guidance sections, inboxes, and ACTION BUTTONS bound only to the job's own workflows (`work_dashboard_runtime.py`, dashboard schema extended with headline/actions/inboxes). Buttons run through the existing Mission delegation path (`dashboard/actions/{id}/run`); the Work tab renders the design with "Design my dashboard"/"Redesign with AI" controls. Verified live: the SOTI MobiControl job received a compliance-sweep dashboard whose button dispatched a real Mission run with honest failure reporting.
+
 ### Fixed
 
+- Guardrails default ON (product decision D6 executed): `/api/health` reports `ok` instead of permanently `degraded`, and Work-mode autonomy handoffs stop dead-ending on "guardrails are unavailable". Opt out via `THOMAS_GUARDRAILS=0` or `policy.toml`. Verified live: chat execution unaffected with guardrails enabled.
 - `release_update` gate: the per-commit helper lane now accepts branch-wide release proof (version bumped + changelog updated relative to the merge-base with the canonical branch) instead of demanding the three release files dirty in every product-surface commit — the structural catch-22 that stranded agent work since 2026-06-26. Direct canonical-branch commits still require release files in the change set; enforcement manifest re-blessed for the edited gate.
 
 ### Changed
