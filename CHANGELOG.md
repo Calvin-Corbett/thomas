@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.3] - 2026-07-19
+
+### Added
+
+- Tabbed dashboards + built-in spreadsheets (Calvin direction): the AI now designs each job dashboard as a small APP — 2-4 tabs (Overview / Data / Operations / whatever fits the job) with every metric, widget, section, and inbox assigned to a tab, ending the one-long-scroll layout. Data-heavy jobs get a Data tab with real SPREADSHEETS: AI-designed columns and starter rows, rendered as editable tables inside Work (contenteditable cells, Add Row, Save; persisted on the job dashboard, bounded 12 cols x 60 rows x 4 sheets). Verified live: the SOTI job designed Overview/Data/Operations with a 9-column Device Inventory sheet and a Compliance Exceptions sheet; a cell edit saved and persisted through reload.
+
 ## [0.19.2] - 2026-07-19
 
 ### Added

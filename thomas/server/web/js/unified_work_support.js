@@ -215,17 +215,31 @@
       return '';
     }
 
+    function sheetHtml(sheet) {
+      // Editable in place: contenteditable cells, Add row, Save. The save
+      // handler serializes the table back into the dashboard's sheets array.
+      const head = (sheet.columns || []).map(col => `<th>${esc(col)}</th>`).join('');
+      const body = (sheet.rows || []).map(row => `<tr>${(sheet.columns || []).map((c, i) => `<td contenteditable="true" spellcheck="false">${esc(row[i] == null ? '' : row[i])}</td>`).join('')}</tr>`).join('');
+      return `<div class="tc-work-sheet" data-work-sheet="${esc(sheet.id)}"><div class="tc-work-sheet-head"><strong><i class="ph ph-table"></i> ${esc(sheet.title || 'Sheet')}</strong><span><button data-work-sheet-addrow="${esc(sheet.id)}">+ Row</button><button class="tc-work-primary is-compact" data-work-sheet-save="${esc(sheet.id)}">Save</button></span></div><div class="tc-work-sheet-scroll"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
+    }
+
     function dashboardHtml() {
       const dashboard = state.activeJob.dashboard || {};
       const headline = dashboard.headline ? `<p class="tc-work-dashboard-headline">${esc(dashboard.headline)}</p>` : '';
-      const widgets = (dashboard.widgets || []).map(widgetHtml).join('');
-      const sections = (dashboard.sections || []).map(row => `<div class="tc-work-dashboard-section"><strong>${esc(row.title || row.name || 'Section')}</strong><p>${esc(row.text || row.description || '')}</p></div>`).join('');
+      const tabs = Array.isArray(dashboard.tabs) && dashboard.tabs.length ? dashboard.tabs : [];
+      const activeTab = tabs.length ? (tabs.some(t => t.id === state.dashTab) ? state.dashTab : tabs[0].id) : '';
+      const inTab = row => !tabs.length || (row.tab || tabs[0].id) === activeTab;
+      const tabBar = tabs.length > 1 ? `<div class="tc-work-dash-tabs" role="tablist">${tabs.map(t => `<button role="tab" aria-selected="${t.id === activeTab}" class="tc-work-dash-tab ${t.id === activeTab ? 'is-active' : ''}" data-work-dash-tab="${esc(t.id)}">${esc(t.label)}</button>`).join('')}</div>` : '';
+      const metricRows = (dashboard.metrics || []).filter(inTab).map(row => `<div class="tc-work-dashboard-section tc-work-dash-metric"><strong>${esc(row.value == null || row.value === '' ? '—' : row.value)}</strong><p>${esc(row.label || '')}${row.hint ? ` <small>· ${esc(row.hint)}</small>` : ''}</p></div>`).join('');
+      const widgets = (dashboard.widgets || []).filter(inTab).map(widgetHtml).join('');
+      const sheets = (dashboard.sheets || []).filter(inTab).map(sheetHtml).join('');
+      const sections = (dashboard.sections || []).filter(inTab).map(row => `<div class="tc-work-dashboard-section"><strong>${esc(row.title || row.name || 'Section')}</strong><p>${esc(row.text || row.description || '')}</p></div>`).join('');
       // AI-designed action buttons: each is bound server-side to one of THIS
       // job's workflows and runs through Mission — never a free-form command.
       const actions = (dashboard.actions || []).map(row => `<button class="tc-work-dashboard-action" data-work-dashboard-run="${esc(row.id)}" title="${esc(row.description || '')}" ${state.actionBusy ? 'disabled' : ''}><i class="ph ph-lightning"></i> ${esc(row.label || 'Run')}</button>`).join('');
-      const inboxes = (dashboard.inboxes || []).map(row => `<div class="tc-work-dashboard-section tc-work-dashboard-inbox"><strong><i class="ph ph-tray"></i> ${esc(row.label || 'Inbox')}</strong><p>${esc(row.description || '')}${row.source ? ` <small>· ${esc(row.source)}</small>` : ''}</p></div>`).join('');
+      const inboxes = (dashboard.inboxes || []).filter(inTab).map(row => `<div class="tc-work-dashboard-section tc-work-dashboard-inbox"><strong><i class="ph ph-tray"></i> ${esc(row.label || 'Inbox')}</strong><p>${esc(row.description || '')}${row.source ? ` <small>· ${esc(row.source)}</small>` : ''}</p></div>`).join('');
       const designLabel = (dashboard.metrics || []).length || (dashboard.actions || []).length ? 'Redesign with AI' : 'Design my dashboard';
-      return `<section class="tc-work-card"><header><span><i class="ph ph-squares-four"></i> Dashboard</span><small>designed for this job</small></header>${headline}${actions ? `<div class="tc-work-dashboard-actions">${actions}</div>` : ''}${widgets}${sections}${inboxes}<button class="tc-work-primary is-compact" data-work-dashboard-design ${state.actionBusy ? 'disabled' : ''}><i class="ph ph-sparkle"></i> ${designLabel}</button><form id="tc-work-dashboard-form" class="tc-work-mini-form"><input name="metric_label" aria-label="Metric label" placeholder="Metric label"><input name="metric_value" aria-label="Metric value" placeholder="Metric value"><input name="section_title" aria-label="Section title" placeholder="Section title"><textarea name="section_text" aria-label="Dashboard note" placeholder="Dashboard note"></textarea><button>Save dashboard item</button></form></section>`;
+      return `<section class="tc-work-card"><header><span><i class="ph ph-squares-four"></i> Dashboard</span><small>designed for this job</small></header>${headline}${actions ? `<div class="tc-work-dashboard-actions">${actions}</div>` : ''}${tabBar}${metricRows}${widgets}${sheets}${sections}${inboxes}<button class="tc-work-primary is-compact" data-work-dashboard-design ${state.actionBusy ? 'disabled' : ''}><i class="ph ph-sparkle"></i> ${designLabel}</button><form id="tc-work-dashboard-form" class="tc-work-mini-form"><input name="metric_label" aria-label="Metric label" placeholder="Metric label"><input name="metric_value" aria-label="Metric value" placeholder="Metric value"><input name="section_title" aria-label="Section title" placeholder="Section title"><textarea name="section_text" aria-label="Dashboard note" placeholder="Dashboard note"></textarea><button>Save dashboard item</button></form></section>`;
     }
 
     function activityHtml() {

@@ -4,7 +4,7 @@
   const state = {
     apps: [], accounts: [], connectors: [], activeApp: null, jobs: [], activeJob: null,
     messages: [], bindings: [], skills: [], automations: [], activity: [], workflows: [], activeWorkflowId: '',
-    stage: 'home', onboardingPhase: 'goal_discovery', onboardingWorkflowId: '', onboardingSelectionUserTurn: 0, running: false, actionBusy: false, formDirty: false, editing: false, editingAutomationId: '', creatingJobInApp: false, sessionId: '', error: '',
+    stage: 'home', onboardingPhase: 'goal_discovery', onboardingWorkflowId: '', onboardingSelectionUserTurn: 0, running: false, actionBusy: false, formDirty: false, editing: false, editingAutomationId: '', creatingJobInApp: false, sessionId: '', error: '', dashTab: '',
   };
   let reconcileTimer = null;
   let activeStreamController = null;
@@ -220,6 +220,13 @@
     root.querySelector('#tc-work-dashboard-form')?.addEventListener('submit', event => { event.preventDefault(); void safely(() => updateDashboard(new FormData(event.currentTarget))); });
     root.querySelector('[data-work-dashboard-design]')?.addEventListener('click', () => { void safely(designDashboard); });
     root.querySelectorAll('[data-work-dashboard-run]').forEach(button => button.addEventListener('click', () => { void safely(() => runDashboardAction(button.dataset.workDashboardRun)); }));
+    root.querySelectorAll('[data-work-dash-tab]').forEach(button => button.addEventListener('click', () => { state.dashTab = button.dataset.workDashTab; render(); }));
+    root.querySelectorAll('[data-work-sheet-addrow]').forEach(button => button.addEventListener('click', () => {
+      const holder = root.querySelector(`[data-work-sheet="${button.dataset.workSheetAddrow}"] tbody`);
+      const cols = root.querySelectorAll(`[data-work-sheet="${button.dataset.workSheetAddrow}"] thead th`).length;
+      if (holder && cols) { const tr = document.createElement('tr'); tr.innerHTML = Array.from({ length: cols }, () => '<td contenteditable="true" spellcheck="false"></td>').join(''); holder.appendChild(tr); }
+    }));
+    root.querySelectorAll('[data-work-sheet-save]').forEach(button => button.addEventListener('click', () => { void safely(() => saveSheet(button.dataset.workSheetSave)); }));
     const composer = root.querySelector('#tc-work-composer');
     if (composer) {
       const field = composer.querySelector('textarea');
@@ -616,6 +623,16 @@
   // The AI designs this job's dashboard server-side from its real context;
   // buttons it creates only ever bind to the job's own workflows.
   async function designDashboard() { await request(jobUrl('/dashboard/design'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }); await openJob(state.activeApp.id, state.activeJob.id); }
+  // Serialize the edited table (textContent per cell — no markup) back into
+  // the dashboard's sheets array and persist the whole set.
+  async function saveSheet(sheetId) {
+    const holder = document.querySelector(`[data-work-sheet="${sheetId}"]`);
+    if (!holder || !state.activeJob) return;
+    const rows = [...holder.querySelectorAll('tbody tr')].map(tr => [...tr.querySelectorAll('td')].map(td => (td.textContent || '').trim().slice(0, 200)));
+    const sheets = [...((state.activeJob.dashboard || {}).sheets || [])].map(s => s.id === sheetId ? { ...s, rows: rows.filter(r => r.some(c => c)) } : s);
+    await request(jobUrl('/dashboard'), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sheets }) });
+    await openJob(state.activeApp.id, state.activeJob.id);
+  }
   async function runDashboardAction(actionId) { await request(jobUrl(`/dashboard/actions/${encodeURIComponent(actionId)}/run`), { method: 'POST' }); await openJob(state.activeApp.id, state.activeJob.id); }
   function automationPayload(form, enabled) {
     const fields = Object.fromEntries(form.entries());

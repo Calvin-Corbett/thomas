@@ -258,6 +258,10 @@ class WorkJobMixin:
                 dashboard["inboxes"] = _clean_object_list(payload["inboxes"], field="inboxes")
             if "widgets" in payload:
                 dashboard["widgets"] = _clean_object_list(payload["widgets"], field="widgets")
+            if "tabs" in payload:
+                dashboard["tabs"] = _clean_object_list(payload["tabs"], field="tabs")
+            if "sheets" in payload:
+                dashboard["sheets"] = _clean_object_list(payload["sheets"], field="sheets")
             job["updated_at"] = utc_now_iso()
             self._append_activity(
                 job,

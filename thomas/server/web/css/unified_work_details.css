@@ -251,6 +251,97 @@
   font-size: 10px;
   font-weight: 600;
 }
+.tc-work-dash-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+  padding: 3px;
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.tc-work-dash-tab {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--c-muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tc-work-dash-tab.is-active {
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+}
+.tc-work-dash-metric strong {
+  font-size: 16px;
+}
+.tc-work-sheet {
+  margin-bottom: 10px;
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.tc-work-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 11px;
+}
+.tc-work-sheet-head span {
+  display: flex;
+  gap: 6px;
+}
+.tc-work-sheet-head button {
+  padding: 3px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--c-dim);
+  font-size: 10px;
+  cursor: pointer;
+}
+.tc-work-sheet-scroll {
+  max-height: 260px;
+  overflow: auto;
+}
+.tc-work-sheet table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.tc-work-sheet th {
+  position: sticky;
+  top: 0;
+  padding: 6px 8px;
+  background: var(--c-surface);
+  color: var(--c-muted);
+  font-size: 10px;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--c-border);
+}
+.tc-work-sheet td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--c-border);
+  color: var(--c-text);
+  min-width: 60px;
+}
+.tc-work-sheet td:focus {
+  outline: 2px solid var(--c-accent-line);
+  outline-offset: -2px;
+  background: var(--c-accent-soft);
+}
 .tc-work-activity-card {
   margin-top: 12px;
 }

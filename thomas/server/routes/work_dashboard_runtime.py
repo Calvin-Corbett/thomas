@@ -29,23 +29,32 @@ _MAX_INBOXES = 4
 _SCHEMA_HINT = """Return ONLY a JSON object, no prose, in exactly this shape:
 {
   "headline": "one-line dashboard purpose in the job's own language",
-  "metrics": [{"label": "...", "value": "...", "hint": "why this number matters", "tone": "good|warn|bad|neutral"}],
+  "tabs": [{"id": "overview", "label": "Overview"}, {"id": "data", "label": "Data"}, {"id": "ops", "label": "Operations"}],
+  "metrics": [{"tab": "overview", "label": "...", "value": "...", "hint": "why this number matters", "tone": "good|warn|bad|neutral"}],
   "widgets": [
-    {"kind": "bar_chart", "title": "...", "bars": [{"label": "Mon", "value": 12}, {"label": "Tue", "value": 8}]},
-    {"kind": "progress", "title": "...", "label": "Compliant devices", "pct": 72, "tone": "good|warn|bad"},
-    {"kind": "status_list", "title": "...", "items": [{"label": "Broker verified", "tone": "good"}, {"label": "Driver conflict", "tone": "bad"}]}
+    {"tab": "overview", "kind": "bar_chart", "title": "...", "bars": [{"label": "Mon", "value": 12}, {"label": "Tue", "value": 8}]},
+    {"tab": "overview", "kind": "progress", "title": "...", "label": "Compliant devices", "pct": 72, "tone": "good|warn|bad"},
+    {"tab": "ops", "kind": "status_list", "title": "...", "items": [{"label": "Broker verified", "tone": "good"}, {"label": "Driver conflict", "tone": "bad"}]}
   ],
-  "sections": [{"title": "...", "text": "2-4 sentences of standing guidance for this job"}],
+  "sheets": [
+    {"tab": "data", "title": "Load Tracker", "columns": ["Date", "Driver", "Broker", "Rate", "Status"],
+     "rows": [["2026-07-19", "J. Smith", "Acme Logistics", "$1,200", "Booked"], ["2026-07-19", "T. Reed", "Bulk Freight", "$980", "Pending"]]}
+  ],
+  "sections": [{"tab": "overview", "title": "...", "text": "2-4 sentences of standing guidance for this job"}],
   "actions": [{"workflow_id": "<id from the workflow list>", "label": "verb-first button label", "description": "what pressing it does"}],
-  "inboxes": [{"label": "...", "source": "<connector id or 'activity'>", "description": "what lands here"}]
+  "inboxes": [{"tab": "ops", "label": "...", "source": "<connector id or 'activity'>", "description": "what lands here"}]
 }
 Rules: every action's workflow_id MUST come from the provided workflow list —
-invent nothing. Design 1-3 WIDGETS that fit THIS job's real work: a dispatcher
-might get a weekly-loads bar_chart and a booking-progress meter; an MDM admin a
-compliance progress meter and a device-status_list; a coach a win/loss
-bar_chart. Use representative example numbers when live data isn't wired yet.
-Metrics without live data use value "—". Every job should look visibly
-different — vary which widget kinds you choose to match the domain."""
+invent nothing. Design this dashboard like a small APP for this company:
+2-4 TABS that organize the job (always start with an Overview tab; add the
+tabs THIS job actually needs — Data, Operations, Fleet, Roster, Compliance,
+whatever fits). Assign every metric/widget/sheet/section/inbox to one of your
+tabs by its id. When the job is data-heavy (loads, devices, players, orders,
+inventory), include a Data tab with 1-2 SPREADSHEETS whose columns fit the
+real work and 3-8 realistic starter rows the user can edit in place. Design
+1-3 widgets that fit the domain; use representative example numbers when live
+data isn't wired yet; metrics without live data use value "—". Every job
+should look visibly different."""
 
 
 def _build_llm(root: Path, profile: str) -> Any | None:
@@ -157,23 +166,101 @@ def validate_dashboard_spec(spec: dict[str, Any], workflows: list[dict[str, Any]
         )
         if len(actions) >= _MAX_ACTIONS:
             break
+    tabs = _clean_tabs(spec.get("tabs"))
+    tab_ids = {t["id"] for t in tabs}
+    default_tab = tabs[0]["id"] if tabs else ""
+
+    def _with_tab(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        for row in rows:
+            tab = str(row.pop("tab", "") or "").strip().lower()
+            row["tab"] = tab if tab in tab_ids else default_tab
+        return rows
+
+    metrics = _clean_rows(spec.get("metrics"), ("label", "value", "hint", "tone", "tab"), _MAX_METRICS)
+    widgets = _clean_widgets(spec.get("widgets"))
+    sections = _clean_rows(spec.get("sections"), ("title", "text", "tab"), _MAX_SECTIONS)
+    inboxes = _clean_rows(spec.get("inboxes"), ("label", "source", "description", "tab"), _MAX_INBOXES)
+    sheets = _clean_sheets(spec.get("sheets"))
     return {
         "headline": str(spec.get("headline") or "").strip()[:200],
-        "metrics": _clean_rows(spec.get("metrics"), ("label", "value", "hint", "tone"), _MAX_METRICS),
-        "widgets": _clean_widgets(spec.get("widgets")),
-        "sections": _clean_rows(spec.get("sections"), ("title", "text"), _MAX_SECTIONS),
+        "tabs": tabs,
+        "metrics": _with_tab(metrics),
+        "widgets": _with_tab(widgets),
+        "sheets": _with_tab(sheets),
+        "sections": _with_tab(sections),
         "actions": actions,
-        "inboxes": _clean_rows(spec.get("inboxes"), ("label", "source", "description"), _MAX_INBOXES),
+        "inboxes": _with_tab(inboxes),
     }
 
 
 _MAX_WIDGETS = 4
+_MAX_TABS = 5
+_MAX_SHEETS = 4
+_MAX_SHEET_COLS = 12
+_MAX_SHEET_ROWS = 60
 _TONES = {"good", "warn", "bad", "neutral"}
 
 
 def _tone(value: Any) -> str:
     t = str(value or "neutral").strip().lower()
     return t if t in _TONES else "neutral"
+
+
+def _clean_tabs(rows: Any) -> list[dict[str, str]]:
+    """Bound the tab layout; always at least an Overview tab."""
+    out: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        raw_id = re.sub(r"[^a-z0-9_-]", "", str(row.get("id") or "").strip().lower())[:24]
+        label = str(row.get("label") or "").strip()[:24]
+        if not raw_id or not label or raw_id in seen:
+            continue
+        seen.add(raw_id)
+        out.append({"id": raw_id, "label": label})
+        if len(out) >= _MAX_TABS:
+            break
+    if not out:
+        out = [{"id": "overview", "label": "Overview"}]
+    return out
+
+
+def _clean_sheets(rows: Any) -> list[dict[str, Any]]:
+    """Bound AI-designed spreadsheets to safe, editable shapes."""
+    out: list[dict[str, Any]] = []
+    for i, row in enumerate(rows if isinstance(rows, list) else []):
+        if not isinstance(row, dict):
+            continue
+        cols = [
+            str(c).strip()[:40]
+            for c in (row.get("columns") if isinstance(row.get("columns"), list) else [])
+            if str(c).strip()
+        ]
+        cols = cols[:_MAX_SHEET_COLS]
+        if not cols:
+            continue
+        cleaned_rows: list[list[str]] = []
+        for r in row.get("rows") if isinstance(row.get("rows"), list) else []:
+            if not isinstance(r, list):
+                continue
+            cells = [str(c if c is not None else "").strip()[:200] for c in r[: len(cols)]]
+            cells += [""] * (len(cols) - len(cells))
+            cleaned_rows.append(cells)
+            if len(cleaned_rows) >= _MAX_SHEET_ROWS:
+                break
+        out.append(
+            {
+                "id": str(row.get("id") or f"sheet-{i + 1}").strip()[:40],
+                "tab": row.get("tab"),
+                "title": str(row.get("title") or f"Sheet {i + 1}").strip()[:80],
+                "columns": cols,
+                "rows": cleaned_rows,
+            }
+        )
+        if len(out) >= _MAX_SHEETS:
+            break
+    return out
 
 
 def _clean_widgets(rows: Any) -> list[dict[str, Any]]:
@@ -184,6 +271,7 @@ def _clean_widgets(rows: Any) -> list[dict[str, Any]]:
             continue
         kind = str(row.get("kind") or "").strip().lower()
         title = str(row.get("title") or "").strip()[:80]
+        tab = row.get("tab")
         if kind == "bar_chart":
             bars = []
             for b in row.get("bars") if isinstance(row.get("bars"), list) else []:
@@ -197,7 +285,7 @@ def _clean_widgets(rows: Any) -> list[dict[str, Any]]:
                 if len(bars) >= 12:
                     break
             if bars:
-                out.append({"kind": "bar_chart", "title": title, "bars": bars})
+                out.append({"kind": "bar_chart", "title": title, "tab": tab, "bars": bars})
         elif kind == "progress":
             try:
                 pct = max(0, min(100, int(float(row.get("pct")))))
@@ -207,6 +295,7 @@ def _clean_widgets(rows: Any) -> list[dict[str, Any]]:
                 {
                     "kind": "progress",
                     "title": title,
+                    "tab": tab,
                     "label": str(row.get("label") or "").strip()[:60],
                     "pct": pct,
                     "tone": _tone(row.get("tone")),
@@ -223,7 +312,7 @@ def _clean_widgets(rows: Any) -> list[dict[str, Any]]:
                 if len(items) >= 8:
                     break
             if items:
-                out.append({"kind": "status_list", "title": title, "items": items})
+                out.append({"kind": "status_list", "title": title, "tab": tab, "items": items})
         if len(out) >= _MAX_WIDGETS:
             break
     return out
