@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.4] - 2026-07-19
+
+### Changed
+
+- Job workspace redesigned as a full-width app (Calvin: "dashboard still looks like crap" — it did): the dashboard IS the main surface now. One tab bar runs the whole job — the AI's tabs (Overview/Data/Operations/...) plus permanent Chat and Setup tabs — replacing the cramped right-rail dashboard and the chat-dominated center. Metrics render as hero tiles, widgets in a responsive grid, spreadsheets full-width; connectors/automations/skills/activity/manual-items moved to the Setup tab; the job conversation (with its composer) lives in the Chat tab and typing anywhere flips to it. Also raised the work panel above the decorative background layer (the theme's floating planet was rendering over metric tiles and the composer).
+
 ## [0.19.3] - 2026-07-19
 
 ### Added

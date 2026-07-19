@@ -452,6 +452,8 @@
 
   async function send(message) {
     const text = String(message || '').trim(); if (!text || state.running) return;
+    // Typing to the job always shows the conversation: flip to the Chat tab.
+    if (state.stage === 'job') state.dashTab = 'chat';
     const generation = selectionGeneration;
     const controller = new AbortController();
     activeStreamController = controller;

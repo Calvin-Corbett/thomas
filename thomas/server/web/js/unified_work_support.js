@@ -223,23 +223,62 @@
       return `<div class="tc-work-sheet" data-work-sheet="${esc(sheet.id)}"><div class="tc-work-sheet-head"><strong><i class="ph ph-table"></i> ${esc(sheet.title || 'Sheet')}</strong><span><button data-work-sheet-addrow="${esc(sheet.id)}">+ Row</button><button class="tc-work-primary is-compact" data-work-sheet-save="${esc(sheet.id)}">Save</button></span></div><div class="tc-work-sheet-scroll"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
     }
 
-    function dashboardHtml() {
+    // The dashboard IS the job's main surface: full-width, with the AI's tabs
+    // first-class and Chat/Setup always available as tabs of the same app.
+    function jobTabs() {
       const dashboard = state.activeJob.dashboard || {};
-      const headline = dashboard.headline ? `<p class="tc-work-dashboard-headline">${esc(dashboard.headline)}</p>` : '';
-      const tabs = Array.isArray(dashboard.tabs) && dashboard.tabs.length ? dashboard.tabs : [];
-      const activeTab = tabs.length ? (tabs.some(t => t.id === state.dashTab) ? state.dashTab : tabs[0].id) : '';
-      const inTab = row => !tabs.length || (row.tab || tabs[0].id) === activeTab;
-      const tabBar = tabs.length > 1 ? `<div class="tc-work-dash-tabs" role="tablist">${tabs.map(t => `<button role="tab" aria-selected="${t.id === activeTab}" class="tc-work-dash-tab ${t.id === activeTab ? 'is-active' : ''}" data-work-dash-tab="${esc(t.id)}">${esc(t.label)}</button>`).join('')}</div>` : '';
-      const metricRows = (dashboard.metrics || []).filter(inTab).map(row => `<div class="tc-work-dashboard-section tc-work-dash-metric"><strong>${esc(row.value == null || row.value === '' ? '—' : row.value)}</strong><p>${esc(row.label || '')}${row.hint ? ` <small>· ${esc(row.hint)}</small>` : ''}</p></div>`).join('');
-      const widgets = (dashboard.widgets || []).filter(inTab).map(widgetHtml).join('');
-      const sheets = (dashboard.sheets || []).filter(inTab).map(sheetHtml).join('');
-      const sections = (dashboard.sections || []).filter(inTab).map(row => `<div class="tc-work-dashboard-section"><strong>${esc(row.title || row.name || 'Section')}</strong><p>${esc(row.text || row.description || '')}</p></div>`).join('');
+      const ai = Array.isArray(dashboard.tabs) ? dashboard.tabs.filter(t => t && t.id) : [];
+      return [...ai, { id: 'chat', label: 'Chat' }, { id: 'setup', label: 'Setup' }];
+    }
+
+    function activeJobTab() {
+      const tabs = jobTabs();
+      if (state.dashTab && tabs.some(t => t.id === state.dashTab)) return state.dashTab;
+      return tabs.length > 2 ? tabs[0].id : 'chat';
+    }
+
+    function jobTabBarHtml() {
+      const active = activeJobTab();
+      const buttons = jobTabs().map(t => `<button role="tab" aria-selected="${t.id === active}" class="tc-work-dash-tab ${t.id === active ? 'is-active' : ''}" data-work-dash-tab="${esc(t.id)}">${t.id === 'chat' ? '<i class="ph ph-chat-circle"></i> ' : t.id === 'setup' ? '<i class="ph ph-gear"></i> ' : ''}${esc(t.label)}</button>`).join('');
+      const hasDesign = ((state.activeJob.dashboard || {}).tabs || []).length > 0;
+      const design = hasDesign ? '' : `<button class="tc-work-primary is-compact" data-work-dashboard-design ${state.actionBusy ? 'disabled' : ''}><i class="ph ph-sparkle"></i> Design my dashboard</button>`;
+      return `<div class="tc-work-job-tabrow"><div class="tc-work-dash-tabs tc-work-job-tabs" role="tablist">${buttons}</div>${design}</div>`;
+    }
+
+    function dashboardTabHtml(tabId) {
+      const dashboard = state.activeJob.dashboard || {};
+      const first = (dashboard.tabs || [])[0];
+      const inTab = row => (row.tab || (first && first.id) || '') === tabId;
+      const isFirst = first && first.id === tabId;
+      const headline = isFirst && dashboard.headline ? `<p class="tc-work-dashboard-headline">${esc(dashboard.headline)}</p>` : '';
       // AI-designed action buttons: each is bound server-side to one of THIS
       // job's workflows and runs through Mission — never a free-form command.
       const actions = (dashboard.actions || []).map(row => `<button class="tc-work-dashboard-action" data-work-dashboard-run="${esc(row.id)}" title="${esc(row.description || '')}" ${state.actionBusy ? 'disabled' : ''}><i class="ph ph-lightning"></i> ${esc(row.label || 'Run')}</button>`).join('');
+      const metricTiles = (dashboard.metrics || []).filter(inTab).map(row => `<div title="${esc(row.hint || '')}"><strong>${esc(row.value == null || row.value === '' ? '—' : row.value)}</strong><span>${esc(row.label || 'Metric')}</span></div>`).join('');
+      const widgets = (dashboard.widgets || []).filter(inTab).map(widgetHtml).join('');
+      const sheets = (dashboard.sheets || []).filter(inTab).map(sheetHtml).join('');
+      const sections = (dashboard.sections || []).filter(inTab).map(row => `<div class="tc-work-dashboard-section"><strong>${esc(row.title || row.name || 'Section')}</strong><p>${esc(row.text || row.description || '')}</p></div>`).join('');
       const inboxes = (dashboard.inboxes || []).filter(inTab).map(row => `<div class="tc-work-dashboard-section tc-work-dashboard-inbox"><strong><i class="ph ph-tray"></i> ${esc(row.label || 'Inbox')}</strong><p>${esc(row.description || '')}${row.source ? ` <small>· ${esc(row.source)}</small>` : ''}</p></div>`).join('');
-      const designLabel = (dashboard.metrics || []).length || (dashboard.actions || []).length ? 'Redesign with AI' : 'Design my dashboard';
-      return `<section class="tc-work-card"><header><span><i class="ph ph-squares-four"></i> Dashboard</span><small>designed for this job</small></header>${headline}${actions ? `<div class="tc-work-dashboard-actions">${actions}</div>` : ''}${tabBar}${metricRows}${widgets}${sheets}${sections}${inboxes}<button class="tc-work-primary is-compact" data-work-dashboard-design ${state.actionBusy ? 'disabled' : ''}><i class="ph ph-sparkle"></i> ${designLabel}</button><form id="tc-work-dashboard-form" class="tc-work-mini-form"><input name="metric_label" aria-label="Metric label" placeholder="Metric label"><input name="metric_value" aria-label="Metric value" placeholder="Metric value"><input name="section_title" aria-label="Section title" placeholder="Section title"><textarea name="section_text" aria-label="Dashboard note" placeholder="Dashboard note"></textarea><button>Save dashboard item</button></form></section>`;
+      const redesign = isFirst ? `<div class="tc-work-dash-foot"><button class="tc-work-primary is-compact" data-work-dashboard-design ${state.actionBusy ? 'disabled' : ''}><i class="ph ph-sparkle"></i> Redesign with AI</button></div>` : '';
+      return `${headline}${actions ? `<div class="tc-work-dashboard-actions">${actions}</div>` : ''}${metricTiles ? `<div class="tc-work-metrics">${metricTiles}</div>` : ''}${widgets ? `<div class="tc-work-widget-grid">${widgets}</div>` : ''}${sheets}${sections || inboxes ? `<div class="tc-work-note-grid">${sections}${inboxes}</div>` : ''}${redesign}`;
+    }
+
+    function chatTabHtml() {
+      const job = state.activeJob;
+      const artifacts = (job.dashboard && job.dashboard.artifacts || []).map(row => { const href = safeArtifactHref(row.reference); return href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(row.title)}</a>` : `<span title="Unsafe result link blocked">${esc(row.title)}</span>`; }).join('');
+      return `<section class="tc-work-conversation"><div class="tc-work-conversation-label"><span class="tc-work-message-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><div><strong>Thomas</strong><small>Working inside ${esc(job.name)}</small></div></div><div class="tc-work-transcript" role="log" aria-live="polite" aria-relevant="additions text" aria-busy="${state.running ? 'true' : 'false'}">${messageRows()}${state.running ? '<div class="tc-work-thinking" role="status">Thomas is working in this job…</div>' : ''}</div>${composerHtml('Message Thomas in this job…')}</section>${artifacts ? `<section class="tc-work-artifacts"><h3>Results</h3>${artifacts}</section>` : ''}`;
+    }
+
+    function setupTabHtml() {
+      const form = `<section class="tc-work-card"><header><span><i class="ph ph-squares-four"></i> Dashboard items</span><small>manual additions</small></header><form id="tc-work-dashboard-form" class="tc-work-mini-form"><input name="metric_label" aria-label="Metric label" placeholder="Metric label"><input name="metric_value" aria-label="Metric value" placeholder="Metric value"><input name="section_title" aria-label="Section title" placeholder="Section title"><textarea name="section_text" aria-label="Dashboard note" placeholder="Dashboard note"></textarea><button>Save dashboard item</button></form></section>`;
+      return `<div class="tc-work-setup-grid">${connectorHtml()}${automationHtml()}${skillsHtml()}${form}${activityHtml()}</div>`;
+    }
+
+    function dashboardHtml() {
+      const tab = activeJobTab();
+      if (tab === 'chat') return chatTabHtml();
+      if (tab === 'setup') return setupTabHtml();
+      return dashboardTabHtml(tab);
     }
 
     function activityHtml() {
@@ -275,10 +314,10 @@
 
     function jobHtml() {
       const job = state.activeJob;
-      const metrics = (job.dashboard && job.dashboard.metrics || []).map(row => `<div><strong>${esc(row.value == null ? '—' : row.value)}</strong><span>${esc(row.label || row.name || 'Metric')}</span></div>`).join('');
-      const artifacts = (job.dashboard && job.dashboard.artifacts || []).map(row => { const href = safeArtifactHref(row.reference); return href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(row.title)}</a>` : `<span title="Unsafe result link blocked">${esc(row.title)}</span>`; }).join('');
       const identity = state.editing ? `<form id="tc-work-job-edit" class="tc-work-job-edit"><input name="name" aria-label="Job name" value="${esc(job.name)}" required><textarea name="goal" aria-label="Job goal" required>${esc(job.goal)}</textarea><button>Save</button><button type="button" data-work-edit-cancel>Cancel</button></form>` : `<div><div class="tc-mode-kicker">${esc(state.activeApp.name)} · job workspace</div><h1 class="tc-mode-title">${esc(job.name)}</h1><p class="tc-mode-subtitle">${esc(job.goal)}</p></div>`;
-      return `<div class="tc-mode-panel tc-work-panel"><div class="tc-mode-hero tc-work-compact">${identity}<div class="tc-work-job-actions">${statusPill(job.status)}<button data-work-edit>Edit</button><button data-work-status="${job.status === 'paused' ? 'resume' : 'pause'}"><i class="ph ph-${job.status === 'paused' ? 'play' : 'pause'}"></i> ${job.status === 'paused' ? 'Resume' : 'Pause'}</button><button class="is-danger" data-work-archive>Archive</button></div></div><div class="tc-work-job-layout">${workflowRailHtml()}<main class="tc-work-job-main"><div class="tc-work-metrics">${metrics || '<div><strong>Ready</strong><span>Job status</span></div><div><strong>' + state.bindings.length + '</strong><span>Connectors</span></div><div><strong>' + state.workflows.length + '</strong><span>Workflows</span></div>'}</div><section class="tc-work-conversation"><div class="tc-work-conversation-label"><span class="tc-work-message-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><div><strong>Thomas</strong><small>Working inside ${esc(job.name)}</small></div></div><div class="tc-work-transcript" role="log" aria-live="polite" aria-relevant="additions text" aria-busy="${state.running ? 'true' : 'false'}">${messageRows()}${state.running ? '<div class="tc-work-thinking" role="status">Thomas is working in this job…</div>' : ''}</div>${composerHtml('Message Thomas in this job…')}</section>${artifacts ? `<section class="tc-work-artifacts"><h3>Results</h3>${artifacts}</section>` : ''}</main><aside class="tc-work-operations">${dashboardHtml()}${connectorHtml()}${automationHtml()}${skillsHtml()}${activityHtml()}</aside></div></div>`;
+      // The dashboard IS the main surface: tab bar up top (AI tabs + Chat +
+      // Setup), one full-width content area below. No cramped side rail.
+      return `<div class="tc-mode-panel tc-work-panel"><div class="tc-mode-hero tc-work-compact">${identity}<div class="tc-work-job-actions">${statusPill(job.status)}<button data-work-edit>Edit</button><button data-work-status="${job.status === 'paused' ? 'resume' : 'pause'}"><i class="ph ph-${job.status === 'paused' ? 'play' : 'pause'}"></i> ${job.status === 'paused' ? 'Resume' : 'Pause'}</button><button class="is-danger" data-work-archive>Archive</button></div></div><div class="tc-work-job-layout">${workflowRailHtml()}<main class="tc-work-job-main">${jobTabBarHtml()}<div class="tc-work-tab-content">${dashboardHtml()}</div></main></div></div>`;
     }
 
     async function provisionOnboardedJob(job) {

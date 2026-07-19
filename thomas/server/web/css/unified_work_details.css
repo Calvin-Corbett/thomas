@@ -260,6 +260,51 @@
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.02);
 }
+/* The job workspace sits ABOVE the decorative background (the theme's
+   floating planet was rendering over metric tiles and the composer). */
+.tc-work-panel {
+  position: relative;
+  z-index: 3;
+}
+.tc-work-job-tabrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.tc-work-job-tabs {
+  flex: 1;
+  margin-bottom: 0;
+}
+.tc-work-job-tabs .tc-work-dash-tab {
+  font-size: 12px;
+  padding: 8px 10px;
+}
+.tc-work-tab-content {
+  min-height: 300px;
+}
+.tc-work-widget-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.tc-work-note-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 8px;
+  align-items: start;
+  margin-bottom: 10px;
+}
+.tc-work-setup-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.tc-work-dash-foot {
+  margin-top: 4px;
+}
 .tc-work-dash-tab {
   flex: 1;
   min-width: 0;
