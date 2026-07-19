@@ -196,16 +196,36 @@
       return `<section class="tc-work-card"><header><span><i class="ph ph-sparkle"></i> Job skills</span><small>private by default</small></header>${rows || '<p class="tc-work-muted">Thomas can remember a repeatable workflow here without loading it in unrelated chats or jobs.</p>'}<form id="tc-work-skill-form" class="tc-work-mini-form"><input name="name" aria-label="Skill name" required placeholder="Skill name"><input name="description" aria-label="Skill instructions" placeholder="What should Thomas remember?"><button>Add skill</button></form></section>`;
     }
 
+    function widgetHtml(w) {
+      const toneVar = t => ({ good: 'var(--c-accent)', warn: '#e6b455', bad: '#ff7a7a', neutral: 'var(--c-muted)' }[t] || 'var(--c-accent)');
+      if (w.kind === 'bar_chart') {
+        const bars = Array.isArray(w.bars) ? w.bars : [];
+        const max = Math.max(1, ...bars.map(b => Number(b.value) || 0));
+        const cols = bars.map(b => { const h = Math.round(((Number(b.value) || 0) / max) * 46); return `<div class="tc-work-widget-bar"><span class="tc-work-widget-bar-fill" style="height:${h}px"></span><small>${esc(b.label || '')}</small><em>${esc(String(b.value))}</em></div>`; }).join('');
+        return `<div class="tc-work-widget"><strong>${esc(w.title || 'Chart')}</strong><div class="tc-work-widget-bars">${cols}</div></div>`;
+      }
+      if (w.kind === 'progress') {
+        const pct = Math.max(0, Math.min(100, Number(w.pct) || 0));
+        return `<div class="tc-work-widget"><strong>${esc(w.title || 'Progress')}</strong><div class="tc-work-widget-progress-row"><span>${esc(w.label || '')}</span><em>${pct}%</em></div><div class="tc-work-widget-meter"><span style="width:${pct}%;background:${toneVar(w.tone)}"></span></div></div>`;
+      }
+      if (w.kind === 'status_list') {
+        const items = (Array.isArray(w.items) ? w.items : []).map(it => `<span class="tc-work-widget-pill" style="border-color:${toneVar(it.tone)};color:${toneVar(it.tone)}">${esc(it.label || '')}</span>`).join('');
+        return `<div class="tc-work-widget"><strong>${esc(w.title || 'Status')}</strong><div class="tc-work-widget-pills">${items}</div></div>`;
+      }
+      return '';
+    }
+
     function dashboardHtml() {
       const dashboard = state.activeJob.dashboard || {};
       const headline = dashboard.headline ? `<p class="tc-work-dashboard-headline">${esc(dashboard.headline)}</p>` : '';
+      const widgets = (dashboard.widgets || []).map(widgetHtml).join('');
       const sections = (dashboard.sections || []).map(row => `<div class="tc-work-dashboard-section"><strong>${esc(row.title || row.name || 'Section')}</strong><p>${esc(row.text || row.description || '')}</p></div>`).join('');
       // AI-designed action buttons: each is bound server-side to one of THIS
       // job's workflows and runs through Mission — never a free-form command.
       const actions = (dashboard.actions || []).map(row => `<button class="tc-work-dashboard-action" data-work-dashboard-run="${esc(row.id)}" title="${esc(row.description || '')}" ${state.actionBusy ? 'disabled' : ''}><i class="ph ph-lightning"></i> ${esc(row.label || 'Run')}</button>`).join('');
       const inboxes = (dashboard.inboxes || []).map(row => `<div class="tc-work-dashboard-section tc-work-dashboard-inbox"><strong><i class="ph ph-tray"></i> ${esc(row.label || 'Inbox')}</strong><p>${esc(row.description || '')}${row.source ? ` <small>· ${esc(row.source)}</small>` : ''}</p></div>`).join('');
       const designLabel = (dashboard.metrics || []).length || (dashboard.actions || []).length ? 'Redesign with AI' : 'Design my dashboard';
-      return `<section class="tc-work-card"><header><span><i class="ph ph-squares-four"></i> Dashboard</span><small>designed for this job</small></header>${headline}${actions ? `<div class="tc-work-dashboard-actions">${actions}</div>` : ''}${sections}${inboxes}<button class="tc-work-primary is-compact" data-work-dashboard-design ${state.actionBusy ? 'disabled' : ''}><i class="ph ph-sparkle"></i> ${designLabel}</button><form id="tc-work-dashboard-form" class="tc-work-mini-form"><input name="metric_label" aria-label="Metric label" placeholder="Metric label"><input name="metric_value" aria-label="Metric value" placeholder="Metric value"><input name="section_title" aria-label="Section title" placeholder="Section title"><textarea name="section_text" aria-label="Dashboard note" placeholder="Dashboard note"></textarea><button>Save dashboard item</button></form></section>`;
+      return `<section class="tc-work-card"><header><span><i class="ph ph-squares-four"></i> Dashboard</span><small>designed for this job</small></header>${headline}${actions ? `<div class="tc-work-dashboard-actions">${actions}</div>` : ''}${widgets}${sections}${inboxes}<button class="tc-work-primary is-compact" data-work-dashboard-design ${state.actionBusy ? 'disabled' : ''}><i class="ph ph-sparkle"></i> ${designLabel}</button><form id="tc-work-dashboard-form" class="tc-work-mini-form"><input name="metric_label" aria-label="Metric label" placeholder="Metric label"><input name="metric_value" aria-label="Metric value" placeholder="Metric value"><input name="section_title" aria-label="Section title" placeholder="Section title"><textarea name="section_text" aria-label="Dashboard note" placeholder="Dashboard note"></textarea><button>Save dashboard item</button></form></section>`;
     }
 
     function activityHtml() {

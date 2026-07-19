@@ -29,16 +29,23 @@ _MAX_INBOXES = 4
 _SCHEMA_HINT = """Return ONLY a JSON object, no prose, in exactly this shape:
 {
   "headline": "one-line dashboard purpose in the job's own language",
-  "metrics": [{"label": "...", "value": "...", "hint": "why this number matters"}],
+  "metrics": [{"label": "...", "value": "...", "hint": "why this number matters", "tone": "good|warn|bad|neutral"}],
+  "widgets": [
+    {"kind": "bar_chart", "title": "...", "bars": [{"label": "Mon", "value": 12}, {"label": "Tue", "value": 8}]},
+    {"kind": "progress", "title": "...", "label": "Compliant devices", "pct": 72, "tone": "good|warn|bad"},
+    {"kind": "status_list", "title": "...", "items": [{"label": "Broker verified", "tone": "good"}, {"label": "Driver conflict", "tone": "bad"}]}
+  ],
   "sections": [{"title": "...", "text": "2-4 sentences of standing guidance for this job"}],
   "actions": [{"workflow_id": "<id from the workflow list>", "label": "verb-first button label", "description": "what pressing it does"}],
   "inboxes": [{"label": "...", "source": "<connector id or 'activity'>", "description": "what lands here"}]
 }
 Rules: every action's workflow_id MUST come from the provided workflow list —
-invent nothing. Metrics without live data yet use value "—" and a hint saying
-what will fill it. Design for THIS job specifically; a football-team manager,
-a truck dispatcher, and an MDM administrator should each get visibly different
-dashboards."""
+invent nothing. Design 1-3 WIDGETS that fit THIS job's real work: a dispatcher
+might get a weekly-loads bar_chart and a booking-progress meter; an MDM admin a
+compliance progress meter and a device-status_list; a coach a win/loss
+bar_chart. Use representative example numbers when live data isn't wired yet.
+Metrics without live data use value "—". Every job should look visibly
+different — vary which widget kinds you choose to match the domain."""
 
 
 def _build_llm(root: Path, profile: str) -> Any | None:
@@ -152,11 +159,74 @@ def validate_dashboard_spec(spec: dict[str, Any], workflows: list[dict[str, Any]
             break
     return {
         "headline": str(spec.get("headline") or "").strip()[:200],
-        "metrics": _clean_rows(spec.get("metrics"), ("label", "value", "hint"), _MAX_METRICS),
+        "metrics": _clean_rows(spec.get("metrics"), ("label", "value", "hint", "tone"), _MAX_METRICS),
+        "widgets": _clean_widgets(spec.get("widgets")),
         "sections": _clean_rows(spec.get("sections"), ("title", "text"), _MAX_SECTIONS),
         "actions": actions,
         "inboxes": _clean_rows(spec.get("inboxes"), ("label", "source", "description"), _MAX_INBOXES),
     }
+
+
+_MAX_WIDGETS = 4
+_TONES = {"good", "warn", "bad", "neutral"}
+
+
+def _tone(value: Any) -> str:
+    t = str(value or "neutral").strip().lower()
+    return t if t in _TONES else "neutral"
+
+
+def _clean_widgets(rows: Any) -> list[dict[str, Any]]:
+    """Bound AI-designed visual widgets to safe, renderable shapes."""
+    out: list[dict[str, Any]] = []
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        kind = str(row.get("kind") or "").strip().lower()
+        title = str(row.get("title") or "").strip()[:80]
+        if kind == "bar_chart":
+            bars = []
+            for b in row.get("bars") if isinstance(row.get("bars"), list) else []:
+                if not isinstance(b, dict):
+                    continue
+                try:
+                    val = float(b.get("value"))
+                except (TypeError, ValueError):
+                    continue
+                bars.append({"label": str(b.get("label") or "").strip()[:24], "value": max(0.0, val)})
+                if len(bars) >= 12:
+                    break
+            if bars:
+                out.append({"kind": "bar_chart", "title": title, "bars": bars})
+        elif kind == "progress":
+            try:
+                pct = max(0, min(100, int(float(row.get("pct")))))
+            except (TypeError, ValueError):
+                continue
+            out.append(
+                {
+                    "kind": "progress",
+                    "title": title,
+                    "label": str(row.get("label") or "").strip()[:60],
+                    "pct": pct,
+                    "tone": _tone(row.get("tone")),
+                }
+            )
+        elif kind == "status_list":
+            items = []
+            for it in row.get("items") if isinstance(row.get("items"), list) else []:
+                if not isinstance(it, dict):
+                    continue
+                lbl = str(it.get("label") or "").strip()[:60]
+                if lbl:
+                    items.append({"label": lbl, "tone": _tone(it.get("tone"))})
+                if len(items) >= 8:
+                    break
+            if items:
+                out.append({"kind": "status_list", "title": title, "items": items})
+        if len(out) >= _MAX_WIDGETS:
+            break
+    return out
 
 
 async def design_job_dashboard(
@@ -184,7 +254,7 @@ async def design_job_dashboard(
     if spec is None:
         return None, "model did not return valid dashboard JSON"
     validated = validate_dashboard_spec(spec, workflows)
-    if not (validated["metrics"] or validated["sections"] or validated["actions"]):
+    if not (validated["metrics"] or validated["widgets"] or validated["sections"] or validated["actions"]):
         return None, "model design was empty after validation"
     return validated, ""
 
