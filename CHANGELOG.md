@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.15] - 2026-07-20
+
+### Added (Codex parity)
+
+- Stop button for Code runs: a running run now shows Stop next to the steer input (`POST /api/evolve/agent/stop` existed server-side but the UI never exposed it). Stopping is non-destructive — changed files stay in Outputs with Keep/Revert. Verified live, including stopping a run the page had just reattached to.
+- Code runs survive a page reload: entering Code mode reattaches to a backend run still in progress (status now exposes the session's conversation_id; the client adopts the run id, restores the Working timer, steer input, and Stop, and reopens the live stream) instead of showing a dead surface while the agent keeps working. Verified live: reload mid-run -> "Reattached — Thomas kept working through the reload" with the timer running.
+
 ## [0.19.14] - 2026-07-20
 
 ### Fixed

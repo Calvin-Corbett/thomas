@@ -570,6 +570,8 @@ def build_evolve_agent_handlers(
                     "message": sess.get("message", ""),
                     "started_at": sess.get("started_at"),
                     "project_root": sess.get("project_root", ""),
+                    # Lets a reloaded page reattach to the running run's conversation.
+                    "conversation_id": sess.get("conversation_id", ""),
                 },
                 "settings": app.get(APP_EVOLVE_AGENT_SETTINGS) or {},
             }

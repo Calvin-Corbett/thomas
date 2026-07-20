@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "thomas-ai"
 # Release 0.19.0: security-reviewed local Chat, Code, and Work lifecycle checkpoint (2026-07-18).
-version = "0.19.14"
+version = "0.19.15"
 description = "Autonomous AI execution platform for local and remote deployments"
 readme = "README.md"
 license = {text = "MIT"}
