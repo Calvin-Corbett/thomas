@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.20] - 2026-07-20
+
+### Fixed (from the self-review's FIX FIRST list)
+
+- Silent stalls are over: a stale-execution sweep (startup + every 10 min) closes any non-terminal delegated task whose heartbeat has been quiet 15+ minutes — workers killed by a restart no longer leave records "executing" forever. First run closed 8 orphans, the oldest stuck 22 DAYS, each with an honest "interrupted (likely a restart)" message and an issue-ledger line.
+- Doomed dispatches prevented: "send that"-style commands with no destination (the ledger showed two no_evidence failures) now get ONE inline clarifying question — verified live: "okay send that" cold returns "Which item should I send, and where should I send it?" instead of starting a worker that can only fail.
+
 ## [0.19.19] - 2026-07-20
 
 ### Added

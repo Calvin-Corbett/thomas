@@ -91,6 +91,14 @@ async def serve_async(
 
         start_canvas_keepalive()
 
+    # Close orphaned delegated executions (workers killed by a restart leave
+    # records stuck "executing" forever) at startup and every few minutes.
+    stale_sweeper: asyncio.Task[None] | None = None
+    with contextlib.suppress(Exception):
+        from thomas.server.stale_execution_sweep import run_stale_execution_sweeper
+
+        stale_sweeper = asyncio.create_task(run_stale_execution_sweeper())
+
     # ── Startup summary ──
     diag = app.get(APP_DIAGNOSTICS, {})
     boot_dur = app.get("APP_BOOT_DURATION", 0)
@@ -110,6 +118,10 @@ async def serve_async(
         while not shutdown_event.is_set():
             await asyncio.sleep(1)
     finally:
+        if stale_sweeper is not None:
+            stale_sweeper.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await stale_sweeper
         await runner.cleanup()
         if preview_service is not None:
             await preview_service.stop()
