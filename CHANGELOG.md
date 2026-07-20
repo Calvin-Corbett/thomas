@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.7] - 2026-07-20
+
+### Changed
+
+- "Thomas can do anything" — workers build the capability instead of dead-ending. When a request needs an integration/device/service Thomas has no built-in tool for (smart home, calendar, email send, a specific API), the worker no longer replies "not configured" and stops, and never fakes the action: it BUILDS a real working bridge (control panel, integration script, or protocol client — e.g. a Home Assistant REST client for smart home) plus a SETUP section naming the one thing the user connects to go live (their hub URL + token). Verified live: a cold "turn my living room lights off" (no smart-home tool exists) produced a working Home Assistant light/turn_off script guarded on the user's own credentials.
+
+### Fixed
+
+- Device-action honesty: when an action request ("turn off the lights", "lock the door", "send…") is fulfilled by a BUILT script/bridge rather than the action actually happening, the completion announcement now says a control was built and what to connect — instead of falsely claiming the physical action occurred ("your lights are off"). Real deliverables are still confirmed normally; only real-world side-effects gated on user credentials get the bridge framing.
+
 ## [0.19.6] - 2026-07-20
 
 ### Added

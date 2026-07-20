@@ -4,7 +4,22 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any
+
+# A real-world SIDE-EFFECT command on external devices/accounts. When the ask
+# is one of these but the deliverable is a script/config/bridge FILE, the
+# physical action did NOT happen (Thomas built the control; the user connects
+# their hub). The announcement must never claim "your lights are off."
+_DEVICE_ACTION_RE = re.compile(
+    r"\b(turn\b[\w\s]{0,24}\b(?:on|off)|switch\b[\w\s]{0,24}\b(?:on|off)|"
+    r"(?:lights?|lamp|fan|tv|plug|outlet|thermostat|door|lock|garage)\b[\w\s]{0,24}\b(?:on|off)|"
+    r"toggle|dim|brighten|lock|unlock|arm|disarm|"
+    r"open|close|start|stop|set (?:the )?(?:thermostat|temperature|heat|ac|alarm)|"
+    r"play|pause|send|text|email|call|schedule|book|order|pay|transfer)\b",
+    re.I,
+)
+_SCRIPT_ARTIFACT_RE = re.compile(r"\.(ps1|sh|bat|cmd|py|js|mjs|ts|json|ya?ml|toml|ini|env|conf)$", re.I)
 
 from aiohttp import web
 
@@ -166,23 +181,39 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
             bits.append(f"This worker's task was: {task_title[:240]}.")
             if summary and failed:
                 bits.append(f"Failure: {summary[:300]}.")
+            built_bridge = bool(
+                artifact_names
+                and not failed
+                and _DEVICE_ACTION_RE.search(task_title or "")
+                and all(_SCRIPT_ARTIFACT_RE.search(name or "") for name in artifact_names)
+            )
             if artifact_names and not failed:
                 bits.append("Its complete verified artifact list is: " + ", ".join(artifact_names) + ".")
                 bits.append(
                     "Mention every artifact in that list and no other deliverable. "
                     "Never claim a sibling item is missing."
                 )
-            bits.append(
-                "In one or two short sentences, proactively tell the user it is done and what is ready."
-                if not failed
-                else (
-                    "In one or two short sentences, be precise about where it stands: if the "
-                    "failure text shows files WERE produced, say the result exists but a step "
-                    "failed along the way so you can't fully vouch for it, and offer to "
-                    "double-check or redo it. Never say nothing was done when files were made. "
-                    "If nothing was produced, say it plainly and offer another run."
+            if built_bridge:
+                bits.append(
+                    "IMPORTANT: this task ASKED for a real-world action, but the deliverable is a "
+                    "CONTROL/BRIDGE the worker BUILT — the physical action has NOT been performed and "
+                    "no real device or account was touched. In one or two sentences, say you built a "
+                    "working control for it and name the ONE thing the user must connect to run it "
+                    "(e.g. their hub URL + access token). NEVER say the action happened "
+                    "(do NOT say the lights are off, the message was sent, etc.)."
                 )
-            )
+            else:
+                bits.append(
+                    "In one or two short sentences, proactively tell the user it is done and what is ready."
+                    if not failed
+                    else (
+                        "In one or two short sentences, be precise about where it stands: if the "
+                        "failure text shows files WERE produced, say the result exists but a step "
+                        "failed along the way so you can't fully vouch for it, and offer to "
+                        "double-check or redo it. Never say nothing was done when files were made. "
+                        "If nothing was produced, say it plainly and offer another run."
+                    )
+                )
             note = await _generate_note(llm, system, " ".join(bits))
             unsupported = _UNSUPPORTED_GAP_CLAIM_RE.search(note)
             missing_name = bool(
