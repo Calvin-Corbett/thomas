@@ -21,7 +21,9 @@ def honest_handoff_confirmation(response: str) -> str:
     text = str(response or "").strip()
     if text and not _PREMATURE_HANDOFF_COMPLETION_RE.search(text):
         return text
-    return "Handed that to the task manager — it's running now. I'll present each verified result when it finishes."
+    # Thomas-first voice: the user should feel THOMAS is handling it, not that
+    # they got routed to a separate "task manager." (Calvin, 2026-07-20.)
+    return "On it — I'm getting this done now and I'll share the result the moment it's ready."
 
 
 def repo_self_context() -> str:

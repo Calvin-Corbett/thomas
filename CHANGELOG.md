@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.8] - 2026-07-20
+
+### Fixed
+
+- Running chats keep their live state across navigation: leaving a chat while a task runs and returning to it now restores the live agent bubble exactly as it was and resumes polling to completion, instead of dropping the bubble and acting done ("I went back to my thermostat thing and it's gone"). The background worker never stopped server-side; only the visual was being lost. Verified live: sent a build, opened a new chat, came back — the "On it" bubble was restored with fresh progress and reconciled through to the finished, downloadable result.
+
+### Changed
+
+- Thomas-first voice: the crew is invisible plumbing, not a "task manager" the user is routed to. The activity card header now reads "On it — working on this" / "Working on N things" / "Done" instead of "Handed off to <worker>" (the worker name stays in the expanded step detail); the start receipt says "On it — I'm getting this done" instead of "Handed that to the task manager"; and the completion note is generated with the recent conversation as context so Thomas drops the result back into the SAME thread naturally, never mentioning a worker.
+
 ## [0.19.7] - 2026-07-20
 
 ### Changed

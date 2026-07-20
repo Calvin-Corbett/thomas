@@ -176,15 +176,40 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
             llm = _announce_llm(app, sid)
             if llm is None or not hasattr(llm, "stream_chat"):
                 return web.json_response({"ok": False, "error": "no_llm"}, status=503)
+            # Give Thomas the recent conversation so the result lands as him
+            # jumping back into the SAME thread — "here's what they were talking
+            # about, let me drop this in" — not a detached worker notification.
+            recent_context = ""
+            try:
+                convo_msgs = conversation.get_messages() if hasattr(conversation, "get_messages") else []
+                tail = [m for m in convo_msgs if isinstance(m, dict) and m.get("role") in ("user", "assistant")][-4:]
+                if tail:
+                    lines = []
+                    for m in tail:
+                        who = "User" if m.get("role") == "user" else "You (Thomas)"
+                        content = m.get("content")
+                        if isinstance(content, list):
+                            content = " ".join(str(p.get("text", "")) for p in content if isinstance(p, dict))
+                        text = str(content or "").strip().replace("\n", " ")[:280]
+                        if text:
+                            lines.append(f"{who}: {text}")
+                    if lines:
+                        recent_context = "Recent conversation so far:\n" + "\n".join(lines) + "\n\n"
+            except (AttributeError, TypeError, ValueError):
+                recent_context = ""
             system = (
-                "You are Thomas, the user's warm, capable assistant. Reply in your own natural voice - "
-                "brief, human, first person, no preamble, no 'as an AI'."
+                "You are Thomas, the user's warm, capable assistant. You are continuing an "
+                "ongoing conversation — a task you were working on just finished, so jump back "
+                "in naturally with the result, aware of what you were both just discussing. "
+                "Reply in your own natural voice: brief, human, first person, no preamble, "
+                "no 'as an AI', and never mention a 'task manager' or 'worker' — YOU did this."
             )
-            bits = [
-                f"A task you handed to {bot} "
+            bits = [recent_context] if recent_context else []
+            bits += [
+                "The work you were doing "
                 + ("ran into a problem and could not finish." if failed else "just finished.")
             ]
-            bits.append(f"This worker's task was: {task_title[:240]}.")
+            bits.append(f"What you were doing: {task_title[:240]}.")
             if summary and failed:
                 bits.append(f"Failure: {summary[:300]}.")
             built_bridge = bool(
@@ -227,7 +252,7 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
             )
             if not note or unsupported or missing_name:
                 if failed:
-                    note = f"{bot} couldn't finish {task_title}. I can take another run at it."
+                    note = f"I couldn't finish {task_title}. I can take another run at it."
                 elif artifact_names:
                     note = (
                         f"I have a verified result ready for {task_title}: "
