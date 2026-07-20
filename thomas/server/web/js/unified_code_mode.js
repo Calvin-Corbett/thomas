@@ -73,6 +73,8 @@
 
   function recordError(error, fallback) {
     pushLiveEvent({ type: 'error', text: errorText(error, fallback) });
+    // Every user-visible Code failure also lands in the issue ledger report.
+    try { fetch('/api/issues', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ surface: 'code-ui', kind: 'action_error', message: errorText(error, fallback).slice(0, 300), context: { runId: state.runId || '' } }) }); } catch (e) {}
     render();
   }
 

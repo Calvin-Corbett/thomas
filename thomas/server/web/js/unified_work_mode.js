@@ -43,9 +43,10 @@
       state.formDirty = false;
     } catch (error) {
       state.error = error && error.message ? error.message : 'Work could not complete that action.';
-      // Users see the friendly banner; the console keeps the real stack so
-      // failures here are debuggable instead of message-only dead ends.
+      // Users see the friendly banner; the console keeps the real stack, and
+      // the issue ledger gets a line so failures show up in the report.
       console.error('Work action failed:', error);
+      try { fetch('/api/issues', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ surface: 'work-ui', kind: 'action_error', message: String(error && error.message || error).slice(0, 300), context: { stage: state.stage || '' } }) }); } catch (e) {}
     } finally { state.actionBusy = false; render(); }
   }
 

@@ -64,6 +64,7 @@ from thomas.server.chat_delegation_worker_config import (
     _replan_prompt,
     _self_recovery_attempts,
 )
+from thomas.server.issue_ledger import record_issue
 from thomas.server.model_runtime_receipt import validate_model_runtime_receipt
 from thomas.server.work_connector_runtime import execution_work_context_id
 from thomas.server.worker_runtime import run_agent_worker_events
@@ -93,6 +94,9 @@ def _tool_phrase(tool_name: str, *, done: bool = False, failed: bool = False) ->
 
 
 _MAX_EFFORT_IDLE_EVENT_TIMEOUT_S = 360.0
+# A worker that fails the same step this many times IN A ROW stops spinning
+# "hit a snag" and hands control to the recovery machinery instead.
+_MAX_CONSECUTIVE_SNAGS = 6
 
 
 def _record_tool_outcome(
@@ -472,6 +476,10 @@ async def _run_agent_worker(
         tool_outputs = {name: list(values) for name, values in base_tool_outputs.items()}
         saw_event = False
         worker_runtime_received = False
+        # Consecutive tool failures within THIS attempt: a worker that keeps
+        # snagging must not spin "hit a snag" forever — cap it and let the
+        # recovery machinery (or an honest failure) take over.
+        consecutive_snags = 0
         progress = (
             "Preparing live repo change baseline."
             if requires_live_repo_change
@@ -592,8 +600,25 @@ async def _run_agent_worker(
                         failed_tools=failed_tools,
                     )
                     if not tool_ok:
-                        progress = _tool_phrase(last_tool, failed=True)
+                        consecutive_snags += 1
+                        record_issue(
+                            surface="chat-worker",
+                            kind="tool_failure",
+                            message=f"{last_tool} failed (streak {consecutive_snags})",
+                            context={"execution_id": execution_id, "task": str(prompt or "")[:160]},
+                            repo_root=repo_root,
+                        )
+                        if consecutive_snags >= _MAX_CONSECUTIVE_SNAGS:
+                            raise _WorkerRetry(
+                                f"{last_tool} failed {consecutive_snags} times in a row; changing approach"
+                            )
+                        progress = (
+                            _tool_phrase(last_tool, failed=True)
+                            if consecutive_snags == 1
+                            else f"Still stuck on this step (try {consecutive_snags}) — rethinking the approach."
+                        )
                     else:
+                        consecutive_snags = 0
                         result_text = str(event.get("result_text") or "")
                         if result_text:
                             tool_outputs.setdefault(last_tool, []).append(result_text)
@@ -750,6 +775,13 @@ async def _run_agent_worker(
                 log.info("worker %s attempt %d failed (%s); retrying", execution_id, attempt, last_error[:120])
                 continue
             # Out of attempts — fail honestly.
+            record_issue(
+                surface="chat-worker",
+                kind="worker_failed",
+                message=f"out of attempts: {last_error}"[:300],
+                context={"execution_id": execution_id, "task": str(prompt or "")[:160], "attempts": str(max_attempts)},
+                repo_root=repo_root,
+            )
             task_bot_runtime.fail_execution(
                 execution_id,
                 actor=bot.name,

@@ -1170,6 +1170,11 @@
     }
     function renderActivity(idx) {
       const ref = msgRefs[idx]; if (!ref || !ref.activityEl) return;
+      // NEVER clobber the card while the user is typing a steer note in it —
+      // the poll re-render was wiping the input mid-keystroke. Updates resume
+      // the moment the box loses focus or the note is sent.
+      const focused = document.activeElement;
+      if (focused && focused.hasAttribute && focused.hasAttribute('data-steer-input') && ref.activityEl.contains(focused)) return;
       const m = state.messages[idx]; if (!m || !m.activity) { ref.activityEl.innerHTML = ''; return; }
       ref.activityEl.innerHTML = activityHTML(m);
       const tog = ref.activityEl.querySelector('[data-act-toggle]');

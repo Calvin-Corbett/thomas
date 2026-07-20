@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.18] - 2026-07-20
+
+### Fixed
+
+- Jump-in steer box is typeable: the live poll re-rendered the agent card every few seconds and wiped the input mid-keystroke. Renders now hold while the steer box has focus and resume on blur/send. Verified against a live running task: value and focus survived multiple poll cycles.
+- Snag loop capped: a worker failing the same step repeatedly no longer prints "hit a snag — trying another way" forever. After 6 consecutive tool failures the attempt is handed to the recovery machinery (replan or honest failure), and repeat snags read "Still stuck on this step (try N) — rethinking the approach" instead of the same line on loop.
+
+### Added
+
+- Issue ledger — failures as a report, not chat archaeology ("is there a system tracking every time it says issues so you can watch it like a report?" — yes, now). Every worker tool snag, final worker failure, and user-visible Work/Code UI error appends a structured line to runtime/logs/issues.jsonl (bounded, fail-silent). `GET /api/issues?hours=24` returns totals by kind/surface plus recent entries; `POST /api/issues` accepts client reports. This is now the first place to look each improvement pass.
+
 ## [0.19.17] - 2026-07-20
 
 ### Added (Codex parity)

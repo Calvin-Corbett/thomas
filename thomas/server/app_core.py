@@ -644,6 +644,34 @@ def create_app(config: AppConfig | None = None):
             raise web.HTTPServiceUnavailable(text="advanced rescue unavailable")
         return web.json_response({"ok": True, "action": action, "message": "Advanced rescue opened."})
 
+    # Issue ledger: "watch it like a report" — GET the failure summary, POST a
+    # client-side (UI) failure. See thomas/server/issue_ledger.py.
+    async def api_issues(request: web.Request) -> web.Response:
+        from thomas.server.issue_ledger import summarize
+
+        try:
+            hours = max(1, min(24 * 14, int(request.query.get("hours", "24"))))
+        except (TypeError, ValueError):
+            hours = 24
+        return web.json_response({"ok": True, **summarize(hours=hours)})
+
+    async def api_issues_report(request: web.Request) -> web.Response:
+        from thomas.server.issue_ledger import record_issue
+
+        try:
+            body = await request.json()
+        except (ValueError, TypeError):
+            body = {}
+        record_issue(
+            surface=str((body or {}).get("surface") or "ui"),
+            kind=str((body or {}).get("kind") or "client_error"),
+            message=str((body or {}).get("message") or ""),
+            context=body.get("context") if isinstance((body or {}).get("context"), dict) else {},
+        )
+        return web.json_response({"ok": True})
+
+    app.router.add_get("/api/issues", api_issues)
+    app.router.add_post("/api/issues", api_issues_report)
     app.router.add_get("/api/health", api_health)
     app.router.add_get("/healthz", api_health)
     app.router.add_get("/api/bootdoctor/recovery_notice", api_bootdoctor_recovery_notice)
