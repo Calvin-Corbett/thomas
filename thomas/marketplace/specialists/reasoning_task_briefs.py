@@ -4,6 +4,20 @@ from __future__ import annotations
 
 from typing import Any
 
+# The shared-context block appended to multi-task briefs. Artifact
+# verification must scope to the text BEFORE this marker: the context names
+# the OTHER workers' deliverables, and treating those as this worker's
+# requirements failed every multi-task run ("missing exact requested
+# artifact" for files that were never this worker's job).
+TASK_CONTEXT_MARKER = "[Context — the user's full request"
+
+
+def brief_scope(prompt: str) -> str:
+    """Return only THIS worker's brief (strip the shared-context block)."""
+    text = str(prompt or "")
+    idx = text.find(TASK_CONTEXT_MARKER)
+    return text[:idx].rstrip() if idx >= 0 else text
+
 
 def build_send_task_instructions(
     prompt: str | None,

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from thomas.core import task_bot_runtime
+from thomas.marketplace.specialists.reasoning_task_briefs import brief_scope as _brief_scope
 from thomas.server.chat_delegation_artifact_verification import (
     _hidden_completion_review_passes,
     _reconcile_missing_marker_literals,
@@ -268,10 +269,14 @@ async def _finalize_worker_completion(
     repo_root: str | Path | None,
 ) -> None:
     """Finalize a normal worker with honest evidence and proof artifacts."""
+    # Verification scopes to THIS worker's brief: the multi-task context block
+    # names the OTHER workers' deliverables, and reading requirements out of it
+    # failed every multi-task run ("missing" files that were never this job).
+    scope_prompt = _brief_scope(prompt)
     created = _resolve_created(work_dir, attempt_baseline, result_text_parts, tools_used)
-    created = _reconcile_requested_artifact_from_evidence(prompt, work_dir, created, tool_outputs)
-    created = _reconcile_missing_marker_literals(prompt, work_dir, created)
-    artifact_issues = _requested_artifact_issues(prompt, work_dir, created, tool_outputs)
+    created = _reconcile_requested_artifact_from_evidence(scope_prompt, work_dir, created, tool_outputs)
+    created = _reconcile_missing_marker_literals(scope_prompt, work_dir, created)
+    artifact_issues = _requested_artifact_issues(scope_prompt, work_dir, created, tool_outputs)
     if artifact_issues:
         raise _WorkerRetry("requested artifact verification failed: " + "; ".join(artifact_issues))
     _report_pdfs = await asyncio.to_thread(render_report_pdfs, work_dir, created)
@@ -283,17 +288,17 @@ async def _finalize_worker_completion(
         created,
         succeeded_tools=succeeded_tools,
         failed_tools=failed_tools,
-        prompt=prompt,
+        prompt=scope_prompt,
     )
     result_summary = _sanitize_terminal_summary(result_summary, created)
     _exec_warnings = executability_warning(work_dir, created)
     _exec_warnings += await asyncio.to_thread(runtime_executability_warning, work_dir, created)
     result_summary += _exec_warnings
     verified_success = bool(created) or _worker_text_is_confirmed_answer(
-        result_text_parts, prompt=prompt, succeeded_tools=succeeded_tools, failed_tools=failed_tools
+        result_text_parts, prompt=scope_prompt, succeeded_tools=succeeded_tools, failed_tools=failed_tools
     )
     verified_success &= _hidden_completion_review_passes(
-        prompt, work_dir, created, result_summary, verified_success, failed_tools, succeeded_tools=succeeded_tools
+        scope_prompt, work_dir, created, result_summary, verified_success, failed_tools, succeeded_tools=succeeded_tools
     )
     artifacts = _artifacts_from_created(created)
     # The engine's own artifact verification just PASSED (issues would have
