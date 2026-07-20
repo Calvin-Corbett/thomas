@@ -921,8 +921,11 @@
   async function waitForRestartReady() {
     for (let attempt = 0; attempt < 50; attempt += 1) {
       const response = await fetch('/api/evolve/agent/status');
-      const status = await response.json();
-      if (!response.ok || !status.ok) throw new Error(status.error || 'Steering status check failed.');
+      const status = await response.json().catch(() => null);
+      // status.ok describes the LAST RUN's outcome, not endpoint health — a
+      // steering-stopped run always reports ok:false (killed, returncode 1),
+      // which must not abort the restart. Only an HTTP failure is fatal here.
+      if (!response.ok || !status) throw new Error((status && status.error) || 'Steering status check failed.');
       if (status.running === false && status.recording !== true) return true;
       await new Promise(resolve => setTimeout(resolve, 100));
     }

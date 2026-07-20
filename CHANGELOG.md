@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.14] - 2026-07-20
+
+### Fixed
+
+- Code mid-run steering actually works now (Codex parity). Steering stopped the run, then ALWAYS aborted with "Steering status check failed" before restarting: the readiness poll treated the killed run's own `ok:false` (returncode 1 — expected for a steering stop) as a status-endpoint failure. The poll now distinguishes run outcome from endpoint health. Verified live end-to-end: a recipe-page run steered mid-flight to "desserts only, title SWEET TOOTH" restarted cleanly and the final artifact carried the steer (title present, dessert content only).
+
 ## [0.19.13] - 2026-07-20
 
 ### Added
