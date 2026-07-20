@@ -915,6 +915,32 @@ def build_evolve_agent_handlers(
         response.headers["Expires"] = "0"
         return response
 
+    async def checkpoint(request: web.Request) -> web.Response:
+        """Codex-parity checkpoint: commit the conversation's kept changes on a
+        new thomas-code/ branch; include a PR-ready remote URL when one exists."""
+        require_api_access(request)
+        if _running():
+            return web.json_response({"ok": False, "error": "wait for the run to finish first"}, status=409)
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001 - missing/invalid body -> treat as empty
+            body = {}
+        cid = str((body or {}).get("conversation_id") or "").strip()
+        message = str((body or {}).get("message") or "").strip() or "Thomas Code checkpoint"
+        if not cid:
+            return web.json_response({"ok": False, "error": "conversation_id required"}, status=400)
+        try:
+            project_root = _project_for_conversation(cid)
+        except forge_code_projects.ForgeCodeProjectError as exc:
+            return web.json_response({"ok": False, "error": str(exc), "code": "project_unavailable"}, status=409)
+        # The user's work only — never Thomas's internal conversation metadata.
+        files = [f for f in forge_code_git.changed_files(project_root) if not f.startswith(".thomas/")]
+        try:
+            result = forge_code_git.checkpoint(project_root, files, message)
+        except forge_code_git.ForgeCodeGitError as exc:
+            return web.json_response({"ok": False, "error": str(exc)}, status=409)
+        return web.json_response({"ok": True, **result, "files": files})
+
     return {
         "send": send,
         "approve": approve,
@@ -922,6 +948,7 @@ def build_evolve_agent_handlers(
         "stream": stream,
         "status": status,
         "stop": stop,
+        "checkpoint": checkpoint,
         "deliverables_list": deliverables_list,
         "conversations_list": conversations_list,
         "conversation_get": conversation_get,

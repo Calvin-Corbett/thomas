@@ -128,6 +128,41 @@ def changed_files(root: str | Path) -> list[str]:
     return sorted({path for _status, path in _status_entries(root)})
 
 
+def checkpoint(
+    root: str | Path, files: list[str], message: str, *, branch_prefix: str = "thomas-code/"
+) -> dict[str, str]:
+    """Commit ``files`` on a new ``thomas-code/…`` branch and stay on it.
+
+    Codex-parity checkpoint: turns a run's kept changes into a real commit the
+    user can push or PR. Raises :class:`ForgeCodeGitError` on any git failure.
+    Returns ``{"branch", "commit", "remote"}`` (remote may be ``""``).
+    """
+    wanted = [str(f).replace("\\", "/") for f in files if str(f).strip()]
+    if not wanted:
+        raise ForgeCodeGitError("nothing to checkpoint — no changed files")
+    import re as _re
+    import time as _time
+
+    slug = _re.sub(r"[^a-z0-9-]+", "-", str(message or "checkpoint").lower()).strip("-")[:40] or "checkpoint"
+    branch = f"{branch_prefix}{slug}-{int(_time.time()) % 100_000_000}"
+    code, _out, err = _run_git(root, ["checkout", "-b", branch])
+    if code != 0:
+        raise ForgeCodeGitError(f"could not create branch {branch}: {err.strip() or 'git error'}")
+    code, _out, err = _run_git(root, ["add", "--", *wanted])
+    if code != 0:
+        raise ForgeCodeGitError(f"could not stage files: {err.strip() or 'git error'}")
+    code, _out, err = _run_git(root, ["commit", "-m", str(message or "Thomas Code checkpoint")])
+    if code != 0:
+        raise ForgeCodeGitError(f"could not commit: {err.strip() or 'git error'}")
+    code, sha, _err = _run_git(root, ["rev-parse", "--short", "HEAD"])
+    code_r, remote, _err_r = _run_git(root, ["remote", "get-url", "origin"])
+    return {
+        "branch": branch,
+        "commit": sha.strip() if code == 0 else "",
+        "remote": remote.strip() if code_r == 0 else "",
+    }
+
+
 def delta_since(root: str | Path, snap: dict[str, str]) -> list[str]:
     """Return paths a run newly touched relative to ``snap``.
 

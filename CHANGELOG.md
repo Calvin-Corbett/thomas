@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.17] - 2026-07-20
+
+### Added (Codex parity)
+
+- Checkpoint: after a Code run, a "Checkpoint — commit these changes" button in Outputs commits the kept changes on a new `thomas-code/<slug>-<ts>` branch (user's work only — Thomas's internal `.thomas/` metadata is excluded) and reports the branch + short SHA; when the project has a remote, the note says the branch is PR-ready. New `forge_code_git.checkpoint()` + `POST /api/evolve/agent/checkpoint`. Verified live twice: via API (real branch + commit, clean tree after) and via the button after an organic run ("Checkpointed 3 file(s) as a310ddc on thomas-code/make-wishlist-…").
+
 ## [0.19.16] - 2026-07-20
 
 ### Added (Codex parity)

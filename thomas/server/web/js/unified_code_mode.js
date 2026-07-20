@@ -537,7 +537,7 @@
       <header class="tc-code-context"><button data-code-results-jump type="button" aria-expanded="${state.drawerOpen ? 'true' : 'false'}"><i class="ph ph-sidebar-simple"></i> Activity <small>${statusLabels[state.runStatus] || 'Ready'}</small>${hasResults ? '<span class="tc-code-activity-count" aria-hidden="true"></span>' : ''}</button></header>
       <div class="tc-code-layout">
         <section class="tc-code-transcript" aria-label="Code conversation"><div id="tc-code-turns">${turns.map(turnHtml).join('') || '<div class="tc-code-empty"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>What should we make?</strong><span>Describe the outcome in the composer below. Keep using this same conversation for changes, tests, and review.</span></div>'}</div>${liveTurn}</section>
-        <aside class="tc-code-actions" aria-label="Code activity" aria-hidden="${state.drawerOpen ? 'false' : 'true'}"${state.drawerOpen ? '' : ' inert'}><section class="tc-code-rail-section"><div class="tc-code-section-title">Outputs</div>${approval}${preview}${artifactRows}${changeRows || (!preview && !artifactRows ? '<p class="tc-code-rail-empty">Previews, changed files, and proof will appear here without interrupting the conversation.</p>' : '')}</section><section class="tc-code-rail-section tc-code-tree"><div class="tc-code-tree-head"><div class="tc-code-section-title">Files · ${esc(state.treePath || '/')}</div>${state.treePath ? '<button id="tc-code-tree-up">Up</button>' : ''}</div><ul>${treeRows || '<li class="tc-code-muted">Choose a project beside Tools to browse its files.</li>'}</ul></section><form id="tc-code-steer-form" class="tc-code-steer" ${state.running ? '' : 'hidden'}><label for="tc-code-steer">Steer Thomas</label><input id="tc-code-steer" name="message" required placeholder="Change direction…" ${state.steeringBusy ? 'disabled' : ''}><button ${state.steeringBusy ? 'disabled' : ''}>${state.steeringBusy ? 'Confirming…' : 'Apply'}</button><button type="button" id="tc-code-stop" title="Stop this run" ${state.steeringBusy ? 'disabled' : ''}>Stop</button></form></aside>
+        <aside class="tc-code-actions" aria-label="Code activity" aria-hidden="${state.drawerOpen ? 'false' : 'true'}"${state.drawerOpen ? '' : ' inert'}><section class="tc-code-rail-section"><div class="tc-code-section-title">Outputs</div>${approval}${preview}${artifactRows}${changeRows || (!preview && !artifactRows ? '<p class="tc-code-rail-empty">Previews, changed files, and proof will appear here without interrupting the conversation.</p>' : '')}${changeRows && !state.running ? `<button id="tc-code-checkpoint" class="tc-code-checkpoint" title="Commit these changes on a thomas-code/ branch">Checkpoint — commit these changes</button>` : ''}</section><section class="tc-code-rail-section tc-code-tree"><div class="tc-code-tree-head"><div class="tc-code-section-title">Files · ${esc(state.treePath || '/')}</div>${state.treePath ? '<button id="tc-code-tree-up">Up</button>' : ''}</div><ul>${treeRows || '<li class="tc-code-muted">Choose a project beside Tools to browse its files.</li>'}</ul></section><form id="tc-code-steer-form" class="tc-code-steer" ${state.running ? '' : 'hidden'}><label for="tc-code-steer">Steer Thomas</label><input id="tc-code-steer" name="message" required placeholder="Change direction…" ${state.steeringBusy ? 'disabled' : ''}><button ${state.steeringBusy ? 'disabled' : ''}>${state.steeringBusy ? 'Confirming…' : 'Apply'}</button><button type="button" id="tc-code-stop" title="Stop this run" ${state.steeringBusy ? 'disabled' : ''}>Stop</button></form></aside>
       </div></div>`;
     const activityDrawer = root.querySelector('.tc-code-actions');
     activityDrawer?.insertAdjacentHTML('afterbegin', `<div class="tc-code-drawer-resize" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize activity drawer" aria-valuemin="280" aria-valuemax="520" aria-valuenow="${state.drawerWidth}"></div><header class="tc-code-drawer-head"><div><strong>Activity</strong><small>${esc(projectLabel)}</small></div><button data-code-drawer-close type="button" aria-label="Close activity"><i class="ph ph-x"></i></button></header>`);
@@ -583,6 +583,7 @@
     root.querySelector('[data-code-approval-cancel]')?.addEventListener('click', () => { state.pendingApproval = null; state.pendingRequest = null; state.runStatus = 'stopped'; pushLiveEvent({ type: 'stopped', text: 'Approval cancelled. No Code action was run.' }); render(); });
     root.querySelector('#tc-code-steer-form')?.addEventListener('submit', event => { event.preventDefault(); void safely(() => steer(new FormData(event.currentTarget).get('message')), 'Could not steer the Code task.'); });
     root.querySelector('#tc-code-stop')?.addEventListener('click', () => { void safely(() => stopRun(), 'Could not stop the Code run.'); });
+    root.querySelector('#tc-code-checkpoint')?.addEventListener('click', () => { void safely(() => checkpointChanges(), 'Could not checkpoint the changes.'); });
     root.querySelectorAll('[data-code-copy-reply]').forEach(button => button.addEventListener('click', () => {
       const reply = button.closest('.tc-code-turn')?.querySelector('.tc-code-reply')?.textContent || '';
       void copyReplyText(reply, button);
@@ -811,6 +812,19 @@
     // Codex-parity task queue: a message sent while a run was going starts
     // automatically the moment this run's result is durable.
     startNextQueued();
+  }
+  // Codex-parity checkpoint: turn kept changes into a real commit on a
+  // thomas-code/ branch; if the project has a remote, the branch is PR-ready.
+  async function checkpointChanges() {
+    if (state.running || state.finishing) return false;
+    const title = String((state.conversation && state.conversation.title) || 'code changes').slice(0, 60);
+    const response = await fetch('/api/evolve/agent/checkpoint', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversation_id: state.activeId, message: `Thomas Code: ${title}` }) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Checkpoint failed.');
+    const where = data.remote ? ` Push it to open a PR on ${data.remote}.` : '';
+    pushLiveEvent({ type: 'insight', text: `Checkpointed ${data.files.length} file(s) as ${data.commit} on ${data.branch}.${where}` });
+    render();
+    return true;
   }
   function startNextQueued() {
     const queued = state.queuedSends && state.queuedSends.shift();

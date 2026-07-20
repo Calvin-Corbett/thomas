@@ -27,6 +27,7 @@ def register_evolve_agent_handler_map(app: web.Application, handlers: dict[str, 
         ("GET", "/api/evolve/agent/changes", "changes"),
         ("POST", "/api/evolve/agent/revert", "revert"),
         ("POST", "/api/evolve/agent/keep", "keep"),
+        ("POST", "/api/evolve/agent/checkpoint", "checkpoint"),
         ("GET", "/api/evolve/agent/artifact-content/{capability}/{cid}/{tail:.*}", "artifact_content"),
         ("GET", "/api/evolve/agent/artifact/{cid}/{tail:.*}", "artifact"),
     )
