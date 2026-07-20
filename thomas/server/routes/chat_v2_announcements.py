@@ -175,7 +175,13 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
             bits.append(
                 "In one or two short sentences, proactively tell the user it is done and what is ready."
                 if not failed
-                else "In one or two short sentences, say it did not finish and offer another run."
+                else (
+                    "In one or two short sentences, be precise about where it stands: if the "
+                    "failure text shows files WERE produced, say the result exists but a step "
+                    "failed along the way so you can't fully vouch for it, and offer to "
+                    "double-check or redo it. Never say nothing was done when files were made. "
+                    "If nothing was produced, say it plainly and offer another run."
+                )
             )
             note = await _generate_note(llm, system, " ".join(bits))
             unsupported = _UNSUPPORTED_GAP_CLAIM_RE.search(note)
