@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.22] - 2026-07-20
+
+### Fixed (self-review P0: evidence-gated status)
+
+- Status questions are answered from live task evidence, never from narrative memory: the operator must ground "is it done / how's it going / how much longer" strictly in the background-work digest (which now lists up to 6 tasks, was 3), never give an ETA for background work, and never claim a restart/retry without actually calling the tool in that turn. Verified live: mid-conversation "how much longer is that going to take?" — where the task had actually failed — returned "It isn't still running — the attempt failed after timing out, so there's no remaining time estimate. I can retry it.", matching the execution record exactly. The old behavior invented "20-45 minutes" ETAs for work that had already died.
+
 ## [0.19.21] - 2026-07-20
 
 ### Fixed (last item on the self-review's FIX FIRST list)

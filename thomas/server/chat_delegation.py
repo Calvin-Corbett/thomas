@@ -116,7 +116,7 @@ async def _run_exhaustive_worker(*args: Any, **kwargs: Any) -> None:
     return await _runner_module._run_exhaustive_worker(*args, **kwargs)
 
 
-def build_active_task_digest(session_id: str, *, repo_root: str | Path | None = None, limit: int = 3) -> str:
+def build_active_task_digest(session_id: str, *, repo_root: str | Path | None = None, limit: int = 6) -> str:
     rows = session_active_delegations(session_id, repo_root=repo_root)
     return build_active_task_digest_from_rows(rows, limit=limit, default_backend=TASK_MANAGER_BACKEND)
 
