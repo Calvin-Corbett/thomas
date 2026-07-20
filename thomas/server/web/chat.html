@@ -832,6 +832,11 @@
           <i class="ph ph-arrow-right" style="font-size: 15px; color: var(--c-muted);"></i>
         </button>`;
       }
+      // A completion ("here it is") bubble carries its own result artifact(s),
+      // presented right in this reply — one place, not a chip on an earlier card.
+      if (m.artifacts && m.artifacts.length) {
+        html += `<div class="tc-msg-artifacts" style="width:100%;">` + artifactHTML({ artifacts: m.artifacts, artifact: m.artifacts.length === 1 ? m.artifacts[0] : null, artifactOpen: !!m.artifactOpen }) + `</div>`;
+      }
       html += `<div style="display:flex;align-items:center;gap:4px;margin-top:2px;">
         <button type="button" data-msg-copy class="hv-soft" title="Copy message" aria-label="Copy message" style="width:28px;height:28px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--c-muted);display:grid;place-items:center;cursor:pointer;transition:all .14s;"><i class="ph ph-copy" style="font-size:15px;"></i></button>
         ${m.role === 'user' ? `<button type="button" data-msg-edit class="hv-soft" title="Edit &amp; resend from here" aria-label="Edit and resend from here" style="width:28px;height:28px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--c-muted);display:grid;place-items:center;cursor:pointer;transition:all .14s;"><i class="ph ph-pencil-simple" style="font-size:15px;"></i></button>` : ''}
@@ -843,6 +848,13 @@
       if (m.activity) renderActivity(idx);
       const artBtn = wrap.querySelector('.tc-art');
       if (artBtn && m.artifact) artBtn.addEventListener('click', () => { void canvasRender(m.artifact.url, m.artifact.name, m.artifact.kind || ''); });
+      // Wire the completion-bubble artifact chips (open in canvas / toggle preview).
+      const artHolder = wrap.querySelector('.tc-msg-artifacts');
+      if (artHolder) {
+        artHolder.querySelectorAll('[data-artifact-open]').forEach(button => button.addEventListener('click', (e) => { e.stopPropagation(); void canvasRender(button.dataset.artifactUrl || '', button.dataset.artifactName || 'result', button.dataset.artifactKind || ''); }));
+        const at = artHolder.querySelector('[data-artifact-toggle]');
+        if (at) at.addEventListener('click', (e) => { e.stopPropagation(); m.artifactOpen = !m.artifactOpen; threadEl.replaceChild(buildMessageNode(m, idx), wrap); });
+      }
       const copyBtn = wrap.querySelector('[data-msg-copy]');
       if (copyBtn) copyBtn.addEventListener('click', () => { void copyMessageText(m.text, copyBtn); });
       const editBtn = wrap.querySelector('[data-msg-edit]');
@@ -984,7 +996,8 @@
         ${a.cancelError ? `<div role="alert" style="padding:0 12px 9px;color:#ff9a9a;font-size:11.5px;">${esc(a.cancelError)}</div>` : ''}
         <div style="display:${a.expanded ? 'block' : 'none'};padding:4px 12px 11px;border-top:1px solid var(--c-border);">${_stepsLog(steps, thinking)}</div>
       </div>`;
-      html += artifactHTML(a);
+      // The completion bubble presents the artifact; don't duplicate it here.
+      if (!a.artifactMovedToAnnouncement) html += artifactHTML(a);
       return html;
     }
     // Inline document preview: a mini first-page thumbnail; click to render the
@@ -1253,9 +1266,25 @@
         }
         const d = await r.json();
         if (d && d.ok && d.message) {
-          state.messages.push({ role: 'assistant', text: String(d.message), model: state.modelLabel || 'GPT-5.6 Sol' });
-          appendMessage(state.messages[state.messages.length - 1]);
+          const arts = Array.isArray(d.artifacts) ? d.artifacts.filter(a => a && (a.url || a.name)) : [];
+          // The artifact lives on THIS "here it is" bubble now — remove it from
+          // the earlier "on it" work card so it's presented once, not twice.
+          if (arts.length) {
+            for (let i = state.messages.length - 1; i >= 0; i--) {
+              const act = state.messages[i] && state.messages[i].activity;
+              if (act && act.steps && act.steps.some(s => s.kind === 'handoff' && String(s.id) === String(eid))) {
+                act.artifactMovedToAnnouncement = true; renderActivity(i); break;
+              }
+            }
+          }
+          const msg = { role: 'assistant', text: String(d.message), model: state.modelLabel || 'GPT-5.6 Sol', artifacts: arts };
+          state.messages.push(msg);
+          appendMessage(msg);
           scrollEnd();
+          // A playable/renderable result (game, chart, HTML) pops open on the
+          // Canvas the moment Thomas says "here it is". Documents stay a chip.
+          const playable = arts.find(a => String(a.kind || '').toLowerCase() === 'web' || /\.html?(?:$|[?#])/i.test(String(a.name || a.url || '')));
+          if (playable && playable.url) { try { canvasRender(playable.url, playable.name || 'result', playable.kind || 'web'); } catch (e) {} }
           return true;
         }
         if (d && d.ok && d.skipped === 'already_reported') return true;

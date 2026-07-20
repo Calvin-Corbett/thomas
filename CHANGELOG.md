@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.9] - 2026-07-20
+
+### Changed
+
+- The result is presented IN the "here it is" reply, once. Previously the artifact showed as a preview chip on the earlier "on it" work card while a second Thomas bubble only referenced it by name. Now the completion bubble carries the artifact itself (openable + downloadable), the "on it" card no longer duplicates it, and a playable/renderable result (game, chart, HTML) pops open on the Canvas the moment Thomas says it's ready. The announcement endpoint returns each artifact with a real preview URL + kind (via the delegation normalizer). Verified live: an HTML game landed on the done reply, popped open on the canvas, and did not duplicate on the work card.
+
 ## [0.19.8] - 2026-07-20
 
 ### Fixed

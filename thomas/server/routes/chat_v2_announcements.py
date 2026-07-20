@@ -267,7 +267,29 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
             exec_id,
             reported_to_chat_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
         )
-        return web.json_response({"ok": True, "message": note})
+        # Return the artifacts so the "here it is" bubble itself carries the
+        # result — the user sees Thomas present it in the same reply, once, and
+        # a playable/renderable one pops open. Reuse the delegation normalizer
+        # so each artifact has a real preview URL + kind (raw proof.artifacts
+        # carries neither). (Calvin, 2026-07-20.)
+        art_payload = []
+        if not failed:
+            try:
+                from thomas.server.chat_delegation_session import _normalize_record
+
+                normalized = _normalize_record(row)
+                art_payload = [
+                    {
+                        "name": str(a.get("name") or a.get("path") or ""),
+                        "url": str(a.get("url") or ""),
+                        "kind": str(a.get("kind") or ""),
+                    }
+                    for a in (normalized.get("artifacts") or [])
+                    if isinstance(a, dict) and (a.get("url") or a.get("name"))
+                ]
+            except (ImportError, KeyError, TypeError, ValueError):
+                art_payload = []
+        return web.json_response({"ok": True, "message": note, "artifacts": art_payload})
     except (KeyError, LookupError, RuntimeError, OSError, TypeError, ValueError) as exc:
         log.debug("announce failed for %s/%s: %s", sid, exec_id, exc, exc_info=True)
         return web.json_response({"ok": False, "error": "exception"}, status=500)
