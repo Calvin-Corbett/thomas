@@ -7,6 +7,10 @@ Versioning: Semantic Versioning.
 
 ## [0.19.22] - 2026-07-20
 
+### Verified (Codex parity: run-the-tests execution)
+
+- Code runs really execute tests: with guardrails "open" + autonomy 3, a run that created add.py + test_add.py had its tests EXECUTED by the build engine's verify loop — transcript shows `pytest test_add.py` -> "3 passed in 0.03s" -> engine checks passed. The dispatched agent stays edit-only by design (it declined to fabricate a test-output file — "no real test output was available to record"); the engine performs the real execution and feeds failures back for fix passes. This closes the last enumerated Codex-parity gap (steering, stop, reload-resume, task queue, checkpoint/PR, attachments in/out, artifact previews, evidence-gated status, test execution).
+
 ### Fixed (self-review P0: evidence-gated status)
 
 - Status questions are answered from live task evidence, never from narrative memory: the operator must ground "is it done / how's it going / how much longer" strictly in the background-work digest (which now lists up to 6 tasks, was 3), never give an ETA for background work, and never claim a restart/retry without actually calling the tool in that turn. Verified live: mid-conversation "how much longer is that going to take?" — where the task had actually failed — returned "It isn't still running — the attempt failed after timing out, so there's no remaining time estimate. I can retry it.", matching the execution record exactly. The old behavior invented "20-45 minutes" ETAs for work that had already died.
