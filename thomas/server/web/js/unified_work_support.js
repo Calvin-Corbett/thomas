@@ -117,7 +117,13 @@
       }
       const selected = selectedOnboardingWorkflow(candidates);
       if (!selected) return `The workflow map is established. Ask the user to explicitly choose one named or numbered workflow. Do not silently choose for them and do not configure any workflow yet.`;
-      return `Focus only on the selected workflow "${selected.name}". Ask exactly one specific question about its inputs, decision points, trigger, approval boundary, connector identity, or finished deliverable. Do not configure the other workflows yet.`;
+      // Cap configuration questioning: a great assistant proposes defaults
+      // instead of interrogating. After 2 configure answers, offer to fill the
+      // rest and point at the visible "Create job & continue this flow" button.
+      if (turn >= 6) {
+        return `Focus only on the selected workflow "${selected.name}". You have enough to work with. Do NOT ask another question. In two short sentences: state the sensible defaults you'll use for anything still open, and tell the user they can hit "Create job & continue this flow" (the button above) right now — you'll refine as they use it.`;
+      }
+      return `Focus only on the selected workflow "${selected.name}". Ask exactly one specific question about its inputs, decision points, trigger, approval boundary, connector identity, or finished deliverable. If you already have the essentials, instead propose sensible defaults and remind the user they can hit "Create job & continue this flow" whenever they're ready. Do not configure the other workflows yet.`;
     }
 
     function composerHtml(placeholder) {
@@ -226,7 +232,7 @@
     // The dashboard IS the job's main surface: full-width, with the AI's tabs
     // first-class and Chat/Setup always available as tabs of the same app.
     function jobTabs() {
-      const dashboard = state.activeJob.dashboard || {};
+      const dashboard = (state.activeJob && state.activeJob.dashboard) || {};
       const ai = Array.isArray(dashboard.tabs) ? dashboard.tabs.filter(t => t && t.id) : [];
       return [...ai, { id: 'chat', label: 'Chat' }, { id: 'setup', label: 'Setup' }];
     }
@@ -240,27 +246,31 @@
     function jobTabBarHtml() {
       const active = activeJobTab();
       const buttons = jobTabs().map(t => `<button role="tab" aria-selected="${t.id === active}" class="tc-work-dash-tab ${t.id === active ? 'is-active' : ''}" data-work-dash-tab="${esc(t.id)}">${t.id === 'chat' ? '<i class="ph ph-chat-circle"></i> ' : t.id === 'setup' ? '<i class="ph ph-gear"></i> ' : ''}${esc(t.label)}</button>`).join('');
-      const hasDesign = ((state.activeJob.dashboard || {}).tabs || []).length > 0;
+      const hasDesign = (((state.activeJob && state.activeJob.dashboard) || {}).tabs || []).length > 0;
       const design = hasDesign ? '' : `<button class="tc-work-primary is-compact" data-work-dashboard-design ${state.actionBusy ? 'disabled' : ''}><i class="ph ph-sparkle"></i> Design my dashboard</button>`;
       return `<div class="tc-work-job-tabrow"><div class="tc-work-dash-tabs tc-work-job-tabs" role="tablist">${buttons}</div>${design}</div>`;
     }
 
     function dashboardTabHtml(tabId) {
-      const dashboard = state.activeJob.dashboard || {};
-      const first = (dashboard.tabs || [])[0];
+      const dashboard = (state.activeJob && state.activeJob.dashboard) || {};
+      // A design being written concurrently (or a partial save) can leave null
+      // or id-less rows in any array — render what's valid, never crash.
+      const rowsOf = key => (Array.isArray(dashboard[key]) ? dashboard[key] : []).filter(row => row && typeof row === 'object');
+      const first = rowsOf('tabs')[0];
       const inTab = row => (row.tab || (first && first.id) || '') === tabId;
       const isFirst = first && first.id === tabId;
       const headline = isFirst && dashboard.headline ? `<p class="tc-work-dashboard-headline">${esc(dashboard.headline)}</p>` : '';
+      const notice = isFirst && state.actionNotice ? `<p class="tc-work-dashboard-headline" role="status"><i class="ph ph-lightning"></i> ${esc(state.actionNotice)}</p>` : '';
       // AI-designed action buttons: each is bound server-side to one of THIS
       // job's workflows and runs through Mission — never a free-form command.
-      const actions = (dashboard.actions || []).map(row => `<button class="tc-work-dashboard-action" data-work-dashboard-run="${esc(row.id)}" title="${esc(row.description || '')}" ${state.actionBusy ? 'disabled' : ''}><i class="ph ph-lightning"></i> ${esc(row.label || 'Run')}</button>`).join('');
-      const metricTiles = (dashboard.metrics || []).filter(inTab).map(row => `<div title="${esc(row.hint || '')}"><strong>${esc(row.value == null || row.value === '' ? '—' : row.value)}</strong><span>${esc(row.label || 'Metric')}</span></div>`).join('');
-      const widgets = (dashboard.widgets || []).filter(inTab).map(widgetHtml).join('');
-      const sheets = (dashboard.sheets || []).filter(inTab).map(sheetHtml).join('');
-      const sections = (dashboard.sections || []).filter(inTab).map(row => `<div class="tc-work-dashboard-section"><strong>${esc(row.title || row.name || 'Section')}</strong><p>${esc(row.text || row.description || '')}</p></div>`).join('');
-      const inboxes = (dashboard.inboxes || []).filter(inTab).map(row => `<div class="tc-work-dashboard-section tc-work-dashboard-inbox"><strong><i class="ph ph-tray"></i> ${esc(row.label || 'Inbox')}</strong><p>${esc(row.description || '')}${row.source ? ` <small>· ${esc(row.source)}</small>` : ''}</p></div>`).join('');
+      const actions = rowsOf('actions').filter(row => row.id).map(row => `<button class="tc-work-dashboard-action" data-work-dashboard-run="${esc(row.id)}" title="${esc(row.description || '')}" ${state.actionBusy ? 'disabled' : ''}><i class="ph ph-lightning"></i> ${esc(row.label || 'Run')}</button>`).join('');
+      const metricTiles = rowsOf('metrics').filter(inTab).map(row => `<div title="${esc(row.hint || '')}"><strong>${esc(row.value == null || row.value === '' ? '—' : row.value)}</strong><span>${esc(row.label || 'Metric')}</span></div>`).join('');
+      const widgets = rowsOf('widgets').filter(inTab).map(widgetHtml).join('');
+      const sheets = rowsOf('sheets').filter(row => row.id).filter(inTab).map(sheetHtml).join('');
+      const sections = rowsOf('sections').filter(inTab).map(row => `<div class="tc-work-dashboard-section"><strong>${esc(row.title || row.name || 'Section')}</strong><p>${esc(row.text || row.description || '')}</p></div>`).join('');
+      const inboxes = rowsOf('inboxes').filter(inTab).map(row => `<div class="tc-work-dashboard-section tc-work-dashboard-inbox"><strong><i class="ph ph-tray"></i> ${esc(row.label || 'Inbox')}</strong><p>${esc(row.description || '')}${row.source ? ` <small>· ${esc(row.source)}</small>` : ''}</p></div>`).join('');
       const redesign = isFirst ? `<div class="tc-work-dash-foot"><button class="tc-work-primary is-compact" data-work-dashboard-design ${state.actionBusy ? 'disabled' : ''}><i class="ph ph-sparkle"></i> Redesign with AI</button></div>` : '';
-      return `${headline}${actions ? `<div class="tc-work-dashboard-actions">${actions}</div>` : ''}${metricTiles ? `<div class="tc-work-metrics">${metricTiles}</div>` : ''}${widgets ? `<div class="tc-work-widget-grid">${widgets}</div>` : ''}${sheets}${sections || inboxes ? `<div class="tc-work-note-grid">${sections}${inboxes}</div>` : ''}${redesign}`;
+      return `${headline}${notice}${actions ? `<div class="tc-work-dashboard-actions">${actions}</div>` : ''}${metricTiles ? `<div class="tc-work-metrics">${metricTiles}</div>` : ''}${widgets ? `<div class="tc-work-widget-grid">${widgets}</div>` : ''}${sheets}${sections || inboxes ? `<div class="tc-work-note-grid">${sections}${inboxes}</div>` : ''}${redesign}`;
     }
 
     function chatTabHtml() {

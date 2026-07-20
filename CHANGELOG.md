@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.12] - 2026-07-20
+
+### Fixed
+
+- Work: opening a job while its AI dashboard design was still being written could crash the view with "Cannot read properties of null (reading 'id')" — the dashboard renderers now tolerate partial/in-flight designs (null or id-less rows are skipped, never fatal), and Work action errors now log the full stack to the console instead of surfacing message-only dead ends.
+- Work: dashboard action buttons gave no visible feedback on click (the run was accepted silently). Clicking an action now shows a receipt on the dashboard — 'Started "Update daily inventory" — the result lands in Activity.' — that clears itself after a few seconds.
+
+### Changed
+
+- Work onboarding pacing: configuration no longer interrogates indefinitely. After two configure answers Thomas proposes sensible defaults and points at the "Create job & continue this flow" button instead of asking another question; the button itself was already there, but nothing ever told the user.
+
+### Verified (organic pass, in browser)
+
+- Fresh food-truck job: goal discovery -> 5-workflow map -> configure -> create; AI-designed dashboard with 3 tabs, 5 workflow-bound action buttons, 4 metrics, chart/progress/status widgets, and two editable built-in spreadsheets whose edits persist server-side (add row -> save -> confirmed in the store).
+- Chat multi-task: one message asking for two deliverables ran two workers ("Working on 2 things"), produced two separate "here it is" replies each carrying its own artifact — the game popped open on the Canvas, the CSV stayed a preview chip, nothing duplicated on the work card.
+
 ## [0.19.11] - 2026-07-20
 
 ### Added

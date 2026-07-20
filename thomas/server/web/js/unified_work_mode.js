@@ -43,6 +43,9 @@
       state.formDirty = false;
     } catch (error) {
       state.error = error && error.message ? error.message : 'Work could not complete that action.';
+      // Users see the friendly banner; the console keeps the real stack so
+      // failures here are debuggable instead of message-only dead ends.
+      console.error('Work action failed:', error);
     } finally { state.actionBusy = false; render(); }
   }
 
@@ -635,7 +638,15 @@
     await request(jobUrl('/dashboard'), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sheets }) });
     await openJob(state.activeApp.id, state.activeJob.id);
   }
-  async function runDashboardAction(actionId) { await request(jobUrl(`/dashboard/actions/${encodeURIComponent(actionId)}/run`), { method: 'POST' }); await openJob(state.activeApp.id, state.activeJob.id); }
+  async function runDashboardAction(actionId) {
+    const data = await request(jobUrl(`/dashboard/actions/${encodeURIComponent(actionId)}/run`), { method: 'POST' });
+    await openJob(state.activeApp.id, state.activeJob.id);
+    // Visible receipt: clicking an action must never feel like a dead button.
+    const label = String((data && data.action && data.action.label) || 'that action');
+    state.actionNotice = `Started "${label}" — the result lands in Activity.`;
+    render();
+    setTimeout(() => { if (state.actionNotice) { state.actionNotice = ''; if (adapterActive) render(); } }, 6000);
+  }
   function automationPayload(form, enabled) {
     const fields = Object.fromEntries(form.entries());
     const kind = fields.trigger || 'manual';
