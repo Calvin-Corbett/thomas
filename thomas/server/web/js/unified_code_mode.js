@@ -419,9 +419,25 @@
     if (source) source.close();
   }
 
+  // Parallel runs (Codex-style): switching away from a RUNNING conversation
+  // parks it — the backend keeps working, and opening that conversation again
+  // reattaches via its run_id + cursor (same machinery as reload-resume).
+  function parkActiveRun() {
+    if (!state.running || !state.activeId || !state.runId) return;
+    state.parkedRuns = state.parkedRuns || {};
+    state.parkedRuns[state.activeId] = { runId: state.runId, startedAt: state.runStartedAt || Date.now(), cursor: state.eventCursor || 0 };
+    closeSource();
+    state.running = false;
+    host().setBusy && host().setBusy(false);
+  }
+
   function canSwitchContext() {
-    if (!state.running && !state.approvalBusy && !state.steeringBusy && !state.finishing) return true;
-    recordError(null, 'Finish or stop the current Code task before switching projects or conversations.');
+    if (!state.approvalBusy && !state.steeringBusy && !state.finishing) {
+      // A live run no longer blocks switching — it parks and keeps running.
+      if (state.running) parkActiveRun();
+      return true;
+    }
+    recordError(null, 'Finish the pending Code approval or steering update before switching.');
     return false;
   }
 
@@ -620,7 +636,7 @@
       const button = document.createElement('button'); button.type = 'button'; button.className = 'tc-mode-history-row';
       button.innerHTML = `<span>${esc(row.title || 'Untitled task')}</span>`;
       if (row.id === state.activeId) button.classList.add('is-active');
-      button.disabled = state.running;
+      // Rows stay clickable while a run is live — switching parks the run.
       button.addEventListener('click', () => { void safely(() => loadConversation(row.id), 'Could not open that Code task.'); }); root.appendChild(button);
     });
   }
@@ -642,6 +658,40 @@
     await Promise.all([loadChanges({ token, deferRender: true }), loadTree('', { token, deferRender: true })]);
     if (!(options && options.deferRender)) render();
     host().renderHistory && host().renderHistory();
+    if (!internal) {
+      await reattachRunFor(id);
+      // A task queued for THIS conversation while it was parked starts now.
+      if (!state.running) startNextQueued();
+    }
+    return true;
+  }
+
+  // Reattach to THIS conversation's still-running run (parked earlier or found
+  // on the server) — the per-conversation half of reload-resume.
+  async function reattachRunFor(cid) {
+    if (state.running || state.finishing || state.activeId !== cid) return false;
+    const parked = (state.parkedRuns || {})[cid];
+    let status;
+    try {
+      const response = await fetch(`/api/evolve/agent/status?conversation_id=${encodeURIComponent(cid)}`);
+      status = await response.json();
+    } catch (error) { return false; }
+    if (state.activeId !== cid) return false;
+    if (!status || status.running !== true || !status.run_id) {
+      if (parked) delete state.parkedRuns[cid];
+      return false;
+    }
+    lifecycle().adoptRunIdentity(state, status.run_id);
+    if (parked && parked.runId === status.run_id && parked.cursor) state.eventCursor = parked.cursor;
+    if (parked) delete state.parkedRuns[cid];
+    state.running = true;
+    state.runStatus = 'working';
+    const startedRaw = (status.session || {}).started_at;
+    state.runStartedAt = (parked && parked.startedAt) || (Number(startedRaw) ? Number(startedRaw) * 1000 : Date.parse(String(startedRaw || ''))) || Date.now();
+    host().setBusy && host().setBusy(true);
+    pushLiveEvent({ type: 'disconnected', text: 'Reattached — this task kept running in the background.' });
+    render();
+    openStream();
     return true;
   }
 
@@ -673,7 +723,9 @@
     // auto-starts it when the current run's result is durable.
     if (state.running || state.finishing) {
       state.queuedSends = state.queuedSends || [];
-      state.queuedSends.push({ message: String(message || ''), context: context || state.lastContext || {} });
+      // Stamp the conversation at ENQUEUE time — with parallel runs the user
+      // may switch away, and a queued task must fire into ITS conversation.
+      state.queuedSends.push({ message: String(message || ''), context: context || state.lastContext || {}, cid: state.activeId || '' });
       pushLiveEvent({ type: 'planning', text: `Queued (${state.queuedSends.length} waiting): ${String(message || '').slice(0, 80)}` });
       render();
       return true;
@@ -829,8 +881,12 @@
     return true;
   }
   function startNextQueued() {
-    const queued = state.queuedSends && state.queuedSends.shift();
-    if (!queued) return;
+    if (!state.queuedSends || !state.queuedSends.length) return;
+    // Drain only tasks queued for the ACTIVE conversation; tasks for a parked
+    // conversation wait until the user returns to it (misdelivery guard).
+    const index = state.queuedSends.findIndex(entry => !entry.cid || entry.cid === state.activeId);
+    if (index < 0) return;
+    const queued = state.queuedSends.splice(index, 1)[0];
     pushLiveEvent({ type: 'planning', text: `Starting your queued task: ${queued.message.slice(0, 80)}` });
     render();
     void safely(() => send(queued.message, queued.context), 'The queued Code task failed to start.');
@@ -955,8 +1011,13 @@
     }
   }
   async function waitForRestartReady() {
+    // Per-conversation status: with parallel runs, the GLOBAL running flag may
+    // be true forever (another project's run) — only THIS conversation matters.
+    const statusUrl = state.activeId
+      ? `/api/evolve/agent/status?conversation_id=${encodeURIComponent(state.activeId)}`
+      : '/api/evolve/agent/status';
     for (let attempt = 0; attempt < 50; attempt += 1) {
-      const response = await fetch('/api/evolve/agent/status');
+      const response = await fetch(statusUrl);
       const status = await response.json().catch(() => null);
       // status.ok describes the LAST RUN's outcome, not endpoint health — a
       // steering-stopped run always reports ok:false (killed, returncode 1),

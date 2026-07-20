@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.23] - 2026-07-20
+
+### Added (Codex parity: parallel Code runs)
+
+- Thomas Code now runs MULTIPLE tasks in parallel across different conversations/projects (Codex-cloud style). Server: a per-conversation run registry (up to 3 concurrent; still strictly serialized within one conversation) with per-slot status (`?conversation_id=`/`?run_id=` plus a `runs[]` list), per-run stream resolution, and stop/steer targeting exactly the requested run; the legacy single-slot keys mirror the most recent run so existing consumers and tests keep working (dead MODEL/SNAPSHOT keys removed). Client: switching conversations mid-run PARKS the run instead of blocking ("Finish or stop the current Code task" is gone) — the backend keeps working and reopening the conversation reattaches with its run id + event cursor; queued sends are stamped with their conversation at enqueue so they can never fire into the wrong project; steer/stop readiness polls per-conversation status. Verified live end-to-end: two runs in two projects executing simultaneously (registry showed both running, both artifacts written in parallel and completed), switch-away parked run A, both conversations reattached with "Reattached — this task kept running." Full route/persistence test suites: no regressions (3 pre-existing environment failures unchanged).
+
 ## [0.19.22] - 2026-07-20
 
 ### Verified (Codex parity: chat attachments to workers, task queue)

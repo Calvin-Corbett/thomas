@@ -79,6 +79,10 @@ APP_EVOLVE_AGENT_PROJECT = "evolve_agent_project"
 APP_EVOLVE_AGENT_SETTINGS = "evolve_agent_settings"
 APP_EVOLVE_AGENT_APPROVALS = "evolve_agent_approvals"
 APP_EVOLVE_AGENT_LOCK = "evolve_agent_lock"
+# Per-conversation run registry: dict[conversation_id -> {"session": ..., "drain": ...}].
+APP_EVOLVE_AGENT_RUNS = "evolve_agent_runs"
+# How many Code runs may execute concurrently across conversations.
+MAX_CONCURRENT_CODE_RUNS = 3
 
 
 def build_evolve_agent_handlers(
@@ -108,6 +112,38 @@ def build_evolve_agent_handlers(
         proc = app.get(APP_EVOLVE_AGENT_TASK)
         return proc is not None and proc.returncode is None
 
+    # ── Per-conversation run registry (parallel Code runs, Codex-style) ──
+    # Each conversation gets its own slot {session, drain}; the legacy single
+    # keys keep mirroring the MOST RECENT run so existing consumers still work.
+    def _runs() -> dict[str, dict[str, Any]]:
+        runs = app.get(APP_EVOLVE_AGENT_RUNS)
+        if not isinstance(runs, dict):
+            runs = {}
+            app[APP_EVOLVE_AGENT_RUNS] = runs
+        return runs
+
+    def _slot_running(slot: dict[str, Any] | None) -> bool:
+        proc = ((slot or {}).get("session") or {}).get("proc")
+        return proc is not None and proc.returncode is None
+
+    def _slot_active(slot: dict[str, Any] | None) -> bool:
+        return _slot_running(slot) or _recording_active((slot or {}).get("drain"))
+
+    def _prune_runs() -> dict[str, dict[str, Any]]:
+        runs = _runs()
+        for key in [key for key, slot in runs.items() if not _slot_active(slot)]:
+            runs.pop(key, None)
+        return runs
+
+    def _slot_for_run_id(run_id: str) -> dict[str, Any] | None:
+        wanted = str(run_id or "").strip()
+        if not wanted:
+            return None
+        for slot in _runs().values():
+            if str((slot.get("session") or {}).get("run_id") or "") == wanted:
+                return slot
+        return None
+
     def _track_process(
         proc: Any,
         transcript: Path,
@@ -123,7 +159,7 @@ def build_evolve_agent_handlers(
         activity_token: str,
     ) -> None:
         generation = int((app.get(APP_EVOLVE_AGENT_SESSION) or {}).get("generation") or 0) + 1
-        app[APP_EVOLVE_AGENT_SESSION] = {
+        session = {
             "generation": generation,
             "run_id": run_id,
             "request_id": request_id,
@@ -136,9 +172,11 @@ def build_evolve_agent_handlers(
             "transcript": str(transcript),
             "proc": proc,
         }
+        # Legacy single-slot mirror: most recent run (existing consumers).
+        app[APP_EVOLVE_AGENT_SESSION] = session
         app[APP_EVOLVE_AGENT_TASK], app[APP_EVOLVE_AGENT_CONVO] = proc, cid
-        app[APP_EVOLVE_AGENT_MODEL], app[APP_EVOLVE_AGENT_PROJECT] = model, str(project_root)
-        app[APP_EVOLVE_AGENT_SETTINGS], app[APP_EVOLVE_AGENT_SNAPSHOT] = settings, snap
+        app[APP_EVOLVE_AGENT_PROJECT] = str(project_root)
+        app[APP_EVOLVE_AGENT_SETTINGS] = settings
         task = asyncio.ensure_future(
             _drain_and_record(
                 proc,
@@ -154,7 +192,9 @@ def build_evolve_agent_handlers(
             )
         )
         _attach_code_activity_release(task, app, activity_token)
-        app[APP_EVOLVE_AGENT_DRAIN] = {"generation": generation, "run_id": run_id, "task": task}
+        drain = {"generation": generation, "run_id": run_id, "task": task}
+        app[APP_EVOLVE_AGENT_DRAIN] = drain
+        _prune_runs()[cid] = {"session": session, "drain": drain}
 
     async def send(request: web.Request) -> web.Response:
         require_api_access(request)
@@ -198,11 +238,39 @@ def build_evolve_agent_handlers(
             return web.json_response(
                 {**(replay.get("response") or {}), **persistence, "replayed": True, "run_state": replay.get("state")}
             )
-        recording = app.get(APP_EVOLVE_AGENT_DRAIN)
-        if _running() or _recording_active(recording):
-            code = "agent_result_recording" if _recording_active(recording) else "agent_already_running"
+        # Parallel runs (Codex-style): serialize per CONVERSATION, allow up to
+        # MAX_CONCURRENT_CODE_RUNS across different conversations/projects.
+        active_slots = {cid_key: slot for cid_key, slot in _prune_runs().items() if _slot_active(slot)}
+        requested_cid = str(body.get("conversation_id") or "").strip()
+        target_slot = active_slots.get(requested_cid) if requested_cid else None
+        if target_slot is not None:
+            code = "agent_result_recording" if not _slot_running(target_slot) else "agent_already_running"
             return web.json_response(
                 {"ok": False, "error": "another Code run is still active", "code": code}, status=409
+            )
+        if len(active_slots) >= MAX_CONCURRENT_CODE_RUNS:
+            return web.json_response(
+                {
+                    "ok": False,
+                    "error": f"all {MAX_CONCURRENT_CODE_RUNS} concurrent Code run slots are busy",
+                    "code": "agent_already_running",
+                },
+                status=409,
+            )
+        # Legacy safety net: a live run not present in the registry (pre-registry
+        # state or tests seeding only the legacy keys) still blocks, with the
+        # original running-vs-recording distinction preserved.
+        legacy_recording = _recording_active(app.get(APP_EVOLVE_AGENT_DRAIN))
+        if not active_slots and (_running() or legacy_recording):
+            return web.json_response(
+                {
+                    "ok": False,
+                    "error": "another Code run is still active",
+                    "code": "agent_result_recording"
+                    if legacy_recording and not _running()
+                    else "agent_already_running",
+                },
+                status=409,
             )
         approval_to_consume: dict[str, Any] | None = None
         risk = _risky_code_action(message)
@@ -453,6 +521,16 @@ def build_evolve_agent_handlers(
         message = str((body or {}).get("message") or "").strip()
         if not message:
             return web.json_response({"ok": False, "error": "empty steering message"}, status=400)
+        # Steer exactly the requested run when several are live.
+        slot = _slot_for_run_id(str((body or {}).get("run_id") or ""))
+        if slot is not None:
+            proc = (slot.get("session") or {}).get("proc")
+            if proc is None or proc.returncode is not None:
+                return web.json_response({"ok": False, "error": "that Code run is not running"}, status=409)
+            asyncio.get_running_loop().run_in_executor(None, _kill_tree, proc)
+            return web.json_response(
+                {"ok": True, "stop_requested": True, "restart_required": True, "message": message}, status=202
+            )
         if not _running():
             return web.json_response({"ok": False, "error": "no Code task is running"}, status=409)
         stale = validate_active_run_request(body, app.get(APP_EVOLVE_AGENT_SESSION))
@@ -469,17 +547,24 @@ def build_evolve_agent_handlers(
         require_api_access(request)
         session = dict(app.get(APP_EVOLVE_AGENT_SESSION) or {})
         run_id = str(session.get("run_id") or "legacy")
-        if request.query.get("run_id") and request.query["run_id"] != run_id:
-            return web.json_response(
-                {"ok": False, "error": "that Code run is not active", "code": "run_not_active"}, status=409
-            )
+        recording = app.get(APP_EVOLVE_AGENT_DRAIN)
+        wanted = str(request.query.get("run_id") or "").strip()
+        if wanted and wanted != run_id:
+            # Any REGISTERED run can be streamed, not just the most recent one.
+            slot = _slot_for_run_id(wanted)
+            if slot is None:
+                return web.json_response(
+                    {"ok": False, "error": "that Code run is not active", "code": "run_not_active"}, status=409
+                )
+            session = dict(slot.get("session") or {})
+            run_id = wanted
+            recording = slot.get("drain")
         try:
             cursor = max(0, int(request.query.get("cursor") or 0))
         except ValueError:
             return web.json_response({"ok": False, "error": "invalid stream cursor"}, status=400)
         transcript = Path(session.get("transcript") or _transcript_path(_root()))
         proc = session.get("proc") or app.get(APP_EVOLVE_AGENT_TASK)
-        recording = app.get(APP_EVOLVE_AGENT_DRAIN)
         resp = web.StreamResponse(
             status=200,
             headers={
@@ -555,35 +640,69 @@ def build_evolve_agent_handlers(
             pass
         return resp
 
+    def _status_payload(sess: dict[str, Any], drain: Any, *, running: bool) -> dict[str, Any]:
+        return {
+            "ok": True,
+            "running": running,
+            **_recording_status(drain),
+            "run_id": sess.get("run_id") or "",
+            "generation": sess.get("generation") or 0,
+            "session": {
+                "message": sess.get("message", ""),
+                "started_at": sess.get("started_at"),
+                "project_root": sess.get("project_root", ""),
+                # Lets a reloaded page reattach to the running run's conversation.
+                "conversation_id": sess.get("conversation_id", ""),
+            },
+            "settings": sess.get("settings") or app.get(APP_EVOLVE_AGENT_SETTINGS) or {},
+        }
+
     async def status(request: web.Request) -> web.Response:
         require_api_access(request)
+        # Per-slot resolution: ?conversation_id= or ?run_id= answers for THAT
+        # run; default keeps the legacy most-recent shape plus a runs[] list.
+        wanted_cid = str(request.query.get("conversation_id") or "").strip()
+        wanted_run = str(request.query.get("run_id") or "").strip()
+        if wanted_cid or wanted_run:
+            slot = _runs().get(wanted_cid) if wanted_cid else _slot_for_run_id(wanted_run)
+            sess = (slot or {}).get("session") or {}
+            return web.json_response(_status_payload(sess, (slot or {}).get("drain"), running=_slot_running(slot)))
         sess = app.get(APP_EVOLVE_AGENT_SESSION) or {}
-        drain_task = app.get(APP_EVOLVE_AGENT_DRAIN)
-        return web.json_response(
+        payload = _status_payload(sess, app.get(APP_EVOLVE_AGENT_DRAIN), running=_running())
+        payload["runs"] = [
             {
-                "ok": True,
-                "running": _running(),
-                **_recording_status(drain_task),
-                "run_id": sess.get("run_id") or "",
-                "generation": sess.get("generation") or 0,
-                "session": {
-                    "message": sess.get("message", ""),
-                    "started_at": sess.get("started_at"),
-                    "project_root": sess.get("project_root", ""),
-                    # Lets a reloaded page reattach to the running run's conversation.
-                    "conversation_id": sess.get("conversation_id", ""),
-                },
-                "settings": app.get(APP_EVOLVE_AGENT_SETTINGS) or {},
+                "run_id": str((slot.get("session") or {}).get("run_id") or ""),
+                "conversation_id": str((slot.get("session") or {}).get("conversation_id") or ""),
+                "project_root": str((slot.get("session") or {}).get("project_root") or ""),
+                "started_at": (slot.get("session") or {}).get("started_at"),
+                "message": str((slot.get("session") or {}).get("message") or "")[:120],
+                "running": _slot_running(slot),
+                "recording": _recording_active(slot.get("drain")),
             }
-        )
+            for slot in _runs().values()
+            if _slot_active(slot)
+        ]
+        return web.json_response(payload)
 
     async def stop(request: web.Request) -> web.Response:
         require_api_access(request)
+        try:
+            body = await request.json()
+        except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+            body = {}
+        # Resolve the slot for the REQUESTED run so stopping targets exactly
+        # that run even when several are live.
+        slot = _slot_for_run_id(str((body or {}).get("run_id") or ""))
+        if slot is not None:
+            proc = (slot.get("session") or {}).get("proc")
+            receipt = await _terminate_process(proc)
+            if receipt["termination_confirmed"]:
+                receipt.update(await _await_recording(slot.get("drain")))
+            status_code = (
+                200 if receipt["termination_confirmed"] else 202 if receipt["state"] == "termination_pending" else 409
+            )
+            return web.json_response(receipt, status=status_code)
         if _running():
-            try:
-                body = await request.json()
-            except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
-                body = {}
             stale = validate_active_run_request(body, app.get(APP_EVOLVE_AGENT_SESSION))
             if stale is not None:
                 return stale
