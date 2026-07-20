@@ -834,6 +834,7 @@
       }
       html += `<div style="display:flex;align-items:center;gap:4px;margin-top:2px;">
         <button type="button" data-msg-copy class="hv-soft" title="Copy message" aria-label="Copy message" style="width:28px;height:28px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--c-muted);display:grid;place-items:center;cursor:pointer;transition:all .14s;"><i class="ph ph-copy" style="font-size:15px;"></i></button>
+        ${m.role === 'user' ? `<button type="button" data-msg-edit class="hv-soft" title="Edit &amp; resend from here" aria-label="Edit and resend from here" style="width:28px;height:28px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--c-muted);display:grid;place-items:center;cursor:pointer;transition:all .14s;"><i class="ph ph-pencil-simple" style="font-size:15px;"></i></button>` : ''}
       </div>`;
       wrap.innerHTML = html;
       const bubbleEl = wrap.querySelector('.tc-bubble');
@@ -844,7 +845,32 @@
       if (artBtn && m.artifact) artBtn.addEventListener('click', () => { void canvasRender(m.artifact.url, m.artifact.name, m.artifact.kind || ''); });
       const copyBtn = wrap.querySelector('[data-msg-copy]');
       if (copyBtn) copyBtn.addEventListener('click', () => { void copyMessageText(m.text, copyBtn); });
+      const editBtn = wrap.querySelector('[data-msg-edit]');
+      if (editBtn) editBtn.addEventListener('click', () => { void editMessageFrom(idx); });
       return wrap;
+    }
+    // Edit-and-resend: fork the conversation at a past user message. The
+    // server truncates the stored history to BEFORE that message (and evicts
+    // the live LLM so removed turns can't leak back), the client mirrors the
+    // cut, and the old text lands in the composer ready to edit and send.
+    async function editMessageFrom(idx) {
+      if (state.streaming) return;
+      const m = state.messages[idx];
+      if (!m || m.role !== 'user') return;
+      const sid = state.sessionId;
+      if (sid) {
+        try {
+          await fetch('/api/v2/chat/session/' + encodeURIComponent(sid) + '/truncate', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ keep_messages: idx }),
+          });
+        } catch (e) {}
+      }
+      state.messages = state.messages.slice(0, idx);
+      threadEl.innerHTML = ''; msgRefs.length = 0;
+      state.messages.forEach((msg, i) => threadEl.appendChild(buildMessageNode(msg, i)));
+      state.input = m.text; inputEl.value = m.text;
+      autosize(); syncDynamic(); inputEl.focus(); scrollEnd();
     }
     function appendMessage(m) {
       const idx = state.messages.length - 1;
@@ -1536,10 +1562,12 @@
       if (abortController) { try { abortController.abort(); } catch (e) {} abortController = null; }
       if (timer) { clearInterval(timer); timer = null; }
       state.messages = []; state.activeChat = null; state.streaming = false; state.input = ''; state.artifactOpen = false; state.sessionId = null;
+      // Deliberate new chat: forget the restore target.
+      try { localStorage.removeItem('thomas_last_chat'); localStorage.removeItem('thomas_last_session'); } catch (e) {}
       inputEl.value = ''; threadEl.innerHTML = ''; msgRefs.length = 0;
       resetCanvasForConversation(); renderChats(); syncView(); autosize(); syncDynamic();
       // ask the backend for a fresh session (harmless 404 on the static preview)
-      fetch('/api/session/new', { method: 'POST' }).then(r => r.ok ? r.json() : null).then(d => { if (d) state.sessionId = d.session_id || (d.data && d.data.session_id) || state.sessionId; }).catch(() => {});
+      fetch('/api/session/new', { method: 'POST' }).then(r => r.ok ? r.json() : null).then(d => { if (d) { state.sessionId = d.session_id || (d.data && d.data.session_id) || state.sessionId; try { if (state.sessionId) localStorage.setItem('thomas_last_session', state.sessionId); } catch (e) {} } }).catch(() => {});
     }
     async function restoreVerifiedChatArtifacts(chatId, sessionId, selectionToken) {
       const sid = String(sessionId || '');
@@ -1618,6 +1646,10 @@
       if (abortController) { try { abortController.abort(); } catch (e) {} abortController = null; }
       if (timer) { clearInterval(timer); timer = null; }
       const c = chatList.find(x => x.id === id);
+      // Remember the open conversation so a reload comes back to IT, not to a
+      // blank chat ("it didn't even save my chat" — it saved; we just never
+      // restored it).
+      try { localStorage.setItem('thomas_last_chat', id); if (c && c.sessionId) localStorage.setItem('thomas_last_session', c.sessionId); } catch (e) {}
       state.activeChat = id; state.streaming = false; state.input = ''; state.artifactOpen = false;
       if (c && c.sessionId) state.sessionId = c.sessionId;
       inputEl.value = ''; threadEl.innerHTML = ''; msgRefs.length = 0;
@@ -2205,10 +2237,19 @@
       } catch (e) {}
       // real recent chats → sidebar
       await refreshChats();
+      // Restore the conversation that was open before the reload — reloading
+      // must never LOOK like losing your chat. Falls through to a fresh
+      // session only when there is nothing to come back to.
+      try {
+        const lastChat = localStorage.getItem('thomas_last_chat') || '';
+        const lastSession = localStorage.getItem('thomas_last_session') || '';
+        const row = chatList.find(c => c.id === lastChat) || chatList.find(c => c.sessionId && c.sessionId === lastSession);
+        if (row) { selectChat(row.id); return; }
+      } catch (e) {}
       // fresh session id for this tab
       try {
         const r = await fetch('/api/session/new', { method: 'POST' });
-        if (r.ok) { const d = await r.json(); state.sessionId = d.session_id || (d.data && d.data.session_id) || state.sessionId; }
+        if (r.ok) { const d = await r.json(); state.sessionId = d.session_id || (d.data && d.data.session_id) || state.sessionId; try { if (state.sessionId) localStorage.setItem('thomas_last_session', state.sessionId); } catch (e) {} }
       } catch (e) {}
     }
 

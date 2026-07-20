@@ -18,7 +18,14 @@ _LIVE_THOMAS_REPO_RE = re.compile(
     r"your own code|"
     r"self[- ]development|"
     r"make thomas|"
-    r"have thomas develop"
+    r"have thomas develop|"
+    # Self-referential UI/product changes: "change YOUR sidebar", "update your
+    # own UI", "make your chat bubbles bigger" — the owner asking Thomas to
+    # change himself. A sandbox worker cannot touch the live product; these
+    # must run in the live repo lane.
+    r"(?:change|update|edit|fix|adjust|restyle|redesign|improve|tweak)\s+"
+    r"(?:your(?:self)?|your own|thomas'?s?)\s+(?:\w+\s+){0,3}?"
+    r"(?:ui|interface|sidebar|chat|composer|dashboard|button|layout|theme|colors?|styles?|page|tab|screen|font)"
     r")\b",
     re.I,
 )

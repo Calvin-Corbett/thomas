@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.6] - 2026-07-20
+
+### Added
+
+- Edit-and-resend: every sent message has an Edit button that forks the conversation at that point — the server truncates the stored history (new `POST /api/v2/chat/session/{id}/truncate`, live LLM evicted so removed turns can't leak back), and the old text lands in the composer ready to change and send.
+- Proactiveness: after finishing anything, Thomas offers the one obvious next step (document it, schedule it, remember it, start the follow-on) and suggests turning recurring chores into Work jobs — one offer, no nagging.
+
+### Fixed
+
+- Reloading the page restores the conversation you were in instead of opening a blank chat ("it didn't even save my chat" — it was saved; it was never restored). Deliberate New chat still starts clean.
+- Self-change asks route to the live product: "change your sidebar color", "update your own UI", "fix your chat composer" now classify into the live-repo lane instead of a sandbox worker that can't touch Thomas.
+
 ## [0.19.5] - 2026-07-19
 
 ### Fixed

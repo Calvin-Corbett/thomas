@@ -77,6 +77,35 @@ async def handle_session_export(request: web.Request) -> web.Response:
     return response
 
 
+async def handle_session_truncate(request: web.Request) -> web.Response:
+    """Cut a session back to its first N messages (edit-and-resend support).
+
+    Editing an already-sent message forks the conversation at that point: the
+    client truncates the stored history, then sends the edited text as the
+    next turn. The live per-session LLM is evicted so stale context can't
+    leak the removed turns back in.
+    """
+    sid = request.match_info["session_id"]
+    try:
+        body = await request.json()
+    except (ValueError, TypeError):
+        body = {}
+    keep = max(0, int((body or {}).get("keep_messages") or 0))
+    session_store: SessionStore = request.app[APP_SESSION_STORE]
+    conversation = await session_store.load(sid)
+    if conversation is None:
+        return web.json_response({"error": "Session not found"}, status=404)
+    msgs = conversation.get_messages()
+    if keep >= len(msgs):
+        return web.json_response({"session_id": sid, "kept": len(msgs), "removed": 0})
+    from thomas.chat.conversation import ConversationManager
+
+    trimmed = ConversationManager(messages=msgs[:keep])
+    await session_store.save(sid, trimmed, force=True)
+    await _evict_session_llm(request.app, sid)
+    return web.json_response({"session_id": sid, "kept": keep, "removed": len(msgs) - keep})
+
+
 async def handle_session_delete(request: web.Request) -> web.Response:
     sid = request.match_info["session_id"]
     session_store: SessionStore = request.app[APP_SESSION_STORE]
@@ -182,5 +211,6 @@ __all__ = [
     "handle_session_delete",
     "handle_session_export",
     "handle_session_get",
+    "handle_session_truncate",
     "handle_specialists_list",
 ]

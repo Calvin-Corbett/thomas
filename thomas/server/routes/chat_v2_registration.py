@@ -33,6 +33,7 @@ from thomas.server.routes.chat_v2_session_routes import (
     handle_session_delete,
     handle_session_export,
     handle_session_get,
+    handle_session_truncate,
     handle_specialists_list,
 )
 from thomas.server.routes.chat_v2_support import _cleanup_cached_session_llms
@@ -90,6 +91,10 @@ def register_chat_v2_route_set(
     app.router.add_get(
         "/api/v2/chat/session/{session_id}/export",
         guard_chat_v2_read(handle_session_export, require_api_access),
+    )
+    app.router.add_post(
+        "/api/v2/chat/session/{session_id}/truncate",
+        guard_chat_v2_read(handle_session_truncate, require_api_access),
     )
     app.router.add_get(
         "/api/v2/chat/session/{session_id}/delegations",
