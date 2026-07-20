@@ -865,10 +865,16 @@
     // server truncates the stored history to BEFORE that message (and evicts
     // the live LLM so removed turns can't leak back), the client mirrors the
     // cut, and the old text lands in the composer ready to edit and send.
+    // Friction telemetry: retries, cancels, and edit-resends are "this didn't
+    // land" signals — they feed the issue ledger so the self-review sees them.
+    function reportFriction(kind, message) {
+      try { fetch('/api/issues', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ surface: 'chat-ui', kind: 'friction', message: kind + ': ' + String(message || '').slice(0, 200), context: { session: state.sessionId || '' } }) }); } catch (e) {}
+    }
     async function editMessageFrom(idx) {
       if (state.streaming) return;
       const m = state.messages[idx];
       if (!m || m.role !== 'user') return;
+      reportFriction('edit_resend', m.text);
       const sid = state.sessionId;
       if (sid) {
         try {
@@ -1204,6 +1210,7 @@
     async function cancelTask(idx) {
       const m = state.messages[idx]; const a = m && m.activity; if (!a) return;
       if (a.cancelling) return;
+      reportFriction('task_cancelled', (a.steps.find(s => s.kind === 'handoff') || {}).label || 'running task');
       const executionIds = Array.from(new Set(a.steps.filter(s => s.kind === 'handoff' && s.status === 'running' && s.id).map(s => String(s.id))));
       a.cancelling = true; a.cancelError = ''; renderActivity(idx);
       if (!executionIds.length) {
@@ -1429,6 +1436,12 @@
     // ---------- Send / stream (wired to the real Thomas backend: POST /api/v2/chat, NDJSON) ----------
     function send() {
       const text = state.input.trim(); if (!text || state.streaming) return;
+      // A user re-sending (nearly) the same message means the first answer
+      // didn't land — that's friction worth seeing in the report.
+      const recentUser = state.messages.filter(m => m.role === 'user').slice(-2);
+      if (recentUser.some(m => { const a = String(m.text || '').toLowerCase().trim(), b = text.toLowerCase(); return a && (a === b || (a.length > 20 && (a.includes(b) || b.includes(a)))); })) {
+        reportFriction('same_message_retry', text);
+      }
       if (window.ThomasUnifiedModes && window.ThomasUnifiedModes.send(text, {
         profile: state.profile,
         modelId: state.modelId,

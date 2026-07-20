@@ -672,6 +672,9 @@ def create_app(config: AppConfig | None = None):
 
     app.router.add_get("/api/issues", api_issues)
     app.router.add_post("/api/issues", api_issues_report)
+    from thomas.server.routes.self_review import handle_self_review
+
+    app.router.add_get("/api/self-review", handle_self_review)
     app.router.add_get("/api/health", api_health)
     app.router.add_get("/healthz", api_health)
     app.router.add_get("/api/bootdoctor/recovery_notice", api_bootdoctor_recovery_notice)

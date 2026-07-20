@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.19] - 2026-07-20
+
+### Added
+
+- Self-review — the automated product owner. `GET /api/self-review?hours=N` has Thomas read his OWN recent conversations, the issue/friction ledger, and task outcomes, then write a prioritized markdown report (TOP FRICTION with evidence quotes, FAILURES with root causes, FIX FIRST) saved to runtime/logs/self_review.md. The first run independently surfaced real problems nobody had reported: "send that" follow-ups failing with no evidence, a job scope contaminated across contexts, file tasks failing with nothing delivered, and tasks stuck executing silently.
+- Friction telemetry: edit-and-resend, task cancels, and near-identical message retries now feed the issue ledger from the chat UI — the "this didn't land" signals, not just hard errors.
+
 ## [0.19.18] - 2026-07-20
 
 ### Fixed
