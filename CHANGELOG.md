@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.16] - 2026-07-20
+
+### Added (Codex parity)
+
+- Code task queue: sending a new task while a run is going now QUEUES it ("Queued (1 waiting): …") and auto-starts it the moment the current run's result is durable — including after a manual Stop. Previously the send threw "A Code task is already running." Verified live: queued a second page build mid-run; it started itself when the first finished and both artifacts landed.
+- Composer send/stop disambiguation: with text typed, the button is always Send (queues while busy); clicking with an EMPTY composer while a run is going is Stop. Previously any click during a Code run stopped it — typing a follow-up task and hitting Send killed your run.
+
+### Verified (Codex parity)
+
+- Shell execution in Code runs works end-to-end behind the dials (guardrails "open" + autonomy 3): a run created is_prime.py + 5 pytest tests and actually EXECUTED them — transcript shows `pytest test_is_prime.py` → `exit 0 … 5 passed`.
+
 ## [0.19.15] - 2026-07-20
 
 ### Added (Codex parity)

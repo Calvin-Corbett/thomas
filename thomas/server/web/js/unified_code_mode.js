@@ -665,7 +665,16 @@
   }
 
   async function send(message, context, options) {
-    if (state.running || state.approvalBusy || state.finishing) throw new Error('A Code task is already running or saving its result. Wait for it to finish before starting another.');
+    if (state.approvalBusy) throw new Error('A Code approval is in progress. Resolve it before starting another task.');
+    // Codex-parity queue: sending while a run is going queues the task and
+    // auto-starts it when the current run's result is durable.
+    if (state.running || state.finishing) {
+      state.queuedSends = state.queuedSends || [];
+      state.queuedSends.push({ message: String(message || ''), context: context || state.lastContext || {} });
+      pushLiveEvent({ type: 'planning', text: `Queued (${state.queuedSends.length} waiting): ${String(message || '').slice(0, 80)}` });
+      render();
+      return true;
+    }
     state.lastContext = context || state.lastContext || {};
     state.running = true;
     state.runStatus = 'working';
@@ -799,6 +808,16 @@
         render();
       }
     }
+    // Codex-parity task queue: a message sent while a run was going starts
+    // automatically the moment this run's result is durable.
+    startNextQueued();
+  }
+  function startNextQueued() {
+    const queued = state.queuedSends && state.queuedSends.shift();
+    if (!queued) return;
+    pushLiveEvent({ type: 'planning', text: `Starting your queued task: ${queued.message.slice(0, 80)}` });
+    render();
+    void safely(() => send(queued.message, queued.context), 'The queued Code task failed to start.');
   }
   async function stop() {
     const response = await fetch('/api/evolve/agent/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ run_id: state.runId }) });
@@ -947,6 +966,7 @@
       pushLiveEvent({ type: 'stopped', text: 'Stopped — you interrupted this run. Anything already changed is in Outputs with Keep/Revert.' });
       state.runStatus = 'stopped';
       finishBusy();
+      startNextQueued();
       return true;
     } finally {
       state.steeringBusy = false;

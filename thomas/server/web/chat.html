@@ -908,7 +908,9 @@
       shell.style.setProperty('--send-ink', active ? 'var(--c-accent-ink)' : 'var(--c-muted)');
       shell.style.setProperty('--send-op', active ? '1' : '0.85');
       shell.style.setProperty('--send-cursor', active ? 'pointer' : 'default');
-      sendIconEl.className = 'ph ' + (modeBusy ? 'ph-stop' : 'ph-arrow-up');
+      // Stop icon only when busy with an EMPTY composer; typed text keeps the
+      // send arrow because clicking it queues the new task (Codex-style).
+      sendIconEl.className = 'ph ' + (modeBusy && !state.input.trim() ? 'ph-stop' : 'ph-arrow-up');
     }
     function autosize() { inputEl.style.height = 'auto'; inputEl.style.height = Math.min(inputEl.scrollHeight, 180) + 'px'; }
     function scrollEnd() { requestAnimationFrame(() => { scrollEl.scrollTop = scrollEl.scrollHeight; }); }
@@ -2321,7 +2323,12 @@
     inputEl.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
     document.getElementById('tc-send').addEventListener('click', () => {
       const unified = window.ThomasUnifiedModes;
-      if (unified && unified.mode() !== 'chat' && unified.stop()) return;
+      if (unified && unified.mode() !== 'chat') {
+        // Typed text sends (queues if the mode is busy — Codex-style);
+        // clicking with an EMPTY composer while busy stops the run.
+        if (state.input.trim()) { send(); return; }
+        if (unified.stop()) return;
+      }
       if (state.streaming) { if (abortController) { try { abortController.abort(); } catch (e) {} } }
       else { send(); }
     });
