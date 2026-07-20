@@ -14,9 +14,15 @@ from typing import Any
 _DEVICE_ACTION_RE = re.compile(
     r"\b(turn\b[\w\s]{0,24}\b(?:on|off)|switch\b[\w\s]{0,24}\b(?:on|off)|"
     r"(?:lights?|lamp|fan|tv|plug|outlet|thermostat|door|lock|garage)\b[\w\s]{0,24}\b(?:on|off)|"
-    r"toggle|dim|brighten|lock|unlock|arm|disarm|"
-    r"open|close|start|stop|set (?:the )?(?:thermostat|temperature|heat|ac|alarm)|"
-    r"play|pause|send|text|email|call|schedule|book|order|pay|transfer)\b",
+    # "set my bedroom thermostat to 68" — allow words between the verb and the
+    # device/target so real phrasings (and derived titles) match.
+    r"set\b[\w\s]{0,30}\b(?:thermostat|temperature|temp|heat(?:er|ing)?|ac|air\s*condition|"
+    r"alarm|degrees?|lights?|scene|brightness|volume)|"
+    r"(?:dim|brighten|lock|unlock|arm|disarm|toggle)\b[\w\s]{0,24}\b"
+    r"(?:lights?|lamp|door|garage|alarm|thermostat|system)?|"
+    r"open\b[\w\s]{0,24}\b(?:door|garage|blinds?|shades?)|"
+    r"close\b[\w\s]{0,24}\b(?:door|garage|blinds?|shades?)|"
+    r"(?:play|pause|send|text|email|call|schedule|book|order|pay|transfer)\b)",
     re.I,
 )
 _SCRIPT_ARTIFACT_RE = re.compile(r"\.(ps1|sh|bat|cmd|py|js|mjs|ts|json|ya?ml|toml|ini|env|conf)$", re.I)
