@@ -9,6 +9,7 @@ Versioning: Semantic Versioning.
 
 ### Added
 
+- Thomas Code output artifacts preview inline: the Code OUTPUTS panel now previews PDF (embedded viewer) and SVG (image) results, matching chat — previously only html/image rendered and everything else was a bare link. (Input attachments — PDFs/photos into a Code run — are the next dedicated slice.)
 - Expandable, interactive agent view: clicking an agent activity card now shows its real STEP-BY-STEP timeline (humanized, timestamped — "Getting started", "Writing the file…", "Saved the file — moving on", "Reading files…") instead of one line with nothing on expand. New `GET .../delegations/{id}/detail` surfaces the durable transition history (internal lifecycle jargon rewritten to plain language, consecutive duplicates collapsed); the timeline refreshes live while the agent works. Plus a "JUMP IN" steer box on running agents (`POST .../delegations/{id}/steer`) so you can send a course correction mid-run, wired to the existing steer/instruction queue. Verified live end-to-end in the browser.
 
 ## [0.19.9] - 2026-07-20

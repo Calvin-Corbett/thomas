@@ -296,6 +296,9 @@
     const title = `<strong>${esc(file)}</strong><a href="${url}" target="_blank" rel="noopener">Open</a>`;
     if (artifact.kind === 'html') return `<section class="tc-code-artifact"><header>${title}</header><iframe src="${url}" sandbox="allow-scripts allow-forms allow-same-origin" title="Preview ${esc(file)}"></iframe></section>`;
     if (artifact.kind === 'image') return `<section class="tc-code-artifact"><header>${title}</header><img src="${url}" alt="Generated artifact ${esc(file)}"></section>`;
+    // PDF/schematic artifacts preview inline too (parity with chat), not just a link.
+    if (artifact.kind === 'pdf' || /\.pdf(?:$|[?#])/i.test(file)) return `<section class="tc-code-artifact"><header>${title}</header><iframe src="${url}#toolbar=0&navpanes=0&view=FitH" title="Preview ${esc(file)}"></iframe></section>`;
+    if (/\.svg(?:$|[?#])/i.test(file)) return `<section class="tc-code-artifact"><header>${title}</header><img src="${url}" alt="Generated artifact ${esc(file)}"></section>`;
     return `<section class="tc-code-artifact is-link"><header>${title}</header><span>${esc(artifact.kind || 'artifact')} result</span></section>`;
   }
 
