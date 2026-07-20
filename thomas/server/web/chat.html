@@ -494,6 +494,9 @@
     const canvasStatus = document.getElementById('tc-canvas-status');
 
     function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+    // Activity cards and status lines render as PLAIN text — worker prose with
+    // markdown markers ("**360**", "`file`") must not leak raw syntax there.
+    function deMd(s) { return String(s == null ? '' : s).replace(/\*\*([^*]+)\*\*/g, '$1').replace(/__([^_]+)__/g, '$1').replace(/`([^`]+)`/g, '$1').replace(/^#{1,4}\s+/gm, ''); }
 
     // ---------- Bot mascot (mirrors Bot.dc.html) ----------
     function botHTML(p) {
@@ -943,7 +946,7 @@
           <span style="width:28px;height:28px;border-radius:8px;background:var(--c-accent);color:var(--c-accent-ink);display:grid;place-items:center;flex:0 0 auto;"><i class="ph ph-arrow-bend-down-right" style="font-size:15px;"></i></span>
           <span style="min-width:0;display:flex;flex-direction:column;gap:1px;">
             <span style="font-size:13px;font-weight:700;white-space:nowrap;">${title}</span>
-            ${current ? `<span style="font-size:11px;color:var(--c-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px;">${esc(current)}</span>` : ''}
+            ${current ? `<span style="font-size:11px;color:var(--c-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px;">${esc(deMd(current))}</span>` : ''}
           </span>
           <span style="flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:${overallColor};margin-left:6px;">${anyRunning ? '<i class="ph ph-circle-notch" style="animation:tc-spin 1s linear infinite;font-size:14px;color:var(--c-dim);"></i>' : overall}</span>
           ${anyRunning ? `<button data-act-cancel aria-label="${a.cancelling ? 'Cancelling task' : 'Cancel task'}" title="${a.cancelling ? 'Cancelling task' : 'Cancel task'}" ${a.cancelling ? 'disabled' : ''} style="flex:0 0 auto;width:22px;height:22px;border-radius:6px;border:1px solid var(--c-border-2);background:transparent;color:var(--c-muted);display:grid;place-items:center;cursor:${a.cancelling ? 'wait' : 'pointer'};padding:0;"><i class="ph ${a.cancelling ? 'ph-circle-notch' : 'ph-x'}" style="font-size:12px;${a.cancelling ? 'animation:tc-spin 1s linear infinite;' : ''}"></i></button>` : ''}
@@ -1030,13 +1033,13 @@
             <span style="font-weight:700;flex:1;min-width:0;">Handed off to ${esc(s.worker || 'a worker')}</span>
             <span style="font-size:11px;color:${statusCol(s.status)};flex:0 0 auto;">${statusWord(s.status)}</span>
           </div>`;
-          if (s.label) h += `<div style="font-size:11.5px;color:var(--c-muted);padding:0 0 4px 23px;line-height:1.5;">${esc(s.label)}</div>`;
+          if (s.label) h += `<div style="font-size:11.5px;color:var(--c-muted);padding:0 0 4px 23px;line-height:1.5;">${esc(deMd(s.label))}</div>`;
         } else if (s.kind === 'tool') {
           h += `<div style="display:flex;align-items:center;gap:8px;padding:4px 0 4px 4px;font-size:12.5px;color:var(--c-dim);">
-            <span style="width:5px;height:5px;border-radius:50%;background:${statusCol(s.status)};flex:0 0 auto;"></span> <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(s.label)}</span> <span style="font-size:11px;color:${statusCol(s.status)};flex:0 0 auto;">${statusWord(s.status)}</span>
+            <span style="width:5px;height:5px;border-radius:50%;background:${statusCol(s.status)};flex:0 0 auto;"></span> <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(deMd(s.label))}</span> <span style="font-size:11px;color:${statusCol(s.status)};flex:0 0 auto;">${statusWord(s.status)}</span>
           </div>`;
         } else {
-          h += `<div style="display:flex;align-items:center;gap:8px;padding:4px 0 4px 4px;font-size:12.5px;color:var(--c-dim);"><span style="width:5px;height:5px;border-radius:50%;background:var(--c-muted);flex:0 0 auto;"></span> ${esc(s.label)}</div>`;
+          h += `<div style="display:flex;align-items:center;gap:8px;padding:4px 0 4px 4px;font-size:12.5px;color:var(--c-dim);"><span style="width:5px;height:5px;border-radius:50%;background:var(--c-muted);flex:0 0 auto;"></span> ${esc(deMd(s.label))}</div>`;
         }
       });
       if (thinking) h += `<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--c-border);font-size:12px;color:var(--c-dim);line-height:1.55;white-space:pre-wrap;"><i class="ph ph-brain" style="color:var(--c-accent);"></i> ${esc(thinking)}</div>`;
@@ -1313,12 +1316,17 @@
       if (!observedId) return;
       const choice = profilesData.flatMap(profile => Array.isArray(profile.models) ? profile.models : []).find(model => String(model && model.id || '') === observedId);
       const observedLabel = String(choice && (choice.display_name || choice.id) || observedId).split('/').pop();
-      const label = observedLabel + (runtime.failover_used === true ? ' · observed failover' : ' · observed');
+      // Provenance without jargon: "· observed" meant "runtime-verified model"
+      // but read as noise on every message. Plain label + tooltip; call out
+      // only the exceptional case (a fallback model actually served this).
+      const label = observedLabel + (runtime.failover_used === true ? ' · fallback used' : '');
       state.messages[idx].model = label;
       const modelEl = msgRefs[idx] && msgRefs[idx].modelEl;
       if (modelEl) {
         modelEl.textContent = label;
-        modelEl.title = runtime.failover_used === true ? 'Observed runtime model after failover' : 'Observed runtime model';
+        modelEl.title = runtime.failover_used === true
+          ? 'Your usual model was unavailable — this reply came from the fallback shown'
+          : 'Verified: this model produced this reply';
       }
     }
     function isChatGPTOAuthProfile(profileName) {

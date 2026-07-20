@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 # Release 0.19.0: security-reviewed local Chat, Code, and Work lifecycle checkpoint (2026-07-18).
-__version__ = "0.19.4"
+__version__ = "0.19.5"
 
 
 def _patch_typer_testing_for_click() -> None:

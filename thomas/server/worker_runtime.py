@@ -612,7 +612,7 @@ async def run_agent_worker_events(
 
     entered_progress_resumed = False
     try:
-        yield {"type": "progress", "text": "Provider-native worker entered the agent loop."}
+        yield {"type": "progress", "text": "On it — starting the work now."}
         entered_progress_resumed = True
     finally:
         if not entered_progress_resumed:

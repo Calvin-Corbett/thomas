@@ -69,6 +69,28 @@ from thomas.server.worker_runtime import run_agent_worker_events
 
 log = logging.getLogger(__name__)
 
+# Progress lines are USER-FACING (the activity card under "Handed off to ...").
+# Raw tool telemetry ("Finished fs.read_file; continuing.") reads like a stack
+# trace to the owner; phrase every step like a teammate's status update.
+_TOOL_PHRASES = {
+    "fs.read_file": ("Reading files", "Read what I needed"),
+    "fs.write_file": ("Writing the file", "Saved the file"),
+    "fs.list_dir": ("Looking through the workspace", "Scanned the workspace"),
+    "fs.search": ("Searching the workspace", "Searched the workspace"),
+    "web.search": ("Searching the web", "Found some sources"),
+    "web.fetch": ("Reading a web page", "Read the page"),
+    "shell.exec": ("Running a command", "Command finished"),
+    "ssh.exec": ("Running a remote command", "Remote command finished"),
+}
+
+
+def _tool_phrase(tool_name: str, *, done: bool = False, failed: bool = False) -> str:
+    active, finished = _TOOL_PHRASES.get(str(tool_name or "tool"), ("Working on the next step", "Step finished"))
+    if failed:
+        return f"{active} hit a snag — trying another way."
+    return f"{finished} — moving on." if done else f"{active}…"
+
+
 _MAX_EFFORT_IDLE_EVENT_TIMEOUT_S = 360.0
 
 
@@ -420,14 +442,14 @@ async def _run_agent_worker(
             if event.get("ok") is False:
                 if tool_name not in base_failed_tools:
                     base_failed_tools.append(tool_name)
-                progress = f"{tool_name} failed; continuing."
+                progress = _tool_phrase(tool_name, failed=True)
             else:
                 if tool_name not in base_succeeded_tools:
                     base_succeeded_tools.append(tool_name)
                 result_text = str(event.get("result_text") or "")
                 if result_text:
                     base_tool_outputs.setdefault(tool_name, []).append(result_text)
-                progress = f"Finished {tool_name}; continuing."
+                progress = _tool_phrase(tool_name, done=True)
         else:
             continue
         task_bot_runtime.update_execution(
@@ -548,7 +570,7 @@ async def _run_agent_worker(
                     tool_name = str(event.get("name") or "tool").strip() or "tool"
                     if tool_name not in tools_used:
                         tools_used.append(tool_name)
-                    progress = f"Using {tool_name}…"
+                    progress = _tool_phrase(tool_name)
                     task_bot_runtime.update_execution(
                         execution_id, progress_summary=progress, actor=bot.name, repo_root=repo_root, force=True
                     )
@@ -565,12 +587,12 @@ async def _run_agent_worker(
                         failed_tools=failed_tools,
                     )
                     if not tool_ok:
-                        progress = f"{last_tool} failed; continuing."
+                        progress = _tool_phrase(last_tool, failed=True)
                     else:
                         result_text = str(event.get("result_text") or "")
                         if result_text:
                             tool_outputs.setdefault(last_tool, []).append(result_text)
-                        progress = f"Finished {last_tool}; continuing."
+                        progress = _tool_phrase(last_tool, done=True)
                     task_bot_runtime.update_execution(
                         execution_id, progress_summary=progress, actor=bot.name, repo_root=repo_root, force=True
                     )

@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.5] - 2026-07-19
+
+### Fixed
+
+- Reply and presentation polish from the organic test battery: (1) trivial text asks (a short poem, a checklist, arithmetic, quick explanations) are answered inline instead of being dispatched to a worker — mixed asks split into inline answers + artifact dispatches, ending the triple-repeat flow where a card, an announcement, and a final reply all restated the same content; (2) activity cards strip raw markdown markers (a worker's `**360**` no longer leaks literally); (3) per-message "· observed" provenance jargon replaced with a plain model label + tooltip, with an explicit "fallback used" note only when a fallback model actually served the reply; (4) worker progress lines humanized ("Reading files…", "Saved the file — moving on.") instead of tool telemetry ("Finished fs.read_file; continuing.").
+- Disabled the ThomasJanitorHourly scheduled task: its hourly "pin the main checkout to dev" hygiene force-checked-out dev under an active feature-branch session twice (19:01 and 21:01), discarding uncommitted work — its live-session detection does not recognize agent sessions. Re-enable only after it learns to leave non-dev checkouts with recent commits alone.
+
 ## [0.19.4] - 2026-07-19
 
 ### Changed
