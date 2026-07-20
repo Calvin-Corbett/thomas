@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.13] - 2026-07-20
+
+### Added
+
+- Work job chat can now READ the job's built-in spreadsheets and metrics: the dashboard's sheets (bounded: 6 sheets, 60 rows, 16 cols) and metric tiles ride the job's private context, so "which location has the highest single-day sales?" is answered from the user's own Daily Sales Log instead of "no sales entries have been recorded." Verified live: Thomas answered with the exact row values from the sheet ($2,020, Farmers Market, July 17) after a UI edit was saved.
+
+### Verified (organic pass, in browser)
+
+- Chat casual ask answered inline in ~4s, no dispatch, one proactive add-on; Edit-and-resend on a sent message prefills, forks the thread at that point, and re-answers the edited ask.
+
 ## [0.19.12] - 2026-07-20
 
 ### Fixed
