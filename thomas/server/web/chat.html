@@ -994,7 +994,7 @@
           <i class="ph ph-caret-${a.expanded ? 'up' : 'down'}" style="font-size:13px;color:var(--c-muted);flex:0 0 auto;"></i>
         </div>
         ${a.cancelError ? `<div role="alert" style="padding:0 12px 9px;color:#ff9a9a;font-size:11.5px;">${esc(a.cancelError)}</div>` : ''}
-        <div style="display:${a.expanded ? 'block' : 'none'};padding:4px 12px 11px;border-top:1px solid var(--c-border);">${_stepsLog(steps, thinking)}</div>
+        <div style="display:${a.expanded ? 'block' : 'none'};padding:4px 12px 11px;border-top:1px solid var(--c-border);">${_stepsLog(steps, thinking)}${_activityDetail(a)}</div>
       </div>`;
       // The completion bubble presents the artifact; don't duplicate it here.
       if (!a.artifactMovedToAnnouncement) html += artifactHTML(a);
@@ -1087,12 +1087,93 @@
       if (thinking) h += `<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--c-border);font-size:12px;color:var(--c-dim);line-height:1.55;white-space:pre-wrap;"><i class="ph ph-brain" style="color:var(--c-accent);"></i> ${esc(thinking)}</div>`;
       return h;
     }
+    function _fmtStepTime(at) {
+      if (!at) return '';
+      const t = Date.parse(at); if (isNaN(t)) return '';
+      const d = new Date(t);
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+    // The REAL "what the agent did" timeline (fetched per-execution) + a steer
+    // box to jump in on a running agent. This is what the drawer shows on click.
+    function _activityDetail(a) {
+      let h = '';
+      const tl = Array.isArray(a.timeline) ? a.timeline : [];
+      if (a.detailLoading && !tl.length) {
+        h += `<div style="font-size:11.5px;color:var(--c-muted);padding:6px 0;">Loading what Thomas did…</div>`;
+      } else if (tl.length) {
+        h += `<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--c-border);">
+          <div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--c-muted);margin-bottom:6px;">Step by step</div>
+          ${tl.map(step => `<div style="display:flex;gap:8px;padding:3px 0;font-size:12px;color:var(--c-dim);line-height:1.5;">
+            <span style="flex:0 0 auto;width:5px;height:5px;margin-top:6px;border-radius:50%;background:var(--c-accent);opacity:.7;"></span>
+            <span style="flex:1;min-width:0;">${esc(deMd(step.summary || ''))}${step.blocker ? ` <span style="color:#ff9a9a;">(${esc(step.blocker)})</span>` : ''}</span>
+            ${step.at ? `<span style="flex:0 0 auto;font-size:10px;color:var(--c-muted);">${esc(_fmtStepTime(step.at))}</span>` : ''}
+          </div>`).join('')}
+        </div>`;
+      }
+      const anyRunning = (a.steps || []).some(s => s.kind === 'handoff' && s.status === 'running');
+      if (anyRunning) {
+        h += `<div style="margin-top:10px;padding-top:9px;border-top:1px dashed var(--c-border);">
+          <div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--c-muted);margin-bottom:6px;">Jump in</div>
+          <form data-steer-form style="display:flex;gap:6px;">
+            <input data-steer-input type="text" placeholder="Tell Thomas to adjust course…" style="flex:1;min-width:0;padding:8px 10px;border:1px solid var(--c-border-2);border-radius:9px;background:var(--c-surface);color:var(--c-text);font:inherit;font-size:12.5px;">
+            <button type="submit" style="flex:0 0 auto;padding:8px 12px;border:1px solid var(--c-accent-line);border-radius:9px;background:var(--c-accent-soft);color:var(--c-accent);font:600 12px var(--font-sans);cursor:pointer;">Send</button>
+          </form>
+          ${a.steerNote ? `<div style="margin-top:5px;font-size:11px;color:var(--c-muted);">${esc(a.steerNote)}</div>` : ''}
+        </div>`;
+      }
+      return h;
+    }
+    // Fetch the durable step timeline for the card's execution(s) when expanded.
+    async function fetchActivityDetail(idx) {
+      const a = state.messages[idx] && state.messages[idx].activity; if (!a) return;
+      const sid = state.sessionId; if (!sid) return;
+      const handoffs = (a.steps || []).filter(s => s.kind === 'handoff' && s.id);
+      if (!handoffs.length) return;
+      // Only show the "Loading…" state on the FIRST fetch; live refreshes are
+      // quiet so the timeline updates without flicker.
+      if (!a.timeline) { a.detailLoading = true; renderActivity(idx); }
+      try {
+        const merged = [];
+        for (const step of handoffs) {
+          const r = await fetch('/api/v2/chat/session/' + encodeURIComponent(sid) + '/delegations/' + encodeURIComponent(step.id) + '/detail');
+          if (!r.ok) continue;
+          const d = await r.json();
+          if (d && d.ok && Array.isArray(d.steps)) {
+            const label = handoffs.length > 1 ? (d.bot_name || 'worker') : '';
+            d.steps.forEach(s => merged.push(label ? Object.assign({}, s, { summary: '[' + label + '] ' + (s.summary || '') }) : s));
+          }
+        }
+        merged.sort((x, y) => String(x.at || '').localeCompare(String(y.at || '')));
+        a.timeline = merged;
+      } catch (e) {}
+      a.detailLoading = false; renderActivity(idx);
+    }
+    async function steerActivity(idx, text) {
+      const a = state.messages[idx] && state.messages[idx].activity; if (!a) return;
+      const sid = state.sessionId; if (!sid) return;
+      const running = (a.steps || []).filter(s => s.kind === 'handoff' && s.status === 'running' && s.id);
+      if (!running.length || !text.trim()) return;
+      a.steerNote = 'Sending your note to Thomas…'; renderActivity(idx);
+      let ok = false;
+      for (const step of running) {
+        try {
+          const r = await fetch('/api/v2/chat/session/' + encodeURIComponent(sid) + '/delegations/' + encodeURIComponent(step.id) + '/steer', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text }),
+          });
+          const d = await r.json(); if (d && d.ok) ok = true;
+        } catch (e) {}
+      }
+      a.steerNote = ok ? 'Got it — Thomas will fold that in as he works.' : 'Couldn’t reach the running task just now.';
+      renderActivity(idx);
+    }
     function renderActivity(idx) {
       const ref = msgRefs[idx]; if (!ref || !ref.activityEl) return;
       const m = state.messages[idx]; if (!m || !m.activity) { ref.activityEl.innerHTML = ''; return; }
       ref.activityEl.innerHTML = activityHTML(m);
       const tog = ref.activityEl.querySelector('[data-act-toggle]');
-      if (tog) tog.addEventListener('click', () => { m.activity.expanded = !m.activity.expanded; renderActivity(idx); });
+      if (tog) tog.addEventListener('click', () => { m.activity.expanded = !m.activity.expanded; renderActivity(idx); if (m.activity.expanded && !m.activity.timeline && !m.activity.detailLoading) fetchActivityDetail(idx); });
+      const steerForm = ref.activityEl.querySelector('[data-steer-form]');
+      if (steerForm) steerForm.addEventListener('submit', (e) => { e.preventDefault(); const input = steerForm.querySelector('[data-steer-input]'); const val = input ? input.value.trim() : ''; if (val) { steerActivity(idx, val); } });
       const cancelBtn = ref.activityEl.querySelector('[data-act-cancel]');
       if (cancelBtn) cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); cancelTask(idx); });
       const artTog = ref.activityEl.querySelector('[data-artifact-toggle]');
@@ -1330,6 +1411,11 @@
             rows.forEach(row => reconcileHandoff(idx, row));
           }
         } catch (e) {}
+        // Keep the expanded step-timeline fresh while the agent works — but not
+        // while the user is typing a steer note (a re-render would clear it).
+        const act = state.messages[idx] && state.messages[idx].activity;
+        const typing = document.activeElement && document.activeElement.hasAttribute && document.activeElement.hasAttribute('data-steer-input');
+        if (act && act.expanded && !typing) fetchActivityDetail(idx);
       }
     }
 

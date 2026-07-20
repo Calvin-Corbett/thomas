@@ -29,12 +29,14 @@ from thomas.server.routes.chat_v2_keys import (
 from thomas.server.routes.chat_v2_request_support import handle_cancel_delegation, handle_session_delegations
 from thomas.server.routes.chat_v2_session_routes import (
     guard_chat_v2_read,
+    handle_delegation_detail,
     handle_mark_delegation_reported,
     handle_session_delete,
     handle_session_export,
     handle_session_get,
     handle_session_truncate,
     handle_specialists_list,
+    handle_steer_delegation,
 )
 from thomas.server.routes.chat_v2_support import _cleanup_cached_session_llms
 from thomas.server.routes.chat_v2_voice import (
@@ -99,6 +101,14 @@ def register_chat_v2_route_set(
     app.router.add_get(
         "/api/v2/chat/session/{session_id}/delegations",
         guard_chat_v2_read(handle_session_delegations, require_api_access),
+    )
+    app.router.add_get(
+        "/api/v2/chat/session/{session_id}/delegations/{execution_id}/detail",
+        guard_chat_v2_read(handle_delegation_detail, require_api_access),
+    )
+    app.router.add_post(
+        "/api/v2/chat/session/{session_id}/delegations/{execution_id}/steer",
+        guard_chat_v2_read(handle_steer_delegation, require_api_access),
     )
     app.router.add_post(
         "/api/v2/chat/session/{session_id}/delegations/{execution_id}/cancel",

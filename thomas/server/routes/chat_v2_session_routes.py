@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re as _re
 import sqlite3
 from collections.abc import Awaitable, Callable
 
@@ -122,6 +123,99 @@ async def handle_session_delete(request: web.Request) -> web.Response:
     return web.json_response({"deleted": deleted, "session_id": sid, "memory_purge": memory_purge})
 
 
+# The step timeline is USER-FACING. Backend transition summaries carry internal
+# lifecycle jargon ("Provider-native worker is initializing", "workspace change
+# baseline"); rewrite those to plain language so "see what the agent did" reads
+# like a person's log, not a stack trace.
+_INTERNAL_STEP_RE = _re.compile(
+    r"provider-native|background execution|workspace change baseline|"
+    r"initializ|queued on|is running|is initializing|start gate|"
+    r"prepared for|recording|reconcil|attribution|receipt",
+    _re.I,
+)
+
+
+def _humanize_step_summary(summary: str) -> str:
+    text = str(summary or "").strip()
+    if not text:
+        return ""
+    if _INTERNAL_STEP_RE.search(text):
+        return "Getting started"
+    # Strip any leading bracket tag like "[worker] " noise.
+    return _re.sub(r"^\s*\[[^\]]+\]\s*", "", text).strip()
+
+
+async def handle_delegation_detail(request: web.Request) -> web.Response:
+    """Return one delegation's step-by-step timeline for the expandable card.
+
+    Surfaces the durable `transitions[]` history (timestamped, humanized step
+    summaries) plus current state/progress/steer queue — so clicking an agent
+    shows what it actually did, not a single line.
+    """
+    sid = str(request.match_info.get("session_id", "") or "").strip()
+    exec_id = str(request.match_info.get("execution_id", "") or "").strip()
+    if not sid or not exec_id:
+        return web.json_response({"ok": False, "error": "invalid_reference"}, status=400)
+    row = task_bot_runtime.get_execution(exec_id) or {}
+    owner = str(row.get("conversation_id") or "").strip()
+    if owner and owner != sid:
+        return web.json_response({"ok": False, "error": "session_mismatch"}, status=403)
+    if not row:
+        return web.json_response({"ok": False, "error": "not_found"}, status=404)
+    transitions = row.get("transitions") if isinstance(row.get("transitions"), list) else []
+    steps: list[dict[str, str]] = []
+    last_summary = ""
+    for t in transitions:
+        if not isinstance(t, dict):
+            continue
+        summary = _humanize_step_summary(str(t.get("summary") or "").strip())
+        if not summary or summary == last_summary:
+            continue  # skip empties + collapse consecutive duplicates
+        last_summary = summary
+        steps.append(
+            {
+                "summary": summary,
+                "state": str(t.get("state") or "").strip(),
+                "actor": str(t.get("actor") or "").strip(),
+                "blocker": str(t.get("blocker") or "").strip(),
+                "at": str(t.get("occurred_at") or "").strip(),
+            }
+        )
+    pending = [str(p).strip() for p in (row.get("pending_instructions") or []) if str(p).strip()]
+    return web.json_response(
+        {
+            "ok": True,
+            "execution_id": exec_id,
+            "state": str(row.get("state") or "").strip(),
+            "bot_name": str(row.get("bot_name") or row.get("bot_id") or "").strip(),
+            "last_progress": str(row.get("progress_summary") or "").strip(),
+            "steps": steps,
+            "pending_instructions": pending,
+        }
+    )
+
+
+async def handle_steer_delegation(
+    request: web.Request,
+    *,
+    task_update: Any = apply_task_update,
+) -> web.Response:
+    """Send a steering message to a RUNNING delegation (jump in / take over)."""
+    sid = str(request.match_info.get("session_id", "") or "").strip()
+    exec_id = str(request.match_info.get("execution_id", "") or "").strip()
+    if not sid or not exec_id:
+        return web.json_response({"ok": False, "error": "invalid_reference"}, status=400)
+    try:
+        body = await request.json()
+    except (ValueError, TypeError):
+        body = {}
+    text = str((body or {}).get("message") or "").strip()
+    if not text:
+        return web.json_response({"ok": False, "error": "empty_message"}, status=400)
+    result = task_update(sid, exec_id, update=text)
+    return web.json_response(result, status=200 if bool(result.get("ok")) else 404)
+
+
 async def handle_session_delegations(
     request: web.Request,
     *,
@@ -210,7 +304,9 @@ __all__ = [
     "handle_session_delegations",
     "handle_session_delete",
     "handle_session_export",
+    "handle_delegation_detail",
     "handle_session_get",
     "handle_session_truncate",
+    "handle_steer_delegation",
     "handle_specialists_list",
 ]
