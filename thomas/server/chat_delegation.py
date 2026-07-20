@@ -81,6 +81,7 @@ from thomas.server.chat_delegation_worker_config import (  # noqa: F401
     _self_recovery_attempts,
 )
 from thomas.server.chat_delegation_workspace import ensure_task_workspace as _ensure_task_workspace
+from thomas.server.chat_delegation_workspace import seed_workspace_from_previous as _seed_workspace_from_previous
 from thomas.server.model_runtime_receipt import validate_model_runtime_receipt
 from thomas.server.worker_runtime import _explicit_browser_preflight, run_agent_worker_events
 
@@ -650,6 +651,16 @@ async def _start_agent_worker_delegation(
     # Normal deliverables run in a clean per-task workspace; self-development uses the
     # live checkout directly and is gated later on actual source-file changes.
     work_dir = root if targets_live_repo else _ensure_task_workspace(execution_id)
+    if not targets_live_repo and prompt_needs_handoff(prompt):
+        # Follow-ups reference the previous deliverable ("add a 6th row to it")
+        # — the new worker must SEE that file, not ask the user to upload it.
+        _seeded = _seed_workspace_from_previous(work_dir, session_id, exclude_execution_id=execution_id, repo_root=root)
+        if _seeded:
+            prompt = (
+                f"{prompt}\n\n[The workspace already contains the earlier deliverable(s): "
+                + ", ".join(_seeded[:8])
+                + ". Modify those files in place.]"
+            )
 
     _os_name = _platform.system() or "this"
     _shell_hint = (

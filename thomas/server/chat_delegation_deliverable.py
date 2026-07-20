@@ -570,7 +570,11 @@ def _build_result_summary(
 _STRONG_FOLLOWUP_RE = re.compile(
     r"\b(make it|change it|update it|fix it|move it|resize it|do the same|the same|same as|"
     r"again|like (?:before|that|this|it)|as before|previous(?:ly)?|earlier|instead|"
-    r"the one|the other)\b",
+    r"the one|the other)\b"
+    # Referential prepositions: "add a row TO IT", "put a title ON IT",
+    # "append INTO THAT" — the object lives in the previous turn. ("add a 6th
+    # row to it" slipped every net and the worker asked for an upload.)
+    r"|(?:\bto|\binto|\bonto|\bfrom|\bon)\s+(?:it|that)\b",
     re.IGNORECASE,
 )
 # Ambiguous verbs that ARE common nouns ("a continue button", "a redo function", "a

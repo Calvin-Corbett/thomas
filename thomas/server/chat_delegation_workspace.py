@@ -22,6 +22,68 @@ def ensure_task_workspace(execution_id: str) -> Path:
     return base
 
 
+def seed_workspace_from_previous(
+    work_dir: Path,
+    session_id: str,
+    *,
+    exclude_execution_id: str = "",
+    repo_root: str | Path | None = None,
+    max_files: int = 24,
+    max_bytes: int = 20_000_000,
+) -> list[str]:
+    """Copy the latest finished deliverables of this chat session into a new workspace.
+
+    A follow-up like "add a 6th row to it" spawns a FRESH worker whose empty
+    workspace cannot see the CSV made one turn earlier — the worker then asks
+    the user to upload the file it just delivered. Seeding the new workspace
+    with the previous execution's files makes follow-ups actually continuous.
+    """
+    import shutil
+
+    from thomas.core import task_bot_runtime
+
+    sid = str(session_id or "").strip()
+    if not sid:
+        return []
+    try:
+        rows = task_bot_runtime.list_executions(repo_root, refresh=False)
+    except (OSError, RuntimeError, ValueError, TypeError):
+        return []
+    candidates = [
+        row
+        for row in rows
+        if str(row.get("conversation_id") or "") == sid
+        and str(row.get("execution_id") or "") not in ("", str(exclude_execution_id or ""))
+        and str(row.get("state") or "").lower() in {"completed", "complete", "verified", "succeeded", "done"}
+    ]
+    candidates.sort(key=lambda row: str(row.get("updated_at") or row.get("created_at") or ""), reverse=True)
+    copied: list[str] = []
+    for row in candidates:
+        prev_dir = ensure_task_workspace(str(row.get("execution_id") or ""))
+        files = snapshot_workspace_files(prev_dir, limit=max_files)
+        if not files:
+            continue
+        budget = max_bytes
+        for rel in files:
+            src = prev_dir / rel
+            dst = Path(work_dir) / rel
+            try:
+                size = src.stat().st_size
+                if size > budget:
+                    continue
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                if not dst.exists():
+                    shutil.copy2(src, dst)
+                    budget -= size
+                    copied.append(rel)
+            except OSError as exc:
+                log.debug("workspace seed copy failed for %s: %s", rel, exc)
+        if copied:
+            log.info("Seeded follow-up workspace with %d file(s) from %s", len(copied), row.get("execution_id"))
+            break
+    return copied
+
+
 def snapshot_workspace_files(work_dir: Path | None, *, limit: int = 24) -> list[str]:
     """List real, non-hidden deliverable files relative to a worker workspace."""
 
