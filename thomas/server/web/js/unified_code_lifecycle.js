@@ -25,12 +25,19 @@
   }
 
   function runRequest(state, message, context) {
+    // Attachments ride the run request: photos as data URLs, docs as extracted
+    // text. The server stages them into the project workspace so the Code agent
+    // can actually read them (parity with chat's Add-files).
+    const docs = Array.isArray(context.docs) ? context.docs.filter(d => d && d.name) : [];
+    const images = Array.isArray(context.images) ? context.images.filter(im => im && im.data_url) : [];
     const base = {
       message,
       conversation_id: state.activeId || undefined,
       project_root: state.projectRoot || undefined,
       ...requestSettings(context),
     };
+    if (docs.length) base.docs = docs;
+    if (images.length) base.images = images;
     const retry = state.retryRequest;
     if (retry && retry.message === base.message && retry.conversation_id === base.conversation_id && retry.project_root === base.project_root) return { ...retry };
     return { ...base, request_id: requestId('run') };

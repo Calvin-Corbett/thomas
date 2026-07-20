@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.11] - 2026-07-20
+
+### Added
+
+- Thomas Code file input (parity with chat's Add-files): the composer's attach button now works in Code mode — photos ride as data URLs and documents as extracted text on the run request, the server stages them into `<project>/_attachments/` (name-sanitized, bounded: 12 files, 8MB/image, 20MB total), and the run goal tells the agent where they landed. Staging happens BEFORE the git snapshot so attachments are inputs in the baseline, never misreported as run outputs. Verified live twice on the real GPT path: an attached note's unique codeword was quoted back in the agent's output file — via direct API and via the actual UI attach → Send flow.
+
 ## [0.19.10] - 2026-07-20
 
 ### Added

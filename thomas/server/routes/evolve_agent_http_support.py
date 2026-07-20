@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import logging
 import posixpath
 import re
@@ -77,6 +79,95 @@ def validate_active_run_request(body: object, session: object) -> web.Response |
             {"ok": False, "error": "that Code run is not active", "code": "run_not_active"}, status=409
         )
     return None
+
+
+# ── Attachment staging (Code input parity with chat's Add-files) ────────────
+# Photos arrive as data URLs, documents as extracted text. They are written
+# into <project>/_attachments/ so the Code agent's file tools can actually
+# read them (the Claude path's Read tool views images natively). Bounded and
+# name-sanitized; never trusts client paths.
+_ATTACHMENT_DIR = "_attachments"
+_ATTACHMENT_MAX_FILES = 12
+_ATTACHMENT_MAX_IMAGE_BYTES = 8 * 1024 * 1024
+_ATTACHMENT_MAX_DOC_CHARS = 2_000_000
+_ATTACHMENT_MAX_TOTAL_BYTES = 20 * 1024 * 1024
+_ATTACHMENT_SAFE_NAME = re.compile(r"[^A-Za-z0-9._ -]+")
+_DATA_URL_RE = re.compile(r"^data:([\w.+-]+/[\w.+-]+)?;base64,(.+)$", re.DOTALL)
+
+
+def _safe_attachment_name(raw: str, index: int, fallback_ext: str) -> str:
+    base = Path(str(raw or "").replace("\\", "/")).name
+    cleaned = _ATTACHMENT_SAFE_NAME.sub("_", base).strip("._ ")[:120]
+    return cleaned or f"attachment-{index + 1}{fallback_ext}"
+
+
+def stage_code_attachments(project_root: Path, body: dict) -> list[str]:
+    """Write run-request attachments into the project; return relative paths."""
+    docs = [d for d in (body.get("docs") or []) if isinstance(d, dict)]
+    images = [im for im in (body.get("images") or []) if isinstance(im, dict)]
+    if not docs and not images:
+        return []
+    target_dir = (project_root / _ATTACHMENT_DIR).resolve()
+    if not target_dir.is_relative_to(project_root.resolve()):
+        return []
+    staged: list[str] = []
+    total = 0
+    target_dir.mkdir(parents=True, exist_ok=True)
+    for index, doc in enumerate(docs[:_ATTACHMENT_MAX_FILES]):
+        text = str(doc.get("text") or "")[:_ATTACHMENT_MAX_DOC_CHARS]
+        if not text.strip():
+            continue
+        name = _safe_attachment_name(str(doc.get("name") or ""), index, ".txt")
+        payload = text.encode("utf-8", errors="replace")
+        if total + len(payload) > _ATTACHMENT_MAX_TOTAL_BYTES:
+            break
+        try:
+            (target_dir / name).write_bytes(payload)
+        except OSError:
+            continue
+        total += len(payload)
+        staged.append(f"{_ATTACHMENT_DIR}/{name}")
+    for index, image in enumerate(images[: _ATTACHMENT_MAX_FILES - len(staged)]):
+        match = _DATA_URL_RE.match(str(image.get("data_url") or ""))
+        if match is None:
+            continue
+        try:
+            payload = base64.b64decode(match.group(2), validate=True)
+        except (binascii.Error, ValueError):
+            continue
+        if not payload or len(payload) > _ATTACHMENT_MAX_IMAGE_BYTES:
+            continue
+        if total + len(payload) > _ATTACHMENT_MAX_TOTAL_BYTES:
+            break
+        mime_ext = {
+            "image/png": ".png",
+            "image/jpeg": ".jpg",
+            "image/gif": ".gif",
+            "image/webp": ".webp",
+            "image/svg+xml": ".svg",
+            "application/pdf": ".pdf",
+        }.get(str(match.group(1) or "").lower(), ".png")
+        name = _safe_attachment_name(str(image.get("name") or ""), index, mime_ext)
+        if "." not in name:
+            name += mime_ext
+        try:
+            (target_dir / name).write_bytes(payload)
+        except OSError:
+            continue
+        total += len(payload)
+        staged.append(f"{_ATTACHMENT_DIR}/{name}")
+    return staged
+
+
+def attachment_goal_note(staged: list[str]) -> str:
+    """One line appended to the run goal so the agent knows where files landed."""
+    if not staged:
+        return ""
+    listing = ", ".join(staged[:_ATTACHMENT_MAX_FILES])
+    return (
+        f"\n\nThe user attached {len(staged)} file(s), already saved in this project: {listing}. "
+        "Read them (images can be viewed with the Read tool) and use their contents for this task."
+    )
 
 
 def conversation_artifact_allowlist(root: Path, conversation: object) -> set[str]:

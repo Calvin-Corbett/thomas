@@ -31,9 +31,11 @@ from thomas.forge.anvil.forge_code_settings import ForgeCodeSettings, ForgeCodeS
 from thomas.server.app_keys import APP_DELIVERABLE_PREVIEW_SERVICE
 
 from .evolve_agent_http_support import (
+    attachment_goal_note,
     conversation_artifact_allowlist,
     git_status_unavailable_response,
     prepare_code_oauth_credential,
+    stage_code_attachments,
     validate_active_run_request,
 )
 from .evolve_agent_registration import register_evolve_agent_handler_map
@@ -289,6 +291,15 @@ def build_evolve_agent_handlers(
             conv = forge_code_store.draft_conversation(source_evolve_item=source_evolve_item)
         cid = conv["id"]
         capability_report = settings.capability_report()
+        # Stage user attachments (photos as files, docs as text) into the project
+        # BEFORE the git snapshot: they are inputs the agent reads, and must not
+        # surface later as run outputs/artifacts in the change delta.
+        try:
+            staged_attachments = stage_code_attachments(project_root, body)
+        except OSError:
+            log.warning("Code attachments could not be staged", exc_info=True)
+            staged_attachments = []
+        goal_message = message + attachment_goal_note(staged_attachments)
         try:
             snap = forge_code_git.snapshot(project_root)
         except forge_code_git.ForgeCodeGitError as exc:
@@ -352,7 +363,7 @@ def build_evolve_agent_handlers(
                 forge_code_projects.update_conversation_settings(catalog_root, cid, capability_report)
             _save_action_receipt(catalog_root, "run", request_id, {**reservation, "state": "running"})
             activity_token = await _release_code_start_gate(
-                app, proc, start_token, oauth_access_token, run_id, message, gate_release_state
+                app, proc, start_token, oauth_access_token, run_id, goal_message, gate_release_state
             )
         except (asyncio.CancelledError, OSError, RuntimeError, TypeError, ValueError):
             termination = {}
