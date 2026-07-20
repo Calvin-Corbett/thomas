@@ -7,6 +7,11 @@ Versioning: Semantic Versioning.
 
 ## [0.19.22] - 2026-07-20
 
+### Verified (Codex parity: chat attachments to workers, task queue)
+
+- Chat attachments reach delegated workers: a doc attached in Chat with a planted codeword produced a worker-built file quoting it (attach -> dispatch -> worker read -> deliverable). This already worked; now it's proven.
+- Code task queue: sending a second task mid-run shows "Queued (1 waiting)" and auto-starts it when the active run finishes — both deliverables landed. Serial-per-instance by design; parallel Code runs across separate projects (Codex-cloud style) is the one remaining structural difference, scoped as its own refactor of the global run slot (status/stream/steer/stop are single-slot today).
+
 ### Verified (Codex parity: run-the-tests execution)
 
 - Code runs really execute tests: with guardrails "open" + autonomy 3, a run that created add.py + test_add.py had its tests EXECUTED by the build engine's verify loop — transcript shows `pytest test_add.py` -> "3 passed in 0.03s" -> engine checks passed. The dispatched agent stays edit-only by design (it declined to fabricate a test-output file — "no real test output was available to record"); the engine performs the real execution and feeds failures back for fix passes. This closes the last enumerated Codex-parity gap (steering, stop, reload-resume, task queue, checkpoint/PR, attachments in/out, artifact previews, evidence-gated status, test execution).
