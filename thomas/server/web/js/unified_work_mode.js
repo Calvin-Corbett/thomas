@@ -359,12 +359,20 @@
     selectionGeneration += 1; clearTimeout(reconcileTimer); reconcileTimer = null; state.activeJob = null; state.messages = []; state.workflows = []; state.activeWorkflowId = ''; state.onboardingWorkflowId = ''; state.onboardingSelectionUserTurn = 0; state.sessionId = ''; state.creatingJobInApp = true; state.onboardingPhase = 'goal_discovery'; state.stage = 'onboarding'; state.error = ''; render();
   }
 
+  // Every onboarding flow gets ITS OWN chat session, namespaced per flow —
+  // never the bare app id. A shared app-level context bled one job's history
+  // into another's onboarding (email triage described as SOTI device work).
+  async function mintOnboardingSession(generation) {
+    if (state.sessionId) return true;
+    const session = await request('/api/session/new', { method: 'POST' });
+    if (generation !== selectionGeneration) return false;
+    state.sessionId = String(session.session_id || (session.data || {}).session_id || '');
+    return true;
+  }
   async function ensureOnboardingApp(firstMessage, generation) {
     if (state.activeApp && state.creatingJobInApp) {
       if (!state.sessionId) {
-        const session = await request('/api/session/new', { method: 'POST' });
-        if (generation !== selectionGeneration) return false;
-        state.sessionId = String(session.session_id || (session.data || {}).session_id || '');
+        if (!await mintOnboardingSession(generation)) return false;
         await persistJobDraft({
           session_id: state.sessionId,
           phase: state.onboardingPhase,
@@ -374,7 +382,13 @@
       }
       return true;
     }
-    if (state.activeApp) return true;
+    if (state.activeApp) {
+      if (!state.sessionId) {
+        if (!await mintOnboardingSession(generation)) return false;
+        try { await jsonRequest(appUrl('/onboarding'), 'PATCH', { fields: { session_id: state.sessionId } }); } catch (e) {}
+      }
+      return true;
+    }
     const created = await request('/api/work/apps', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: deriveName(firstMessage), goal: '' }) });
     if (generation !== selectionGeneration) return false;
     state.activeApp = created.app;
@@ -469,7 +483,9 @@
         const turn = state.messages.filter(row => row.role === 'user').length;
         const jobName = state.creatingJobInApp ? deriveName((state.messages.find(row => row.role === 'user') || {}).text) : state.activeApp.name;
         const instruction = `[Private Thomas Work onboarding context. ${onboardingInstruction(jobName, turn)} This is follow-up ${turn}. Do not repeat answered questions and do not claim setup is complete.]\n\n${text}`;
-        const contextId = state.creatingJobInApp ? `${state.activeApp.id}:onboarding:${state.sessionId}` : state.activeApp.id;
+        // Always the per-flow namespace — a bare app.id context accumulates
+        // every past conversation in the app and bleeds it into new jobs.
+        const contextId = `${state.activeApp.id}:onboarding:${state.sessionId}`;
         const pending = { role: 'assistant', text: '' }; state.messages.push(pending); render();
         const answer = await readChatStream(instruction, { contextId, displayPrompt: text, signal: controller.signal, onDelta: value => { if (generation === selectionGeneration) { pending.text = value; if (adapterActive) render(); } } });
         if (generation !== selectionGeneration) return;

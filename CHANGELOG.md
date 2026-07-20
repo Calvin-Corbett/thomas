@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [0.19.21] - 2026-07-20
+
+### Fixed (last item on the self-review's FIX FIRST list)
+
+- Job-scope isolation: Work onboarding chat could inherit the app's ENTIRE prior conversation history (bare app-id chat context), which is how an email-triage job got described as SOTI MobiControl device work. Every onboarding flow now mints its own session and always uses the per-flow `app:onboarding:session` context. Verified live with a fetch intercept: a fresh onboarding in the workspace sends the namespaced context and the conversation stays on the new job's topic.
+
 ## [0.19.20] - 2026-07-20
 
 ### Fixed (from the self-review's FIX FIRST list)
