@@ -171,6 +171,7 @@ _SAFE_READ_TOOLS = {
     "demo_campaign",
     "demo_task_pack",
     "diff.preview",
+    "diff.preview_patch",
     "eng.code_complexity",
     "eng.dependency_tree",
     "eng.detect_encoding",
