@@ -13,6 +13,11 @@ Versioning: Semantic Versioning.
 
 ### Added (Frontier capability program — external integrations, real code behind injectable adapters)
 
+- App-builder payments (CAP-119): a generated app's payment/entitlement wiring where entitlements are granted only on a signature-verified webhook (reusing Thomas's existing Stripe verifier) — a forged, wrong-secret, or tampered event grants nothing; cancellations revoke.
+- SSO (CAP-123): an OIDC + PKCE engine (authorize-URL + code/verifier exchange, ID-token issuer/audience/expiry/nonce validation) enforced through a single hook the auth choke point imports, so every surface enforces identically.
+- SCIM provisioning (CAP-124): SCIM 2.0 user/group create/get/list/PUT/PATCH/delete matching the Okta/Entra dialect, with directory sync that reconciles a provider push (deactivating removed users rather than hard-deleting) — filling the gap that Thomas had no user model.
+- Governed connector suite (CAP-073): a governed set of productivity/deploy connectors on the BYO-connector contract, with allow/deny policy and a composed cross-app workflow that chains actions across connectors and surfaces mid-workflow failures.
+- Design-system awareness (CAP-115): discover a target project's components and design tokens and recommend reusing them (mapping an off-system value to the nearest on-system token) instead of inventing new ones.
 - CI-native execution (CAP-065): Thomas can run inside a CI job — parse a failure into structured findings, drive the reason→edit→verify loop to create a fix (pass/fail from a real subprocess exit code), and report a machine-readable result plus GitHub-Actions `::error`/`::notice` annotations and `$GITHUB_OUTPUT` vars. The fix step degrades honestly to inspection-only when no model is wired.
 - Real-browser E2E gate (CAP-088): click-type-assert browser validation is now a required done gate for interactive changes — asserting on *computed* visibility (not innerText on hidden nodes), failing closed when no browser is present, and integrating with the completion gate.
 - Fleet TUI (CAP-099): a terminal fleet dashboard with navigate, peek, attach, reply, and a live task graph — rendered as a pure, snapshot-testable frame.
