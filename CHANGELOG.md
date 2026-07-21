@@ -13,6 +13,11 @@ Versioning: Semantic Versioning.
 
 ### Added (Frontier capability program — closing the 2026-07-21 audit gaps)
 
+- Audit log with causal chains (CAP-126): every auditable action records complete actor attribution (human or agent, plus the human it acts on behalf of), and human→agent→agent causal chains reconstruct in order — with a stable export that round-trips.
+- Metering, budgets & downshift (CAP-128): per-agent spend attribution with linear end-of-period projection, 80%/100% budget alerts on actual or projected spend, and policy-driven downshift that recommends a cheaper tier for an over-budget agent.
+- Change security scanning (CAP-083): every generated change is scanned (hardcoded secrets, eval/exec, shell=True, unsafe deserialization, SQL string-building) and confirmed findings become regeneration directives (file:line + fix) fed back into generation — the change is blocked until addressed.
+- Cross-tool format compatibility (CAP-133): lossless import/export round-trip with external skill (SKILL.md) and instruction (CLAUDE.md/.cursorrules) formats, surfacing a diff when a round-trip isn't lossless instead of silently dropping content.
+- Fleet management API (CAP-135): programmatic CRUD over agents, automations, schedules, and policies — validated (missing-field and duplicate-id rejected, nonexistent update/delete errors cleanly), durable, and isolated across the four kinds.
 - Specialist role fan-out (CAP-030): standing expert roles (security/performance/correctness/tests) run in parallel and their outputs provably change the result — a materiality report shows what each role added and whether it flipped the decision versus a baseline without them.
 - Per-release token efficiency (CAP-095): retry rate and first-pass success are recorded per release against the token ledger, so you can see tokens-per-success trend release over release.
 - Fast-inference tier (CAP-096): a per-task fast tier gated on latency and edit-quality — tasks over the latency budget aren't fast-tiered, and a fast output below the quality bar falls back to standard, with a benchmark report per task.
