@@ -11,6 +11,14 @@ Versioning: Semantic Versioning.
 
 - Concurrent Code runs are no longer hard-capped at 3: the ceiling is now live-configurable via `THOMAS_MAX_CONCURRENT_CODE_RUNS` (default 8, safety ceiling 64) so you can run many different Code projects at once. Same-project (same-conversation) runs are still serialized to protect that project's state; only distinct projects run in parallel. The "all N slots are busy" message now tells you how to raise the limit.
 
+### Added (Frontier capability program — external integrations, real code behind injectable adapters)
+
+- Authenticated GitHub source-host integration (CAP-070): real PR create/update, review-comment reply with a follow-up fix reference, and a check re-run + reaction flow — behind an injectable transport (stdlib urllib default) so it's fully tested offline against a fake and runs live with a `GITHUB_TOKEN`. Plugs straight into the governed-PR gateway seam.
+- Linear ticket sync (CAP-071): ticket assignment intake plus bidirectional ticket↔PR status sync through one canonical state map, idempotent and conflict-aware (divergent changes record a conflict, not a silent clobber). Real Linear GraphQL behind an injectable provider; tested against a fake.
+- Chat-platform operation (CAP-072): chat-native dispatch, steering, approvals, Block-Kit diff review, and request-to-merge (with validation-evidence proof) — the five verbs mapped onto Thomas's existing delegation/approval/merge seams, over an injectable chat transport.
+- BYO-connector framework (CAP-074): a first-class custom-connector contract plus a conformance harness that certifies a candidate connector (methods, metadata, capability envelopes, error/health) before it can be used — fully hermetic.
+- Team MCP distribution (CAP-069): admin distributes an approved MCP server set with per-group policy (denied servers withheld with a reason), cross-surface refresh that installs new and prunes removed servers, and an append-only audit history.
+
 ### Added (Frontier capability program — closing the 2026-07-21 audit gaps)
 
 - Cross-vendor agent roster (CAP-034): register external agent runtimes alongside internal ones and compare them on a shared scorecard — the same task set scored on identical metrics (success/latency/tokens/cost/quality) with a deterministic ranking.
