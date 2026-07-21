@@ -23,6 +23,7 @@ import re
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
+from thomas.agent.hook_events import HookEvent, emit_hook
 from thomas.agent.loop_core import AgentLoop as _AgentLoopBase
 from thomas.agent.loop_core import LoopState
 from thomas.agent.loop_execution import _agent_loop_run
@@ -295,19 +296,38 @@ class AgentLoop(_AgentLoopBase):
 
         See _agent_loop_run for full documentation.
         """
-        async for event in _agent_loop_run(
+        # Hook surface (run category): run_start fires before the first event and
+        # run_end fires exactly once when the run is exhausted or closed.
+        await emit_hook(
             self,
-            prompt,
-            intent_text=intent_text,
-            mode=mode,
-            tools_policy=tools_policy,
-            token_economy=token_economy,
-            max_iterations=max_iterations,
-            job_type=job_type,
-            _quality_retry_count=_quality_retry_count,
-            _quality_carry_forward_events=_quality_carry_forward_events,
-        ):
-            yield event
+            HookEvent.RUN_START,
+            {
+                "run_id": self._run_id,
+                "session_id": self._session_id,
+                "mode": mode,
+                "tools_policy": tools_policy,
+            },
+        )
+        try:
+            async for event in _agent_loop_run(
+                self,
+                prompt,
+                intent_text=intent_text,
+                mode=mode,
+                tools_policy=tools_policy,
+                token_economy=token_economy,
+                max_iterations=max_iterations,
+                job_type=job_type,
+                _quality_retry_count=_quality_retry_count,
+                _quality_carry_forward_events=_quality_carry_forward_events,
+            ):
+                yield event
+        finally:
+            await emit_hook(
+                self,
+                HookEvent.RUN_END,
+                {"run_id": self._run_id, "session_id": self._session_id},
+            )
 
 
 # Public exports for backward compatibility

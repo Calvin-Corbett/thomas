@@ -15,6 +15,7 @@ from thomas.agent.completion_gate import (
     build_give_up_demand_prompt,
     evaluate_completion_gate,
 )
+from thomas.agent.hook_events import HookEvent, emit_hook
 from thomas.core.config import load_config
 from thomas.core.events import AgentEvent
 from thomas.core.rules_of_road import build_remediation_prompt, evaluate_rules
@@ -276,12 +277,15 @@ async def handle_post_loop_completion(
         )
         yield AgentEvent.agent_error(block_error, iteration=state.iteration)
         state.error = block_error
+        await emit_hook(self, HookEvent.FAILURE, {"error": block_error, "run_id": self._run_id})
         return
 
     # Errors and exhausted pass budgets are incomplete outcomes. Never append a
     # success event after an AGENT_ERROR; Code and Work must not present partial
     # changes as finished work.
     if state.error:
+        # Hook surface (failure category): the run terminated with an error.
+        await emit_hook(self, HookEvent.FAILURE, {"error": str(state.error), "run_id": self._run_id})
         return
 
     # Completion gate: a bare AGENT_DONE on failed validation is rejected.
@@ -315,6 +319,7 @@ async def handle_post_loop_completion(
         block_error = f"Completion gate blocked AGENT_DONE: {gate_decision.reason}"
         yield AgentEvent.agent_error(block_error, iteration=state.iteration)
         state.error = block_error
+        await emit_hook(self, HookEvent.FAILURE, {"error": block_error, "run_id": self._run_id})
         return
 
     # Yield final completion event. A diagnosed give-up completes distinctly

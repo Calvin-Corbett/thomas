@@ -13,6 +13,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
+from thomas.agent.hook_events import HookEvent, bridge_guardrails_event, emit_hook
 from thomas.benchmarks.benchmark_lane import audit_benchmark_event, get_benchmark_context
 from thomas.core.events import AgentEvent, EventType
 
@@ -294,24 +295,6 @@ def parse_tool_args(raw_args: Any) -> tuple[dict[str, Any] | None, str | None]:
         return None, f"Could not parse tool arguments: {type(e).__name__}: {e}"
 
 
-async def _run_loop_hook(loop: Any, hook: str, payload: dict[str, Any]) -> None:
-    """Invoke ``loop._run_plugin_hook`` if present; otherwise no-op.
-
-    ``execute_tools`` accepts any loop-like object, so resolve the plugin-hook
-    invoker defensively. The real AgentLoop always provides it (base class);
-    minimal test stubs and other callers that omit it simply skip hooks. The
-    invoker itself already swallows plugin exceptions, so a hook can never break
-    tool execution.
-    """
-    invoker = getattr(loop, "_run_plugin_hook", None)
-    if invoker is None:
-        return
-    try:
-        await invoker(hook, payload)
-    except Exception as e:  # REVIEWED: plugin hooks must never break a turn
-        log.debug("Plugin hook %r failed (non-fatal): %s", hook, e)
-
-
 async def execute_tools(
     loop: Any,
     tool_calls: list[dict[str, Any]],
@@ -448,9 +431,9 @@ async def execute_tools(
                     },
                 )
 
-        # Observational plugin hook: fires after arg parsing / path sanitization
-        # and before tool execution. Read-only this release (return ignored).
-        await _run_loop_hook(loop, "before_tool", {"name": name, "args": args})
+        # Hook surface (tool category): fires after arg parsing / path
+        # sanitization and before tool execution. Read-only this release.
+        await emit_hook(loop, HookEvent.TOOL_PRE, {"name": name, "args": args})
 
         start = time.monotonic()
         await loop._audit_action(
@@ -473,6 +456,9 @@ async def execute_tools(
                     }
 
                 async def _emit_guardrails_event(evt_type: str, payload: dict[str, Any]) -> None:
+                    # Hook surface (approval category): bridge the guardrails
+                    # TOOL_APPROVAL_REQUIRED event onto the approval_requested hook.
+                    await bridge_guardrails_event(loop, evt_type, payload)
                     cb = loop._guardrails_event_cb
                     if cb is None:
                         return
@@ -709,11 +695,11 @@ async def execute_tools(
             # Append verification feedback to result so the LLM sees it
             event_data["result_text"] = result_text + "\n\n" + verification_feedback
 
-        # Observational plugin hook: fires after the tool completes, once
+        # Hook surface (tool category): fires after the tool completes, once
         # duration/ok/result_text are known. Read-only this release.
-        await _run_loop_hook(
+        await emit_hook(
             loop,
-            "after_tool",
+            HookEvent.TOOL_POST,
             {"name": name, "args": args, "ok": ok, "result_text": result_text},
         )
 

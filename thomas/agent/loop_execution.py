@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from thomas.agent.checkin_policy import resolve_checkin_policy
+from thomas.agent.constraint_envelope import ConstraintEnvelope, envelope_events
+from thomas.agent.hook_events import HookEvent, emit_hook
 from thomas.agent.loop_completion import handle_post_loop_completion
 from thomas.agent.loop_core import LoopState
 from thomas.agent.loop_helpers import (
@@ -740,6 +742,11 @@ async def _agent_loop_run(
     if checkin_policy is not None:
         self._checkin_policy = checkin_policy
 
+    # Constraint envelope (CAP-048): token ceiling + checkpoint summaries with
+    # deterministic stop reasons. Inert unless configured via env, so default
+    # behavior is unchanged.
+    constraint_envelope = ConstraintEnvelope.from_env()
+
     for iteration in range(max_iter):
         state.iteration = iteration
 
@@ -854,10 +861,11 @@ async def _agent_loop_run(
         streamed_visible_text = ""
         iter_prompt_start_total = int(stream_usage.get("prompt_tokens", 0) or 0)
 
-        # Observational plugin hook: fires immediately before the LLM call.
+        # Hook surface (model category): fires immediately before the LLM call.
         # Read-only this release (return value ignored); never breaks the turn.
-        await self._run_plugin_hook(
-            "before_model",
+        await emit_hook(
+            self,
+            HookEvent.MODEL_CALL,
             {"messages": messages, "model": str(getattr(self.llm.config, "model", "") or "")},
         )
 
@@ -1080,6 +1088,14 @@ async def _agent_loop_run(
         iter_prompt_spend = max(0, iter_prompt_now - int(iter_prompt_start_total))
         iter_prompt_spends.append(int(iter_prompt_spend))
 
+        envelope_decision = constraint_envelope.observe(int(stream_usage.get("total_tokens", 0) or 0))
+        for envelope_event in envelope_events(envelope_decision, iteration=iteration):
+            yield envelope_event
+        if envelope_decision.should_stop:
+            state.error = envelope_decision.stop_message
+            state.finished = True
+            break
+
         benchmark_validation_ok = True
         benchmark_issue = ""
         if str(job_type or "").strip().lower() == "benchmark" and code_output_validation_enabled:
@@ -1127,9 +1143,9 @@ async def _agent_loop_run(
                 self._sync_assistant_message_to_intelligence(iter_text)
                 if not benchmark_mode:
                     self._record_event("assistant_response", iter_text)
-            # Observational plugin hook: fires at end-of-turn once the final
-            # assistant text is finalized. Read-only this release.
-            await self._run_plugin_hook("after_response", {"text": state.text_response})
+            # Hook surface (completion category): fires at end-of-turn once the
+            # final assistant text is finalized. Read-only this release.
+            await emit_hook(self, HookEvent.COMPLETION, {"text": state.text_response})
             state.finished = True
             break
 
