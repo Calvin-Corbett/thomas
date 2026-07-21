@@ -13,6 +13,11 @@ Versioning: Semantic Versioning.
 
 ### Added (Frontier capability program — closing the 2026-07-21 audit gaps)
 
+- Failure recovery & loop-breaking (CAP-005): a failed attempt forces a different, never-repeated strategy; contradictory or cycling attempts are detected and escalate (contradiction / cycle / strategies-exhausted) instead of looping forever; and escalation produces a structured failure summary of every attempt and why it's blocked.
+- Six-way fan-out with conflict-aware synthesis (CAP-029): one prompt fans out to N independent workers (default 6), each with its own evidence, and synthesis reports consensus when they agree but explicitly surfaces conflicts (which workers disagree, on what, with each side's evidence) rather than silently majority-picking.
+- Integration coordinator (CAP-056): orders branches for integration respecting declared dependencies (rejecting cycles), groups branches with disjoint files and no dependency edge into parallel-safe stages, and serializes overlapping-file branches with the overlap named.
+- Multi-repo groups (CAP-057): named groups of repos with pinned revisions and per-member read/write boundaries — writes to a read-only member are denied, access to a non-member repo is denied, and floating (unpinned) members are flagged.
+- One-command backgrounding (CAP-059): background an inflight run and later reattach — status surfaces state, progress, and a deterministic ETA; reattach restores the run's cursor and foregrounds it; finished/unknown runs signal cleanly.
 - Deterministic multi-file rename (CAP-002): rename a symbol coherently across imports, source, tests, and docs in one all-or-nothing pass — word-boundary safe (won't clobber `old_name_extra`), deterministic, and it rolls every file back byte-identical if any write fails.
 - Isolated subagent contexts (CAP-027): each spawned subagent gets its own budget-bounded context (default 50k tokens) with no reference path to its parent or siblings, so one subagent's context can never leak into another's; parents collect only each child's published summary.
 - Automatic per-session worktree (CAP-054): eligible sessions automatically get exactly one git worktree (idempotent reuse, ineligible sessions get none) with safe cleanup that removes a clean worktree but preserves a dirty one with a clear signal — never silently discarding work.
