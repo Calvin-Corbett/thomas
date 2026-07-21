@@ -777,7 +777,7 @@ function modulePanelLabels(mode) {
         labels.queueTitle = 'Connector Queue';
         labels.queueMeta = 'Reconnect and scope issues';
     } else if (mode === 'my_stuff') {
-        labels.queueTitle = 'My Stuff';
+        labels.queueTitle = 'Library';
         labels.queueMeta = 'Project board with launch controls and Thomas chat lanes';
     } else if (mode === 'marketplace') {
         labels.queueTitle = 'Marketplace';

@@ -504,7 +504,7 @@ const MODULE_SPECIAL_SURFACE_CONFIGS = Object.freeze({
 const MODULE_STATIC_WORKSPACE_ITEMS = Object.freeze([
     { workspace_id: 'mission', mode_id: 'mission', label: 'Mission Control', icon: 'ph-crosshair-simple', default_nav_section: 'apps', default_nav_order: 120 },
     { workspace_id: 'app_builder', mode_id: 'app_builder', label: 'UI Editor', icon: 'ph-app-window', default_nav_section: 'apps', default_nav_order: 160 },
-    { workspace_id: 'my_stuff', mode_id: 'my_stuff', label: 'My Stuff', icon: 'ph-grid-four', default_nav_section: 'apps', default_nav_order: 220 },
+    { workspace_id: 'my_stuff', mode_id: 'my_stuff', label: 'Library', icon: 'ph-grid-four', default_nav_section: 'apps', default_nav_order: 220 },
     { workspace_id: 'channels', mode_id: 'channels', label: 'Channels', icon: 'ph-broadcast', default_nav_section: 'apps', default_nav_order: 280 },
     { workspace_id: 'token_economy', mode_id: 'token_economy', label: 'Token Economy', icon: 'ph-coins', default_nav_section: 'apps', default_nav_order: 300 },
     { workspace_id: 'marketplace', mode_id: 'marketplace', label: 'Marketplace', icon: 'ph-storefront', default_nav_section: 'apps', default_nav_order: 320 },

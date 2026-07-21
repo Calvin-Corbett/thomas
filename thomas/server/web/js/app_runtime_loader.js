@@ -33,6 +33,7 @@
         '019_virtual_office_03.js',
         '020_virtual_office_04.js',
         '021_virtual_office_05.js',
+        'office_server_state.js',
         'office_workspace_state.js',
         'office_default_layout_compaction.js',
         'office_default_layout_polish.js',

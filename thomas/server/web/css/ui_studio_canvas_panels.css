@@ -4,6 +4,9 @@
  * immediately after it (same namespaced .ui-studio-* selectors). */
 
 /* Properties / inspector grid */
+.ui-studio-side-tabs { display: grid; grid-template-columns: repeat(3, 1fr); padding: 6px; gap: 4px; border-bottom: 1px solid var(--border-light); }
+.ui-studio-side-tab { min-width: 0; padding: 7px 5px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text-muted); cursor: pointer; font: 700 11px var(--font-sans); }
+.ui-studio-side-tab:is(:hover, :focus-visible, .is-active) { border-color: var(--c-accent-line); background: var(--c-accent-soft); color: var(--text-primary); outline: 0; }
 .ui-studio-props {
     padding: 8px 10px 10px;
     overflow-y: auto;

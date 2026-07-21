@@ -142,32 +142,13 @@
 
 function officeRenderScene() {
     if (!officeScene) return;
-    /* ── New Virtual Office (iframe-based replacement) ── */
-    if (!document.getElementById('virtualOfficeFrame')) {
-        officeScene.innerHTML = '';
-        const wrap = document.createElement('div');
-        wrap.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;overflow:hidden;';
-        const iframe = document.createElement('iframe');
-        iframe.id = 'virtualOfficeFrame';
-        iframe.src = '/static/virtual_office.html';
-        iframe.style.cssText = 'border:none;width:100%;height:100%;display:block;background:#0a0e1a;';
-        iframe.setAttribute('allowfullscreen', '');
-        wrap.appendChild(iframe);
-        officeScene.appendChild(wrap);
-        /* Pass agent/room state into iframe when ready */
-        iframe.addEventListener('load', () => {
-            try {
-                if (officeState && iframe.contentWindow) {
-                    iframe.contentWindow.postMessage({
-                        type: 'thomas-office-state',
-                        agents: officeState.agents || [],
-                        rooms: officeState.rooms || [],
-                    }, '*');
-                }
-            } catch(e) { /* cross-origin safety */ }
-        });
+    // This extracted compatibility source is not loaded by the current app.
+    // If a tooling consumer evaluates it, delegate to the canonical native
+    // scene instead of resurrecting the retired standalone iframe.
+    if (typeof officeRenderDraftMapScene === 'function') {
+        officeRenderDraftMapScene();
+        return;
     }
-    /* Legacy layers for compatibility (hidden behind iframe) */
     if (officeState) {
         officeState.roomLayerEl = officeState.roomLayerEl || document.createElement('div');
         officeState.agentLayerEl = officeState.agentLayerEl || document.createElement('div');

@@ -33,6 +33,13 @@
         eyes.appendChild(element('span')); eyes.appendChild(element('span'));
         brand.appendChild(eyes); brand.appendChild(element('strong', 'ui-studio-brand-name', 'Canvas'));
         toolbar.appendChild(brand);
+        var gMode = mark(element('div', 'ui-studio-toolbar-group ui-studio-mode-group'), 'modeActions');
+        var modeLabels = { design: 'Design', draw: 'Draw', model3d: '3D Model' };
+        var modeButtons = {};
+        Object.keys(modeLabels).forEach(function (key) {
+            modeButtons[key] = action(modeLabels[key], 'mode-' + key, 'ui-studio-btn' + (key === 'design' ? ' is-accent' : ''));
+            modeButtons[key].setAttribute('aria-pressed', key === 'design' ? 'true' : 'false'); gMode.appendChild(modeButtons[key]);
+        });
 
         var gFile = mark(element('div', 'ui-studio-toolbar-group'), 'fileActions');
         var btnGen = action('Generate Code', 'generate-code', 'ui-studio-btn is-accent');
@@ -68,7 +75,7 @@
         var btnRedo = action('Redo', 'redo');
         var btnClear = action('Clear', 'clear');
         gGrid.appendChild(gridToggle); gGrid.appendChild(btnUndo); gGrid.appendChild(btnRedo); gGrid.appendChild(btnClear);
-        toolbar.appendChild(gFile); toolbar.appendChild(gAdd); toolbar.appendChild(gAi); toolbar.appendChild(gZoom); toolbar.appendChild(gGrid);
+        toolbar.appendChild(gMode); toolbar.appendChild(gFile); toolbar.appendChild(gAdd); toolbar.appendChild(gAi); toolbar.appendChild(gZoom); toolbar.appendChild(gGrid);
 
         var rail = mark(element('nav', 'ui-studio-rail'), 'toolRail');
         rail.setAttribute('aria-label', 'Canvas tools');
@@ -86,16 +93,20 @@
         canvas.setAttribute('aria-label', 'Canvas design surface'); canvas.setAttribute('tabindex', '0');
         var readout = mark(element('div', 'ui-studio-readout', 'Ready'), 'stageReadout');
         var sketchInput = document.createElement('input'); sketchInput.type = 'file'; sketchInput.accept = 'image/*'; sketchInput.hidden = true;
-        stageWrap.appendChild(canvas); stageWrap.appendChild(readout); stageWrap.appendChild(sketchInput);
+        var lab3dHost = mark(element('div', 'ui-studio-lab3d'), 'modelStage'); lab3dHost.hidden = true;
+        stageWrap.appendChild(canvas); stageWrap.appendChild(lab3dHost); stageWrap.appendChild(readout); stageWrap.appendChild(sketchInput);
 
         var side = mark(element('aside', 'ui-studio-side'), 'inspector');
+        var sideTabs = element('nav', 'ui-studio-side-tabs'); sideTabs.setAttribute('aria-label', 'Canvas side panels');
+        var sideButtons = { layers: action('Layers', 'side-layers'), properties: action('Properties', 'side-properties') };
+        Object.keys(sideButtons).forEach(function (key) { sideButtons[key].className = 'ui-studio-side-tab' + (key === 'layers' ? ' is-active' : ''); sideTabs.appendChild(sideButtons[key]); });
         var layersSec = mark(element('section', 'ui-studio-side-section is-grow'), 'layers');
         layersSec.appendChild(element('div', 'ui-studio-side-title', 'Layers'));
         var layers = element('div', 'ui-studio-layers'); layersSec.appendChild(layers);
         var propsSec = mark(element('section', 'ui-studio-side-section'), 'properties');
-        propsSec.appendChild(element('div', 'ui-studio-side-title', 'Properties'));
+        propsSec.hidden = true; propsSec.appendChild(element('div', 'ui-studio-side-title', 'Properties'));
         var props = element('div', 'ui-studio-props'); propsSec.appendChild(props);
-        side.appendChild(layersSec); side.appendChild(propsSec);
+        side.appendChild(sideTabs); side.appendChild(layersSec); side.appendChild(propsSec);
 
         var modal = mark(element('div', 'ui-studio-modal'), 'preview'); modal.hidden = true;
         modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true'); modal.setAttribute('aria-label', 'Generated code preview');
@@ -114,9 +125,14 @@
         card.appendChild(head); card.appendChild(body); card.appendChild(foot); modal.appendChild(card);
         modal.addEventListener('click', function (event) { if (event.target === modal) modal.hidden = true; });
         root.appendChild(toolbar); root.appendChild(rail); root.appendChild(stageWrap); root.appendChild(side); root.appendChild(modal);
+        function showSide(key) {
+            layersSec.hidden = key !== 'layers'; propsSec.hidden = key !== 'properties';
+            Object.keys(sideButtons).forEach(function (name) { sideButtons[name].classList.toggle('is-active', name === key); sideButtons[name].setAttribute('aria-pressed', name === key ? 'true' : 'false'); });
+        }
+        Object.keys(sideButtons).forEach(function (key) { sideButtons[key].onclick = function () { showSide(key); }; });
 
         return {
-            canvas: canvas, stageWrap: stageWrap, readout: readout, layers: layers, props: props,
+            canvas: canvas, stageWrap: stageWrap, lab3dHost: lab3dHost, readout: readout, layers: layers, props: props, conversation: null,
             zoomLabel: zoomLabel, sketchInput: sketchInput, aiBtn: btnAi,
             modal: modal, modalTabs: modalTabs, modalCode: modalCode, modalCopy: modalCopy, modalDownload: modalDownload,
             fields: {},
@@ -128,6 +144,9 @@
                     toolButtons[key].setAttribute('aria-pressed', active ? 'true' : 'false');
                 });
             },
+            syncMode: function (mode) {
+                Object.keys(modeButtons).forEach(function (key) { var active = key === mode; modeButtons[key].classList.toggle('is-accent', active); modeButtons[key].setAttribute('aria-pressed', active ? 'true' : 'false'); });
+            },
             bind: function (handlers) {
                 btnGen.onclick = handlers.onGenerate; btnExport.onclick = handlers.onExport; btnSave.onclick = handlers.onSave;
                 btnAi.onclick = handlers.onAi; btnSketch.onclick = handlers.onSketch;
@@ -137,6 +156,7 @@
                 addBtns.container.onclick = handlers.onAddContainer; addBtns.text.onclick = handlers.onAddText; addBtns.button.onclick = handlers.onAddButton;
                 addBtns.card.onclick = handlers.onAddCard; addBtns.input.onclick = handlers.onAddInput; addBtns.image.onclick = handlers.onAddImage;
                 Object.keys(toolButtons).forEach(function (key) { toolButtons[key].onclick = function () { handlers.onTool(key); }; });
+                Object.keys(modeButtons).forEach(function (key) { modeButtons[key].onclick = function () { handlers.onMode(key); }; });
             },
             unbind: function () {
                 [btnGen, btnExport, btnSave, btnAi, btnSketch, btnZoomIn, btnZoomOut, btnZoomReset, btnUndo, btnRedo, btnClear]
@@ -144,6 +164,8 @@
                 gridCheck.onchange = null;
                 Object.keys(addBtns).forEach(function (key) { addBtns[key].onclick = null; });
                 Object.keys(toolButtons).forEach(function (key) { toolButtons[key].onclick = null; });
+                Object.keys(modeButtons).forEach(function (key) { modeButtons[key].onclick = null; });
+                Object.keys(sideButtons).forEach(function (key) { sideButtons[key].onclick = null; });
             }
         };
     }

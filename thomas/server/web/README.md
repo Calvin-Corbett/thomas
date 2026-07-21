@@ -18,7 +18,7 @@ The web frontend is the **user-facing interface** to Thomas. When a user opens T
 | `index.html` | ACTIVE | 78K | Main chat interface |
 | `settings.html` | ACTIVE | 45K | Settings UI |
 | `mission.html` | ACTIVE | 10K | Mission/task display |
-| `virtual_office.html` | ACTIVE | 2.7K | Virtual office interface |
+| `index.html#officeWorkspace` + `js/runtime/office_*.js` | ACTIVE | Embedded | Canonical Virtual Office workspace and live office runtime |
 | `companion.html` | ACTIVE | 7.5K | Mobile companion app |
 | `css/` | ACTIVE | Multiple files | Stylesheets |
 | `static/` | ACTIVE | Assets | Icons, images, etc. |
@@ -82,10 +82,10 @@ User types message → Runtime handlers process it
 | `index.html` | Main page. User sees this when they visit "/" |
 | `settings.html` | Settings page. Loaded in sidebar or modal |
 | `mission.html` | Task/mission display and tracking |
-| `virtual_office.html` | Virtual office (multi-user space) |
+| `index.html#officeWorkspace` | Virtual Office workspace; behavior is implemented by the active `js/runtime/office_*.js` files |
 | `companion.html` | Mobile app version |
 
-Each HTML file is a **shell**—it contains structure and styling, but all logic runs through `app_runtime_primary.mjs`.
+The classic HTML shell loads the ordered `js/runtime/` files through `app_runtime_loader.js`. The former standalone `virtual_office*` shells were retired because the embedded workspace is the only canonical Office surface.
 
 ## Inside js/runtime/ (The Split Runtime)
 

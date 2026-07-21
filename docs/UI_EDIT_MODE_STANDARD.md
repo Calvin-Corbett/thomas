@@ -37,6 +37,16 @@ The shared runtime MUST provide:
 - containment, minimum/maximum size, protected-control, and responsive fallback policies;
 - accessible focus and keyboard operation.
 
+## Save and recovery contract
+
+- Entering Edit Mode starts a draft from the last saved layout for the current breakpoint.
+- Moving, resizing, stacking, locking, undoing, and resetting update that draft immediately on screen, but do not replace the saved layout.
+- **Done & Save** commits the draft and exits. **Cancel** or **Escape** exits and restores the last saved layout.
+- **Previous** restores an earlier committed layout. Saved history is bounded and local to the workspace and breakpoint.
+- **Export** downloads a portable copy; it does not save or commit the current draft.
+- Covered regions remain recoverable through the semantic region picker, and front/back stacking never changes the component's live handlers or state.
+- AI Edit sends the selected semantic component identity and owner prompt to the active surface's Thomas identity. Inside a workspace it opens that workspace's resident specialist; in normal Chat it remains with the generalist. Generated changes still require the normal governed implementation and proof flow.
+
 ## Safety rules
 
 - A layout is keyed by workspace, semantic component identity, and breakpoint.
@@ -56,6 +66,6 @@ A UI module is incomplete until its meaningful regions register with this contra
 4. Desktop, tablet, and mobile layouts do not corrupt one another.
 5. Edit Mode prevents accidental underlying actions.
 6. Undo, reset, keyboard operation, and accessible focus work.
-7. Every modernized workspace is covered by the route matrix.
+7. Every modernized workspace is covered by the route matrix, including Library (the owner-facing name for the internal `my_stuff` route).
 
 The reference studio at `outputs/thomas-ui-studio` is working design evidence. Thomas's shared shell and real APIs remain authoritative when implementation details differ.

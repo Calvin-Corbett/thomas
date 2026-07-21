@@ -249,7 +249,7 @@ def test_my_stuff_indexes_installed_workspace_plugins() -> None:
     assert 'id="installedAppsShelf"' in html
     assert '<section class="stuff-installed-shelf" id="installedAppsShelf"' in html
     assert "Loading app workspaces..." in html
-    assert "Installed Apps" in html
+    assert "Library items" in html
     assert "installedPlugins: []" in js
     assert "fetchJson(window.location.origin + '/api/marketplace/installed')" in js
     assert "function installedPluginsFromPayload(payload)" in js
@@ -269,7 +269,7 @@ def test_my_stuff_indexes_installed_workspace_plugins() -> None:
     assert "left_nav_behavior).toLowerCase() !== 'workspace'" in js
     assert "data-plugin-mode" in js
     assert "window.parent.setSidebarNavMode(mode);" in js
-    assert "My Stuff ready. '" in js
+    assert "Library ready. '" in js
     assert "installed app' + (moduleCount === 1 ? '' : 's')" in js
     assert "project' + (state.projects.length === 1 ? '' : 's')" in js
     assert "+ moduleCards" not in js

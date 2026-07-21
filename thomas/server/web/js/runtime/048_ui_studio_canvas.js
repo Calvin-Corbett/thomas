@@ -456,6 +456,7 @@
         var destroyed = false;
         var activeReader = null;
         var offlineAiTimer = null;
+        var lab3dRefreshTimer = null;
 
         // ---- DOM scaffold ----------------------------------------------------
         container.innerHTML = '';
@@ -464,6 +465,7 @@
             throw new Error('Canvas workspace runtime must load before the Canvas engine.');
         }
         var ui = workspaceRuntime.buildChrome(container);
+        container.__thomasCanvasContext = function () { return { mode: 'canvas', spec: cloneSpec(api.spec), selection: api.selection.slice() }; };
         var canvas = ui.canvas;
         var ctx = canvas.getContext('2d');
 
@@ -1254,6 +1256,7 @@
 
         // ---- chrome wiring (buttons -> actions) ------------------------------
         ui.bind({
+            onMode: function (mode) { var is3d = mode === 'model3d'; ui.syncMode(mode); canvas.hidden = is3d; ui.lab3dHost.hidden = !is3d; ui.readout.hidden = is3d; if (is3d && !ui.lab3dHost.dataset.mounted) { var state = moduleEnsureRuntime(); state.workbench.lab_3d = state.workbench.lab_3d || {}; moduleRenderWorkbenchLab3d(ui.lab3dHost, state.workbench.lab_3d); ui.lab3dHost.dataset.mounted = 'true'; ui.readout.textContent = '3D Model - Export STL'; lab3dRefreshTimer = setInterval(function () { if (state.workbench.lab_3d.ossReady || state.workbench.lab_3d.ossError) { clearInterval(lab3dRefreshTimer); lab3dRefreshTimer = null; ui.lab3dHost.innerHTML = ''; moduleRenderWorkbenchLab3d(ui.lab3dHost, state.workbench.lab_3d); } }, 250); } else if (!is3d) { api.tool = mode === 'draw' ? 'pen' : 'select'; ui.syncTools(api.tool); canvas.className = 'ui-studio-stage tool-' + api.tool; resize(); } },
             onTool: function (t) { api.tool = t; ui.syncTools(t); canvas.className = 'ui-studio-stage tool-' + t; render(); },
             onUndo: undo, onRedo: redo,
             onZoomIn: function () { zoomBy(1.2); }, onZoomOut: function () { zoomBy(1 / 1.2); }, onZoomReset: function () { api.zoom = 1; api.panX = 60; api.panY = 60; ui.zoomLabel.textContent = '100%'; render(); },
@@ -1339,6 +1342,7 @@
                 ui.stageWrap.removeEventListener('dragover', onStageDragOver);
                 ui.stageWrap.removeEventListener('dragleave', onStageDragLeave);
                 ui.stageWrap.removeEventListener('drop', onStageDrop);
+                if (lab3dRefreshTimer) clearInterval(lab3dRefreshTimer); if (ui.conversation) ui.conversation.destroy(); if (typeof moduleWorkbenchTeardown === 'function') moduleWorkbenchTeardown('lab_3d'); delete container.__thomasCanvasContext;
                 if (typeof ui.unbind === 'function') ui.unbind();
                 container.innerHTML = '';
                 container.classList.remove('ui-studio-root');

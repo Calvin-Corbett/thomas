@@ -137,6 +137,22 @@ html[data-thomas-theme="sandstone"], html[data-theme="sandstone"] {
   color: var(--c-accent);
 }
 html.is-embedded .thomas-standalone-only { display: none !important; }
+html.is-embedded, html.is-embedded body, html.tcw-embed, html.tcw-embed body { background: transparent !important; }
+/* Chromium otherwise gives a transparent embedded document an opaque canvas
+   derived from its dark/light color scheme, hiding Chat's literal live world. */
+html.is-embedded, html.tcw-embed { color-scheme: normal !important; }
+html.tcw-embed .module-workspace:is(
+  [data-mode="app_builder"], [data-mode="channels"],
+  [data-mode="token_economy"], [data-mode="marketplace"]
+) { background: transparent; }
+html.tcw-embed .module-workspace:is(
+  [data-mode="app_builder"], [data-mode="channels"],
+  [data-mode="token_economy"], [data-mode="marketplace"]
+)::before,
+html.tcw-embed .module-workspace:is(
+  [data-mode="app_builder"], [data-mode="channels"],
+  [data-mode="token_economy"], [data-mode="marketplace"]
+)::after { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }

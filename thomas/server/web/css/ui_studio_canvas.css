@@ -39,7 +39,7 @@
 /* Canvas workspace layout. */
 .ui-studio-root {
     display: grid;
-    grid-template-columns: 52px 1fr 276px;
+    grid-template-columns: 52px minmax(0, 1fr) clamp(300px, 27vw, 380px);
     grid-template-rows: 52px 1fr;
     width: 100%;
     height: 100%;
@@ -177,6 +177,13 @@
     background: var(--c-accent-soft);
     color: var(--text-primary, #ececf1);
 }
+.ui-studio-side-section[hidden] { display: none !important; }
+.ui-studio-stage[hidden], .ui-studio-lab3d[hidden] { display: none; }
+.ui-studio-lab3d { position: absolute; inset: 0; overflow: auto; padding: 10px; }
+.ui-studio-lab3d .module-header { display: none; }
+.ui-studio-lab3d > .module-wb-shell { min-height: 100%; }
+.ui-studio-lab3d .module-wb-shell-loading > .module-wb-stage-card,
+.ui-studio-lab3d .module-wb-loader { min-height: 100%; }
 .ui-studio-layer-type {
     flex: 0 0 auto;
     width: 16px;
@@ -209,6 +216,11 @@
 }
 
 @media (max-width: 980px) {
+    .ui-studio-toolbar { padding-inline: 8px; }
+    .ui-studio-toolbar-group { padding-right: 5px; margin-right: 0; }
+}
+
+@media (max-width: 760px) {
     .ui-studio-root {
         grid-template-columns: 48px minmax(0, 1fr);
         grid-template-rows: 52px minmax(280px, 1fr) minmax(170px, 28vh);

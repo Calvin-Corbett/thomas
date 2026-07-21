@@ -188,7 +188,7 @@
 </div>
 <div class="switch-row">
 <div>
-<strong>My Stuff</strong>
+<strong>Library</strong>
 <p>Personal vault, saved items, and bookmarks.</p>
 </div>
 <label class="toggle-switch">

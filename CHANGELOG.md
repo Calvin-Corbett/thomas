@@ -25,6 +25,8 @@ Versioning: Semantic Versioning.
 
 ### Fixed
 
+- Made the shared workspace shell and UI Edit Mode preserve the live Chat top bar, resident Chat action, breakpoint-safe layouts, and real control handlers across every modernized route; retired the two owner-approved legacy Virtual Office bundle copies after moving CLI roster discovery to the canonical native office source.
+
 - Kept the literal Thomas Chat model/Canvas/theme bar mounted above every workspace, removed welcome-robot and composer bleed behind embedded tools, and bounded route switching to one persistent classic runtime plus one direct-route frame so repeated navigation does not continually rebuild the expensive workspace runtime.
 - Removed eight unreachable duplicate Virtual Office standalone bundles after confirming the native current workspace owns the live route, preventing the retired couch-heavy renderer from returning through legacy paths.
 - Guardrails default ON (product decision D6 executed): `/api/health` reports `ok` instead of permanently `degraded`, and Work-mode autonomy handoffs stop dead-ending on "guardrails are unavailable". Opt out via `THOMAS_GUARDRAILS=0` or `policy.toml`. Verified live: chat execution unaffected with guardrails enabled.

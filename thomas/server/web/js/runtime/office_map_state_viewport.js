@@ -217,6 +217,37 @@ function officeDraftContentBounds(stateRaw = officeEnsureDraftMapState()) {
     };
 }
 
+function officeDraftFocusSpaceZoom(space, viewport) {
+    const width = Math.max(320, Number(space?.width) || 0);
+    const height = Math.max(240, Number(space?.height) || 0);
+    const shortestSide = Math.min(width, height);
+    const padding = Math.max(92, Math.min(160, shortestSide * 0.14));
+    const fitZoom = Math.min(
+        viewport.width / (width + (padding * 2)),
+        viewport.height / (height + (padding * 2)),
+    );
+    const responsiveFloor = viewport.width < 640 ? 0.38 : (viewport.width < 900 ? 0.5 : 0.64);
+    return Math.max(
+        responsiveFloor,
+        Math.min(1.05, OFFICE_DRAFT_MAP_MAX_ZOOM, fitZoom),
+    );
+}
+
+function officeDraftApplyFocusedViewport(state, focusSpace, viewport) {
+    if (!focusSpace) return false;
+    state.zoom = officeDraftFocusSpaceZoom(focusSpace, viewport);
+    const focusX = (Number(focusSpace.x) || 0) + ((Number(focusSpace.width) || 0) / 2);
+    const focusY = (Number(focusSpace.y) || 0) + ((Number(focusSpace.height) || 0) / 2);
+    const clamped = officeClampDraftMapPan(
+        focusX - (viewport.width / (2 * state.zoom)),
+        focusY - (viewport.height / (2 * state.zoom)),
+        state.zoom,
+    );
+    state.panX = clamped.panX;
+    state.panY = clamped.panY;
+    return true;
+}
+
 function officeCenterDraftMapViewport() {
     const state = officeEnsureDraftMapState();
     const viewport = officeDraftMapViewportRect();
@@ -224,9 +255,11 @@ function officeCenterDraftMapViewport() {
     if (focusSpace && !state.initialized && safeString(focusSpace.id) !== safeString(state.selectedSpaceId)) {
         state.selectedSpaceId = safeString(focusSpace.id);
     }
-    // On the first viewport setup, zoom the WHOLE office to fit the screen so
-    // the user sees the full floor plan instead of opening at a fixed zoom that
-    // overflows the viewport. (Fix: office rendered ~2x too large.)
+    // Use the full-floor view only when it stays legible. On ordinary desktop
+    // screens the complete map is much wider than the viewport; centering its
+    // bounds at the minimum zoom turns real agents and tools into a field of
+    // indistinct furniture. In that case, frame the active room and keep the
+    // minimap as the whole-office navigator.
     if (!state.initialized) {
         const bounds = officeDraftContentBounds(state);
         if (bounds && bounds.width > 0 && bounds.height > 0) {
@@ -235,20 +268,19 @@ function officeCenterDraftMapViewport() {
                 viewport.width / (bounds.width + pad),
                 viewport.height / (bounds.height + pad),
             );
-            // Clamp to a LEGIBLE floor: below ~0.5 the furniture outlines render
-            // sub-pixel and the whole office looks broken/blurry. We'd rather show
-            // fewer rooms crisply (and let the user pan/zoom) than fit everything
-            // illegibly. The legible floor wins over a tiny fit-everything zoom.
             const OFFICE_DRAFT_LEGIBLE_MIN_ZOOM = 0.5;
-            state.zoom = Math.max(OFFICE_DRAFT_LEGIBLE_MIN_ZOOM, Math.min(OFFICE_DRAFT_MAP_MAX_ZOOM, fitZoom));
-            const fitClamped = officeClampDraftMapPan(
-                bounds.cx - (viewport.width / (2 * state.zoom)),
-                bounds.cy - (viewport.height / (2 * state.zoom)),
-                state.zoom,
-            );
-            state.panX = fitClamped.panX;
-            state.panY = fitClamped.panY;
-            return;
+            if (fitZoom >= OFFICE_DRAFT_LEGIBLE_MIN_ZOOM) {
+                state.zoom = Math.min(OFFICE_DRAFT_MAP_MAX_ZOOM, fitZoom);
+                const fitClamped = officeClampDraftMapPan(
+                    bounds.cx - (viewport.width / (2 * state.zoom)),
+                    bounds.cy - (viewport.height / (2 * state.zoom)),
+                    state.zoom,
+                );
+                state.panX = fitClamped.panX;
+                state.panY = fitClamped.panY;
+                return;
+            }
+            if (officeDraftApplyFocusedViewport(state, focusSpace, viewport)) return;
         }
     }
     const focusX = focusSpace

@@ -33,6 +33,7 @@ def test_canvas_runtime_is_split_and_keeps_one_authoritative_renderer() -> None:
     contract_position = loader.index("'canvas_workspace_contract.js'")
     runtime_position = loader.index("'canvas_workspace_runtime.js'")
     engine_position = loader.index("'048_ui_studio_canvas.js'")
+    assert "canvas_thomas_conversation.js" not in loader
     assert contract_position < runtime_position < engine_position
 
 
@@ -95,6 +96,25 @@ def test_canvas_css_uses_current_chat_theme_tokens() -> None:
     assert "var(--c-accent-soft" in panels
     assert "@media (max-width: 980px)" in css
     assert "@media (max-width: 620px)" in panels
+
+
+def test_canvas_uses_shared_resident_drawer_and_keeps_real_creation_modes() -> None:
+    runtime = _text(RUNTIME / "canvas_workspace_runtime.js")
+    engine = _text(RUNTIME / "048_ui_studio_canvas.js")
+    drawer = _text(ROOT / "thomas" / "server" / "web" / "js" / "workspace_chat_drawer.js")
+    transport = _text(ROOT / "thomas" / "server" / "web" / "js" / "workspace_chat_transport.js")
+
+    for label in ("Design", "Draw", "3D Model"):
+        assert label in runtime
+    assert "moduleRenderWorkbenchLab3d" in engine
+    assert "lab_3d" in engine
+    assert "Export STL" in engine
+    assert "ThomasCanvasConversation" not in runtime
+    assert "canvas.conversation" not in runtime
+    assert "workspace:app_builder" in transport
+    assert "surface_mode: 'workspace'" in drawer
+    assert "/api/session/new" not in drawer + transport
+    assert "getReader()" in transport
 
 
 def test_canvas_contract_and_teardown_execute_in_node() -> None:

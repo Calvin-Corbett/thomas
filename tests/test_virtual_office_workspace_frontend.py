@@ -4,8 +4,6 @@ from pathlib import Path
 from tests.web_ui_source import read_app_js_source
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-VIRTUAL_OFFICE_HTML = REPO_ROOT / "thomas" / "server" / "web" / "virtual_office.html"
-VIRTUAL_OFFICE_STATIC_HTML = REPO_ROOT / "thomas" / "server" / "web" / "static" / "virtual_office.html"
 LAYOUT_DEBUG_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "layout-debug-panel.css"
 VIRTUAL_OFFICE_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "virtual_office_workspace.css"
 APP_RUNTIME_LOADER = REPO_ROOT / "thomas" / "server" / "web" / "js" / "app_runtime_loader.js"
@@ -13,6 +11,7 @@ RUNTIME_DIR = REPO_ROOT / "thomas" / "server" / "web" / "js" / "runtime"
 OFFICE_AGENT_ELEMENT = RUNTIME_DIR / "office_agent_element.js"
 OFFICE_AGENT_CHAT_PANELS = RUNTIME_DIR / "office_agent_chat_panels.js"
 OFFICE_MAP_SCENE = RUNTIME_DIR / "office_map_scene.js"
+OFFICE_MAP_VIEWPORT = RUNTIME_DIR / "office_map_state_viewport.js"
 OFFICE_ASSET_DETAIL_RENDERER = RUNTIME_DIR / "office_asset_detail_renderer.js"
 OFFICE_WORKSPACE_RUNTIME = RUNTIME_DIR / "022_virtual_office_06.js"
 
@@ -46,6 +45,17 @@ def test_virtual_office_runtime_contracts_are_committed_sources() -> None:
     assert "Accept: 'application/x-ndjson'" in runtime_js
 
 
+def test_virtual_office_initial_camera_frames_the_active_room_when_full_map_is_too_small() -> None:
+    viewport_js = _read(OFFICE_MAP_VIEWPORT)
+
+    assert "function officeDraftFocusSpaceZoom(space, viewport)" in viewport_js
+    assert "function officeDraftApplyFocusedViewport(state, focusSpace, viewport)" in viewport_js
+    assert "if (fitZoom >= OFFICE_DRAFT_LEGIBLE_MIN_ZOOM)" in viewport_js
+    assert "if (officeDraftApplyFocusedViewport(state, focusSpace, viewport)) return;" in viewport_js
+    assert "viewport.width < 640 ? 0.38 : (viewport.width < 900 ? 0.5 : 0.64)" in viewport_js
+    assert "minimap as the whole-office navigator" in viewport_js
+
+
 def test_split_runtime_loader_boots_after_all_office_chunks() -> None:
     loader = _read(APP_RUNTIME_LOADER)
     chunk_041 = _read(RUNTIME_DIR / "041_model_setup_settings_02.js")
@@ -65,9 +75,8 @@ def test_virtual_office_agent_selection_text_and_cosmetics_are_tight() -> None:
     js = read_app_js_source()
     css = _read(LAYOUT_DEBUG_CSS)
 
-    assert "const activeAgentId = safeString(state?.expandedRosterAgentId || officeState?.selectedAgentId);" in js
-    assert "const densityAllowsNames = Math.max(1, Number(total) || 1) <= 3;" in js
-    assert "showName: focused || (!activeAgentId && densityAllowsNames && zoom >= OFFICE_DRAFT_AGENT_NAME_ZOOM)," in js
+    assert "const densityAllowsNames = Math.max(1, Number(total) || 1) <= 3 || zoom >= 0.72;" in js
+    assert "showName: focused || (densityAllowsNames && zoom >= OFFICE_DRAFT_AGENT_NAME_ZOOM)," in js
     assert (
         "const speechText = typeof officeVisibleSpeech === 'function' ? officeVisibleSpeech(agent, now) : safeString(agent?.speech);"
         in js
@@ -950,6 +959,7 @@ def test_virtual_office_workspace_wires_editor_roster_and_agents() -> None:
     assert "if (state.minimapRenderTimer) return;" in js
     assert "roomLabel.className = 'office-room-label';" in js
     assert "room.className = 'office-live-room';" in js
+    assert "top: 58px;" in _read(VIRTUAL_OFFICE_CSS)
     assert "action: 'food'," in js
     assert "action: 'print'," in js
     assert "action: 'charge'," in js
@@ -962,10 +972,16 @@ def test_virtual_office_workspace_wires_editor_roster_and_agents() -> None:
     assert "if (activity === 'drink') {" in js
 
 
-def test_virtual_office_entry_points_are_placeholder_shells() -> None:
-    for html_path in (VIRTUAL_OFFICE_HTML, VIRTUAL_OFFICE_STATIC_HTML):
-        text = _read(html_path)
-        assert "Virtual office reset pending rebuild" in text
-        assert "Gather-style redesign" in text
-        assert "virtual_office.script01.js" not in text
-        assert "virtual_office.style01.css" not in text
+def test_virtual_office_legacy_standalone_duplicates_are_removed() -> None:
+    web_root = REPO_ROOT / "thomas" / "server" / "web"
+    for relative_path in (
+        "virtual_office.html",
+        "virtual_office.script01_part01.js",
+        "virtual_office.script01_part02.js",
+        "virtual_office.style01.css",
+        "static/virtual_office.html",
+        "static/virtual_office.script01_part01.js",
+        "static/virtual_office.script01_part02.js",
+        "static/virtual_office.style01.css",
+    ):
+        assert not (web_root / relative_path).exists(), relative_path

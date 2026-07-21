@@ -26,6 +26,8 @@
   <link rel="stylesheet" href="/static/css/unified_code_results.css?v=__THOMAS_WEB_BUILD__">
   <link rel="stylesheet" href="/static/css/unified_work_mode.css?v=__THOMAS_WEB_BUILD__">
   <link rel="stylesheet" href="/static/css/unified_work_details.css?v=__THOMAS_WEB_BUILD__">
+  <link rel="stylesheet" href="/static/css/ui_edit_mode.css?v=__THOMAS_WEB_BUILD__">
+  <link rel="stylesheet" href="/static/css/workspace_chat_drawer.css?v=__THOMAS_WEB_BUILD__">
   <style>
     /* Local, deterministic icon fallback: the chat shell must boot offline. */
     .ph { display: inline-grid; place-items: center; width: 1.1em; font-style: normal; font-weight: 700; }
@@ -318,10 +320,6 @@
 
     <!-- ===================== MAIN ===================== -->
     <main data-ui-id="chat.main" data-ui-label="Chat workspace" data-ui-policy="root protected" style="position: relative; z-index: 1; flex: 1; min-width: 0; display: flex; flex-direction: column;">
-      <!-- Workspace surface: a workspace's existing content is embedded here with the
-           legacy chrome hidden (?embed=1), so it opens INSIDE the new shell. The old
-           UI never appears. -->
-      <iframe id="tc-ws-frame" title="Workspace" style="display: none; position: absolute; inset: 0; width: 100%; height: 100%; border: 0; z-index: 20; background: var(--c-bg);"></iframe>
       <header data-ui-id="chat.topbar" data-ui-label="Top toolbar" data-ui-policy="move resize" data-ui-constraints="minWidth=360;minHeight=50" style="flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--c-border);">
         <button id="tc-sidebar-toggle" class="hv-icon" title="Toggle sidebar" style="width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--c-border); background: transparent; color: var(--c-dim); display: grid; place-items: center; cursor: pointer; transition: all .15s;">
           <i class="ph ph-sidebar-simple" style="font-size: 17px;"></i>
@@ -339,7 +337,7 @@
         </div>
         <div style="flex: 1;"></div>
         <button id="tc-canvas-btn" class="hv-surface" title="Open Thomas Canvas" data-ui-id="chat.action.canvas" data-ui-label="Canvas button" data-ui-policy="control" style="display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--c-accent-line); background: var(--c-accent-soft); color: var(--c-text); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;">
-          <i class="ph ph-chalkboard-simple" style="font-size: 16px; color: var(--c-accent);"></i> Canvas
+          <i id="tc-primary-action-icon" class="ph ph-chalkboard-simple" style="font-size: 16px; color: var(--c-accent);"></i><span id="tc-primary-action-label">Canvas</span>
         </button>
         <div style="position: relative;" data-theme-switch="1">
           <button id="tc-theme-btn" class="hv-pill" title="Switch theme" data-ui-id="chat.action.theme" data-ui-label="Theme switcher" data-ui-policy="control" style="display: flex; align-items: center; gap: 9px; padding: 7px 11px 7px 9px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;">
@@ -359,7 +357,10 @@
       </header>
 
       <!-- body row: chat column + canvas column -->
-      <div id="tc-body-row" data-ui-id="chat.body" data-ui-label="Conversation workspace" data-ui-policy="move resize" data-ui-constraints="minWidth=360;minHeight=360" style="flex: 1; min-height: 0; display: flex;">
+      <div id="tc-body-row" data-ui-id="chat.body" data-ui-label="Conversation workspace" data-ui-policy="move resize" data-ui-constraints="minWidth=360;minHeight=360" style="position: relative; flex: 1; min-height: 0; display: flex;">
+        <!-- The one live workspace frame is deliberately inside the body row. The
+             literal Chat top bar above it never disappears or gets duplicated. -->
+        <iframe id="tc-ws-frame" class="tc-workspace-frame" title="Workspace" style="display: none; position: absolute; inset: 0; width: 100%; height: 100%; border: 0; z-index: 20; background: transparent;"></iframe>
         <div id="tc-primary-column" style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
           <section id="tc-mode-surface" aria-live="polite" aria-label="Mode workspace" style="display:none;"></section>
           <div id="tc-scroll" class="tc-scroll" style="flex: 1; min-height: 0; overflow-y: auto;">
@@ -419,11 +420,16 @@
   </div>
 
   <script src="/static/js/workspace_shell.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/ui_edit_layout.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/ui_edit_mode.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/unified_mode_shell.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/unified_code_lifecycle.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/unified_code_mode.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/unified_work_support.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/unified_work_mode.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/workspace_chat_transport.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/workspace_chat_drawer_view.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/workspace_chat_drawer.js?v=__THOMAS_WEB_BUILD__"></script>
   <script>
   (function () {
     "use strict";
@@ -548,8 +554,9 @@
       // re-tint the welcome hero bot (it reads --bot-* vars, so re-render to pick up new values)
       const heroBot = welcomeEl.querySelector('[data-bot]');
       if (heroBot) heroBot.innerHTML = botHTML({ primary: 'var(--bot-primary)', secondary: 'var(--bot-secondary)', trim: 'var(--bot-trim)', glow: 'var(--bot-glow)', scale: heroBot.dataset.scale, flame: heroBot.dataset.flame });
-      const frame = document.getElementById('tc-ws-frame');
-      if (frame && frame.contentWindow && window.ThomasWorkspaceShell) window.ThomasWorkspaceShell.sendTheme(frame, name, t.vars);
+      document.querySelectorAll('.tc-workspace-frame').forEach((frame) => {
+        if (frame.contentWindow && window.ThomasWorkspaceShell) window.ThomasWorkspaceShell.sendTheme(frame, name, t.vars);
+      });
     }
     function selectTheme(name) {
       state.theme = name; state.themeMenuOpen = false; applyTheme(name);
@@ -700,26 +707,62 @@
       my_stuff: '/my-stuff?embed=1',
       settings: '/settings?embed=1',
     };
+    const CLASSIC_WORKSPACE_ROUTE = '/classic?embed=1';
+    function workspaceFrame(mode) {
+      if (!WORKSPACE_ROUTES[mode]) return document.getElementById('tc-ws-frame');
+      let frame = document.getElementById('tc-direct-frame');
+      if (frame) return frame;
+      frame = document.createElement('iframe'); frame.id = 'tc-direct-frame'; frame.className = 'tc-workspace-frame'; frame.title = 'Workspace';
+      frame.style.cssText = 'display:none;position:absolute;inset:0;width:100%;height:100%;border:0;z-index:20;background:transparent;';
+      document.getElementById('tc-body-row').appendChild(frame); return frame;
+    }
+    function syncWorkspaceFrame(frame) {
+      const theme = THEMES[state.theme];
+      if (theme && window.ThomasWorkspaceShell) window.ThomasWorkspaceShell.sendTheme(frame, state.theme, theme.vars);
+      if (frame.contentWindow && frame.dataset.workspaceMode && !WORKSPACE_ROUTES[frame.dataset.workspaceMode]) {
+        frame.contentWindow.postMessage({ type: "thomas:workspace:navigate", mode: frame.dataset.workspaceMode }, location.origin);
+      }
+    }
     function openWorkspace(mode) {
-      const f = document.getElementById('tc-ws-frame');
+      const f = workspaceFrame(mode);
       if (!f) return;
-      const route = WORKSPACE_ROUTES[mode] || ('/classic?nav=' + encodeURIComponent(mode) + '&embed=1');
+      const route = WORKSPACE_ROUTES[mode] || CLASSIC_WORKSPACE_ROUTE;
+      document.querySelectorAll('.tc-workspace-frame').forEach((frame) => { frame.style.display = 'none'; });
+      f.dataset.workspaceMode = mode;
+      f.onload = () => syncWorkspaceFrame(f);
       if (f.dataset.route !== route) {
         f.dataset.route = route;
         f.src = route;
-      }
-      f.onload = () => {
-        const theme = THEMES[state.theme];
-        if (theme && window.ThomasWorkspaceShell) window.ThomasWorkspaceShell.sendTheme(f, state.theme, theme.vars);
-      };
+      } else syncWorkspaceFrame(f);
       f.style.display = 'block';
+      const primary = document.getElementById('tc-primary-column');
+      const canvasPanel = document.getElementById('tc-canvas');
+      if (primary) { primary.style.visibility = 'hidden'; primary.inert = true; }
+      if (canvasPanel) { canvasPanel.style.visibility = 'hidden'; canvasPanel.inert = true; }
       state.workspaceOpen = true;
+      if (window.ThomasWorkspaceChat) window.ThomasWorkspaceChat.setWorkspace(mode);
     }
     function showChat() {
-      const f = document.getElementById('tc-ws-frame');
-      if (f) f.style.display = 'none';
+      document.querySelectorAll('.tc-workspace-frame').forEach((frame) => { frame.style.display = 'none'; });
+      const primary = document.getElementById('tc-primary-column');
+      const canvasPanel = document.getElementById('tc-canvas');
+      if (primary) { primary.style.visibility = ''; primary.inert = false; }
+      if (canvasPanel) { canvasPanel.style.visibility = ''; canvasPanel.inert = false; }
       state.workspaceOpen = false;
+      if (window.ThomasWorkspaceChat) window.ThomasWorkspaceChat.setWorkspace(null);
     }
+    function stageUiAiEdit(event) {
+      const detail = event && event.detail || {};
+      if (!detail.identity || !detail.prompt) return;
+      if (state.workspaceOpen && window.ThomasWorkspaceChat) {
+        window.ThomasWorkspaceChat.open({ draft: `Update ${detail.label || detail.identity} (${detail.identity}): ${detail.prompt}` });
+        return;
+      }
+      showChat();
+      state.input = `In ${detail.workspace || 'this workspace'}, update ${detail.label || detail.identity} (${detail.identity}): ${detail.prompt}`;
+      inputEl.value = state.input; autosize(); inputEl.focus();
+    }
+    window.addEventListener('thomas:ui-ai-edit-request', stageUiAiEdit);
     function renderWorkspaces() {
       const workspaces = [
         // Code and Work are first-class modes above search. Do not duplicate their
@@ -727,7 +770,7 @@
         { icon: 'ph-crosshair-simple', label: 'Mission Control', mode: 'mission' },
         { icon: 'ph-buildings',        label: 'Virtual Office',  mode: 'office' },
         { icon: 'ph-pencil-ruler',     label: 'Canvas',          mode: 'app_builder' },
-        { icon: 'ph-cards',            label: 'My Stuff',        mode: 'my_stuff' },
+        { icon: 'ph-cards',            label: 'Library',         mode: 'my_stuff' },
         { icon: 'ph-broadcast',        label: 'Channels',        mode: 'channels' },
         { icon: 'ph-coins',            label: 'Token Economy',   mode: 'token_economy' },
         { icon: 'ph-storefront',       label: 'Marketplace',     mode: 'marketplace' },
@@ -2146,7 +2189,10 @@
     document.getElementById('tc-newchat-top').addEventListener('click', newChat);
     document.getElementById('tc-sidebar-toggle').addEventListener('click', toggleSidebar);
     document.getElementById('tc-settings').addEventListener('click', () => openWorkspace('settings'));
-    document.getElementById('tc-canvas-btn').addEventListener('click', openConversationCanvas);
+    document.getElementById('tc-canvas-btn').addEventListener('click', () => {
+      if (state.workspaceOpen && window.ThomasWorkspaceChat) window.ThomasWorkspaceChat.toggle();
+      else openWorkspace('app_builder');
+    });
     document.getElementById('tc-canvas-close').addEventListener('click', closeCanvas);
     document.getElementById('tc-theme-btn').addEventListener('click', toggleThemeMenu);
     document.getElementById('tc-model-btn').addEventListener('click', toggleModelMenu);
@@ -2250,6 +2296,11 @@
         modeChanged,
         renderHistory: renderChats,
         setBusy: setExternalBusy,
+      });
+    }
+    if (window.ThomasWorkspaceChat) {
+      window.ThomasWorkspaceChat.connect({
+        getContext: () => ({ profile: state.profile, modelId: state.modelId, modelLabel: state.modelLabel, dials: Object.assign({}, state.dials) }),
       });
     }
 

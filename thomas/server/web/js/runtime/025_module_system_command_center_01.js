@@ -322,7 +322,7 @@ const MODULE_MODE_SEEDS = Object.freeze({
         ],
     },
     my_stuff: {
-        title: 'My Stuff',
+        title: 'Library',
         subtitle: 'Project board with launch controls, troubleshooting, and project-scoped Thomas chats.',
         pill: 'Launchpad',
         kpis: [],

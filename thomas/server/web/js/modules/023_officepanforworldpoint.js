@@ -41,12 +41,14 @@ function officeSetFollowMode(enabled, agentId = '') {
     if (!enabled) {
         officeState.followAgentId = '';
         officeUpdateFollowUi();
+        if (typeof officePersistServerFollowAgent === 'function') void officePersistServerFollowAgent('');
         return;
     }
     const fallbackId = safeString(agentId) || safeString(officeState.selectedAgentId) || safeString(officeState.agents[0]?.id);
     if (!fallbackId) {
         officeState.followAgentId = '';
         officeUpdateFollowUi();
+        if (typeof officePersistServerFollowAgent === 'function') void officePersistServerFollowAgent('');
         return;
     }
     officeState.followAgentId = fallbackId;
@@ -55,6 +57,7 @@ function officeSetFollowMode(enabled, agentId = '') {
         officeCenterOnWorldPoint((target.x / 100) * officeState.mapWidth, (target.y / 100) * officeState.mapHeight);
     }
     officeUpdateFollowUi();
+    if (typeof officePersistServerFollowAgent === 'function') void officePersistServerFollowAgent(fallbackId);
 }
 
 function officeTickFollowCamera() {
