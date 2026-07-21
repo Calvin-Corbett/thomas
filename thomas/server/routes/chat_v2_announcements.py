@@ -29,6 +29,7 @@ _SCRIPT_ARTIFACT_RE = re.compile(r"\.(ps1|sh|bat|cmd|py|js|mjs|ts|json|ya?ml|tom
 
 from aiohttp import web
 
+from thomas.agent.response_tone import strip_sandbox_links
 from thomas.chat.conversation import ConversationManager
 from thomas.chat.session_store import SessionMeta, SessionStore
 from thomas.server.routes.chat_v2_keys import (
@@ -222,7 +223,9 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
                 bits.append("Its complete verified artifact list is: " + ", ".join(artifact_names) + ".")
                 bits.append(
                     "Mention every artifact in that list and no other deliverable. "
-                    "Never claim a sibling item is missing."
+                    "Never claim a sibling item is missing. Refer to each file by name only — do "
+                    "NOT write markdown links, URLs, or file paths; the interface attaches the "
+                    "downloads for the user."
                 )
             if built_bridge:
                 bits.append(
@@ -261,6 +264,10 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
                     )
                 else:
                     note = f"I have a verified result ready for {task_title}."
+        # Drop any broken sandbox/local-path links the model inlined; the real
+        # deliverable is attached below as an artifact card. (Same hygiene as the
+        # classic AgentLoop and the V2 orchestrator reply paths.)
+        note = strip_sandbox_links(note)
         conversation = conversation.append_message("assistant", note, metadata={"announce": exec_id})
         await session_store.save(sid, conversation, SessionMeta(session_id=sid), force=True)
         task_bot_runtime.update_execution(

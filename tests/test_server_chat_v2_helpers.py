@@ -506,6 +506,65 @@ async def test_announce_delegation_skips_already_reported_or_non_terminal(monkey
 
 
 @pytest.mark.asyncio
+async def test_announce_delegation_strips_sandbox_links_from_note(monkeypatch: pytest.MonkeyPatch) -> None:
+    from aiohttp.test_utils import make_mocked_request
+
+    from thomas.core import task_bot_runtime
+
+    class _FakeLLM:
+        def stream_chat(self, *args, **kwargs):  # noqa: ANN002, ANN003
+            async def _events():
+                yield SimpleNamespace(
+                    type="token",
+                    data={"text": "Done - your chart is ready: [download chart.png](sandbox:/mnt/data/chart.png)."},
+                )
+
+            return _events()
+
+    class _FakeStore:
+        def __init__(self) -> None:
+            self.loaded = mod.ConversationManager().append_message("user", "make a png chart")
+            self.saved = None
+
+        async def load(self, sid: str):  # noqa: ANN201
+            return self.loaded
+
+        async def save(self, sid: str, conversation, meta, force: bool = False) -> None:  # noqa: ANN001
+            self.saved = (sid, conversation, meta, force)
+
+    app = web.Application()
+    store = _FakeStore()
+    app[mod.APP_SESSION_STORE] = store
+    app[mod.APP_SESSION_LLM_CACHE] = {"sess-1": SimpleNamespace(llm=_FakeLLM())}
+    monkeypatch.setattr(
+        task_bot_runtime,
+        "get_execution",
+        lambda eid, *a, **k: {
+            "execution_id": eid,
+            "conversation_id": "sess-1",
+            "state": "completed",
+            "proof_status": "verified",
+            "proof": {"status": "verified", "artifacts": [{"kind": "image", "path": "chart.png"}]},
+            "progress_summary": "Rendered the chart",
+            "bot_name": "Canvas Worker",
+        },
+    )
+    monkeypatch.setattr(task_bot_runtime, "update_execution", lambda eid, **kw: None)
+    req = make_mocked_request("POST", "/x", match_info={"session_id": "sess-1", "execution_id": "exec-9"}, app=app)
+    resp = await mod.handle_announce_delegation(req)
+
+    assert resp.status == 200
+    assert resp.text is not None
+    # The broken sandbox link is gone; the label and file name survive.
+    assert "sandbox:" not in resp.text
+    assert "](" not in resp.text
+    assert "chart.png" in resp.text
+    last = store.saved[1].last_assistant_message()
+    assert "sandbox:" not in last
+    assert last == "Done - your chart is ready: download chart.png."
+
+
+@pytest.mark.asyncio
 async def test_announce_delegation_persists_model_note_and_marks_reported(monkeypatch: pytest.MonkeyPatch) -> None:
     from aiohttp.test_utils import make_mocked_request
 
