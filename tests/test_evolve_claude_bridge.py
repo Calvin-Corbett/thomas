@@ -2041,3 +2041,24 @@ def test_gpt_path_thinking_before_any_tool_yields_no_insight():
     # ...but the full reasoning is still preserved for the collapsible view (honest)
     assert any(e["fc"] == "reason" and "empty input" in e["text"] for e in out)
     assert tr.rc == 0
+
+
+def test_action_refusal_detects_hallucinated_tool_unavailable_claims():
+    """A Code fix that hallucinates "your file tools aren't set up" must score as a
+    refusal (ok=False -> retry), not a silent "I can't, go re-enable something" bounce.
+
+    Live: an FPS fix bounced with exactly this phrasing while index.html was on disk
+    and the Read/Edit/Write tools were registered. The bounce phrasing slipped past
+    the refusal detector, so it was recorded as a normal reply with no retry.
+    """
+    from thomas.forge.anvil.dispatch_claude_cli import _is_action_refusal
+
+    assert _is_action_refusal(
+        "The file tools aren't exposed in this session, so I can't honestly patch the "
+        "working tree yet; re-enable the workspace tools and I'll fix the renderer directly."
+    )
+    assert _is_action_refusal("I can't finish — the write tool isn't available")  # pre-existing marker
+    assert _is_action_refusal("I couldn't do it because the tools are not available this session")
+    # No false positives on real completions or incidental "exposed"/"workspace" wording.
+    assert not _is_action_refusal("Done — I edited index.html and moved the player to a floor tile.")
+    assert not _is_action_refusal("The exposed API returns JSON; I updated the handler in the workspace.")

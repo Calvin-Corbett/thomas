@@ -73,6 +73,20 @@ def _is_action_refusal(text: str) -> bool:
             "don't have access",
             "do not have access",
             "required file tool",
+            # Hallucinated "your tools aren't set up" refusals. The file tools
+            # (Read/Edit/Write/Glob/Grep) are ALWAYS registered when the model
+            # runs, so these claims are false — detect them so the run is scored
+            # a refusal (ok=False -> retry) instead of a silent "I can't, go
+            # re-enable something" bounce. (Live: an FPS fix bounced this way.)
+            "aren't exposed",
+            "isn't exposed",
+            "are not exposed",
+            "is not exposed",
+            "tools aren't available",
+            "tools are not available",
+            "re-enable the workspace",
+            "re-enable workspace",
+            "workspace tools",
         )
     )
     return inability and blocker
