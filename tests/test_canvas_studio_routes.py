@@ -1,4 +1,4 @@
-"""Tests for the UI Studio Canvas API handlers.
+"""Tests for the Thomas Canvas API handlers.
 
 Mirrors the evolve-loop route test idiom: build the handlers directly with an
 injected ``root_resolver`` pointing at a temp ``.thomas/`` and a no-op auth
@@ -127,6 +127,17 @@ def _sample_spec(name: str = "Test Layout") -> dict:
 
 
 class TestCanvasStudioPersistence(unittest.IsolatedAsyncioTestCase):
+    async def test_current_canvas_api_surface_remains_complete(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            handlers = _handlers(web.Application(), Path(tmp))
+            assert set(handlers) == {
+                "save_spec",
+                "load_spec",
+                "codegen",
+                "template",
+                "spec_from_sketch",
+            }
+
     async def test_spec_round_trips_through_thomas_canvas(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

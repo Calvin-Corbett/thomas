@@ -1056,6 +1056,17 @@ function moduleBuildChannelsSurfaceModel(state) {
     };
 }
 
+function moduleChannelsUiInstanceKey(...parts) {
+    const values = parts.map((value) => safeString(value).trim()).filter(Boolean);
+    return values.length ? values.map((value) => encodeURIComponent(value)).join('--') : 'unknown';
+}
+
+function moduleChannelsProtectedAttrs(sectionRaw, keyRaw, labelRaw, policyRaw = 'controls') {
+    const section = moduleChannelsUiInstanceKey(sectionRaw);
+    const key = moduleChannelsUiInstanceKey(keyRaw);
+    return `data-ui-id="channels.${section}.${key}" data-ui-instance-key="${escapeHtml(key)}" data-ui-label="${escapeHtml(safeString(labelRaw) || 'Protected channel control')}" data-ui-component="protected-control" data-ui-policy="protected ${escapeHtml(safeString(policyRaw) || 'controls')}" data-ui-constraints="preserve-runtime-ids,preserve-handlers"`;
+}
+
 function moduleChannelsSessionMarkup(model, state) {
     if (!model.sessions.length) return '<div class="module-empty">No indexed Discord sessions yet.</div>';
     return model.sessions.map((row) => {
@@ -1066,11 +1077,18 @@ function moduleChannelsSessionMarkup(model, state) {
         const updatedAt = safeString(row?.updated_at);
         const displayName = safeString(row?.display_name) || 'Discord scope';
         const turnCount = Number(row?.turn_count || 0);
+        const instanceKey = moduleChannelsUiInstanceKey(sessionId);
         return `
             <button
                 type="button"
                 class="module-channels-session-btn${isSelected ? ' is-selected' : ''}"
-                data-channels-session-id="${escapeHtml(sessionId)}">
+                data-channels-session-id="${escapeHtml(sessionId)}"
+                data-ui-id="channels.history.session.${escapeHtml(instanceKey)}"
+                data-ui-instance-key="${escapeHtml(instanceKey)}"
+                data-ui-label="${escapeHtml(`${displayName} Discord session`)}"
+                data-ui-component="repeating-record"
+                data-ui-policy="protected controls live-record"
+                data-ui-constraints="preserve-runtime-ids,preserve-handlers">
                 <div class="module-channels-session-top">
                     <strong>${escapeHtml(displayName)}</strong>
                     <span>${escapeHtml(updatedAt ? missionRelativeTime(updatedAt) : 'unknown time')}</span>
@@ -1097,11 +1115,19 @@ function moduleChannelsHitMarkup(model) {
                 <span>${escapeHtml(String(model.hits.length))} hits</span>
             </div>
             <div class="module-channels-hit-list">
-            ${model.hits.length ? model.hits.slice(0, 8).map((hit) => `
+            ${model.hits.length ? model.hits.slice(0, 8).map((hit) => {
+                const hitKey = moduleChannelsUiInstanceKey(hit?.turn_id, hit?.session_id, hit?.created_at);
+                return `
                 <button
                     type="button"
                     class="module-channels-hit-card"
-                    data-channels-session-id="${escapeHtml(safeString(hit?.session_id))}">
+                    data-channels-session-id="${escapeHtml(safeString(hit?.session_id))}"
+                    data-ui-id="channels.history.hit.${escapeHtml(hitKey)}"
+                    data-ui-instance-key="${escapeHtml(hitKey)}"
+                    data-ui-label="Discord history match"
+                    data-ui-component="repeating-record"
+                    data-ui-policy="protected controls live-record"
+                    data-ui-constraints="preserve-runtime-ids,preserve-handlers">
                     <div class="module-channels-session-top">
                         <strong>${escapeHtml(safeString(hit?.display_name) || safeString(hit?.session_id) || 'Match')}</strong>
                         <span>${escapeHtml(safeString(hit?.created_at) ? missionRelativeTime(safeString(hit.created_at)) : 'recent')}</span>
@@ -1112,7 +1138,8 @@ function moduleChannelsHitMarkup(model) {
                     </div>
                     <p>${escapeHtml(safeString(hit?.excerpt) || 'No excerpt available.')}</p>
                 </button>
-            `).join('') : '<div class="module-empty">No Discord history matches this query yet.</div>'}
+            `;
+            }).join('') : '<div class="module-empty">No Discord history matches this query yet.</div>'}
             </div>
         </div>
     `;
@@ -1128,23 +1155,23 @@ function moduleChannelsSessionSummaryMarkup(model) {
     }
     const turnCount = Number(model.selectedMeta?.turn_count || model.selectedTurns.length || 0);
     return `
-        <div class="module-channels-context-grid">
-            <article class="module-channels-context-card">
+        <div class="module-channels-context-grid" data-ui-id="channels.history.session-summary" data-ui-label="Selected session summary" data-ui-component="panel-group" data-ui-policy="move resize" data-ui-constraints="contain=parent,minWidth=260,minHeight=120,maxHeight=480,collision=avoid">
+            <article class="module-channels-context-card" data-ui-id="channels.history.scope-key" data-ui-label="Session scope key" data-ui-policy="move resize-deny contain=parent">
                 <span>Scope key</span>
                 <strong>${escapeHtml(safeString(model.selectedMeta?.scope_key) || 'not selected')}</strong>
                 <em>Thomas retrieval anchor</em>
             </article>
-            <article class="module-channels-context-card">
+            <article class="module-channels-context-card" data-ui-id="channels.history.guild-channel" data-ui-label="Session guild and channel" data-ui-policy="move resize-deny contain=parent">
                 <span>Guild / channel</span>
                 <strong>${escapeHtml(safeString(model.selectedMeta?.guild_id) || 'dm')}</strong>
                 <em>${escapeHtml(safeString(model.selectedMeta?.channel_id) || 'unknown channel')}</em>
             </article>
-            <article class="module-channels-context-card">
+            <article class="module-channels-context-card" data-ui-id="channels.history.request-kinds" data-ui-label="Session request kinds" data-ui-policy="move resize-deny contain=parent">
                 <span>Request kinds</span>
                 <strong>${escapeHtml(model.requestKindsText)}</strong>
                 <em>${escapeHtml(`${turnCount} indexed turn${turnCount === 1 ? '' : 's'}`)}</em>
             </article>
-            <article class="module-channels-context-card">
+            <article class="module-channels-context-card" data-ui-id="channels.history.updated" data-ui-label="Session update time" data-ui-policy="move resize-deny contain=parent">
                 <span>Updated</span>
                 <strong>${escapeHtml(safeString(model.selectedMeta?.updated_at) ? missionRelativeTime(safeString(model.selectedMeta.updated_at)) : 'unknown')}</strong>
                 <em>${escapeHtml(safeString(model.selectedMeta?.session_id) || 'no session selected')}</em>
@@ -1155,8 +1182,10 @@ function moduleChannelsSessionSummaryMarkup(model) {
 
 function moduleChannelsTurnMarkup(model) {
     if (!model.selectedTurns.length) return '<div class="module-empty">Select a Discord session to inspect recent context.</div>';
-    return model.selectedTurns.map((turn) => `
-        <article class="module-channels-transcript-turn">
+    return model.selectedTurns.map((turn) => {
+        const turnKey = moduleChannelsUiInstanceKey(turn?.turn_id, model.selectedMeta?.session_id, turn?.created_at);
+        return `
+        <article class="module-channels-transcript-turn" data-ui-id="channels.history.turn.${escapeHtml(turnKey)}" data-ui-instance-key="${escapeHtml(turnKey)}" data-ui-label="Discord transcript turn" data-ui-component="repeating-record" data-ui-policy="protected live-record" data-ui-constraints="preserve-runtime-ids,preserve-handlers">
             <div class="module-channels-transcript-head">
                 <strong>${escapeHtml(safeString(turn?.display_name) || 'Discord user')}</strong>
                 <span>${escapeHtml(safeString(turn?.created_at) ? missionRelativeTime(safeString(turn.created_at)) : '')}</span>
@@ -1170,19 +1199,26 @@ function moduleChannelsTurnMarkup(model) {
                 <p>${escapeHtml(safeString(turn?.assistant_text) || '(no Thomas reply)')}</p>
             </div>
         </article>
-    `).join('');
+    `;
+    }).join('');
 }
 
 function moduleChannelsHelpButton(label, description) {
     const helpText = safeString(description);
     if (!helpText) return '';
     const aria = safeString(label) ? `${label}: ${helpText}` : helpText;
+    const helpKey = moduleChannelsUiInstanceKey(label || helpText.slice(0, 40));
     return `
         <button
             type="button"
             class="module-channels-help"
             title="${escapeHtml(helpText)}"
-            aria-label="${escapeHtml(aria)}">
+            aria-label="${escapeHtml(aria)}"
+            data-ui-id="channels.help.${escapeHtml(helpKey)}"
+            data-ui-instance-key="${escapeHtml(helpKey)}"
+            data-ui-label="${escapeHtml(safeString(label) || 'Channel help')}"
+            data-ui-component="help-control"
+            data-ui-policy="protected controls">
             <span aria-hidden="true">i</span>
         </button>
     `;

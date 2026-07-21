@@ -9,6 +9,11 @@ function officeRenderDraftMapEditorPanel() {
         panel.dataset.officeEditorPanel = '1';
         officeSceneWrap.appendChild(panel);
     }
+    panel.className = 'office-live-panel office-layout-panel';
+    panel.dataset.uiId = 'virtual-office.office-layout';
+    panel.dataset.uiLabel = 'Office layout tools';
+    panel.dataset.uiPolicy = 'move resize';
+    panel.dataset.uiConstraints = 'minWidth=340;minHeight=320;maxWidth=760;maxHeight=980';
     if (!state.editorOpen) {
         panel.style.display = 'none';
         panel.innerHTML = '';
@@ -158,7 +163,7 @@ function officeRenderDraftMapEditorPanel() {
 
     panel.innerHTML = `
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex:0 0 auto;">
-            <strong style="font-size:0.92rem;letter-spacing:0.04em;text-transform:uppercase;">Office Editor</strong>
+            <strong style="font-size:0.92rem;letter-spacing:0.04em;text-transform:uppercase;">Office Layout</strong>
             <span style="font-size:0.72rem;color:rgba(202,214,230,0.72);">${state.autosaveEnabled ? 'Autosave On' : 'Autosave Off'}</span>
         </div>
         <div style="display:flex;flex:1 1 auto;min-height:0;flex-direction:column;gap:12px;margin-top:14px;overflow-y:auto;overflow-x:hidden;padding-right:2px;">
@@ -408,31 +413,23 @@ function officePrepareDraftMapShell() {
     const toolbar = officeWorkspace?.querySelector('.office-toolbar');
     const toolbarTitle = officeWorkspace?.querySelector('.office-toolbar-title');
     const toolbarLabel = toolbarTitle?.querySelector('span:last-child');
-    if (toolbar instanceof HTMLElement) {
-        toolbar.style.display = 'flex';
-        toolbar.style.alignItems = 'center';
-        toolbar.style.justifyContent = 'space-between';
-        toolbar.style.gap = '16px';
-        toolbar.style.padding = '18px 22px';
-        toolbar.style.borderBottom = '1px solid rgba(104, 128, 164, 0.24)';
-        toolbar.style.background = 'linear-gradient(180deg, rgba(11, 19, 34, 0.98), rgba(8, 14, 26, 0.88))';
-    }
     if (toolbarLabel instanceof HTMLElement) {
         toolbarLabel.textContent = 'Virtual Office';
     }
-    if (toolbarTitle instanceof HTMLElement && !toolbar.querySelector('[data-office-map-hint="1"]')) {
-        const hint = document.createElement('span');
-        hint.dataset.officeMapHint = '1';
-        hint.textContent = 'Live agent office - drag to pan - wheel to zoom';
-        hint.style.fontSize = '0.75rem';
-        hint.style.letterSpacing = '0.08em';
-        hint.style.textTransform = 'uppercase';
-        hint.style.color = 'rgba(201, 214, 236, 0.64)';
-        hint.style.marginLeft = '14px';
-        toolbarTitle.appendChild(hint);
-    }
     if (officeEditorToggleBtn instanceof HTMLElement) {
         officeEditorToggleBtn.style.display = 'none';
+    }
+    if (officeDebugToggleBtn instanceof HTMLElement) {
+        officeDebugToggleBtn.dataset.uiId = 'virtual-office.action.debug';
+        officeDebugToggleBtn.dataset.uiLabel = 'Office debug controls';
+        officeDebugToggleBtn.dataset.uiPolicy = 'protected controls';
+        officeDebugToggleBtn.dataset.uiConstraints = 'no-delete no-copy';
+    }
+    if (officeDebugOverlay instanceof HTMLElement) {
+        officeDebugOverlay.dataset.uiId = 'virtual-office.debug-panel';
+        officeDebugOverlay.dataset.uiLabel = 'Office debug panel';
+        officeDebugOverlay.dataset.uiPolicy = 'protected critical-status';
+        officeDebugOverlay.dataset.uiConstraints = 'no-delete no-copy';
     }
     [
         officeWorkspace?.querySelector('.office-map-controls'),
@@ -446,30 +443,28 @@ function officePrepareDraftMapShell() {
     });
     const stage = officeWorkspace?.querySelector('.office-stage');
     if (officeWorkspace instanceof HTMLElement) {
+        officeWorkspace.classList.add('office-modern-workspace');
+        officeWorkspace.dataset.uiId = 'virtual-office.shell';
+        officeWorkspace.dataset.uiLabel = 'Virtual Office';
+        officeWorkspace.dataset.uiPolicy = 'root protected';
+        officeWorkspace.dataset.uiConstraints = 'no-delete no-copy';
         officeWorkspace.style.display = officeWorkspace.classList.contains('hidden') ? '' : 'flex';
-        officeWorkspace.style.flexDirection = 'column';
-        officeWorkspace.style.minHeight = 'calc(100vh - 140px)';
-        officeWorkspace.style.background = 'linear-gradient(180deg, rgba(8, 14, 26, 0.96), rgba(6, 10, 19, 0.98))';
-        officeWorkspace.style.overflow = 'hidden';
     }
     if (stage instanceof HTMLElement) {
-        stage.style.display = 'flex';
-        stage.style.flex = '1';
-        stage.style.minHeight = '0';
-        stage.style.padding = '22px';
+        stage.dataset.uiId = 'virtual-office.stage';
+        stage.dataset.uiLabel = 'Office map stage';
+        stage.dataset.uiPolicy = 'move resize';
+        stage.dataset.uiConstraints = 'minWidth=360;minHeight=360';
     }
     if (officeSceneWrap instanceof HTMLElement) {
+        officeSceneWrap.classList.add('office-map-viewport');
+        officeSceneWrap.dataset.uiId = 'virtual-office.map';
+        officeSceneWrap.dataset.uiLabel = 'Live office map';
+        officeSceneWrap.dataset.uiPolicy = 'move resize';
+        officeSceneWrap.dataset.uiConstraints = 'minWidth=360;minHeight=360';
         officeSceneWrap.tabIndex = 0;
         officeSceneWrap.setAttribute('aria-label', 'Virtual office base map. Drag to pan and use the mouse wheel to zoom.');
-        officeSceneWrap.style.position = 'relative';
-        officeSceneWrap.style.flex = '1';
-        officeSceneWrap.style.minHeight = 'calc(100vh - 120px)';
-        officeSceneWrap.style.borderRadius = '26px';
-        officeSceneWrap.style.overflow = 'hidden';
         officeSceneWrap.style.cursor = state.pointerId === null ? 'grab' : 'grabbing';
-        officeSceneWrap.style.touchAction = 'none';
-        officeSceneWrap.style.background = 'radial-gradient(circle at top, rgba(58, 86, 132, 0.28), rgba(8, 14, 26, 0.94) 52%, rgba(4, 7, 14, 1) 100%)';
-        officeSceneWrap.style.boxShadow = 'inset 0 0 0 1px rgba(110, 134, 176, 0.16)';
     }
     if (toolbar instanceof HTMLElement) {
         toolbar.style.display = 'none';
@@ -479,102 +474,44 @@ function officePrepareDraftMapShell() {
         toolbar.style.border = '0';
         toolbar.style.overflow = 'hidden';
     }
-    if (officeWorkspace instanceof HTMLElement) {
-        officeWorkspace.style.minHeight = 'calc(100vh - 76px)';
-    }
-    if (stage instanceof HTMLElement) {
-        stage.style.padding = '8px';
-    }
     const mapToolbar = officeSceneWrap?.querySelector('[data-office-map-toolbar="1"]');
     if (mapToolbar instanceof HTMLElement) {
-        mapToolbar.style.position = 'absolute';
-        mapToolbar.style.top = '14px';
-        mapToolbar.style.left = '14px';
-        mapToolbar.style.right = '14px';
-        mapToolbar.style.display = 'flex';
-        mapToolbar.style.alignItems = 'center';
-        mapToolbar.style.justifyContent = 'flex-start';
-        mapToolbar.style.gap = '8px';
-        mapToolbar.style.padding = '8px 10px';
-        mapToolbar.style.borderRadius = '16px';
-        mapToolbar.style.background = 'rgba(6, 10, 19, 0.84)';
-        mapToolbar.style.border = '1px solid rgba(112, 139, 184, 0.28)';
-        mapToolbar.style.backdropFilter = 'blur(10px)';
-        mapToolbar.style.zIndex = '12';
+        mapToolbar.classList.add('office-map-toolbar');
     }
     const minimapToolbarBtn = officeSceneWrap?.querySelector('[data-office-map-toolbar-minimap="1"]');
     if (minimapToolbarBtn instanceof HTMLButtonElement) {
         minimapToolbarBtn.textContent = 'Minimap';
         minimapToolbarBtn.setAttribute('aria-pressed', state.minimapMinimized ? 'false' : 'true');
-        minimapToolbarBtn.style.padding = '8px 14px';
-        minimapToolbarBtn.style.borderRadius = '12px';
-        minimapToolbarBtn.style.border = '1px solid rgba(112, 139, 184, 0.28)';
-        minimapToolbarBtn.style.background = state.minimapMinimized ? 'rgba(17, 27, 44, 0.72)' : 'rgba(55, 103, 184, 0.34)';
-        minimapToolbarBtn.style.color = 'rgba(234, 242, 255, 0.92)';
-        minimapToolbarBtn.style.fontSize = '0.82rem';
-        minimapToolbarBtn.style.fontWeight = '600';
+        minimapToolbarBtn.classList.toggle('is-active', !state.minimapMinimized);
     }
     const editorToolbarBtn = officeSceneWrap?.querySelector('[data-office-map-toolbar-editor="1"]');
     if (editorToolbarBtn instanceof HTMLButtonElement) {
-        editorToolbarBtn.textContent = 'Office Editor';
+        editorToolbarBtn.textContent = 'Layout';
         editorToolbarBtn.setAttribute('aria-pressed', state.editorOpen ? 'true' : 'false');
-        editorToolbarBtn.style.padding = '8px 14px';
-        editorToolbarBtn.style.borderRadius = '12px';
-        editorToolbarBtn.style.border = '1px solid rgba(112, 139, 184, 0.28)';
-        editorToolbarBtn.style.background = state.editorOpen ? 'rgba(81, 125, 205, 0.34)' : 'rgba(17, 27, 44, 0.72)';
-        editorToolbarBtn.style.color = 'rgba(234, 242, 255, 0.92)';
-        editorToolbarBtn.style.fontSize = '0.82rem';
-        editorToolbarBtn.style.fontWeight = '600';
+        editorToolbarBtn.classList.toggle('is-active', state.editorOpen);
     }
     const rosterToolbarBtn = officeSceneWrap?.querySelector('[data-office-map-toolbar-roster="1"]');
     if (rosterToolbarBtn instanceof HTMLButtonElement) {
         rosterToolbarBtn.textContent = 'Agent Roster';
         rosterToolbarBtn.setAttribute('aria-pressed', state.rosterOpen ? 'true' : 'false');
-        rosterToolbarBtn.style.padding = '8px 14px';
-        rosterToolbarBtn.style.borderRadius = '12px';
-        rosterToolbarBtn.style.border = '1px solid rgba(112, 139, 184, 0.28)';
-        rosterToolbarBtn.style.background = state.rosterOpen ? 'rgba(81, 125, 205, 0.34)' : 'rgba(17, 27, 44, 0.72)';
-        rosterToolbarBtn.style.color = 'rgba(234, 242, 255, 0.92)';
-        rosterToolbarBtn.style.fontSize = '0.82rem';
-        rosterToolbarBtn.style.fontWeight = '600';
+        rosterToolbarBtn.classList.toggle('is-active', state.rosterOpen);
     }
     const chatToolbarBtn = officeSceneWrap?.querySelector('[data-office-map-toolbar-chat="1"]');
     if (chatToolbarBtn instanceof HTMLButtonElement) {
         chatToolbarBtn.textContent = 'Chat';
         chatToolbarBtn.setAttribute('aria-pressed', state.agentChatOpen ? 'true' : 'false');
-        chatToolbarBtn.style.padding = '8px 14px';
-        chatToolbarBtn.style.borderRadius = '12px';
-        chatToolbarBtn.style.border = '1px solid rgba(112, 139, 184, 0.28)';
-        chatToolbarBtn.style.background = state.agentChatOpen ? 'rgba(81, 125, 205, 0.34)' : 'rgba(17, 27, 44, 0.72)';
-        chatToolbarBtn.style.color = 'rgba(234, 242, 255, 0.92)';
-        chatToolbarBtn.style.fontSize = '0.82rem';
-        chatToolbarBtn.style.fontWeight = '600';
+        chatToolbarBtn.classList.toggle('is-active', state.agentChatOpen);
     }
     const saveToolbarBtn = officeSceneWrap?.querySelector('[data-office-map-toolbar-save="1"]');
     if (saveToolbarBtn instanceof HTMLButtonElement) {
         saveToolbarBtn.textContent = 'Save';
-        saveToolbarBtn.style.padding = '8px 14px';
-        saveToolbarBtn.style.borderRadius = '12px';
-        saveToolbarBtn.style.border = '1px solid rgba(112, 139, 184, 0.28)';
-        saveToolbarBtn.style.background = 'rgba(20, 38, 64, 0.86)';
-        saveToolbarBtn.style.color = 'rgba(234, 242, 255, 0.92)';
-        saveToolbarBtn.style.fontSize = '0.82rem';
-        saveToolbarBtn.style.fontWeight = '600';
+        saveToolbarBtn.classList.add('office-control-primary');
     }
     const undoToolbarBtn = officeSceneWrap?.querySelector('[data-office-map-toolbar-undo="1"]');
     if (undoToolbarBtn instanceof HTMLButtonElement) {
         const canUndo = Array.isArray(state.undoStack) && state.undoStack.length > 0;
         undoToolbarBtn.textContent = 'Back';
         undoToolbarBtn.disabled = !canUndo;
-        undoToolbarBtn.style.padding = '8px 14px';
-        undoToolbarBtn.style.borderRadius = '12px';
-        undoToolbarBtn.style.border = '1px solid rgba(112, 139, 184, 0.28)';
-        undoToolbarBtn.style.background = canUndo ? 'rgba(28, 44, 73, 0.78)' : 'rgba(17, 27, 44, 0.42)';
-        undoToolbarBtn.style.color = canUndo ? 'rgba(234, 242, 255, 0.92)' : 'rgba(168, 184, 209, 0.56)';
-        undoToolbarBtn.style.fontSize = '0.82rem';
-        undoToolbarBtn.style.fontWeight = '600';
-        undoToolbarBtn.style.cursor = canUndo ? 'pointer' : 'not-allowed';
-        undoToolbarBtn.style.opacity = canUndo ? '1' : '0.72';
     }
     const toolbarStatus = officeSceneWrap?.querySelector('[data-office-map-badge="1"]');
     if (toolbarStatus instanceof HTMLElement) {
@@ -582,113 +519,39 @@ function officePrepareDraftMapShell() {
     }
     const editorPanel = officeSceneWrap?.querySelector('[data-office-editor-panel="1"]');
     if (editorPanel instanceof HTMLElement) {
-        editorPanel.style.position = 'absolute';
-        editorPanel.style.top = '62px';
-        editorPanel.style.right = '14px';
-        editorPanel.style.width = '520px';
-        editorPanel.style.maxWidth = 'calc(100% - 28px)';
-        editorPanel.style.height = 'calc(100% - 92px)';
-        editorPanel.style.maxHeight = 'calc(100% - 92px)';
-        editorPanel.style.flexDirection = 'column';
-        editorPanel.style.minHeight = '0';
-        editorPanel.style.overflow = 'hidden';
-        editorPanel.style.padding = '14px';
-        editorPanel.style.borderRadius = '18px';
-        editorPanel.style.border = '1px solid rgba(112, 139, 184, 0.24)';
-        editorPanel.style.background = 'rgba(8, 14, 24, 0.98)';
-        editorPanel.style.backdropFilter = 'none';
-        editorPanel.style.boxShadow = '0 14px 34px rgba(0, 0, 0, 0.24)';
-        editorPanel.style.zIndex = '12';
+        editorPanel.classList.add('office-live-panel', 'office-layout-panel');
     }
     const rosterPanel = officeSceneWrap?.querySelector('[data-office-agent-roster-panel="1"]');
     if (rosterPanel instanceof HTMLElement) {
-        rosterPanel.style.position = 'absolute';
-        rosterPanel.style.top = '62px';
-        rosterPanel.style.left = '14px';
-        rosterPanel.style.width = '430px';
-        rosterPanel.style.maxWidth = 'calc(100% - 28px)';
-        rosterPanel.style.maxHeight = 'calc(100% - 92px)';
-        rosterPanel.style.overflow = 'auto';
-        rosterPanel.style.padding = '14px';
-        rosterPanel.style.borderRadius = '18px';
-        rosterPanel.style.border = '1px solid rgba(112, 139, 184, 0.24)';
-        rosterPanel.style.background = 'rgba(8, 14, 24, 0.98)';
-        rosterPanel.style.backdropFilter = 'none';
-        rosterPanel.style.boxShadow = '0 14px 34px rgba(0, 0, 0, 0.24)';
-        rosterPanel.style.zIndex = '12';
+        rosterPanel.classList.add('office-live-panel');
     }
     const chatPanel = officeSceneWrap?.querySelector('[data-office-agent-chat-panel="1"]');
     if (chatPanel instanceof HTMLElement) {
-        chatPanel.style.position = 'absolute';
-        chatPanel.style.top = '62px';
         chatPanel.style.right = state.editorOpen ? '548px' : '14px';
-        chatPanel.style.width = '520px';
-        chatPanel.style.maxWidth = 'calc(100% - 28px)';
-        chatPanel.style.maxHeight = 'calc(100% - 92px)';
-        chatPanel.style.overflow = 'hidden';
-        chatPanel.style.gridTemplateRows = 'auto auto minmax(0,1fr) auto';
-        chatPanel.style.gap = '10px';
-        chatPanel.style.padding = '12px';
-        chatPanel.style.borderRadius = '18px';
-        chatPanel.style.border = '1px solid rgba(112, 139, 184, 0.24)';
-        chatPanel.style.background = 'rgba(8, 14, 24, 0.98)';
-        chatPanel.style.backdropFilter = 'none';
-        chatPanel.style.boxShadow = '0 14px 34px rgba(0, 0, 0, 0.24)';
-        chatPanel.style.zIndex = '13';
+        chatPanel.classList.add('office-live-panel');
     }
     if (officeMinimap instanceof HTMLElement) {
+        officeMinimap.classList.add('office-modern-minimap');
+        officeMinimap.dataset.uiId = 'virtual-office.minimap';
+        officeMinimap.dataset.uiLabel = 'Office minimap';
+        officeMinimap.dataset.uiPolicy = 'protected live-map-control';
+        officeMinimap.dataset.uiConstraints = 'no-delete no-copy';
         officeMinimap.style.display = state.minimapMinimized ? 'none' : 'block';
-        officeMinimap.style.position = 'absolute';
-        officeMinimap.style.right = '34px';
-        officeMinimap.style.bottom = '34px';
         officeMinimap.style.width = `${state.minimapSize}px`;
         officeMinimap.style.height = `${state.minimapSize}px`;
-        officeMinimap.style.padding = '0';
-        officeMinimap.style.border = '1px solid rgba(112, 139, 184, 0.3)';
-        officeMinimap.style.borderRadius = '18px';
-        officeMinimap.style.background = 'rgba(6, 10, 19, 0.94)';
-        officeMinimap.style.backdropFilter = 'none';
-        officeMinimap.style.boxShadow = '0 10px 28px rgba(0, 0, 0, 0.24)';
-        officeMinimap.style.overflow = 'hidden';
         officeMinimap.style.transform = `translate3d(${state.minimapOffsetX}px, ${state.minimapOffsetY}px, 0)`;
-        officeMinimap.style.zIndex = '12';
-        officeMinimap.style.userSelect = 'none';
         officeMinimap.style.cursor = state.minimapLocked ? 'default' : (state.minimapPointerMode === 'panel' && state.minimapPointerId !== null ? 'grabbing' : 'default');
     }
     const minimapHead = officeMinimap?.querySelector('.office-minimap-head');
     if (minimapHead instanceof HTMLElement) {
-        minimapHead.style.display = 'flex';
-        minimapHead.style.alignItems = 'center';
-        minimapHead.style.justifyContent = 'space-between';
-        minimapHead.style.position = 'absolute';
-        minimapHead.style.top = '8px';
-        minimapHead.style.left = '8px';
-        minimapHead.style.right = '8px';
-        minimapHead.style.zIndex = '2';
-        minimapHead.style.gap = '6px';
-        minimapHead.style.padding = '0';
-        minimapHead.style.cursor = 'default';
-        minimapHead.style.background = 'transparent';
-        minimapHead.style.borderBottom = '0';
-        minimapHead.style.userSelect = 'none';
+        minimapHead.classList.add('office-modern-minimap-head');
     }
     const minimapLockBtn = officeMinimap?.querySelector('[data-office-minimap-lock="1"]');
     if (minimapLockBtn instanceof HTMLElement) {
         minimapLockBtn.textContent = state.minimapLocked ? 'Lock' : 'Move';
         minimapLockBtn.setAttribute('aria-pressed', state.minimapLocked ? 'true' : 'false');
         minimapLockBtn.setAttribute('aria-label', state.minimapLocked ? 'Minimap locked' : 'Minimap can move');
-        minimapLockBtn.style.display = 'inline-flex';
-        minimapLockBtn.style.alignItems = 'center';
-        minimapLockBtn.style.justifyContent = 'center';
-        minimapLockBtn.style.minWidth = '42px';
-        minimapLockBtn.style.padding = '4px 8px';
-        minimapLockBtn.style.fontSize = '0.68rem';
-        minimapLockBtn.style.fontWeight = '800';
-        minimapLockBtn.style.borderRadius = '8px';
-        minimapLockBtn.style.border = state.minimapLocked ? '1px solid rgba(142, 199, 255, 0.62)' : '1px solid rgba(112, 139, 184, 0.26)';
-        minimapLockBtn.style.background = state.minimapLocked ? 'rgba(40, 83, 138, 0.88)' : 'rgba(11, 18, 32, 0.84)';
-        minimapLockBtn.style.color = 'rgba(235, 243, 255, 0.94)';
-        minimapLockBtn.style.cursor = 'pointer';
+        minimapLockBtn.classList.toggle('is-active', state.minimapLocked);
     }
     const minimapLabel = minimapHead?.querySelector('span');
     if (minimapLabel instanceof HTMLElement) {
@@ -696,17 +559,11 @@ function officePrepareDraftMapShell() {
         minimapLabel.style.display = 'none';
     }
     if (officeFollowToggleBtn instanceof HTMLElement) {
+        officeFollowToggleBtn.classList.add('office-control');
+        officeFollowToggleBtn.dataset.uiId = 'virtual-office.action.toggle-minimap';
+        officeFollowToggleBtn.dataset.uiLabel = 'Show or hide minimap';
+        officeFollowToggleBtn.dataset.uiPolicy = 'protected controls';
         officeFollowToggleBtn.textContent = state.minimapMinimized ? 'Show' : 'Hide';
-        officeFollowToggleBtn.style.display = 'inline-flex';
-        officeFollowToggleBtn.style.alignItems = 'center';
-        officeFollowToggleBtn.style.justifyContent = 'center';
-        officeFollowToggleBtn.style.padding = '4px 8px';
-        officeFollowToggleBtn.style.fontSize = '0.68rem';
-        officeFollowToggleBtn.style.fontWeight = '600';
-        officeFollowToggleBtn.style.borderRadius = '8px';
-        officeFollowToggleBtn.style.border = '1px solid rgba(112, 139, 184, 0.26)';
-        officeFollowToggleBtn.style.background = 'rgba(11, 18, 32, 0.84)';
-        officeFollowToggleBtn.style.color = 'rgba(235, 243, 255, 0.92)';
     }
     if (officeMinimapCanvas instanceof HTMLCanvasElement) {
         officeMinimapCanvas.style.display = 'block';
@@ -717,21 +574,7 @@ function officePrepareDraftMapShell() {
     }
     const resizeHandle = officeMinimap?.querySelector('[data-office-minimap-resize="1"]');
     if (resizeHandle instanceof HTMLElement) {
-        resizeHandle.style.position = 'absolute';
-        resizeHandle.style.right = '10px';
-        resizeHandle.style.bottom = '10px';
         resizeHandle.style.display = state.minimapLocked ? 'none' : 'block';
-        resizeHandle.style.width = '14px';
-        resizeHandle.style.height = '14px';
-        resizeHandle.style.padding = '0';
-        resizeHandle.style.borderRadius = '0';
-        resizeHandle.style.cursor = 'nwse-resize';
-        resizeHandle.style.background = 'transparent';
-        resizeHandle.style.borderRight = '3px solid rgba(152, 193, 255, 0.92)';
-        resizeHandle.style.borderBottom = '3px solid rgba(152, 193, 255, 0.92)';
-        resizeHandle.style.boxShadow = 'none';
-        resizeHandle.style.color = 'transparent';
-        resizeHandle.style.fontSize = '0';
     }
     const liveRect = officeSceneWrap?.getBoundingClientRect();
     const hasLiveViewport = Boolean(liveRect && liveRect.width > 1 && liveRect.height > 1);

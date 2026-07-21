@@ -1,15 +1,10 @@
 /* ui_studio_canvas.css
-   Styles for the UI Studio Canvas (Tab B of the app_builder workbench).
+   Styles for the Canvas workspace (the app_builder runtime mode).
    Matches Thomas' visual language: tokens.css custom properties, the skinny
    button profile, dense surfaces. All selectors are namespaced under
-   `.ui-studio-*` so they cannot collide with the existing UI Editor
-   (`module-ui-editor-*`) or the rest of the shell.
+   `.ui-studio-*` so they cannot collide with the rest of the shell. */
 
-   Fallback values are provided after every var() so the standalone demo page
-   (ui_studio_demo.html) renders correctly even without tokens.css loaded. */
-
-/* ── Tab host (lives in the module, Tab A + Tab B pills) ─────────────────── */
-/* The workbench section that hosts the UI Studio holds ONLY the studio host as
+/* The workbench section that hosts Canvas holds only the studio host as
    a single grid child. Without forcing it to grow + giving the row 1fr, it
    collapses to the canvas's content height and the editor renders as a cramped
    strip at the top of the page instead of filling the workspace. */
@@ -20,79 +15,32 @@
 }
 
 .ui-studio-host {
+    --bg-app: var(--c-bg, #16181f);
+    --bg-surface: var(--c-surface, #1f232c);
+    --bg-surface-hover: var(--c-hover, #242936);
+    --text-primary: var(--c-text, #ececf1);
+    --text-secondary: var(--c-dim, #adb3c2);
+    --text-muted: var(--c-muted, #929bb0);
+    --border-light: var(--c-border, rgba(255, 255, 255, 0.12));
+    --border-focus: var(--c-accent-line, #8a9aad);
+    --accent: var(--c-accent, #8a9aad);
+    --accent-mint: var(--c-accent, #47d7ac);
+    --shadow-strong: var(--c-shadow, 0 22px 60px rgba(0, 0, 0, 0.45));
+    --radius-sm: var(--r-control, 7px);
+    --radius-md: var(--r-card, 10px);
+    --radius-lg: var(--r-panel, 14px);
     display: flex;
     flex-direction: column;
     width: 100%;
     height: 100%;
     min-height: 0;
 }
-.ui-studio-tabbar {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 10px;
-    border-bottom: 1px solid var(--border-light, rgba(255, 255, 255, 0.12));
-    background: var(--bg-surface, #1f232c);
-    flex: 0 0 auto;
-}
-.ui-studio-tab {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 14px;
-    border-radius: 999px;
-    border: 1px solid var(--border-light, rgba(255, 255, 255, 0.12));
-    background: transparent;
-    color: var(--text-secondary, #adb3c2);
-    font-family: var(--font-sans, "Segoe UI", Roboto, sans-serif);
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
-    white-space: nowrap;
-}
-.ui-studio-tab:hover {
-    background: rgba(162, 191, 233, 0.08);
-    color: var(--text-primary, #ececf1);
-}
-.ui-studio-tab.is-active {
-    background: rgba(88, 166, 255, 0.14);
-    border-color: var(--accent, #8a9aad);
-    color: var(--text-primary, #ececf1);
-}
-.ui-studio-tab-spacer { flex: 1 1 auto; }
-.ui-studio-tab-hint {
-    font-size: 11px;
-    color: var(--text-muted, #929bb0);
-    white-space: nowrap;
-}
-.ui-studio-panes {
-    position: relative;
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: hidden;
-}
-.ui-studio-pane {
-    position: absolute;
-    inset: 0;
-    overflow: auto;
-}
-.ui-studio-pane[hidden] { display: none; }
-.ui-studio-pane-canvas { overflow: hidden; }
-.ui-studio-canvas-frame {
-    width: 100%;
-    height: 100%;
-    border: 0;
-    display: block;
-    background: var(--bg-app, #16181f);
-}
 
-/* ── Standalone Canvas page layout (also used when the module renders the
-      canvas inline, not via iframe — same class names) ─────────────────── */
+/* Canvas workspace layout. */
 .ui-studio-root {
     display: grid;
-    grid-template-columns: 52px 1fr 248px;
-    grid-template-rows: 40px 1fr;
+    grid-template-columns: 52px 1fr 276px;
+    grid-template-rows: 52px 1fr;
     width: 100%;
     height: 100%;
     min-height: 0;
@@ -109,7 +57,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 0 10px;
+    padding: 6px 12px;
     border-bottom: 1px solid var(--border-light, rgba(255, 255, 255, 0.12));
     background: var(--bg-surface, #1f232c);
     overflow-x: auto;
@@ -124,12 +72,16 @@
 }
 .ui-studio-toolbar-group:last-child { border-right: 0; }
 .ui-studio-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
     font-weight: 700;
     letter-spacing: 0.2px;
     color: var(--text-primary, #ececf1);
     margin-right: 4px;
     white-space: nowrap;
 }
+.ui-studio-brand-name { font-size: 13px; }
 .ui-studio-zoom-label {
     min-width: 44px;
     text-align: center;
@@ -158,7 +110,7 @@
     position: relative;
     overflow: hidden;
     background:
-        radial-gradient(circle at 30% 20%, rgba(88, 166, 255, 0.06), rgba(0, 0, 0, 0) 40%),
+        radial-gradient(circle at 30% 20%, var(--c-accent-soft, rgba(88, 166, 255, 0.06)), transparent 42%),
         var(--bg-app, #16181f);
     min-width: 0;
 }
@@ -200,7 +152,7 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: var(--text-muted, #929bb0);
-    background: rgba(0, 0, 0, 0.12);
+    background: var(--c-hover, rgba(0, 0, 0, 0.12));
 }
 
 /* Layers list */
@@ -222,7 +174,7 @@
 }
 .ui-studio-layer:hover { background: var(--bg-surface-hover, #242936); }
 .ui-studio-layer.is-selected {
-    background: rgba(88, 166, 255, 0.16);
+    background: var(--c-accent-soft);
     color: var(--text-primary, #ececf1);
 }
 .ui-studio-layer-type {
@@ -254,5 +206,30 @@
     font-size: 12px;
     color: var(--text-muted, #929bb0);
     text-align: center;
+}
+
+@media (max-width: 980px) {
+    .ui-studio-root {
+        grid-template-columns: 48px minmax(0, 1fr);
+        grid-template-rows: 52px minmax(280px, 1fr) minmax(170px, 28vh);
+    }
+    .ui-studio-rail { grid-column: 1; grid-row: 2; }
+    .ui-studio-stage-wrap { grid-column: 2; grid-row: 2; }
+    .ui-studio-side {
+        grid-column: 1 / -1;
+        grid-row: 3;
+        flex-direction: row;
+        border-left: 0;
+        border-top: 1px solid var(--border-light, rgba(255, 255, 255, 0.12));
+    }
+    .ui-studio-side-section { flex: 1 1 50%; border-right: 1px solid var(--border-light, rgba(255, 255, 255, 0.1)); }
+}
+
+@media (max-width: 620px) {
+    .ui-studio-root { grid-template-rows: 48px minmax(250px, 1fr) 180px; }
+    .ui-studio-toolbar { padding-inline: 8px; gap: 5px; }
+    .ui-studio-toolbar-group { padding-right: 5px; margin-right: 0; }
+    .ui-studio-brand-name { display: none; }
+    .ui-studio-side-title { padding-block: 5px; }
 }
 

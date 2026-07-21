@@ -1,7 +1,14 @@
 (function () {
     var CHAT_STORE_KEY = 'thomas.myStuff.projectChats.v2';
     var SESSION_STORE_KEY = 'thomas.myStuff.projectSessions.v2';
-    var SCRIPT_VERSION = '20260625-forge+paper-1';
+    var SCRIPT_VERSION = '20260721-modernized-1';
+
+    // The shared workspace shell owns initial theme and postMessage handling.
+    // Storage events keep an already-open standalone tab in sync as well.
+    window.addEventListener('storage', function (event) {
+        if (event.key !== 'thomas_chat_theme' || !event.newValue || !window.ThomasWorkspaceShell) return;
+        window.ThomasWorkspaceShell.applyTheme(event.newValue, { persist: false });
+    });
 
     var state = {
         projects: [],
@@ -542,6 +549,7 @@
             var deepLink = safeString(build && build.deep_link);
             var kind = safeString(build && build.kind);
             var title = safeString(build && build.title) || 'Build';
+            var buildKey = safeString(build && (build.id || build.deliverable_id || build.path || build.open_url || build.deep_link)) || (kind + '-' + title);
             var thumb = safeString(build && build.thumbnail);
             // A registered deliverable persists as a registry row + path; its built
             // file can later be reverted/moved/deleted, leaving the card dangling so
@@ -567,15 +575,15 @@
             // Greyed via inline opacity (no extra stylesheet); the conversation
             // deep-link still works since it does not depend on the built file.
             return ''
-                + '<article class="stuff-forge-card"' + (available ? '' : ' style="opacity:0.6;"') + '>'
+                + '<article class="stuff-forge-card" data-ui-id="my-stuff.forge-build-card.' + escapeHtml(buildKey) + '" data-ui-instance-key="' + escapeHtml(buildKey) + '" data-ui-component="repeating-card-item" data-ui-policy="layout-style" data-ui-constraints="preserve-instance-key,preserve-runtime-content,preserve-actions"' + (available ? '' : ' style="opacity:0.6;"') + '>'
                 + '  <div class="stuff-forge-thumb">' + preview + '</div>'
                 + '  <div class="stuff-forge-body">'
                 + '    <h3 class="stuff-forge-title">' + escapeHtml(title) + '</h3>'
                 + '    <p class="stuff-forge-meta">' + metaLine + '</p>'
-                + '    <div class="stuff-forge-actions">'
-                +        (available && openUrl ? '<button class="stuff-btn stuff-btn-primary" type="button" data-forge-open="' + escapeHtml(openUrl) + '">Open</button>' : '')
-                +        (!available ? '<button class="stuff-btn stuff-btn-ghost" type="button" disabled aria-disabled="true" title="The built file is no longer on disk">Unavailable</button>' : '')
-                +        (deepLink ? '<button class="stuff-btn stuff-btn-ghost" type="button" data-forge-convo="' + escapeHtml(deepLink) + '">Open in Code</button>' : '')
+                + '    <div class="stuff-forge-actions" data-ui-id="my-stuff.forge-build-card.' + escapeHtml(buildKey) + '.actions" data-ui-component="action-group" data-ui-policy="layout-style" data-ui-constraints="preserve-order,preserve-handlers">'
+                +        (available && openUrl ? '<button class="stuff-btn stuff-btn-primary" type="button" data-forge-open="' + escapeHtml(openUrl) + '" data-ui-id="my-stuff.action.open-build.' + escapeHtml(buildKey) + '" data-ui-component="runtime-action" data-ui-policy="control" data-ui-constraints="preserve-handler,preserve-target">Open</button>' : '')
+                +        (!available ? '<button class="stuff-btn stuff-btn-ghost" type="button" disabled aria-disabled="true" title="The built file is no longer on disk" data-ui-id="my-stuff.action.unavailable-build.' + escapeHtml(buildKey) + '" data-ui-component="runtime-action" data-ui-policy="protected">Unavailable</button>' : '')
+                +        (deepLink ? '<button class="stuff-btn stuff-btn-ghost" type="button" data-forge-convo="' + escapeHtml(deepLink) + '" data-ui-id="my-stuff.action.open-build-conversation.' + escapeHtml(buildKey) + '" data-ui-component="runtime-action" data-ui-policy="control" data-ui-constraints="preserve-handler,preserve-target">Open in Code</button>' : '')
                 + '    </div>'
                 + '  </div>'
                 + '</article>';
@@ -595,8 +603,9 @@
     function renderInstalledAppCard(plugin) {
         var mode = pluginMode(plugin);
         var tone = pluginTone(plugin);
+        var instanceKey = pluginId(plugin) || mode;
         return ''
-            + '<button class="stuff-installed-app stuff-module-app" type="button" data-plugin-mode="' + escapeHtml(mode) + '">'
+            + '<button class="stuff-installed-app stuff-module-app" type="button" data-plugin-mode="' + escapeHtml(mode) + '" data-ui-id="my-stuff.installed-app-card.' + escapeHtml(instanceKey) + '" data-ui-instance-key="' + escapeHtml(instanceKey) + '" data-ui-component="repeating-card-item" data-ui-policy="layout-style" data-ui-constraints="preserve-instance-key,preserve-handler,preserve-runtime-content">'
             + '  <span class="stuff-installed-icon stuff-module-icon">' + escapeHtml(pluginInitials(plugin)) + '</span>'
             + '  <span class="stuff-installed-copy">'
             + '    <span class="stuff-app-title">' + escapeHtml(pluginLabel(plugin)) + '</span>'
@@ -634,8 +643,9 @@
             renderedPositions.push(pos);
             var icon = project && project.board_icon && project.board_icon.emoji ? project.board_icon.emoji : '[]';
             var accent = project && project.board_icon && project.board_icon.accent ? project.board_icon.accent : '#4c8eff';
+            var projectId = safeString(project && project.id);
             return ''
-                + '<button class="stuff-app" type="button" data-project-id="' + escapeHtml(safeString(project && project.id)) + '" style="left:' + String(pos.x) + 'px;top:' + String(pos.y) + 'px;">'
+                + '<button class="stuff-app" type="button" data-project-id="' + escapeHtml(projectId) + '" data-ui-id="my-stuff.project-card.' + escapeHtml(projectId) + '" data-ui-instance-key="' + escapeHtml(projectId) + '" data-ui-component="repeating-card-item" data-ui-policy="layout-style" data-ui-constraints="preserve-instance-key,preserve-handler,preserve-drag-state,resize-deny" style="left:' + String(pos.x) + 'px;top:' + String(pos.y) + 'px;">'
                 + '  <span class="stuff-app-emoji" style="background:' + escapeHtml(accent) + ';">' + escapeHtml(icon) + '</span>'
                 + '  <span class="stuff-app-title">' + escapeHtml(safeString(project && project.name) || 'Project') + '</span>'
                 + '  <span class="stuff-app-meta">' + escapeHtml(safeString(project && project.framework) || safeString(project && project.project_type) || 'Workspace') + '</span>'
@@ -644,7 +654,7 @@
         }).join('');
         var importPos = slotToPosition(0);
         elements.board.innerHTML = ''
-            + '<button class="stuff-import-hub" id="boardImportHub" type="button" style="left:' + String(importPos.x) + 'px;top:' + String(importPos.y) + 'px;">'
+            + '<button class="stuff-import-hub" id="boardImportHub" type="button" data-ui-id="my-stuff.action.add-project-card" data-ui-component="runtime-action" data-ui-policy="style-only" data-ui-constraints="preserve-id,preserve-handler,position-locked" style="left:' + String(importPos.x) + 'px;top:' + String(importPos.y) + 'px;">'
             + '  <span class="stuff-app-emoji" style="background:linear-gradient(135deg, #66b5ff 0%, #6ee2b0 100%);">+</span>'
             + '  <span class="stuff-app-title">Add Project</span>'
             + '  <span class="stuff-app-meta">Link a local repo and let Thomas stage it.</span>'
@@ -654,7 +664,9 @@
     }
 
     function actionButtonMarkup(action, label, extraClass, disabled) {
-        return '<button class="stuff-btn ' + escapeHtml(extraClass || 'stuff-btn-ghost') + '" type="button" data-detail-action="' + escapeHtml(action) + '"' + (disabled ? ' disabled' : '') + '>' + escapeHtml(label) + '</button>';
+        var destructive = action === 'remove';
+        var instanceKey = safeString(state.activeProjectId) + '.' + action;
+        return '<button class="stuff-btn ' + escapeHtml(extraClass || 'stuff-btn-ghost') + '" type="button" data-detail-action="' + escapeHtml(action) + '" data-ui-id="my-stuff.project-action.' + escapeHtml(instanceKey) + '" data-ui-instance-key="' + escapeHtml(action) + '" data-ui-component="' + (destructive ? 'privileged-action' : 'runtime-action') + '" data-ui-policy="' + (destructive ? 'protected' : 'control') + '" data-ui-constraints="preserve-handler,preserve-action' + (destructive ? ',preserve-confirmation-flow' : '') + '"' + (disabled ? ' disabled' : '') + '>' + escapeHtml(label) + '</button>';
     }
 
     function getProjectChat(projectId) {
@@ -697,8 +709,9 @@
         }
         return rows.map(function (row) {
             var role = safeString(row && row.role).toLowerCase() === 'user' ? 'user' : 'assistant';
+            var messageKey = safeString(row && row.id) || (role + '-' + safeString(row && row.created_at));
             return ''
-                + '<div class="stuff-chat-row role-' + role + (row && row.pending ? ' is-pending' : '') + '">'
+                + '<div class="stuff-chat-row role-' + role + (row && row.pending ? ' is-pending' : '') + '" data-ui-id="my-stuff.project-chat.message.' + escapeHtml(messageKey) + '" data-ui-instance-key="' + escapeHtml(messageKey) + '" data-ui-component="repeating-content-item" data-ui-policy="style-only" data-ui-constraints="preserve-instance-key,preserve-runtime-content">'
                 + '  <div class="stuff-chat-bubble">' + escapeHtml(safeString(row && row.text) || (row && row.pending ? 'Thomas is thinking...' : '')) + '</div>'
                 + '</div>';
         }).join('');
@@ -708,26 +721,26 @@
         var projectId = safeString(project && project.id);
         var busy = safeString(state.chatBusyProjectId) === projectId;
         return ''
-            + '<section class="stuff-project-chat">'
+            + '<section class="stuff-project-chat" data-ui-id="my-stuff.project-chat.' + escapeHtml(projectId) + '" data-ui-component="workspace-region" data-ui-policy="layout-style" data-ui-constraints="preserve-project-scope,preserve-state">'
             + '  <div class="stuff-chat-head">'
             + '    <div class="stuff-chat-head-copy">'
             + '      <h3>Thomas Project Chat</h3>'
             + '      <p>This lane stays tied to ' + escapeHtml(safeString(project && project.name) || 'this project') + ' so Thomas can work from the repo context instead of the main chat.</p>'
             + '    </div>'
-            + '    <div class="stuff-chat-head-actions">'
+            + '    <div class="stuff-chat-head-actions" data-ui-id="my-stuff.project-chat.' + escapeHtml(projectId) + '.actions" data-ui-component="action-group" data-ui-policy="layout-style" data-ui-constraints="preserve-order,preserve-handlers">'
             +        actionButtonMarkup('troubleshoot', 'Troubleshoot', 'stuff-btn-primary', busy)
             +        actionButtonMarkup('new_thread', 'New Thread', 'stuff-btn-ghost', busy)
             + '    </div>'
             + '  </div>'
-            + '  <div class="stuff-chat-quick-row">'
-            + '    <button class="stuff-chat-chip" type="button" data-chat-prompt="explain">Explain Project</button>'
-            + '    <button class="stuff-chat-chip" type="button" data-chat-prompt="launch_verify">Launch + Verify</button>'
-            + '    <button class="stuff-chat-chip" type="button" data-chat-prompt="troubleshoot">Troubleshoot</button>'
+            + '  <div class="stuff-chat-quick-row" data-ui-id="my-stuff.project-chat.' + escapeHtml(projectId) + '.prompts" data-ui-component="action-group" data-ui-policy="layout-style" data-ui-constraints="preserve-order,preserve-handlers">'
+            + '    <button class="stuff-chat-chip" type="button" data-chat-prompt="explain" data-ui-id="my-stuff.action.chat-prompt.' + escapeHtml(projectId) + '.explain" data-ui-instance-key="explain" data-ui-component="runtime-action" data-ui-policy="control" data-ui-constraints="preserve-handler,preserve-prompt">Explain Project</button>'
+            + '    <button class="stuff-chat-chip" type="button" data-chat-prompt="launch_verify" data-ui-id="my-stuff.action.chat-prompt.' + escapeHtml(projectId) + '.launch-verify" data-ui-instance-key="launch-verify" data-ui-component="runtime-action" data-ui-policy="control" data-ui-constraints="preserve-handler,preserve-prompt">Launch + Verify</button>'
+            + '    <button class="stuff-chat-chip" type="button" data-chat-prompt="troubleshoot" data-ui-id="my-stuff.action.chat-prompt.' + escapeHtml(projectId) + '.troubleshoot" data-ui-instance-key="troubleshoot" data-ui-component="runtime-action" data-ui-policy="control" data-ui-constraints="preserve-handler,preserve-prompt">Troubleshoot</button>'
             + '  </div>'
-            + '  <div class="stuff-chat-log" data-project-chat-log>' + renderProjectChatMessages(projectId) + '</div>'
-            + '  <form class="stuff-chat-form" data-project-chat-form>'
-            + '    <textarea data-project-chat-input placeholder="Talk to Thomas about this project only..."' + (busy ? ' disabled' : '') + '></textarea>'
-            + '    <button class="stuff-btn stuff-btn-primary" type="submit"' + (busy ? ' disabled' : '') + '>' + (busy ? 'Working...' : 'Send') + '</button>'
+            + '  <div class="stuff-chat-log" data-project-chat-log data-ui-id="my-stuff.project-chat.' + escapeHtml(projectId) + '.messages" data-ui-component="repeating-content-list" data-ui-policy="layout-style" data-ui-constraints="preserve-instance-keys,preserve-runtime-content">' + renderProjectChatMessages(projectId) + '</div>'
+            + '  <form class="stuff-chat-form" data-project-chat-form data-ui-id="my-stuff.project-chat.' + escapeHtml(projectId) + '.composer" data-ui-component="composer" data-ui-policy="layout-style" data-ui-constraints="preserve-handler,preserve-submit-flow">'
+            + '    <textarea data-project-chat-input data-ui-id="my-stuff.project-chat.' + escapeHtml(projectId) + '.input" data-ui-component="runtime-input" data-ui-policy="control" data-ui-constraints="preserve-handler,preserve-project-scope" placeholder="Talk to Thomas about this project only..."' + (busy ? ' disabled' : '') + '></textarea>'
+            + '    <button class="stuff-btn stuff-btn-primary" type="submit" data-ui-id="my-stuff.action.send-project-chat.' + escapeHtml(projectId) + '" data-ui-component="runtime-action" data-ui-policy="control" data-ui-constraints="preserve-handler,preserve-submit-flow"' + (busy ? ' disabled' : '') + '>' + (busy ? 'Working...' : 'Send') + '</button>'
             + '  </form>'
             + '</section>';
     }
@@ -774,7 +787,7 @@
         var result = state.detailResult && safeString(state.detailResult.projectId) === safeString(project.id) ? state.detailResult : null;
 
         elements.detailShell.innerHTML = ''
-            + '<div class="stuff-detail-hero">'
+            + '<div class="stuff-detail-hero" data-ui-id="my-stuff.project-detail.hero" data-ui-component="content-group" data-ui-policy="layout-style" data-ui-constraints="preserve-runtime-content">'
             + '  <div class="stuff-detail-identity">'
             + '    <div class="stuff-detail-emoji" style="background:' + escapeHtml(accent) + ';">' + escapeHtml(emoji) + '</div>'
             + '    <div>'
@@ -786,10 +799,10 @@
             + '    </div>'
             + '  </div>'
             + '</div>'
-            + '<div class="stuff-detail-actions">' + actionsMarkup.join('') + '</div>'
+            + '<div class="stuff-detail-actions" data-ui-id="my-stuff.project-detail.actions" data-ui-component="action-group" data-ui-policy="layout-style" data-ui-constraints="preserve-order,preserve-handlers">' + actionsMarkup.join('') + '</div>'
             + (result ? '<div class="stuff-action-result is-' + escapeHtml(statusToneClass(result.tone)) + '"><strong>' + escapeHtml(safeString(result.title)) + '</strong><br>' + escapeHtml(safeString(result.text)) + '</div>' : '')
             + '<div class="stuff-detail-grid">'
-            + '  <section class="stuff-panel">'
+            + '  <section class="stuff-panel" data-ui-id="my-stuff.project-detail.read" data-ui-component="content-panel" data-ui-policy="layout-style" data-ui-constraints="preserve-runtime-content">'
             + '    <h3>Thomas Read</h3>'
             + '    <p>' + escapeHtml(safeString(project && project.summary)) + '</p>'
             + '    <ul>'
@@ -799,11 +812,11 @@
             + '      <li><strong>Launch count:</strong> ' + escapeHtml(String(project && project.launch_count || 0)) + '</li>'
             + '    </ul>'
             + '  </section>'
-            + '  <section class="stuff-panel">'
+            + '  <section class="stuff-panel" data-ui-id="my-stuff.project-detail.launch" data-ui-component="content-panel" data-ui-policy="layout-style" data-ui-constraints="preserve-runtime-content">'
             + '    <h3>Launch + Verify</h3>'
             + (commands ? '<ul>' + commands + '</ul>' : '<p>Thomas has not found a trustworthy launch or test command yet.</p>')
             + '  </section>'
-            + '  <section class="stuff-panel">'
+            + '  <section class="stuff-panel" data-ui-id="my-stuff.project-detail.findings" data-ui-component="repeating-content-group" data-ui-policy="layout-style" data-ui-constraints="preserve-runtime-content,items-runtime-owned">'
             + '    <h3>Findings</h3>'
             + '    <div class="stuff-finding-list">' + findings.map(function (finding) {
                 var findingTone = safeString(finding && finding.level).toLowerCase();
@@ -811,7 +824,7 @@
                 return '<div class="stuff-finding is-' + findingClass + '"><strong>' + escapeHtml(safeString(finding && finding.title) || 'Finding') + '</strong><span>' + escapeHtml(safeString(finding && finding.detail)) + '</span></div>';
             }).join('') + '</div>'
             + '  </section>'
-            + '  <section class="stuff-panel">'
+            + '  <section class="stuff-panel" data-ui-id="my-stuff.project-detail.top-level" data-ui-component="content-panel" data-ui-policy="layout-style" data-ui-constraints="preserve-runtime-content">'
             + '    <h3>Top Level</h3>'
             + (topLevel ? '<ul>' + topLevel + '</ul>' : '<p>Thomas has not cached a top-level file read for this repo yet.</p>')
             + '  </section>'
@@ -1364,5 +1377,4 @@
     renderBoard();
     openBoardView();
     void refresh();
-    void loadForgeBuilds();
 })();

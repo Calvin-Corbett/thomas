@@ -13,6 +13,8 @@ Versioning: Semantic Versioning.
 
 - Added one shared Thomas UI Edit Mode contract and runtime for modernized workspaces: stable semantic component identities, live move/eight-way resize, keyboard editing, snapping/guides, lock, undo/redo/reset/export, protected-control policies, and isolated desktop/tablet/mobile persistence. Normal Thomas Chat remains visually unchanged and editor chrome appears only while Edit Mode is invoked.
 
+- Added focused workspace contracts for Canvas, Channels, Marketplace, My Stuff, Token Economy, and Virtual Office so their live controls, backend wiring, and semantic edit identities are covered independently of the shared shell.
+
 - Generative per-job dashboards (Work mode, pillar 3): a new `dashboard/design` endpoint has an LLM read one job's real context (onboarding, workflows, automations, connectors) and design a bespoke dashboard — headline, metrics, guidance sections, inboxes, and ACTION BUTTONS bound only to the job's own workflows (`work_dashboard_runtime.py`, dashboard schema extended with headline/actions/inboxes). Buttons run through the existing Mission delegation path (`dashboard/actions/{id}/run`); the Work tab renders the design with "Design my dashboard"/"Redesign with AI" controls. Verified live: the SOTI MobiControl job received a compliance-sweep dashboard whose button dispatched a real Mission run with honest failure reporting.
 
 ### Fixed

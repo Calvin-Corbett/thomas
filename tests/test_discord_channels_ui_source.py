@@ -51,5 +51,10 @@ def test_channels_runtime_wires_discord_controls_and_history() -> None:
     assert 'data-channels-voice-config-field="voice_stt_hint_phrases"' in js
     assert 'data-channels-voice-config-field="voice_stt_prompt"' in js
     assert "module-channels-history-frame" in js
+    assert 'data-ui-workspace="channels"' in js
+    assert 'data-ui-id="channels.shell"' in js
+    assert 'data-ui-component="repeating-card-group"' in js
+    assert 'class="thomas-eyes-mark module-channels-eyes-mark"' in js
+    assert "function moduleChannelsProtectedAttrs" in js
     assert ">i</span>" in js
     assert "ph-eye" not in js

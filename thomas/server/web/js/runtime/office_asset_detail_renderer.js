@@ -2,6 +2,9 @@
 
 function officeDraftAppendAssetPart(parent, styles = {}, text = '') {
     const part = document.createElement('div');
+    part.className = 'office-asset-detail';
+    part.dataset.officeAssetDetail = '1';
+    part.setAttribute('aria-hidden', 'true');
     part.style.boxSizing = 'border-box';
     Object.entries(styles).forEach(([key, value]) => {
         part.style[key] = value;
@@ -17,8 +20,8 @@ function officeDraftAddAssetSurfaceDetail(root, scaled, baseWidthRaw, baseHeight
     if (!(root instanceof HTMLElement) || typeof scaled !== 'function') return;
     const baseWidth = Math.max(48, Number(baseWidthRaw) || 0);
     const baseHeight = Math.max(48, Number(baseHeightRaw) || 0);
-    const accent = color.accent || color.arm || 'rgba(214, 236, 255, 0.62)';
-    const line = color.line || color.seam || 'rgba(9, 18, 31, 0.34)';
+    const accent = color.accent || color.arm || 'var(--c-accent-line, rgba(139, 140, 255, 0.45))';
+    const line = color.line || color.seam || 'var(--c-border-2, rgba(255, 255, 255, 0.17))';
     officeDraftAppendAssetPart(root, {
         position: 'absolute',
         left: scaled(baseWidth * 0.12),
@@ -26,7 +29,7 @@ function officeDraftAddAssetSurfaceDetail(root, scaled, baseWidthRaw, baseHeight
         width: scaled(Math.max(26, baseWidth * 0.26)),
         height: scaled(Math.max(4, baseHeight * 0.045)),
         borderRadius: '999px',
-        background: 'rgba(255,255,255,0.18)',
+        background: 'color-mix(in srgb, var(--c-text) 18%, transparent)',
         pointerEvents: 'none',
     });
     officeDraftAppendAssetPart(root, {
@@ -61,9 +64,9 @@ function officeDraftAddAssetPixelDetail(root, scaled, baseWidthRaw, baseHeightRa
     const baseHeight = Math.max(48, Number(baseHeightRaw) || 0);
     const type = safeString(typeRaw);
     const shape = safeString(shapeRaw);
-    const accent = color.accent || color.arm || 'rgba(214, 236, 255, 0.72)';
-    const line = color.line || color.seam || 'rgba(7, 13, 24, 0.36)';
-    const surface = color.surface || color.seat || color.body || 'rgba(120, 147, 184, 0.92)';
+    const accent = color.accent || color.arm || 'var(--c-accent-line, rgba(139, 140, 255, 0.45))';
+    const line = color.line || color.seam || 'var(--c-border-2, rgba(255, 255, 255, 0.17))';
+    const surface = color.surface || color.seat || color.body || 'var(--c-dim, rgba(238, 240, 251, 0.66))';
     const body = color.body || color.back || surface;
     const part = (styles = {}) => officeDraftAppendAssetPart(root, {
         position: 'absolute',
@@ -86,7 +89,7 @@ function officeDraftAddAssetPixelDetail(root, scaled, baseWidthRaw, baseHeightRa
         width: scaled(Math.max(4, baseWidth * 0.018)),
         height: scaled(Math.max(18, baseHeight * 0.42)),
         borderRadius: '999px',
-        background: 'rgba(255,255,255,0.16)',
+        background: 'color-mix(in srgb, var(--c-text) 16%, transparent)',
         opacity: '0.82',
     });
     part({
@@ -95,7 +98,7 @@ function officeDraftAddAssetPixelDetail(root, scaled, baseWidthRaw, baseHeightRa
         width: scaled(Math.max(32, baseWidth * 0.34)),
         height: scaled(Math.max(4, baseHeight * 0.035)),
         borderRadius: '999px',
-        background: 'rgba(255,255,255,0.22)',
+        background: 'color-mix(in srgb, var(--c-text) 22%, transparent)',
         opacity: '0.72',
     });
 
