@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -51,6 +52,13 @@ from thomas.server.routes.local_projects_helpers_aiohttp import (
 
 RequireAccessFn = Callable[[web.Request], None]
 ReadJsonFn = Callable[[web.Request], Awaitable[Any]]
+
+# Single-flight guard for the native folder picker. The OS folder dialog is
+# modal and blocking; it must run off the event loop (see the handler) and only
+# one may be open at a time — a second overlapping request would stack a hidden
+# dialog on the desktop. State lives at module scope because there is exactly
+# one server process and all access happens on the single event-loop thread.
+_PICK_FOLDER_STATE = {"busy": False}
 
 
 def _run_command(command: list[str], cwd: Path) -> dict[str, Any]:
@@ -302,7 +310,19 @@ def register_local_project_routes(
     async def api_local_projects_pick_folder(request: web.Request) -> web.Response:
         require_api_access(request)
         require_loopback(request)
-        path_value = _pick_folder_via_dialog()
+        # The native dialog blocks its thread until the user picks or cancels.
+        # Running it inline froze the whole aiohttp server (chat, workers, and
+        # /api/health all hung). Run it in a worker thread so the event loop
+        # keeps serving, and refuse overlapping requests so repeated clicks
+        # cannot stack multiple hidden dialogs.
+        if _PICK_FOLDER_STATE["busy"]:
+            raise web.HTTPConflict(text="a folder picker is already open")
+        _PICK_FOLDER_STATE["busy"] = True
+        try:
+            loop = asyncio.get_running_loop()
+            path_value = await loop.run_in_executor(None, _pick_folder_via_dialog)
+        finally:
+            _PICK_FOLDER_STATE["busy"] = False
         if not path_value:
             return web.json_response({"ok": True, "cancelled": True, "path": ""})
         return web.json_response({"ok": True, "cancelled": False, "path": str(_resolve_project_root(path_value))})

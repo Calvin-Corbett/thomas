@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import tempfile
+import threading
+import time
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -187,6 +190,51 @@ class TestServerLocalProjectsRoutes(AioHTTPTestCase):
             self.assertTrue(body.get("ok"))
             self.assertFalse(body.get("cancelled"))
             self.assertEqual(str(body.get("path") or ""), str(project_root.resolve()))
+
+    async def test_pick_folder_does_not_block_event_loop(self):
+        # Regression: the native folder dialog blocks its thread. It must run in
+        # an executor so the event loop keeps serving other requests. If it runs
+        # inline, the concurrent GET below cannot complete until the sleep ends.
+        project_root = self._write_project("FreedomNonBlock", {"README.md": "# nb"})
+
+        def _slow_pick() -> str:
+            time.sleep(0.6)
+            return str(project_root)
+
+        with patch("thomas.server.routes.local_projects_aiohttp._pick_folder_via_dialog", side_effect=_slow_pick):
+            pick_task = asyncio.ensure_future(self.client.post("/api/local/projects/pick-folder"))
+            # Let the picker handler enter its executor call before we probe.
+            await asyncio.sleep(0.05)
+            probe_start = time.monotonic()
+            probe = await self.client.get("/api/local/projects")
+            probe_elapsed = time.monotonic() - probe_start
+            self.assertEqual(probe.status, 200)
+            # Served concurrently: well under the 0.6s the dialog thread sleeps.
+            self.assertLess(probe_elapsed, 0.4)
+            pick_resp = await pick_task
+            self.assertEqual(pick_resp.status, 200)
+            self.assertEqual(str((await pick_resp.json()).get("path") or ""), str(project_root.resolve()))
+
+    async def test_pick_folder_single_flight_rejects_overlap(self):
+        # Regression: only one native dialog may be open. A second overlapping
+        # request must be refused (409) instead of stacking a hidden dialog.
+        project_root = self._write_project("FreedomSingleFlight", {"README.md": "# sf"})
+        release = threading.Event()
+
+        def _blocking_pick() -> str:
+            release.wait(timeout=5)
+            return str(project_root)
+
+        with patch("thomas.server.routes.local_projects_aiohttp._pick_folder_via_dialog", side_effect=_blocking_pick):
+            first = asyncio.ensure_future(self.client.post("/api/local/projects/pick-folder"))
+            try:
+                await asyncio.sleep(0.1)  # let the first request claim the single-flight slot
+                second = await self.client.post("/api/local/projects/pick-folder")
+                self.assertEqual(second.status, 409)
+            finally:
+                release.set()
+            first_resp = await first
+            self.assertEqual(first_resp.status, 200)
 
     async def test_delete_project_removes_registry_entry(self):
         project_root = self._write_project(
