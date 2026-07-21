@@ -4,6 +4,7 @@ import asyncio
 import dataclasses
 import logging
 import platform as _platform
+import re
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -291,6 +292,7 @@ async def start_background_delegation(
                 memory_enabled=memory_enabled,
                 file_access=file_access,
                 runtime_policy=runtime_policy,
+                recent_messages=recent_messages,
             )
         except (RuntimeError, OSError, ValueError, TypeError) as exc:
             log.warning("Canvas worker failed, falling back to agent worker: %s", exc, exc_info=True)
@@ -389,6 +391,35 @@ async def _start_task_manager_delegation(
     return record
 
 
+_CANVAS_FOLLOWUP_RE = re.compile(
+    r"\b(re-?run|re-?do|re-?generate|re-?make|re-?create|regenerate|again|"
+    r"same\s+(?:chart|graph|plot|data|thing|one)|"
+    r"add\s+(?:a\s+|another\s+)?(?:row|column|bar|series|point|month|entry|value|slice|wedge)|"
+    r"update\s+(?:the\s+|that\s+|this\s+)?(?:chart|graph|plot)|"
+    r"(?:that|this|the)\s+(?:chart|graph|plot))\b",
+    re.I,
+)
+
+
+def _canvas_worker_prompt(prompt: str, recent_messages: list[dict[str, Any]] | None) -> str:
+    """Prepend recent-conversation handoff to a referential canvas follow-up.
+
+    A follow-up like "rerun the chart" / "add a row" carries no data of its own;
+    without the prior turns the worker gets an empty workspace and asks the user
+    to re-paste the numbers. Reuses the curation (_handoff_block) proven on the
+    agent-worker path. Charts have no "wrong build" bleed risk (they simply
+    re-plot data), so the referential gate is broader than the conservative
+    agent-worker one — it also catches chart-specific edits like "rerun the
+    chart" and "add a row".
+    """
+    text = str(prompt or "")
+    referential = prompt_needs_handoff(prompt) or bool(_CANVAS_FOLLOWUP_RE.search(text))
+    if not referential:
+        return prompt
+    handoff = _handoff_block(recent_messages)
+    return f"{prompt}\n\n{handoff}" if handoff else prompt
+
+
 def _record_canvas_issue(execution_id: str, prompt: str, blocker: str, repo_root: Any) -> None:
     """Record a canvas failure to the issue ledger so the self-review sees it.
 
@@ -423,6 +454,7 @@ async def _start_canvas_worker_delegation(
     memory_enabled: bool = True,
     file_access: int | None = None,
     runtime_policy: dict[str, Any] | None = None,
+    recent_messages: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Stream a reviewed HTML document to Canvas, then persist its deliverable."""
     from thomas.server.chat_runtime_policy import tool_policy_from_payload
@@ -434,6 +466,11 @@ async def _start_canvas_worker_delegation(
     if effective_file_access == READ_ONLY:
         raise PermissionError("read_only file access denied Canvas artifact delivery")
     root = _resolve_repo_root(repo_root)
+    # A referential follow-up ("rerun the chart", "add a row") lands here as a
+    # fresh execution with an empty workspace. Thread the recent conversation
+    # into the WORKER prompt (not the title/execution) so it can re-extract the
+    # prior data instead of asking the user to paste the numbers again.
+    worker_prompt = _canvas_worker_prompt(prompt, recent_messages)
     execution = task_bot_runtime.create_execution(
         session_id=session_id,
         summary=derive_task_title(prompt),
@@ -483,7 +520,7 @@ async def _start_canvas_worker_delegation(
         try:
             html = await run_canvas_worker(
                 execution_id=execution_id,
-                prompt=prompt,
+                prompt=worker_prompt,
                 root=root,
                 profile=profile,
                 model_id=model_id,
@@ -537,7 +574,7 @@ async def _start_canvas_worker_delegation(
         try:
             rec, summary = complete_canvas_delivery(
                 execution_id=execution_id,
-                prompt=prompt,
+                prompt=worker_prompt,
                 html=html,
                 actor=bot.name,
                 repo_root=root,
