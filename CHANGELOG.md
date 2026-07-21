@@ -13,6 +13,14 @@ Versioning: Semantic Versioning.
 
 ### Added (Frontier capability program — closing the 2026-07-21 audit gaps)
 
+- Cross-vendor agent roster (CAP-034): register external agent runtimes alongside internal ones and compare them on a shared scorecard — the same task set scored on identical metrics (success/latency/tokens/cost/quality) with a deterministic ranking.
+- Spec-as-source-of-truth (CAP-122): promote prompts into a versioned app spec, regenerate deterministically (same spec → identical artifact), and get a behavioral diff that names what capability changed between regenerations, not just a text diff.
+- Agent outcome metrics (CAP-129): per-agent outcome tracking (accepted/rejected, time-to-complete, edits-after) plus a counterfactual productivity estimate versus a no-agent baseline, as dashboard-ready data.
+- Program management (CAP-144): build a two-week program plan (phases, dependencies, milestones) with an automated day-7 midpoint risk/phase report and phase-transition reports.
+- Multi-root workspaces (CAP-016): name a set of repos as one workspace with cross-repo search, coordinated all-or-nothing cross-repo edits, and a coordinated PR plan that links one change across N repos.
+- Agent interop protocol (CAP-033): native ACP — advertise/discover agents by capability, invoke with structured request/result, cancel an in-flight invocation (the callee observes it), and exchange typed validated envelopes.
+- Org shared knowledge (CAP-110): org-scoped knowledge shared across different users, with a reviewed promotion gate (personal→org stays pending until an authorized reviewer approves; rejected proposals stay personal).
+- Automation templates & reports (CAP-080): versioned automation templates with recoverable edit history, and exception reports from failed runs routed to the automation's configured channel and nowhere else.
 - Audit log with causal chains (CAP-126): every auditable action records complete actor attribution (human or agent, plus the human it acts on behalf of), and human→agent→agent causal chains reconstruct in order — with a stable export that round-trips.
 - Metering, budgets & downshift (CAP-128): per-agent spend attribution with linear end-of-period projection, 80%/100% budget alerts on actual or projected spend, and policy-driven downshift that recommends a cheaper tier for an over-budget agent.
 - Change security scanning (CAP-083): every generated change is scanned (hardcoded secrets, eval/exec, shell=True, unsafe deserialization, SQL string-building) and confirmed findings become regeneration directives (file:line + fix) fed back into generation — the change is blocked until addressed.
