@@ -26,6 +26,7 @@ from thomas.core.config import ModelConfig
 from thomas.core.llm_budget import LLMBudgetMixin
 from thomas.core.llm_shared import LLMError, StreamEvent, TokenUsage, callable_accepts_keyword
 from thomas.core.llm_streaming import stream_anthropic, stream_openai, stream_openai_codex
+from thomas.core.structured_output import StructuredResult, request_structured
 
 log = logging.getLogger(__name__)
 
@@ -802,3 +803,31 @@ class LLMClient(LLMBudgetMixin):
             "tool_calls": tool_calls,
             "usage": usage,
         }
+
+    async def chat_structured(
+        self,
+        messages: list[dict[str, Any]],
+        schema: dict[str, Any],
+        max_repair_attempts: int = 2,
+    ) -> StructuredResult:
+        """Non-streaming chat returning JSON validated against a caller schema.
+
+        Delegates to thomas.core.structured_output.request_structured, using
+        this client's chat() as the LLM adapter. Validation failures are fed
+        back to the model and retried up to ``max_repair_attempts`` times.
+
+        Raises SchemaValidationError for a malformed caller schema and
+        StructuredOutputError (with a per-attempt trace) when the model cannot
+        produce conforming output within the bounded repair loop.
+        """
+
+        async def _adapter(msgs: list[dict[str, Any]]) -> str:
+            result = await self.chat(msgs)
+            return str(result.get("text") or "")
+
+        return await request_structured(
+            _adapter,
+            messages,
+            schema,
+            max_repair_attempts=max_repair_attempts,
+        )
