@@ -82,6 +82,7 @@ from thomas.server.chat_delegation_worker_config import (  # noqa: F401
 )
 from thomas.server.chat_delegation_workspace import ensure_task_workspace as _ensure_task_workspace
 from thomas.server.chat_delegation_workspace import seed_workspace_from_previous as _seed_workspace_from_previous
+from thomas.server.issue_ledger import record_issue
 from thomas.server.model_runtime_receipt import validate_model_runtime_receipt
 from thomas.server.worker_runtime import _explicit_browser_preflight, run_agent_worker_events
 
@@ -388,6 +389,26 @@ async def _start_task_manager_delegation(
     return record
 
 
+def _record_canvas_issue(execution_id: str, prompt: str, blocker: str, repo_root: Any) -> None:
+    """Record a canvas failure to the issue ledger so the self-review sees it.
+
+    Canvas failures previously called fail_execution without ever touching the
+    ledger, so /api/issues and /api/self-review were blind to them — a chart that
+    renders then dies in review left no ledger trace. record_issue is fail-silent.
+    """
+    record_issue(
+        surface="chat-worker",
+        kind="canvas_failed",
+        message=f"canvas failed: {blocker}"[:300],
+        context={
+            "execution_id": str(execution_id),
+            "task": str(prompt or "")[:160],
+            "blocker": blocker,
+        },
+        repo_root=repo_root,
+    )
+
+
 async def _start_canvas_worker_delegation(
     *,
     session_id: str,
@@ -475,6 +496,7 @@ async def _start_canvas_worker_delegation(
             log.exception("Canvas worker failed for %s (%s)", execution_id, type(exc).__name__)
             canvas_finish(execution_id, "failed")
             safe_error = "Canvas generation failed before a verified result was produced."
+            _record_canvas_issue(execution_id, prompt, "canvas_failed", root)
             task_bot_runtime.fail_execution(
                 execution_id,
                 actor=bot.name,
@@ -491,6 +513,7 @@ async def _start_canvas_worker_delegation(
             requested_model_id=str(model_id or ""),
         )
         if validated_runtime is None:
+            _record_canvas_issue(execution_id, prompt, "model_runtime_missing", root)
             task_bot_runtime.fail_execution(
                 execution_id,
                 actor=bot.name,
@@ -524,6 +547,7 @@ async def _start_canvas_worker_delegation(
             )
         except (OSError, RuntimeError, ValueError, TypeError) as exc:
             canvas_finish(execution_id, "failed")
+            _record_canvas_issue(execution_id, prompt, "canvas_review_failed", root)
             task_bot_runtime.fail_execution(
                 execution_id,
                 actor=bot.name,
