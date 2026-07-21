@@ -38,11 +38,14 @@ Thomas can use when talking to the user.
 - `sandbox_part01.py` (892 lines) — Sandboxed code execution. Real but over limit.
 - `dep_scanner_part01.py` (902 lines) — Dependency scanning. Real but over limit.
 - `windows_auth.py` (292 lines) — OS-level auth gate. Real, production-used.
+- `mcp_client.py` / `mcp_tools.py` / `mcp_bridge.py` — Executable MCP stdio
+  client (JSON-RPC 2.0, newline-delimited), adapter registering discovered
+  tools as `mcp.<server>.<tool>`, and startup bridge consumed by the REPL.
+  Real, tested (tests/test_mcp_client.py, hermetic fake-server fixture).
 
 ## What Is Placeholder
 
 - `git_worktree.py` — **PLACEHOLDER.** Git worktree operations.
-- `mcp_bridge.py` — **PLACEHOLDER.** MCP (Model Context Protocol) bridge.
 - `notebook.py` — **PLACEHOLDER.** Jupyter notebook tool.
 - `plugin_bridge.py` — **PLACEHOLDER.** Plugin bridge tool.
 
@@ -58,9 +61,8 @@ new tools should eventually be installable through the marketplace too.
 
 ## Known Gaps
 
-- 4 placeholder files (git_worktree, mcp_bridge, notebook, plugin_bridge)
+- 3 placeholder files (git_worktree, notebook, plugin_bridge)
 - 4 files over 800-line limit (git_conflicts, engineering, sandbox, dep_scanner)
-- No MCP bridge (important for interop with Claude/other agents)
 - No notebook tool (important for data work)
 - No STATUS.md existed before this one (added 2026-03-18)
 

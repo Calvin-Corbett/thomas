@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -52,6 +53,7 @@ from thomas.cli.parity_support import (
     utc_iso as _utc_iso,
 )
 from thomas.core.config import AppConfig
+from thomas.tools.mcp_client import McpError, client_from_server_row
 
 
 @click.group(name="mcp", invoke_without_command=True)
@@ -210,6 +212,104 @@ def mcp_remove(ctx: click.Context, name: str, as_json: bool) -> None:
         click.echo(f"Removed MCP server: {name}")
     else:
         click.echo(f"MCP server not found: {name}")
+        raise SystemExit(1)
+
+
+def _stdio_server_row(config: AppConfig, name: str) -> dict[str, Any]:
+    rows = _load_mcp_registry(config)
+    row = _find_mcp_server(rows, name)
+    if row is None:
+        raise click.ClickException(f"MCP server not found: {name}")
+    transport = str(row.get("transport") or "stdio").strip().lower()
+    if transport != "stdio":
+        raise click.ClickException(f"MCP server {name!r} uses transport {transport!r}; live sessions require stdio.")
+    return row
+
+
+@mcp.command("tools")
+@click.argument("name")
+@click.option("--timeout", "timeout_s", type=float, default=15.0, show_default=True, help="Per-request timeout.")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def mcp_tools_cmd(ctx: click.Context, name: str, timeout_s: float, as_json: bool) -> None:
+    """Connect to a registered stdio MCP server and list its tools (live discovery)."""
+    config: AppConfig = ctx.obj["config"]
+    row = _stdio_server_row(config, name)
+
+    async def _run() -> dict[str, Any]:
+        async with client_from_server_row(row, request_timeout=timeout_s) as client:
+            tool_defs = await client.list_tools()
+            return {
+                "server": client.name,
+                "server_info": client.server_info,
+                "protocol_version": client.protocol_version,
+                "capabilities": client.capabilities,
+                "count": len(tool_defs),
+                "tools": [
+                    {"name": t.name, "description": t.description, "input_schema": t.input_schema} for t in tool_defs
+                ],
+            }
+
+    try:
+        payload = asyncio.run(_run())
+    except McpError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(f"MCP server {payload['server']}: {payload['count']} tools (protocol {payload['protocol_version']})")
+    for tool in payload["tools"]:
+        click.echo(f"- {tool['name']}: {tool['description']}")
+
+
+@mcp.command("call")
+@click.argument("name")
+@click.argument("tool")
+@click.option("--args", "args_json", default="{}", show_default=True, help="JSON object of tool arguments.")
+@click.option("--timeout", "timeout_s", type=float, default=30.0, show_default=True, help="Per-request timeout.")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def mcp_call_cmd(ctx: click.Context, name: str, tool: str, args_json: str, timeout_s: float, as_json: bool) -> None:
+    """Call a tool on a registered stdio MCP server (discovery + call in one session)."""
+    config: AppConfig = ctx.obj["config"]
+    row = _stdio_server_row(config, name)
+    try:
+        arguments = json.loads(args_json or "{}")
+    except json.JSONDecodeError as exc:
+        raise click.ClickException(f"--args must be a JSON object: {exc}") from exc
+    if not isinstance(arguments, dict):
+        raise click.ClickException("--args must be a JSON object.")
+
+    async def _run() -> dict[str, Any]:
+        async with client_from_server_row(row, request_timeout=timeout_s) as client:
+            discovered = [t.name for t in await client.list_tools()]
+            if tool not in discovered:
+                raise click.ClickException(
+                    f"Tool {tool!r} not found on {client.name!r}. Available: {', '.join(discovered)}"
+                )
+            result = await client.call_tool(tool, arguments)
+            return {
+                "server": client.name,
+                "tool": tool,
+                "is_error": result.is_error,
+                "content": result.content,
+                "structured": result.structured,
+                "text": result.text,
+                "discovered_tools": discovered,
+            }
+
+    try:
+        payload = asyncio.run(_run())
+    except McpError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        if payload["is_error"]:
+            raise SystemExit(1)
+        return
+    click.echo(f"{payload['server']}.{payload['tool']} -> {'ERROR' if payload['is_error'] else 'ok'}")
+    click.echo(payload["text"] or json.dumps(payload["content"], ensure_ascii=False))
+    if payload["is_error"]:
         raise SystemExit(1)
 
 
