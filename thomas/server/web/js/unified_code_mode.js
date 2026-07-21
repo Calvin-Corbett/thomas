@@ -292,6 +292,40 @@
     return 'The Code task stopped before it finished.';
   }
 
+  function reportRow(ok, heading, label) {
+    return `<div class="tc-code-technical${ok ? '' : ' is-error'}"><i class="ph ph-${ok ? 'check-circle' : 'warning'}"></i><div><strong>${esc(heading)}</strong><code>${esc(label)}</code></div></div>`;
+  }
+
+  function reportSection(title, rows) {
+    if (!rows.length) return '';
+    return `<details class="tc-code-progress-history"><summary>${esc(title)} (${rows.length})</summary><div>${rows.join('')}</div></details>`;
+  }
+
+  // CAP-141: structured post-run report (attempts / validations / open risks /
+  // attention pointers / rubric mapping), rendered as collapsible sections with
+  // the existing technical-log styling. Defensive: an absent or malformed
+  // report renders nothing — older turns have no report field.
+  function runReportHtml(report) {
+    if (!report || typeof report !== 'object') return '';
+    const list = value => Array.isArray(value) ? value : [];
+    const attempts = list(report.attempts).map(item => reportRow(!/fail/i.test(String(item.outcome || '')), `Pass ${item.pass || '?'} · ${String(item.outcome || 'unknown')}`, `${String(item.goal || '')} → ${String(item.exit_state || '')}`));
+    const validations = list(report.validations).map(item => reportRow(item.passed === true, item.passed === true ? 'Check passed' : 'Check failed', `${String(item.command || item.kind || 'check')} — ${String(item.evidence || '')}`));
+    const risks = list(report.open_risks).map(item => reportRow(false, String(item.risk || 'open risk'), String(item.detail || '')));
+    const pointers = list(report.attention_pointers).map(item => reportRow(true, `#${item.rank || '?'} ${String(item.target || '')}`, String(item.why || '')));
+    const rubric = list(report.rubric_mapping).map(item => reportRow(item.status === 'met', `${String(item.status || 'unverified')} · ${String(item.criterion || '')}`, String(item.evidence || '')));
+    const sections = [
+      reportSection('Attempts', attempts),
+      reportSection('Validations', validations),
+      reportSection('Open risks', risks),
+      reportSection('Where to look first', pointers),
+      reportSection('Rubric mapping', rubric),
+    ].join('');
+    if (!sections) return '';
+    const riskCount = risks.length;
+    const summary = `Run report · ${attempts.length} pass${attempts.length === 1 ? '' : 'es'} · ${validations.length} check${validations.length === 1 ? '' : 's'} · ${riskCount} open risk${riskCount === 1 ? '' : 's'}`;
+    return `<details class="tc-code-saved-activity tc-code-run-report${riskCount ? ' has-issues' : ''}" data-saved="true"><summary><span class="tc-code-activity-summary"><i class="ph ph-${riskCount ? 'warning' : 'clipboard-text'}"></i>${esc(summary)}</span><span>Show details</span></summary><div class="tc-code-technical-log">${sections}</div></details>`;
+  }
+
   function artifactHtml(artifact) {
     const file = String(artifact.file || '');
     const url = `/api/evolve/agent/artifact/${encodeURIComponent(state.activeId)}/${file.split('/').map(encodeURIComponent).join('/')}`;
@@ -318,7 +352,7 @@
     const narrative = narrativeActivityHtml(activityEvents, true);
     const technicalEvents = activityEvents.filter(isTechnicalEvent);
     const resultCount = (turn.artifacts || []).filter(artifact => !isInternalResultPath(artifact.file)).length;
-    return `<article class="tc-code-turn is-agent"><div class="tc-code-message-head"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>Thomas</strong><small>${esc(turn.model || 'Code')}</small><button class="tc-code-copy" data-code-copy-reply type="button" aria-label="Copy Thomas reply"><i class="ph ph-copy"></i></button></div><div class="tc-code-turn-body">${narrative}${technicalActivityHtml(technicalEvents, true)}<div class="tc-code-reply${turn.ok ? '' : ' is-error'}">${esc(reply)}</div>${changedCount || resultCount ? `<div class="tc-code-result-note">${changedCount ? `<span><i class="ph ph-files"></i>${changedCount} file${changedCount === 1 ? '' : 's'} changed</span>` : ''}${resultCount ? `<span><i class="ph ph-browser"></i>${resultCount} result${resultCount === 1 ? '' : 's'} ready</span>` : ''}</div>` : ''}</div></article>`;
+    return `<article class="tc-code-turn is-agent"><div class="tc-code-message-head"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>Thomas</strong><small>${esc(turn.model || 'Code')}</small><button class="tc-code-copy" data-code-copy-reply type="button" aria-label="Copy Thomas reply"><i class="ph ph-copy"></i></button></div><div class="tc-code-turn-body">${narrative}${technicalActivityHtml(technicalEvents, true)}<div class="tc-code-reply${turn.ok ? '' : ' is-error'}">${esc(reply)}</div>${runReportHtml(turn.report)}${changedCount || resultCount ? `<div class="tc-code-result-note">${changedCount ? `<span><i class="ph ph-files"></i>${changedCount} file${changedCount === 1 ? '' : 's'} changed</span>` : ''}${resultCount ? `<span><i class="ph ph-browser"></i>${resultCount} result${resultCount === 1 ? '' : 's'} ready</span>` : ''}</div>` : ''}</div></article>`;
   }
 
   function transcriptScroller(root) {

@@ -17,7 +17,7 @@ from typing import Any
 
 from aiohttp import web
 
-from thomas.forge.anvil import forge_code_deliverables, forge_code_git, forge_code_store
+from thomas.forge.anvil import forge_code_deliverables, forge_code_git, forge_code_store, run_report
 from thomas.server.app_keys import APP_ENGINE_MANAGER
 
 from .evolve_agent_activity import (
@@ -666,6 +666,20 @@ async def _drain_and_record(
         else:
             reason = f"{len(changed)} file(s) changed"
             outcome = "completed"
+        # CAP-141: structured post-run report, built from the run's REAL recorded
+        # data (forge events + git truth). The goal is the conversation's latest
+        # user message — the completion criteria this run was given.
+        prior_turns = (forge_code_store.load_conversation(root, cid) or {}).get("turns") or []
+        goal_text = next((str(t.get("text") or "") for t in reversed(prior_turns) if t.get("role") == "user"), "")
+        report = run_report.build_run_report(
+            goal=goal_text,
+            transcript=text,
+            changed_files=changed,
+            returncode=rc,
+            ok=ok,
+            outcome=outcome,
+            reason=reason,
+        )
         persisted = forge_code_store.append_agent_turn(
             root,
             cid,
@@ -677,6 +691,7 @@ async def _drain_and_record(
             noop=noop,
             reason=reason,
             run_id=run_id,
+            report=report,
         )
         if persisted is None:
             raise RuntimeError("agent turn store returned no persisted conversation")
@@ -702,6 +717,7 @@ async def _drain_and_record(
             "ok": ok,
             "noop": noop,
             "outcome": outcome,
+            "report": report,
         }
     except (AttributeError, KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
         log.warning("evolve agent: recording run outcome failed", exc_info=True)

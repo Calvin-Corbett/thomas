@@ -342,29 +342,33 @@ def append_agent_turn(
     noop: bool,
     reason: str,
     run_id: str = "",
+    report: dict | None = None,
 ) -> dict | None:
     """Append an agent turn carrying the model used and the run outcome."""
     conversation = load_conversation(root, cid)
     if conversation is None:
         return None
-    conversation.setdefault("turns", []).append(
-        {
-            "role": "agent",
-            "model": model,
-            "ts": _now_iso(),
-            "transcript": transcript,
-            "changed_files": list(changed_files or []),
-            # Renderable/downloadable results this run produced,
-            # recorded so a resumed conversation re-renders the artifact cards
-            # exactly as the live run showed them. Empty for a code-only run.
-            "artifacts": detect_artifacts(changed_files),
-            "returncode": returncode,
-            "ok": ok,
-            "noop": noop,
-            "reason": reason,
-            "run_id": str(run_id or ""),
-        }
-    )
+    turn = {
+        "role": "agent",
+        "model": model,
+        "ts": _now_iso(),
+        "transcript": transcript,
+        "changed_files": list(changed_files or []),
+        # Renderable/downloadable results this run produced,
+        # recorded so a resumed conversation re-renders the artifact cards
+        # exactly as the live run showed them. Empty for a code-only run.
+        "artifacts": detect_artifacts(changed_files),
+        "returncode": returncode,
+        "ok": ok,
+        "noop": noop,
+        "reason": reason,
+        "run_id": str(run_id or ""),
+    }
+    if report is not None:
+        # CAP-141: the structured post-run report (attempts/validations/risks/
+        # pointers/rubric), persisted so a reloaded conversation re-renders it.
+        turn["report"] = report
+    conversation.setdefault("turns", []).append(turn)
     conversation["updated_at"] = _now_iso()
     return _write_conversation(root, conversation)
 
