@@ -394,22 +394,19 @@
       render();
       return;
     }
-    if (isTechnicalEvent(event)) {
-      const activity = surface()?.querySelector('#tc-code-live-technical');
-      if (activity) activity.innerHTML = technicalActivityHtml(state.liveEvents.filter(isTechnicalEvent), false);
-      else render();
-    } else {
-      const progressCount = state.liveEvents.filter(item => !isTechnicalEvent(item) && ['insight', 'planning', 'say'].includes(eventType(item))).length;
-      if (progressCount > MAX_VISIBLE_PROGRESS_EVENTS) {
-        render();
-        const nextTranscript = transcriptScroller(surface());
-        if (nearBottom && nextTranscript) nextTranscript.scrollTop = nextTranscript.scrollHeight;
-        return;
-      }
-      if (replaceLast && list.lastElementChild) list.lastElementChild.outerHTML = eventHtml(state.liveEvents[state.liveEvents.length - 1], false);
-      else list.insertAdjacentHTML('beforeend', eventHtml(event, false));
-      trimLiveEventDom(list);
+    // Every event — narrative AND technical (tool/terminal) — streams inline in
+    // arrival order into the single live feed, so the run reads action-by-action
+    // in the chat instead of hiding tool work behind a collapsed block.
+    const progressCount = state.liveEvents.filter(item => ['insight', 'planning', 'say'].includes(eventType(item))).length;
+    if (progressCount > MAX_VISIBLE_PROGRESS_EVENTS) {
+      render();
+      const nextTranscript = transcriptScroller(surface());
+      if (nearBottom && nextTranscript) nextTranscript.scrollTop = nextTranscript.scrollHeight;
+      return;
     }
+    if (replaceLast && list.lastElementChild) list.lastElementChild.outerHTML = eventHtml(state.liveEvents[state.liveEvents.length - 1], false);
+    else list.insertAdjacentHTML('beforeend', eventHtml(event, false));
+    trimLiveEventDom(list);
     if (nearBottom && transcript) transcript.scrollTop = transcript.scrollHeight;
   }
 
@@ -528,12 +525,17 @@
     const turns = state.conversation && Array.isArray(state.conversation.turns) ? state.conversation.turns : [];
     const liveFinalEvent = finalReplyEvent(state.liveEvents);
     const liveActivityEvents = progressEvents(state.liveEvents, liveFinalEvent);
-    const liveNarrative = narrativeActivityHtml(liveActivityEvents, false);
+    // Codex-style: stream EVERY action inline in arrival order as it happens —
+    // tool runs and terminal commands ("Used Read", "Ran terminal command") land
+    // right next to the narrative updates instead of being hidden in a collapsed
+    // "Show details" block. (Owner: "he doesn't output stuff in the chat, he
+    // outputs it in the activity thing on the side.")
+    const liveNarrative = liveActivityEvents.map(event => eventHtml(event, false)).join('');
     const liveErrors = state.liveEvents.filter(event => eventType(event) === 'error');
     const liveReply = liveFinalEvent
       ? `<div class="tc-code-reply">${esc(eventLabel(liveFinalEvent))}</div>`
       : liveErrors.length ? `<div class="tc-code-reply is-error">${esc(failureSummary({ ok: false }, liveErrors))}</div>` : '';
-    const liveTechnical = technicalActivityHtml(liveActivityEvents.filter(isTechnicalEvent), false);
+    const liveTechnical = '';
     const liveTurn = state.running || state.liveEvents.length
       ? `<article class="tc-code-turn is-agent is-live" data-code-live-turn><div class="tc-code-message-head"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>Thomas</strong><small>Code</small></div><div class="tc-code-turn-body"><div id="tc-code-live-events" aria-live="polite">${liveNarrative}</div><div id="tc-code-live-technical">${liveTechnical}</div>${liveReply}</div></article>`
       : '<div id="tc-code-live-events" hidden></div><div id="tc-code-live-technical" hidden></div>';
