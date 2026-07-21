@@ -8,7 +8,7 @@ referential follow-ups (which charts can safely do — no "wrong build" bleed).
 
 from __future__ import annotations
 
-from thomas.server.chat_delegation import _canvas_worker_prompt
+from thomas.server.chat_delegation import _canvas_worker_prompt, _wants_canvas_delegation
 
 _RECENT = [
     {"role": "user", "content": "make a bar chart of my fuel costs: jan 2100, feb 1850, mar 2400"},
@@ -35,3 +35,19 @@ def test_self_contained_request_is_not_threaded() -> None:
 def test_no_recent_messages_is_noop() -> None:
     assert _canvas_worker_prompt("rerun the chart", []) == "rerun the chart"
     assert _canvas_worker_prompt("rerun the chart", None) == "rerun the chart"
+
+
+def test_chart_reruns_route_to_canvas() -> None:
+    # Referential chart re-runs must reach the canvas specialist (where the
+    # handoff threading lives), not the generic agent worker.
+    assert _wants_canvas_delegation("rerun the chart please")
+    assert _wants_canvas_delegation("redo the graph")
+    assert _wants_canvas_delegation("make the chart again")
+    assert _wants_canvas_delegation("make me a downloadable png bar chart of weekly miles")
+
+
+def test_non_chart_reruns_stay_off_canvas() -> None:
+    # A rerun verb without a chart word must not be misrouted to the canvas.
+    assert not _wants_canvas_delegation("run it again")
+    assert not _wants_canvas_delegation("rerun the analysis")
+    assert not _wants_canvas_delegation("what is the capital of france")

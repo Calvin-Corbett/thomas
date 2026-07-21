@@ -267,11 +267,11 @@ async def start_background_delegation(
 
     _declared = str(surface or "").strip().lower()
     if _declared == "canvas":
-        _want_canvas = is_canvas_task(prompt)
+        _want_canvas = _wants_canvas_delegation(prompt)
     elif _declared == "task":
         _want_canvas = False
     else:
-        _want_canvas = is_canvas_task(prompt)
+        _want_canvas = _wants_canvas_delegation(prompt)
     effective_file_access = clamp_file_access_level(file_access if file_access is not None else 1)
     if _want_canvas and _agent_worker_permission_block(
         prompt, targets_live_repo=False, file_access=effective_file_access
@@ -399,6 +399,22 @@ _CANVAS_FOLLOWUP_RE = re.compile(
     r"(?:that|this|the)\s+(?:chart|graph|plot))\b",
     re.I,
 )
+
+
+# Route chart RE-runs ("rerun the chart", "redo the graph", "chart again") to the
+# canvas specialist, not the generic agent worker. Requires a rerun verb AND a
+# chart word so a non-chart "run it again" is never misrouted.
+_CANVAS_RERUN_RE = re.compile(
+    r"\b(?:re-?run|re-?do|re-?generate|re-?make|re-?create|regenerate|redraw|remake|update)\b"
+    r"[^.?!]{0,30}\b(?:chart|graph|plot|bar|pie|line|donut|scatter)\b"
+    r"|\b(?:chart|graph|plot)\b[^.?!]{0,20}\bagain\b",
+    re.I,
+)
+
+
+def _wants_canvas_delegation(prompt: str) -> bool:
+    """A fresh chart request OR a referential chart re-run belongs on the canvas."""
+    return is_canvas_task(prompt) or bool(_CANVAS_RERUN_RE.search(str(prompt or "")))
 
 
 def _canvas_worker_prompt(prompt: str, recent_messages: list[dict[str, Any]] | None) -> str:
