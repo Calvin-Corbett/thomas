@@ -31,6 +31,9 @@
 <link rel="stylesheet" href="/static/css/composer.css?v=__THOMAS_WEB_BUILD__">
 <link rel="stylesheet" href="/static/css/ui_studio_canvas.css?v=__THOMAS_WEB_BUILD__">
 <link rel="stylesheet" href="/static/css/ui_studio_canvas_panels.css?v=__THOMAS_WEB_BUILD__">
+<link rel="stylesheet" href="/static/css/workspace_shell.css?v=__THOMAS_WEB_BUILD__">
+<link rel="stylesheet" href="/static/css/virtual_office_workspace.css?v=__THOMAS_WEB_BUILD__">
+<link rel="stylesheet" href="/static/css/ui_edit_mode.css?v=__THOMAS_WEB_BUILD__">
 <style>
   /* Embedded-workspace mode: when the new chat UI hosts a workspace via iframe
      (?embed=1), hide the legacy shell so ONLY the workspace content shows. The
@@ -119,7 +122,7 @@
 </i> Mission Control </button>
 <button class="nav-item" id="navUiEditorBtn" data-nav-mode="app_builder">
 <i class="ph ph-app-window">
-</i> UI Editor </button>
+</i> Canvas </button>
 <button class="nav-item" id="navMyStuffBtn" data-nav-mode="my_stuff">
 <i class="ph ph-grid-four">
 </i> My Stuff </button>
@@ -167,7 +170,7 @@
 </nav>
 <section class="settings-screen hidden" id="settingsModal"></section>
 <aside class="debug-dock" id="debugDock" aria-label="Thomas tools panel" data-agent-aria-label-template="{{agent}} tools panel"></aside>
-<section class="office-workspace hidden" id="officeWorkspace" aria-label="Virtual office workspace">
+<section class="office-workspace hidden" id="officeWorkspace" aria-label="Virtual office workspace" data-ui-id="virtual-office.shell" data-ui-label="Virtual Office" data-ui-policy="root protected" data-ui-constraints="move=false;resize=false;preserveHandlers=true;preserveA11y=true">
 <div class="office-toolbar">
 <div class="office-toolbar-title">
 <span class="office-toolbar-dot">
@@ -176,16 +179,16 @@
 </div>
 <button id="officeEditorToggleBtn" class="settings-mini-btn" type="button">Robot Editor</button>
 </div>
-<div class="office-stage">
-<div class="office-scene-wrap" tabindex="0" aria-label="Virtual office map. Drag to pan, use wheel to zoom, or use arrow keys for keyboard panning.">
+<div class="office-stage" data-ui-id="virtual-office.stage" data-ui-label="Office map stage" data-ui-policy="move resize" data-ui-constraints="minWidth=360;minHeight=360;preserveHandlers=true;preserveA11y=true">
+<div class="office-scene-wrap" tabindex="0" aria-label="Virtual office map. Drag to pan, use wheel to zoom, or use arrow keys for keyboard panning." data-ui-id="virtual-office.map" data-ui-label="Live office map" data-ui-policy="move resize" data-ui-constraints="minWidth=360;minHeight=360;preserveHandlers=true;preserveA11y=true">
 <div class="office-scene-panzoom" id="officeScenePanzoom">
 <div class="office-scene" id="officeScene">
 </div>
 </div>
-<section class="office-minimap" id="officeMinimap" aria-label="Office minimap">
+<section class="office-minimap" id="officeMinimap" aria-label="Office minimap" data-ui-id="virtual-office.minimap" data-ui-label="Office minimap" data-ui-policy="move resize" data-ui-constraints="minWidth=180;minHeight=130;maxWidth=520;maxHeight=420;preserveHandlers=true;preserveA11y=true">
 <div class="office-minimap-head">
 <span>Live Map</span>
-<button id="officeFollowToggleBtn" class="settings-mini-btn" type="button">Follow: Off</button>
+<button id="officeFollowToggleBtn" class="settings-mini-btn" type="button" data-ui-id="virtual-office.action.follow" data-ui-label="Follow active agent" data-ui-policy="protected controls" data-ui-constraints="move=false;resize=false;preserveHandlers=true;preserveA11y=true">Follow: Off</button>
 </div>
 <canvas id="officeMinimapCanvas" width="240" height="152" aria-label="Office minimap. Click or drag to pan the camera.">
 </canvas>
@@ -200,9 +203,9 @@
 <i class="ph ph-plus">
 </i>
 </button>
-<button id="officeDebugToggleBtn" class="settings-mini-btn" type="button" aria-pressed="false" aria-label="Toggle office debug overlay">Debug</button>
+<button id="officeDebugToggleBtn" class="settings-mini-btn" type="button" aria-pressed="false" aria-label="Toggle office debug overlay" data-ui-id="virtual-office.action.debug" data-ui-label="Office debug controls" data-ui-policy="protected controls" data-ui-constraints="move=false;resize=false;preserveHandlers=true;preserveA11y=true">Debug</button>
 </div>
-<aside class="office-debug-overlay hidden" id="officeDebugOverlay" aria-live="polite" aria-label="Office debug overlay">
+<aside class="office-debug-overlay hidden" id="officeDebugOverlay" aria-live="polite" aria-label="Office debug overlay" data-ui-id="virtual-office.debug-panel" data-ui-label="Office debug panel" data-ui-policy="protected critical-status" data-ui-constraints="move=false;resize=false;preserveHandlers=true;preserveA11y=true">
 </aside>
 </div>
 <div class="office-editor-modal hidden" id="officeEditorModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="officeEditorTitle">
@@ -886,6 +889,9 @@
 </script>
 <script src="/static/js/token_economy.js?v=__THOMAS_WEB_BUILD__"></script>
 <script src="/static/js/composer_controls.js?v=__THOMAS_WEB_BUILD__"></script>
+<script src="/static/js/workspace_shell.js?v=__THOMAS_WEB_BUILD__"></script>
+<script src="/static/js/ui_edit_layout.js?v=__THOMAS_WEB_BUILD__"></script>
+<script src="/static/js/ui_edit_mode.js?v=__THOMAS_WEB_BUILD__"></script>
 <script src="/static/js/templates/tpl_settings.js?v=__THOMAS_WEB_BUILD__"></script>
 <script src="/static/js/templates/tpl_debug_dock.js?v=__THOMAS_WEB_BUILD__"></script>
 <script src="/static/js/templates/tpl_mission.js?v=__THOMAS_WEB_BUILD__"></script>

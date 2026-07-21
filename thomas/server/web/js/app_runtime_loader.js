@@ -1,6 +1,6 @@
 /**
  * Thomas Runtime Loader
- * Loads split runtime scripts in order, ensuring each completes before the next.
+ * Fetches split runtime scripts in parallel and executes them in declared order.
  * All scripts share global scope so they can access each other's variables.
  */
 (function () {
@@ -100,6 +100,8 @@
         '045_model_setup_settings_06.js',
         '046_evolution_dashboard.js',
         '047_evolve_agent_chat.js',
+        'canvas_workspace_contract.js',
+        'canvas_workspace_runtime.js',
         '048_ui_studio_canvas.js',
     ];
 
@@ -139,9 +141,11 @@
     window.__thomasRuntimeReady = (async function () {
         console.log('[Thomas] Loading ' + RUNTIME_SCRIPTS.length + ' runtime modules...');
         var t0 = performance.now();
-        for (var i = 0; i < RUNTIME_SCRIPTS.length; i++) {
-            await loadScript(RUNTIME_SCRIPTS[i]);
-        }
+        // Dynamically inserted classic scripts join the browser's ordered queue
+        // when async is set to false before insertion. Appending the full queue
+        // immediately preserves dependency order while allowing network fetches
+        // to overlap instead of paying one request round trip 94 times.
+        await Promise.all(RUNTIME_SCRIPTS.map(loadScript));
         var elapsed = Math.round(performance.now() - t0);
         console.log('[Thomas] All ' + RUNTIME_SCRIPTS.length + ' runtime modules loaded (' + elapsed + 'ms)');
         await bootstrapRuntime();

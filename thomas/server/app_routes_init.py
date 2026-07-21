@@ -146,6 +146,7 @@ def _setup_routes_and_handlers(
     _chat_file_for = locals_dict.get("_chat_file_for")
     _read_chat_from_disk = locals_dict.get("_read_chat_from_disk")
     _build_tools = locals_dict.get("_build_tools")
+    _web_build_fingerprint = locals_dict.get("_web_build_fingerprint")
     index = locals_dict.get("index")
     classic = locals_dict.get("classic")
     settings = locals_dict.get("settings")
@@ -1139,7 +1140,29 @@ def _setup_routes_and_handlers(
         static_root = (web_dir / "static").resolve()
         if not my_stuff_html.is_relative_to(static_root) or not my_stuff_html.is_file():
             raise web.HTTPNotFound()
-        return web.FileResponse(my_stuff_html)
+        try:
+            html = await asyncio.to_thread(my_stuff_html.read_text, encoding="utf-8", errors="replace")
+            web_build = (
+                _web_build_fingerprint(
+                    "static/my_stuff.html",
+                    "static/my_stuff.style01.css",
+                    "static/my_stuff.script01.js",
+                    "js/workspace_shell.js",
+                    "js/ui_edit_layout.js",
+                    "js/ui_edit_mode.js",
+                    "css/workspace_shell.css",
+                    "css/ui_edit_mode.css",
+                )
+                if callable(_web_build_fingerprint)
+                else "dev"
+            )
+            return web.Response(
+                text=html.replace("__THOMAS_WEB_BUILD__", web_build),
+                content_type="text/html",
+                headers={"Cache-Control": "no-store"},
+            )
+        except (OSError, UnicodeDecodeError):
+            return web.FileResponse(my_stuff_html)
 
     app.router.add_get("/my-stuff", my_stuff_page)
     app.router.add_get("/my-stuff/", my_stuff_page)
