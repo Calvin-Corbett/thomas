@@ -25,6 +25,7 @@ from thomas.server.chat_delegation_live_repo import (
 )
 from thomas.server.chat_delegation_result_policy import worker_text_is_confirmed_answer
 from thomas.server.chat_delegation_session import _execution_is_terminal, _normalize_record
+from thomas.server.issue_ledger import record_issue
 from thomas.server.work_connector_runtime import execution_work_context_id
 
 log = logging.getLogger(__name__)
@@ -173,6 +174,16 @@ async def _run_exhaustive_worker(
             verified_success=verified_success,
         )
         record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
+        # Record an evidence-free "done" (demoted to failed/no_evidence) so the
+        # self-review sees it (core can't import the ledger — circular-import rule).
+        if str((record or {}).get("blocker") or "") == "no_evidence":
+            record_issue(
+                surface="chat-worker",
+                kind="no_evidence",
+                message="completed without artifacts or a confirmed tool success",
+                context={"execution_id": execution_id, "task": str(record.get("summary") or "")[:160]},
+                repo_root=repo_root,
+            )
         if str((record or {}).get("state") or "") == "completed":
             await emitter.completed(record, specialist_id=specialist_id, bot=bot, text=result_summary)
         else:

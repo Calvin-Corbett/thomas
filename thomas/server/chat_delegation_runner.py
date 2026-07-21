@@ -333,6 +333,17 @@ async def _finalize_worker_completion(
         repo_root=repo_root,
         verified_success=verified_success,
     )
+    # complete_execution demotes an evidence-free "done" to failed(no_evidence).
+    # Record it so the self-review sees the "claimed done, produced nothing" class
+    # (core can't import the ledger — circular-import rule — so record it here).
+    if isinstance(completion_payload, dict) and str(completion_payload.get("blocker") or "") == "no_evidence":
+        record_issue(
+            surface="chat-worker",
+            kind="no_evidence",
+            message="completed without artifacts or a confirmed tool success",
+            context={"execution_id": execution_id, "task": str(scope_prompt or "")[:160]},
+            repo_root=repo_root,
+        )
     record_payload = (
         completion_payload
         if isinstance(completion_payload, dict)
