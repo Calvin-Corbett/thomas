@@ -84,6 +84,17 @@ def extract_chart_data(prompt: str, plan: str) -> tuple[str, list[ChartDatum]]:
     return title, rows or [ChartDatum(label="Series 1", value=1.0)]
 
 
+def _clean_note(prompt: str) -> str:
+    """Footer caption from the user's own request, minus any appended handoff.
+
+    A referential follow-up ("rerun the chart") is threaded with a recent-
+    conversation handoff for the worker; that preamble must not bleed into the
+    chart's footer caption.
+    """
+    head = str(prompt or "").split("\n\n", 1)[0]
+    return re.sub(r"\s+", " ", head).strip()[:110]
+
+
 def _chart_kind(prompt: str) -> str:
     match = re.search(r"\b(bar|line|pie|donut|scatter|area)\s+(?:chart|graph|plot)\b", str(prompt or ""), re.I)
     return match.group(1).lower() if match else "bar"
@@ -180,7 +191,7 @@ def _write_pdf(path: Path, title: str, prompt: str, rows: list[ChartDatum], kind
         _draw_cartesian(pdf, rows, kind=kind)
     pdf.setFillColorRGB(0.35, 0.39, 0.48)
     pdf.setFont("Helvetica", 8)
-    note = re.sub(r"\s+", " ", prompt).strip()[:110]
+    note = _clean_note(prompt)
     pdf.drawString(52, 44, note)
     pdf.drawRightString(740, 44, "Source data included beside this PDF")
     pdf.showPage()
@@ -232,7 +243,7 @@ def _write_png(path: Path, title: str, prompt: str, rows: list[ChartDatum], kind
     else:
         _draw_cartesian_png(draw, rows, kind=kind)
 
-    note = re.sub(r"\s+", " ", prompt).strip()[:110]
+    note = _clean_note(prompt)
     draw.text((36, height - 30), note, fill=(90, 99, 122), font=_png_font(11))
     img.save(str(path), "PNG")
 

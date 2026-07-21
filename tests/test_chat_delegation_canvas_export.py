@@ -10,6 +10,7 @@ import pytest
 from thomas.server.chat_delegation_canvas_export import (
     ChartExportUnavailable,
     _chart_format,
+    _clean_note,
     export_static_chart,
     extract_chart_data,
     is_static_chart_request,
@@ -58,6 +59,14 @@ def test_export_static_chart_writes_pdf_and_backing_data(tmp_path: Path) -> None
         assert list(csv.reader(handle)) == [["label", "value"], ["Q1", "120"], ["Q2", "135"]]
     if "chart-data.xlsx" in files:
         assert (tmp_path / "chart-data.xlsx").stat().st_size > 1000
+
+
+def test_clean_note_strips_appended_handoff() -> None:
+    # A rerun follow-up is threaded with a handoff for the worker; the footer
+    # caption must show only the user's request, not the handoff preamble.
+    threaded = "rerun the chart\n\nFor context, here is the recent conversation between the user and Thomas"
+    assert _clean_note(threaded) == "rerun the chart"
+    assert _clean_note("make a bar chart of jan 100 feb 200") == "make a bar chart of jan 100 feb 200"
 
 
 def test_chart_format_honors_explicit_png() -> None:
