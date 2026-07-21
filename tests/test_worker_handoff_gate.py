@@ -64,6 +64,13 @@ def test_self_contained_requests_get_no_handoff(prompt: str) -> None:
         "the first one but in dark mode",
         "give me another one",
         "another one",
+        # Re-run commands are unambiguous references to the prior deliverable
+        # (regression: a canvas "rerun the chart" got an empty workspace and
+        # asked the user to re-paste the numbers).
+        "yes rerun the chart please",
+        "rerun the chart",
+        "regenerate the graph",
+        "recreate that chart",
     ],
 )
 def test_referential_followups_get_handoff(prompt: str) -> None:
@@ -79,6 +86,9 @@ def test_referential_followups_get_handoff(prompt: str) -> None:
         "write a redo function for the editor",
         "make a tweak tool for the settings page",
         "create a revert script",
+        # "rerun" as a noun/embedded verb in a fresh build must NOT pull handoff.
+        "create a rerun button for the toolbar",
+        "write a function that reruns the tests",
     ],
 )
 def test_ambiguous_verb_nouns_do_not_pull_handoff(prompt: str) -> None:

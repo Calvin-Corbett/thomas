@@ -581,8 +581,9 @@ _STRONG_FOLLOWUP_RE = re.compile(
 # tweak tool"): only count as follow-ups when they LEAD the prompt as a command, so a
 # self-contained "build a continue button" doesn't falsely re-attach the handoff.
 _LEADING_FOLLOWUP_RE = re.compile(
-    r"^\s*(?:please\s+|now\s+|ok(?:ay)?,?\s+|can you\s+|could you\s+|go\s+)*"
-    r"(continue|keep going|redo|tweak|adjust|revert)\b",
+    r"^\s*(?:please\s+|now\s+|ok(?:ay)?,?\s+|yes,?\s+|can you\s+|could you\s+|go\s+)*"
+    r"(continue|keep going|re-?do|re-?run|re-?generate|regen|re-?create|re-?make|"
+    r"tweak|adjust|revert)\b",
     re.IGNORECASE,
 )
 # A leading continuation adverb ("now"/"then"/"also"/"next") + a MODIFICATION verb is a
