@@ -213,11 +213,16 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
             bits.append(f"What you were doing: {task_title[:240]}.")
             if summary and failed:
                 bits.append(f"Failure: {summary[:300]}.")
+            # A device-action ask that yields ANY control script (.ps1/.sh/.py/…)
+            # is a built bridge — the physical action did NOT happen. Requiring
+            # ALL artifacts to be scripts wrongly cleared the flag when the real
+            # deliverable bundled setup docs (SETUP.md/SETUP.pdf) with the script,
+            # so Thomas falsely announced "the kitchen lights are off." (live 2026-07-21)
             built_bridge = bool(
                 artifact_names
                 and not failed
                 and _DEVICE_ACTION_RE.search(task_title or "")
-                and all(_SCRIPT_ARTIFACT_RE.search(name or "") for name in artifact_names)
+                and any(_SCRIPT_ARTIFACT_RE.search(name or "") for name in artifact_names)
             )
             if artifact_names and not failed:
                 bits.append("Its complete verified artifact list is: " + ", ".join(artifact_names) + ".")

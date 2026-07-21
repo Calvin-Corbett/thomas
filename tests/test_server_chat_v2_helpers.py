@@ -565,6 +565,79 @@ async def test_announce_delegation_strips_sandbox_links_from_note(monkeypatch: p
 
 
 @pytest.mark.asyncio
+async def test_announce_device_action_with_script_and_docs_flags_built_bridge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from aiohttp.test_utils import make_mocked_request
+
+    from thomas.core import task_bot_runtime
+
+    captured: dict = {}
+
+    class _FakeLLM:
+        def stream_chat(self, *args, **kwargs):  # noqa: ANN002, ANN003
+            captured["messages"] = kwargs.get("messages") or list(args)
+
+            async def _events():
+                yield SimpleNamespace(
+                    type="token",
+                    data={
+                        "text": (
+                            "I built a control for it: SETUP.md, kitchen-lights.ps1, and SETUP.pdf are "
+                            "ready — connect your hub to run it."
+                        )
+                    },
+                )
+
+            return _events()
+
+    class _FakeStore:
+        def __init__(self) -> None:
+            self.loaded = mod.ConversationManager().append_message("user", "turn off my kitchen lights")
+            self.saved = None
+
+        async def load(self, sid: str):  # noqa: ANN201
+            return self.loaded
+
+        async def save(self, sid: str, conversation, meta, force: bool = False) -> None:  # noqa: ANN001
+            self.saved = (sid, conversation, meta, force)
+
+    app = web.Application()
+    app[mod.APP_SESSION_STORE] = _FakeStore()
+    app[mod.APP_SESSION_LLM_CACHE] = {"sess-1": SimpleNamespace(llm=_FakeLLM())}
+    monkeypatch.setattr(
+        task_bot_runtime,
+        "get_execution",
+        lambda eid, *a, **k: {
+            "execution_id": eid,
+            "conversation_id": "sess-1",
+            "state": "completed",
+            "proof_status": "verified",
+            "proof": {
+                "status": "verified",
+                "artifacts": [
+                    {"kind": "doc", "path": "SETUP.md"},
+                    {"kind": "script", "path": "kitchen-lights.ps1"},
+                    {"kind": "doc", "path": "SETUP.pdf"},
+                ],
+            },
+            "summary": "turn off my kitchen lights",
+            "bot_name": "Bridge Worker",
+        },
+    )
+    monkeypatch.setattr(task_bot_runtime, "update_execution", lambda eid, **kw: None)
+    req = make_mocked_request("POST", "/x", match_info={"session_id": "sess-1", "execution_id": "exec-9"}, app=app)
+    resp = await mod.handle_announce_delegation(req)
+
+    assert resp.status == 200
+    # The bridge honesty instruction must fire even though SETUP.md/SETUP.pdf are
+    # not scripts — a .ps1 control script means the physical action did NOT happen.
+    user_prompt = " ".join(str(m.get("content", "")) for m in (captured.get("messages") or []) if isinstance(m, dict))
+    assert "physical action has NOT been performed" in user_prompt
+    assert "NEVER say the action happened" in user_prompt
+
+
+@pytest.mark.asyncio
 async def test_announce_delegation_persists_model_note_and_marks_reported(monkeypatch: pytest.MonkeyPatch) -> None:
     from aiohttp.test_utils import make_mocked_request
 
