@@ -67,7 +67,8 @@ def complete_canvas_delivery(
             prompt=prompt,
             plan=str(canvas_record.get("plan") or ""),
         )
-        summary = "Reviewed the live chart and delivered chart.pdf with backing data."
+        primary = created[0] if created else "chart.pdf"
+        summary = f"Reviewed the live chart and delivered {primary} with backing data."
 
     task_bot_runtime.attach_proof(
         execution_id,

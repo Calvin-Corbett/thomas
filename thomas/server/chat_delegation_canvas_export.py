@@ -187,20 +187,139 @@ def _write_pdf(path: Path, title: str, prompt: str, rows: list[ChartDatum], kind
     pdf.save()
 
 
+def _chart_format(prompt: str) -> str:
+    """Honor an explicit output-format request; default to the reviewed PDF."""
+    text = str(prompt or "").lower()
+    if re.search(r"\bpngs?\b", text) and not re.search(r"\bpdf\b", text):
+        return "png"
+    return "pdf"
+
+
+def _palette255(index: int) -> tuple[int, int, int]:
+    r, g, b = _palette(index)
+    return (round(r * 255), round(g * 255), round(b * 255))
+
+
+def _png_font(size: int, *, bold: bool = False) -> Any:
+    from PIL import ImageFont
+
+    names = ("arialbd.ttf", "DejaVuSans-Bold.ttf") if bold else ("arial.ttf", "DejaVuSans.ttf")
+    for name in names:
+        try:
+            return ImageFont.truetype(name, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def _write_png(path: Path, title: str, prompt: str, rows: list[ChartDatum], kind: str) -> None:
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError as exc:
+        raise ChartExportUnavailable(
+            "PNG chart export is unavailable because the required Pillow package is not installed"
+        ) from exc
+
+    width, height = 1000, 620
+    img = Image.new("RGB", (width, height), (255, 255, 255))
+    draw = ImageDraw.Draw(img)
+    draw.rectangle([0, 0, width, 70], fill=(18, 23, 38))
+    draw.text((36, 22), title[:64], fill=(255, 255, 255), font=_png_font(28, bold=True))
+    draw.text((36, 52), "Reviewed Thomas Canvas export", fill=(174, 186, 214), font=_png_font(12))
+
+    if kind in {"pie", "donut"}:
+        _draw_pie_png(draw, rows, donut=kind == "donut")
+    else:
+        _draw_cartesian_png(draw, rows, kind=kind)
+
+    note = re.sub(r"\s+", " ", prompt).strip()[:110]
+    draw.text((36, height - 30), note, fill=(90, 99, 122), font=_png_font(11))
+    img.save(str(path), "PNG")
+
+
+def _draw_cartesian_png(draw: Any, rows: list[ChartDatum], *, kind: str) -> None:
+    left, top, right, bottom = 96.0, 120.0, 952.0, 512.0
+    plot_h = bottom - top
+    small = _png_font(12)
+    small_bold = _png_font(12, bold=True)
+    for step in range(6):
+        y = bottom - plot_h * step / 5
+        draw.line([(left, y), (right, y)], fill=(212, 219, 235), width=1)
+    values = [row.value for row in rows]
+    low = min(0.0, min(values))
+    high = max(values)
+    span = high - low or 1.0
+    baseline = bottom - plot_h * (0 - low) / span
+    slot = (right - left) / max(1, len(rows))
+    points: list[tuple[float, float]] = []
+    for index, row in enumerate(rows):
+        cx = left + slot * (index + 0.5)
+        vy = bottom - plot_h * (row.value - low) / span
+        points.append((cx, vy))
+        draw.text((cx, bottom + 8), row.label[:16], fill=(70, 78, 98), font=small, anchor="ma")
+        draw.text((cx, vy - 16), f"{row.value:g}", fill=(40, 46, 64), font=small_bold, anchor="ms")
+        if kind == "bar":
+            bw = min(56.0, slot * 0.62)
+            draw.rounded_rectangle(
+                [cx - bw / 2, min(vy, baseline), cx + bw / 2, max(vy, baseline)],
+                radius=6,
+                fill=_palette255(index),
+            )
+    if kind != "bar":
+        for start, end in zip(points, points[1:], strict=False):
+            draw.line([start, end], fill=(56, 89, 242), width=3)
+        for index, (cx, vy) in enumerate(points):
+            draw.ellipse([cx - 5, vy - 5, cx + 5, vy + 5], fill=_palette255(index))
+
+
+def _draw_pie_png(draw: Any, rows: list[ChartDatum], *, donut: bool) -> None:
+    cx, cy, radius = 300.0, 330.0, 175.0
+    bbox = [cx - radius, cy - radius, cx + radius, cy + radius]
+    total = sum(abs(row.value) for row in rows) or 1.0
+    start = -90.0
+    for index, row in enumerate(rows):
+        extent = 360.0 * abs(row.value) / total
+        draw.pieslice(bbox, start, start + extent, fill=_palette255(index))
+        start += extent
+    if donut:
+        inner = radius * 0.5
+        draw.ellipse([cx - inner, cy - inner, cx + inner, cy + inner], fill=(255, 255, 255))
+    legend = _png_font(13)
+    for index, row in enumerate(rows):
+        y = 150 + index * 30
+        draw.rounded_rectangle([560, y, 576, y + 16], radius=3, fill=_palette255(index))
+        draw.text((588, y + 1), f"{row.label[:24]}  {row.value:g}", fill=(40, 48, 66), font=legend)
+
+
 def export_static_chart(work_dir: str | Path, *, prompt: str, plan: str) -> list[str]:
-    """Write PDF and source data, failing closed when the required PDF runtime is absent."""
+    """Write the chart (honoring an explicit PNG request) plus source data.
+
+    Fails closed when the chosen renderer's runtime is absent, falling back to
+    the reviewed PDF when PNG rendering is unavailable.
+    """
 
     root = Path(work_dir)
     root.mkdir(parents=True, exist_ok=True)
     title, rows = extract_chart_data(prompt, plan)
-    pdf_path = root / "chart.pdf"
+    kind = _chart_kind(prompt)
     csv_path = root / "chart-data.csv"
-    _write_pdf(pdf_path, title, prompt, rows, _chart_kind(prompt))
+
+    primary_name = "chart.pdf"
+    if _chart_format(prompt) == "png":
+        try:
+            _write_png(root / "chart.png", title, prompt, rows, kind)
+            primary_name = "chart.png"
+        except ChartExportUnavailable:
+            primary_name = "chart.pdf"
+    if primary_name == "chart.pdf":
+        _write_pdf(root / "chart.pdf", title, prompt, rows, kind)
+    primary_path = root / primary_name
+
     with csv_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(["label", "value"])
         writer.writerows((row.label, f"{row.value:g}") for row in rows)
-    created = [pdf_path.name, csv_path.name]
+    created = [primary_name, csv_path.name]
     try:
         from openpyxl import Workbook
 
@@ -218,7 +337,9 @@ def export_static_chart(work_dir: str | Path, *, prompt: str, plan: str) -> list
         created.append(xlsx_path.name)
     except (ImportError, OSError, ValueError):
         pass
-    if not pdf_path.read_bytes().startswith(b"%PDF-") or csv_path.stat().st_size < 10:
+
+    magic = b"\x89PNG" if primary_name == "chart.png" else b"%PDF-"
+    if not primary_path.read_bytes().startswith(magic) or csv_path.stat().st_size < 10:
         raise OSError("chart export readback failed")
     return created
 

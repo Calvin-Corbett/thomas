@@ -9,10 +9,12 @@ import pytest
 
 from thomas.server.chat_delegation_canvas_export import (
     ChartExportUnavailable,
+    _chart_format,
     export_static_chart,
     extract_chart_data,
     is_static_chart_request,
 )
+from thomas.server.chat_delegation_canvas_intent import is_canvas_task
 
 
 def _plan() -> str:
@@ -56,6 +58,55 @@ def test_export_static_chart_writes_pdf_and_backing_data(tmp_path: Path) -> None
         assert list(csv.reader(handle)) == [["label", "value"], ["Q1", "120"], ["Q2", "135"]]
     if "chart-data.xlsx" in files:
         assert (tmp_path / "chart-data.xlsx").stat().st_size > 1000
+
+
+def test_chart_format_honors_explicit_png() -> None:
+    assert _chart_format("make a downloadable png bar chart") == "png"
+    assert _chart_format("make a bar chart") == "pdf"
+    # An explicit pdf mention wins over png to avoid surprising a pdf-wanting user.
+    assert _chart_format("png or pdf, either is fine") == "pdf"
+
+
+def test_export_static_chart_honors_png_request(tmp_path: Path) -> None:
+    pytest.importorskip("PIL")
+    files = export_static_chart(
+        tmp_path,
+        prompt="Make a downloadable PNG bar chart: Q1 120, Q2 135",
+        plan=_plan(),
+    )
+    assert files[0] == "chart.png"
+    assert "chart-data.csv" in files
+    assert (tmp_path / "chart.png").read_bytes().startswith(b"\x89PNG")
+    assert not (tmp_path / "chart.pdf").exists()
+
+
+def test_png_request_falls_back_to_pdf_when_pillow_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("reportlab")
+    real_import = builtins.__import__
+
+    def blocked_import(name: str, *args: object, **kwargs: object) -> object:
+        if name == "PIL" or name.startswith("PIL."):
+            raise ImportError("Pillow intentionally unavailable")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", blocked_import)
+    files = export_static_chart(
+        tmp_path,
+        prompt="Make a PNG bar chart Q1 120 Q2 135",
+        plan=_plan(),
+    )
+    assert files[0] == "chart.pdf"
+    assert (tmp_path / "chart.pdf").read_bytes().startswith(b"%PDF-")
+    assert not (tmp_path / "chart.png").exists()
+
+
+def test_is_canvas_task_accepts_named_png_output() -> None:
+    # chart.png must be in the canvas export allowlist so an explicit png ask
+    # is not rejected as a non-canvas named deliverable.
+    assert is_canvas_task("make a bar chart and save chart.png")
 
 
 def test_static_chart_export_fails_closed_when_reportlab_is_missing(

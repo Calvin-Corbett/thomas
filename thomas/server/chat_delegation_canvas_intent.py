@@ -44,7 +44,7 @@ _NAMED_SOURCE_CUE_RE = re.compile(
     r"\b(?:from|using|based\s+(?:on|upon)|read|load|input|source|data(?:\s+is)?\s+in)\s+$",
     re.IGNORECASE,
 )
-_CANVAS_EXPORT_NAMES = frozenset({"chart.pdf", "chart-data.csv", "chart-data.xlsx"})
+_CANVAS_EXPORT_NAMES = frozenset({"chart.pdf", "chart.png", "chart-data.csv", "chart-data.xlsx"})
 
 
 def _named_outputs(text: str) -> set[str]:
