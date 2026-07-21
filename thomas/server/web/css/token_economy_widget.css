@@ -3,6 +3,45 @@
     width: 100%;
     min-width: 0;
     min-height: 100%;
+    background: transparent;
+}
+
+/* The workspace owns no world layer. The literal Chat shell remains visible. */
+#moduleWorkspace[data-mode="token_economy"],
+html.tcw-embed:has([data-te-container] .te-v3.is-active) #moduleWorkspace {
+    background: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+}
+
+#moduleWorkspace[data-mode="token_economy"]::before,
+#moduleWorkspace[data-mode="token_economy"]::after,
+html.tcw-embed:has([data-te-container] .te-v3.is-active) #moduleWorkspace::before,
+html.tcw-embed:has([data-te-container] .te-v3.is-active) #moduleWorkspace::after {
+    display: none !important;
+    content: none !important;
+    background: none !important;
+}
+
+html.tcw-embed [data-te-container],
+html.tcw-embed [data-te-container] .te-v3 {
+    background: transparent !important;
+}
+
+html.tcw-embed:has([data-te-container] .te-v3.is-active) {
+    color-scheme: normal !important;
+}
+
+html.tcw-embed body:has([data-te-container] .te-v3.is-active) .main-content {
+    background: transparent !important;
+    background-image: none !important;
+}
+
+html.tcw-embed body:has([data-te-container] .te-v3.is-active) .main-content::before,
+html.tcw-embed body:has([data-te-container] .te-v3.is-active) .main-content::after {
+    display: none !important;
+    content: none !important;
+    background: none !important;
 }
 
 .te-v3,
@@ -11,13 +50,13 @@
 }
 
 .te-v3 {
-    width: min(1380px, 100%);
+    width: 100%;
     min-height: 100%;
-    margin: 0 auto;
-    padding: 16px;
+    margin: 0;
+    padding: 10px 12px;
     display: grid;
     align-content: start;
-    gap: 14px;
+    gap: 8px;
     color: var(--c-text);
     font: 13px/1.5 var(--font-sans, "Manrope", system-ui, sans-serif);
     isolation: isolate;
@@ -36,16 +75,16 @@
 
 .te-v3 .te-topbar {
     min-width: 0;
-    min-height: 76px;
+    min-height: 46px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    padding: 14px;
+    gap: 10px;
+    padding: 6px 8px;
     border: 1px solid var(--c-border);
-    border-radius: var(--r-card, 14px);
-    background: var(--c-surface);
-    box-shadow: var(--c-shadow);
+    border-radius: calc(var(--r-card, 14px) - 6px);
+    background: color-mix(in srgb, var(--c-surface) 86%, transparent);
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--c-shadow) 24%, transparent);
 }
 
 .te-v3 .te-topbar-left,
@@ -53,7 +92,7 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 7px;
 }
 
 .te-v3 .te-heading {
@@ -65,28 +104,20 @@
 .te-v3 .te-topbar-title {
     color: var(--c-text);
     font-family: var(--font-head, var(--font-sans, "Manrope", system-ui, sans-serif));
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 800;
     letter-spacing: -.015em;
 }
 
-.te-v3 .te-topbar-subtitle {
-    overflow: hidden;
-    color: var(--c-dim);
-    font-size: 12px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 .te-v3 .te-mode-pill,
 .te-v3 .te-topbar-live {
-    min-height: 26px;
+    min-height: 24px;
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 0 8px;
+    padding: 0 7px;
     border: 1px solid var(--c-accent-line);
-    border-radius: 8px;
+    border-radius: 6px;
     background: var(--c-accent-soft);
     color: var(--c-text);
     font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -111,13 +142,13 @@
 }
 
 .te-v3 .te-range-control {
-    height: 34px;
+    height: 30px;
     display: inline-flex;
     align-items: center;
     gap: 7px;
     padding-left: 9px;
     border: 1px solid var(--c-border);
-    border-radius: 10px;
+    border-radius: 6px;
     background: var(--c-surface);
     color: var(--c-muted);
     font-size: 11px;
@@ -126,7 +157,7 @@
 }
 
 .te-v3 .te-range-sel {
-    height: 32px;
+    height: 28px;
     border: 0;
     border-left: 1px solid var(--c-border);
     padding: 0 9px;
@@ -136,13 +167,13 @@
 }
 
 .te-v3 .te-topbar-btn {
-    height: 34px;
+    height: 30px;
     display: inline-flex;
     align-items: center;
     gap: 6px;
     padding: 0 10px;
     border: 1px solid var(--c-border);
-    border-radius: 10px;
+    border-radius: 6px;
     background: transparent;
     color: var(--c-dim);
     cursor: pointer;
@@ -160,16 +191,24 @@
     white-space: nowrap;
 }
 
+.te-v3 .te-overview-rail {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(220px, .72fr) minmax(0, 2.28fr);
+    gap: 8px;
+}
+
 .te-v3 .te-hero {
     min-width: 0;
-    min-height: 170px;
+    min-height: 84px;
     display: grid;
     align-content: center;
-    gap: 8px;
-    padding: 22px;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 2px 8px;
+    padding: 9px 11px;
     overflow: hidden;
     border: 1px solid var(--c-border);
-    border-radius: var(--r-card, 14px);
+    border-radius: calc(var(--r-card, 14px) - 6px);
     background: var(--c-surface);
 }
 
@@ -178,7 +217,7 @@
     color: var(--c-muted);
     font-size: 10.5px;
     font-weight: 800;
-    letter-spacing: .09em;
+    letter-spacing: .07em;
     text-transform: uppercase;
 }
 
@@ -186,7 +225,7 @@
     min-width: 0;
     display: flex;
     align-items: baseline;
-    gap: 7px;
+    gap: 5px;
     color: var(--c-text);
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
@@ -199,7 +238,7 @@
 
 .te-v3 .te-hero-whole {
     overflow: hidden;
-    font-size: clamp(42px, 7vw, 76px);
+    font-size: clamp(25px, 3vw, 38px);
     font-weight: 760;
     letter-spacing: -.07em;
     line-height: .95;
@@ -208,13 +247,14 @@
 
 .te-v3 .te-hero-frac {
     color: var(--c-dim);
-    font-size: 16px;
+    font-size: 11px;
     font-weight: 650;
 }
 
 .te-v3 .te-hero-sub {
+    grid-column: 1 / -1;
     color: var(--c-dim);
-    font-size: 12px;
+    font-size: 10px;
 }
 
 .te-v3 .te-hero-pipe {
@@ -225,7 +265,7 @@
 .te-v3 .te-burnstrip,
 .te-v3 .te-ctx-track {
     position: relative;
-    height: 5px;
+    height: 4px;
     overflow: hidden;
     border-radius: 999px;
     background: var(--c-surface-2);
@@ -250,6 +290,10 @@
     opacity: .7;
 }
 
+.te-v3 .te-burnstrip {
+    grid-column: 1 / -1;
+}
+
 .te-v3 .te-datastrip {
     min-width: 0;
     display: grid;
@@ -257,24 +301,24 @@
     gap: 1px;
     overflow: hidden;
     border: 1px solid var(--c-border);
-    border-radius: var(--r-card, 14px);
+    border-radius: calc(var(--r-card, 14px) - 6px);
     background: var(--c-border);
 }
 
 .te-v3 .te-ds-cell {
     min-width: 0;
-    min-height: 92px;
+    min-height: 84px;
     display: grid;
     align-content: center;
     gap: 3px;
-    padding: 14px;
+    padding: 9px 11px;
     background: var(--c-surface);
 }
 
 .te-v3 .te-ds-num {
     overflow: hidden;
     color: var(--c-text);
-    font: 750 22px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font: 750 17px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     text-overflow: ellipsis;
 }
 
@@ -303,17 +347,17 @@
     .te-v3 .te-topbar { align-items: flex-start; }
     .te-v3 .te-topbar-right { flex-wrap: wrap; justify-content: flex-end; }
     .te-v3 .te-datastrip { grid-template-columns: repeat(2, 1fr); }
+    .te-v3 .te-overview-rail { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 660px) {
-    .te-v3 { padding: 10px; gap: 10px; }
+    .te-v3 { padding: 8px; gap: 8px; }
     .te-v3 .te-topbar { display: grid; }
     .te-v3 .te-topbar-left { align-items: flex-start; flex-wrap: wrap; }
     .te-v3 .te-topbar-right { justify-content: flex-start; }
-    .te-v3 .te-topbar-subtitle { white-space: normal; }
     .te-v3 .te-topbar-clock { display: none; }
     .te-v3 .te-datastrip { grid-template-columns: 1fr; }
-    .te-v3 .te-hero { padding: 18px; }
+    .te-v3 .te-hero { padding: 9px 11px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,6 +1,4 @@
 (function () {
-    var CHAT_STORE_KEY = 'thomas.myStuff.projectChats.v2';
-    var SESSION_STORE_KEY = 'thomas.myStuff.projectSessions.v2';
     var SCRIPT_VERSION = '20260721-modernized-1';
 
     // The shared workspace shell owns initial theme and postMessage handling.
@@ -16,17 +14,18 @@
         loading: false,
         activeProjectId: '',
         activeProject: null,
-        statusMessage: 'Loading project board...',
+        statusMessage: 'Loading Library...',
         statusTone: 'info',
         importOpen: false,
         importBusy: false,
         drag: null,
         suppressClickUntil: 0,
         detailResult: null,
-        projectChats: readStore(CHAT_STORE_KEY),
-        projectSessions: readStore(SESSION_STORE_KEY),
-        chatBusyProjectId: '',
-        forgeBuilds: []
+        forgeBuilds: [],
+        viewMode: 'library',
+        libraryFilter: 'all',
+        libraryQuery: '',
+        activeLibraryItem: null
     };
 
     var SNAP = {
@@ -35,17 +34,19 @@
         width: 170,
         height: 180,
         tileWidth: 148,
-        tileHeight: 156,
-        columns: 5
+        tileHeight: 156
     };
 
     var elements = {
         boardView: document.getElementById('boardView'),
         board: document.getElementById('board'),
-        forgeBuilds: document.getElementById('forgeBuilds'),
-        forgeBuildsGrid: document.getElementById('forgeBuildsGrid'),
         installedAppsShelf: document.getElementById('installedAppsShelf'),
         installedAppsList: document.getElementById('installedAppsList'),
+        stuffSearch: document.getElementById('stuffSearch'),
+        libraryTitle: document.getElementById('libraryTitle'),
+        librarySummary: document.getElementById('librarySummary'),
+        itemDetail: document.getElementById('itemDetail'),
+        itemDetailContent: document.getElementById('itemDetailContent'),
         detailView: document.getElementById('detailView'),
         detailShell: document.getElementById('detailShell'),
         statusPill: document.getElementById('statusPill'),
@@ -76,27 +77,6 @@
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
-    }
-
-    function readStore(key) {
-        try {
-            var raw = window.localStorage.getItem(key);
-            if (!raw) return {};
-            var parsed = JSON.parse(raw);
-            return parsed && typeof parsed === 'object' ? parsed : {};
-        } catch (_error) {
-            return {};
-        }
-    }
-
-    function writeStore(key, value) {
-        try {
-            window.localStorage.setItem(key, JSON.stringify(value || {}));
-        } catch (_error) {}
-    }
-
-    function makeLocalId(prefix) {
-        return prefix + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
     }
 
     function formatRelativeTime(value) {
@@ -243,7 +223,7 @@
             elements.statusText.textContent = state.statusMessage;
         }
         if (elements.statusPill) {
-            elements.statusPill.textContent = state.activeProject ? 'Project Detail' : 'Project Board';
+            elements.statusPill.textContent = state.activeProject ? 'Project Detail' : (state.viewMode === 'arrange' ? 'Arrange' : 'Library');
             elements.statusPill.className = 'stuff-status-pill is-' + statusToneClass(state.activeProject && state.activeProject.readiness && state.activeProject.readiness.state ? toneForState(state.activeProject.readiness.state) : state.statusTone);
         }
     }
@@ -284,10 +264,18 @@
         return state.installedPlugins;
     }
 
+    function boardColumnCount() {
+        var liveWidth = elements.board instanceof HTMLElement ? elements.board.clientWidth : 0;
+        var fallbackWidth = Math.max(560, document.documentElement.clientWidth - 100);
+        var available = Math.max(liveWidth, fallbackWidth) - SNAP.left - 24;
+        return Math.max(1, Math.floor((available - SNAP.tileWidth) / SNAP.width) + 1);
+    }
+
     function slotToPosition(slot) {
         var normalized = Math.max(0, Number(slot) || 0);
-        var col = normalized % SNAP.columns;
-        var row = Math.floor(normalized / SNAP.columns);
+        var columns = boardColumnCount();
+        var col = normalized % columns;
+        var row = Math.floor(normalized / columns);
         return {
             x: SNAP.left + col * SNAP.width,
             y: SNAP.top + row * SNAP.height
@@ -297,9 +285,10 @@
     function positionToSlot(pos) {
         var x = Number(pos && pos.x) || SNAP.left;
         var y = Number(pos && pos.y) || SNAP.top;
-        var col = Math.max(0, Math.round((x - SNAP.left) / SNAP.width));
+        var columns = boardColumnCount();
+        var col = Math.max(0, Math.min(columns - 1, Math.round((x - SNAP.left) / SNAP.width)));
         var row = Math.max(0, Math.round((y - SNAP.top) / SNAP.height));
-        return row * SNAP.columns + col;
+        return row * columns + col;
     }
 
     function boardKey(pos) {
@@ -398,9 +387,8 @@
         state.activeProjectId = '';
         state.activeProject = null;
         state.detailResult = null;
-        if (elements.boardView) elements.boardView.classList.remove('hidden');
         if (elements.detailView) elements.detailView.classList.add('hidden');
-        renderStatus();
+        setViewMode(state.viewMode);
     }
 
     async function openProject(projectId, options) {
@@ -412,6 +400,7 @@
         setStatus('Opening project page...', 'info');
         var payload = await fetchJson('/api/local/projects/' + encodeURIComponent(projectId));
         state.activeProject = payload && payload.project ? payload.project : null;
+        if (elements.installedAppsShelf) elements.installedAppsShelf.classList.add('hidden');
         if (elements.boardView) elements.boardView.classList.add('hidden');
         if (elements.detailView) elements.detailView.classList.remove('hidden');
         renderDetail();
@@ -422,13 +411,15 @@
         var preserveStatus = Boolean(options && options.preserveStatus);
         state.loading = true;
         if (!preserveStatus) {
-            setStatus('Refreshing project board...', 'info');
+            setStatus('Refreshing Library...', 'info');
         }
         var installedPromise = refreshInstalledPlugins();
+        var buildsPromise = loadForgeBuilds({ deferRender: true });
         try {
             var payload = await fetchJson('/api/local/projects');
             state.projects = Array.isArray(payload && payload.projects) ? payload.projects : [];
             await installedPromise;
+            await buildsPromise;
             var changedPositions = normalizeProjectPositions(state.projects);
             if (changedPositions.length) {
                 changedPositions.slice(0, 12).forEach(function (row) {
@@ -446,11 +437,10 @@
                 }
             }
             renderBoard();
-            void loadForgeBuilds();
             if (!preserveStatus) {
                 var moduleCount = installedWorkspacePlugins().length;
                 setStatus(
-                    'My Stuff ready. '
+                    'Library ready. '
                     + String(moduleCount) + ' installed app' + (moduleCount === 1 ? '' : 's')
                     + ' and '
                     + String(state.projects.length) + ' project' + (state.projects.length === 1 ? '' : 's')
@@ -461,7 +451,7 @@
                 renderStatus();
             }
         } catch (error) {
-            setStatus(safeString(error && error.message) || 'Could not load Project Board.', 'bad');
+            setStatus(safeString(error && error.message) || 'Could not load Library.', 'bad');
         } finally {
             state.loading = false;
         }
@@ -519,7 +509,7 @@
         }
     }
 
-    // -- Forge Code build deliverables ("My Stuff" build outputs) -------------
+    // -- Forge Code deliverables recorded in Library --------------------------
     // A run that produced a coherent deliverable (a built page/app, a doc, an
     // image, a data file) is registered server-side at run completion; we surface
     // those here so a build becomes a durable, openable thing -- not a diff that
@@ -535,94 +525,95 @@
         return '📦';
     }
 
-    function renderForgeBuilds() {
-        if (!elements.forgeBuilds || !elements.forgeBuildsGrid) return;
-        var builds = Array.isArray(state.forgeBuilds) ? state.forgeBuilds : [];
-        if (!builds.length) {
-            elements.forgeBuilds.classList.add('hidden');
-            elements.forgeBuildsGrid.innerHTML = '';
-            return;
-        }
-        elements.forgeBuilds.classList.remove('hidden');
-        elements.forgeBuildsGrid.innerHTML = builds.map(function (build) {
-            var openUrl = safeString(build && build.open_url);
-            var deepLink = safeString(build && build.deep_link);
-            var kind = safeString(build && build.kind);
-            var title = safeString(build && build.title) || 'Build';
-            var buildKey = safeString(build && (build.id || build.deliverable_id || build.path || build.open_url || build.deep_link)) || (kind + '-' + title);
-            var thumb = safeString(build && build.thumbnail);
-            // A registered deliverable persists as a registry row + path; its built
-            // file can later be reverted/moved/deleted, leaving the card dangling so
-            // "Open" 404s. The server reports `available:false` for those. Render them
-            // greyed + non-opening and never load the (gone) artifact -- that load IS
-            // the 404. A missing flag is treated as available (older payloads).
-            var available = !build || build.available !== false;
-            var preview;
-            if (!available) {
-                preview = '<span class="stuff-forge-thumb-glyph">' + forgeBuildGlyph(kind) + '</span>';
-            } else if (kind === 'image' && thumb) {
-                preview = '<img class="stuff-forge-thumb-img" src="' + escapeHtml(thumb) + '" alt="' + escapeHtml(title) + ' preview" loading="lazy">';
-            } else if (kind === 'html' && openUrl) {
-                // A real, sandboxed live preview of the built page (opaque origin --
-                // it cannot reach this board's DOM), not a fabricated screenshot.
-                preview = '<iframe class="stuff-forge-thumb-frame" src="' + escapeHtml(openUrl) + '" sandbox="allow-scripts" loading="lazy" title="' + escapeHtml(title) + ' preview" tabindex="-1"></iframe>';
-            } else {
-                preview = '<span class="stuff-forge-thumb-glyph">' + forgeBuildGlyph(kind) + '</span>';
-            }
-            var metaLine = available
-                ? (escapeHtml(kind || 'deliverable') + ' · ' + escapeHtml(formatRelativeTime(build && (build.updated_at || build.created_at))))
-                : 'Unavailable · the built file was moved or deleted';
-            // Greyed via inline opacity (no extra stylesheet); the conversation
-            // deep-link still works since it does not depend on the built file.
-            return ''
-                + '<article class="stuff-forge-card" data-ui-id="my-stuff.forge-build-card.' + escapeHtml(buildKey) + '" data-ui-instance-key="' + escapeHtml(buildKey) + '" data-ui-component="repeating-card-item" data-ui-policy="layout-style" data-ui-constraints="preserve-instance-key,preserve-runtime-content,preserve-actions"' + (available ? '' : ' style="opacity:0.6;"') + '>'
-                + '  <div class="stuff-forge-thumb">' + preview + '</div>'
-                + '  <div class="stuff-forge-body">'
-                + '    <h3 class="stuff-forge-title">' + escapeHtml(title) + '</h3>'
-                + '    <p class="stuff-forge-meta">' + metaLine + '</p>'
-                + '    <div class="stuff-forge-actions" data-ui-id="my-stuff.forge-build-card.' + escapeHtml(buildKey) + '.actions" data-ui-component="action-group" data-ui-policy="layout-style" data-ui-constraints="preserve-order,preserve-handlers">'
-                +        (available && openUrl ? '<button class="stuff-btn stuff-btn-primary" type="button" data-forge-open="' + escapeHtml(openUrl) + '" data-ui-id="my-stuff.action.open-build.' + escapeHtml(buildKey) + '" data-ui-component="runtime-action" data-ui-policy="control" data-ui-constraints="preserve-handler,preserve-target">Open</button>' : '')
-                +        (!available ? '<button class="stuff-btn stuff-btn-ghost" type="button" disabled aria-disabled="true" title="The built file is no longer on disk" data-ui-id="my-stuff.action.unavailable-build.' + escapeHtml(buildKey) + '" data-ui-component="runtime-action" data-ui-policy="protected">Unavailable</button>' : '')
-                +        (deepLink ? '<button class="stuff-btn stuff-btn-ghost" type="button" data-forge-convo="' + escapeHtml(deepLink) + '" data-ui-id="my-stuff.action.open-build-conversation.' + escapeHtml(buildKey) + '" data-ui-component="runtime-action" data-ui-policy="control" data-ui-constraints="preserve-handler,preserve-target">Open in Code</button>' : '')
-                + '    </div>'
-                + '  </div>'
-                + '</article>';
-        }).join('');
-    }
-
-    async function loadForgeBuilds() {
+    async function loadForgeBuilds(options) {
         try {
             var payload = await fetchJson('/api/evolve/agent/deliverables');
             state.forgeBuilds = Array.isArray(payload && payload.deliverables) ? payload.deliverables : [];
         } catch (_error) {
             state.forgeBuilds = [];
         }
-        renderForgeBuilds();
+        if (!(options && options.deferRender)) renderInstalledAppsShelf();
+    }
+
+    function forgeBuildKey(build) {
+        return safeString(build && (build.id || build.deliverable_id || build.path || build.open_url || build.deep_link))
+            || (safeString(build && build.kind) + '-' + safeString(build && build.title));
+    }
+
+    function libraryItems() {
+        var items = installedWorkspacePlugins().map(function (plugin) {
+            return { key: 'app:' + (pluginId(plugin) || pluginMode(plugin)), type: 'app', title: pluginLabel(plugin), summary: pluginMeta(plugin), meta: 'Installed workspace', updated: '', icon: pluginInitials(plugin), raw: plugin };
+        });
+        (state.projects || []).forEach(function (project) {
+            var generated = Boolean(project && project.generated);
+            items.push({ key: 'project:' + safeString(project && project.id), type: generated ? 'creation' : 'project', title: safeString(project && project.name) || 'Project', summary: safeString(project && (project.scope_summary || project.summary)), meta: safeString(project && project.framework) || 'Local project', updated: safeString(project && (project.updated_at || project.created_at)), icon: safeString(project && project.board_icon && project.board_icon.emoji) || (generated ? 'AI' : '{}'), raw: project, project: true });
+        });
+        (state.forgeBuilds || []).forEach(function (build) {
+            var openUrl = safeString(build && build.open_url);
+            var duplicate = openUrl && (state.projects || []).some(function (project) { return safeString(project && project.artifact_url) === openUrl; });
+            if (!duplicate) items.push({ key: 'creation:' + forgeBuildKey(build), type: 'creation', title: safeString(build && build.title) || 'Thomas creation', summary: safeString(build && build.summary) || 'A durable artifact created with Thomas.', meta: safeString(build && build.kind) || 'artifact', updated: safeString(build && (build.updated_at || build.created_at)), icon: forgeBuildGlyph(build && build.kind), raw: build, build: true });
+        });
+        return items.sort(function (left, right) { return (Date.parse(right.updated) || 0) - (Date.parse(left.updated) || 0) || left.title.localeCompare(right.title); });
+    }
+
+    function libraryCardMarkup(item) {
+        var rawKey = item.key.replace(/^[^:]+:/, '');
+        var uiPrefix = item.type === 'app' ? 'my-stuff.library.installed-app-card.' : (item.build ? 'my-stuff.library.forge-build-card.' : 'my-stuff.library.project-card.');
+        var tone = item.type === 'app' ? pluginTone(item.raw) : toneForState(item.raw && item.raw.readiness && item.raw.readiness.state);
+        return '<button class="stuff-installed-app' + (item.type === 'app' ? ' stuff-module-app' : '') + '" type="button" data-library-key="' + escapeHtml(item.key) + '"' + (item.type === 'app' ? ' data-plugin-mode="' + escapeHtml(pluginMode(item.raw)) + '"' : '') + ' data-ui-id="' + uiPrefix + escapeHtml(rawKey) + '" data-ui-instance-key="' + escapeHtml(rawKey) + '" data-ui-component="repeating-card-item" data-ui-policy="layout-style" data-ui-constraints="preserve-instance-key,preserve-handler,preserve-runtime-content">'
+            + '<span class="stuff-installed-icon stuff-module-icon">' + escapeHtml(item.icon) + '</span><span class="stuff-installed-copy"><span class="stuff-app-title">' + escapeHtml(item.title) + '</span><span class="stuff-app-meta">' + escapeHtml(item.summary || item.meta) + '</span></span>'
+            + '<span class="stuff-library-card-kind">' + escapeHtml(item.type === 'creation' ? 'Created' : item.type) + '</span><span class="stuff-installed-action">Details</span><span class="stuff-app-badge is-' + escapeHtml(tone) + '">' + escapeHtml(item.updated ? formatRelativeTime(item.updated) : item.meta) + '</span></button>';
     }
 
     function renderInstalledAppCard(plugin) {
-        var mode = pluginMode(plugin);
-        var tone = pluginTone(plugin);
-        var instanceKey = pluginId(plugin) || mode;
-        return ''
-            + '<button class="stuff-installed-app stuff-module-app" type="button" data-plugin-mode="' + escapeHtml(mode) + '" data-ui-id="my-stuff.installed-app-card.' + escapeHtml(instanceKey) + '" data-ui-instance-key="' + escapeHtml(instanceKey) + '" data-ui-component="repeating-card-item" data-ui-policy="layout-style" data-ui-constraints="preserve-instance-key,preserve-handler,preserve-runtime-content">'
-            + '  <span class="stuff-installed-icon stuff-module-icon">' + escapeHtml(pluginInitials(plugin)) + '</span>'
-            + '  <span class="stuff-installed-copy">'
-            + '    <span class="stuff-app-title">' + escapeHtml(pluginLabel(plugin)) + '</span>'
-            + '    <span class="stuff-app-meta">' + escapeHtml(pluginMeta(plugin)) + '</span>'
-            + '  </span>'
-            + '  <span class="stuff-installed-action">Open</span>'
-            + '  <span class="stuff-app-badge is-' + escapeHtml(tone) + '">' + (tone === 'good' ? 'Installed' : 'Needs review') + '</span>'
-            + '</button>';
+        return libraryCardMarkup({ key: 'app:' + (pluginId(plugin) || pluginMode(plugin)), type: 'app', title: pluginLabel(plugin), summary: pluginMeta(plugin), meta: 'Installed workspace', updated: '', icon: pluginInitials(plugin), raw: plugin });
     }
 
     function renderInstalledAppsShelf() {
         if (!elements.installedAppsShelf || !elements.installedAppsList) return;
-        var plugins = installedWorkspacePlugins();
+        var items = libraryItems();
+        var recentKeys = items.slice(0, 12).map(function (item) { return item.key; });
+        var query = state.libraryQuery.toLowerCase();
+        var visible = items.filter(function (item) {
+            var typeMatch = state.libraryFilter === 'all' || item.type === state.libraryFilter || (state.libraryFilter === 'recent' && recentKeys.indexOf(item.key) >= 0);
+            var text = (item.title + ' ' + item.summary + ' ' + item.meta + ' ' + item.type).toLowerCase();
+            return typeMatch && (!query || text.indexOf(query) >= 0);
+        });
         elements.installedAppsShelf.classList.remove('hidden');
-        elements.installedAppsList.innerHTML = plugins.length
-            ? plugins.map(renderInstalledAppCard).join('')
-            : '<div class="stuff-installed-empty">No installed app workspaces yet.</div>';
+        document.querySelectorAll('[data-filter-count]').forEach(function (node) { var key = safeString(node.getAttribute('data-filter-count')); node.textContent = String(key === 'all' ? items.length : key === 'recent' ? recentKeys.length : items.filter(function (item) { return item.type === key; }).length); });
+        if (elements.libraryTitle) elements.libraryTitle.textContent = state.libraryFilter === 'all' ? 'All Stuff' : state.libraryFilter.charAt(0).toUpperCase() + state.libraryFilter.slice(1);
+        if (elements.librarySummary) elements.librarySummary.textContent = String(visible.length) + ' of ' + String(items.length) + ' items';
+        elements.installedAppsList.innerHTML = visible.length ? visible.map(libraryCardMarkup).join('') : '<div class="stuff-installed-empty stuff-library-empty">Nothing matches this collection yet.<br>New Thomas creations will appear automatically when a canonical source records them.</div>';
+    }
+
+    function closeLibraryItemDetails() {
+        state.activeLibraryItem = null;
+        if (elements.itemDetail) elements.itemDetail.classList.add('hidden');
+    }
+
+    function openLibraryItemDetails(key) {
+        var item = libraryItems().find(function (row) { return row.key === key; });
+        if (!item) return;
+        if (item.project) { void openProject(safeString(item.raw && item.raw.id)); return; }
+        state.activeLibraryItem = item;
+        var isApp = item.type === 'app';
+        var source = isApp ? 'Installed marketplace registry' : 'Thomas Code deliverables registry';
+        var type = isApp ? 'Installed app' : (safeString(item.raw && item.raw.kind) || 'Artifact');
+        var target = isApp ? (pluginMode(item.raw) || safeString(item.raw && item.raw.surface_url)) : safeString(item.raw && (item.raw.path || item.raw.open_url));
+        var actions = isApp
+            ? '<button class="stuff-btn stuff-btn-primary" type="button" data-detail-plugin-mode="' + escapeHtml(pluginMode(item.raw)) + '" data-ui-id="my-stuff.action.launch-app.' + escapeHtml(item.key) + '" data-ui-component="runtime-action" data-ui-policy="control" data-ui-constraints="preserve-handler,preserve-target">Open App</button>'
+            : ((item.raw && item.raw.available === false) ? '<button class="stuff-btn stuff-btn-ghost" type="button" disabled>Artifact unavailable</button>' : (safeString(item.raw && item.raw.open_url) ? '<button class="stuff-btn stuff-btn-primary" type="button" data-forge-open="' + escapeHtml(item.raw.open_url) + '">Open Artifact</button>' : ''))
+                + (safeString(item.raw && item.raw.deep_link) ? '<button class="stuff-btn stuff-btn-ghost" type="button" data-forge-convo="' + escapeHtml(item.raw.deep_link) + '">Open Source Chat</button>' : '');
+        if (elements.itemDetailContent) elements.itemDetailContent.innerHTML = '<div class="stuff-item-detail-icon">' + escapeHtml(item.icon) + '</div><p class="stuff-item-detail-kicker">' + escapeHtml(type) + '</p><h2 id="itemDetailTitle">' + escapeHtml(item.title) + '</h2><p class="stuff-item-detail-summary">' + escapeHtml(item.summary || 'Ready in Library.') + '</p><dl class="stuff-item-detail-meta"><div><dt>Source</dt><dd>' + escapeHtml(source) + '</dd></div><div><dt>Location</dt><dd>' + escapeHtml(target || 'Managed by Thomas') + '</dd></div><div><dt>Updated</dt><dd>' + escapeHtml(item.updated ? formatRelativeTime(item.updated) : 'Installed now') + '</dd></div></dl><div class="stuff-item-detail-actions" data-ui-id="my-stuff.item-detail.actions" data-ui-component="action-group" data-ui-policy="layout-style" data-ui-constraints="preserve-order,preserve-handlers">' + actions + '</div>';
+        if (elements.itemDetail) { elements.itemDetail.classList.remove('hidden'); var close = elements.itemDetail.querySelector('.stuff-close-btn'); if (close) close.focus(); }
+    }
+
+    function setViewMode(mode) {
+        state.viewMode = mode === 'arrange' ? 'arrange' : 'library';
+        if (elements.installedAppsShelf) elements.installedAppsShelf.classList.toggle('hidden', state.viewMode !== 'library');
+        if (elements.boardView) elements.boardView.classList.toggle('hidden', state.viewMode !== 'arrange');
+        document.querySelectorAll('[data-view-mode]').forEach(function (button) { var active = button.getAttribute('data-view-mode') === state.viewMode; button.classList.toggle('is-active', active); button.setAttribute('aria-pressed', active ? 'true' : 'false'); });
+        renderStatus();
     }
 
     function renderBoard() {
@@ -645,7 +636,7 @@
             var accent = project && project.board_icon && project.board_icon.accent ? project.board_icon.accent : '#4c8eff';
             var projectId = safeString(project && project.id);
             return ''
-                + '<button class="stuff-app" type="button" data-project-id="' + escapeHtml(projectId) + '" data-ui-id="my-stuff.project-card.' + escapeHtml(projectId) + '" data-ui-instance-key="' + escapeHtml(projectId) + '" data-ui-component="repeating-card-item" data-ui-policy="layout-style" data-ui-constraints="preserve-instance-key,preserve-handler,preserve-drag-state,resize-deny" style="left:' + String(pos.x) + 'px;top:' + String(pos.y) + 'px;">'
+                + '<button class="stuff-app" type="button" data-project-id="' + escapeHtml(projectId) + '" data-ui-id="my-stuff.board.project-card.' + escapeHtml(projectId) + '" data-ui-instance-key="' + escapeHtml(projectId) + '" data-ui-component="repeating-card-item" data-ui-policy="layout-style" data-ui-constraints="preserve-instance-key,preserve-handler,preserve-drag-state,resize-deny" style="left:' + String(pos.x) + 'px;top:' + String(pos.y) + 'px;">'
                 + '  <span class="stuff-app-emoji" style="background:' + escapeHtml(accent) + ';">' + escapeHtml(icon) + '</span>'
                 + '  <span class="stuff-app-title">' + escapeHtml(safeString(project && project.name) || 'Project') + '</span>'
                 + '  <span class="stuff-app-meta">' + escapeHtml(safeString(project && project.framework) || safeString(project && project.project_type) || 'Workspace') + '</span>'
@@ -661,6 +652,7 @@
             + '</button>'
             + cards;
         updateBoardMinHeight(renderedPositions);
+        if (!state.activeProject) setViewMode(state.viewMode);
     }
 
     function actionButtonMarkup(action, label, extraClass, disabled) {
@@ -669,79 +661,17 @@
         return '<button class="stuff-btn ' + escapeHtml(extraClass || 'stuff-btn-ghost') + '" type="button" data-detail-action="' + escapeHtml(action) + '" data-ui-id="my-stuff.project-action.' + escapeHtml(instanceKey) + '" data-ui-instance-key="' + escapeHtml(action) + '" data-ui-component="' + (destructive ? 'privileged-action' : 'runtime-action') + '" data-ui-policy="' + (destructive ? 'protected' : 'control') + '" data-ui-constraints="preserve-handler,preserve-action' + (destructive ? ',preserve-confirmation-flow' : '') + '"' + (disabled ? ' disabled' : '') + '>' + escapeHtml(label) + '</button>';
     }
 
-    function getProjectChat(projectId) {
-        var key = safeString(projectId);
-        return Array.isArray(state.projectChats[key]) ? state.projectChats[key].slice() : [];
-    }
-
-    function saveProjectChat(projectId, rows) {
-        var key = safeString(projectId);
-        state.projectChats[key] = (Array.isArray(rows) ? rows : []).slice(-80);
-        writeStore(CHAT_STORE_KEY, state.projectChats);
-    }
-
-    function appendProjectChat(projectId, message) {
-        var rows = getProjectChat(projectId);
-        rows.push(message);
-        saveProjectChat(projectId, rows);
-    }
-
-    function updateProjectChatMessage(projectId, messageId, patch) {
-        var rows = getProjectChat(projectId).map(function (row) {
-            if (safeString(row && row.id) !== safeString(messageId)) return row;
-            return Object.assign({}, row || {}, patch || {});
-        });
-        saveProjectChat(projectId, rows);
-    }
-
-    function resetProjectChat(projectId) {
-        var key = safeString(projectId);
-        delete state.projectChats[key];
-        delete state.projectSessions[key];
-        writeStore(CHAT_STORE_KEY, state.projectChats);
-        writeStore(SESSION_STORE_KEY, state.projectSessions);
-    }
-
-    function renderProjectChatMessages(projectId) {
-        var rows = getProjectChat(projectId);
-        if (!rows.length) {
-            return '<div class="stuff-chat-empty">This lane is project-scoped. Ask Thomas to troubleshoot, explain the repo, or launch and verify it from here.</div>';
-        }
-        return rows.map(function (row) {
-            var role = safeString(row && row.role).toLowerCase() === 'user' ? 'user' : 'assistant';
-            var messageKey = safeString(row && row.id) || (role + '-' + safeString(row && row.created_at));
-            return ''
-                + '<div class="stuff-chat-row role-' + role + (row && row.pending ? ' is-pending' : '') + '" data-ui-id="my-stuff.project-chat.message.' + escapeHtml(messageKey) + '" data-ui-instance-key="' + escapeHtml(messageKey) + '" data-ui-component="repeating-content-item" data-ui-policy="style-only" data-ui-constraints="preserve-instance-key,preserve-runtime-content">'
-                + '  <div class="stuff-chat-bubble">' + escapeHtml(safeString(row && row.text) || (row && row.pending ? 'Thomas is thinking...' : '')) + '</div>'
-                + '</div>';
-        }).join('');
-    }
-
     function renderProjectChatMarkup(project) {
         var projectId = safeString(project && project.id);
-        var busy = safeString(state.chatBusyProjectId) === projectId;
         return ''
-            + '<section class="stuff-project-chat" data-ui-id="my-stuff.project-chat.' + escapeHtml(projectId) + '" data-ui-component="workspace-region" data-ui-policy="layout-style" data-ui-constraints="preserve-project-scope,preserve-state">'
+            + '<section class="stuff-project-chat" data-ui-id="my-stuff.project-thomas.' + escapeHtml(projectId) + '" data-ui-component="workspace-region" data-ui-policy="layout-style" data-ui-constraints="preserve-project-scope,preserve-handler">'
             + '  <div class="stuff-chat-head">'
             + '    <div class="stuff-chat-head-copy">'
-            + '      <h3>Thomas Project Chat</h3>'
-            + '      <p>This lane stays tied to ' + escapeHtml(safeString(project && project.name) || 'this project') + ' so Thomas can work from the repo context instead of the main chat.</p>'
+            + '      <h3>Thomas</h3>'
+            + '      <p>Open the Library specialist with ' + escapeHtml(safeString(project && project.name) || 'this project') + ' already in context.</p>'
             + '    </div>'
-            + '    <div class="stuff-chat-head-actions" data-ui-id="my-stuff.project-chat.' + escapeHtml(projectId) + '.actions" data-ui-component="action-group" data-ui-policy="layout-style" data-ui-constraints="preserve-order,preserve-handlers">'
-            +        actionButtonMarkup('troubleshoot', 'Troubleshoot', 'stuff-btn-primary', busy)
-            +        actionButtonMarkup('new_thread', 'New Thread', 'stuff-btn-ghost', busy)
-            + '    </div>'
+            + '    <button class="stuff-btn stuff-btn-primary" type="button" data-open-workspace-chat data-ui-id="my-stuff.action.open-thomas.' + escapeHtml(projectId) + '" data-ui-component="runtime-action" data-ui-policy="control" data-ui-constraints="preserve-handler">Ask Thomas</button>'
             + '  </div>'
-            + '  <div class="stuff-chat-quick-row" data-ui-id="my-stuff.project-chat.' + escapeHtml(projectId) + '.prompts" data-ui-component="action-group" data-ui-policy="layout-style" data-ui-constraints="preserve-order,preserve-handlers">'
-            + '    <button class="stuff-chat-chip" type="button" data-chat-prompt="explain" data-ui-id="my-stuff.action.chat-prompt.' + escapeHtml(projectId) + '.explain" data-ui-instance-key="explain" data-ui-component="runtime-action" data-ui-policy="control" data-ui-constraints="preserve-handler,preserve-prompt">Explain Project</button>'
-            + '    <button class="stuff-chat-chip" type="button" data-chat-prompt="launch_verify" data-ui-id="my-stuff.action.chat-prompt.' + escapeHtml(projectId) + '.launch-verify" data-ui-instance-key="launch-verify" data-ui-component="runtime-action" data-ui-policy="control" data-ui-constraints="preserve-handler,preserve-prompt">Launch + Verify</button>'
-            + '    <button class="stuff-chat-chip" type="button" data-chat-prompt="troubleshoot" data-ui-id="my-stuff.action.chat-prompt.' + escapeHtml(projectId) + '.troubleshoot" data-ui-instance-key="troubleshoot" data-ui-component="runtime-action" data-ui-policy="control" data-ui-constraints="preserve-handler,preserve-prompt">Troubleshoot</button>'
-            + '  </div>'
-            + '  <div class="stuff-chat-log" data-project-chat-log data-ui-id="my-stuff.project-chat.' + escapeHtml(projectId) + '.messages" data-ui-component="repeating-content-list" data-ui-policy="layout-style" data-ui-constraints="preserve-instance-keys,preserve-runtime-content">' + renderProjectChatMessages(projectId) + '</div>'
-            + '  <form class="stuff-chat-form" data-project-chat-form data-ui-id="my-stuff.project-chat.' + escapeHtml(projectId) + '.composer" data-ui-component="composer" data-ui-policy="layout-style" data-ui-constraints="preserve-handler,preserve-submit-flow">'
-            + '    <textarea data-project-chat-input data-ui-id="my-stuff.project-chat.' + escapeHtml(projectId) + '.input" data-ui-component="runtime-input" data-ui-policy="control" data-ui-constraints="preserve-handler,preserve-project-scope" placeholder="Talk to Thomas about this project only..."' + (busy ? ' disabled' : '') + '></textarea>'
-            + '    <button class="stuff-btn stuff-btn-primary" type="submit" data-ui-id="my-stuff.action.send-project-chat.' + escapeHtml(projectId) + '" data-ui-component="runtime-action" data-ui-policy="control" data-ui-constraints="preserve-handler,preserve-submit-flow"' + (busy ? ' disabled' : '') + '>' + (busy ? 'Working...' : 'Send') + '</button>'
-            + '  </form>'
             + '</section>';
     }
 
@@ -832,16 +762,6 @@
             + renderProjectChatMarkup(project);
     }
 
-    function prefillProjectPrompt(text) {
-        if (!elements.detailShell) return;
-        var input = elements.detailShell.querySelector('[data-project-chat-input]');
-        if (!(input instanceof HTMLTextAreaElement)) return;
-        input.value = safeString(text);
-        input.focus();
-        input.selectionStart = input.value.length;
-        input.selectionEnd = input.value.length;
-    }
-
     function quickPrompt(kind, project) {
         var name = safeString(project && project.name) || 'this project';
         if (kind === 'launch_verify') {
@@ -853,173 +773,16 @@
         return 'Explain what ' + name + ' is, what stack it uses, and what the most important files are.';
     }
 
-    function buildProjectScopedPrompt(project, userMessage) {
-        var launchCandidates = Array.isArray(project && project.launch_candidates) ? project.launch_candidates : [];
-        var findings = Array.isArray(project && project.findings_preview) ? project.findings_preview : [];
-        var candidateText = launchCandidates.map(function (candidate) {
-            return '- ' + safeString(candidate && candidate.label) + ': ' + safeString(candidate && candidate.command_display);
-        }).filter(Boolean).join('\n');
-        var findingText = findings.map(function (finding) {
-            return '- ' + safeString(finding && finding.title) + ': ' + safeString(finding && finding.detail);
-        }).filter(Boolean).join('\n');
-        return [
-            'You are Thomas working inside a single linked local project from Project Board.',
-            'Treat the project root below as the active workspace for this conversation.',
-            'If you suggest commands or file paths, anchor them to this repo.',
-            '',
-            'Project name: ' + safeString(project && project.name),
-            'Project root: ' + safeString(project && project.root_path),
-            'Framework: ' + safeString(project && project.framework),
-            'Project type: ' + safeString(project && project.project_type),
-            'Readiness: ' + safeString(project && project.readiness && project.readiness.label),
-            'Summary: ' + safeString(project && project.summary),
-            'Scope summary: ' + safeString(project && project.scope_summary),
-            candidateText ? ('Launch candidates:\n' + candidateText) : 'Launch candidates: none detected',
-            findingText ? ('Findings preview:\n' + findingText) : 'Findings preview: none',
-            '',
-            'User request:',
-            safeString(userMessage)
-        ].join('\n');
-    }
-
-    async function consumeNdjson(response, onEvent) {
-        var reader = response && response.body && response.body.getReader ? response.body.getReader() : null;
-        var decoder = new TextDecoder();
-        var buffer = '';
-        if (!reader) {
-            var whole = await response.text();
-            buffer = whole || '';
-        } else {
-            while (true) {
-                var chunk = await reader.read();
-                if (!chunk || chunk.done) break;
-                buffer += decoder.decode(chunk.value, { stream: true });
-                var newlineIndex = buffer.indexOf('\n');
-                while (newlineIndex >= 0) {
-                    var line = buffer.slice(0, newlineIndex).trim();
-                    buffer = buffer.slice(newlineIndex + 1);
-                    if (line) {
-                        try {
-                            onEvent(JSON.parse(line));
-                        } catch (_error) {}
-                    }
-                    newlineIndex = buffer.indexOf('\n');
-                }
-            }
-            buffer += decoder.decode();
-        }
-        if (buffer.trim()) {
-            buffer.trim().split(/\n+/).forEach(function (line) {
-                if (!line) return;
-                try {
-                    onEvent(JSON.parse(line));
-                } catch (_error) {}
-            });
-        }
-    }
-
-    function syncProjectChatUi() {
-        if (!elements.detailShell || !state.activeProject) return;
-        var projectId = safeString(state.activeProject.id);
-        var log = elements.detailShell.querySelector('[data-project-chat-log]');
-        if (log) {
-            log.innerHTML = renderProjectChatMessages(projectId);
-            log.scrollTop = log.scrollHeight;
-        }
-        var input = elements.detailShell.querySelector('[data-project-chat-input]');
-        var formButton = elements.detailShell.querySelector('[data-project-chat-form] button[type="submit"]');
-        var busy = safeString(state.chatBusyProjectId) === projectId;
-        if (input instanceof HTMLTextAreaElement) input.disabled = busy;
-        if (formButton instanceof HTMLButtonElement) {
-            formButton.disabled = busy;
-            formButton.textContent = busy ? 'Working...' : 'Send';
-        }
-    }
-
     async function sendProjectChat(message) {
         var project = state.activeProject;
         var projectId = safeString(project && project.id);
         var text = safeString(message);
         if (!projectId || !text) return;
-        if (safeString(state.chatBusyProjectId) === projectId) return;
-
-        appendProjectChat(projectId, {
-            id: makeLocalId('user'),
-            role: 'user',
-            text: text,
-            created_at: new Date().toISOString()
-        });
-
-        var assistantId = makeLocalId('assistant');
-        appendProjectChat(projectId, {
-            id: assistantId,
-            role: 'assistant',
-            text: '',
-            pending: true,
-            created_at: new Date().toISOString()
-        });
-
-        state.chatBusyProjectId = projectId;
-        syncProjectChatUi();
-        setStatus('Thomas is working inside ' + safeString(project && project.name) + '...', 'info');
-
-        try {
-            var sessionId = safeString(state.projectSessions[projectId]);
-            var response = await fetch('/api/v2/chat', {
-                method: 'POST',
-                headers: {
-                    'Accept': 'application/x-ndjson, application/json',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    message: buildProjectScopedPrompt(project, text),
-                    session_id: sessionId || undefined,
-                    mode: 'auto',
-                    autonomy_level: 3
-                })
-            });
-            if (!response.ok) {
-                var errorText = await response.text();
-                throw new Error(errorText || 'Thomas could not answer from this project lane.');
-            }
-
-            var assistantText = '';
-            await consumeNdjson(response, function (event) {
-                var type = safeString(event && event.type).toLowerCase();
-                if (type === 'text') {
-                    assistantText += safeString(event && event.text);
-                    updateProjectChatMessage(projectId, assistantId, { text: assistantText, pending: true });
-                    syncProjectChatUi();
-                    return;
-                }
-                if (type === 'done') {
-                    var nextSessionId = safeString(event && event.session_id);
-                    if (nextSessionId) {
-                        state.projectSessions[projectId] = nextSessionId;
-                        writeStore(SESSION_STORE_KEY, state.projectSessions);
-                    }
-                    return;
-                }
-                if (type === 'error') {
-                    throw new Error(safeString(event && event.error) || 'Thomas hit an error in this project lane.');
-                }
-            });
-
-            updateProjectChatMessage(projectId, assistantId, {
-                text: assistantText || 'Thomas finished the project pass but did not stream a text reply.',
-                pending: false
-            });
-            setStatus('Project chat updated.', 'good');
-        } catch (error) {
-            updateProjectChatMessage(projectId, assistantId, {
-                text: safeString(error && error.message) || 'Thomas could not answer from this project lane.',
-                pending: false
-            });
-            setStatus('Project chat failed to answer.', 'bad');
-        } finally {
-            state.chatBusyProjectId = '';
-            syncProjectChatUi();
-        }
+        window.parent.postMessage({
+            type: 'thomas:workspace-chat:open',
+            mode: 'my_stuff',
+            draft: 'For ' + (safeString(project && project.name) || 'this project') + ' at ' + safeString(project && project.root_path) + ': ' + text
+        }, window.location.origin);
     }
 
     async function runDetailAction(action) {
@@ -1028,27 +791,14 @@
         if (!projectId || !action) return;
 
         if (action === 'remove') {
-            if (!window.confirm('Remove this project from Project Board?')) return;
+            if (!window.confirm('Remove this project from Library?')) return;
             await fetchJson('/api/local/projects/' + encodeURIComponent(projectId), {
                 method: 'DELETE',
                 headers: { 'Accept': 'application/json' }
             });
-            resetProjectChat(projectId);
             openBoardView();
             await refresh({ preserveStatus: true });
-            setStatus('Removed ' + safeString(project && project.name) + ' from Project Board.', 'good');
-            return;
-        }
-
-        if (action === 'new_thread') {
-            resetProjectChat(projectId);
-            state.detailResult = {
-                projectId: projectId,
-                tone: 'info',
-                title: 'Project chat reset',
-                text: 'Thomas will start a fresh project-only lane the next time you send a message.'
-            };
-            renderDetail();
+            setStatus('Removed ' + safeString(project && project.name) + ' from Library.', 'good');
             return;
         }
 
@@ -1284,6 +1034,13 @@
             setStatus('Saved icon position.', 'good');
         });
 
+        elements.board.addEventListener('pointercancel', function (event) {
+            if (!state.drag || state.drag.pointerId !== event.pointerId) return;
+            if (state.drag.target) state.drag.target.classList.remove('is-dragging');
+            state.drag = null;
+            renderBoard();
+        });
+
         ['dragenter', 'dragover'].forEach(function (eventName) {
             elements.board.addEventListener(eventName, function (event) {
                 event.preventDefault();
@@ -1313,14 +1070,53 @@
 
     if (elements.installedAppsList) {
         elements.installedAppsList.addEventListener('click', function (event) {
-            var target = event.target instanceof Element ? event.target.closest('[data-plugin-mode]') : null;
+            var target = event.target instanceof Element ? event.target.closest('[data-library-key]') : null;
             if (!target) return;
-            launchInstalledPluginMode(target.getAttribute('data-plugin-mode'));
+            openLibraryItemDetails(safeString(target.getAttribute('data-library-key')));
         });
     }
 
+    document.querySelectorAll('[data-library-filter]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            state.libraryFilter = safeString(button.getAttribute('data-library-filter')) || 'all';
+            document.querySelectorAll('[data-library-filter]').forEach(function (row) { var active = row === button; row.classList.toggle('is-active', active); row.setAttribute('aria-pressed', active ? 'true' : 'false'); });
+            renderInstalledAppsShelf();
+        });
+    });
+
+    document.querySelectorAll('[data-view-mode]').forEach(function (button) {
+        button.addEventListener('click', function () { setViewMode(button.getAttribute('data-view-mode')); });
+    });
+
+    if (elements.stuffSearch) {
+        elements.stuffSearch.addEventListener('input', function () { state.libraryQuery = safeString(elements.stuffSearch.value); renderInstalledAppsShelf(); });
+    }
+
+    if (elements.itemDetail) {
+        elements.itemDetail.addEventListener('click', function (event) {
+            var close = event.target instanceof Element ? event.target.closest('[data-close-item-detail]') : null;
+            if (close) { closeLibraryItemDetails(); return; }
+            var app = event.target instanceof Element ? event.target.closest('[data-detail-plugin-mode]') : null;
+            if (app) { launchInstalledPluginMode(app.getAttribute('data-detail-plugin-mode')); return; }
+            var open = event.target instanceof Element ? event.target.closest('[data-forge-open]') : null;
+            if (open) { var openUrl = safeString(open.getAttribute('data-forge-open')); if (openUrl) window.open(openUrl, '_blank', 'noopener'); return; }
+            var convo = event.target instanceof Element ? event.target.closest('[data-forge-convo]') : null;
+            if (convo) { var deepLink = safeString(convo.getAttribute('data-forge-convo')); if (deepLink) { try { (window.top || window).location.href = deepLink; } catch (_error) { window.location.href = deepLink; } } }
+        });
+    }
+
+    document.addEventListener('keydown', function (event) {
+        if ((event.ctrlKey || event.metaKey) && safeString(event.key).toLowerCase() === 'k' && elements.stuffSearch) { event.preventDefault(); elements.stuffSearch.focus(); }
+        if (event.key === 'Escape' && state.activeLibraryItem) closeLibraryItemDetails();
+    });
+
     if (elements.detailShell) {
         elements.detailShell.addEventListener('click', function (event) {
+            var openThomas = event.target instanceof Element ? event.target.closest('button[data-open-workspace-chat]') : null;
+            if (openThomas && state.activeProject) {
+                void sendProjectChat('What should I know or do next with this project?');
+                return;
+            }
             var actionTarget = event.target instanceof Element ? event.target.closest('button[data-detail-action]') : null;
             if (actionTarget) {
                 var action = safeString(actionTarget.getAttribute('data-detail-action'));
@@ -1328,47 +1124,6 @@
                     void runDetailAction(action);
                 }
                 return;
-            }
-            var promptTarget = event.target instanceof Element ? event.target.closest('button[data-chat-prompt]') : null;
-            if (!promptTarget || !state.activeProject) return;
-            var promptKey = safeString(promptTarget.getAttribute('data-chat-prompt'));
-            if (!promptKey) return;
-            prefillProjectPrompt(quickPrompt(promptKey, state.activeProject));
-        });
-
-        elements.detailShell.addEventListener('submit', function (event) {
-            var form = event.target instanceof Element ? event.target.closest('[data-project-chat-form]') : null;
-            if (!form) return;
-            event.preventDefault();
-            var input = elements.detailShell.querySelector('[data-project-chat-input]');
-            if (!(input instanceof HTMLTextAreaElement)) return;
-            var message = safeString(input.value);
-            if (!message) return;
-            input.value = '';
-            void sendProjectChat(message);
-        });
-    }
-
-    if (elements.forgeBuildsGrid) {
-        elements.forgeBuildsGrid.addEventListener('click', function (event) {
-            var openTarget = event.target instanceof Element ? event.target.closest('[data-forge-open]') : null;
-            if (openTarget) {
-                var openUrl = safeString(openTarget.getAttribute('data-forge-open'));
-                // Open the real built file (sandboxed artifact preview) in a new tab.
-                if (openUrl) window.open(openUrl, '_blank', 'noopener');
-                return;
-            }
-            var convoTarget = event.target instanceof Element ? event.target.closest('[data-forge-convo]') : null;
-            if (convoTarget) {
-                var deepLink = safeString(convoTarget.getAttribute('data-forge-convo'));
-                if (!deepLink) return;
-                // Deep-link back to the originating Code conversation. This board is
-                // an embedded surface; navigate the TOP window so Thomas Code opens.
-                try {
-                    (window.top || window).location.href = deepLink;
-                } catch (_error) {
-                    window.location.href = deepLink;
-                }
             }
         });
     }

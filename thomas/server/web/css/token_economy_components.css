@@ -2,8 +2,8 @@
 .te-v3 .te-main {
     min-width: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(320px, .8fr);
-    gap: 14px;
+    grid-template-columns: minmax(0, 1.4fr) minmax(300px, .6fr);
+    gap: 8px;
 }
 
 .te-v3 .te-col-left,
@@ -11,29 +11,29 @@
     min-width: 0;
     display: grid;
     align-content: start;
-    gap: 14px;
+    gap: 8px;
 }
 
 .te-v3 .te-panel {
     min-width: 0;
-    padding: 16px;
+    padding: 10px;
     overflow: hidden;
     border: 1px solid var(--c-border);
-    border-radius: var(--r-card, 14px);
-    background: var(--c-surface);
+    border-radius: calc(var(--r-card, 14px) - 6px);
+    background: color-mix(in srgb, var(--c-surface) 92%, transparent);
 }
 
 .te-v3 .te-panel-grow {
-    min-height: 330px;
+    min-height: 220px;
 }
 
 .te-v3 .te-panel-head {
-    min-height: 24px;
+    min-height: 19px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    margin-bottom: 12px;
+    margin-bottom: 7px;
     color: var(--c-text);
 }
 
@@ -44,23 +44,17 @@
     text-transform: none;
 }
 
-.te-v3 .te-panel-copy {
-    margin: -5px 0 13px;
-    color: var(--c-dim);
-    font-size: 12px;
-}
-
 .te-v3 .te-spectrum {
-    min-height: 255px;
+    min-height: 178px;
 }
 
 .te-v3 .te-spec-grid {
-    height: 255px;
+    height: 178px;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(18px, 1fr));
     align-items: end;
-    gap: 6px;
-    padding-top: 22px;
+    gap: 4px;
+    padding-top: 12px;
 }
 
 .te-v3 .te-spec-col {
@@ -95,18 +89,18 @@
 }
 
 .te-v3 .te-terminal {
-    max-height: 240px;
+    max-height: 126px;
     overflow: auto;
     border: 1px solid var(--c-border);
-    border-radius: 10px;
-    background: var(--c-bg);
+    border-radius: 6px;
+    background: transparent;
 }
 
 .te-v3 .te-term-line {
     display: grid;
     grid-template-columns: 64px minmax(70px, 1fr) auto minmax(120px, 1.3fr);
-    gap: 8px;
-    padding: 8px 10px;
+    gap: 6px;
+    padding: 5px 7px;
     border-bottom: 1px solid var(--c-border);
     color: var(--c-dim);
     font: 10.5px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -121,7 +115,7 @@
 .te-v3 .te-term-tok { color: var(--c-text); }
 
 .te-v3 .te-switch-track {
-    margin-bottom: 12px;
+    margin-bottom: 7px;
 }
 
 .te-v3 .te-switch-bg {
@@ -130,8 +124,8 @@
     grid-template-columns: repeat(3, 1fr);
     padding: 3px;
     border: 1px solid var(--c-border);
-    border-radius: 11px;
-    background: var(--c-bg);
+    border-radius: 7px;
+    background: transparent;
 }
 
 .te-v3 .te-switch-thumb {
@@ -140,7 +134,7 @@
     bottom: 3px;
     width: calc(33.333% - 2px);
     border: 1px solid var(--c-accent-line);
-    border-radius: 8px;
+    border-radius: 5px;
     background: var(--c-accent-soft);
     transition: left .16s ease;
 }
@@ -148,7 +142,7 @@
 .te-v3 .te-switch-opt {
     position: relative;
     z-index: 1;
-    min-height: 48px;
+    min-height: 36px;
     display: grid;
     place-content: center;
     gap: 1px;
@@ -173,25 +167,25 @@
 }
 
 .te-v3 .te-mode-readout {
-    padding: 12px;
+    padding: 8px;
     border: 1px solid var(--c-border);
-    border-radius: 10px;
+    border-radius: 6px;
     background: var(--c-surface-2);
 }
 
 .te-v3 .te-ro-desc {
     display: block;
-    margin-bottom: 9px;
+    margin-bottom: 5px;
     color: var(--c-dim);
-    font-size: 12px;
+    font-size: 10px;
 }
 
 .te-v3 .te-ro-grid {
     display: grid;
     grid-template-columns: minmax(90px, 1fr) auto;
-    gap: 5px 12px;
+    gap: 3px 10px;
     color: var(--c-muted);
-    font-size: 11px;
+    font-size: 10px;
 }
 
 .te-v3 .te-ro-grid > :nth-child(even) {
@@ -201,14 +195,14 @@
 }
 
 .te-v3 .te-context-meter {
-    margin-top: 13px;
+    margin-top: 8px;
 }
 
 .te-v3 .te-ctx-label {
     display: flex;
     justify-content: space-between;
     gap: 10px;
-    margin-bottom: 7px;
+    margin-bottom: 4px;
     color: var(--c-muted);
     font-size: 10px;
     font-weight: 750;
@@ -221,7 +215,7 @@
 
 .te-v3 .te-mprop {
     position: relative;
-    min-height: 30px;
+    min-height: 24px;
     display: grid;
     grid-template-columns: minmax(90px, 1fr) auto;
     align-items: center;
@@ -256,14 +250,14 @@
 
 .te-v3 .te-mtbl {
     width: 100%;
-    margin-top: 10px;
+    margin-top: 5px;
     border-collapse: collapse;
     color: var(--c-dim);
     font-size: 10.5px;
 }
 
 .te-v3 .te-mtbl td {
-    padding: 7px 4px;
+    padding: 4px;
     border-bottom: 1px solid var(--c-border);
     text-align: right;
 }
@@ -302,7 +296,7 @@
 
 .te-v3 .te-rate-grid > span {
     min-width: 0;
-    padding: 6px 0;
+    padding: 4px 0;
     overflow: hidden;
     border-bottom: 1px solid var(--c-border);
     text-overflow: ellipsis;
@@ -330,7 +324,7 @@
 
 .te-v3 .te-empty-state,
 .te-v3 .te-loading {
-    min-height: 110px;
+    min-height: 72px;
     display: grid;
     place-items: center;
     color: var(--c-muted);
@@ -340,7 +334,7 @@
 
 .te-v3 .te-empty-chart {
     width: min(300px, 100%);
-    height: 90px;
+    height: 54px;
 }
 
 .te-v3 .te-empty-svg {
@@ -355,7 +349,7 @@
 
 .te-v3 .te-idle-viz {
     height: 5px;
-    margin-bottom: 12px;
+    margin-bottom: 7px;
     overflow: hidden;
     border-radius: 999px;
     background: var(--c-surface-2);

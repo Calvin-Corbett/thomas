@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Thomas · My Stuff</title>
+    <title>Thomas · Library</title>
     <link rel="stylesheet" href="/static/css/tokens.css">
     <link rel="stylesheet" href="/static/css/workspace_shell.css?v=__THOMAS_WEB_BUILD__">
     <link rel="stylesheet" href="/static/css/ui_edit_mode.css?v=__THOMAS_WEB_BUILD__">
-    <link rel="stylesheet" href="/static/static/my_stuff.style01.css?v=20260624-forge-builds-1-20260721-modernized-1">
+    <link rel="stylesheet" href="/static/static/my_stuff.style01.css?v=20260624-forge-builds-1-20260721-library-3">
     <script src="/static/js/workspace_shell.js?v=__THOMAS_WEB_BUILD__" defer></script>
     <script src="/static/js/ui_edit_layout.js?v=__THOMAS_WEB_BUILD__" defer></script>
     <script src="/static/js/ui_edit_mode.js?v=__THOMAS_WEB_BUILD__" defer></script>
-    <script src="/static/static/my_stuff.script01.js?v=20260624-forge-builds-1-20260721-modernized-1" defer></script>
+    <script src="/static/static/my_stuff.script01.js?v=20260624-forge-builds-1-20260721-library-3" defer></script>
 </head>
 <body data-ui-workspace="my_stuff">
     <main class="stuff-shell" data-ui-id="my-stuff.shell" data-ui-component="workspace-shell" data-ui-policy="layout-style" data-ui-constraints="preserve-runtime-ids,preserve-handlers">
@@ -19,54 +19,69 @@
             <span class="thomas-eyes-mark" aria-hidden="true"><span></span><span></span></span>
             <span class="stuff-brand-name">Thomas</span>
             <span class="stuff-brand-divider" aria-hidden="true">/</span>
-            <span class="stuff-brand-space">My Stuff</span>
+            <span class="stuff-brand-space">Library</span>
         </div>
 
         <header class="stuff-header" data-ui-id="my-stuff.header" data-ui-component="workspace-header" data-ui-policy="layout-style" data-ui-constraints="preserve-actions,preserve-heading-order">
             <div class="stuff-header-copy" data-ui-id="my-stuff.header.copy" data-ui-component="content-group" data-ui-policy="content-style">
-                <p class="stuff-kicker">My Stuff</p>
-                <h1>Your projects, ready when you are.</h1>
-                <p class="stuff-subtitle">Open local work, launch and verify it, or ask Thomas for help in a project-only lane.</p>
+                <h1>Library</h1>
+                <p class="stuff-subtitle">Apps · Projects · Creations</p>
             </div>
             <div class="stuff-header-actions" data-ui-id="my-stuff.header.actions" data-ui-component="action-group" data-ui-policy="layout-style" data-ui-constraints="preserve-order,preserve-handlers">
+                <div class="stuff-view-switch" role="group" aria-label="Library view" data-ui-id="my-stuff.view-switch" data-ui-component="action-group" data-ui-policy="layout-style" data-ui-constraints="preserve-order,preserve-handlers">
+                    <button class="stuff-view-button is-active" type="button" data-view-mode="library" aria-pressed="true">Library</button>
+                    <button class="stuff-view-button" type="button" data-view-mode="arrange" aria-pressed="false">Arrange</button>
+                </div>
                 <button class="stuff-btn stuff-btn-ghost" id="refreshButton" type="button" data-ui-id="my-stuff.action.refresh" data-ui-component="runtime-action" data-ui-policy="style-only" data-ui-constraints="preserve-id,preserve-handler">Refresh</button>
                 <button class="stuff-btn stuff-btn-primary" id="openImportButton" type="button" data-ui-id="my-stuff.action.add-project" data-ui-component="runtime-action" data-ui-policy="style-only" data-ui-constraints="preserve-id,preserve-handler">Add Project</button>
             </div>
         </header>
 
         <section class="stuff-statusbar" aria-live="polite" data-ui-id="my-stuff.status" data-ui-component="status-region" data-ui-policy="layout-style" data-ui-constraints="preserve-live-region">
-            <span class="stuff-status-pill" id="statusPill">Board</span>
-            <span class="stuff-status-text" id="statusText">Loading project board...</span>
+            <span class="stuff-status-pill" id="statusPill">Library</span>
+            <span class="stuff-status-text" id="statusText">Loading Library...</span>
         </section>
 
         <section class="stuff-installed-shelf" id="installedAppsShelf" aria-labelledby="installedAppsTitle" data-ui-id="my-stuff.installed-apps" data-ui-component="repeating-card-group" data-ui-policy="layout-style" data-ui-constraints="items-runtime-owned,reorder-deny,add-deny,remove-deny">
-            <div class="stuff-installed-head">
-                <div>
-                    <p class="stuff-kicker">Ready now</p>
-                    <h2 id="installedAppsTitle">Installed Apps</h2>
+            <h2 class="stuff-visually-hidden" id="installedAppsTitle">Library items</h2>
+            <label class="stuff-search" for="stuffSearch" data-ui-id="my-stuff.library.search" data-ui-component="runtime-input" data-ui-policy="control" data-ui-constraints="preserve-id,preserve-handler">
+                <span aria-hidden="true">⌕</span>
+                <input id="stuffSearch" type="search" autocomplete="off" placeholder="Search apps, projects, artifacts, and files" aria-label="Search Library">
+                <kbd>Ctrl K</kbd>
+            </label>
+            <div class="stuff-library-layout">
+                <nav class="stuff-collections" aria-label="Smart collections" data-ui-id="my-stuff.library.collections" data-ui-component="action-group" data-ui-policy="layout-style" data-ui-constraints="preserve-order,preserve-handlers">
+                    <p>Smart Collections</p>
+                    <button class="stuff-collection is-active" type="button" data-library-filter="all" aria-pressed="true"><span>All Stuff</span><strong data-filter-count="all">0</strong></button>
+                    <button class="stuff-collection" type="button" data-library-filter="app" aria-pressed="false"><span>Apps</span><strong data-filter-count="app">0</strong></button>
+                    <button class="stuff-collection" type="button" data-library-filter="project" aria-pressed="false"><span>Projects</span><strong data-filter-count="project">0</strong></button>
+                    <button class="stuff-collection" type="button" data-library-filter="creation" aria-pressed="false"><span>Creations</span><strong data-filter-count="creation">0</strong></button>
+                    <button class="stuff-collection" type="button" data-library-filter="recent" aria-pressed="false"><span>Recent</span><strong data-filter-count="recent">0</strong></button>
+                </nav>
+                <div class="stuff-library-main">
+                    <div class="stuff-library-summary">
+                        <div><strong id="libraryTitle">All Stuff</strong><span id="librarySummary">Loading your library…</span></div>
+                        <span class="stuff-source-note"><i aria-hidden="true"></i> Synced · Local-first</span>
+                    </div>
+                    <div class="stuff-installed-apps stuff-library-grid" id="installedAppsList" aria-live="polite" data-ui-id="my-stuff.installed-apps.items" data-ui-component="repeating-card-list" data-ui-policy="layout-style" data-ui-constraints="preserve-instance-keys,preserve-runtime-content">
+                        <div class="stuff-installed-empty">Loading app workspaces... projects and creations are next.</div>
+                    </div>
                 </div>
-                <p class="stuff-subtitle">Open an installed app in its own workspace.</p>
-            </div>
-            <div class="stuff-installed-apps" id="installedAppsList" aria-live="polite" data-ui-id="my-stuff.installed-apps.items" data-ui-component="repeating-card-list" data-ui-policy="layout-style" data-ui-constraints="preserve-instance-keys,preserve-runtime-content">
-                <div class="stuff-installed-empty">Loading app workspaces...</div>
             </div>
         </section>
 
-        <section class="stuff-board-view" id="boardView" data-ui-id="my-stuff.board-view" data-ui-component="workspace-region" data-ui-policy="layout-style" data-ui-constraints="preserve-project-state">
+        <section class="stuff-board-view hidden" id="boardView" data-ui-id="my-stuff.board-view" data-ui-component="workspace-region" data-ui-policy="layout-style" data-ui-constraints="preserve-project-state">
+            <div class="stuff-arrange-head">
+                <div><p class="stuff-kicker">Arrange</p><h2>Your project desktop</h2></div>
+                <p>Drag projects anywhere across the board. Positions save to Thomas's local project registry.</p>
+            </div>
             <div class="stuff-board-frame" data-ui-id="my-stuff.project-board" data-ui-component="freeform-card-group" data-ui-policy="layout-style" data-ui-constraints="items-runtime-owned,reposition-allow,resize-deny,add-deny,remove-deny">
                 <div class="stuff-board" id="board" aria-label="Project board" data-ui-id="my-stuff.project-board.items" data-ui-component="freeform-card-list" data-ui-policy="layout-style" data-ui-constraints="preserve-instance-keys,preserve-drag-handlers"></div>
             </div>
-            <section class="stuff-forge-builds hidden" id="forgeBuilds" aria-label="Forge Code builds" data-ui-id="my-stuff.forge-builds" data-ui-component="repeating-card-group" data-ui-policy="layout-style" data-ui-constraints="items-runtime-owned,reorder-deny,add-deny,remove-deny">
-                <div class="stuff-forge-builds-head">
-                    <h2>Forge Builds</h2>
-                    <p>Deliverables Thomas Code built for you. Open the result, or jump back to the conversation that made it.</p>
-                </div>
-                <div class="stuff-forge-grid" id="forgeBuildsGrid" data-ui-id="my-stuff.forge-builds.items" data-ui-component="repeating-card-list" data-ui-policy="layout-style" data-ui-constraints="preserve-instance-keys,preserve-runtime-content"></div>
-            </section>
         </section>
 
         <section class="stuff-detail-view hidden" id="detailView" aria-live="polite" data-ui-id="my-stuff.project-detail" data-ui-component="workspace-region" data-ui-policy="layout-style" data-ui-constraints="preserve-live-region,preserve-project-state">
-            <button class="stuff-back-btn" id="backToBoardButton" type="button" data-ui-id="my-stuff.action.back" data-ui-component="runtime-action" data-ui-policy="style-only" data-ui-constraints="preserve-id,preserve-handler">← Back to board</button>
+            <button class="stuff-back-btn" id="backToBoardButton" type="button" data-ui-id="my-stuff.action.back" data-ui-component="runtime-action" data-ui-policy="style-only" data-ui-constraints="preserve-id,preserve-handler">← Back to Library</button>
             <div class="stuff-detail-shell" id="detailShell" data-ui-id="my-stuff.project-detail.content" data-ui-component="runtime-content" data-ui-policy="layout-style" data-ui-constraints="preserve-runtime-content,preserve-handlers"></div>
         </section>
 
@@ -81,7 +96,7 @@
                 </div>
                 <div class="stuff-dropzone" id="dropzone" data-ui-id="my-stuff.import.dropzone" data-ui-component="file-drop-target" data-ui-policy="style-only" data-ui-constraints="preserve-id,preserve-drop-handlers">
                     <strong>Drop a repo folder here</strong>
-                    <span>Thomas will stage it, infer scope, detect launch and test paths, and build a project page inside Project Board.</span>
+                    <span>Thomas will stage it, infer scope, detect launch and test paths, and add it to Library.</span>
                 </div>
                 <div class="stuff-import-actions" data-ui-id="my-stuff.import.actions" data-ui-component="action-group" data-ui-policy="layout-style" data-ui-constraints="preserve-order,preserve-handlers">
                     <button class="stuff-btn stuff-btn-primary" id="pickFolderButton" type="button" data-ui-id="my-stuff.action.choose-folder" data-ui-component="privileged-action" data-ui-policy="protected" data-ui-constraints="preserve-id,preserve-handler,preserve-user-gesture">Choose Folder</button>
@@ -101,6 +116,14 @@
                 <p class="stuff-import-note" id="importNote">Best path for everyday users: choose a folder and let Thomas do the first read for you.</p>
             </div>
         </section>
+
+        <aside class="stuff-item-detail hidden" id="itemDetail" role="dialog" aria-modal="true" aria-labelledby="itemDetailTitle" data-ui-id="my-stuff.item-detail" data-ui-component="modal-region" data-ui-policy="layout-style" data-ui-constraints="preserve-open-state,preserve-runtime-content,preserve-handlers">
+            <button class="stuff-detail-scrim" type="button" data-close-item-detail aria-label="Close item details"></button>
+            <div class="stuff-item-detail-card">
+                <button class="stuff-close-btn" type="button" data-close-item-detail aria-label="Close item details">×</button>
+                <div id="itemDetailContent"></div>
+            </div>
+        </aside>
     </main>
 </body>
 </html>

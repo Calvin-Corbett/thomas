@@ -13,24 +13,6 @@
     color: var(--c-text);
 }
 
-[data-te-container] .te-v3.is-active::before {
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    border-radius: 18px;
-    background:
-        radial-gradient(circle at 12% 4%, var(--c-accent-soft), transparent 32%),
-        linear-gradient(180deg, color-mix(in srgb, var(--c-bg) 18%, transparent), transparent 44%);
-    content: "";
-    pointer-events: none;
-}
-
 [data-te-container] .te-v3 [data-ui-policy~="protected"] {
     --te-protected-control: 1;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    [data-te-container] .te-v3.is-active::before {
-        background: transparent;
-    }
 }

@@ -55,46 +55,99 @@ function moduleChannelsProbeResultMarkup(state) {
 }
 
 function moduleChannelsCatalogMarkup(model) {
-    return model.catalog.map((entry) => {
-        const isDiscord = entry.id === 'discord';
+    const channelHues = [238, 202, 148, 18, 332, 278, 188, 116, 42, 216, 304, 164];
+    return model.catalog.filter((entry) => entry.id !== 'discord').map((entry, index) => {
         const isSelected = entry.id === model.selectedChannelId;
-        const tileStatus = isDiscord ? model.statusLabel : 'Coming soon';
-        const tileTone = isDiscord ? model.statusTone : 'catalog';
-        const tileMeta = isDiscord
-            ? `${model.enabled ? 'Channel on' : 'Channel off'} | ${model.configured ? 'Securely configured' : 'Setup required'}`
-            : 'Reorder this slot now. Bridge lifecycle lands here later.';
         const instanceKey = moduleChannelsUiInstanceKey(entry.id);
+        const hue = channelHues[index % channelHues.length];
         return `
             <button
                 type="button"
-                class="module-channel-card${isSelected ? ' is-selected' : ''}"
+                class="module-channel-catalog-row is-planned${isSelected ? ' is-selected' : ''}"
                 data-channel-card-select="${escapeHtml(entry.id)}"
                 data-channel-card-id="${escapeHtml(entry.id)}"
+                data-channel-kind="${escapeHtml(entry.id)}"
+                data-channel-search-value="${escapeHtml(`${entry.title} ${entry.summary}`.toLowerCase())}"
                 data-ui-id="channels.catalog-card.${escapeHtml(instanceKey)}"
                 data-ui-instance-key="${escapeHtml(instanceKey)}"
                 data-ui-label="${escapeHtml(`${entry.title} channel card`)}"
                 data-ui-component="repeating-card"
                 data-ui-policy="move resize-deny contain=parent collision=avoid"
-                data-ui-constraints="items-runtime-owned,preserve-runtime-ids,preserve-handlers,minWidth=180,minHeight=150"
+                data-ui-constraints="items-runtime-owned,preserve-runtime-ids,preserve-handlers,minWidth=148,minHeight=62"
+                style="--channel-hue:${escapeHtml(String(hue))}"
+                aria-label="${escapeHtml(`${entry.title}: Planned. ${entry.summary}`)}"
                 draggable="true">
-                <div class="module-channel-card-head">
-                    <div class="module-channel-card-brand">
-                        <i class="ph ${escapeHtml(entry.icon)}"></i>
-                        <div>
-                            <span>${escapeHtml(entry.eyebrow || 'Channel')}</span>
-                            <strong>${escapeHtml(entry.title)}</strong>
-                        </div>
-                    </div>
-                    <span class="module-channel-card-status" data-channel-status="${escapeHtml(tileTone)}">${escapeHtml(tileStatus)}</span>
-                </div>
-                <p class="module-channel-card-summary">${escapeHtml(entry.summary)}</p>
-                <div class="module-channel-card-foot">
-                    <span>${escapeHtml(entry.capabilityLabel || '')}</span>
-                    <span>${escapeHtml(tileMeta)}</span>
-                </div>
+                <span class="module-channel-icon"><i class="ph ${escapeHtml(entry.icon)}" aria-hidden="true"></i></span>
+                <span class="module-channel-catalog-name"><strong>${escapeHtml(entry.title)}</strong><small>Planned</small></span>
+                <span class="module-channel-catalog-cue"><span>Inspect</span><i class="ph ph-arrow-up-right" aria-hidden="true"></i></span>
             </button>
         `;
     }).join('');
+}
+
+function moduleChannelsOperationalMarkup(model) {
+    const latestSession = model.sessions[0] && typeof model.sessions[0] === 'object' ? model.sessions[0] : {};
+    const latestName = safeString(latestSession.display_name) || safeString(latestSession.session_id) || 'No traffic yet';
+    const latestTime = safeString(latestSession.updated_at || latestSession.last_seen_at || latestSession.created_at);
+    const attentionLabel = model.running ? 'Listening now' : model.configured ? 'Ready to start' : 'Setup required';
+    const routeLabel = model.running ? 'Signal path open' : model.configured ? 'Bridge standing by' : 'Bridge needs credentials';
+    const plannedCount = Math.max(0, model.catalog.length - 1);
+    return `
+        <div class="module-channels-operations" data-ui-id="channels.connection-map" data-ui-label="Channel operations" data-ui-component="panel-group" data-ui-policy="move resize" data-ui-constraints="contain=parent,minWidth=320,minHeight=280,maxHeight=980,collision=avoid">
+            <article class="module-channels-primary" data-ui-id="channels.primary.discord" data-ui-instance-key="discord" data-ui-label="Discord live channel" data-ui-component="control-panel" data-ui-policy="move resize" data-ui-constraints="contain=parent,minWidth=300,minHeight=250,maxHeight=680,collision=avoid,preserve-runtime-ids,preserve-handlers">
+                <div class="module-channels-primary-head">
+                    <span class="module-channel-icon is-discord"><i class="ph ph-discord-logo" aria-hidden="true"></i></span>
+                    <div><span class="module-channels-section-kicker">Primary connection</span><h4>Discord</h4></div>
+                    <span class="module-channel-card-status" data-channel-status="${escapeHtml(model.statusTone)}">${escapeHtml(model.statusLabel)}</span>
+                </div>
+                <div class="module-channel-route" data-route-live="${model.running ? 'true' : 'false'}" aria-label="Discord to Thomas signal path">
+                    <span><i class="ph ph-discord-logo" aria-hidden="true"></i><strong>Discord</strong></span><i class="module-channel-route-line" aria-hidden="true"></i>
+                    <span class="is-thomas"><i class="thomas-eyes-mark" aria-hidden="true"><i></i><i></i></i><strong>Thomas</strong></span><i class="module-channel-route-line" aria-hidden="true"></i>
+                    <span><i class="ph ph-user-circle" aria-hidden="true"></i><strong>Owner</strong></span>
+                </div>
+                <div class="module-channel-live-readout">
+                    <span><strong>${model.enabled ? 'On' : 'Off'}</strong> channel</span>
+                    <span><strong>${escapeHtml(String(model.indexedTurnCount))}</strong> turns</span>
+                    <span><strong>${escapeHtml(String(model.sessions.length))}</strong> sessions</span>
+                </div>
+                <div class="module-channels-actions compact">
+                    <button type="button" class="module-channels-btn primary" data-channel-card-select="discord" ${moduleChannelsProtectedAttrs('action', 'open-discord', 'Open Discord controls', 'controls bridge')}>Open controls</button>
+                    <button type="button" class="module-channels-btn" data-channels-action="refresh" ${moduleChannelsProtectedAttrs('action', 'refresh-status', 'Refresh Discord status', 'controls bridge')}>Refresh</button>
+                </div>
+            </article>
+            <article class="module-channels-signal" data-ui-id="channels.current-signal" data-ui-label="Current channel signal" data-ui-component="status-panel" data-ui-policy="move resize" data-ui-constraints="contain=parent,minWidth=280,minHeight=250,maxHeight=680,collision=avoid">
+                <div class="module-channels-section-header compact">
+                    <div><span class="module-channels-section-kicker">Current signal</span><h4>${escapeHtml(attentionLabel)}</h4></div>
+                    <span class="module-channels-signal-pulse" data-live="${model.running ? 'true' : 'false'}" aria-hidden="true"></span>
+                </div>
+                <div class="module-channels-signal-screen">
+                    <span>Route</span><strong>${escapeHtml(routeLabel)}</strong>
+                    <i aria-hidden="true"></i><i aria-hidden="true"></i><i aria-hidden="true"></i><i aria-hidden="true"></i><i aria-hidden="true"></i>
+                </div>
+                <div class="module-channels-activity-line"><span>Latest session</span><strong>${escapeHtml(latestName)}</strong><small>${escapeHtml(latestTime ? missionRelativeTime(latestTime) : 'waiting for first signal')}</small></div>
+                <div class="module-channels-activity-line"><span>Network</span><strong>1 real · ${escapeHtml(String(plannedCount))} planned</strong><small>${escapeHtml(model.lastUpdatedLabel)} refresh</small></div>
+            </article>
+        </div>
+    `;
+}
+
+function moduleBindChannelsCatalogTools(root) {
+    const searchInput = root?.querySelector('[data-channel-catalog-search]');
+    if (!(searchInput instanceof HTMLInputElement)) return;
+    const rows = Array.from(root.querySelectorAll('[data-channel-search-value]'));
+    const count = root.querySelector('[data-channel-catalog-count]');
+    const empty = root.querySelector('[data-channel-catalog-empty]');
+    searchInput.addEventListener('input', () => {
+        const query = safeString(searchInput.value).trim().toLowerCase();
+        let visibleCount = 0;
+        rows.forEach((row) => {
+            const visible = !query || safeString(row.getAttribute('data-channel-search-value')).includes(query);
+            row.hidden = !visible;
+            if (visible) visibleCount += 1;
+        });
+        if (count) count.textContent = `${visibleCount} shown`;
+        if (empty) empty.hidden = visibleCount > 0;
+    });
 }
 
 function moduleRenderPlaceholderChannelDetail(model) {
@@ -307,29 +360,49 @@ function moduleRenderChannelsSurfaceNext(container, state) {
     ` : `
         <section class="module-channels-shell" data-ui-workspace="channels" data-ui-id="channels.shell" data-ui-label="Channels workspace" data-ui-component="workspace-shell" data-ui-policy="root protected" data-ui-constraints="preserve-runtime-ids,preserve-handlers">
             <section class="module-channels-catalog" data-ui-id="channels.catalog" data-ui-label="Channel catalog" data-ui-component="content-panel" data-ui-policy="move resize" data-ui-constraints="contain=parent,minWidth=320,minHeight=420,maxHeight=1800,collision=avoid,preserve-runtime-ids,preserve-handlers">
-                <div class="module-channels-title-lockup">
-                    <span class="thomas-eyes-mark module-channels-eyes-mark" aria-hidden="true"><i></i><i></i></span>
-                    <div>
-                        <span class="module-channels-section-kicker">Channels workspace</span>
-                        <h3>All channels</h3>
-                        <p>Drag channels into the order you want, then open one to manage it.</p>
+                <div class="module-channels-commandbar">
+                    <div class="module-channels-title-lockup">
+                        <span class="thomas-eyes-mark module-channels-eyes-mark" aria-hidden="true"><i></i><i></i></span>
+                        <div>
+                            <span class="module-channels-section-kicker">Communications</span>
+                            <h3>Channels</h3>
+                            <p>Listen, reply, and remember across every connection.</p>
+                        </div>
+                    </div>
+                    <div class="module-channels-command-status" aria-label="Channel network summary">
+                        <span class="module-channels-live-dot" data-live="${model.running ? 'true' : 'false'}" aria-hidden="true"></span>
+                        <span><strong>${escapeHtml(String(model.liveCount))}</strong> live</span>
+                        <span><strong>${escapeHtml(String(model.configuredCount))}</strong> configured</span>
+                        <span><strong>${escapeHtml(String(model.indexedTurnCount))}</strong> indexed</span>
                     </div>
                 </div>
-                <div class="module-channels-section-header">
+                ${moduleChannelsOperationalMarkup(model)}
+                <details class="module-channels-catalog-drawer" data-ui-id="channels.planned-catalog" data-ui-label="Planned channel catalog" data-ui-component="disclosure-panel" data-ui-policy="move resize" data-ui-constraints="contain=parent,minWidth=300,minHeight=52,maxHeight=1200,collision=avoid,preserve-runtime-ids,preserve-handlers">
+                <summary class="module-channels-section-header module-channels-network-head">
                     <div>
-                        <span class="module-channels-section-kicker">Channel catalog</span>
-                        <h4>${escapeHtml(String(model.catalog.length))} channel slots ready</h4>
+                        <span class="module-channels-section-kicker">Connection catalog</span>
+                        <h4>Planned connections</h4>
                     </div>
-                    <span>${state?.loading ? 'refreshing' : `updated ${escapeHtml(model.lastUpdatedLabel)}`}</span>
-                </div>
-                <div class="module-channels-grid" data-channel-grid data-ui-id="channels.catalog-grid" data-ui-label="Channel cards" data-ui-component="repeating-card-group" data-ui-policy="move resize" data-ui-constraints="items-runtime-owned,reposition-allow,resize-deny,add-deny,remove-deny,contain=parent,minWidth=280,minHeight=260,maxHeight=1600,collision=avoid">
+                    <span>${state?.loading ? 'refreshing' : `${escapeHtml(String(Math.max(0, model.catalog.length - 1)))} available · updated ${escapeHtml(model.lastUpdatedLabel)}`}</span>
+                </summary>
+                <div class="module-channels-catalog-body">
+                    <div class="module-channels-catalog-tools">
+                        <label><i class="ph ph-magnifying-glass" aria-hidden="true"></i><input type="search" data-channel-catalog-search placeholder="Find a planned connection" aria-label="Find a planned connection" /></label>
+                        <span data-channel-catalog-count>${escapeHtml(String(Math.max(0, model.catalog.length - 1)))} shown</span>
+                    </div>
+                <div class="module-channels-grid" data-channel-grid data-ui-id="channels.catalog-grid" data-ui-label="Planned channel records" data-ui-component="repeating-card-group" data-ui-policy="move resize" data-ui-constraints="items-runtime-owned,reposition-allow,resize-deny,add-deny,remove-deny,contain=parent,minWidth=280,minHeight=120,maxHeight=1000,collision=avoid">
                     ${moduleChannelsCatalogMarkup(model)}
+                    <p class="module-channels-catalog-empty" data-channel-catalog-empty hidden>No matching connection.</p>
                 </div>
+                </div>
+                </details>
             </section>
             ${safeString(state?.error) ? `<div class="module-empty">${escapeHtml(state.error)}</div>` : ''}
         </section>
     `;
-    return container.firstElementChild;
+    const root = container.firstElementChild;
+    moduleBindChannelsCatalogTools(root);
+    return root;
 }
 
 function moduleRenderSpecialSurface(mode, container) {

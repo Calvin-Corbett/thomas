@@ -23,7 +23,8 @@ def test_channels_runtime_wires_discord_controls_and_history() -> None:
     assert "function moduleRenderChannelsSurfaceNext(container, state)" in js
     assert "moduleRenderChannelsSurface(moduleQueueList);" in js
     assert "/api/channels/discord" in js
-    assert "All channels" in js
+    assert "function moduleChannelsOperationalMarkup(model)" in js
+    assert "Planned connections" in js
     assert "Secure local store" in js
     assert 'data-channel-card-select="${escapeHtml(entry.id)}"' in js
     assert 'data-channels-action="restart"' in js
@@ -58,3 +59,40 @@ def test_channels_runtime_wires_discord_controls_and_history() -> None:
     assert "function moduleChannelsProtectedAttrs" in js
     assert ">i</span>" in js
     assert "ph-eye" not in js
+
+
+def test_channels_catalog_is_a_dense_transparent_tool_not_a_card_wall() -> None:
+    js = read_app_js_source()
+    css = (
+        REPO_ROOT
+        / "thomas"
+        / "server"
+        / "web"
+        / "css"
+        / "component_styles"
+        / "marketplace-channels.css"
+    ).read_text(encoding="utf-8")
+
+    assert 'class="module-channels-operations"' in js
+    assert 'class="module-channels-primary"' in js
+    assert 'class="module-channels-signal"' in js
+    assert 'class="module-channel-route"' in js
+    assert 'class="module-channel-live-readout"' in js
+    assert 'class="module-channels-command-status"' in js
+    assert 'class="module-channels-catalog-drawer"' in js
+    assert 'data-channel-catalog-search' in js
+    assert "function moduleBindChannelsCatalogTools(root)" in js
+    assert "model.catalog.filter((entry) => entry.id !== 'discord')" in js
+    assert '<details class="module-channels-catalog-drawer"' in js
+    assert '<details class="module-channels-catalog-drawer" open' not in js
+    assert 'class="module-channel-catalog-row is-planned' in js
+    assert 'data-channel-kind="${escapeHtml(entry.id)}"' in js
+    assert 'aria-label="${escapeHtml(`${entry.title}: Planned. ${entry.summary}`)}"' in js
+    assert '<p class="module-channel-card-summary">' not in js
+    assert "background: transparent !important" in css
+    assert ".module-channels-operations" in css
+    assert ".module-channel-route" in css
+    assert ".module-channels-catalog-drawer" in css
+    assert ".module-channel-catalog-row" in css
+    assert ".module-channel-card.is-live" not in css
+    assert "grid-template-columns: repeat(3, minmax(0, 1fr))" in css

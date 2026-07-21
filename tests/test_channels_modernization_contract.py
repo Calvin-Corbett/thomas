@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_036 = ROOT / "thomas/server/web/js/runtime/036_workbench_editors_08.js"
 RUNTIME_037 = ROOT / "thomas/server/web/js/runtime/037_workbench_editors_09.js"
 RUNTIME_038 = ROOT / "thomas/server/web/js/runtime/038_module_rendering_dispatch_01.js"
-CHANNELS_CSS = ROOT / "thomas/server/web/css/components_parts/marketplace-channels.css"
+CHANNELS_CSS = ROOT / "thomas/server/web/css/component_styles/marketplace-channels.css"
 
 
 def _read(path: Path) -> str:
@@ -25,7 +25,6 @@ def test_channels_uses_the_current_five_theme_visual_language() -> None:
     for theme in ("nebula", "dark", "light", "aurora", "sandstone"):
         assert f'data-thomas-theme="{theme}"' in channels_css
     for token in (
-        "--c-bg",
         "--c-surface",
         "--c-surface-2",
         "--c-border",
@@ -37,10 +36,12 @@ def test_channels_uses_the_current_five_theme_visual_language() -> None:
         "--c-accent-soft",
         "--c-accent-line",
         "--c-composer-bg",
-        "--c-shadow",
     ):
         assert f"var({token})" in channels_css
 
+    assert "background: var(--c-bg)" not in channels_css
+    assert 'body:has(#moduleWorkspace[data-mode="channels"]) .main-content' in css
+    assert ".main-content::before { display: none !important; }" in css
     assert "rgba(" not in channels_css
     assert re.search(r"#[0-9a-fA-F]{3,8}\b", channels_css) is None
     assert "'JetBrains Mono', ui-monospace, monospace" in channels_css

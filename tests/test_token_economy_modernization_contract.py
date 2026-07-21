@@ -45,7 +45,7 @@ def test_token_economy_consumes_the_immutable_five_theme_shell() -> None:
     assert "te-theme-light" not in css
     assert "te-theme-dark" not in css
     assert "body.te-" not in css
-    assert ".main-content" not in css
+    assert "\n.main-content" not in css
     assert ".sidebar" not in css
     assert "#settings" not in css
     assert "var(--r-card" in css
@@ -57,7 +57,9 @@ def test_token_economy_uses_the_shared_eyes_mark_and_no_editor_chrome() -> None:
 
     assert 'class="thomas-eyes-mark"' in js
     assert '<strong class="te-topbar-title">Token Economy</strong>' in js
-    assert "See token use, budgets, and runtime policy in one place." in js
+    assert 'class="te-overview-rail"' in js
+    assert "See token use, budgets, and runtime policy in one place." not in js
+    assert 'class="te-panel-copy"' not in js
     assert "thomas-ui-editor" not in js
     assert "thomas-ui-edit-toolbar" not in js
     assert ">Edit UI<" not in js
@@ -175,3 +177,27 @@ def test_token_economy_respects_reduced_motion() -> None:
     assert "@media (prefers-reduced-motion: reduce)" in css
     assert "animation: none !important" in css
     assert "transition-duration: .01ms !important" in css
+
+
+def test_token_economy_is_a_dense_tool_without_the_legacy_space_backdrop() -> None:
+    widget = _read(TOKEN_CSS)
+    components = _read(COMPONENT_CSS)
+    theme = _read(THEME_CSS)
+
+    assert '#moduleWorkspace[data-mode="token_economy"]::before' in widget
+    assert '#moduleWorkspace[data-mode="token_economy"]::after' in widget
+    assert "display: none !important" in widget
+    assert "content: none !important" in widget
+    assert "background: none !important" in widget
+    assert "html.tcw-embed [data-te-container]" in widget
+    assert "html.tcw-embed:has([data-te-container] .te-v3.is-active) #moduleWorkspace" in widget
+    assert "html.tcw-embed:has([data-te-container] .te-v3.is-active)" in widget
+    assert "color-scheme: normal !important" in widget
+    assert "body:has([data-te-container] .te-v3.is-active) .main-content" in widget
+    assert "body:has([data-te-container] .te-v3.is-active) .main-content::before" in widget
+    assert "body:has([data-te-container] .te-v3.is-active) .main-content::after" in widget
+    assert ".te-overview-rail" in widget
+    assert "min-height: 46px" in widget
+    assert "min-height: 84px" in widget
+    assert "min-height: 220px" in components
+    assert "radial-gradient" not in theme

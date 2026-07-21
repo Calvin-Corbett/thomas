@@ -297,12 +297,11 @@
     function shell() {
         return `
 <div class="te-v3" data-ui-id="token-economy.workspace" data-ui-label="Token Economy workspace" data-ui-policy="protected">
-    <header class="te-topbar" data-ui-id="token-economy.header" data-ui-label="Token Economy header" data-ui-policy="layout resize contain-parent collision-avoid" data-ui-constraints="minWidth=320 minHeight=76 maxHeight=180">
+    <header class="te-topbar" data-ui-id="token-economy.header" data-ui-label="Token Economy header" data-ui-policy="layout resize contain-parent collision-avoid" data-ui-constraints="minWidth=320 minHeight=44 maxHeight=112">
         <div class="te-topbar-left">
             <span class="thomas-eyes-mark" aria-hidden="true"><i></i><i></i></span>
             <span class="te-heading">
                 <strong class="te-topbar-title">Token Economy</strong>
-                <span class="te-topbar-subtitle">See token use, budgets, and runtime policy in one place.</span>
             </span>
             <span class="te-mode-pill" data-te-topmode></span>
         </div>
@@ -323,34 +322,31 @@
         </div>
     </header>
 
-    <section class="te-hero" data-te-hero data-ui-id="token-economy.overview" data-ui-label="Today's token overview" data-ui-policy="layout resize contain-parent collision-avoid" data-ui-constraints="minWidth=280 minHeight=150 maxHeight=360">
-        <span class="te-eyebrow">Tokens used today</span>
-        <div class="te-hero-cost">
-            <span class="te-hero-dollar" data-te-hdollar>TOK</span><span class="te-hero-whole" data-te-hwhole>0</span><span class="te-hero-frac" data-te-hfrac> used</span>
-        </div>
-        <div class="te-hero-sub">
-            <span data-te-hcalls>0</span> calls
-            <span class="te-hero-pipe">/</span>
-            <span data-te-htokens>0</span> prompt + completion
-        </div>
-        <div class="te-burnstrip" data-te-burnstrip aria-label="Daily token budget progress">
-            <div class="te-burnstrip-fill" data-te-burnfill></div>
-            <div class="te-burnstrip-marker" data-te-burnmark></div>
-        </div>
-    </section>
-
-    <section class="te-datastrip" data-te-datastrip data-ui-id="token-economy.summary" data-ui-label="Token summary metrics" data-ui-policy="layout resize contain-parent collision-avoid" data-ui-constraints="minWidth=280 minHeight=92 maxHeight=260" aria-live="polite"></section>
+    <div class="te-overview-rail">
+        <section class="te-hero" data-te-hero data-ui-id="token-economy.overview" data-ui-label="Today's token overview" data-ui-policy="layout resize contain-parent collision-avoid" data-ui-constraints="minWidth=220 minHeight=76 maxHeight=180">
+            <span class="te-eyebrow">Today</span>
+            <div class="te-hero-cost">
+                <span class="te-hero-dollar" data-te-hdollar>TOK</span><span class="te-hero-whole" data-te-hwhole>0</span><span class="te-hero-frac" data-te-hfrac> used</span>
+            </div>
+            <div class="te-hero-sub"><span data-te-hcalls>0</span> calls <span class="te-hero-pipe">/</span> <span data-te-htokens>0</span> tokens</div>
+            <div class="te-burnstrip" data-te-burnstrip aria-label="Daily token budget progress">
+                <div class="te-burnstrip-fill" data-te-burnfill></div>
+                <div class="te-burnstrip-marker" data-te-burnmark></div>
+            </div>
+        </section>
+        <section class="te-datastrip" data-te-datastrip data-ui-id="token-economy.summary" data-ui-label="Token summary metrics" data-ui-policy="layout resize contain-parent collision-avoid" data-ui-constraints="minWidth=280 minHeight=76 maxHeight=180" aria-live="polite"></section>
+    </div>
 
     <main class="te-main">
         <div class="te-col-left">
-            <section class="te-panel te-panel-grow" data-ui-id="token-economy.history" data-ui-label="Token history" data-ui-policy="layout resize contain-parent collision-avoid" data-ui-constraints="minWidth=280 minHeight=260">
+            <section class="te-panel te-panel-grow" data-ui-id="token-economy.history" data-ui-label="Token history" data-ui-policy="layout resize contain-parent collision-avoid" data-ui-constraints="minWidth=280 minHeight=190">
                 <div class="te-panel-head">
                     <span>Token history</span>
                     <span class="te-panel-sub" data-te-htotal></span>
                 </div>
                 <div class="te-spectrum" data-te-spectrum></div>
             </section>
-            <section class="te-panel" data-ui-id="token-economy.ledger" data-ui-label="Live token ledger" data-ui-policy="layout resize contain-parent collision-avoid" data-ui-constraints="minWidth=280 minHeight=190">
+            <section class="te-panel" data-ui-id="token-economy.ledger" data-ui-label="Live token ledger" data-ui-policy="layout resize contain-parent collision-avoid" data-ui-constraints="minWidth=280 minHeight=130">
                 <div class="te-panel-head">
                     <span><span class="te-dot"></span> Live ledger</span>
                     <span class="te-panel-sub" data-te-fcount>Awaiting events</span>
@@ -362,12 +358,11 @@
         </div>
 
         <div class="te-col-right">
-            <section class="te-panel te-policy-panel" data-ui-id="token-economy.policy" data-ui-label="Economy policy controls" data-ui-policy="protected" data-ui-constraints="minWidth=280 minHeight=300">
+            <section class="te-panel te-policy-panel" data-ui-id="token-economy.policy" data-ui-label="Economy policy controls" data-ui-policy="protected" data-ui-constraints="minWidth=280 minHeight=220">
                 <div class="te-panel-head">
                     <span>Economy policy</span>
                     <span class="te-panel-sub" data-te-modelabel></span>
                 </div>
-                <p class="te-panel-copy">Controls how many passes Thomas can spend on a request.</p>
                 <div class="te-switch-track" data-te-modes></div>
                 <div class="te-mode-readout" data-te-modereadout></div>
                 <div class="te-context-meter" data-te-ctxmeter>
@@ -378,7 +373,7 @@
                     <div class="te-ctx-track"><div class="te-ctx-fill" data-te-ctxfill></div></div>
                 </div>
             </section>
-            <section class="te-panel" data-ui-id="token-economy.models" data-ui-label="Model token mix" data-ui-policy="layout resize contain-parent collision-avoid" data-ui-constraints="minWidth=280 minHeight=230">
+            <section class="te-panel" data-ui-id="token-economy.models" data-ui-label="Model token mix" data-ui-policy="layout resize contain-parent collision-avoid" data-ui-constraints="minWidth=280 minHeight=160">
                 <div class="te-panel-head">
                     <span>Model mix</span>
                     <span class="te-panel-sub" data-te-mtitle>Today</span>
@@ -386,7 +381,7 @@
                 <div data-te-modelviz data-ui-group-policy="managed-collection"></div>
                 <div data-te-modeltable data-ui-group-policy="managed-collection"></div>
             </section>
-            <section class="te-panel" data-ui-id="token-economy.profile-matrix" data-ui-label="Runtime profile matrix" data-ui-policy="layout resize contain-parent collision-avoid" data-ui-constraints="minWidth=280 minHeight=190">
+            <section class="te-panel" data-ui-id="token-economy.profile-matrix" data-ui-label="Runtime profile matrix" data-ui-policy="layout resize contain-parent collision-avoid" data-ui-constraints="minWidth=280 minHeight=140">
                 <div class="te-panel-head"><span>Runtime profiles</span></div>
                 <div data-te-pricing></div>
             </section>

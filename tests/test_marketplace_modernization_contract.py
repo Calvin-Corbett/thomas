@@ -6,7 +6,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "thomas" / "server" / "web" / "js" / "runtime"
-CSS = ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "marketplace-workspace.css"
+CSS = ROOT / "thomas" / "server" / "web" / "css" / "component_styles" / "marketplace-workspace.css"
+RENDERER = RUNTIME / "036_workbench_editors_08.js"
+ELIGIBILITY = ROOT / "docs" / "MARKETPLACE_VISIBLE_ELIGIBILITY.md"
 
 
 def _read(path: Path) -> str:
@@ -83,6 +85,8 @@ def test_marketplace_uses_chat_tokens_and_has_no_normal_editor_chrome() -> None:
     assert not re.search(r"#[0-9a-fA-F]{3,8}\b|rgba?\(", modern)
     assert "ui-edit-toolbar" not in modern
     assert "Edit UI" not in modern
+    assert 'background:transparent!important' in modern
+    assert ':is(.module-marketplace-shell,.module-marketplace-stream)' in modern
 
 
 def test_marketplace_coalesces_fetches_without_weakening_install_security() -> None:
@@ -103,6 +107,110 @@ def test_marketplace_coalesces_fetches_without_weakening_install_security() -> N
     assert "'/api/marketplace/import'" in state
     assert "mock" not in state.lower()
     assert "fake listing" not in state.lower()
+
+
+def test_marketplace_uses_editorial_shelves_without_hiding_real_catalog_actions() -> None:
+    renderer = _read(RENDERER)
+
+    for contract in (
+        'class="marketplace-card marketplace-product-card',
+        'class="marketplace-feature-wrap${',
+        'class="marketplace-shelf"',
+        'class="marketplace-shelf-rail"',
+        'class="marketplace-results-grid"',
+        'class="marketplace-selected-strip"',
+        'data-ui-id="marketplace.feature"',
+        'data-ui-id="marketplace.shelf"',
+        'data-ui-id="marketplace.shelf.items"',
+        'data-ui-id="marketplace.package.art"',
+        'data-ui-group="marketplace.shelves"',
+        'data-ui-policy="move resize ai-edit"',
+        'data-module-marketplace-select=',
+        'data-module-marketplace-filter=',
+        'data-module-marketplace-search',
+        'data-module-marketplace-refresh',
+        'data-marketplace-import',
+    ):
+        assert contract in renderer
+
+    assert "const featuredApp = browseMode ? rankApps(activePool)" in renderer
+    assert ").slice(0, 8);" in renderer
+    assert ").filter(Boolean).slice(0, 4);" in renderer
+    assert "const resultLimit = activeFilter === 'all' ? 120 : 80;" in renderer
+    assert "apps.filter((app)" in renderer
+    assert "buildPrimaryAction(app)" in renderer
+    assert "buildSecondaryActions(app)" in renderer
+    assert "renderActionButton(app, primaryAction" in renderer
+    assert "mock" not in renderer.lower()
+    assert "fake listing" not in renderer.lower()
+
+
+def test_marketplace_main_store_is_evidence_gated_and_potential_is_quarantined() -> None:
+    renderer = _read(RENDERER)
+    policy = _read(ELIGIBILITY)
+
+    for contract in (
+        "const marketplaceEvidence = (app)",
+        "const signedInstall = Boolean(app?.installable && app?.compatibility?.eligible)",
+        "const trustedDownload = Boolean(app?.download_available && downloadUrl)",
+        "const verifiedApps = apps.filter((app) => marketplaceEvidence(app).verified)",
+        "const potentialApps = apps.filter((app) => !marketplaceEvidence(app).verified)",
+        "const activePool = potentialMode ? potentialApps : verifiedApps",
+        "No packages have proven operating evidence yet.",
+        "Potential · local review only",
+        "No verified install",
+    ):
+        assert contract in renderer
+
+    assert "Verified Store" in policy
+    assert "hooks.py" in policy
+    assert "is not operating evidence" in policy
+    assert "481 Potential" in policy
+    assert "not copied into a committed replacement catalog" in policy
+    assert "destructively deleted" in policy
+
+
+def test_marketplace_has_deterministic_iconography_and_interactive_carousels() -> None:
+    renderer = _read(RENDERER)
+    css = _read(CSS)
+
+    for token in (
+        "categoryIconMap",
+        "ph-bell-ringing",
+        "ph-chart-line-up",
+        "ph-shield-warning",
+        "ph-credit-card",
+        "ph-discord-logo",
+        "marketplace-icon-secondary",
+        "data-marketplace-carousel=",
+        "data-marketplace-carousel-target=",
+        "rail.scrollBy({",
+        "prefers-reduced-motion: reduce",
+    ):
+        assert token in renderer or token in css
+
+    assert "return /^ph-[a-z0-9-]+$/i.test(value) ? value : 'ph-puzzle-piece'" not in renderer
+    assert ".marketplace-carousel-btn" in css
+
+
+def test_marketplace_editorial_layout_remains_responsive_and_keyboard_visible() -> None:
+    css = _read(CSS)
+    modern = css.split("/* Marketplace modernization:", maxsplit=1)[1]
+
+    for selector in (
+        ".marketplace-feature-wrap",
+        ".marketplace-shelf-rail",
+        ".marketplace-product-card",
+        ".marketplace-card-hit:focus-visible",
+        ".marketplace-results-grid",
+        ".marketplace-selected-strip",
+        ".marketplace-store-empty",
+    ):
+        assert selector in modern
+    assert "overflow-x:auto" in modern
+    assert "scroll-snap-type:inline proximity" in modern
+    assert "@media (max-width: 1000px)" in modern
+    assert "@media (max-width: 760px)" in modern
 
 
 def test_marketplace_scoped_files_stay_within_guardrail_limits() -> None:

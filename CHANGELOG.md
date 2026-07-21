@@ -34,6 +34,8 @@ Versioning: Semantic Versioning.
 
 ### Changed
 
+- Finished the owner corrective route pass: Library is now a dense full-width tool, Marketplace separates proof-backed installs from Potential, Channels opens as a live signal workspace instead of an icon wall, Token Economy and Mission Control inherit the exact Chat world, and Settings no longer paints a competing embedded background.
+
 - Completed the eight-workspace modernization against locked Thomas Chat tokens and identity: Mission Control, Virtual Office, Canvas, Library (internal `my_stuff`), Channels, Token Economy, Marketplace, and Settings now share Chat's exact five-theme contract and 30px eyes mark. Mission Control, Library, and Settings use bounded direct routes; the remaining classic loader fetches 96 split runtime files in parallel with declared-order execution; loaded workspaces remain mounted when returning to Chat; and UI Editor is now owner-facing Canvas.
 
 - Renamed owner-facing My Stuff to **Library** and replaced its landing-page hero with a dense full-workspace app, project, creation, and file tool. Reworked Token Economy into a compact 70/30 operational console. Marketplace now uses proof-gated Verified Store and local Potential views with bounded carousels, mixed feature heroes, category-specific icon treatment, and no manufactured install actions.

@@ -158,7 +158,13 @@ textarea { resize: vertical; min-height: 86px; }
 
 html.is-embedded .mission-chrome { display: none; }
 html.is-embedded .mission-content { max-width: none; padding: clamp(18px, 2.5vw, 32px); }
-html.is-embedded body { background: var(--c-bg); }
+/* Embedded Mission Control is a tool layer inside the literal Chat world.
+   It must never repaint or reinterpret the parent theme backdrop. */
+html.is-embedded,
+html.is-embedded body,
+html.is-embedded .mission-app { background: transparent !important; }
+html.is-embedded { color-scheme: normal !important; }
+html.is-embedded .mission-world { display: none !important; }
 
 @media (max-width: 960px) {
   .mission-board { grid-template-columns: 1fr; }

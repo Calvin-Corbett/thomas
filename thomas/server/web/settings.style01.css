@@ -67,6 +67,12 @@ body::before {
   opacity: 0.7;
 }
 
+html.is-embedded body::before,
+body.is-embedded::before {
+  display: none !important;
+  content: none !important;
+}
+
 html[data-theme="dark"] body::before {
   background-size: 28px 28px, 28px 28px;
   opacity: 0.45;

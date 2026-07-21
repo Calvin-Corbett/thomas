@@ -610,7 +610,8 @@ def test_marketplace_runtime_supports_reorderable_workspace_nav_and_import() -> 
     assert "DEFAULT_MARKETPLACE_STORE_URL" in script
     assert "Marketplace Source" not in script
     assert "thomas_deep_link" in script
-    assert "Synced from" in script
+    assert "Last sync" in script
+    assert "Synced from" not in script
     assert "__THOMAS_WEB_BUILD__" in _read_text("thomas/server/web/index.html")
 
 
@@ -641,7 +642,9 @@ def test_marketplace_runtime_uses_store_specific_empty_state_copy() -> None:
     assert "Marketplace is syncing upgrades." in script
     assert "Loading upgrades..." in script
     assert "No upgrades match this view." in script
-    assert "All Upgrades" in script
+    assert "Verified Store" in script
+    assert "Potential" in script
+    assert "All Upgrades" not in script
     assert "Installable Thomas plugins from the extension catalog." not in script
     assert "No live queue data yet." not in script
     assert "moduleWorkspaceMeta.textContent = 'Extension catalog';" not in script
