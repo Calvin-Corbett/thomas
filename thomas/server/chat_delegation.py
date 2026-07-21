@@ -11,6 +11,7 @@ from typing import Any
 
 from thomas.agent.chat_dispatcher import dispatch_async
 from thomas.agent.dispatch import should_dispatch
+from thomas.agent.instruction_contract import apply_root_instructions
 from thomas.core import task_bot_runtime
 from thomas.core.file_access import READ_ONLY, clamp_file_access_level
 from thomas.core.task_titling import derive_task_title
@@ -829,6 +830,11 @@ async def _start_agent_worker_delegation(
     handoff = _handoff_block(recent_messages) if prompt_needs_handoff(prompt) else ""
     if handoff:
         instructions = f"{instructions}\n\n{handoff}"
+
+    # Honor the same root instruction contract on delegated workers as the main
+    # agent surface: resolve project instructions rooted at the worker's cwd and
+    # fold them into its system prompt. Empty workspaces degrade cleanly (no-op).
+    instructions = apply_root_instructions(instructions, cwd=work_dir)
 
     preflight_events: list[dict[str, Any]] = []
     preflight_evidence = ""
