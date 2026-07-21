@@ -8,6 +8,13 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from thomas.agent.completion_gate import (
+    GATE_BLOCK,
+    GATE_DEMAND_GIVE_UP,
+    GATE_GIVE_UP,
+    build_give_up_demand_prompt,
+    evaluate_completion_gate,
+)
 from thomas.core.config import load_config
 from thomas.core.events import AgentEvent
 from thomas.core.rules_of_road import build_remediation_prompt, evaluate_rules
@@ -277,17 +284,56 @@ async def handle_post_loop_completion(
     if state.error:
         return
 
-    # Yield final completion event
-    yield AgentEvent.agent_done(
+    # Completion gate: a bare AGENT_DONE on failed validation is rejected.
+    # The run must either fix the failing checks or return an explicit
+    # structured give-up with a diagnosis (see thomas.agent.completion_gate).
+    gate_decision = evaluate_completion_gate(
+        validation_passed=bool(rules_report.get("passed", False)),
+        response_text=state.text_response,
+        gate_active=bool(((quality_enabled and quality_enforce) or strict_issue_ownership) and quality_retry_enabled),
+        attempt=int(_quality_retry_count),
+        max_retries=int(quality_max_retries),
+    )
+    token_report["completion_gate"] = gate_decision.to_payload()
+
+    if gate_decision.outcome == GATE_DEMAND_GIVE_UP:
+        retry_job_type = str(job_type or rules_report.get("job_type") or "").strip().lower() or None
+        async for gate_event in self.run(
+            build_give_up_demand_prompt(rules_report),
+            mode=mode,
+            tools_policy=tools_policy,
+            token_economy=applied_token_economy,
+            max_iterations=max_iterations,
+            job_type=retry_job_type,
+            _quality_retry_count=_quality_retry_count + 1,
+            _quality_carry_forward_events=combined_quality_events,
+        ):
+            yield gate_event
+        return
+
+    if gate_decision.outcome == GATE_BLOCK:
+        block_error = f"Completion gate blocked AGENT_DONE: {gate_decision.reason}"
+        yield AgentEvent.agent_error(block_error, iteration=state.iteration)
+        state.error = block_error
+        return
+
+    # Yield final completion event. A diagnosed give-up completes distinctly
+    # from success so callers can tell the outcomes apart.
+    done_event = AgentEvent.agent_done(
         text=state.text_response,
         iterations=state.iteration + 1,
         tool_calls=state.total_tool_calls,
         usage=usage_obj,
         token_report=token_report,
     )
+    if gate_decision.outcome == GATE_GIVE_UP and gate_decision.diagnosis is not None:
+        done_event.data["gave_up"] = True
+        done_event.data["give_up_diagnosis"] = gate_decision.diagnosis.to_payload()
+    yield done_event
 
-    # Auto-generate reusable tool from completed task
-    if state.text_response and state.total_tool_calls > 0:
+    # Auto-generate reusable tool from completed task (successes only; a
+    # diagnosed give-up is not a reusable success pattern)
+    if state.text_response and state.total_tool_calls > 0 and gate_decision.outcome != GATE_GIVE_UP:
         try:
             from thomas.core.tool_factory import get_tool_factory
 

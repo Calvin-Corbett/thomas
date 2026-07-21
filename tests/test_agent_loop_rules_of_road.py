@@ -27,7 +27,7 @@ class _WriteTool(Tool):
 
 class _WriteThenAnswerLLM:
     def __init__(self) -> None:
-        self.config = ModelConfig(name="dummy", model="dummy", context_window=2048, max_tokens=64)
+        self.config = ModelConfig(name="dummy", model="dummy", context_window=32768, max_tokens=64)
         self._step = 0
 
     async def stream_chat(self, messages, tools):  # noqa: ANN001
@@ -52,7 +52,7 @@ class _WriteThenAnswerLLM:
 
 class _WriteThenNoopRetryLLM:
     def __init__(self) -> None:
-        self.config = ModelConfig(name="dummy", model="dummy", context_window=2048, max_tokens=64)
+        self.config = ModelConfig(name="dummy", model="dummy", context_window=32768, max_tokens=64)
         self._calls = 0
 
     async def stream_chat(self, messages, tools):  # noqa: ANN001
@@ -70,13 +70,24 @@ class _WriteThenNoopRetryLLM:
             yield StreamEvent(type="done", data={})
             return
 
-        yield StreamEvent(type="token", data={"text": "Done."})
+        yield StreamEvent(
+            type="token",
+            data={
+                "text": (
+                    "I could not verify the change.\n\n"
+                    "GIVE_UP\n"
+                    "what_failed: coding verification checks did not pass after editing app.py\n"
+                    "what_was_tried: applied the diff.create edit and re-ran the required quality checks\n"
+                    "why_blocked: no verification tooling is available in this environment to prove the fix\n"
+                )
+            },
+        )
         yield StreamEvent(type="done", data={})
 
 
 class _StaticTextLLM:
     def __init__(self, text: str) -> None:
-        self.config = ModelConfig(name="dummy", model="dummy", context_window=2048, max_tokens=64)
+        self.config = ModelConfig(name="dummy", model="dummy", context_window=32768, max_tokens=64)
         self._text = str(text or "")
 
     async def stream_chat(self, messages, tools):  # noqa: ANN001
@@ -88,7 +99,7 @@ class _StaticTextLLM:
 
 class _InvalidThenValidCodeLLM:
     def __init__(self) -> None:
-        self.config = ModelConfig(name="dummy", model="dummy", context_window=2048, max_tokens=64)
+        self.config = ModelConfig(name="dummy", model="dummy", context_window=32768, max_tokens=64)
         self.calls = 0
 
     async def stream_chat(self, messages, tools):  # noqa: ANN001
@@ -108,7 +119,7 @@ class _InvalidThenValidCodeLLM:
 
 class _EntryPointThenValidCodeLLM:
     def __init__(self) -> None:
-        self.config = ModelConfig(name="dummy", model="dummy", context_window=2048, max_tokens=64)
+        self.config = ModelConfig(name="dummy", model="dummy", context_window=32768, max_tokens=64)
         self.calls = 0
 
     async def stream_chat(self, messages, tools):  # noqa: ANN001
@@ -159,18 +170,25 @@ def test_rules_of_road_report_is_attached_to_done_event() -> None:
     assert "passed" in rules
 
 
-def test_rules_of_road_auto_retry_runs_when_required_checks_fail() -> None:
+def test_rules_of_road_auto_retry_runs_then_gate_blocks_bare_done() -> None:
+    # New contract (CAP-004): a run whose validation still fails may NOT end in
+    # a bare AGENT_DONE. After the quality retry, the completion gate demands a
+    # fix-or-give-up pass; without an explicit diagnosed give-up, completion is
+    # blocked with AGENT_ERROR instead of AGENT_DONE.
     events = _run_once("fix configuration in thomas.toml")
     starts = [e for e in events if e.type == EventType.AGENT_START]
     done = [e for e in events if e.type == EventType.AGENT_DONE]
-    assert len(starts) == 2  # initial pass + one auto-retry
-    assert len(done) == 1
-    rules = done[-1].data.get("token_report", {}).get("rules_of_road", {})
-    assert rules.get("attempt") == 1
-    assert rules.get("passed") is False
+    errs = [e for e in events if e.type == EventType.AGENT_ERROR]
+    assert len(starts) == 3  # initial pass + one auto-retry + one give-up demand pass
+    assert len(done) == 0
+    assert len(errs) >= 1
+    assert "Completion gate blocked AGENT_DONE" in str(errs[-1].data.get("error") or "")
 
 
 def test_rules_of_road_retry_carries_failed_write_requirements_forward() -> None:
+    # The retry response now gives up explicitly (CAP-004 contract), so the run
+    # completes as a diagnosed give-up while the carried-forward failed write
+    # requirement is still visible in the attached rules report.
     events = _run_once(
         "fix bug in app.py",
         llm=_WriteThenNoopRetryLLM(),
@@ -183,6 +201,9 @@ def test_rules_of_road_retry_carries_failed_write_requirements_forward() -> None
     assert rules.get("passed") is False
     failed_ids = {c.get("id") for c in list(rules.get("checks") or []) if c.get("required") and not c.get("passed")}
     assert "coding_verification" in failed_ids
+    assert done[-1].data.get("gave_up") is True
+    diagnosis = done[-1].data.get("give_up_diagnosis") or {}
+    assert "verification" in str(diagnosis.get("what_failed") or "")
 
 
 def test_non_coder_strict_gate_blocks_workaround_completion() -> None:
