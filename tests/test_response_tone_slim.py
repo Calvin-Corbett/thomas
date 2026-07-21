@@ -14,6 +14,7 @@ from thomas.agent.response_tone import (
     simplified_review_default_hint,
     strip_internal_reasoning_narration,
     strip_robotic_opener,
+    strip_sandbox_links,
     strip_tool_call_artifacts,
     strip_unprompted_workspace_references,
 )
@@ -198,6 +199,37 @@ class TestWorkspaceReferences(unittest.TestCase):
         text = "You are in `/home/user/project`."
         out, changed = strip_unprompted_workspace_references(text, prompt_text="what directory am I in?")
         self.assertFalse(changed)
+
+
+class TestStripSandboxLinks(unittest.TestCase):
+    def test_strips_sandbox_link_keeps_label(self):
+        text = "Done: [Download the PDF](sandbox:/mnt/data/dot.pdf)."
+        self.assertEqual(strip_sandbox_links(text), "Done: Download the PDF.")
+
+    def test_strips_file_scheme_link(self):
+        self.assertEqual(strip_sandbox_links("open [log](file:///tmp/y.txt) now"), "open log now")
+
+    def test_strips_windows_path_link(self):
+        text = "see [report](C:\\Users\\me\\out.txt) here"
+        self.assertEqual(strip_sandbox_links(text), "see report here")
+
+    def test_strips_bare_mnt_path_link(self):
+        self.assertEqual(strip_sandbox_links("grab [it](/mnt/data/x.csv)!"), "grab it!")
+
+    def test_preserves_http_links(self):
+        text = "See [docs](https://example.com/a) and [more](http://x.io/b)."
+        self.assertEqual(strip_sandbox_links(text), text)
+
+    def test_preserves_real_deliverable_links(self):
+        # The real download card link must never be stripped.
+        text = "Grab [it](/deliverable/exec-1/chart.pdf) now."
+        self.assertEqual(strip_sandbox_links(text), text)
+
+    def test_no_links_unchanged(self):
+        self.assertEqual(strip_sandbox_links("no links here at all"), "no links here at all")
+
+    def test_empty_string(self):
+        self.assertEqual(strip_sandbox_links(""), "")
 
 
 class TestLiveTestHint(unittest.TestCase):

@@ -19,6 +19,7 @@ from thomas.agent.response_tone import (
     apply_social_tone_adjustments,
     prompt_has_frustration_signal,
     strip_internal_reasoning_narration,
+    strip_sandbox_links,
     strip_tool_call_artifacts,
     strip_unprompted_workspace_references,
 )
@@ -153,6 +154,7 @@ def sanitize_assistant_text(
         "directness": False,
         "social": False,
         "workspace": False,
+        "sandbox": False,
     }
 
     if (action_path or continuation_turn or frustrated_turn) and not blocked_response:
@@ -193,6 +195,13 @@ def sanitize_assistant_text(
         if path_changed:
             flags["workspace"] = True
             changed = True
+    # Always drop broken sandbox/local-path links regardless of route — the real
+    # deliverable ships as an attached artifact, so these inline links are dead.
+    sandbox_out = strip_sandbox_links(out)
+    if sandbox_out != out:
+        out = sandbox_out
+        flags["sandbox"] = True
+        changed = True
     agent._last_sanitize_flags = flags
     return out, changed
 

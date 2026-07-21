@@ -764,6 +764,24 @@ def strip_unprompted_workspace_references(text: str, *, prompt_text: str) -> tup
     return (out if out else src), changed
 
 
+_SANDBOX_LINK_RE = re.compile(r"\[([^\]]*)\]\(\s*(?:sandbox:|file:|/mnt/|[A-Za-z]:[\\/])[^)]*\)")
+
+
+def strip_sandbox_links(text: str) -> str:
+    """Neutralize markdown links pointing at a provider sandbox or local path.
+
+    Models sometimes emit links like ``[Download the PDF](sandbox:/mnt/data/x.pdf)``
+    or ``[open](file:///…)`` / ``[log](C:\\…)``. Those targets are never
+    reachable from the browser — the real deliverable is surfaced separately as
+    an attached artifact card — so the inline link is broken and redundant. Keep
+    the visible label; drop only the dead target.
+    """
+    src = str(text or "")
+    if "](" not in src:
+        return src
+    return _SANDBOX_LINK_RE.sub(lambda m: (m.group(1) or "").strip(), src)
+
+
 def live_test_default_hint(prompt_text: str) -> str:
     src = str(prompt_text or "").strip().lower()
     if not src:

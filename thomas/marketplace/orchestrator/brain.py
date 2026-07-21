@@ -25,6 +25,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from thomas.agent.dispatch import DispatchDecision, should_dispatch
+from thomas.agent.response_tone import strip_sandbox_links
 from thomas.chat.conversation import ConversationManager
 from thomas.chat.event_stream import EventDispatcher
 from thomas.chat.memory_layers import MemoryContext, MemoryCoordinator
@@ -1260,7 +1261,10 @@ class OrchestratorBrain:
                 log.error("Specialist %s returned an error: %s", specialist_id, result.error)
 
             elapsed = int((time.monotonic() - start) * 1000)
-            result.content = "".join(content_parts)
+            # Drop broken sandbox/local-path links the model may have inlined
+            # (e.g. [Download](sandbox:/mnt/data/x.pdf)); the real deliverable
+            # ships as an attached artifact card.
+            result.content = strip_sandbox_links("".join(content_parts))
             result.tool_calls = tool_calls
             result.thinking = "\n".join(specialist_thinking)
             result.elapsed_ms = elapsed
