@@ -1,10 +1,17 @@
-"""Offline risk mapping for Thomas agent tool actions."""
+"""Offline risk mapping for Thomas agent tool actions.
+
+Destructive-command detection is delegated to the parsed-command policy in
+``thomas.agent.command_analysis`` (tokenized argv analysis with chaining,
+wrapper and obfuscation handling) instead of legacy substring markers.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
+
+from thomas.agent.command_analysis import CommandFinding, analyze_command
 
 
 class ToolActionCategory(str, Enum):
@@ -86,18 +93,6 @@ _SECRET_MARKERS = (
     "token",
 )
 
-_DESTRUCTIVE_MARKERS = (
-    "chmod",
-    "chown",
-    "del ",
-    "format",
-    "git push",
-    "mkfs",
-    "remove-item",
-    "rm ",
-    "rmdir",
-)
-
 _RULES = (
     _ToolRiskRule(
         name="secret_access",
@@ -124,7 +119,6 @@ _RULES = (
             ToolRiskControl.AUDIT_LOG,
         ),
         tool_prefixes=("cmd", "command.", "exec.", "powershell", "shell", "subprocess.", "terminal."),
-        arg_markers=_DESTRUCTIVE_MARKERS,
     ),
     _ToolRiskRule(
         name="file_mutation",
@@ -209,7 +203,8 @@ def classify_tool_action(tool_name: str, args: dict[str, Any] | None = None) -> 
 
     normalized_name = _normalize_tool_name(tool_name)
     normalized_args = _flatten_args(args or {})
-    candidates = [rule for rule in _RULES if _matches_rule(rule, normalized_name, normalized_args)]
+    command_findings = _collect_command_findings(args or {})
+    candidates = [rule for rule in _RULES if _matches_rule(rule, normalized_name, normalized_args, command_findings)]
 
     if not candidates:
         return ToolRiskProfile(
@@ -236,7 +231,8 @@ def classify_tool_action(tool_name: str, args: dict[str, Any] | None = None) -> 
         )
         reason = f"File read action '{tool_name}' targets secret-like arguments; treat as secret access."
 
-    if rule.name == "shell_execution" and _contains_marker(normalized_args, _DESTRUCTIVE_MARKERS):
+    if rule.name == "shell_execution" and command_findings:
+        trigger = command_findings[0]
         risk_level = ToolRiskLevel.CRITICAL
         controls = (
             ToolRiskControl.DENY_BY_DEFAULT,
@@ -245,7 +241,10 @@ def classify_tool_action(tool_name: str, args: dict[str, Any] | None = None) -> 
             ToolRiskControl.REDACT_OUTPUT,
             ToolRiskControl.AUDIT_LOG,
         )
-        reason = f"Shell action '{tool_name}' includes destructive command markers; require fail-closed controls."
+        reason = (
+            f"Shell action '{tool_name}' includes destructive parsed command segment "
+            f"'{trigger.segment}' ({trigger.reason}); require fail-closed controls."
+        )
 
     return ToolRiskProfile(
         category=rule.category,
@@ -256,10 +255,40 @@ def classify_tool_action(tool_name: str, args: dict[str, Any] | None = None) -> 
     )
 
 
-def _matches_rule(rule: _ToolRiskRule, normalized_name: str, normalized_args: str) -> bool:
-    return normalized_name.startswith(rule.tool_prefixes) or bool(
-        rule.arg_markers and _contains_marker(normalized_args, rule.arg_markers)
-    )
+def _matches_rule(
+    rule: _ToolRiskRule,
+    normalized_name: str,
+    normalized_args: str,
+    command_findings: tuple[CommandFinding, ...],
+) -> bool:
+    if normalized_name.startswith(rule.tool_prefixes):
+        return True
+    if rule.name == "shell_execution":
+        return bool(command_findings)
+    return bool(rule.arg_markers and _contains_marker(normalized_args, rule.arg_markers))
+
+
+def _collect_command_findings(args: dict[str, Any]) -> tuple[CommandFinding, ...]:
+    """Run parsed-command danger analysis over every command-like argument value."""
+
+    findings: list[CommandFinding] = []
+
+    def _walk(value: Any) -> None:
+        if isinstance(value, str):
+            findings.extend(analyze_command(value).findings)
+        elif isinstance(value, dict):
+            for key in value:
+                _walk(value[key])
+        elif isinstance(value, (list, tuple)):
+            if value and all(isinstance(item, str) for item in value):
+                # argv-style command lists are analyzed as one command line
+                findings.extend(analyze_command(" ".join(value)).findings)
+            else:
+                for item in value:
+                    _walk(item)
+
+    _walk(args)
+    return tuple(findings)
 
 
 def _contains_marker(value: str, markers: tuple[str, ...]) -> bool:
