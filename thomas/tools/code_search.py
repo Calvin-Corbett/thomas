@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from thomas.tools.base import Tool, ToolResult
+from thomas.tools.semantic_search import register_semantic_search_tool
 
 _SKIP_DIRS = {
     ".git",
@@ -548,3 +549,6 @@ def register_code_search_tools(registry: Any, sandbox_root: Path) -> None:
     registry.register(FindDefinitionTool(sandbox_root))
     registry.register(FindReferencesTool(sandbox_root))
     registry.register(ProjectStructureTool(sandbox_root))
+    # Semantic (concept) search over the RAG index — lives alongside the lexical
+    # code.* tools so the agent can retrieve code by meaning, not just keywords.
+    register_semantic_search_tool(registry)
