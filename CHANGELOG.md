@@ -13,6 +13,11 @@ Versioning: Semantic Versioning.
 
 ### Added (Frontier capability program — external integrations, real code behind injectable adapters)
 
+- Managed DB provisioning (CAP-117): provision a database for a generated app (real SQLite default, Postgres-DSN builder for the credential-gated lane) with a vendored, standalone per-app migration runner — ordered, idempotent (re-run is a no-op), transactional (a failing migration rolls back with no partial record).
+- Ownership-scoped auth provisioning (CAP-118): generate default-deny ownership rules for a generated app plus auto-emitted cross-account denial tests that pass against the correct policy and fail against a deliberately permissive one (so the tests have teeth).
+- Prompt→full-app scaffold (CAP-116): from an app spec, generate a coherent zero-wiring app — backend handlers and a persistence layer already connected — and the generated persistence is executed against real SQLite in tests to prove it works, not just emits text.
+- Governed marketplace distribution (CAP-026): distribute plugins/extensions/skills to a team or org scope with an approval gate (pending until approved; rejected never distributes) and revocation (withdrawn from members, future installs blocked), all audited.
+- Monorepo-scale index (CAP-145): a sub-linear inverted index (query work scales with matches, not corpus size) plus AST build-graph partitioning (a changed file's minimal impacted set), with a 1x/2x/5x/10x benchmark computing a sub-linear scaling exponent.
 - App-builder payments (CAP-119): a generated app's payment/entitlement wiring where entitlements are granted only on a signature-verified webhook (reusing Thomas's existing Stripe verifier) — a forged, wrong-secret, or tampered event grants nothing; cancellations revoke.
 - SSO (CAP-123): an OIDC + PKCE engine (authorize-URL + code/verifier exchange, ID-token issuer/audience/expiry/nonce validation) enforced through a single hook the auth choke point imports, so every surface enforces identically.
 - SCIM provisioning (CAP-124): SCIM 2.0 user/group create/get/list/PUT/PATCH/delete matching the Okta/Entra dialect, with directory sync that reconciles a provider push (deactivating removed users rather than hard-deleting) — filling the gap that Thomas had no user model.
