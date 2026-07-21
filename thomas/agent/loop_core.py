@@ -354,7 +354,10 @@ class AgentLoop:
         if include_project_instructions and route in _project_instruction_paths:
             try:
                 sandbox_root = Path(os.getcwd())
-                project_content = discover_project_instructions(sandbox_root)
+                # Bound merged instructions by the model window so small-context
+                # models never lose required prompt text to project files.
+                instruction_budget = max(1_200, min(24_000, int(self._context_window) // 2))
+                project_content = discover_project_instructions(sandbox_root, max_chars=instruction_budget)
                 if project_content:
                     prompt = prompt.rstrip() + "\n\n" + format_project_instructions(project_content)
             except Exception:
@@ -444,24 +447,41 @@ class AgentLoop:
                     anchor_source=all_messages,
                 )
             except ValueError:
-                if not memory_text:
+                # Optional context is dropped in stages, each as one complete,
+                # well-formed section: merged project instructions first (bulk
+                # ambient files), then retrieved memory — memory_text carries
+                # deliberately injected steering (e.g. the best-practice hint),
+                # so it must outlive ambient instruction files — then both.
+                # Required prompt text is never cut.
+                stages: list[tuple[str, bool]] = []
+                if include_project_instructions:
+                    stages.append((memory_text, False))
+                if memory_text:
+                    stages.append(("", include_project_instructions))
+                if memory_text and include_project_instructions:
+                    stages.append(("", False))
+                if not stages:
                     raise
-                # Retrieved memory is optional context. Drop it as one complete,
-                # well-formed section before considering required prompt text.
-                messages[0] = self._build_system_message(
-                    "",
-                    include_purpose=include_purpose,
-                    route_path=route_path,
-                    skills_context=skills_context,
-                    include_autonomy_profile=include_autonomy_profile,
-                    include_editing_policy=include_editing_policy,
-                    include_project_instructions=include_project_instructions,
-                )
-                messages = fit_messages_to_hard_cap(
-                    messages,
-                    hard_cap=message_hard_cap,
-                    anchor_source=all_messages,
-                )
+                for stage_index, (stage_memory, stage_instructions) in enumerate(stages):
+                    messages[0] = self._build_system_message(
+                        stage_memory,
+                        include_purpose=include_purpose,
+                        route_path=route_path,
+                        skills_context=skills_context,
+                        include_autonomy_profile=include_autonomy_profile,
+                        include_editing_policy=include_editing_policy,
+                        include_project_instructions=stage_instructions,
+                    )
+                    try:
+                        messages = fit_messages_to_hard_cap(
+                            messages,
+                            hard_cap=message_hard_cap,
+                            anchor_source=all_messages,
+                        )
+                        break
+                    except ValueError:
+                        if stage_index == len(stages) - 1:
+                            raise
         except ValueError as exc:
             raise ValueError(
                 "Model context window cannot fit the required instructions and latest request after reserving "
