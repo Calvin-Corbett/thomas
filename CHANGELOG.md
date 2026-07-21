@@ -13,6 +13,13 @@ Versioning: Semantic Versioning.
 
 ### Added (Frontier capability program — external integrations, real code behind injectable adapters)
 
+- CI-native execution (CAP-065): Thomas can run inside a CI job — parse a failure into structured findings, drive the reason→edit→verify loop to create a fix (pass/fail from a real subprocess exit code), and report a machine-readable result plus GitHub-Actions `::error`/`::notice` annotations and `$GITHUB_OUTPUT` vars. The fix step degrades honestly to inspection-only when no model is wired.
+- Real-browser E2E gate (CAP-088): click-type-assert browser validation is now a required done gate for interactive changes — asserting on *computed* visibility (not innerText on hidden nodes), failing closed when no browser is present, and integrating with the completion gate.
+- Fleet TUI (CAP-099): a terminal fleet dashboard with navigate, peek, attach, reply, and a live task graph — rendered as a pure, snapshot-testable frame.
+- Embedding SDK (CAP-131): a full-harness SDK (`thomas/sdk/`) with a stable client API and an embeddable Agent View, proven end-to-end with a simulated third-party host over an injectable transport.
+- Post-deploy monitoring loop (CAP-121): deployed-app health and error signals feed back to the agent as structured findings, each trace-linked so a deployed error points back to the originating change/run.
+
+
 - Authenticated GitHub source-host integration (CAP-070): real PR create/update, review-comment reply with a follow-up fix reference, and a check re-run + reaction flow — behind an injectable transport (stdlib urllib default) so it's fully tested offline against a fake and runs live with a `GITHUB_TOKEN`. Plugs straight into the governed-PR gateway seam.
 - Linear ticket sync (CAP-071): ticket assignment intake plus bidirectional ticket↔PR status sync through one canonical state map, idempotent and conflict-aware (divergent changes record a conflict, not a silent clobber). Real Linear GraphQL behind an injectable provider; tested against a fake. (A Jira provider drops in behind the same `TicketProvider` Protocol.)
 - Chat-platform operation (CAP-072): chat-native dispatch, steering, approvals, Block-Kit diff review, and request-to-merge (with validation-evidence proof) — the five verbs mapped onto Thomas's existing delegation/approval/merge seams, over an injectable chat transport.
