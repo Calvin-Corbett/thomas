@@ -71,6 +71,13 @@ def _repl_needs_codex_event_loop(config: AppConfig, active_profile: str) -> bool
     return False
 
 
+from thomas.cli.headless_run_log import (
+    OUTCOME_AGENT_ERROR,
+    OUTCOME_SUCCESS,
+    OUTCOME_TIMEOUT,
+    OUTCOME_USAGE_ERROR,
+    HeadlessRunRecorder,
+)
 from thomas.cli.main_runtime_ops import (
     doctor_cmd as _doctor_cmd,
 )
@@ -325,8 +332,15 @@ async def _run_chat(
     autonomy_level: int = 3,
     max_iterations: int | None = None,
     job_type: str | None = None,
-) -> None:
-    """Run a single chat interaction with streaming output."""
+) -> dict[str, Any]:
+    """Run a single chat interaction with streaming output.
+
+    Returns a run summary dict for the headless exit-code/run-log contract
+    (see :mod:`thomas.cli.headless_run_log`): ``outcome`` is ``agent_error``
+    when any ``AGENT_ERROR`` event was emitted, else ``success``; ``error``
+    carries the joined error details; ``artifacts`` lists output paths
+    reported by the agent's completion event when present.
+    """
     # Resolve via sys.modules so tests that monkeypatch the symbols on
     # ``thomas.cli.main`` (which re-exports them) intercept this call site.
     # The defaults are the implementations imported above.
@@ -366,6 +380,8 @@ async def _run_chat(
         autonomy_level=clamp_autonomy_level(autonomy_level, default=3),
     )
 
+    agent_errors: list[str] = []
+    run_artifacts: list[str] = []
     try:
         tool_active = False
         tool_args: dict[str, str] = {}
@@ -432,9 +448,13 @@ async def _run_chat(
                     tool_args.pop(tool_id, None)
 
             elif event.type == EventType.AGENT_ERROR:
+                agent_errors.append(str(event.data.get("error") or "agent error"))
                 sys.stderr.write(f"\n\033[31mError: {event.data['error']}\033[0m\n")
 
             elif event.type == EventType.AGENT_DONE:
+                done_artifacts = event.data.get("artifacts")
+                if isinstance(done_artifacts, (list, tuple)):
+                    run_artifacts.extend(str(item) for item in done_artifacts if item)
                 iters = event.data["iterations"]
                 tc = event.data["tool_calls"]
                 sys.stdout.write("\n")
@@ -470,6 +490,13 @@ async def _run_chat(
                     sys.stdout.write(f"\033[90m[runtime model: {active_profile_name}/{active_model}]\033[0m\n")
             except (OSError, FileNotFoundError):
                 pass
+        return {
+            "outcome": OUTCOME_AGENT_ERROR if agent_errors else OUTCOME_SUCCESS,
+            "error": "; ".join(err for err in agent_errors if err) or None,
+            "model_profile": active_profile,
+            "model_id": model_config.model,
+            "artifacts": run_artifacts,
+        }
     finally:
         await llm.close()
         if memory:
@@ -574,44 +601,61 @@ def cli(
     show_default=True,
     help="Execution autonomy level (1=manual review, 4=full auto).",
 )
+@click.option(
+    "--run-log",
+    "run_log_flag",
+    type=click.Path(dir_okay=False),
+    default=None,
+    help="Append a machine-readable JSONL run summary to this path (THOMAS_RUN_LOG env var also works).",
+)
 @click.pass_context
 def chat(
     ctx: click.Context,
     prompt: str,
     model_name: str | None,
     autonomy_level: int,
+    run_log_flag: str | None,
 ) -> None:
-    """Send a single prompt and get a response."""
+    """Send a single prompt and get a response.
+
+    Headless contract: exit 0 on success, 1 on agent/task error, 2 on
+    usage/config error, 3 on timeout/interrupt. See
+    :mod:`thomas.cli.headless_run_log` for the run-log record format.
+    """
     config: AppConfig = ctx.obj["config"]
+    recorder = HeadlessRunRecorder(prompt, run_log_flag)
     selected_profile = _resolve_model_profile_name(config, model_name) if model_name else ""
     if model_name and not selected_profile:
-        click.echo(f"Unknown model profile '{model_name}'. Available: {', '.join(config.models.keys())}", err=True)
-        sys.exit(2)
+        message = f"Unknown model profile '{model_name}'. Available: {', '.join(config.models.keys())}"
+        click.echo(message, err=True)
+        sys.exit(recorder.finish(OUTCOME_USAGE_ERROR, error=message))
 
     errors = config.validate()
     if errors:
         for e in errors:
             click.echo(f"Config error: {e}", err=True)
-        sys.exit(1)
+        sys.exit(recorder.finish(OUTCOME_USAGE_ERROR, error="; ".join(errors)))
 
     # Natural-language model switching for single-shot chat
     if model_name is None:
         nl_model, nl_prompt, nl_message = _parse_model_switch_prompt(prompt, config)
         if nl_message:
             click.echo(nl_message)
+            recorder.finish(OUTCOME_SUCCESS)
             return
         if nl_model:
             selected_profile = _resolve_model_profile_name(config, nl_model)
             if not selected_profile:
-                click.echo(
-                    f"Unknown model profile '{nl_model}'. Available: {', '.join(config.models.keys())}", err=True
-                )
-                sys.exit(2)
+                message = f"Unknown model profile '{nl_model}'. Available: {', '.join(config.models.keys())}"
+                click.echo(message, err=True)
+                sys.exit(recorder.finish(OUTCOME_USAGE_ERROR, error=message))
             model_name = selected_profile
             if nl_prompt is None:
                 click.echo(f"Switched to model '{model_name}' for this run. Ask a question.")
+                recorder.finish(OUTCOME_SUCCESS)
                 return
             prompt = nl_prompt
+            recorder.prompt = prompt
 
     from thomas.core.model_resolution import resolve_effective_model
 
@@ -630,22 +674,50 @@ def chat(
     if not resolved_profile:
         selected_profile = _resolve_model_profile_name(config, config.default_model)
         if not selected_profile:
-            click.echo("No valid model profile configured.", err=True)
-            sys.exit(2)
+            message = "No valid model profile configured."
+            click.echo(message, err=True)
+            sys.exit(recorder.finish(OUTCOME_USAGE_ERROR, error=message))
         resolved_profile = selected_profile
 
     config.default_model = resolved_profile
     if resolved_model_id and resolved_profile in config.models:
         config.models[resolved_profile].model = resolved_model_id
 
-    asyncio.run(
-        _run_chat(
-            config,
-            prompt,
-            resolved_profile,
-            autonomy_level=clamp_autonomy_level(autonomy_level, default=3),
+    recorder.model_profile = resolved_profile
+    if resolved_profile in config.models:
+        recorder.model_id = config.models[resolved_profile].model
+
+    try:
+        summary = asyncio.run(
+            _run_chat(
+                config,
+                prompt,
+                resolved_profile,
+                autonomy_level=clamp_autonomy_level(autonomy_level, default=3),
+            )
         )
-    )
+    except KeyboardInterrupt:
+        click.echo("Interrupted.", err=True)
+        sys.exit(recorder.finish(OUTCOME_TIMEOUT, error="interrupted"))
+    except TimeoutError as exc:
+        click.echo(f"Timed out: {exc}", err=True)
+        sys.exit(recorder.finish(OUTCOME_TIMEOUT, error=str(exc) or "timeout"))
+    except Exception as exc:
+        log.exception("Headless chat run failed.")
+        click.echo(f"Error: {exc}", err=True)
+        raise SystemExit(recorder.finish(OUTCOME_AGENT_ERROR, error=f"{type(exc).__name__}: {exc}")) from exc
+
+    summary = summary if isinstance(summary, dict) else {}
+    if summary.get("model_profile"):
+        recorder.model_profile = str(summary["model_profile"])
+    if summary.get("model_id"):
+        recorder.model_id = str(summary["model_id"])
+    recorder.artifacts = [str(item) for item in (summary.get("artifacts") or [])]
+    outcome = str(summary.get("outcome") or OUTCOME_SUCCESS)
+    error_detail = summary.get("error")
+    exit_code = recorder.finish(outcome, error=str(error_detail) if error_detail else None)
+    if exit_code != 0:
+        sys.exit(exit_code)
 
 
 def _emit_config_show(config: AppConfig) -> None:
