@@ -7,9 +7,12 @@ blue-owned code whether a finished session may promote.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
+
+from .independent_verifier import CLAIM_REJECTED, IndependentVerdict
 
 LOOP_PACKAGE_PREFIX = "thomas/forge/anvil/"
 SUPERVISOR_PACKAGE_PREFIX = "evolve_supervisor/"
@@ -297,11 +300,23 @@ def decide_for_session(
     posture: str | EvolvePosture,
     session: dict[str, Any],
     risk_tier: str,
+    *,
+    independent_verifier: Callable[[dict[str, Any]], IndependentVerdict | None] | None = None,
 ) -> PromotionDecision:
-    """Summarize a session and decide in one call."""
+    """Summarize a session and decide in one call.
+
+    When ``independent_verifier`` is supplied (see
+    ``independent_verifier.build_session_verifier``), any completion claim that
+    carries runnable evidence is rerun in a fresh subprocess, and a rejected
+    rerun OVERRIDES an approving in-path review: the session is rejected with
+    the diverging evidence in the reason.  An ``unverifiable`` verdict never
+    upgrades or downgrades the in-path decision -- it simply is not treated as
+    independent confirmation (evidence-free sessions are already held by the
+    ``verification_ran`` gate in :func:`decide_promotion`).
+    """
     outcome = summarize_session_outcome(session)
     effective_risk_tier = outcome.risk_floor or risk_tier
-    return decide_promotion(
+    decision = decide_promotion(
         posture=posture,
         risk_tier=effective_risk_tier,
         verification_ok=outcome.verification_ok,
@@ -314,3 +329,14 @@ def decide_for_session(
         human_hold_required=outcome.human_hold_required,
         human_hold_reason=outcome.human_hold_reason,
     )
+    if independent_verifier is None or decision.action == ACTION_REJECT:
+        return decision
+    verdict = independent_verifier(dict(session or {}))
+    if verdict is not None and verdict.status == CLAIM_REJECTED:
+        return PromotionDecision(
+            ACTION_REJECT,
+            f"independent verifier rejected completion claim: {verdict.summary()}",
+            decision.posture,
+            decision.risk_tier,
+        )
+    return decision

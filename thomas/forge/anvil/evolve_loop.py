@@ -29,6 +29,7 @@ from evolve_supervisor import (
     ACTION_PROMOTE,
     DEFAULT_POSTURE,
     EvolvePosture,
+    build_session_verifier,
     decide_for_session,
     evaluate_spend_governor,
     parse_posture,
@@ -297,7 +298,15 @@ def run_evolve_loop(
                 )
 
             # ---- gate decides promote / hold / reject ----
-            decision = decide_for_session(posture_enum, session, goal.risk_tier)
+            # The independent verifier reruns the session's claimed verification
+            # evidence in a fresh subprocess; a diverging rerun rejects the claim
+            # even when the in-path review would have approved or promoted it.
+            decision = decide_for_session(
+                posture_enum,
+                session,
+                goal.risk_tier,
+                independent_verifier=build_session_verifier(timeout_seconds=timeout_seconds),
+            )
             promoted = False
             if decision.action == ACTION_PROMOTE:
                 try:
