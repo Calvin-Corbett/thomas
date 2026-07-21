@@ -20,10 +20,12 @@ from thomas.cli.repl_project import instruction_file_path
 from thomas.cli.repl_skills import expand_skill, list_all_skills
 from thomas.cli.repl_slash import (
     extract_slash_token,
-    normalize_slash_command,
+    list_repo_slash_specs,
+    resolve_slash_invocation,
     suggest_slash_commands,
 )
 from thomas.cli.repl_state import ReplUiState
+from thomas.cli.repo_commands import dispatch_repo_command
 from thomas.core.autonomy import autonomy_level_name, clamp_autonomy_level, parse_autonomy_level
 
 USER_PANEL_TITLE = "USER"
@@ -215,7 +217,10 @@ class ThomasREPLRuntimeMixin:
                 self._transition_ui_state(ReplUiState.IDLE)
             return should_exit, handled
 
-        command = normalize_slash_command(raw_command)
+        command, repo_command = resolve_slash_invocation(raw_command)
+        if repo_command is not None:
+            await dispatch_repo_command(self, repo_command, arg)
+            return False, True
         if not command:
             token = extract_slash_token(cmd)
             tips = suggest_slash_commands(token)
@@ -258,6 +263,14 @@ class ThomasREPLRuntimeMixin:
                 aliases = f"  [dim]{' '.join(spec.aliases)}[/dim]" if spec.aliases else ""
                 usage = spec.usage or spec.command
                 lines.append(f"[bold]{usage}[/bold]  {spec.summary}{aliases}")
+            repo_specs, repo_warnings = list_repo_slash_specs()
+            if repo_specs:
+                lines.append("")
+                lines.append("[dim]Repo commands (.thomas/commands, .claude/commands):[/dim]")
+                for spec in repo_specs:
+                    lines.append(f"[bold]{spec.usage or spec.command}[/bold]  {spec.summary}")
+            for warning in repo_warnings:
+                lines.append(f"[yellow]repo command warning: {warning}[/yellow]")
             lines.append("")
             lines.append("[dim]/ opens picker. Use // to send literal slash text. Ctrl+J for multiline input.[/dim]")
             self._console.print(Panel("\n".join(lines), title="Commands", border_style="dim"))
