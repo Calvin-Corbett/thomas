@@ -13,6 +13,11 @@ Versioning: Semantic Versioning.
 
 ### Added (Frontier capability program — closing the 2026-07-21 audit gaps)
 
+- Context-aware code review (CAP-081): reviews changed modules together and flags cross-module invariant violations — a stale caller left behind by a signature change, an imported-but-undefined symbol, a forbidden dependency edge — each finding standards-cited (rule id + why) with both locations involved.
+- Checkpoints & rollback (CAP-086): checkpoint repository, environment, and conversation state together, then selectively undo just one kind (roll back the repo without touching the conversation, or vice versa) — repo snapshots survive even a git reset.
+- Requirement-linked test generation (CAP-087): generate edge and failure tests each linked to a requirement id, then validate the suite by mutation testing (it must kill injected mutants) — a weak suite scores low, so the metric actually discriminates.
+- Cost-tiered routing (CAP-094): an auditable classifier routes low-risk status/summary work to a cheap model profile and risky/complex work to standard/premium, recording why for every decision; ambiguous work falls back to a safe default, never cheap-by-accident.
+- Tool-call activity trace (CAP-138): every tool call is stored with full inputs/outputs (not truncated), duration, and session — queryable by session/tool/trace/time-window, and trace links follow across sessions so a chain spanning two sessions reads back as one.
 - Accountable repo navigation probe (CAP-001): locate a symbol with no location hint even three directories deep, returning a bounded read rationale — every file read is charged against a file/byte budget and recorded with a one-line reason, so navigation is accountable rather than a blind full-repo read.
 - Constraint retention through compaction (CAP-012): durable constraints stated early are pinned and exempt from compaction, so a rule from turn 1 survives a 200-turn compaction verbatim and still governs — and vetoes — a final action that would violate it.
 - Cross-surface session identity (CAP-018): one canonical server-side session identity spans CLI, web, and companion — all resolve to the same session and state, an update on one surface hands off automatically to the others, and the identity survives a restart.
