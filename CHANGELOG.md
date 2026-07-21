@@ -13,6 +13,11 @@ Versioning: Semantic Versioning.
 
 ### Added (Frontier capability program — closing the 2026-07-21 audit gaps)
 
+- Specialist role fan-out (CAP-030): standing expert roles (security/performance/correctness/tests) run in parallel and their outputs provably change the result — a materiality report shows what each role added and whether it flipped the decision versus a baseline without them.
+- Per-release token efficiency (CAP-095): retry rate and first-pass success are recorded per release against the token ledger, so you can see tokens-per-success trend release over release.
+- Fast-inference tier (CAP-096): a per-task fast tier gated on latency and edit-quality — tasks over the latency budget aren't fast-tiered, and a fast output below the quality bar falls back to standard, with a benchmark report per task.
+- RBAC (CAP-125): custom scoped roles enforced identically for humans and agents — a human and an agent with the same role get the same decision, with explicit-deny-overrides-allow, default-deny, scope constraints, and multi-role union.
+- Agent identity & signed attestation (CAP-127): each agent gets a managed identity with a scoped policy and a signing secret (never exposed), and every action can be signed and verified — tampering with the action or identity, or a forged secret, fails verification.
 - Context-aware code review (CAP-081): reviews changed modules together and flags cross-module invariant violations — a stale caller left behind by a signature change, an imported-but-undefined symbol, a forbidden dependency edge — each finding standards-cited (rule id + why) with both locations involved.
 - Checkpoints & rollback (CAP-086): checkpoint repository, environment, and conversation state together, then selectively undo just one kind (roll back the repo without touching the conversation, or vice versa) — repo snapshots survive even a git reset.
 - Requirement-linked test generation (CAP-087): generate edge and failure tests each linked to a requirement id, then validate the suite by mutation testing (it must kill injected mutants) — a weak suite scores low, so the metric actually discriminates.
