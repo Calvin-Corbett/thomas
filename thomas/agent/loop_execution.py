@@ -10,6 +10,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from thomas.agent.checkin_policy import resolve_checkin_policy
 from thomas.agent.loop_completion import handle_post_loop_completion
 from thomas.agent.loop_core import LoopState
 from thomas.agent.loop_helpers import (
@@ -734,6 +735,11 @@ async def _agent_loop_run(
     self._sync_user_message_to_intelligence(request_text)
     turn_user_content: Any = prompt
 
+    # Mid-run check-in policy (CAP-051): zero overhead unless configured.
+    checkin_policy = getattr(self, "_checkin_policy", None) or resolve_checkin_policy(self.config)
+    if checkin_policy is not None:
+        self._checkin_policy = checkin_policy
+
     for iteration in range(max_iter):
         state.iteration = iteration
 
@@ -1277,6 +1283,19 @@ async def _agent_loop_run(
                     pass
 
             state.total_tool_calls += 1
+
+            if checkin_policy is not None:
+                for checkin in checkin_policy.observe_step(
+                    total_tokens=int(stream_usage.get("total_tokens", 0) or 0),
+                    label=str(tc.get("name") or ""),
+                ):
+                    yield AgentEvent(
+                        type=EventType.STATUS,
+                        data={"message": checkin.message, "checkin": checkin.to_dict()},
+                        iteration=iteration,
+                    )
+                    if checkin.ack_required:
+                        await checkin_policy.wait_until_acknowledged()
 
             if current_job_type == "coding":
                 tool_action = _code_tool_action(str(tc.get("name") or ""), args_meta)
