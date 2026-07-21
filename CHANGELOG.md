@@ -5,7 +5,13 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
-## [0.19.23] - 2026-07-20
+## [Unreleased]
+
+### Added (Frontier capability program — closing the 2026-07-21 audit gaps)
+
+- Delegation lifecycle notifications (CAP-045): completed/failed/approval-needed delegation events now emit Smart Notification Center notifications automatically (completion / blocked / approval_needed kinds) with `/?session=<id>` deep links, deduped per (event, execution_id) through the existing dispatcher (persistence + SSE + push). Notification failures are fail-silent — they can never break delegation itself.
+- Parsed dangerous-command policy (CAP-084): destructive-command detection upgraded from substring markers to tokenized argv analysis (thomas/agent/command_analysis.py) — argv[0] basename resolution, full chain-segment evaluation (&&, ||, ;, |, &, newlines), sudo/env/nohup/xargs unwrapping, cmd /c + powershell -Command (incl. -EncodedCommand) + bash -c payload re-parsing, and a marker fallback on unparseable input so it is never less strict than before. Quoted-string false positives (grep 'rm -rf') no longer escalate; obfuscated deletes ("rm" -rf, r''m) now do.
+- Headless/CI contract for one-shot chat (CAP-078): deterministic exit codes (0 success / 1 agent error / 2 usage-config / 3 timeout-interrupt) and an optional machine-readable JSONL run log (--run-log / THOMAS_RUN_LOG) with timestamp, prompt, model, outcome, exit code, duration, error, and artifacts per execution. Fixes AGENT_ERROR runs previously leaking exit 0.
 
 ### Added (Codex parity: parallel Code runs)
 

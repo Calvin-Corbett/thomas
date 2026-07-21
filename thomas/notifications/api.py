@@ -12,6 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Body, FastAPI, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
+from .delegation_hooks import set_active_dispatcher
 from .dispatcher import (
     NotificationBroadcaster,
     NotificationDispatcher,
@@ -88,6 +89,10 @@ def init_notifications(app: FastAPI, db_path: str | None = None) -> None:
     app.state.notification_store = store
     app.state.notification_broadcaster = broadcaster
     app.state.notification_dispatcher = dispatcher
+
+    # Delegation lifecycle hooks (CAP-045) share this dispatcher so automatic
+    # completion/blocked notifications reach the same store + SSE clients.
+    set_active_dispatcher(dispatcher)
 
     app.include_router(build_router(), prefix="")
 

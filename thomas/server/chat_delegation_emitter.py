@@ -1,13 +1,63 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+log = logging.getLogger(__name__)
+
+# Failures the best-effort notification path swallows (with logging).  The
+# production notifier (thomas.notifications.delegation_hooks) is itself
+# hardened to never raise; this guard exists for injected notifiers and
+# import-time failures.  A notification failure must never break delegation.
+_NOTIFY_EXCEPTIONS = (
+    ImportError,
+    OSError,
+    RuntimeError,
+    ValueError,
+    TypeError,
+    KeyError,
+    AttributeError,
+    LookupError,
+)
+
 
 class _DelegationEmitter:
-    def __init__(self, emit_event: Callable[[dict[str, Any]], Awaitable[None]]) -> None:
+    def __init__(
+        self,
+        emit_event: Callable[[dict[str, Any]], Awaitable[None]],
+        notifier: Callable[..., Any] | None = None,
+    ) -> None:
         self._emit_event = emit_event
+        self._notifier = notifier
+
+    async def _notify_lifecycle(self, event: str, record: dict[str, Any], text: str = "") -> None:
+        """Best-effort user notification (CAP-045); never raises."""
+        try:
+            notifier = self._notifier
+            if notifier is None:
+                # CAP-045: server emits Smart-Notification-Center notifications on
+                # delegation lifecycle. This is a deliberate server->notifications
+                # edge that still needs declaring in thomas/_architecture.py
+                # (server.depends_on += "notifications"); the import is kept
+                # function-level and fail-silent so it never loads at boot and a
+                # notification failure never breaks delegation.
+                from thomas.notifications.delegation_hooks import emit_delegation_notification
+
+                notifier = emit_delegation_notification
+            await asyncio.to_thread(notifier, event, record, text=text)
+        except _NOTIFY_EXCEPTIONS:
+            log.warning(
+                "delegation %s notification failed (execution_id=%s)",
+                event,
+                record.get("execution_id", ""),
+                exc_info=True,
+            )
+
+    async def approval_needed(self, record: dict[str, Any], *, specialist_id: str, bot: Any, text: str = "") -> None:
+        """Notify that a delegation is paused waiting for user approval."""
+        await self._notify_lifecycle("approval_needed", record, text)
 
     async def started(self, record: dict[str, Any], *, specialist_id: str, bot: Any) -> None:
         await self._emit_event(
@@ -82,6 +132,7 @@ class _DelegationEmitter:
                 **bot.to_event_dict(),
             }
         )
+        await self._notify_lifecycle("completed", record, text)
 
     async def failed(self, record: dict[str, Any], *, specialist_id: str, bot: Any, text: str) -> None:
         await self._emit_event(
@@ -102,6 +153,7 @@ class _DelegationEmitter:
                 **bot.to_event_dict(),
             }
         )
+        await self._notify_lifecycle("failed", record, text)
 
 
 class _ThreadsafeDelegationEmitter:
@@ -125,3 +177,6 @@ class _ThreadsafeDelegationEmitter:
 
     async def failed(self, record: dict[str, Any], *, specialist_id: str, bot: Any, text: str) -> None:
         await self._call("failed", record, specialist_id=specialist_id, bot=bot, text=text)
+
+    async def approval_needed(self, record: dict[str, Any], *, specialist_id: str, bot: Any, text: str = "") -> None:
+        await self._call("approval_needed", record, specialist_id=specialist_id, bot=bot, text=text)
