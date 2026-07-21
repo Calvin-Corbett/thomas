@@ -36,9 +36,11 @@ Safety + concurrency
 - Total parallel running tasks are limited via asyncio.Semaphore.
 - Optional per-agent concurrency limits (useful when multiple tasks share one model backend).
 - Clean cancellation: cancelling a run stops outstanding work, marks remaining tasks cancelled/blocked.
+- Ready-task selection is priority-aware (meta["priority"] + aging + cooperative
+  requeue-before-start preemption); policy and boundary docs live in thomas/agent/task_queue_policy.py.
 
 Integration note
-This module avoids importing the rest of the Thomas codebase. The server layer should provide:
+This module's only internal import is the stdlib-only task_queue_policy sibling. The server layer should provide:
 - subagents: dict[str, Subagent] (must include "planner" and "reviewer")
 - tool_call callback OR tool registry + mutates_fs signal
 """
@@ -54,6 +56,8 @@ import time
 from collections.abc import AsyncIterator, Iterable
 from datetime import datetime, timezone
 from typing import Any, Protocol
+
+from thomas.agent.task_queue_policy import TaskQueuePolicy
 
 # -----------------------------
 # Small utilities
@@ -435,6 +439,8 @@ class SwarmConfig:
     max_tasks: int = 64
     # max retries per task on failure (3 attempts total: initial + 2 retries)
     max_task_retries: int = 2
+    # aging rate for queue priority (points/sec); None -> policy default. See task_queue_policy.py.
+    queue_aging_rate_per_sec: float | None = None
 
 
 class SwarmRunRegistry:
@@ -503,6 +509,7 @@ class SwarmOrchestrator:
         self.task_results: dict[str, TaskResult] = {}
         self._blocked_by: dict[str, str] = {}  # task_id -> failed dep id
         self._task_retry_count: dict[str, int] = {}  # task_id -> retry attempt count
+        self._queue_policy: TaskQueuePolicy | None = None
         self._events: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
         self._done_evt = asyncio.Event()
 
@@ -717,7 +724,10 @@ class SwarmOrchestrator:
 
         pending = set(self.graph.tasks.keys())
         inflight: set[str] = set()
+        # ready_q carries wake tokens (one per ready task); the policy owns selection order.
         ready_q: asyncio.Queue[str] = asyncio.Queue()
+        policy = TaskQueuePolicy.for_graph(self.graph, aging_rate_per_sec=self.config.queue_aging_rate_per_sec)
+        self._queue_policy = policy
         state_changed = asyncio.Event()
         state_changed.set()  # initial scheduling pass
 
@@ -771,11 +781,12 @@ class SwarmOrchestrator:
                     )
                     progressed = True
 
-                # 2) enqueue ready tasks
-                for tid in list(pending):
+                # 2) enqueue ready tasks (graph order, so no-priority runs stay deterministic FIFO)
+                for tid in [t for t in self.graph.tasks if t in pending]:
                     ready, blocker = deps_state(tid)
                     if ready:
                         pending.remove(tid)
+                        policy.mark_ready(tid)
                         await ready_q.put(tid)
                         progressed = True
 
@@ -802,12 +813,20 @@ class SwarmOrchestrator:
                         return
                     continue
 
+                picked = policy.pop_next()
+                if picked is None:
+                    continue  # spurious token; pairing invariant keeps this unreachable
+                tid = picked
+
                 inflight.add(tid)
                 try:
-                    await self._run_one_task(task_id=tid, subagents=subagents)
+                    ran = await self._run_one_task(task_id=tid, subagents=subagents)
                 finally:
                     inflight.discard(tid)
                     state_changed.set()
+                if not ran:
+                    # Claim was preempted before start; restore its wake token.
+                    await ready_q.put(tid)
 
         worker_count = max(1, int(self.config.max_parallel_tasks))
         async with asyncio.TaskGroup() as tg:
@@ -821,14 +840,15 @@ class SwarmOrchestrator:
                 self.task_status[tid] = TaskStatus.CANCELLED
                 await self._emit("task_update", "orchestrator", tid, {"status": TaskStatus.CANCELLED.value})
 
-    async def _run_one_task(self, *, task_id: str, subagents: dict[str, Subagent]) -> None:
+    async def _run_one_task(self, *, task_id: str, subagents: dict[str, Subagent]) -> bool:
+        """Returns False only when the claim was preempted before start (caller requeues)."""
         assert self.graph is not None
         t = self.graph.tasks[task_id]
 
         if self._cancel.is_set():
             self.task_status[task_id] = TaskStatus.CANCELLED
             await self._emit("task_update", "orchestrator", task_id, {"status": TaskStatus.CANCELLED.value})
-            return
+            return True
 
         agent = subagents.get(t.agent)
         if agent is None:
@@ -840,13 +860,29 @@ class SwarmOrchestrator:
                 {"status": TaskStatus.FAILED.value, "error": f"missing subagent '{t.agent}'"},
             )
             self.task_results[task_id] = TaskResult(ok=False, error=f"missing subagent '{t.agent}'")
-            return
+            return True
 
         # concurrency control: global + per-agent
         agent_sem = self._agent_sems.get(t.agent)
         await self._task_sem.acquire()
         if agent_sem:
-            await agent_sem.acquire()
+            while True:
+                try:
+                    await asyncio.wait_for(agent_sem.acquire(), timeout=0.05)
+                    break
+                except asyncio.TimeoutError:
+                    policy = self._queue_policy
+                    if policy is None or not policy.should_yield_claim(task_id):
+                        continue
+                    # Cooperative requeue-before-start preemption: this claimed task has not
+                    # started; yield its slot to strictly-higher-priority ready work.
+                    # (Started tasks cannot be preempted — see task_queue_policy.py.)
+                    self._task_sem.release()
+                    policy.requeue(task_id)
+                    await self._emit(
+                        "task_update", "orchestrator", task_id, {"status": TaskStatus.QUEUED.value, "preempted": True}
+                    )
+                    return False
 
         started = _monotonic_ms()
         self.task_status[task_id] = TaskStatus.RUNNING
@@ -990,6 +1026,7 @@ class SwarmOrchestrator:
             if agent_sem:
                 agent_sem.release()
             self._task_sem.release()
+        return True
 
     async def _call_tool(
         self, *, agent_id: str, task_id: str, name: str, args: dict[str, Any], mutates_fs: bool | None
@@ -1102,7 +1139,7 @@ class SwarmOrchestrator:
             '      "deps": ["T0", "T2"],\n'
             '      "prompt": "the instruction for that agent",\n'
             '      "acceptance": ["a", "b"],\n'
-            '      "meta": {"mutates_fs": true|false, "risk": "low|med|high"}\n'
+            '      "meta": {"mutates_fs": true|false, "risk": "low|med|high", "priority": "low|normal|high|critical"}\n'
             "    }\n"
             "  ]\n"
             "}\n\n"
