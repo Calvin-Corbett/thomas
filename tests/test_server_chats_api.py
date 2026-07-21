@@ -1,6 +1,8 @@
 import tempfile
 import unittest
+from unittest.mock import AsyncMock, Mock, patch
 
+from aiohttp import web
 from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.chat.conversation import ConversationManager
@@ -91,6 +93,8 @@ class TestServerChatsApiLocal(AioHTTPTestCase):
             ("v2-chat", "chat", None, "Chat session"),
             ("work-mail", "work", "mail:triage", "Mail triage"),
             ("work-drive", "work", "drive:reports", "Drive reports"),
+            ("workspace-mission", "workspace", "workspace:mission", "Mission resident"),
+            ("workspace-office", "workspace", "workspace:office", "Office resident"),
         ]
         for session_id, mode, context_id, title in fixtures:
             conversation = ConversationManager().append_message("user", title)
@@ -108,8 +112,86 @@ class TestServerChatsApiLocal(AioHTTPTestCase):
         self.assertEqual([row["id"] for row in work_rows], ["work-mail"])
         self.assertEqual(work_rows[0]["contextId"], "mail:triage")
 
+        workspace_response = await self.client.get(
+            "/api/chats?mode=workspace&context_id=workspace:mission"
+        )
+        self.assertEqual(workspace_response.status, 200)
+        workspace_rows = (await workspace_response.json())["chats"]
+        self.assertEqual([row["id"] for row in workspace_rows], ["workspace-mission"])
+        self.assertEqual(workspace_rows[0]["contextId"], "workspace:mission")
+
+        workspace_alias = await self.client.get(
+            "/api/chats?mode=workspace&context_id=workspace:mission_control"
+        )
+        self.assertEqual(workspace_alias.status, 200)
+        self.assertEqual(
+            [row["id"] for row in (await workspace_alias.json())["chats"]],
+            ["workspace-mission"],
+        )
+
+        workspace_without_context = await self.client.get("/api/chats?mode=workspace")
+        self.assertEqual(workspace_without_context.status, 400)
+
         invalid = await self.client.get("/api/chats?mode=code")
         self.assertEqual(invalid.status, 400)
+
+    async def test_chat_v2_rejects_cross_workspace_session_reuse_before_model_work(self):
+        store = self.app[APP_SESSION_STORE]
+        conversation = ConversationManager().append_message("user", "Show mission status")
+        meta = SessionMeta(
+            session_id="workspace-session",
+            surface_mode="workspace",
+            context_id="workspace:mission",
+        )
+        await store.save("workspace-session", conversation, meta, force=True)
+
+        response = await self.client.post(
+            "/api/v2/chat",
+            json={
+                "message": "Now show the office",
+                "session_id": "workspace-session",
+                "surface_mode": "workspace",
+                "context_id": "workspace:office",
+            },
+        )
+        self.assertEqual(response.status, 409)
+        self.assertIn("session namespace", (await response.json())["error"])
+
+    async def test_workspace_turn_branches_before_general_chat_side_effects(self):
+        async def _resident(_request, **kwargs):
+            return web.json_response(
+                {
+                    "path": "workspace_resident",
+                    "context_id": kwargs["route_context"].context_id,
+                }
+            )
+
+        resident = AsyncMock(side_effect=_resident)
+        autopilot = AsyncMock(side_effect=AssertionError("workspace reached Chat autopilot"))
+        discord = Mock(side_effect=AssertionError("workspace reached Discord command routing"))
+        orchestrator = Mock(side_effect=AssertionError("workspace created the general orchestrator"))
+        with (
+            patch("thomas.server.routes.chat_v2.handle_workspace_chat_v2", resident),
+            patch("thomas.server.routes.chat_v2.maybe_auto_start_autopilot_from_chat", autopilot),
+            patch("thomas.server.routes.chat_v2.resolve_discord_chat_command", discord),
+            patch("thomas.server.routes.chat_v2.OrchestratorBrain", orchestrator),
+        ):
+            response = await self.client.post(
+                "/api/v2/chat",
+                json={
+                    "message": "Show me Mission Control",
+                    "session_id": "new-workspace-session",
+                    "surface_mode": "workspace",
+                    "context_id": "workspace:mission",
+                },
+            )
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual((await response.json())["path"], "workspace_resident")
+        resident.assert_awaited_once()
+        autopilot.assert_not_awaited()
+        discord.assert_not_called()
+        orchestrator.assert_not_called()
 
 
 class TestServerChatsApiRemoteAuth(AioHTTPTestCase):

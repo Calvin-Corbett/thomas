@@ -117,7 +117,7 @@ The frontend is delivered from here:
 | `index.html` | Main chat UI |
 | `settings.html` | Settings page |
 | `mission.html` | Mission/task UI |
-| `virtual_office.html` | Virtual office interface |
+| `index.html#officeWorkspace` + `js/runtime/office_*.js` | Canonical embedded Virtual Office interface and runtime |
 | `companion.html` | Mobile companion app |
 | `js/runtime/*.js` | **THE ENTIRE CLASSIC RUNTIME** (94 ordered split files) |
 | `js/app_runtime_loader.js` | Fetches runtime files in parallel and executes them in declared order in global scope |

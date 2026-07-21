@@ -84,6 +84,10 @@ def test_mission_styles_cover_themes_embed_and_source_caps() -> None:
     assert "--c-bg:" not in css
     assert ".thomas-eyes-mark" not in css
     assert "html.is-embedded .mission-chrome" in css
+    assert "html.is-embedded .mission-world { display: none !important; }" in css
+    assert "html.is-embedded body { background: var(--c-bg); }" not in css
+    assert "html.is-embedded .mission-app { background: transparent !important; }" in css
+    assert "html.is-embedded { color-scheme: normal !important; }" in css
     assert len(css.splitlines()) <= 600
     assert len(_read(MISSION_JS_PATH).splitlines()) <= 800
     assert len(_read(MISSION_HTML_PATH).splitlines()) <= 1000

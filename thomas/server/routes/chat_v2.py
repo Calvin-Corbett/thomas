@@ -46,8 +46,9 @@ from thomas.server.chat_runtime_policy import (
 from thomas.server.model_runtime_receipt import model_runtime_receipt
 from thomas.server.routes.autopilot import maybe_auto_start_autopilot_from_chat
 from thomas.server.routes.chat_surface_namespace import (
+    SessionNamespaceBindError,
+    bind_chat_surface_session,
     parse_chat_surface_namespace,
-    session_namespace_matches,
 )
 from thomas.server.routes.chat_task_ledger import (
     record_chat_task_failed,
@@ -95,6 +96,7 @@ from thomas.server.routes.chat_v2_session_routes import (
 from thomas.server.routes.chat_v2_support import (
     _UNSUPPORTED_GAP_CLAIM_RE,
     _CachedSessionLLM,
+    _cleanup_cached_session_llms,
     _evict_session_llm,
     _foreground_reply_prompt,
     _is_external_tool_name,
@@ -110,13 +112,7 @@ from thomas.server.routes.chat_v2_support import (
     _uploaded_audio_format,
     _voice_bridge_for_request,
 )
-from thomas.server.routes.chat_v2_support import (
-    _cleanup_cached_session_llms as _cleanup_cached_session_llms,
-)
-from thomas.server.routes.chat_v2_ui_control import (
-    _chat_stream_headers,
-    _handle_ui_control_turn,
-)
+from thomas.server.routes.chat_v2_ui_control import _chat_stream_headers, _handle_ui_control_turn
 from thomas.server.routes.chat_v2_usage import UsageReceiptDispatcher
 from thomas.server.routes.chat_v2_work_context import (
     WorkContextError,
@@ -128,6 +124,7 @@ from thomas.server.routes.discord_channels_support import (
     stream_static_chat_events,
 )
 from thomas.server.work_connector_runtime import request_work_tools
+from thomas.server.workspace_specialist_runtime import handle_workspace_chat_v2, workspace_chat_route_context
 from thomas.tools.voice import VoiceBridge as VoiceBridge
 
 try:
@@ -239,14 +236,12 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
         return web.json_response({"error": str(exc)}, status=exc.status)
 
     session_store: SessionStore = request.app[APP_SESSION_STORE]
-    conversation = None if temporary else await session_store.load(sid)
-    if conversation is None:
-        conversation = ConversationManager()
-    saved_meta = None if temporary else await session_store.load_meta(sid)
-    if saved_meta is not None and not session_namespace_matches(saved_meta, namespace):
-        return web.json_response(
-            {"error": "session namespace does not match the requested mode or context"}, status=409
+    try:
+        conversation, saved_meta = await bind_chat_surface_session(
+            session_store, session_id=sid, temporary=temporary, namespace=namespace
         )
+    except SessionNamespaceBindError as exc:
+        return web.json_response({"error": str(exc)}, status=exc.status)
     meta = saved_meta or SessionMeta(session_id=sid)
     meta.surface_mode = surface_mode
     meta.context_id = context_id or None
@@ -305,7 +300,6 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
     thomas_guardrails = str(payload.get("thomas_guardrails", "") or "")
     _grm = payload.get("thomas_guardrail_modes")
     thomas_guardrail_modes = _grm if isinstance(_grm, dict) else None
-    registry: SpecialistRegistry = request.app[APP_SPECIALIST_REGISTRY]
     app_memory = None
     if APP_MEMORY is not None:
         try:
@@ -319,6 +313,15 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
     meta.model_id = requested_model_id or None
     meta.reasoning_effort = requested_reasoning_effort or None
     meta.system_prompt = runtime_policy.system_prompt or None
+    if surface_mode == "workspace":
+        route_context = workspace_chat_route_context(
+            (sid, context_id, temporary, external_access), (session_store, conversation, meta),
+            (app_config, runtime_policy, app_memory), (requested_profile, requested_model_id, requested_reasoning_effort),
+            (turn_mode, turn_autonomy_level, foreground_runtime_policy, token_economy_meta, request_user_id),
+            (prompt, history_prompt, image_data),
+        )
+        return await handle_workspace_chat_v2(request, route_context=route_context)
+    registry: SpecialistRegistry = request.app[APP_SPECIALIST_REGISTRY]
     try:
         await maybe_auto_start_autopilot_from_chat(
             request,
@@ -330,13 +333,11 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
         )
     except (KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
         log.warning("Chat V2 could not auto-start a continuous objective: %s", exc)
-
     project_context = ""
     project_receipt: dict[str, Any] = {}
     if project_id:
         try:
             from thomas.server.routes.local_projects_aiohttp import build_project_chat_context
-
             project_context, project_receipt = await build_project_chat_context(
                 request.app,
                 project_id=project_id,
