@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import json
 import logging
+import os
 import secrets
 import sys
 import time
@@ -82,7 +83,30 @@ APP_EVOLVE_AGENT_LOCK = "evolve_agent_lock"
 # Per-conversation run registry: dict[conversation_id -> {"session": ..., "drain": ...}].
 APP_EVOLVE_AGENT_RUNS = "evolve_agent_runs"
 # How many Code runs may execute concurrently across conversations.
-MAX_CONCURRENT_CODE_RUNS = 3
+# Raised from the old hard cap of 3 and made live-configurable via
+# THOMAS_MAX_CONCURRENT_CODE_RUNS so a user can run as many different Code
+# projects at once as they want; the ceiling only guards against runaway
+# subprocess/model fan-out exhausting the host (each run spawns a headless
+# build subprocess + model stream). Per-conversation serialization is
+# unchanged — two runs in the SAME project would corrupt its state.
+DEFAULT_MAX_CONCURRENT_CODE_RUNS = 8
+_CODE_RUN_CEILING = 64
+
+
+def _max_concurrent_code_runs() -> int:
+    raw = str(os.environ.get("THOMAS_MAX_CONCURRENT_CODE_RUNS", "")).strip()
+    if raw:
+        try:
+            requested = int(raw)
+        except ValueError:
+            requested = 0
+        if requested > 0:
+            return min(requested, _CODE_RUN_CEILING)
+    return DEFAULT_MAX_CONCURRENT_CODE_RUNS
+
+
+# Back-compat alias for callers/tests importing the old constant name.
+MAX_CONCURRENT_CODE_RUNS = DEFAULT_MAX_CONCURRENT_CODE_RUNS
 
 
 def build_evolve_agent_handlers(
@@ -248,11 +272,15 @@ def build_evolve_agent_handlers(
             return web.json_response(
                 {"ok": False, "error": "another Code run is still active", "code": code}, status=409
             )
-        if len(active_slots) >= MAX_CONCURRENT_CODE_RUNS:
+        run_ceiling = _max_concurrent_code_runs()
+        if len(active_slots) >= run_ceiling:
             return web.json_response(
                 {
                     "ok": False,
-                    "error": f"all {MAX_CONCURRENT_CODE_RUNS} concurrent Code run slots are busy",
+                    "error": (
+                        f"all {run_ceiling} concurrent Code run slots are busy — raise "
+                        "THOMAS_MAX_CONCURRENT_CODE_RUNS to run more at once"
+                    ),
                     "code": "agent_already_running",
                 },
                 status=409,

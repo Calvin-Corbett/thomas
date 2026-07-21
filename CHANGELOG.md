@@ -7,6 +7,10 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed
+
+- Concurrent Code runs are no longer hard-capped at 3: the ceiling is now live-configurable via `THOMAS_MAX_CONCURRENT_CODE_RUNS` (default 8, safety ceiling 64) so you can run many different Code projects at once. Same-project (same-conversation) runs are still serialized to protect that project's state; only distinct projects run in parallel. The "all N slots are busy" message now tells you how to raise the limit.
+
 ### Added (Frontier capability program — closing the 2026-07-21 audit gaps)
 
 - Repository-defined slash commands (CAP-022): define your own parameterized `/commands` as markdown files in `.thomas/commands/` (or `.claude/commands/` for compatibility) — frontmatter for description/argument-hint, `$ARGUMENTS` and `$1..$9` substitution, live discovery without restart, listed in `/help` alongside built-ins. Built-ins always win name collisions; malformed files degrade to a warning.
