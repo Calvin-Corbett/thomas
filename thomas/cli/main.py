@@ -121,6 +121,13 @@ except Exception as e:
     log.warning("Failed to register heartbeat command: %s", e)
 
 try:
+    from thomas.cli.consolidate_cmd import consolidate_command
+
+    cli.add_command(consolidate_command)
+except (ImportError, ModuleNotFoundError, AttributeError, RuntimeError, TypeError) as e:
+    log.warning("Failed to register consolidate command: %s", e)
+
+try:
     from thomas.cli.commands.investigate import register_investigate_commands
 
     register_investigate_commands(cli)
