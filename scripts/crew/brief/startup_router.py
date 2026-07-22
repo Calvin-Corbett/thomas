@@ -820,6 +820,29 @@ def _startup_branch_inventory(repo_root: Path, *, trunk: str = "dev") -> dict[st
     try:
         git = branch_custodian.subprocess_git_runner(str(repo_root))
         report = branch_custodian.survey(git, trunk=trunk)
+
+        # An active consolidation hold outranks everything else: it means new
+        # branches are refused, so the agent must know before it tries.
+        held = None
+        try:
+            from thomas.forge.consolidation_hold import active_hold
+
+            held = active_hold(repo_root)
+        except (ImportError, ModuleNotFoundError, OSError, ValueError):  # pragma: no cover
+            held = None
+        if held is not None:
+            return {
+                "ok": True,
+                "total": report.total,
+                "ceiling": report.ceiling,
+                "over_ceiling": report.over_ceiling,
+                "reclaimable": len(report.reclaimable),
+                "needs_decision": len(report.needs_decision),
+                "on_hold": True,
+                "summary": report.summary(),
+                "warning": held.message(),
+            }
+
         warning = ""
         if report.over_ceiling:
             warning = (
@@ -835,6 +858,7 @@ def _startup_branch_inventory(repo_root: Path, *, trunk: str = "dev") -> dict[st
             "over_ceiling": report.over_ceiling,
             "reclaimable": len(report.reclaimable),
             "needs_decision": len(report.needs_decision),
+            "on_hold": False,
             "summary": report.summary(),
             "warning": warning,
         }
