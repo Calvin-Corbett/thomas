@@ -446,6 +446,15 @@ def _setup_routes_and_handlers(
                     log.warning("Run store reconciled %d orphaned runs on startup", reconciled)
             run_store_janitor_task = asyncio.create_task(_run_store_janitor(app_ref))
 
+        # Branch-sprawl maintenance: places/lifts the consolidation hold on a
+        # cadence so sprawl is caught without anyone remembering to look.
+        try:
+            from thomas.server.consolidation_maintenance import consolidation_maintenance_loop
+
+            app_ref["consolidation_maintenance_task"] = asyncio.create_task(consolidation_maintenance_loop(app_ref))
+        except (ImportError, ModuleNotFoundError, RuntimeError, TypeError) as consolidation_exc:
+            log.debug("Consolidation maintenance not started: %s", consolidation_exc)
+
     async def on_cleanup(app_ref: web.Application) -> None:
         """App cleanup handler."""
         nonlocal run_store_janitor_task
@@ -454,6 +463,11 @@ def _setup_routes_and_handlers(
             guard_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await guard_task
+        consolidation_task = app_ref.get("consolidation_maintenance_task")
+        if consolidation_task:
+            consolidation_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await consolidation_task
         if run_store_janitor_task is not None:
             run_store_janitor_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

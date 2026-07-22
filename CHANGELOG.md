@@ -20,6 +20,7 @@ Versioning: Semantic Versioning.
 - **Consolidation holds** are the circuit breaker. When branches cross the ceiling, `thomas consolidate --audit` places a hold and **new branch creation is refused** with a message naming the remedy; the trunk stays usable so the consolidation work itself is never blocked by the hold it is clearing. Once sprawl drops back under the ceiling the hold lifts itself. Nobody has to remember to check.
 - Session start now reports branch state to every agent alongside the worktree inventory, including any active hold. This is what stops an agent arriving with no context from cheerfully creating branch 82 on top of a pile nobody is tracking.
 - A corrupt hold file fails **open** rather than wedging the repository, and releasing a hold is unconditional.
+- **It now runs itself.** A maintenance sweep starts with the server (beside the runtime guard and run-store janitor) and re-checks for sprawl on a cadence — every six hours by default, tunable via `THOMAS_CONSOLIDATION_AUDIT_INTERVAL_S`, disable with `THOMAS_CONSOLIDATION_AUDIT_ENABLED=0`. Nobody has to remember to run anything. A failing sweep is logged and the loop keeps its cadence; maintenance can never take the server down, and it cancels cleanly on shutdown.
 
 ### Fixed
 
