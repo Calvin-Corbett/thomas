@@ -77,6 +77,7 @@ MODULES = {
             "integrations",
             "forge",
             "work",
+            "notifications",
         ],
         "health": "yellow",
         "debt": "routes/companion_aiohttp.py exceeds 850 lines, routes/asset_studio_aiohttp.py exceeds 1080 lines, app_routes_init.py exceeds 800 lines, routes/marketplace_catalog_aiohttp.py exceeds 1020 lines, routes/chat_aiohttp_streaming.py exceeds 810 lines, routes/evolve_agent_routes.py exceeds 926 lines, routes/evolve_agent_runtime.py exceeds 823 lines; TODO[batch-8]: server chat-plan-mode route imports cli --server should not depend on cli (cli is the consumer of server, not the other way); extract shared command-handling into core or expose via a thin interface; TODO[batch-8]: server discord-channels routes import integrations --server tier should not depend on ext tier; integrations should expose a server-facing interface or move shared code to core",
@@ -357,6 +358,12 @@ MODULES = {
         "depends_on": ["core", "marketplace"],
         "health": "green",
         "description": "Code execution sandbox abstractions",
+    },
+    "sdk": {
+        "tier": "support",
+        "depends_on": [],
+        "health": "green",
+        "description": "Embeddable Python SDK client and third-party Agent View",
     },
     "tests": {
         "tier": "support",

@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
 from thomas.tools.base import Tool, ToolResult
 from thomas.tools.filesystem import _safe_path
+from thomas.tools.shell_spool import (
+    OUTCOME_HUNG,
+    OUTCOME_NOT_FOUND,
+    OUTCOME_TIMEOUT,
+    SpoolResult,
+    run_spooled_command,
+)
 
 _GIT_TOPOLOGY_MUTATION_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\bgit\s+clone\b", re.I), "git clone"),
@@ -86,11 +93,17 @@ class ShellTool(Tool):
         default_timeout: int = 30,
         max_timeout: int = 300,
         allowed: bool = True,
+        idle_timeout: float = 120.0,
+        hang_retries: int = 1,
     ):
         self._cwd = working_dir.resolve()
         self._default_timeout = default_timeout
         self._max_timeout = max_timeout
         self._allowed = allowed
+        # Hang detection: kill the process tree if it is still running but has
+        # produced no output for this many seconds, then retry automatically.
+        self._idle_timeout = idle_timeout
+        self._hang_retries = hang_retries
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         if not self._allowed:
@@ -124,80 +137,89 @@ class ShellTool(Tool):
         else:
             shell_cmd = ["bash", "-c", command]
 
-        proc: asyncio.subprocess.Process | None = None
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *shell_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=str(cwd),
-                env={**os.environ, "PYTHONUNBUFFERED": "1"},
-            )
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-            exit_code = proc.returncode
-        except NotImplementedError:
-            # Windows: asyncio subprocesses require the Proactor event loop. On a
-            # Selector loop (used for prompt_toolkit/codex compatibility) the call
-            # above raises NotImplementedError and the command "never reaches the
-            # shell". Fall back to a blocking subprocess.run on a worker thread,
-            # which works regardless of the active event loop.
-            loop = asyncio.get_event_loop()
+        # Spooled runner: streams output incrementally (no blocking
+        # communicate()), writes the complete output to an on-disk spool file,
+        # detects output-idle hangs, kills the process tree (Windows-safe), and
+        # retries once on hang. Runs on a worker thread so it works on any
+        # event loop (including Windows Selector loops, where asyncio
+        # subprocesses raise NotImplementedError).
+        loop = asyncio.get_running_loop()
+        runner = functools.partial(
+            run_spooled_command,
+            shell_cmd,
+            cwd=str(cwd),
+            env={**os.environ, "PYTHONUNBUFFERED": "1"},
+            timeout=float(timeout),
+            idle_timeout=self._idle_timeout,
+            hang_retries=self._hang_retries,
+        )
+        result = await loop.run_in_executor(None, runner)
 
-            def _blocking_run() -> tuple[bytes, bytes, int]:
-                completed = subprocess.run(
-                    shell_cmd,
-                    capture_output=True,
-                    cwd=str(cwd),
-                    env={**os.environ, "PYTHONUNBUFFERED": "1"},
-                    timeout=timeout,
-                    check=False,
-                )
-                return completed.stdout, completed.stderr, int(completed.returncode or 0)
-
-            try:
-                stdout_bytes, stderr_bytes, exit_code = await loop.run_in_executor(None, _blocking_run)
-            except subprocess.TimeoutExpired:
-                return ToolResult(ok=False, error=f"Command timed out after {timeout}s: {command}")
-            except FileNotFoundError:
-                return ToolResult(ok=False, error=f"Shell not found. Command: {command}")
-        except asyncio.TimeoutError:
-            try:
-                if proc is not None:
-                    proc.kill()
-            except ProcessLookupError:
-                pass
-            return ToolResult(
-                ok=False,
-                error=f"Command timed out after {timeout}s: {command}",
-            )
-        except FileNotFoundError:
+        if result.outcome == OUTCOME_NOT_FOUND:
             return ToolResult(
                 ok=False,
                 error=f"Shell not found. Command: {command}",
             )
 
-        stdout = stdout_bytes.decode("utf-8", errors="replace")
-        stderr = stderr_bytes.decode("utf-8", errors="replace")
+        output = _format_spooled_output(result)
 
-        # Build output
-        parts: list[str] = []
-        if stdout.strip():
-            parts.append(stdout.rstrip())
-        if stderr.strip():
-            parts.append(f"[stderr]\n{stderr.rstrip()}")
-        parts.append(f"[exit code: {exit_code}]")
-        output = "\n".join(parts)
+        if result.outcome == OUTCOME_TIMEOUT:
+            return ToolResult(
+                ok=False,
+                data=output,
+                error=f"Command timed out after {timeout}s: {command}",
+            )
 
-        # Truncate very long output
-        max_len = 100_000
-        if len(output) > max_len:
-            output = output[:max_len] + f"\n... (truncated, {len(output)} chars total)"
+        if result.outcome == OUTCOME_HUNG:
+            evidence = result.hang_events[-1]
+            return ToolResult(
+                ok=False,
+                data=output,
+                error=(
+                    f"Command hung: no output for {evidence.idle_seconds:.1f}s; "
+                    f"killed pid {evidence.killed_pid}; "
+                    f"attempts {result.attempts}: {command}"
+                ),
+            )
 
+        exit_code = result.exit_code
         return ToolResult(
             ok=exit_code == 0,
             data=output,
             error=f"Exit code {exit_code}" if exit_code != 0 else None,
         )
+
+
+def _format_spooled_output(result: SpoolResult) -> str:
+    """Build the inline (truncated) output string from a spooled run.
+
+    Keeps the historical shape (stdout, ``[stderr]`` block, ``[exit code: N]``,
+    100k truncation) and appends the spool file path — the complete output is
+    always retrievable from disk — plus hang/retry evidence when a hang
+    occurred.
+    """
+    parts: list[str] = []
+    if result.stdout.strip():
+        parts.append(result.stdout.rstrip())
+    if result.stderr.strip():
+        parts.append(f"[stderr]\n{result.stderr.rstrip()}")
+    parts.append(f"[exit code: {result.exit_code}]")
+    output = "\n".join(parts)
+
+    # Truncate very long output inline; the spool file keeps everything.
+    max_len = 100_000
+    if len(output) > max_len:
+        output = output[:max_len] + f"\n... (truncated, {len(output)} chars total; complete output in spool file)"
+
+    output += f"\n[spool: {result.spool_path}]"
+    if result.hang_events:
+        evidence = result.hang_events[-1]
+        output += (
+            f"\n[hang-retry: attempts={result.attempts}, "
+            f"last_idle={evidence.idle_seconds:.1f}s, "
+            f"killed_pid={evidence.killed_pid}]"
+        )
+    return output
 
 
 def register_shell_tools(registry: Any, working_dir: Path, config_timeout: int = 30, allowed: bool = True) -> None:
