@@ -13,6 +13,12 @@ Versioning: Semantic Versioning.
 
 ### Added (Frontier capability program — external integrations, real code behind injectable adapters)
 
+- Legacy code map (CAP-142): a symbols + edges map over a codebase with hash-gated O(changed) incremental ingest, a reverse-dependency impact set for a changed symbol, and a precision/recall accuracy report against a golden set.
+- Cross-language migration harness (CAP-143): replay a corpus against a source and candidate implementation comparing return and raise behavior, drive a counterexample-fed fix loop to convergence, quarantine persistently-divergent inputs, and emit a frozen equivalence suite.
+- Interactive mockup mode (CAP-112): a mockup workflow with approval state (only approved can be implemented), a clickable prototype flow across screens, and an implementation commit that links mockup↔code bidirectionally.
+- Visual click-to-edit (CAP-113): convert a structured visual edit into a reviewable unified source diff (not an opaque live mutation), batching edits into one coherent diff set.
+- Large-context needle citation (CAP-011): a scalable needle corpus with a naive-truncation control proving the needle is unreachable by truncation, and a reader that returns the correct file citation.
+- Orchestration scale benchmark (CAP-032): run 20-25 concurrent agents (barrier-proven) with a merge-quality oracle (clean-merge/conflict/gate-pass rates) and a structured scale report.
 - Managed DB provisioning (CAP-117): provision a database for a generated app (real SQLite default, Postgres-DSN builder for the credential-gated lane) with a vendored, standalone per-app migration runner — ordered, idempotent (re-run is a no-op), transactional (a failing migration rolls back with no partial record).
 - Ownership-scoped auth provisioning (CAP-118): generate default-deny ownership rules for a generated app plus auto-emitted cross-account denial tests that pass against the correct policy and fail against a deliberately permissive one (so the tests have teeth).
 - Prompt→full-app scaffold (CAP-116): from an app spec, generate a coherent zero-wiring app — backend handlers and a persistence layer already connected — and the generated persistence is executed against real SQLite in tests to prove it works, not just emits text.
