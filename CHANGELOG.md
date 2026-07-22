@@ -24,6 +24,7 @@ Versioning: Semantic Versioning.
 
 ### Fixed
 
+- **Two chat requests for the same session no longer run at the same time.** Chat V2 never adopted the session-run guard the older chat handler used, so a rapid follow-up could execute a turn while the previous one was still running and the two could interleave conversation state. Turns for a session are now serialised — the follow-up waits for the turn in front of it and then runs normally, so nothing is dropped. Different sessions are unaffected and still run in parallel; if the lock registry is ever unavailable the turn proceeds rather than blocking chat. Found by migrating a test suite that had been failing (and being dismissed) since the Chat V2 migration: it was sabotaging Chat V2 to reach a legacy route that no longer exists, and mocking a class Chat V2 never instantiates.
 - Cleared a stale workboard task/problem mapping pointing at a `PROBLEM.md` that no longer existed. QuickBuilder mode had masked it; it blocked commits once gate enforcement was restored.
 - Opening Thomas at `http://localhost:<port>` no longer leaves the app silently read-only. The same-origin guard parsed the Origin host as an IP address, so the *name* "localhost" failed the check and every mutating request (save, send, approve, delete) was rejected with 403 while page loads and reads kept working — the UI looked healthy and then quietly refused to do anything. "localhost" and "*.localhost" are now recognised as loopback origins, per RFC 6761. Genuinely cross-origin callers are still rejected, including lookalikes such as `notlocalhost` and `localhost.evil.com`.
 
@@ -146,6 +147,7 @@ Versioning: Semantic Versioning.
 ### Audits
 
 - Module `thomas/server` audited by `claude` on 2026-07-22 (status: pass, sig: `93d3d3bdf8ce`).
+- Module `thomas/server` audited by `claude` on 2026-07-22 (status: pass, sig: `4523c83bdd3a`).
 ## [0.19.22] - 2026-07-20
 
 ### Verified (Codex parity: chat attachments to workers, task queue)
