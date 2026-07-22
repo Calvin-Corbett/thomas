@@ -11,8 +11,15 @@ Versioning: Semantic Versioning.
 
 - Concurrent Code runs are no longer hard-capped at 3: the ceiling is now live-configurable via `THOMAS_MAX_CONCURRENT_CODE_RUNS` (default 8, safety ceiling 64) so you can run many different Code projects at once. Same-project (same-conversation) runs are still serialized to protect that project's state; only distinct projects run in parallel. The "all N slots are busy" message now tells you how to raise the limit.
 
+### Added (Branch custodian — sprawl is detected and consolidated instead of accumulating)
+
+- Thomas tracked *worktrees* but never counted **branches**, so a repository could sit under the worktree ceiling while dozens of branches piled up invisibly — and the remedy the alarm printed, `thomas consolidate`, was never implemented, so following the instructions exactly led to a dead end. The branch custodian closes that loop: it classifies every branch against trunk as **contained** (nothing outside trunk — safe to delete), **superseded** (diverged, but every change already exists in trunk), **unique work** (carries content trunk lacks), or **active** (recently touched), then proposes the safe action for each. Dry run by default.
+- Branches carrying unique work are **never** deleted automatically — they are flagged with the exact list of files at stake, so the decision is visible instead of silent. Any branch git cannot fully read is treated as unique work rather than as safe, so an unreadable branch can never be retired by mistake.
+- Reports in plain language ("80 branches; 1 safe to retire automatically; 71 carry unique work and need your call") rather than requiring someone to read git plumbing.
+
 ### Fixed
 
+- Cleared a stale workboard task/problem mapping pointing at a `PROBLEM.md` that no longer existed. QuickBuilder mode had masked it; it blocked commits once gate enforcement was restored.
 - Opening Thomas at `http://localhost:<port>` no longer leaves the app silently read-only. The same-origin guard parsed the Origin host as an IP address, so the *name* "localhost" failed the check and every mutating request (save, send, approve, delete) was rejected with 403 while page loads and reads kept working — the UI looked healthy and then quietly refused to do anything. "localhost" and "*.localhost" are now recognised as loopback origins, per RFC 6761. Genuinely cross-origin callers are still rejected, including lookalikes such as `notlocalhost` and `localhost.evil.com`.
 
 ### Added (Agent Operations surfaces — the frontier capability cores are now usable in the browser)
