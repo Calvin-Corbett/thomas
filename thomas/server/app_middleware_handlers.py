@@ -255,12 +255,8 @@ def setup_middleware_and_handlers(
         token = str(host or "").strip().lower()
         if not token:
             return False
-        # RFC 6761: "localhost" and any "*.localhost" name always resolve to a
-        # loopback address, so they are same-machine origins by definition.
-        # Without this, a browser opened at http://localhost:<port> sends
-        # Origin: http://localhost:<port>, which failed ip_address() parsing and
-        # got rejected -- GETs passed but every mutating request 403'd, leaving
-        # the UI silently read-only.
+        # RFC 6761 reserves these to always resolve to loopback, so they are
+        # same-machine origins (see tests/test_origin_guard_localhost.py).
         if token == "localhost" or token.endswith(".localhost"):
             return True
         try:
