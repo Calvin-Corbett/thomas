@@ -11,6 +11,10 @@ Versioning: Semantic Versioning.
 
 - Concurrent Code runs are no longer hard-capped at 3: the ceiling is now live-configurable via `THOMAS_MAX_CONCURRENT_CODE_RUNS` (default 8, safety ceiling 64) so you can run many different Code projects at once. Same-project (same-conversation) runs are still serialized to protect that project's state; only distinct projects run in parallel. The "all N slots are busy" message now tells you how to raise the limit.
 
+### Fixed
+
+- Opening Thomas at `http://localhost:<port>` no longer leaves the app silently read-only. The same-origin guard parsed the Origin host as an IP address, so the *name* "localhost" failed the check and every mutating request (save, send, approve, delete) was rejected with 403 while page loads and reads kept working — the UI looked healthy and then quietly refused to do anything. "localhost" and "*.localhost" are now recognised as loopback origins, per RFC 6761. Genuinely cross-origin callers are still rejected, including lookalikes such as `notlocalhost` and `localhost.evil.com`.
+
 ### Added (Agent Operations surfaces — the frontier capability cores are now usable in the browser)
 
 - New **Agent Operations** page at `/static/frontier.html` puts six capability surfaces behind one console, each wired to its already-tested backend core over a real HTTP route:
