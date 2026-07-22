@@ -16,6 +16,10 @@ Versioning: Semantic Versioning.
 - Thomas tracked *worktrees* but never counted **branches**, so a repository could sit under the worktree ceiling while dozens of branches piled up invisibly — and the remedy the alarm printed, `thomas consolidate`, was never implemented, so following the instructions exactly led to a dead end. The branch custodian closes that loop: it classifies every branch against trunk as **contained** (nothing outside trunk — safe to delete), **superseded** (diverged, but every change already exists in trunk), **unique work** (carries content trunk lacks), or **active** (recently touched), then proposes the safe action for each. Dry run by default.
 - Branches carrying unique work are **never** deleted automatically — they are flagged with the exact list of files at stake, so the decision is visible instead of silent. Any branch git cannot fully read is treated as unique work rather than as safe, so an unreadable branch can never be retired by mistake.
 - Reports in plain language ("80 branches; 1 safe to retire automatically; 71 carry unique work and need your call") rather than requiring someone to read git plumbing.
+- `thomas consolidate` now exists as a real command — it had been printed as the recommended remedy for months without being implemented, so anyone following the instructions hit a dead end.
+- **Consolidation holds** are the circuit breaker. When branches cross the ceiling, `thomas consolidate --audit` places a hold and **new branch creation is refused** with a message naming the remedy; the trunk stays usable so the consolidation work itself is never blocked by the hold it is clearing. Once sprawl drops back under the ceiling the hold lifts itself. Nobody has to remember to check.
+- Session start now reports branch state to every agent alongside the worktree inventory, including any active hold. This is what stops an agent arriving with no context from cheerfully creating branch 82 on top of a pile nobody is tracking.
+- A corrupt hold file fails **open** rather than wedging the repository, and releasing a hold is unconditional.
 
 ### Fixed
 

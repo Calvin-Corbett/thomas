@@ -174,6 +174,27 @@ def test_delete_failure_is_reported_not_swallowed() -> None:
     assert "merged/x" not in result.deleted
 
 
+def test_unreadable_head_date_makes_everything_active_so_nothing_is_touched() -> None:
+    """If 'today' cannot be determined, every branch reads as ACTIVE.
+
+    Ages become unknowable, so the custodian must not guess: treating all
+    branches as recently-touched means nothing is proposed for deletion. Found
+    while building the hold audit, where a fake git that did not answer
+    `log -1 --format=%ct` silently produced an all-ACTIVE survey.
+    """
+    fake = FakeGit({TRUNK: ("aaa", 0, 0, []), "ancient": ("bbb", 900, 7, [])})
+    # No now_days injected -> survey asks git for HEAD's timestamp, which this
+    # fake does not implement.
+    report = survey(fake, trunk=TRUNK, active_days=3, ceiling=10)
+
+    assert _row(report, "ancient").status is BranchStatus.ACTIVE
+    assert report.reclaimable == ()
+
+    result = consolidate(fake, report, apply=True)
+    assert result.deleted == []
+    assert "ancient" in fake.branches
+
+
 def test_circuit_breaker_trips_over_ceiling() -> None:
     fake = _fixture()
     assert _survey(fake, ceiling=99).over_ceiling is False

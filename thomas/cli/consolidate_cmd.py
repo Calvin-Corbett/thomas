@@ -41,6 +41,34 @@ def _echo_rows(title: str, rows, *, show_files: bool = False) -> None:
         click.echo(f"  ... and {len(rows) - _MAX_LISTED} more")
 
 
+def _run_audit(git, *, repo: str, trunk: str, ceiling: int, namespace: str, as_json: bool) -> None:
+    """Background mode: let the repository police itself."""
+    from thomas.forge.consolidation_hold import audit as run_audit
+
+    try:
+        result = run_audit(git, repo, trunk=trunk, ceiling=ceiling, namespace=namespace, now=_utc_stamp)
+    except BranchCustodianError as exc:
+        raise click.ClickException(f"Could not read the repository: {exc}") from exc
+
+    if as_json:
+        click.echo(_json.dumps(result.as_dict(), indent=2, sort_keys=True))
+        return
+
+    click.echo(click.style(result.report.summary(), bold=True))
+    if result.hold_placed:
+        click.echo(click.style("Consolidation hold PLACED -- new branches are blocked until this clears.", fg="yellow"))
+    elif result.hold_released:
+        click.echo(click.style("Consolidation hold lifted -- back under the ceiling.", fg="green"))
+    for note in result.notes:
+        click.echo(f"  {note}")
+
+
+def _utc_stamp() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
 @click.command("consolidate")
 @click.option("--trunk", default=DEFAULT_TRUNK, show_default=True, help="Branch everything is compared against.")
 @click.option(
@@ -54,6 +82,12 @@ def _echo_rows(title: str, rows, *, show_files: bool = False) -> None:
 )
 @click.option("--namespace", default="refs/heads", show_default=True, help="Ref namespace to audit.")
 @click.option("--apply", "apply_", is_flag=True, help="Actually retire the safe branches (default is a dry run).")
+@click.option(
+    "--audit",
+    "audit_",
+    is_flag=True,
+    help="Background mode: place or lift the consolidation hold automatically, then exit.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Machine-readable output.")
 @click.option("--repo", default=".", show_default=True, help="Repository root.")
 def consolidate_command(
@@ -62,11 +96,17 @@ def consolidate_command(
     active_days: int,
     namespace: str,
     apply_: bool,
+    audit_: bool,
     as_json: bool,
     repo: str,
 ) -> None:
     """Find branch sprawl and retire what is provably safe to retire."""
     git = subprocess_git_runner(repo)
+
+    if audit_:
+        _run_audit(git, repo=repo, trunk=trunk, ceiling=ceiling, namespace=namespace, as_json=as_json)
+        return
+
     try:
         report = survey(git, trunk=trunk, active_days=active_days, ceiling=ceiling, namespace=namespace)
     except BranchCustodianError as exc:
