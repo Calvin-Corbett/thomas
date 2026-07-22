@@ -1,1243 +1,371 @@
-/* token_economy.css v3
-   Design: Bloomberg Terminal × spacecraft instruments × deep space.
-   Thomas is a robot. Space is home.
-   No rounded cards, no glass blur, no uniform grids.
-   Monospace-first. Numbers dominate. Color is earned. */
+/* Token Economy — scoped Thomas Chat workspace */
+[data-te-container] {
+    width: 100%;
+    min-width: 0;
+    min-height: 100%;
+    background: transparent;
+}
 
-/* ── v3 Shell ────────────────────────────────────────────────── */
+/* The workspace owns no world layer. The literal Chat shell remains visible. */
+#moduleWorkspace[data-mode="token_economy"],
+html.tcw-embed:has([data-te-container] .te-v3.is-active) #moduleWorkspace {
+    background: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+}
+
+#moduleWorkspace[data-mode="token_economy"]::before,
+#moduleWorkspace[data-mode="token_economy"]::after,
+html.tcw-embed:has([data-te-container] .te-v3.is-active) #moduleWorkspace::before,
+html.tcw-embed:has([data-te-container] .te-v3.is-active) #moduleWorkspace::after {
+    display: none !important;
+    content: none !important;
+    background: none !important;
+}
+
+html.tcw-embed [data-te-container],
+html.tcw-embed [data-te-container] .te-v3 {
+    background: transparent !important;
+}
+
+html.tcw-embed:has([data-te-container] .te-v3.is-active) {
+    color-scheme: normal !important;
+}
+
+html.tcw-embed body:has([data-te-container] .te-v3.is-active) .main-content {
+    background: transparent !important;
+    background-image: none !important;
+}
+
+html.tcw-embed body:has([data-te-container] .te-v3.is-active) .main-content::before,
+html.tcw-embed body:has([data-te-container] .te-v3.is-active) .main-content::after {
+    display: none !important;
+    content: none !important;
+    background: none !important;
+}
+
+.te-v3,
+.te-v3 * {
+    box-sizing: border-box;
+}
+
 .te-v3 {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    overflow: hidden;
-    font-family: var(--font-mono, 'SF Mono', 'Consolas', 'Fira Code', monospace);
-    font-variant-numeric: tabular-nums;
-    --te-accent: #58a6ff;
-    --te-mint: #47d7ac;
-    --te-amber: #ffbf47;
-    --te-red: #ff6b6b;
-    --te-rule: rgba(255,255,255,0.12);
-    --te-surface: rgba(255,255,255,0.04);
-    --te-glow: rgba(88,166,255,0.12);
-    position: relative;
+    width: 100%;
+    min-height: 100%;
+    margin: 0;
+    padding: 10px 12px;
+    display: grid;
+    align-content: start;
+    gap: 8px;
+    color: var(--c-text);
+    font: 13px/1.5 var(--font-sans, "Manrope", system-ui, sans-serif);
     isolation: isolate;
 }
 
-/* ── DEEP SPACE: full-viewport background ───────────────────── */
-/* The space layer is injected onto document.body by JS as a
-   position:fixed div with id="te-space-root". It sits behind
-   everything (z-index: -1) and gets removed on module unmount.
-   This makes the ENTIRE page background into space — not just
-   the token economy widget.                                    */
-
-/* When the space bg is active, make ancestor containers transparent
-   so the fixed layer shows through. The JS adds this class to body. */
-body.te-space-active,
-body.te-space-active .app-layout,
-body.te-space-active .main-content,
-body.te-space-active .main-content::before,
-body.te-space-active #moduleWorkspace,
-body.te-space-active #moduleWorkspace::before,
-body.te-space-active #moduleWorkspace::after,
-body.te-space-active [data-te-container] {
-    background: transparent !important;
+.te-v3 button,
+.te-v3 select {
+    font: inherit;
 }
 
-/* Kill the grid-line pseudo-element and radial overlay on workspace */
-body.te-space-active #moduleWorkspace::before,
-body.te-space-active #moduleWorkspace::after {
-    display: none !important;
+.te-v3 button:focus-visible,
+.te-v3 select:focus-visible {
+    outline: 2px solid var(--c-accent);
+    outline-offset: 2px;
 }
 
-/* Make module panels, cards, and headers semi-transparent against space */
-body.te-space-active .module-panel {
-    background: rgba(8, 12, 20, 0.55) !important;
-    border-color: rgba(88, 166, 255, 0.14) !important;
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-}
-body.te-space-active .module-panel:hover {
-    border-color: rgba(88, 166, 255, 0.30) !important;
-    box-shadow: 0 0 16px rgba(88, 166, 255, 0.08) !important;
-}
-body.te-space-active .module-item-card {
-    background: rgba(10, 14, 24, 0.45) !important;
-    border-color: rgba(88, 166, 255, 0.12) !important;
-}
-body.te-space-active .module-header {
-    background: transparent !important;
-}
-body.te-space-active .module-kpi-grid .module-panel {
-    background: rgba(8, 12, 20, 0.50) !important;
-}
-body.te-space-active .module-subnav-chip {
-    background: rgba(255, 255, 255, 0.04) !important;
-    border-color: rgba(88, 166, 255, 0.15) !important;
-}
-body.te-space-active .module-subnav-chip:hover,
-body.te-space-active .module-subnav-chip.active {
-    background: rgba(88, 166, 255, 0.12) !important;
-    border-color: rgba(88, 166, 255, 0.30) !important;
-}
-body.te-space-active .module-item-btn {
-    border-color: rgba(88, 166, 255, 0.18) !important;
-    background: rgba(255, 255, 255, 0.03) !important;
-}
-body.te-space-active .module-item-btn:hover {
-    background: rgba(88, 166, 255, 0.10) !important;
-    border-color: rgba(88, 166, 255, 0.35) !important;
-}
-/* Focus strip, flair, and workbench areas */
-body.te-space-active .module-focus-strip,
-body.te-space-active .module-workbench,
-body.te-space-active .module-special-grid {
-    background: transparent !important;
-}
-/* Marketplace-specific cards */
-body.te-space-active .module-marketplace-card {
-    background: rgba(8, 12, 20, 0.55) !important;
-    border-color: rgba(88, 166, 255, 0.12) !important;
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-}
-
-#te-space-root {
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    overflow: hidden;
-    pointer-events: none;
-    background: #050608;
-}
-/* Ensure app content sits above the space root */
-body.te-space-active .app-layout {
-    position: relative;
-    z-index: 1;
-}
-
-/* Orbit wrapper — oversized container that drifts in a slow circle.
-   Creates the feeling of being inside a slowly rotating donut of space.
-   Random per page load (JS sets the size/position), CSS handles the orbit. */
-.te-space-orbit {
-    animation: te-space-orbit 150s linear infinite;
-    will-change: transform;
-}
-
-@keyframes te-space-orbit {
-    0%   { transform: translate(0%, 0%); }
-    25%  { transform: translate(-6%, -4%); }
-    50%  { transform: translate(1%, -7%); }
-    75%  { transform: translate(6%, -3%); }
-    100% { transform: translate(0%, 0%); }
-}
-
-/* Content must sit above the space root */
-.te-v3 {
-    position: relative;
-    z-index: 1;
-}
-
-/* ── NEBULA: multi-layer realistic space nebula ─────────────── */
-/* Layer 1: Deep background color field — the dark canvas */
-.te-nebula-layer {
-    position: absolute;
-    inset: -15%;
-    width: 130%;
-    height: 130%;
-    animation: te-nebula-drift 200s ease-in-out infinite alternate;
-}
-
-/* Dense core nebula — muted, dark, realistic.
-   Space is mostly black with whispers of color. */
-.te-nebula-layer {
-    background:
-        /* Deep blue anchor — lower left */
-        radial-gradient(ellipse 90% 70% at 5% 90%, rgba(10, 20, 60, 0.35) 0%, rgba(5, 12, 40, 0.12) 40%, transparent 65%),
-        /* Purple plume — upper right */
-        radial-gradient(ellipse 70% 80% at 92% 8%, rgba(45, 10, 65, 0.25) 0%, rgba(30, 8, 50, 0.08) 35%, transparent 55%),
-        /* Teal wisp across middle */
-        radial-gradient(ellipse 120% 25% at 50% 55%, rgba(8, 35, 50, 0.22) 0%, rgba(5, 25, 40, 0.06) 50%, transparent 70%),
-        /* Blue highlight — emission region */
-        radial-gradient(ellipse 35% 30% at 20% 30%, rgba(25, 60, 110, 0.15) 0%, transparent 50%),
-        /* Rose accent — subtle */
-        radial-gradient(ellipse 25% 35% at 75% 65%, rgba(80, 25, 55, 0.12) 0%, transparent 45%),
-        /* Scattered dark cyan wisps */
-        radial-gradient(ellipse 40% 20% at 60% 20%, rgba(15, 70, 80, 0.08) 0%, transparent 50%),
-        radial-gradient(ellipse 30% 50% at 35% 70%, rgba(15, 50, 75, 0.10) 0%, transparent 50%),
-        /* Warm edge — very faint */
-        radial-gradient(ellipse 50% 30% at 85% 85%, rgba(60, 30, 15, 0.06) 0%, transparent 45%);
-}
-
-/* Layer 2: Foreground wisps — slow drift, very muted */
-.te-nebula-layer::before {
-    content: '';
-    position: absolute;
-    inset: -5%;
-    width: 110%;
-    height: 110%;
-    background:
-        /* Drifting purple cloud */
-        radial-gradient(ellipse 60% 45% at 70% 80%, rgba(40, 12, 70, 0.18) 0%, rgba(25, 8, 50, 0.04) 40%, transparent 60%),
-        /* Drifting blue emission */
-        radial-gradient(ellipse 50% 55% at 25% 15%, rgba(12, 40, 80, 0.16) 0%, rgba(8, 25, 55, 0.03) 45%, transparent 60%),
-        /* Subtle core highlight */
-        radial-gradient(ellipse 30% 25% at 50% 50%, rgba(40, 65, 110, 0.08) 0%, transparent 50%);
-    animation: te-nebula-foreground 140s ease-in-out infinite alternate;
-    mix-blend-mode: screen;
-}
-
-/* Layer 3: Color-shifting veil — barely perceptible wave of color */
-.te-nebula-layer::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background:
-        radial-gradient(ellipse 80% 60% at 85% 70%, rgba(50, 18, 75, 0.15) 0%, transparent 50%),
-        radial-gradient(ellipse 70% 50% at 10% 30%, rgba(10, 50, 85, 0.12) 0%, transparent 50%),
-        radial-gradient(ellipse 50% 40% at 50% 50%, rgba(70, 25, 45, 0.08) 0%, transparent 45%),
-        radial-gradient(ellipse 35% 60% at 40% 80%, rgba(18, 25, 70, 0.10) 0%, transparent 50%);
-    animation: te-nebula-color-shift 120s ease-in-out infinite alternate;
-    mix-blend-mode: screen;
-}
-
-@keyframes te-nebula-drift {
-    0% { transform: translate(0, 0) scale(1); }
-    33% { transform: translate(2%, -1.5%) scale(1.02); }
-    66% { transform: translate(-1.5%, 2%) scale(0.99); }
-    100% { transform: translate(1%, -1%) scale(1.01); }
-}
-
-@keyframes te-nebula-foreground {
-    0% { transform: translate(0, 0) scale(1); opacity: 0.6; }
-    25% { transform: translate(-3%, 2%) scale(1.04); opacity: 0.9; }
-    50% { transform: translate(2%, -2%) scale(0.97); opacity: 0.7; }
-    75% { transform: translate(-1%, 3%) scale(1.02); opacity: 1; }
-    100% { transform: translate(1%, -1%) scale(1); opacity: 0.5; }
-}
-
-@keyframes te-nebula-color-shift {
-    0% { opacity: 0.2; transform: translate(0, 0) rotate(0deg); }
-    25% { opacity: 0.65; transform: translate(2%, -1%) rotate(1deg); }
-    50% { opacity: 0.85; transform: translate(-1%, 2%) rotate(-1deg); }
-    75% { opacity: 0.5; transform: translate(-2%, -1%) rotate(0.5deg); }
-    100% { opacity: 0.2; transform: translate(0, 0) rotate(0deg); }
-}
-
-/* Stars are now canvas-based and animated in JS */
-
-/* Nebula gas clouds — large blurred regions that drift slowly */
-.te-nebula-blob {
-    position: absolute;
-    border-radius: 40% 60% 55% 45% / 50% 40% 60% 50%;
-    filter: blur(100px);
-    pointer-events: none;
-    mix-blend-mode: screen;
-}
-
-.te-nebula-blob:nth-of-type(1) {
-    width: 800px;
-    height: 550px;
-    top: -5%;
-    left: -10%;
-    background: radial-gradient(ellipse at 30% 40%, rgba(15, 30, 75, 0.18) 0%, rgba(8, 18, 50, 0.05) 60%, transparent 80%);
-    animation: te-blob-1 60s ease-in-out infinite;
-}
-
-.te-nebula-blob:nth-of-type(2) {
-    width: 700px;
-    height: 500px;
-    top: 40%;
-    right: -12%;
-    background: radial-gradient(ellipse at 60% 50%, rgba(50, 15, 75, 0.15) 0%, rgba(35, 8, 55, 0.04) 55%, transparent 75%);
-    animation: te-blob-2 55s ease-in-out infinite;
-}
-
-.te-nebula-blob:nth-of-type(3) {
-    width: 650px;
-    height: 450px;
-    bottom: -5%;
-    left: 15%;
-    background: radial-gradient(ellipse at 50% 60%, rgba(12, 55, 50, 0.10) 0%, rgba(8, 35, 40, 0.03) 50%, transparent 70%);
-    animation: te-blob-3 65s ease-in-out infinite;
-}
-
-@keyframes te-blob-1 {
-    0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); border-radius: 40% 60% 55% 45% / 50% 40% 60% 50%; }
-    33% { transform: translate(30px, -20px) scale(1.08) rotate(2deg); border-radius: 55% 45% 50% 50% / 45% 55% 45% 55%; }
-    66% { transform: translate(-15px, 15px) scale(0.95) rotate(-1deg); border-radius: 45% 55% 60% 40% / 55% 45% 50% 50%; }
-}
-
-@keyframes te-blob-2 {
-    0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
-    33% { transform: translate(-25px, 20px) scale(1.06) rotate(-2deg); }
-    66% { transform: translate(20px, -10px) scale(0.97) rotate(1.5deg); }
-}
-
-@keyframes te-blob-3 {
-    0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
-    33% { transform: translate(15px, -25px) scale(1.04) rotate(1deg); }
-    66% { transform: translate(-20px, 10px) scale(0.96) rotate(-1.5deg); }
-}
-
-/* Galaxies are now canvas-based and animated in JS */
-
-/* ── Floating robots — drift across space occasionally ── */
-.te-floater {
-    position: fixed;
-    pointer-events: none;
-    z-index: 0;            /* Behind content by default — sits in space layer */
-    image-rendering: pixelated;
-    filter: drop-shadow(0 0 18px rgba(154, 216, 255, 0.5)) drop-shadow(0 0 6px rgba(88, 166, 255, 0.4));
-    opacity: 0;
-    /* Each flight is set dynamically via JS inline styles */
-}
-
-/* The robot is built from divs, same pixel art as the alert bot */
-.te-floater-bot {
-    --bot-primary: #9ad8ff;
-    --bot-secondary: #5aaeff;
-    --bot-trim: #0d1117;
-    width: 58px;
-    height: 54px;
-    position: relative;
-    image-rendering: pixelated;
-}
-
-.te-floater-head {
-    position: absolute;
-    top: 2px;
-    left: 16px;
-    width: 24px;
-    height: 14px;
-    border: 2px solid var(--bot-trim);
-    background: var(--bot-primary);
-}
-
-.te-floater-eye {
-    position: absolute;
-    top: 3px;
-    width: 4px;
-    height: 4px;
-    background: #0b1726;
-}
-.te-floater-eye.left { left: 5px; }
-.te-floater-eye.right { left: 13px; }
-
-.te-floater-body {
-    position: absolute;
-    top: 18px;
-    left: 13px;
-    width: 30px;
-    height: 18px;
-    border: 2px solid var(--bot-trim);
-    background: linear-gradient(to bottom, var(--bot-primary) 0, var(--bot-primary) 44%, var(--bot-secondary) 45%, var(--bot-secondary) 100%);
-}
-
-.te-floater-leg {
-    position: absolute;
-    top: 36px;
-    width: 8px;
-    height: 10px;
-    border: 2px solid var(--bot-trim);
-    background: var(--bot-secondary);
-}
-.te-floater-leg.left { left: 18px; }
-.te-floater-leg.right { left: 32px; }
-
-/* Name label under each floating robot */
-.te-floater-name {
-    position: absolute;
-    bottom: -14px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-family: var(--font-mono, 'SF Mono', 'Consolas', 'Fira Code', monospace);
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--bot-primary, #9ad8ff);
-    white-space: nowrap;
-    opacity: 0.7;
-    text-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
-    pointer-events: none;
-}
-
-/* Visual wrapper — receives scaleX(-1) for direction, name label stays outside */
-.te-floater-visual {
-    position: relative;
-    width: 58px;
-    height: 54px;
-}
-
-/* Gentle bobbing while floating */
-@keyframes te-floater-bob {
-    0%, 100% { transform: translateY(0) rotate(0deg); }
-    25% { transform: translateY(-6px) rotate(2deg); }
-    50% { transform: translateY(0) rotate(0deg); }
-    75% { transform: translateY(4px) rotate(-2deg); }
-}
-
-/* Slow 360 tumble spin — applied to some robots for humor */
-@keyframes te-floater-spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-/* The actual drift path is set by JS via inline animation on .te-floater */
-/* This keyframe is the fade-in/out envelope applied via JS */
-@keyframes te-floater-flight {
-    0% { opacity: 0; }
-    5% { opacity: 0.7; }
-    90% { opacity: 0.7; }
-    100% { opacity: 0; }
-}
-
-/* HUD scan lines removed — no longer needed */
-
-/* ── Panel transparency: space shows through ───────────────── */
-.te-topbar {
-    background: rgba(8, 9, 12, 0.72);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-}
-
-.te-hero {
-    background: rgba(8, 9, 12, 0.50);
-}
-
-.te-datastrip {
-    background: rgba(8, 9, 12, 0.58);
-}
-
-.te-col-left {
-    background: rgba(8, 9, 12, 0.42);
-}
-
-.te-col-right {
-    background: rgba(8, 9, 12, 0.52);
-    border-left: 1px solid rgba(88, 166, 255, 0.10);
-}
-
-/* ── TOP BAR ─────────────────────────────────────────────────── */
-.te-topbar {
+.te-v3 .te-topbar {
+    min-width: 0;
+    min-height: 46px;
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    align-items: center;
-    padding: 0 20px;
-    height: 32px;
-    min-height: 32px;
-    border-bottom: 1px solid var(--te-rule);
-    font-size: 10px;
-    letter-spacing: 0.1em;
-    color: var(--text-muted);
-}
-
-.te-topbar-left,
-.te-topbar-right {
-    display: flex;
-    align-items: center;
     gap: 10px;
+    padding: 6px 8px;
+    border: 1px solid var(--c-border);
+    border-radius: calc(var(--r-card, 14px) - 6px);
+    background: color-mix(in srgb, var(--c-surface) 86%, transparent);
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--c-shadow) 24%, transparent);
 }
 
-.te-sigil {
-    width: 6px;
-    height: 6px;
-    background: var(--te-accent);
-    clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
-    flex-shrink: 0;
-}
-
-.te-topbar-title {
-    font-weight: 800;
-    color: var(--text-secondary);
-    font-size: 10px;
-}
-
-.te-topbar-dim {
-    color: var(--text-muted);
-    opacity: 0.75;
-}
-
-.te-topbar-clock {
-    font-weight: 700;
-    color: var(--text-muted);
-    min-width: 56px;
-    text-align: right;
-}
-
-.te-topbar-live {
+.te-v3 .te-topbar-left,
+.te-v3 .te-topbar-right {
+    min-width: 0;
     display: flex;
     align-items: center;
-    gap: 4px;
-    font-weight: 700;
-    color: var(--te-accent);
-    font-size: 9px;
+    gap: 7px;
 }
 
-.te-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: var(--te-accent);
-    margin-right: 6px;
-    display: inline-block;
-    box-shadow: 0 0 6px rgba(88,166,255,0.5);
-    animation: te-blink 2s ease-in-out infinite;
-}
-
-@keyframes te-blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
-}
-
-.te-range-sel {
-    appearance: none;
-    background: transparent;
-    border: 1px solid var(--te-rule);
-    color: var(--text-muted);
-    font-family: inherit;
-    font-size: 9px;
-    font-weight: 700;
-    padding: 2px 8px;
-    cursor: pointer;
-    letter-spacing: 0.08em;
-}
-.te-range-sel:hover { border-color: rgba(255,255,255,0.2); color: var(--text-secondary); }
-
-.te-topbar-btn {
-    background: none;
-    border: 1px solid var(--te-rule);
-    color: var(--text-muted);
-    font-size: 12px;
-    width: 22px;
-    height: 22px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    line-height: 1;
-}
-.te-topbar-btn:hover { background: var(--te-surface); color: var(--text-secondary); border-color: rgba(255,255,255,0.15); }
-
-/* ── HERO: the number IS the design ──────────────────────────── */
-.te-hero {
-    padding: 28px 24px 16px;
-    border-bottom: 1px solid var(--te-rule);
-    position: relative;
-    overflow: hidden;
-}
-
-.te-hero::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: var(--te-accent);
-    opacity: 0.3;
-}
-
-.te-hero-cost {
-    display: flex;
-    align-items: baseline;
-    line-height: 1;
-}
-
-.te-hero-dollar {
-    font-size: 36px;
-    font-weight: 300;
-    color: var(--text-muted);
-    opacity: 0.4;
-    margin-right: 2px;
-}
-
-.te-hero-whole {
-    font-size: 72px;
-    font-weight: 900;
-    color: var(--text-primary);
-    letter-spacing: -0.06em;
-}
-
-.te-hero-frac {
-    font-size: 36px;
-    font-weight: 400;
-    color: var(--text-muted);
-    letter-spacing: -0.02em;
-}
-
-/* Tone shifts */
-.te-tone-active .te-hero-whole { color: var(--te-mint); }
-.te-tone-active .te-hero-frac { color: var(--te-mint); opacity: 0.5; }
-.te-tone-warm .te-hero-whole { color: var(--te-amber); }
-.te-tone-warm .te-hero-frac { color: var(--te-amber); opacity: 0.5; }
-.te-tone-hot .te-hero-whole { color: var(--te-red); }
-.te-tone-hot .te-hero-frac { color: var(--te-red); opacity: 0.5; }
-
-.te-hero-sub {
-    margin-top: 6px;
-    font-size: 11px;
-    color: var(--text-muted);
-    letter-spacing: 0.02em;
-}
-
-.te-hero-pipe {
-    opacity: 0.2;
-    margin: 0 4px;
-}
-
-/* Burn strip: thin heat line */
-.te-burnstrip {
-    margin-top: 14px;
-    height: 3px;
-    background: rgba(255,255,255,0.04);
-    position: relative;
-}
-
-.te-burnstrip-fill {
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-    background: linear-gradient(90deg, var(--te-accent) 0%, var(--te-mint) 30%, var(--te-amber) 70%, var(--te-red) 100%);
-    transition: width 1s cubic-bezier(0.25,0.8,0.25,1);
-}
-
-.te-burnstrip-marker {
-    position: absolute;
-    top: -2px;
-    width: 1px;
-    height: 7px;
-    background: var(--text-muted);
-    opacity: 0.4;
-    transition: left 1s ease;
-}
-
-/* ── DATA STRIP ──────────────────────────────────────────────── */
-.te-datastrip {
-    display: flex;
-    border-bottom: 1px solid var(--te-rule);
-    min-height: 56px;
-}
-
-.te-ds-cell {
-    flex: 1;
-    padding: 10px 16px 8px;
-    border-right: 1px solid var(--te-rule);
-    display: flex;
-    flex-direction: column;
+.te-v3 .te-heading {
+    min-width: 0;
+    display: grid;
     gap: 1px;
 }
 
-.te-ds-cell:last-child { border-right: none; }
-.te-ds-cell.te-ds-wide { flex: 1.4; }
-
-.te-ds-num {
-    font-size: 16px;
+.te-v3 .te-topbar-title {
+    color: var(--c-text);
+    font-family: var(--font-head, var(--font-sans, "Manrope", system-ui, sans-serif));
+    font-size: 14px;
     font-weight: 800;
-    color: var(--text-primary);
-    line-height: 1.1;
-    letter-spacing: -0.03em;
+    letter-spacing: -.015em;
 }
 
-.te-ds-label {
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    color: var(--text-muted);
-    opacity: 0.85;
-}
-
-.te-ds-note {
-    font-size: 9px;
-    color: var(--text-muted);
-    opacity: 0.65;
-}
-
-.te-ds-delta {
-    font-size: 9px;
-    font-weight: 800;
-    padding: 1px 4px;
+.te-v3 .te-mode-pill,
+.te-v3 .te-topbar-live {
+    min-height: 24px;
     display: inline-flex;
-    align-self: flex-start;
-}
-
-.te-ds-delta.te-delta-up { color: var(--te-red); }
-.te-ds-delta.te-delta-down { color: var(--te-mint); }
-.te-ds-delta.te-delta-flat { color: var(--text-muted); opacity: 0.5; }
-
-/* ── MAIN: 2-col asymmetric ──────────────────────────────────── */
-.te-main {
-    display: grid;
-    grid-template-columns: 1fr 320px;
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-}
-
-.te-col-left {
-    display: flex;
-    flex-direction: column;
-    border-right: 1px solid var(--te-rule);
-    overflow: hidden;
-}
-
-.te-col-right {
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-}
-
-/* ── PANEL ────────────────────────────────────────────────────── */
-.te-panel {
-    padding: 14px 18px 12px;
-    border-bottom: 1px solid var(--te-rule);
-}
-
-/* First panel (Economy Mode) gets extra prominence */
-.te-panel:first-child {
-    padding-top: 16px;
-    padding-bottom: 16px;
-    background: rgba(88, 166, 255, 0.04);
-    border-bottom: 1px solid rgba(88, 166, 255, 0.2);
-}
-
-.te-panel-grow {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
-}
-
-.te-panel-head {
-    display: flex;
-    justify-content: space-between;
     align-items: center;
-    font-size: 9px;
-    font-weight: 800;
-    letter-spacing: 0.12em;
-    color: var(--text-muted);
-    margin-bottom: 10px;
-}
-
-/* Emphasize the first panel's heading */
-.te-panel:first-child .te-panel-head {
-    color: var(--te-accent);
-    opacity: 0.85;
-}
-
-.te-panel-sub {
-    font-weight: 500;
-    opacity: 0.75;
-}
-
-/* ── MODE SWITCH: physical 3-position ────────────────────────── */
-.te-switch-bg {
-    position: relative;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    background: rgba(0,0,0,0.3);
-    border: 1px solid var(--te-rule);
-}
-
-.te-switch-thumb {
-    position: absolute;
-    top: 0;
-    width: 33.334%;
-    height: 100%;
-    background: var(--te-glow);
-    border-bottom: 2px solid var(--te-accent);
-    transition: left 0.3s cubic-bezier(0.25,0.8,0.25,1);
-    pointer-events: none;
-    z-index: 0;
-}
-
-.te-switch-opt {
-    position: relative;
-    z-index: 1;
-    background: none;
-    border: none;
-    border-right: 1px solid var(--te-rule);
-    padding: 10px 6px 8px;
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    color: var(--text-muted);
-    transition: color 0.2s;
-}
-
-.te-switch-opt:last-child { border-right: none; }
-.te-switch-opt.active { color: var(--text-primary); }
-
-.te-switch-opt[data-mode="cheap"].active { color: var(--te-mint); }
-.te-switch-opt[data-mode="cheap"].active ~ .te-switch-thumb,
-.te-switch-bg:has(.te-switch-opt[data-mode="cheap"].active) .te-switch-thumb {
-    border-bottom-color: var(--te-mint);
-    background: rgba(71,215,172,0.08);
-}
-.te-switch-opt[data-mode="max"].active { color: var(--te-amber); }
-.te-switch-bg:has(.te-switch-opt[data-mode="max"].active) .te-switch-thumb {
-    border-bottom-color: var(--te-amber);
-    background: rgba(255,191,71,0.06);
-}
-
-.te-sw-mul {
-    font-size: 18px;
-    font-weight: 900;
-    letter-spacing: -0.04em;
-    line-height: 1;
-}
-
-.te-sw-name {
-    font-size: 8px;
-    font-weight: 800;
-    letter-spacing: 0.15em;
-}
-
-/* Mode readout */
-.te-mode-readout {
-    margin-top: 8px;
-    padding: 8px 10px;
-    background: var(--te-surface);
-    border: 1px solid var(--te-rule);
-    font-size: 10px;
-    line-height: 1.5;
-    color: var(--text-muted);
-}
-
-.te-ro-desc {
-    display: block;
-    color: var(--text-secondary);
-    font-weight: 600;
-    margin-bottom: 6px;
-}
-
-.te-ro-grid {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 2px 12px;
-}
-
-.te-ro-grid span:nth-child(odd) {
-    color: var(--text-muted);
-    opacity: 0.7;
-}
-
-.te-ro-grid span:nth-child(even) {
-    color: var(--text-secondary);
-    font-weight: 700;
-    text-align: right;
-}
-
-/* Context meter */
-.te-context-meter {
-    margin-top: 10px;
-}
-
-.te-ctx-label {
-    display: flex;
-    justify-content: space-between;
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    color: var(--text-muted);
-    margin-bottom: 4px;
-}
-
-.te-ctx-track {
-    height: 4px;
-    background: rgba(255,255,255,0.04);
-    position: relative;
-    overflow: hidden;
-}
-
-.te-ctx-fill {
-    height: 100%;
-    background: var(--te-accent);
-    transition: width 0.8s ease, background 0.3s;
-}
-.te-ctx-fill.te-ctx-warn { background: var(--te-amber); }
-.te-ctx-fill.te-ctx-danger { background: var(--te-red); }
-
-/* ── SPECTRUM: vertical bars (equalizer style) ───────────────── */
-.te-spectrum {
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-    display: flex;
-    align-items: flex-end;
-    padding: 0 2px;
-}
-
-.te-spec-grid {
-    display: flex;
-    align-items: flex-end;
-    gap: 3px;
-    width: 100%;
-    height: 100%;
-    padding-bottom: 18px;
-    position: relative;
-}
-
-.te-spec-col {
-    flex: 1;
-    display: flex;
-    flex-direction: column-reverse;
-    align-items: center;
-    min-width: 0;
-    height: 100%;
-    position: relative;
-}
-
-.te-spec-bar {
-    width: 100%;
-    background: linear-gradient(to top, rgba(88, 166, 255, 0.08), rgba(88, 166, 255, 0.18));
-    min-height: 1px;
-    transition: height 0.6s cubic-bezier(0.25,0.8,0.25,1);
-    position: relative;
-    border-top: 2px solid rgba(88, 166, 255, 0.6);
-    border-left: 1px solid rgba(88, 166, 255, 0.08);
-    border-right: 1px solid rgba(88, 166, 255, 0.08);
-}
-
-.te-spec-bar.te-spec-warm {
-    background: linear-gradient(to top, rgba(255, 191, 71, 0.06), rgba(255, 191, 71, 0.15));
-    border-top-color: rgba(255, 191, 71, 0.6);
-    border-left-color: rgba(255, 191, 71, 0.06);
-    border-right-color: rgba(255, 191, 71, 0.06);
-}
-.te-spec-bar.te-spec-hot {
-    background: linear-gradient(to top, rgba(255, 107, 107, 0.08), rgba(255, 107, 107, 0.18));
-    border-top-color: rgba(255, 107, 107, 0.7);
-    border-left-color: rgba(255, 107, 107, 0.06);
-    border-right-color: rgba(255, 107, 107, 0.06);
-}
-
-.te-spec-today .te-spec-bar {
-    background: linear-gradient(to top, rgba(88, 166, 255, 0.12), rgba(88, 166, 255, 0.3));
-    border-top-color: var(--te-accent);
-    border-left-color: rgba(88, 166, 255, 0.15);
-    border-right-color: rgba(88, 166, 255, 0.15);
-    box-shadow: 0 0 12px rgba(88,166,255,0.15);
-}
-
-.te-spec-date {
-    position: absolute;
-    bottom: 0;
-    font-size: 7px;
-    color: var(--text-muted);
-    opacity: 0.5;
+    gap: 6px;
+    padding: 0 7px;
+    border: 1px solid var(--c-accent-line);
+    border-radius: 6px;
+    background: var(--c-accent-soft);
+    color: var(--c-text);
+    font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: .04em;
+    text-transform: uppercase;
     white-space: nowrap;
 }
 
-.te-spec-today .te-spec-date {
-    color: var(--text-primary);
-    opacity: 1;
-    font-weight: 700;
+.te-v3 .te-topbar-live {
+    border-color: var(--c-border);
+    background: var(--c-surface-2);
+    color: var(--c-dim);
 }
 
-.te-spec-amt {
-    position: absolute;
-    top: -2px;
-    transform: translateY(-100%);
-    font-size: 7px;
-    font-weight: 700;
-    color: var(--text-muted);
-    opacity: 0;
-    white-space: nowrap;
-    pointer-events: none;
-    transition: opacity 0.15s;
-}
-
-.te-spec-col:hover .te-spec-amt {
-    opacity: 1;
-}
-
-.te-spec-col:hover .te-spec-bar {
-    opacity: 0.6;
-}
-
-/* ── TERMINAL FEED ───────────────────────────────────────────── */
-.te-terminal {
-    font-size: 10px;
-    line-height: 1.6;
-    max-height: 180px;
-    overflow-y: auto;
-    padding: 4px 0;
-    color: var(--text-muted);
-}
-
-.te-term-line {
-    padding: 1px 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.te-term-line.te-term-new {
-    animation: te-term-flash 0.4s ease-out;
-}
-
-@keyframes te-term-flash {
-    from { background: rgba(88,166,255,0.08); }
-    to { background: transparent; }
-}
-
-.te-term-line.te-term-sys {
-    color: var(--text-muted);
-    opacity: 0.4;
-    font-style: italic;
-}
-
-.te-term-ts { color: rgba(255,255,255,0.2); }
-.te-term-model { color: var(--text-secondary); }
-.te-term-tok { color: var(--text-muted); }
-.te-term-cost { color: var(--text-secondary); font-weight: 700; }
-.te-term-cost.te-term-amber { color: var(--te-amber); }
-.te-term-cost.te-term-red { color: var(--te-red); font-weight: 800; }
-
-/* ── MODEL VIZ: proportion bars ──────────────────────────────── */
-.te-mprop {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 4px;
-    position: relative;
-}
-
-.te-mprop-bar {
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-    opacity: 0.12;
-    z-index: 0;
-    transition: width 0.6s ease;
-}
-
-.te-mprop-name {
-    font-size: 10px;
-    color: var(--text-secondary);
-    font-weight: 600;
-    z-index: 1;
-    padding: 3px 0 3px 4px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.te-mprop-val {
-    font-size: 10px;
-    color: var(--text-muted);
-    font-weight: 700;
-    z-index: 1;
-    padding: 3px 4px 3px 0;
-}
-
-/* Model table */
-.te-mtbl {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 8px;
-}
-
-.te-mtbl td {
-    padding: 3px 0;
-    font-size: 10px;
-    color: var(--text-muted);
-    border-bottom: 1px solid rgba(255,255,255,0.02);
-}
-
-.te-mtbl td:first-child {
-    color: var(--text-secondary);
-    font-weight: 600;
-}
-
-.te-mtbl td:not(:first-child) { text-align: right; }
-
-.te-mtbl .te-mtbl-total td {
-    font-weight: 800;
-    color: var(--text-primary);
-    border-top: 1px solid var(--te-rule);
-    border-bottom: none;
-    padding-top: 5px;
-}
-
-.te-mdot {
-    display: inline-block;
+.te-v3 .te-dot {
     width: 6px;
     height: 6px;
-    margin-right: 5px;
-    vertical-align: middle;
+    display: inline-block;
+    border-radius: 999px;
+    background: var(--c-accent);
+    box-shadow: 0 0 0 3px var(--c-accent-soft);
 }
 
-/* ── RATE CARD ───────────────────────────────────────────────── */
-.te-rate-grid {
-    display: grid;
-    grid-template-columns: 1fr auto auto;
-    gap: 1px 10px;
-    font-size: 10px;
-}
-
-.te-rh {
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    color: var(--text-muted);
-    opacity: 0.5;
-    padding-bottom: 3px;
-    border-bottom: 1px solid var(--te-rule);
-}
-
-.te-rn {
-    color: var(--text-secondary);
-    font-weight: 600;
-    padding: 2px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.015);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.te-rv {
-    color: var(--text-muted);
-    text-align: right;
-    padding: 2px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.015);
-}
-
-/* ── IDLE / EMPTY states ─────────────────────────────────────── */
-.te-empty-state {
-    display: flex;
-    flex-direction: column;
+.te-v3 .te-range-control {
+    height: 30px;
+    display: inline-flex;
     align-items: center;
-    justify-content: flex-end;
-    flex: 1;
-    position: relative;
-    min-height: 0;
-}
-
-.te-empty-chart {
-    width: 100%;
-    flex: 1;
-    min-height: 0;
-    opacity: 0.6;
-}
-
-.te-empty-svg {
-    width: 100%;
-    height: 100%;
-    display: block;
-}
-
-.te-empty-label {
-    font-size: 9px;
-    color: var(--text-muted);
-    opacity: 0.5;
-    letter-spacing: 0.1em;
+    gap: 7px;
+    padding-left: 9px;
+    border: 1px solid var(--c-border);
+    border-radius: 6px;
+    background: var(--c-surface);
+    color: var(--c-muted);
+    font-size: 11px;
+    font-weight: 700;
     text-transform: uppercase;
 }
 
-/* Blinking cursor after the label */
-.te-empty-label::after {
-    content: '_';
-    animation: te-cursor-blink 1s steps(2, start) infinite;
-    color: var(--te-accent);
-    opacity: 0.6;
-    margin-left: 2px;
-}
-
-@keyframes te-cursor-blink {
-    0%, 100% { opacity: 0.6; }
-    50% { opacity: 0; }
-}
-
-.te-idle-viz {
+.te-v3 .te-range-sel {
     height: 28px;
-    display: flex;
+    border: 0;
+    border-left: 1px solid var(--c-border);
+    padding: 0 9px;
+    background: transparent;
+    color: var(--c-text);
+    cursor: pointer;
+}
+
+.te-v3 .te-topbar-btn {
+    height: 30px;
+    display: inline-flex;
     align-items: center;
-    justify-content: center;
+    gap: 6px;
+    padding: 0 10px;
+    border: 1px solid var(--c-border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--c-dim);
+    cursor: pointer;
 }
 
-.te-idle-pulse {
-    width: 40px;
-    height: 2px;
-    background: var(--te-accent);
-    opacity: 0.15;
-    animation: te-idle-breathe 3s ease-in-out infinite;
+.te-v3 .te-topbar-btn:hover {
+    border-color: var(--c-border-2);
+    background: var(--c-hover);
+    color: var(--c-text);
 }
 
-@keyframes te-idle-breathe {
-    0%, 100% { opacity: 0.08; width: 30px; }
-    50% { opacity: 0.2; width: 60px; }
+.te-v3 .te-topbar-clock {
+    color: var(--c-muted);
+    font: 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: nowrap;
 }
 
-.te-loading {
-    display: flex;
-    align-items: center;
-    justify-content: center;
+.te-v3 .te-overview-rail {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(220px, .72fr) minmax(0, 2.28fr);
     gap: 8px;
-    color: var(--text-muted);
+}
+
+.te-v3 .te-hero {
+    min-width: 0;
+    min-height: 84px;
+    display: grid;
+    align-content: center;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 2px 8px;
+    padding: 9px 11px;
+    overflow: hidden;
+    border: 1px solid var(--c-border);
+    border-radius: calc(var(--r-card, 14px) - 6px);
+    background: var(--c-surface);
+}
+
+.te-v3 .te-eyebrow,
+.te-v3 .te-panel-head {
+    color: var(--c-muted);
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+}
+
+.te-v3 .te-hero-cost {
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    color: var(--c-text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.te-v3 .te-hero-dollar {
+    color: var(--c-accent);
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.te-v3 .te-hero-whole {
+    overflow: hidden;
+    font-size: clamp(25px, 3vw, 38px);
+    font-weight: 760;
+    letter-spacing: -.07em;
+    line-height: .95;
+    text-overflow: ellipsis;
+}
+
+.te-v3 .te-hero-frac {
+    color: var(--c-dim);
+    font-size: 11px;
+    font-weight: 650;
+}
+
+.te-v3 .te-hero-sub {
+    grid-column: 1 / -1;
+    color: var(--c-dim);
     font-size: 10px;
-    padding: 16px;
-    opacity: 0.5;
 }
 
-.te-loading::before {
-    content: '';
-    width: 8px;
-    height: 8px;
-    border: 1px solid rgba(255,255,255,0.1);
-    border-top-color: var(--te-accent);
-    border-radius: 50%;
-    animation: te-spin 0.5s linear infinite;
+.te-v3 .te-hero-pipe {
+    margin: 0 7px;
+    color: var(--c-border-2);
 }
 
-@keyframes te-spin { to { transform: rotate(360deg); } }
-
-/* ── Idle / Screensaver mode ─────────────────────────────────── */
-/* Fade the CONTAINER itself (not children) so everything disappears uniformly. */
-body.te-screensaver-active .app-layout {
-    opacity: 0 !important;
-    transition: opacity 3.5s ease-out !important;
-    pointer-events: none !important;
+.te-v3 .te-burnstrip,
+.te-v3 .te-ctx-track {
+    position: relative;
+    height: 4px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--c-surface-2);
 }
 
-/* Space root must stay visible */
-body.te-screensaver-active #te-space-root {
-    opacity: 1 !important;
-    pointer-events: none;
+.te-v3 .te-burnstrip-fill,
+.te-v3 .te-ctx-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 0;
+    border-radius: inherit;
+    background: var(--c-accent);
+    transition: width .18s ease;
 }
 
-body.te-screensaver-active .te-floater {
-    z-index: 2;
+.te-v3 .te-burnstrip-marker {
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    width: 1px;
+    background: var(--c-text);
+    opacity: .7;
 }
 
-/* Slightly faster nebula drift during screensaver */
-body.te-screensaver-active .te-nebula-layer { animation-duration: 100s !important; }
-body.te-screensaver-active .te-nebula-layer::after { animation-duration: 60s !important; }
-
-/* Fade content back in — snappier return */
-body.te-screensaver-exit .app-layout {
-    opacity: 1 !important;
-    transition: opacity 0.6s ease-in !important;
-    pointer-events: auto !important;
+.te-v3 .te-burnstrip {
+    grid-column: 1 / -1;
 }
 
-/* ── Responsive ──────────────────────────────────────────────── */
-@media (max-width: 900px) {
-    .te-main { grid-template-columns: 1fr; }
-    .te-col-left { border-right: none; }
-    .te-col-right { border-top: 1px solid var(--te-rule); }
-    .te-hero-whole { font-size: 48px; }
-    .te-hero-dollar { font-size: 24px; }
-    .te-hero-frac { font-size: 24px; }
-    .te-datastrip { flex-wrap: wrap; }
-    .te-ds-cell { min-width: 45%; }
+.te-v3 .te-datastrip {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 1.25fr repeat(3, 1fr);
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--c-border);
+    border-radius: calc(var(--r-card, 14px) - 6px);
+    background: var(--c-border);
 }
 
+.te-v3 .te-ds-cell {
+    min-width: 0;
+    min-height: 84px;
+    display: grid;
+    align-content: center;
+    gap: 3px;
+    padding: 9px 11px;
+    background: var(--c-surface);
+}
 
+.te-v3 .te-ds-num {
+    overflow: hidden;
+    color: var(--c-text);
+    font: 750 17px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    text-overflow: ellipsis;
+}
+
+.te-v3 .te-ds-label,
+.te-v3 .te-ds-note,
+.te-v3 .te-ds-delta {
+    color: var(--c-muted);
+    font-size: 10px;
+    font-weight: 750;
+    letter-spacing: .055em;
+    text-transform: uppercase;
+}
+
+.te-v3 .te-ds-note {
+    color: var(--c-dim);
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.te-v3 .te-delta-up { color: var(--c-accent); }
+.te-v3 .te-delta-down,
+.te-v3 .te-delta-flat { color: var(--c-muted); }
+
+@media (max-width: 980px) {
+    .te-v3 .te-topbar { align-items: flex-start; }
+    .te-v3 .te-topbar-right { flex-wrap: wrap; justify-content: flex-end; }
+    .te-v3 .te-datastrip { grid-template-columns: repeat(2, 1fr); }
+    .te-v3 .te-overview-rail { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 660px) {
+    .te-v3 { padding: 8px; gap: 8px; }
+    .te-v3 .te-topbar { display: grid; }
+    .te-v3 .te-topbar-left { align-items: flex-start; flex-wrap: wrap; }
+    .te-v3 .te-topbar-right { justify-content: flex-start; }
+    .te-v3 .te-topbar-clock { display: none; }
+    .te-v3 .te-datastrip { grid-template-columns: 1fr; }
+    .te-v3 .te-hero { padding: 9px 11px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .te-v3 *,
+    .te-v3 *::before,
+    .te-v3 *::after {
+        animation: none !important;
+        scroll-behavior: auto !important;
+        transition-duration: .01ms !important;
+    }
+}

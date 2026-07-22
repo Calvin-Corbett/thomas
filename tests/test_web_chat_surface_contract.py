@@ -202,24 +202,25 @@ def test_chat_status_suppresses_ambient_robots_and_keeps_game_player() -> None:
     assert ".chat-robot-world," in status_css
     assert "body.te-nav-chat #officeScene .office-agent" in status_css
 
-    assert "_removeIdleThomas();" in token_js
-    assert "_stopAmbientBots();" in token_js
-    assert "#te-idle-thomas," in token_css
-    assert ".te-ambient-bot," in token_css
-    assert "body.te-space-active .robot-alert-stage" in token_css
+    assert "requestAnimationFrame" not in token_js
+    assert "MutationObserver" not in token_js
+    assert "function workspaceActive()" in token_js
+    assert "if (_s.sse || !workspaceActive()) return;" in token_js
+    assert "[data-te-container] .te-v3.is-active" in token_css
+    assert "body.te-space-active" not in token_css
 
 
 def test_token_economy_leads_with_tokens_and_runtime_profiles() -> None:
     token_js = _read(TOKEN_ECONOMY_JS)
 
-    assert "TOKEN HISTORY" in token_js
-    assert "PROFILE MATRIX" in token_js
+    assert "<span>Token history</span>" in token_js
+    assert 'data-ui-label="Runtime profile matrix"' in token_js
     assert "data-te-hdollar>TOK" in token_js
     assert "function modelTokens(detail)" in token_js
     assert "api('/api/runtime/matrix')" in token_js
     assert "SESSION TOKENS" in token_js
     assert "AVG TOK/CALL" in token_js
-    assert "streaming token events" in token_js
+    assert "New token events will appear here" in token_js
     assert "function paintPricing()" in token_js
     assert "SPEND HISTORY" not in token_js
     assert "RATE CARD" not in token_js
@@ -248,7 +249,7 @@ def test_my_stuff_indexes_installed_workspace_plugins() -> None:
     assert 'id="installedAppsShelf"' in html
     assert '<section class="stuff-installed-shelf" id="installedAppsShelf"' in html
     assert "Loading app workspaces..." in html
-    assert "Installed Apps" in html
+    assert "Library items" in html
     assert "installedPlugins: []" in js
     assert "fetchJson(window.location.origin + '/api/marketplace/installed')" in js
     assert "function installedPluginsFromPayload(payload)" in js
@@ -268,7 +269,7 @@ def test_my_stuff_indexes_installed_workspace_plugins() -> None:
     assert "left_nav_behavior).toLowerCase() !== 'workspace'" in js
     assert "data-plugin-mode" in js
     assert "window.parent.setSidebarNavMode(mode);" in js
-    assert "My Stuff ready. '" in js
+    assert "Library ready. '" in js
     assert "installed app' + (moduleCount === 1 ? '' : 's')" in js
     assert "project' + (state.projects.length === 1 ? '' : 's')" in js
     assert "+ moduleCards" not in js

@@ -62,6 +62,10 @@ def build_mission_control_routes(
     run_store_enabled_key: Any,
     run_store_module_key: Any,
 ):
+    snapshot_cache: dict[str, Any] = {"payload": None, "built_at": 0.0}
+    snapshot_lock = asyncio.Lock()
+    snapshot_cache_ttl_s = 1.5
+
     def _resolve_approvals_broker():
         broker = app.get(APP_APPROVALS_BROKER)
         if broker is None:
@@ -259,12 +263,13 @@ def build_mission_control_routes(
                 if not run_id or run_id in seen_run_ids:
                     continue
                 seen_run_ids.add(run_id)
-                last_evt = _latest_run_event(run_store_mod, run_id)
+                ended_at_raw = str(run.get("ended_at") or "").strip()
+                last_evt = _latest_run_event(run_store_mod, run_id, terminal=bool(ended_at_raw))
                 status, room, summary = _run_state_room_and_summary(run, last_evt)
                 updated_at = _run_updated_at(run, last_evt)
                 created_at = _coerce_iso(run.get("created_at") or run.get("started_at"))
                 started_at = _coerce_iso(run.get("started_at")) if run.get("started_at") else created_at
-                ended_at = _coerce_iso(run.get("ended_at")) if run.get("ended_at") else ""
+                ended_at = _coerce_iso(ended_at_raw) if ended_at_raw else ""
                 session_id = str(run.get("session_id") or "").strip()
                 mode = str(run.get("mode") or "").strip()
                 profile_name = str(run.get("profile") or "").strip()
@@ -569,14 +574,28 @@ def build_mission_control_routes(
             "events": events,
         }
 
+    async def _mission_snapshot_payload(*, force: bool = False) -> dict[str, Any]:
+        async with snapshot_lock:
+            now = asyncio.get_running_loop().time()
+            cached = snapshot_cache.get("payload")
+            built_at = float(snapshot_cache.get("built_at") or 0.0)
+            if not force and isinstance(cached, dict) and (now - built_at) < snapshot_cache_ttl_s:
+                return cached
+
+            payload = _build_mission_control_payload()
+            payload["approvals"] = await _mission_approvals_payload()
+            payload["topology"] = _mission_topology_payload(payload)
+            totals = payload.get("totals")
+            if isinstance(totals, dict):
+                totals["approvals_pending"] = int(payload["approvals"].get("pending_total") or 0)
+            snapshot_cache["payload"] = payload
+            snapshot_cache["built_at"] = asyncio.get_running_loop().time()
+            return payload
+
     async def api_mission_control(request: web.Request) -> web.Response:
         require_api_access(request)
-        payload = _build_mission_control_payload()
-        payload["approvals"] = await _mission_approvals_payload()
-        payload["topology"] = _mission_topology_payload(payload)
-        totals = payload.get("totals")
-        if isinstance(totals, dict):
-            totals["approvals_pending"] = int(payload["approvals"].get("pending_total") or 0)
+        force = str(request.query.get("fresh") or "").strip() in {"1", "true", "yes"}
+        payload = await _mission_snapshot_payload(force=force)
         return web.json_response(payload, dumps=lambda x: json.dumps(x, ensure_ascii=False))
 
     async def api_mission_stream(request: web.Request) -> web.StreamResponse:
@@ -621,12 +640,7 @@ def build_mission_control_routes(
         updates_sent = 0
         try:
             while True:
-                payload = _build_mission_control_payload()
-                payload["approvals"] = await _mission_approvals_payload()
-                payload["topology"] = _mission_topology_payload(payload)
-                totals = payload.get("totals")
-                if isinstance(totals, dict):
-                    totals["approvals_pending"] = int(payload["approvals"].get("pending_total") or 0)
+                payload = await _mission_snapshot_payload()
                 updates_sent += 1
                 await send({"type": "snapshot", "seq": updates_sent, "payload": payload})
                 if max_updates and updates_sent >= max_updates:

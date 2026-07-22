@@ -117,17 +117,17 @@ The frontend is delivered from here:
 | `index.html` | Main chat UI |
 | `settings.html` | Settings page |
 | `mission.html` | Mission/task UI |
-| `virtual_office.html` | Virtual office interface |
+| `index.html#officeWorkspace` + `js/runtime/office_*.js` | Canonical embedded Virtual Office interface and runtime |
 | `companion.html` | Mobile companion app |
-| `js/runtime/*.js` (001–045) | **THE ENTIRE RUNTIME** (45 numbered files, combined 41,470 lines) |
-| `js/app_runtime_loader.js` | Loads runtime files 001–045 sequentially into global scope |
+| `js/runtime/*.js` | **THE ENTIRE CLASSIC RUNTIME** (94 ordered split files) |
+| `js/app_runtime_loader.js` | Fetches runtime files in parallel and executes them in declared order in global scope |
 | `js/app.js` | Entrypoint (loads app_runtime_loader.js) |
 | `js/app_runtime_primary.mjs` | **DEAD CODE (LEGACY)** — Pre-split monolith, not loaded by index.html |
 | `js/app_parts/` | **DEAD CODE**—ignore these |
 | `css/` | Stylesheets |
 | `static/` | Assets (images, icons, etc.) |
 
-**CRITICAL:** The only active frontend code is in `js/runtime/` (the 45 numbered files). Do not edit `js/app_parts/` or `js/app_runtime_primary.mjs` — they're never loaded.
+**CRITICAL:** The classic active frontend code is in `js/runtime/` (94 ordered files). Do not edit `js/app_parts/` or `js/app_runtime_primary.mjs` — they're never loaded.
 
 ## Middleware
 
@@ -217,7 +217,7 @@ To add a plugin:
 3. Restart server
 
 ### To update the UI:
-1. Edit the appropriate file in `web/js/runtime/` (numbered 001–045) or standalone scripts
+1. Edit the appropriate file in `web/js/runtime/` (declared by `app_runtime_loader.js`) or standalone scripts
 2. Clear browser cache
 3. Reload the page
 

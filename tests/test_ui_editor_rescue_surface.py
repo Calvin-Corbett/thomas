@@ -24,57 +24,26 @@ def _read_all_runtime_js() -> str:
     return "\n".join(path.read_text(encoding="utf-8", errors="replace") for path in sorted(runtime_dir.glob("*.js")))
 
 
-def test_ui_editor_now_has_inspector_and_stable_targets() -> None:
-    editor_core = _read_text("thomas/server/web/js/modules/063_module_studio_comfy_style_id_helpers.js")
-    editor_shell = _read_text("thomas/server/web/js/modules/063_module_studio_comfy_style_id_workspace.js")
-    assert "function moduleUiEditorIsElement" in editor_core
-    assert "type: 'url'" in editor_core
-    assert "url: '/'" in editor_core
-    assert "overridesById" in editor_core
-    assert "notesById" in editor_core
-    assert "moduleUiEditorBuildThomasShellDocument" not in editor_core
-    assert "thomas_shell" not in editor_core
-    assert "Thomas UI Shell" not in editor_core
-    assert "Inspect the live Thomas UI" in editor_core
-    assert "Selected Element" in editor_core
-    assert "Visible Layers" in editor_core
-    assert "Export Snapshot" in editor_core
-    assert '[data-ui-editor-target-key="' in editor_core
-    assert "Live Thomas UI" in editor_shell
-    assert "thomas_shell" not in editor_shell
-    assert "selected_key" in editor_shell
-    assert "overrides_by_target" in editor_shell
-    assert "notes_by_target" in editor_shell
-    assert "applySelectionFields" in editor_shell
-    assert "resetSelectionOverride" in editor_shell
-    assert "persistProjects()" in editor_shell
-    assert "Selected layer could not be rebound to the live DOM." in editor_shell
-    assert "frameSandboxValue" in editor_shell
-    assert "applyFrameSandbox" in editor_shell
-    assert "if (trustedProject) {" in editor_shell
-    assert "frame.removeAttribute('sandbox');" in editor_shell
-    assert "loadProject(true);" in editor_shell
+def test_canvas_is_the_authoritative_app_builder_surface() -> None:
+    contract = _read_text("thomas/server/web/js/runtime/canvas_workspace_contract.js")
+    runtime = _read_text("thomas/server/web/js/runtime/canvas_workspace_runtime.js")
+    engine = _read_text("thomas/server/web/js/runtime/048_ui_studio_canvas.js")
+
+    assert "var NAME = 'Canvas';" in contract
+    assert "var MODE_ID = 'app_builder';" in contract
+    assert "window.ThomasCanvasWorkspaceContract" in contract
+    assert "window.ThomasCanvasWorkspaceRuntime" in runtime
+    assert "moduleRenderWorkbenchAppBuilderCanvas" in runtime
+    assert "workspaceRuntime.install(window.UI_STUDIO)" in engine
+    assert "module-ui-editor-shell" not in runtime
+    assert "module-ui-editor-shell" not in engine
+    assert "Live Thomas UI" not in runtime
+    assert "Visible Layers" not in runtime
 
 
 def test_ui_editor_rescue_loader_is_wired_into_app_boot() -> None:
     app_loader = _read_text("thomas/server/web/js/app.js")
     rescue_loader = _read_text("thomas/server/web/js/ui_editor_rescue.js")
-    runtime_module_core = _read_text(
-        "thomas/server/web/js/src/runtime_modules/063_module_studio_comfy_style_id_helpers.js"
-    )
-    runtime_module_shell = _read_text(
-        "thomas/server/web/js/src/runtime_modules/063_module_studio_comfy_style_id_workspace.js"
-    )
-    runtime_editor = _read_many(
-        [
-            "thomas/server/web/js/src/runtime_modules/063_module_studio_comfy_style_id_bootstrap.js",
-            "thomas/server/web/js/src/runtime_modules/063_module_studio_comfy_style_id_helpers.js",
-            "thomas/server/web/js/src/runtime_modules/063_module_studio_comfy_style_id_workspace.js",
-        ]
-    )
-    runtime_surface = _read_text("thomas/server/web/js/runtime/044_model_setup_settings_05.js")
-    marketplace_html = _read_text("thomas/server/web/static/plugin_marketplace.html")
-    marketplace_script = _read_text("thomas/server/web/static/plugin_marketplace.script01.js")
     assert "window.__thomasRuntimeReady" in app_loader
     assert "await window.__thomasRuntimeReady" in app_loader
     assert "startUiEditorRescueMode" in app_loader
@@ -82,31 +51,20 @@ def test_ui_editor_rescue_loader_is_wired_into_app_boot() -> None:
     assert "generated/app_runtime_joined.mjs" not in app_loader
     assert "app_parts/" not in app_loader
     assert "Loading UI editor rescue mode" in app_loader
-    assert "function moduleRenderWorkbenchAppBuilder" in runtime_editor
-    assert "Live Thomas UI" in runtime_surface
-    assert "Visible Layers" in runtime_surface
-    assert "Export Snapshot" in runtime_surface
-    assert "./modules/063_module_studio_comfy_style_id_helpers.js" in rescue_loader
-    assert "./modules/063_module_studio_comfy_style_id_workspace.js" in rescue_loader
-    assert "allow-scripts allow-forms allow-popups allow-modals" in runtime_surface
-    assert "/static/static/plugin_marketplace.html" not in runtime_surface
-    assert "Store Health" not in runtime_surface
-    assert "Store Activity" not in runtime_surface
-    assert "Feature Inventory" not in runtime_surface
-    assert "Recent Store Activity" not in runtime_surface
-    assert "thomas_shell" not in runtime_editor
-    assert "moduleUiEditorBuildThomasShellDocument" not in runtime_editor
-    assert "moduleUiEditorBuildThomasShellDocument" not in runtime_module_core
-    assert "allow-scripts allow-same-origin allow-forms allow-popups allow-modals" not in runtime_module_core
-    assert "thomas_shell" not in runtime_module_core
-    assert "allow-scripts allow-same-origin allow-forms allow-popups allow-modals" not in runtime_module_shell
-    assert "thomas_shell" not in runtime_module_shell
-    assert "Thomas Companion" not in marketplace_html
-    assert "/api/marketplace/plugins" in marketplace_script
-    assert "/api/companion/v1/app-store" not in marketplace_script
+    ordered_files = [
+        "./runtime/canvas_workspace_contract.js",
+        "./runtime/canvas_workspace_runtime.js",
+        "./runtime/048_ui_studio_canvas.js",
+    ]
+    positions = [rescue_loader.index(path) for path in ordered_files]
+    assert positions == sorted(positions)
+    assert "063_" not in rescue_loader
+    assert "for (const file of CANVAS_RUNTIME_FILES)" in rescue_loader
+    assert "await loadClassicScript(file);" in rescue_loader
+    assert "startCanvasRescueMode" in rescue_loader
     assert "startUiEditorRescueMode" in rescue_loader
-    assert "UI Editor rescue mode is active." in rescue_loader
-    assert "moduleRenderWorkbenchStudioOss" in rescue_loader
+    assert "Canvas rescue mode is active." in rescue_loader
+    assert "UI Editor rescue mode is active." not in rescue_loader
     assert "moduleRenderWorkbenchAppBuilder" in rescue_loader
 
 

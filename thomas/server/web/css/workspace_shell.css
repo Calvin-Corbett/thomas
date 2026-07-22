@@ -1,0 +1,159 @@
+:root {
+  color-scheme: dark;
+  --c-bg: #070912;
+  --c-sidebar: rgba(11, 14, 26, .72);
+  --c-surface: rgba(255, 255, 255, .04);
+  --c-surface-2: rgba(255, 255, 255, .08);
+  --c-hover: rgba(255, 255, 255, .06);
+  --c-border: rgba(255, 255, 255, .10);
+  --c-border-2: rgba(255, 255, 255, .17);
+  --c-text: #eef0fb;
+  --c-dim: rgba(238, 240, 251, .66);
+  --c-muted: rgba(238, 240, 251, .42);
+  --c-accent: #8b8cff;
+  --c-accent-ink: #0a0b16;
+  --c-accent-soft: rgba(139, 140, 255, .16);
+  --c-accent-line: rgba(139, 140, 255, .45);
+  --c-user-bg: rgba(124, 118, 235, .20);
+  --c-user-text: #eef0fb;
+  --c-composer-bg: rgba(16, 19, 34, .86);
+  --c-shadow: 0 18px 50px rgba(2, 4, 12, .55);
+  --c-menu-bg: #15142b;
+  --font-head: "Manrope", system-ui, sans-serif;
+  --font-label: "Manrope", system-ui, sans-serif;
+  --font-sans: "Manrope", system-ui, sans-serif;
+  --font-serif: "Newsreader", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --r-card: 14px;
+  --r-composer: 18px;
+}
+
+html[data-thomas-theme="dark"], html[data-theme="dark"] {
+  --c-bg: #16181c; --c-sidebar: #101216; --c-surface: rgba(255, 255, 255, .035);
+  --c-surface-2: rgba(255, 255, 255, .07); --c-hover: rgba(255, 255, 255, .055);
+  --c-border: rgba(255, 255, 255, .09); --c-border-2: rgba(255, 255, 255, .15);
+  --c-text: #e7e9ee; --c-dim: rgba(231, 233, 238, .64); --c-muted: rgba(231, 233, 238, .40);
+  --c-accent: #6e9bff; --c-accent-ink: #0b1020; --c-accent-soft: rgba(110, 155, 255, .14);
+  --c-accent-line: rgba(110, 155, 255, .42); --c-user-bg: #2a2e36; --c-user-text: #e7e9ee;
+  --c-composer-bg: #1b1e23; --c-shadow: 0 14px 40px rgba(0, 0, 0, .45);
+  --c-menu-bg: #22252b; --font-head: "Manrope", system-ui, sans-serif;
+  --font-label: "JetBrains Mono", ui-monospace, monospace; --r-card: 8px; --r-composer: 12px;
+}
+
+html[data-thomas-theme="light"], html[data-theme="light"] {
+  color-scheme: light; --c-bg: #fafbfc; --c-sidebar: #f3f5f8; --c-surface: #fff;
+  --c-surface-2: #f3f5f8; --c-hover: rgba(20, 30, 60, .05); --c-border: rgba(20, 30, 60, .10);
+  --c-border-2: rgba(20, 30, 60, .16); --c-text: #1c2330; --c-dim: rgba(28, 35, 48, .66);
+  --c-muted: rgba(28, 35, 48, .46); --c-accent: #2f6bff; --c-accent-ink: #fff;
+  --c-accent-soft: rgba(47, 107, 255, .10); --c-accent-line: rgba(47, 107, 255, .40);
+  --c-user-bg: #eaeef6; --c-user-text: #1c2330; --c-composer-bg: #fff;
+  --c-shadow: 0 14px 40px rgba(20, 30, 60, .12);
+  --c-menu-bg: #fff; --font-head: "Manrope", system-ui, sans-serif;
+  --font-label: "Manrope", system-ui, sans-serif; --r-card: 16px; --r-composer: 18px;
+}
+
+html[data-thomas-theme="aurora"], html[data-theme="aurora"] {
+  --c-bg: #08151a; --c-sidebar: rgba(9, 22, 26, .78); --c-surface: rgba(120, 255, 220, .04);
+  --c-surface-2: rgba(120, 255, 220, .08); --c-hover: rgba(120, 255, 220, .06);
+  --c-border: rgba(140, 255, 225, .12); --c-border-2: rgba(140, 255, 225, .20);
+  --c-text: #e7f3ef; --c-dim: rgba(231, 243, 239, .66); --c-muted: rgba(231, 243, 239, .42);
+  --c-accent: #34e0b0; --c-accent-ink: #04211a; --c-accent-soft: rgba(52, 224, 176, .14);
+  --c-accent-line: rgba(52, 224, 176, .45); --c-user-bg: rgba(36, 120, 100, .30);
+  --c-user-text: #e7f3ef; --c-composer-bg: rgba(10, 28, 30, .88);
+  --c-shadow: 0 18px 50px rgba(0, 12, 10, .55);
+  --c-menu-bg: #0c2226; --font-head: "Manrope", system-ui, sans-serif;
+  --font-label: "Manrope", system-ui, sans-serif; --r-card: 14px; --r-composer: 18px;
+}
+
+html[data-thomas-theme="sandstone"], html[data-theme="sandstone"] {
+  color-scheme: light; --c-bg: #f4ede1; --c-sidebar: #efe5d6; --c-surface: #fbf6ee;
+  --c-surface-2: #f1e7d7; --c-hover: rgba(80, 52, 28, .06); --c-border: rgba(90, 62, 34, .16);
+  --c-border-2: rgba(90, 62, 34, .26); --c-text: #2f2a22; --c-dim: rgba(47, 42, 34, .70);
+  --c-muted: rgba(47, 42, 34, .48); --c-accent: #c0603c; --c-accent-ink: #fdf6ee;
+  --c-accent-soft: rgba(192, 96, 60, .12); --c-accent-line: rgba(192, 96, 60, .42);
+  --c-user-bg: #ece0cd; --c-user-text: #2f2a22; --c-composer-bg: #fbf6ee;
+  --c-shadow: 0 14px 40px rgba(90, 62, 34, .16);
+  --c-menu-bg: #fbf6ee; --font-head: "Newsreader", Georgia, serif;
+  --font-label: "Newsreader", Georgia, serif; --r-card: 12px; --r-composer: 14px;
+}
+
+.thomas-eyes-mark {
+  width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+  gap: 4px; flex: 0 0 auto; border: 0; border-radius: 9px;
+  background: var(--c-accent); box-shadow: 0 0 18px var(--c-accent-soft);
+}
+.thomas-eyes-mark > i, .thomas-eyes-mark > span {
+  width: 5px; height: 6px; display: block; border-radius: 1px; background: var(--c-accent-ink);
+}
+
+/* The five modernized classic-host routes keep their live workspace runtime,
+   but the old host's fixed blue backdrop must never override Chat's theme. */
+.module-workspace:is(
+  [data-mode="app_builder"], [data-mode="channels"],
+  [data-mode="token_economy"], [data-mode="marketplace"]
+) {
+  --module-accent: var(--c-accent-line);
+  --module-accent-soft: var(--c-accent-soft);
+  --module-panel-tint: var(--c-accent-soft);
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font-sans);
+}
+.module-workspace:is(
+  [data-mode="app_builder"], [data-mode="channels"],
+  [data-mode="token_economy"], [data-mode="marketplace"]
+)::before {
+  background: linear-gradient(var(--c-border) 1px, transparent 1px),
+              linear-gradient(90deg, var(--c-border) 1px, transparent 1px);
+  background-size: 52px 52px;
+  opacity: .16;
+}
+.module-workspace:is(
+  [data-mode="app_builder"], [data-mode="channels"],
+  [data-mode="token_economy"], [data-mode="marketplace"]
+)::after {
+  background: radial-gradient(circle at 18% 14%, var(--c-accent-soft), transparent 42%),
+              radial-gradient(circle at 84% 72%, var(--c-accent-soft), transparent 44%);
+  opacity: .42;
+}
+.module-workspace:is(
+  [data-mode="app_builder"], [data-mode="channels"],
+  [data-mode="token_economy"], [data-mode="marketplace"]
+) .module-header-copy h2 {
+  color: var(--c-text);
+  font-family: var(--font-head);
+  text-shadow: none;
+}
+.module-workspace:is(
+  [data-mode="app_builder"], [data-mode="channels"],
+  [data-mode="token_economy"], [data-mode="marketplace"]
+) :is(.module-header-copy p, .module-meta-text) { color: var(--c-muted); }
+.module-workspace:is(
+  [data-mode="app_builder"], [data-mode="channels"],
+  [data-mode="token_economy"], [data-mode="marketplace"]
+) .module-meta-pill {
+  border-color: var(--c-accent-line);
+  background: var(--c-surface);
+  color: var(--c-accent);
+}
+html.is-embedded .thomas-standalone-only { display: none !important; }
+html.is-embedded, html.is-embedded body, html.tcw-embed, html.tcw-embed body { background: transparent !important; }
+/* Chromium otherwise gives a transparent embedded document an opaque canvas
+   derived from its dark/light color scheme, hiding Chat's literal live world. */
+html.is-embedded, html.tcw-embed { color-scheme: normal !important; }
+html.tcw-embed .module-workspace:is(
+  [data-mode="app_builder"], [data-mode="channels"],
+  [data-mode="token_economy"], [data-mode="marketplace"]
+) { background: transparent; }
+html.tcw-embed .module-workspace:is(
+  [data-mode="app_builder"], [data-mode="channels"],
+  [data-mode="token_economy"], [data-mode="marketplace"]
+)::before,
+html.tcw-embed .module-workspace:is(
+  [data-mode="app_builder"], [data-mode="channels"],
+  [data-mode="token_economy"], [data-mode="marketplace"]
+)::after { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}

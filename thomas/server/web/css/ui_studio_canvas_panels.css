@@ -1,9 +1,12 @@
 /* ui_studio_canvas_panels.css
- * UI Studio Canvas — part 2: inspector/properties grid, buttons, modal,
+ * Canvas workspace — part 2: inspector/properties grid, buttons, modal,
  * toasts. Split from ui_studio_canvas.css to keep each file small; loaded
  * immediately after it (same namespaced .ui-studio-* selectors). */
 
 /* Properties / inspector grid */
+.ui-studio-side-tabs { display: grid; grid-template-columns: repeat(3, 1fr); padding: 6px; gap: 4px; border-bottom: 1px solid var(--border-light); }
+.ui-studio-side-tab { min-width: 0; padding: 7px 5px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text-muted); cursor: pointer; font: 700 11px var(--font-sans); }
+.ui-studio-side-tab:is(:hover, :focus-visible, .is-active) { border-color: var(--c-accent-line); background: var(--c-accent-soft); color: var(--text-primary); outline: 0; }
 .ui-studio-props {
     padding: 8px 10px 10px;
     overflow-y: auto;
@@ -67,7 +70,7 @@
     padding: 4px 12px;
     border-radius: var(--radius-sm, 4px);
     border: 1px solid var(--border-light, rgba(255, 255, 255, 0.12));
-    background: transparent;
+    background: var(--c-surface-2, transparent);
     color: var(--text-secondary, #adb3c2);
     font-size: 12px;
     font-weight: 600;
@@ -79,8 +82,8 @@
     flex: 0 0 auto;
 }
 .ui-studio-btn:hover {
-    background: rgba(162, 191, 233, 0.08);
-    border-color: rgba(255, 255, 255, 0.2);
+    background: var(--bg-surface-hover, rgba(162, 191, 233, 0.08));
+    border-color: var(--c-border-2, rgba(255, 255, 255, 0.2));
     color: var(--text-primary, #ececf1);
 }
 .ui-studio-btn:active { transform: scale(0.97); }
@@ -88,15 +91,15 @@
 .ui-studio-btn.is-accent {
     border-color: var(--accent, #8a9aad);
     color: var(--accent, #8a9aad);
-    background: rgba(88, 166, 255, 0.06);
+    background: var(--c-accent-soft, rgba(88, 166, 255, 0.06));
 }
-.ui-studio-btn.is-accent:hover { background: rgba(88, 166, 255, 0.16); }
+.ui-studio-btn.is-accent:hover { background: var(--c-accent-soft, rgba(88, 166, 255, 0.16)); }
 .ui-studio-btn.is-mint {
     border-color: var(--accent-mint, #47d7ac);
     color: var(--accent-mint, #47d7ac);
-    background: rgba(71, 215, 172, 0.06);
+    background: var(--c-accent-soft, rgba(71, 215, 172, 0.06));
 }
-.ui-studio-btn.is-mint:hover { background: rgba(71, 215, 172, 0.16); }
+.ui-studio-btn.is-mint:hover { background: var(--c-accent-soft, rgba(71, 215, 172, 0.16)); }
 
 /* Tool buttons (icon + glyph, in the left rail) */
 .ui-studio-tool {
@@ -118,8 +121,8 @@
     color: var(--text-primary, #ececf1);
 }
 .ui-studio-tool.is-active {
-    background: rgba(88, 166, 255, 0.18);
-    border-color: var(--accent, #8a9aad);
+    background: var(--c-accent-soft);
+    border-color: var(--c-accent-line);
     color: var(--text-primary, #ececf1);
 }
 
@@ -134,9 +137,40 @@
     user-select: none;
     padding: 3px 6px;
     border-radius: var(--radius-sm, 4px);
+    min-height: 34px;
+    white-space: nowrap;
 }
 .ui-studio-toggle:hover { background: var(--bg-surface-hover, #242936); }
-.ui-studio-toggle input { margin: 0; }
+.ui-studio-toggle input[type="checkbox"] {
+    appearance: none;
+    width: 14px !important;
+    height: 14px !important;
+    min-width: 14px !important;
+    min-height: 14px !important;
+    flex: 0 0 14px;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--c-border-2);
+    border-radius: 4px;
+    background: var(--c-surface);
+}
+.ui-studio-toggle input[type="checkbox"]::after {
+    width: 6px;
+    height: 3px;
+    content: "";
+    border-left: 2px solid var(--c-accent-ink);
+    border-bottom: 2px solid var(--c-accent-ink);
+    opacity: 0;
+    transform: translateY(-1px) rotate(-45deg);
+}
+.ui-studio-toggle input[type="checkbox"]:checked {
+    border-color: var(--c-accent);
+    background: var(--c-accent);
+}
+.ui-studio-toggle input[type="checkbox"]:checked::after { opacity: 1; }
+.ui-studio-toggle input[type="checkbox"]:focus-visible { outline: 2px solid var(--c-accent-line); outline-offset: 2px; }
 
 /* Status / coordinate readout (bottom-left overlay on stage) */
 .ui-studio-readout {
@@ -180,6 +214,8 @@
     align-items: center;
     justify-content: center;
     background: rgba(0, 0, 0, 0.5);
+    background: color-mix(in srgb, var(--c-bg, #000) 78%, transparent);
+    backdrop-filter: blur(10px);
 }
 .ui-studio-modal[hidden] { display: none; }
 .ui-studio-modal-card {
@@ -247,3 +283,12 @@
 .ui-studio-toast.is-visible { opacity: 1; transform: translateY(0); }
 .ui-studio-toast.tone-warn { border-color: var(--warn-line, rgba(255, 191, 71, 0.45)); }
 .ui-studio-toast.tone-success { border-color: var(--accent-mint, #47d7ac); }
+
+@media (max-width: 620px) {
+    .ui-studio-btn { padding-inline: 9px; }
+    .ui-studio-field-grid { grid-template-columns: 1fr; }
+    .ui-studio-field.is-wide { grid-column: auto; }
+    .ui-studio-modal-card { width: calc(100% - 20px); height: calc(100% - 20px); max-height: none; }
+    .ui-studio-modal-head { align-items: flex-start; flex-direction: column; }
+    .ui-studio-modal-tabs { max-width: 100%; overflow-x: auto; }
+}

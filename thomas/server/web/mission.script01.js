@@ -1,510 +1,550 @@
+(function () {
+  'use strict';
 
-    // State Management
-    const state = {
-      missions: [],
-      agents: [],
-      approvals: [],
-      activities: [],
-      connected: false,
-      selectedTab: 'missions'
+  const ACTIVE_STATES = new Set(['running', 'active', 'queued', 'pending', 'awaiting_approval', 'blocked']);
+  const TERMINAL_STATES = new Set(['succeeded', 'completed', 'failed', 'dead', 'cancelled']);
+  const JOBS_REFRESH_MS = 15000;
+  const FALLBACK_REFRESH_MS = 8000;
+  const STREAM_URL = '/api/mission/stream?interval=3';
+  const state = {
+    control: null,
+    jobs: [],
+    jobsUnavailable: false,
+    filter: 'active',
+    loading: false,
+    actionPending: false,
+    streamController: null,
+    streamConnected: false,
+    reconnectTimer: 0,
+    reconnectMs: 1000,
+    jobsTimer: 0,
+    fallbackTimer: 0,
+  };
+
+  const byId = (id) => document.getElementById(id);
+  const safe = (value) => String(value == null ? '' : value).trim();
+  const escapeHtml = (value) => safe(value)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  const normalizeStatus = (value) => safe(value).toLowerCase().replace(/\s+/g, '_') || 'unknown';
+  const statusLabel = (value) => normalizeStatus(value).replace(/_/g, ' ');
+  const array = (value) => Array.isArray(value) ? value : [];
+  const epoch = (value) => {
+    const parsed = Date.parse(safe(value));
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  const plural = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
+
+  function relativeTime(value) {
+    const time = epoch(value);
+    if (!time) return 'just now';
+    const delta = Date.now() - time;
+    const abs = Math.abs(delta);
+    if (abs < 45000) return delta >= 0 ? 'just now' : 'soon';
+    if (abs < 3600000) return `${delta >= 0 ? '' : 'in '}${Math.max(1, Math.round(abs / 60000))}m${delta >= 0 ? ' ago' : ''}`;
+    if (abs < 86400000) return `${delta >= 0 ? '' : 'in '}${Math.max(1, Math.round(abs / 3600000))}h${delta >= 0 ? ' ago' : ''}`;
+    return `${delta >= 0 ? '' : 'in '}${Math.max(1, Math.round(abs / 86400000))}d${delta >= 0 ? ' ago' : ''}`;
+  }
+
+  function setConnection(kind, label) {
+    const pill = byId('missionConnection');
+    if (!pill) return;
+    pill.className = `connection-pill is-${kind}`;
+    const text = pill.querySelector('span');
+    if (text) text.textContent = label;
+  }
+
+  function showToast(message, tone = '') {
+    const host = byId('missionToasts');
+    if (!host) return;
+    const toast = document.createElement('div');
+    toast.className = `toast${tone ? ` is-${tone}` : ''}`;
+    toast.textContent = safe(message);
+    host.appendChild(toast);
+    window.setTimeout(() => toast.remove(), 3600);
+  }
+
+  async function request(url, options = {}) {
+    const response = await fetch(url, { cache: 'no-store', ...options });
+    const contentType = safe(response.headers.get('content-type')).toLowerCase();
+    let payload = null;
+    if (contentType.includes('application/json')) {
+      payload = await response.json().catch(() => null);
+    } else {
+      payload = await response.text().catch(() => '');
+    }
+    if (!response.ok) {
+      const detail = typeof payload === 'object' && payload ? safe(payload.error || payload.message) : safe(payload);
+      throw new Error(detail || `Request failed (${response.status})`);
+    }
+    return payload;
+  }
+
+  function empty(message) {
+    return `<div class="empty-state">${escapeHtml(message)}</div>`;
+  }
+
+  function statusPill(status) {
+    const value = normalizeStatus(status);
+    return `<span class="status-pill status-${escapeHtml(value)}">${escapeHtml(statusLabel(value))}</span>`;
+  }
+
+  function instanceAttrs(type, key, container) {
+    return `data-ui-id="mission.${escapeHtml(type)}.${escapeHtml(key)}" data-ui-role="mission.${escapeHtml(type)}" data-ui-instance-key="${escapeHtml(key)}" data-ui-policy="move resize" data-ui-constraints="contain=parent;container=${escapeHtml(container)};collision=avoid;minWidth=220;minHeight=72;preserveHandlers=true;preserveA11y=true"`;
+  }
+
+  function protectedAttrs(type, key) {
+    return `data-ui-id="mission.${escapeHtml(type)}.${escapeHtml(key)}" data-ui-role="mission.${escapeHtml(type)}" data-ui-instance-key="${escapeHtml(key)}" data-ui-policy="protected controls" data-ui-constraints="move=false;resize=false;critical=true;preserveHandlers=true;preserveA11y=true"`;
+  }
+
+  function jobSummary(job) {
+    const payload = job && typeof job.payload === 'object' ? job.payload : {};
+    return safe(payload.goal || payload.prompt || payload.task || payload.message || 'No task summary provided.');
+  }
+
+  function scheduleLabel(job) {
+    const schedule = job && typeof job.schedule === 'object' ? job.schedule : null;
+    if (!schedule) return safe(job && job.next_run_at) ? `once · ${relativeTime(job.next_run_at)}` : 'manual';
+    const type = safe(schedule.type).toLowerCase();
+    if (type === 'interval') {
+      const seconds = Number(schedule.every_seconds || 0);
+      if (seconds >= 3600) return `every ${Math.round(seconds / 3600)}h`;
+      if (seconds >= 60) return `every ${Math.round(seconds / 60)}m`;
+      return `every ${Math.round(seconds)}s`;
+    }
+    if (type === 'daily') return `daily ${safe(schedule.at) || '--:--'}`;
+    if (type === 'weekly') return `weekly ${safe(schedule.at) || '--:--'}`;
+    if (type === 'once') return `once · ${relativeTime(job.next_run_at)}`;
+    return type || 'scheduled';
+  }
+
+  function renderPulse() {
+    const control = state.control || {};
+    const agents = array(control.agents);
+    const jobs = state.jobs;
+    const live = agents.filter((row) => ['running', 'active'].includes(normalizeStatus(row.status)));
+    const primary = live[0] || agents.find((row) => ACTIVE_STATES.has(normalizeStatus(row.status)));
+    const scheduled = jobs.filter((job) => epoch(job.next_run_at) > 0).sort((a, b) => epoch(a.next_run_at) - epoch(b.next_run_at));
+    const blockers = agents.filter((row) => ['blocked', 'failed', 'dead'].includes(normalizeStatus(row.status)));
+    const blockedJobs = jobs.filter((row) => ['blocked', 'failed', 'dead'].includes(normalizeStatus(row.status)));
+    const blockerCount = blockers.length + blockedJobs.length;
+
+    byId('pulseNowTitle').textContent = safe(primary && primary.name) || 'No active execution';
+    byId('pulseNowMeta').textContent = primary ? (safe(primary.summary) || `${statusLabel(primary.status)} · ${safe(primary.room) || 'workspace'}`) : 'Waiting for live work';
+    byId('pulseNextTitle').textContent = safe(scheduled[0] && scheduled[0].name) || 'No scheduled run';
+    byId('pulseNextMeta').textContent = scheduled[0] ? `${scheduleLabel(scheduled[0])} · ${relativeTime(scheduled[0].next_run_at)}` : 'Create a job when ready';
+    byId('pulseBlockerTitle').textContent = plural(blockerCount, 'blocker');
+    byId('pulseBlockerMeta').textContent = blockerCount ? 'Review failed or blocked work' : 'Nothing needs attention';
+  }
+
+  function renderMetrics() {
+    const control = state.control || {};
+    const agents = array(control.agents);
+    const approvals = control.approvals && typeof control.approvals === 'object' ? control.approvals : {};
+    const active = agents.filter((row) => ACTIVE_STATES.has(normalizeStatus(row.status))).length;
+    const risk = agents.filter((row) => ['blocked', 'failed', 'dead'].includes(normalizeStatus(row.status))).length;
+    const pending = Number(approvals.pending_total || 0);
+    const engine = control.engine && typeof control.engine === 'object' ? control.engine : {};
+    const engineLive = Boolean(engine.autonomy_running || engine.run_store_enabled);
+    byId('metricActive').textContent = String(active);
+    byId('metricActiveMeta').textContent = active ? plural(active, 'agent') + ' in motion' : 'No active agents';
+    byId('metricApprovals').textContent = String(pending);
+    byId('metricApprovalsMeta').textContent = pending ? 'Owner decision needed' : 'Nothing waiting';
+    byId('metricRisk').textContent = String(risk);
+    byId('metricRiskMeta').textContent = risk ? 'Review attention states' : 'No blocked work';
+    byId('metricEngine').textContent = engineLive ? 'Live' : 'Idle';
+    byId('metricEngineMeta').textContent = `Run store ${engine.run_store_enabled ? 'on' : 'off'} · Autonomy ${engine.autonomy_enabled ? 'on' : 'off'}`;
+  }
+
+  function renderAgents() {
+    const host = byId('agentsList');
+    const agents = array(state.control && state.control.agents);
+    const active = agents.filter((row) => ACTIVE_STATES.has(normalizeStatus(row.status)));
+    byId('agentsCount').textContent = `${active.length} active`;
+    const rows = [...active, ...agents.filter((row) => !ACTIVE_STATES.has(normalizeStatus(row.status)))].slice(0, 20);
+    if (!rows.length) {
+      host.innerHTML = empty('No delegated agents are active. New work will appear here as soon as Thomas hands it off.');
+      return;
+    }
+    host.innerHTML = rows.map((agent, index) => {
+      const key = safe(agent.id || agent.execution_id || agent.run_id || `agent-${index}`);
+      const source = safe(agent.source).replace(/_/g, ' ') || 'Thomas';
+      return `<article class="work-card" ${instanceAttrs('agent-card', key, 'mission.live-work')}>
+        <div class="card-top"><div class="card-title"><strong>${escapeHtml(agent.name || 'Worker')}</strong><small>${escapeHtml(source)} · ${escapeHtml(agent.room || 'workspace')}</small></div>${statusPill(agent.status)}</div>
+        <p class="card-summary">${escapeHtml(agent.summary || 'Standing by for the next update.')}</p>
+        <div class="card-meta"><span>Updated ${escapeHtml(relativeTime(agent.updated_at))}</span>${agent.session_id ? `<span>Session ${escapeHtml(safe(agent.session_id).slice(0, 14))}</span>` : ''}</div>
+      </article>`;
+    }).join('');
+  }
+
+  function renderJobs() {
+    const host = byId('jobsList');
+    let jobs = [...state.jobs];
+    if (state.filter === 'active') jobs = jobs.filter((job) => ACTIVE_STATES.has(normalizeStatus(job.status)));
+    if (state.filter === 'scheduled') jobs = jobs.filter((job) => job.schedule || safe(job.next_run_at));
+    jobs.sort((a, b) => {
+      const aLive = ACTIVE_STATES.has(normalizeStatus(a.status)) ? 0 : 1;
+      const bLive = ACTIVE_STATES.has(normalizeStatus(b.status)) ? 0 : 1;
+      return aLive - bLive || epoch(b.updated_at) - epoch(a.updated_at);
+    });
+    byId('jobsCount').textContent = state.jobsUnavailable ? 'Runtime unavailable' : plural(state.jobs.length, 'job');
+    if (!jobs.length) {
+      host.innerHTML = empty(state.jobsUnavailable ? 'The autonomy runtime is unavailable. Create a mission to start it.' : `No ${state.filter === 'all' ? '' : state.filter + ' '}jobs to show.`);
+      return;
+    }
+    host.innerHTML = jobs.slice(0, 40).map((job, index) => {
+      const key = safe(job.id || `job-${index}`);
+      const status = normalizeStatus(job.status);
+      const canCancel = ACTIVE_STATES.has(status);
+      const canRequeue = TERMINAL_STATES.has(status) || status === 'blocked';
+      return `<article class="job-card" ${instanceAttrs('job-card', key, 'mission.jobs')}>
+        <div class="card-top"><div class="card-title"><strong>${escapeHtml(job.name || job.id || 'Mission job')}</strong><small>${escapeHtml(scheduleLabel(job))}${job.next_run_at ? ` · ${escapeHtml(relativeTime(job.next_run_at))}` : ''}</small></div>${statusPill(status)}</div>
+        <p class="card-summary">${escapeHtml(jobSummary(job))}</p>
+        <div class="card-meta"><span>${escapeHtml(job.kind || 'workflow task')}</span><span>Updated ${escapeHtml(relativeTime(job.updated_at || job.created_at))}</span>${job.requires_approval ? '<span>Approval required</span>' : ''}</div>
+        <div class="card-actions" ${protectedAttrs('job-actions', key)}>
+          <button class="action-button is-primary" type="button" data-job-action="run_now" data-job-id="${escapeHtml(key)}">Run now</button>
+          ${canRequeue ? `<button class="action-button" type="button" data-job-action="requeue" data-job-id="${escapeHtml(key)}">Requeue</button>` : ''}
+          ${canCancel ? `<button class="action-button is-danger" type="button" data-job-action="cancel" data-job-id="${escapeHtml(key)}">Cancel</button>` : ''}
+        </div>
+      </article>`;
+    }).join('');
+  }
+
+  function approvalRows() {
+    const approvals = state.control && state.control.approvals && typeof state.control.approvals === 'object' ? state.control.approvals : {};
+    return [
+      ...array(approvals.autonomy).map((row) => ({ ...row, source: 'autonomy' })),
+      ...array(approvals.guardrails).map((row) => ({ ...row, source: 'guardrails' })),
+    ];
+  }
+
+  function approvalKey(row, index = 0) {
+    return safe(row.id || `${row.source}:${row.run_id || ''}:${row.tool_call_id || ''}:${index}`);
+  }
+
+  function renderApprovals() {
+    const host = byId('approvalsList');
+    const rows = approvalRows();
+    byId('approvalsCount').textContent = `${rows.length} waiting`;
+    if (!rows.length) {
+      host.innerHTML = empty('No approvals are waiting. Thomas will surface owner decisions here.');
+      return;
+    }
+    host.innerHTML = rows.slice(0, 30).map((row, index) => {
+      const key = approvalKey(row, index);
+      const title = row.source === 'guardrails' ? (safe(row.tool_name) || 'Guardrail request') : (safe(row.name || row.kind) || 'Autonomy request');
+      const detail = safe(row.reason || row.summary || row.args_preview || 'Review this request before work continues.');
+      return `<article class="approval-card" ${instanceAttrs('approval-card', key, 'mission.approvals')}>
+        <div class="card-top"><div class="card-title"><strong>${escapeHtml(title)}</strong><small>${escapeHtml(row.source)} · requested ${escapeHtml(relativeTime(row.requested_at))}</small></div><span class="status-pill is-warning">waiting</span></div>
+        <p class="card-summary">${escapeHtml(detail)}</p>
+        <div class="card-actions" ${protectedAttrs('approval-actions', key)}>
+          <button class="action-button is-primary" type="button" data-approval-key="${escapeHtml(key)}" data-approval-action="approve">Approve</button>
+          ${row.source === 'guardrails' ? `<button class="action-button" type="button" data-approval-key="${escapeHtml(key)}" data-approval-action="approve_session">Approve for session</button>` : ''}
+          <button class="action-button is-danger" type="button" data-approval-key="${escapeHtml(key)}" data-approval-action="deny">Deny</button>
+        </div>
+      </article>`;
+    }).join('');
+  }
+
+  function renderActivity() {
+    const host = byId('activityList');
+    const events = array(state.control && state.control.events).slice(0, 18);
+    byId('updatedAt').textContent = state.control && state.control.generated_at ? `Updated ${relativeTime(state.control.generated_at)}` : 'Not synced';
+    if (!events.length) {
+      host.innerHTML = empty('No recent signals yet. Runtime updates will appear here.');
+      return;
+    }
+    host.innerHTML = events.map((event, index) => {
+      const key = safe(event.id || `${event.source || 'event'}:${event.ts || index}`);
+      return `<article class="signal-card" ${instanceAttrs('signal-card', key, 'mission.activity')}><strong>${escapeHtml(safe(event.type).replace(/_/g, ' ') || 'Update')} · ${escapeHtml(relativeTime(event.ts))}</strong><p>${escapeHtml(event.text || 'Mission state changed.')}</p></article>`;
+    }).join('');
+  }
+
+  function renderAll() {
+    renderPulse();
+    renderMetrics();
+    renderAgents();
+    renderJobs();
+    renderApprovals();
+    renderActivity();
+  }
+
+  async function refreshJobs({ silent = true } = {}) {
+    try {
+      const payload = await request('/api/mission/jobs?limit=180');
+      state.jobs = array(payload && payload.jobs);
+      state.jobsUnavailable = Boolean(payload && payload.unavailable);
+      renderPulse();
+      renderJobs();
+      if (!silent && !state.streamConnected) setConnection('polling', 'Polling');
+    } catch (error) {
+      if (!silent) showToast(error.message || 'Could not refresh jobs.', 'error');
+    }
+  }
+
+  async function refreshAll({ silent = false, fresh = false } = {}) {
+    if (state.loading) return;
+    state.loading = true;
+    if (!silent) setConnection('connecting', 'Refreshing');
+    try {
+      const [control, jobs] = await Promise.all([
+        request(`/api/mission/control${fresh ? '?fresh=1' : ''}`),
+        request('/api/mission/jobs?limit=180'),
+      ]);
+      state.control = control && typeof control === 'object' ? control : {};
+      state.jobs = array(jobs && jobs.jobs);
+      state.jobsUnavailable = Boolean(jobs && jobs.unavailable);
+      renderAll();
+      setConnection(state.streamConnected ? 'live' : 'polling', state.streamConnected ? 'Live' : 'Polling');
+    } catch (error) {
+      setConnection('offline', 'Offline');
+      if (!silent) showToast(error.message || 'Mission Control refresh failed.', 'error');
+    } finally {
+      state.loading = false;
+    }
+  }
+
+  function stopFallbackPolling() {
+    if (state.fallbackTimer) window.clearInterval(state.fallbackTimer);
+    state.fallbackTimer = 0;
+  }
+
+  function startFallbackPolling() {
+    if (state.fallbackTimer) return;
+    state.fallbackTimer = window.setInterval(() => void refreshAll({ silent: true }), FALLBACK_REFRESH_MS);
+  }
+
+  function scheduleStreamReconnect() {
+    if (state.reconnectTimer || document.hidden) return;
+    const delay = state.reconnectMs;
+    state.reconnectMs = Math.min(15000, Math.round(state.reconnectMs * 1.7));
+    state.reconnectTimer = window.setTimeout(() => {
+      state.reconnectTimer = 0;
+      void startStream();
+    }, delay);
+  }
+
+  function stopStream() {
+    if (state.streamController) state.streamController.abort();
+    state.streamController = null;
+    state.streamConnected = false;
+  }
+
+  async function startStream() {
+    if (state.streamController || document.hidden) return;
+    const controller = new AbortController();
+    state.streamController = controller;
+    try {
+      const response = await fetch(STREAM_URL, { cache: 'no-store', headers: { Accept: 'application/x-ndjson' }, signal: controller.signal });
+      if (!response.ok || !response.body) throw new Error(`Live stream unavailable (${response.status})`);
+      state.streamConnected = true;
+      state.reconnectMs = 1000;
+      stopFallbackPolling();
+      setConnection('live', 'Live');
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (!controller.signal.aborted) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        buffer += decoder.decode(chunk.value, { stream: true });
+        let lineEnd = buffer.indexOf('\n');
+        while (lineEnd >= 0) {
+          const line = buffer.slice(0, lineEnd).trim();
+          buffer = buffer.slice(lineEnd + 1);
+          if (line) {
+            try {
+              const message = JSON.parse(line);
+              if (message.type === 'snapshot' && message.payload && typeof message.payload === 'object') {
+                state.control = message.payload;
+                renderPulse(); renderMetrics(); renderAgents(); renderApprovals(); renderActivity();
+              }
+            } catch (_) { /* ignore malformed stream lines and continue */ }
+          }
+          lineEnd = buffer.indexOf('\n');
+        }
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) console.warn('Mission stream unavailable; using bounded polling.', error);
+    } finally {
+      if (state.streamController === controller) state.streamController = null;
+      state.streamConnected = false;
+      if (!controller.signal.aborted) {
+        setConnection('polling', 'Polling');
+        startFallbackPolling();
+        scheduleStreamReconnect();
+      }
+    }
+  }
+
+  async function runJobAction(jobId, action) {
+    if (state.actionPending || !jobId || !['run_now', 'requeue', 'cancel'].includes(action)) return;
+    state.actionPending = true;
+    try {
+      await request(`/api/mission/jobs/${encodeURIComponent(jobId)}/${action}`, { method: 'POST' });
+      showToast(`Job ${action.replace(/_/g, ' ')} requested.`);
+      await refreshJobs({ silent: false });
+    } catch (error) {
+      showToast(error.message || 'Job action failed.', 'error');
+    } finally {
+      state.actionPending = false;
+    }
+  }
+
+  async function resolveApproval(key, action) {
+    if (state.actionPending) return;
+    const rows = approvalRows();
+    const row = rows.find((item, index) => approvalKey(item, index) === key);
+    if (!row) return;
+    const approve = action === 'approve' || action === 'approve_session';
+    state.actionPending = true;
+    try {
+      if (row.source === 'autonomy') {
+        await request(`/api/mission/approvals/autonomy/${encodeURIComponent(safe(row.id))}/decision`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ approve, actor: 'mission_control', reason: approve ? 'approved in mission control' : 'denied in mission control' }),
+        });
+      } else {
+        await request('/api/mission/approvals/guardrails/resolve', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ run_id: safe(row.run_id), tool_call_id: safe(row.tool_call_id), approve, allow_session_tool: action === 'approve_session', tool_name: safe(row.tool_name), session_id: safe(row.session_id), actor: 'mission_control' }),
+        });
+      }
+      showToast(approve ? 'Approval submitted.' : 'Request denied.');
+      await refreshAll({ silent: true, fresh: true });
+    } catch (error) {
+      showToast(error.message || 'Approval action failed.', 'error');
+    } finally {
+      state.actionPending = false;
+    }
+  }
+
+  function updateScheduleFields() {
+    const mode = safe(byId('missionMode').value).toLowerCase() || 'now';
+    document.querySelectorAll('[data-schedule-field]').forEach((field) => {
+      const kind = field.dataset.scheduleField;
+      field.hidden = !(
+        kind === mode ||
+        (kind === 'timed' && (mode === 'daily' || mode === 'weekly')) ||
+        (kind === 'weekly' && mode === 'weekly')
+      );
+    });
+    if (mode === 'once' && !byId('missionRunAt').value) {
+      const runAt = new Date(Date.now() + 15 * 60000);
+      runAt.setSeconds(0, 0);
+      const local = new Date(runAt.getTime() - runAt.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      byId('missionRunAt').value = local;
+    }
+  }
+
+  function buildMissionPayload() {
+    const mode = safe(byId('missionMode').value).toLowerCase() || 'now';
+    const goal = safe(byId('missionGoal').value);
+    if (!goal) throw new Error('Task or goal is required.');
+    const payload = {
+      name: safe(byId('missionName').value) || 'Mission task', kind: 'workflow_task', goal, prompt: goal,
+      workflow: safe(byId('missionWorkflow').value) || 'chain', requires_approval: Boolean(byId('missionRequiresApproval').checked),
     };
-
-    // WebSocket Connection
-    let ws = null;
-    let reconnectAttempts = 0;
-    const MAX_RECONNECT_ATTEMPTS = 10;
-
-    function connectWebSocket() {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws/events`;
-
-      ws = new WebSocket(wsUrl);
-
-      ws.onopen = () => {
-        console.log('WebSocket connected');
-        state.connected = true;
-        reconnectAttempts = 0;
-        showToast('Connected to Mission Control', 'success');
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          handleWebSocketMessage(data);
-        } catch (e) {
-          console.error('Failed to parse WebSocket message:', e);
-        }
-      };
-
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        state.connected = false;
-      };
-
-      ws.onclose = () => {
-        console.log('WebSocket disconnected');
-        state.connected = false;
-        attemptReconnect();
-      };
-    }
-
-    function attemptReconnect() {
-      if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-        reconnectAttempts++;
-        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
-        console.log(`Reconnecting in ${delay}ms...`);
-        setTimeout(connectWebSocket, delay);
+    const profile = safe(byId('missionProfile').value);
+    if (profile) payload.profile = profile;
+    if (mode === 'once') {
+      const runAt = new Date(byId('missionRunAt').value);
+      if (!Number.isFinite(runAt.getTime())) throw new Error('Choose a valid run time.');
+      payload.run_at = runAt.toISOString();
+    } else if (mode === 'interval') {
+      const seconds = Number(byId('missionEvery').value || 0);
+      if (!Number.isFinite(seconds) || seconds < 30) throw new Error('Interval must be at least 30 seconds.');
+      payload.schedule = { type: 'interval', every_seconds: Math.round(seconds) };
+    } else if (mode === 'daily' || mode === 'weekly') {
+      const at = safe(byId('missionAt').value);
+      if (!/^\d{2}:\d{2}$/.test(at)) throw new Error('Choose a valid schedule time.');
+      payload.schedule = { type: mode, at, tz: safe(byId('missionTimezone').value) || 'UTC' };
+      if (mode === 'weekly') {
+        payload.schedule.dow = Array.from(byId('missionWeekdays').querySelectorAll('input:checked')).map((input) => Number(input.value));
+        if (!payload.schedule.dow.length) throw new Error('Choose at least one weekday.');
       }
     }
+    return payload;
+  }
 
-    function handleWebSocketMessage(data) {
-      const { type, payload } = data;
+  function toggleCreatePanel(open) {
+    const panel = byId('missionCreatePanel');
+    const button = byId('missionNewButton');
+    panel.hidden = !open;
+    button.setAttribute('aria-expanded', String(Boolean(open)));
+    if (open) window.setTimeout(() => byId('missionGoal').focus(), 0);
+  }
 
-      switch (type) {
-        case 'mission_created':
-          state.missions.push(payload);
-          renderMissions();
-          showToast(`Mission "${payload.name}" created`, 'success');
-          break;
-        case 'mission_updated':
-          const idx = state.missions.findIndex(m => m.id === payload.id);
-          if (idx >= 0) {
-            state.missions[idx] = payload;
-            renderMissions();
-          }
-          break;
-        case 'mission_status_changed':
-          const missionIdx = state.missions.findIndex(m => m.id === payload.id);
-          if (missionIdx >= 0) {
-            state.missions[missionIdx].status = payload.status;
-            renderMissions();
-          }
-          showToast(`Mission status: ${payload.status}`, payload.status);
-          break;
-        case 'agent_connected':
-          state.agents.push(payload);
-          renderAgents();
-          break;
-        case 'agent_updated':
-          const agentIdx = state.agents.findIndex(a => a.id === payload.id);
-          if (agentIdx >= 0) {
-            state.agents[agentIdx] = payload;
-            renderAgents();
-          }
-          break;
-        case 'activity':
-          state.activities.unshift(payload);
-          if (state.activities.length > 50) state.activities.pop();
-          renderActivity();
-          break;
-        case 'approval_requested':
-          state.approvals.push(payload);
-          renderApprovals();
-          break;
-        case 'metrics_update':
-          updateKPIs(payload);
-          break;
-      }
+  async function createMission(event) {
+    event.preventDefault();
+    if (state.actionPending) return;
+    let payload;
+    try { payload = buildMissionPayload(); } catch (error) {
+      byId('missionCreateStatus').textContent = error.message;
+      return;
     }
-
-    // API Functions
-    async function fetchMissions() {
-      try {
-        const response = await fetch('/api/missions');
-        if (!response.ok) throw new Error('Failed to fetch missions');
-        state.missions = await response.json();
-        renderMissions();
-      } catch (e) {
-        console.error('Error fetching missions:', e);
-      }
+    state.actionPending = true;
+    byId('missionCreateSubmit').disabled = true;
+    byId('missionCreateStatus').textContent = 'Creating…';
+    try {
+      const created = await request('/api/mission/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      showToast(`${safe(created && created.job && created.job.name) || payload.name} created.`);
+      byId('missionCreateForm').reset();
+      byId('missionTimezone').value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+      updateScheduleFields();
+      toggleCreatePanel(false);
+      await refreshJobs({ silent: false });
+    } catch (error) {
+      byId('missionCreateStatus').textContent = error.message || 'Create failed.';
+      showToast(error.message || 'Could not create mission.', 'error');
+    } finally {
+      state.actionPending = false;
+      byId('missionCreateSubmit').disabled = false;
     }
+  }
 
-    async function fetchAgents() {
-      try {
-        const response = await fetch('/api/agents');
-        if (!response.ok) throw new Error('Failed to fetch agents');
-        state.agents = await response.json();
-        renderAgents();
-        populateAgentSelect();
-      } catch (e) {
-        console.error('Error fetching agents:', e);
-      }
-    }
-
-    async function fetchApprovals() {
-      try {
-        const response = await fetch('/api/approvals');
-        if (!response.ok) throw new Error('Failed to fetch approvals');
-        state.approvals = await response.json();
-        renderApprovals();
-      } catch (e) {
-        console.error('Error fetching approvals:', e);
-      }
-    }
-
-    async function createMission(data) {
-      try {
-        const response = await fetch('/api/missions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-        if (!response.ok) throw new Error('Failed to create mission');
-        const mission = await response.json();
-        state.missions.push(mission);
-        renderMissions();
-        closeModal();
-        showToast(`Mission "${mission.name}" created successfully`, 'success');
-      } catch (e) {
-        console.error('Error creating mission:', e);
-        showToast('Failed to create mission', 'error');
-      }
-    }
-
-    async function approveMission(approvalId) {
-      try {
-        const response = await fetch(`/api/approvals/${approvalId}/approve`, {
-          method: 'POST'
-        });
-        if (!response.ok) throw new Error('Failed to approve');
-        state.approvals = state.approvals.filter(a => a.id !== approvalId);
-        renderApprovals();
-        showToast('Approval granted', 'success');
-      } catch (e) {
-        console.error('Error approving:', e);
-        showToast('Failed to approve', 'error');
-      }
-    }
-
-    async function rejectMission(approvalId) {
-      try {
-        const response = await fetch(`/api/approvals/${approvalId}/reject`, {
-          method: 'POST'
-        });
-        if (!response.ok) throw new Error('Failed to reject');
-        state.approvals = state.approvals.filter(a => a.id !== approvalId);
-        renderApprovals();
-        showToast('Approval rejected', 'warning');
-      } catch (e) {
-        console.error('Error rejecting:', e);
-        showToast('Failed to reject', 'error');
-      }
-    }
-
-    // Rendering Functions
-    function renderMissions() {
-      const tbody = document.getElementById('missions-list');
-      if (!state.missions.length) {
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="6" class="empty-state">
-              <div class="empty-state-icon"><i class="ph-inbox"></i></div>
-              <div class="empty-state-title">No missions yet</div>
-              <div>Create a new mission to get started</div>
-            </td>
-          </tr>
-        `;
-        updateKPIs();
-        return;
-      }
-
-      tbody.innerHTML = state.missions.map(mission => `
-        <tr>
-          <td class="mission-name">${escapeHtml(mission.name)}</td>
-          <td>
-            <span class="status-badge status-${mission.status}">
-              <span class="spinner" style="display: ${mission.status === 'running' ? 'inline-block' : 'none'};"></span>
-              ${mission.status.charAt(0).toUpperCase() + mission.status.slice(1)}
-            </span>
-          </td>
-          <td>
-            <div class="progress-bar">
-              <div class="progress-fill" style="width: ${mission.progress || 0}%"></div>
-            </div>
-            <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">${mission.progress || 0}%</div>
-          </td>
-          <td>${escapeHtml(mission.agent || 'Unassigned')}</td>
-          <td>${mission.priority || 'P3'}</td>
-          <td style="font-size: 11px; color: var(--text-secondary);">${formatTime(mission.created_at)}</td>
-        </tr>
-      `).join('');
-
-      updateKPIs();
-    }
-
-    function renderAgents() {
-      const grid = document.getElementById('agents-grid');
-      if (!state.agents.length) {
-        grid.innerHTML = `
-          <div class="empty-state" style="padding: 20px;">
-            <div class="empty-state-icon"><i class="ph-robot"></i></div>
-            <div class="empty-state-title">No agents connected</div>
-          </div>
-        `;
-        return;
-      }
-
-      grid.innerHTML = state.agents.map(agent => `
-        <div class="agent-card">
-          <div class="agent-header">
-            <div class="agent-name">${escapeHtml(agent.name)}</div>
-            <span class="agent-state ${agent.state}">
-              <i class="ph-circle-fill" style="font-size: 6px;"></i>
-              ${agent.state}
-            </span>
-          </div>
-          <div class="agent-stat">
-            <span>Current Task:</span>
-            <span class="agent-stat-value">${escapeHtml(agent.current_task || 'None')}</span>
-          </div>
-          <div class="agent-stat">
-            <span>Uptime:</span>
-            <span class="agent-stat-value">${agent.uptime_hours || 0}h</span>
-          </div>
-          <div class="agent-stat">
-            <span>Success Rate:</span>
-            <span class="agent-stat-value">${agent.success_rate || 0}%</span>
-          </div>
-        </div>
-      `).join('');
-
-      updateKPIs();
-    }
-
-    function renderActivity() {
-      const feed = document.getElementById('activity-feed');
-      if (!state.activities.length) {
-        feed.innerHTML = `
-          <div class="empty-state">
-            <div class="empty-state-icon"><i class="ph-radio-button-off"></i></div>
-            <div class="empty-state-title">No activity yet</div>
-            <div>Live events will appear here</div>
-          </div>
-        `;
-        return;
-      }
-
-      feed.innerHTML = state.activities.map(activity => `
-        <div class="activity-item ${activity.type}">
-          <div class="activity-icon">
-            ${getActivityIcon(activity.type)}
-          </div>
-          <div class="activity-content">
-            <div class="activity-message">${escapeHtml(activity.message)}</div>
-            <div class="activity-time">${formatTime(activity.timestamp)}</div>
-          </div>
-        </div>
-      `).join('');
-    }
-
-    function renderApprovals() {
-      const list = document.getElementById('approvals-list');
-      const panel = document.getElementById('approvals-panel');
-
-      if (!state.approvals.length) {
-        list.innerHTML = `
-          <div class="empty-state">
-            <div class="empty-state-icon"><i class="ph-check-circle"></i></div>
-            <div class="empty-state-title">All clear!</div>
-            <div>No pending approvals</div>
-          </div>
-        `;
-        panel.innerHTML = `
-          <div class="empty-state" style="padding: 20px;">
-            <div class="empty-state-icon"><i class="ph-seal-check"></i></div>
-            <div class="empty-state-title">No pending items</div>
-          </div>
-        `;
-        return;
-      }
-
-      const html = state.approvals.map(approval => `
-        <div class="approval-item">
-          <div class="approval-title">${escapeHtml(approval.title)}</div>
-          <div class="approval-desc">${escapeHtml(approval.description)}</div>
-          <div class="approval-actions">
-            <button class="btn btn-approve" onclick="approveMission('${approval.id}')">Approve</button>
-            <button class="btn btn-reject" onclick="rejectMission('${approval.id}')">Reject</button>
-          </div>
-        </div>
-      `).join('');
-
-      list.innerHTML = html || list.innerHTML;
-      panel.innerHTML = html || panel.innerHTML;
-    }
-
-    function updateKPIs(metrics = {}) {
-      const completed = metrics.completed_today || state.missions.filter(m => m.status === 'succeeded').length;
-      const avgTime = metrics.avg_completion_time || 45;
-      const successRate = metrics.success_rate || (state.missions.length ? Math.round((state.missions.filter(m => m.status === 'succeeded').length / state.missions.length) * 100) : 0);
-      const activeAgents = metrics.active_agents || state.agents.filter(a => a.state === 'working').length;
-      const queueDepth = metrics.queue_depth || state.missions.filter(m => m.status === 'queued').length;
-
-      document.getElementById('kpi-completed').textContent = completed;
-      document.getElementById('kpi-completion-time').textContent = avgTime;
-      document.getElementById('kpi-success-rate').textContent = `${successRate}%`;
-      document.getElementById('kpi-active-agents').textContent = activeAgents;
-      document.getElementById('kpi-queue-depth').textContent = queueDepth;
-    }
-
-    function populateAgentSelect() {
-      const select = document.getElementById('mission-agent');
-      select.innerHTML = '<option value="">Select an agent...</option>' +
-        state.agents.map(agent => `<option value="${agent.id}">${escapeHtml(agent.name)}</option>`).join('');
-    }
-
-    // Utility Functions
-    function showToast(message, type = 'info') {
-      const container = document.getElementById('toast-container');
-      const toast = document.createElement('div');
-      toast.className = `toast ${type}`;
-      toast.innerHTML = `
-        <i class="ph-${getToastIcon(type)}" style="font-size: 16px;"></i>
-        <span>${escapeHtml(message)}</span>
-      `;
-      container.appendChild(toast);
-      setTimeout(() => toast.remove(), 4000);
-    }
-
-    function getToastIcon(type) {
-      const icons = {
-        success: 'check-circle',
-        error: 'warning-circle',
-        warning: 'warning',
-        info: 'info'
-      };
-      return icons[type] || icons.info;
-    }
-
-    function getActivityIcon(type) {
-      const icons = {
-        action: 'arrow-right',
-        success: 'check-circle',
-        error: 'warning-circle',
-        warning: 'warning'
-      };
-      const icon = icons[type] || icons.action;
-      return `<i class="ph-${icon}"></i>`;
-    }
-
-    function formatTime(timestamp) {
-      if (!timestamp) return 'now';
-      const date = new Date(timestamp);
-      const now = new Date();
-      const diff = Math.floor((now - date) / 1000);
-
-      if (diff < 60) return `${diff}s ago`;
-      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-      if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-      return date.toLocaleDateString();
-    }
-
-    function escapeHtml(text) {
-      const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-      return text.replace(/[&<>"']/g, c => map[c]);
-    }
-
-    function sortTable(th) {
-      const table = document.getElementById('missions-table');
-      const tbody = table.querySelector('tbody');
-      const rows = Array.from(tbody.querySelectorAll('tr')).filter(r => r.cells[0] !== r.querySelector('[colspan]'));
-      const index = Array.from(th.parentNode.children).indexOf(th);
-
-      rows.sort((a, b) => {
-        const aVal = a.cells[index].textContent.trim();
-        const bVal = b.cells[index].textContent.trim();
-        return aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-      });
-
-      tbody.innerHTML = '';
-      rows.forEach(row => tbody.appendChild(row));
-    }
-
-    function openModal() {
-      document.getElementById('mission-modal').classList.add('active');
-    }
-
-    function closeModal() {
-      document.getElementById('mission-modal').classList.remove('active');
-      document.getElementById('mission-form').reset();
-    }
-
-    // Event Listeners
-    document.getElementById('btn-new-mission').addEventListener('click', openModal);
-
-    document.getElementById('mission-form').addEventListener('submit', (e) => {
-      e.preventDefault();
-      const formData = new FormData(e.target);
-      const data = {
-        name: formData.get('mission-name'),
-        goal: formData.get('mission-goal'),
-        priority: formData.get('priority'),
-        agent_id: formData.get('mission-agent'),
-        autonomy: formData.get('mission-autonomy'),
-        schedule_type: formData.get('schedule-type'),
-        cron: formData.get('schedule-type') === 'cron' ? formData.get('mission-cron') : null,
-        risk_class: formData.get('mission-risk')
-      };
-      createMission(data);
+  function bindControls() {
+    byId('missionRefreshButton').addEventListener('click', () => void refreshAll({ fresh: true }));
+    byId('missionNewButton').addEventListener('click', () => toggleCreatePanel(true));
+    byId('missionCreateClose').addEventListener('click', () => toggleCreatePanel(false));
+    byId('missionMode').addEventListener('change', updateScheduleFields);
+    byId('missionCreateForm').addEventListener('submit', createMission);
+    byId('jobFilters').addEventListener('click', (event) => {
+      if (!(event.target instanceof Element)) return;
+      const button = event.target.closest('button[data-filter]');
+      if (!button) return;
+      state.filter = safe(button.dataset.filter) || 'active';
+      byId('jobFilters').querySelectorAll('button').forEach((item) => item.classList.toggle('is-active', item === button));
+      renderJobs();
     });
-
-    document.querySelectorAll('input[name="schedule-type"]').forEach(radio => {
-      radio.addEventListener('change', (e) => {
-        document.getElementById('cron-group').style.display = e.target.value === 'cron' ? 'block' : 'none';
-      });
+    byId('jobsList').addEventListener('click', (event) => {
+      if (!(event.target instanceof Element)) return;
+      const button = event.target.closest('button[data-job-action][data-job-id]');
+      if (button) void runJobAction(safe(button.dataset.jobId), safe(button.dataset.jobAction));
     });
-
-    document.querySelectorAll('.tab').forEach(tab => {
-      tab.addEventListener('click', (e) => {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-        e.target.classList.add('active');
-        const tabName = e.target.dataset.tab;
-        document.getElementById(`tab-${tabName}`).classList.add('active');
-      });
+    byId('approvalsList').addEventListener('click', (event) => {
+      if (!(event.target instanceof Element)) return;
+      const button = event.target.closest('button[data-approval-key][data-approval-action]');
+      if (button) void resolveApproval(safe(button.dataset.approvalKey), safe(button.dataset.approvalAction));
     });
-
-    document.querySelectorAll('.nav-item').forEach(item => {
-      item.addEventListener('click', (e) => {
-        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-        e.currentTarget.classList.add('active');
-      });
-    });
-
-    document.getElementById('toggle-filter').addEventListener('click', () => {
-      alert('Filter functionality ready for implementation');
-    });
-
-    document.getElementById('mission-modal').addEventListener('click', (e) => {
-      if (e.target === document.getElementById('mission-modal')) closeModal();
-    });
-
-    // Initialize
-    function init() {
-      connectWebSocket();
-      fetchMissions();
-      fetchAgents();
-      fetchApprovals();
-
-      // Auto-refresh every 30 seconds as fallback
-      setInterval(() => {
-        if (!state.connected) {
-          fetchMissions();
-          fetchAgents();
-          fetchApprovals();
-        }
-      }, 30000);
-    }
-
-    // Keyboard accessibility
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeModal();
-      if (e.ctrlKey && e.key === 'n') {
-        e.preventDefault();
-        openModal();
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        stopStream(); stopFallbackPolling();
+      } else {
+        void refreshAll({ silent: true }); void startStream();
       }
     });
+  }
 
-    // Start the application
-    window.addEventListener('load', init);
-  
+  async function boot() {
+    bindControls();
+    try { byId('missionTimezone').value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (_) { byId('missionTimezone').value = 'UTC'; }
+    updateScheduleFields();
+    renderAll();
+    await refreshAll({ silent: true });
+    state.jobsTimer = window.setInterval(() => void refreshJobs(), JOBS_REFRESH_MS);
+    void startStream();
+  }
+
+  void boot();
+})();

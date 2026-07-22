@@ -32,8 +32,8 @@ def test_chat_shell_settings_button_opens_embedded_settings_workspace() -> None:
     text = CHAT_HTML.read_text(encoding="utf-8")
 
     assert 'id="tc-settings"' in text
-    assert "mode === 'settings'" in text
-    assert "? '/settings?embed=1'" in text
+    assert "settings: '/settings?embed=1'" in text
+    assert "const route = WORKSPACE_ROUTES[mode]" in text
     assert "document.getElementById('tc-settings').addEventListener('click', () => openWorkspace('settings'));" in text
 
 

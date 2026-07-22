@@ -102,13 +102,15 @@ function officeDraftAgentUiVisibility(state, agent, activity, selected, now = pe
     const clicked = clickedAt > 0 && clickedAt + 6600 > (Number(now) || performance.now());
     const dropped = dropUntil > 0 && dropUntil > (Number(now) || performance.now());
     const focused = Boolean(selected || hovered || clicked || dropped || agent?.draftMotion?.dragging);
-    const densityAllowsNames = Math.max(1, Number(total) || 1) <= 3;
-    const activeAgentId = safeString(state?.expandedRosterAgentId || officeState?.selectedAgentId);
+    // A focused room should read as a staffed office, not as anonymous furniture.
+    // At a legible room zoom there is enough space for the compact name labels;
+    // keep the stricter density rule for overview and mobile zoom levels.
+    const densityAllowsNames = Math.max(1, Number(total) || 1) <= 3 || zoom >= 0.72;
     const speechText = typeof officeVisibleSpeech === 'function' ? officeVisibleSpeech(agent, now) : safeString(agent?.speech);
     const speechContext = activity === 'talking' || activity === 'paused' || activity === 'dropped';
     return {
         focused,
-        showName: focused || (!activeAgentId && densityAllowsNames && zoom >= OFFICE_DRAFT_AGENT_NAME_ZOOM),
+        showName: focused || (densityAllowsNames && zoom >= OFFICE_DRAFT_AGENT_NAME_ZOOM),
         showStatus: false,
         showProp: false,
         showBubble: Boolean(safeString(speechText) && speechContext),

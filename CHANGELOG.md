@@ -324,17 +324,42 @@ Versioning: Semantic Versioning.
 - Multi-deliverable chat asks joined by "and"/"also" (e.g. "make a game and also a graph") produced one worker that built only the first item. The operator prompt now instructs one `send_task` per distinct deliverable; a single multi-attribute deliverable stays one task. (Complements the per-worker brief fix in 0.19.0.)
 
 ## [Unreleased]
+## [0.19.1] - 2026-07-21
 
 ### Added
+
+- Added one shared Thomas UI Edit Mode contract and runtime for modernized workspaces: stable semantic component identities, live move/eight-way resize, keyboard editing, snapping/guides, lock, undo/redo/reset/export, protected-control policies, and isolated desktop/tablet/mobile persistence. Normal Thomas Chat remains visually unchanged and editor chrome appears only while Edit Mode is invoked.
+
+- Added focused workspace contracts for Canvas, Channels, Marketplace, My Stuff, Token Economy, and Virtual Office so their live controls, backend wiring, and semantic edit identities are covered independently of the shared shell.
+
+- Added explicit Edit Mode draft/commit recovery: **Done & Save** commits, **Cancel** and **Escape** restore the last saved layout, **Previous** restores bounded saved history, and covered or stacked regions remain selectable through the semantic region picker. AI Edit stages the selected component identity and owner prompt with the active surface's Thomas identity.
+
+- Added Canvas creation modes for Design, Draw, and a live Three.js 3D fabrication workspace with GLTF/STL export controls.
+
+- Added one shared workspace Chat drawer and direct resident-specialist runtime. Each workspace receives isolated history plus a bounded server-owned action vocabulary; workspace turns cannot enter General Chat's task-manager, delegation, or autopilot paths, and guarded mutations require authoritative readback before success is reported.
 
 - Generative per-job dashboards (Work mode, pillar 3): a new `dashboard/design` endpoint has an LLM read one job's real context (onboarding, workflows, automations, connectors) and design a bespoke dashboard — headline, metrics, guidance sections, inboxes, and ACTION BUTTONS bound only to the job's own workflows (`work_dashboard_runtime.py`, dashboard schema extended with headline/actions/inboxes). Buttons run through the existing Mission delegation path (`dashboard/actions/{id}/run`); the Work tab renders the design with "Design my dashboard"/"Redesign with AI" controls. Verified live: the SOTI MobiControl job received a compliance-sweep dashboard whose button dispatched a real Mission run with honest failure reporting.
 
 ### Fixed
 
+- Made the shared workspace shell and UI Edit Mode preserve the live Chat top bar, resident Chat action, breakpoint-safe layouts, and real control handlers across every modernized route; retired the two owner-approved legacy Virtual Office bundle copies after moving CLI roster discovery to the canonical native office source.
+
+- Kept the literal Thomas Chat model/Canvas/theme bar mounted above every workspace, removed welcome-robot and composer bleed behind embedded tools, and bounded route switching to one persistent classic runtime plus one direct-route frame so repeated navigation does not continually rebuild the expensive workspace runtime.
+- Removed eight unreachable duplicate Virtual Office standalone bundles after confirming the native current workspace owns the live route, preventing the retired couch-heavy renderer from returning through legacy paths.
 - Guardrails default ON (product decision D6 executed): `/api/health` reports `ok` instead of permanently `degraded`, and Work-mode autonomy handoffs stop dead-ending on "guardrails are unavailable". Opt out via `THOMAS_GUARDRAILS=0` or `policy.toml`. Verified live: chat execution unaffected with guardrails enabled.
 - `release_update` gate: the per-commit helper lane now accepts branch-wide release proof (version bumped + changelog updated relative to the merge-base with the canonical branch) instead of demanding the three release files dirty in every product-surface commit — the structural catch-22 that stranded agent work since 2026-06-26. Direct canonical-branch commits still require release files in the change set; enforcement manifest re-blessed for the edited gate.
 
 ### Changed
+
+- Recorded the final local-only corrective proof and workboard handoff: eight routes, five themes, resident specialists, UI Edit Mode persistence, and repeated-route stability are complete for owner testing but remain unapproved for integration.
+
+- Finished the owner corrective route pass: Library is now a dense full-width tool, Marketplace separates proof-backed installs from Potential, Channels opens as a live signal workspace instead of an icon wall, Token Economy and Mission Control inherit the exact Chat world, and Settings no longer paints a competing embedded background.
+
+- Completed the eight-workspace modernization against locked Thomas Chat tokens and identity: Mission Control, Virtual Office, Canvas, Library (internal `my_stuff`), Channels, Token Economy, Marketplace, and Settings now share Chat's exact five-theme contract and 30px eyes mark. Mission Control, Library, and Settings use bounded direct routes; the remaining classic loader fetches 96 split runtime files in parallel with declared-order execution; loaded workspaces remain mounted when returning to Chat; and UI Editor is now owner-facing Canvas.
+
+- Renamed owner-facing My Stuff to **Library** and replaced its landing-page hero with a dense full-workspace app, project, creation, and file tool. Reworked Token Economy into a compact 70/30 operational console. Marketplace now uses proof-gated Verified Store and local Potential views with bounded carousels, mixed feature heroes, category-specific icon treatment, and no manufactured install actions.
+
+- Replaced Channels' generic 36-integration icon wall with an operational Discord-to-Thomas-to-Owner signal surface. The real Discord lifecycle and voice controls remain primary, while 35 unconfigured connections stay collapsed in a searchable planned catalog.
 
 - Merged `dev` (land.py lane, gate-surface green, evolve monolith split) into the unified 0.19.0 branch; version resolves to 0.19.0, both monolith splits coexist (`evolve_charter`/`evolve_arch_sync`/`evolve_prompts` from dev + `evolve_charter_store`/`evolve_architecture_health` from the branch), enforcement manifest regenerated for the merged scripts, and the dropped dev-side debt annotations restored. `reasoning.py` slimmed under the soft limit by extracting `reasoning_task_briefs.py` (single source for raw-ask vs per-worker briefs).
 - Fresh chats default to Agent autonomy (dial 3) with a one-time migration for stored dial state, so an out-of-box ask executes instead of replying "raise autonomy and resend"; guardrails stay Guarded. (Thomas-Agent: claude)

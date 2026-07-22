@@ -26,6 +26,8 @@
   <link rel="stylesheet" href="/static/css/unified_code_results.css?v=__THOMAS_WEB_BUILD__">
   <link rel="stylesheet" href="/static/css/unified_work_mode.css?v=__THOMAS_WEB_BUILD__">
   <link rel="stylesheet" href="/static/css/unified_work_details.css?v=__THOMAS_WEB_BUILD__">
+  <link rel="stylesheet" href="/static/css/ui_edit_mode.css?v=__THOMAS_WEB_BUILD__">
+  <link rel="stylesheet" href="/static/css/workspace_chat_drawer.css?v=__THOMAS_WEB_BUILD__">
   <style>
     /* Local, deterministic icon fallback: the chat shell must boot offline. */
     .ph { display: inline-grid; place-items: center; width: 1.1em; font-style: normal; font-weight: 700; }
@@ -178,9 +180,9 @@
     @keyframes tc-blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
   </style>
 </head>
-<body>
+<body data-ui-workspace="chat">
   <!-- Shell. Default vars below = Nebula Core (mirrors the design's inline root). -->
-  <div id="tc-shell" class="tc-shell" data-theme="nebula" style="position: relative; display: flex; height: 100vh; width: 100%; overflow: hidden; font-family: var(--font-sans); color: var(--c-text); background: var(--c-bg); --c-bg: #070912; --c-sidebar: rgba(11,14,26,0.72); --c-surface: rgba(255,255,255,0.04); --c-surface-2: rgba(255,255,255,0.08); --c-hover: rgba(255,255,255,0.06); --c-border: rgba(255,255,255,0.10); --c-border-2: rgba(255,255,255,0.17); --c-text: #eef0fb; --c-dim: rgba(238,240,251,0.66); --c-muted: rgba(238,240,251,0.42); --c-accent: #8b8cff; --c-accent-ink: #0a0b16; --c-accent-soft: rgba(139,140,255,0.16); --c-accent-line: rgba(139,140,255,0.45); --c-user-bg: rgba(124,118,235,0.20); --c-user-text: #eef0fb; --c-composer-bg: rgba(16,19,34,0.86); --c-menu-bg: #15142b; --c-shadow: 0 18px 50px rgba(2,4,12,0.55); --bot-primary: #9ad8ff; --bot-secondary: #5aaeff; --bot-glow: rgba(90,174,255,0.5); --bot-trim: #0d1117; --r-card: 14px; --r-composer: 18px; --font-head: 'Manrope', system-ui, sans-serif; --font-label: 'Manrope', system-ui, sans-serif; --font-sans: 'Manrope', system-ui, sans-serif; --font-serif: 'Newsreader', Georgia, serif; --font-mono: 'JetBrains Mono', ui-monospace, monospace; --sidebar-margin: 0;">
+  <div id="tc-shell" class="tc-shell" data-theme="nebula" data-ui-id="chat.shell" data-ui-label="Thomas Chat shell" data-ui-policy="root protected" style="position: relative; display: flex; height: 100vh; width: 100%; overflow: hidden; font-family: var(--font-sans); color: var(--c-text); background: var(--c-bg); --c-bg: #070912; --c-sidebar: rgba(11,14,26,0.72); --c-surface: rgba(255,255,255,0.04); --c-surface-2: rgba(255,255,255,0.08); --c-hover: rgba(255,255,255,0.06); --c-border: rgba(255,255,255,0.10); --c-border-2: rgba(255,255,255,0.17); --c-text: #eef0fb; --c-dim: rgba(238,240,251,0.66); --c-muted: rgba(238,240,251,0.42); --c-accent: #8b8cff; --c-accent-ink: #0a0b16; --c-accent-soft: rgba(139,140,255,0.16); --c-accent-line: rgba(139,140,255,0.45); --c-user-bg: rgba(124,118,235,0.20); --c-user-text: #eef0fb; --c-composer-bg: rgba(16,19,34,0.86); --c-menu-bg: #15142b; --c-shadow: 0 18px 50px rgba(2,4,12,0.55); --bot-primary: #9ad8ff; --bot-secondary: #5aaeff; --bot-glow: rgba(90,174,255,0.5); --bot-trim: #0d1117; --r-card: 14px; --r-composer: 18px; --font-head: 'Manrope', system-ui, sans-serif; --font-label: 'Manrope', system-ui, sans-serif; --font-sans: 'Manrope', system-ui, sans-serif; --font-serif: 'Newsreader', Georgia, serif; --font-mono: 'JetBrains Mono', ui-monospace, monospace; --sidebar-margin: 0;">
 
     <!-- ===================== LIVING WORLDS (behind everything) ===================== -->
     <div aria-hidden="true" style="position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;">
@@ -271,7 +273,7 @@
     </div>
 
     <!-- ===================== SIDEBAR ===================== -->
-    <aside class="tc-sidebar" style="position: relative; z-index: 2; flex: 0 0 auto; width: 280px; display: flex; flex-direction: column; background: var(--c-sidebar); border-right: 1px solid var(--c-border); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); transition: margin-left 0.28s cubic-bezier(.4,0,.2,1); margin-left: var(--sidebar-margin, 0);">
+    <aside class="tc-sidebar" data-ui-id="chat.sidebar" data-ui-label="Chat sidebar" data-ui-policy="move resize" data-ui-constraints="minWidth=220;minHeight=420;maxWidth=420" style="position: relative; z-index: 2; flex: 0 0 auto; width: 280px; display: flex; flex-direction: column; background: var(--c-sidebar); border-right: 1px solid var(--c-border); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); transition: margin-left 0.28s cubic-bezier(.4,0,.2,1); margin-left: var(--sidebar-margin, 0);">
       <div style="display: flex; align-items: center; justify-content: space-between; padding: 18px 16px 14px;">
         <div style="display: flex; align-items: center; gap: 10px;">
           <span style="width: 30px; height: 30px; border-radius: 9px; background: var(--c-accent); display: grid; place-items: center; box-shadow: 0 0 18px var(--c-accent-soft); flex: 0 0 auto;">
@@ -282,13 +284,13 @@
           </span>
           <span style="font-weight: 800; font-size: 18px; letter-spacing: -0.01em;">Thomas</span>
         </div>
-        <button id="tc-newchat-top" class="hv-icon" title="New chat" style="width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--c-border); background: transparent; color: var(--c-dim); display: grid; place-items: center; cursor: pointer; transition: all .15s;">
+        <button id="tc-newchat-top" class="hv-icon" title="New chat" data-ui-id="chat.action.new-top" data-ui-label="New chat" data-ui-policy="control" style="width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--c-border); background: transparent; color: var(--c-dim); display: grid; place-items: center; cursor: pointer; transition: all .15s;">
           <i class="ph ph-pencil-simple-line" style="font-size: 17px;"></i>
         </button>
       </div>
 
       <div style="padding: 0 12px 12px;">
-        <div id="tc-mode-switch" role="tablist" aria-label="Thomas mode">
+        <div id="tc-mode-switch" role="tablist" aria-label="Thomas mode" data-ui-id="chat.mode-switch" data-ui-label="Chat Code Work switch" data-ui-policy="move">
           <button type="button" class="tc-mode-button is-active" role="tab" aria-selected="true" tabindex="0" data-thomas-mode="chat"><i class="ph ph-chats-circle" aria-hidden="true"></i><span>Chat</span></button>
           <button type="button" class="tc-mode-button" role="tab" aria-selected="false" tabindex="-1" data-thomas-mode="code"><i class="ph ph-code" aria-hidden="true"></i><span>Code</span></button>
           <button type="button" class="tc-mode-button" role="tab" aria-selected="false" tabindex="-1" data-thomas-mode="work"><i class="ph ph-briefcase" aria-hidden="true"></i><span>Work</span></button>
@@ -300,34 +302,30 @@
       </div>
 
       <nav style="flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 4px 12px 12px;">
-        <button id="tc-newchat" class="hv-newchat" style="flex: 0 0 auto; width: 100%; display: flex; align-items: center; gap: 9px; padding: 9px 11px; margin-bottom: 8px; border-radius: 10px; border: 1px dashed var(--c-border-2); background: transparent; color: var(--c-text); font-family: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: all .15s;">
+        <button id="tc-newchat" class="hv-newchat" data-ui-id="chat.action.new" data-ui-label="New chat button" data-ui-policy="control" style="flex: 0 0 auto; width: 100%; display: flex; align-items: center; gap: 9px; padding: 9px 11px; margin-bottom: 8px; border-radius: 10px; border: 1px dashed var(--c-border-2); background: transparent; color: var(--c-text); font-family: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: all .15s;">
           <i class="ph ph-plus" style="font-size: 15px;"></i> New chat
         </button>
         <div id="tc-history-label" style="flex: 0 0 auto; font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--c-muted); padding: 10px 6px 6px;">Recent chats</div>
-        <div id="tc-chats" class="tc-scroll" style="flex: 1 1 auto; min-height: 60px; overflow-y: auto;"></div>
+        <div id="tc-chats" class="tc-scroll" data-ui-id="chat.history" data-ui-label="Recent chats" data-ui-policy="move resize" data-ui-constraints="minWidth=180;minHeight=60" style="flex: 1 1 auto; min-height: 60px; overflow-y: auto;"></div>
         <div style="flex: 0 0 auto; font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--c-muted); padding: 14px 6px 6px; border-top: 1px solid var(--c-border); margin-top: 6px;">Workspaces</div>
-        <div id="tc-workspaces" style="flex: 0 0 auto; max-height: 42%; overflow-y: auto;" class="tc-scroll"></div>
+        <div id="tc-workspaces" data-ui-id="chat.workspaces" data-ui-label="Workspaces" data-ui-policy="move resize" data-ui-constraints="minWidth=180;minHeight=120" style="flex: 0 0 auto; max-height: 42%; overflow-y: auto;" class="tc-scroll"></div>
       </nav>
 
       <div style="padding: 10px 12px; border-top: 1px solid var(--c-border);">
-        <button id="tc-settings" class="hv-soft" style="width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--c-dim); font-family: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; transition: all .14s;">
+        <button id="tc-settings" class="hv-soft" data-ui-id="chat.action.settings" data-ui-label="Settings button" data-ui-policy="control" style="width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--c-dim); font-family: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; transition: all .14s;">
           <i class="ph ph-gear-six" style="font-size: 17px;"></i> Settings
         </button>
       </div>
     </aside>
 
     <!-- ===================== MAIN ===================== -->
-    <main style="position: relative; z-index: 1; flex: 1; min-width: 0; display: flex; flex-direction: column;">
-      <!-- Workspace surface: a workspace's existing content is embedded here with the
-           legacy chrome hidden (?embed=1), so it opens INSIDE the new shell. The old
-           UI never appears. -->
-      <iframe id="tc-ws-frame" title="Workspace" style="display: none; position: absolute; inset: 0; width: 100%; height: 100%; border: 0; z-index: 20; background: var(--c-bg);"></iframe>
-      <header style="flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--c-border);">
+    <main data-ui-id="chat.main" data-ui-label="Chat workspace" data-ui-policy="root protected" style="position: relative; z-index: 1; flex: 1; min-width: 0; display: flex; flex-direction: column;">
+      <header data-ui-id="chat.topbar" data-ui-label="Top toolbar" data-ui-policy="move resize" data-ui-constraints="minWidth=360;minHeight=50" style="flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--c-border);">
         <button id="tc-sidebar-toggle" class="hv-icon" title="Toggle sidebar" style="width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--c-border); background: transparent; color: var(--c-dim); display: grid; place-items: center; cursor: pointer; transition: all .15s;">
           <i class="ph ph-sidebar-simple" style="font-size: 17px;"></i>
         </button>
         <div style="position: relative;" data-model-switch="1">
-          <button id="tc-model-btn" class="hv-pill" title="Switch model" style="display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-family: var(--font-label); font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;">
+          <button id="tc-model-btn" class="hv-pill" title="Switch model" data-ui-id="chat.action.model" data-ui-label="Model switcher" data-ui-policy="control" style="display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-family: var(--font-label); font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;">
             <span style="width: 7px; height: 7px; border-radius: 999px; background: var(--c-accent); box-shadow: 0 0 8px var(--c-accent);"></span>
             <span id="tc-model">GPT-5.6 Sol</span>
             <i class="ph ph-caret-down" style="font-size: 12px; color: var(--c-muted);"></i>
@@ -338,11 +336,11 @@
           </div>
         </div>
         <div style="flex: 1;"></div>
-        <button id="tc-canvas-btn" class="hv-surface" title="Open Thomas Canvas" style="display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--c-accent-line); background: var(--c-accent-soft); color: var(--c-text); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;">
-          <i class="ph ph-chalkboard-simple" style="font-size: 16px; color: var(--c-accent);"></i> Canvas
+        <button id="tc-canvas-btn" class="hv-surface" title="Open Thomas Canvas" data-ui-id="chat.action.canvas" data-ui-label="Canvas button" data-ui-policy="control" style="display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--c-accent-line); background: var(--c-accent-soft); color: var(--c-text); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;">
+          <i id="tc-primary-action-icon" class="ph ph-chalkboard-simple" style="font-size: 16px; color: var(--c-accent);"></i><span id="tc-primary-action-label">Canvas</span>
         </button>
         <div style="position: relative;" data-theme-switch="1">
-          <button id="tc-theme-btn" class="hv-pill" title="Switch theme" style="display: flex; align-items: center; gap: 9px; padding: 7px 11px 7px 9px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;">
+          <button id="tc-theme-btn" class="hv-pill" title="Switch theme" data-ui-id="chat.action.theme" data-ui-label="Theme switcher" data-ui-policy="control" style="display: flex; align-items: center; gap: 9px; padding: 7px 11px 7px 9px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;">
             <span style="display: inline-flex; border-radius: 6px; overflow: hidden; border: 1px solid var(--c-border-2);">
               <span id="tc-sw1" style="width: 11px; height: 18px; background: var(--sw-1);"></span>
               <span id="tc-sw2" style="width: 11px; height: 18px; background: var(--sw-2);"></span>
@@ -359,16 +357,19 @@
       </header>
 
       <!-- body row: chat column + canvas column -->
-      <div id="tc-body-row" style="flex: 1; min-height: 0; display: flex;">
+      <div id="tc-body-row" data-ui-id="chat.body" data-ui-label="Conversation workspace" data-ui-policy="move resize" data-ui-constraints="minWidth=360;minHeight=360" style="position: relative; flex: 1; min-height: 0; display: flex;">
+        <!-- The one live workspace frame is deliberately inside the body row. The
+             literal Chat top bar above it never disappears or gets duplicated. -->
+        <iframe id="tc-ws-frame" class="tc-workspace-frame" title="Workspace" style="display: none; position: absolute; inset: 0; width: 100%; height: 100%; border: 0; z-index: 20; background: transparent;"></iframe>
         <div id="tc-primary-column" style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
           <section id="tc-mode-surface" aria-live="polite" aria-label="Mode workspace" style="display:none;"></section>
           <div id="tc-scroll" class="tc-scroll" style="flex: 1; min-height: 0; overflow-y: auto;">
             <!-- WELCOME -->
-            <div id="tc-welcome" class="tc-rail" style="max-width: 720px; margin: 0 auto; padding: clamp(20px, 4vh, 56px) 24px 32px; display: flex; flex-direction: column; align-items: center; text-align: center;">
+            <div id="tc-welcome" class="tc-rail" data-ui-id="chat.welcome" data-ui-label="Welcome dashboard" data-ui-policy="move resize" data-ui-constraints="minWidth=320;minHeight=260" style="max-width: 720px; margin: 0 auto; padding: clamp(20px, 4vh, 56px) 24px 32px; display: flex; flex-direction: column; align-items: center; text-align: center;">
               <div style="height: 124px; display: grid; place-items: center; margin-bottom: 2px; animation: tc-hover 4.2s ease-in-out infinite;" data-bot data-primary="var(--bot-primary)" data-secondary="var(--bot-secondary)" data-trim="var(--bot-trim)" data-glow="var(--bot-glow)" data-scale="2.5" data-flame="true"></div>
               <h1 id="tc-welcome-title" style="margin: 0; font-family: var(--font-head); font-size: clamp(28px, 4vw, 38px); font-weight: 800; letter-spacing: -0.02em;">Where to, Captain?</h1>
               <p id="tc-welcome-sub" style="margin: 10px 0 0; font-size: 16px; color: var(--c-dim); max-width: 460px; line-height: 1.6;">Thomas understands the ask, acts within your boundaries, and shows you what changed.</p>
-              <div id="tc-cards" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 30px; width: 100%;"></div>
+              <div id="tc-cards" data-ui-id="chat.prompt-cards" data-ui-label="Prompt cards" data-ui-policy="move resize" data-ui-constraints="minWidth=280;minHeight=100" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 30px; width: 100%;"></div>
             </div>
 
             <!-- THREAD -->
@@ -376,7 +377,7 @@
           </div>
 
           <!-- composer -->
-          <div style="flex: 0 0 auto; padding: 6px 18px 18px;">
+          <div data-ui-id="chat.composer" data-ui-label="Message composer" data-ui-policy="move resize" data-ui-constraints="minWidth=320;minHeight=90" style="flex: 0 0 auto; padding: 6px 18px 18px;">
             <div class="tc-rail" style="max-width: 768px; margin: 0 auto;">
               <div style="position: relative; display: flex; flex-direction: column; gap: 8px; background: var(--c-composer-bg); border: 1px solid var(--c-border-2); border-radius: var(--r-composer); padding: 12px 14px; box-shadow: var(--c-shadow); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); overflow: visible;">
                 <div style="position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--composer-accent, transparent);"></div>
@@ -392,7 +393,7 @@
                   <button id="tc-code-project-btn" class="hv-icon" title="Choose project folder" hidden style="display: none; align-items: center; gap: 7px; max-width: 220px; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--c-border); background: transparent; color: var(--c-dim); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;"><i class="ph ph-folder-open" style="font-size: 16px;"></i><span>Project</span></button>
                   <div style="flex: 1;"></div>
                   <button id="tc-mic-btn" class="hv-icon" title="Voice input" style="width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--c-border); background: transparent; color: var(--c-dim); display: grid; place-items: center; cursor: pointer; transition: all .15s;"><i class="ph ph-microphone" style="font-size: 18px;"></i></button>
-                  <button id="tc-send" title="Send" style="width: 40px; height: 40px; border-radius: 12px; border: 0; background: var(--send-bg, var(--c-surface-2)); color: var(--send-ink, var(--c-muted)); display: grid; place-items: center; cursor: var(--send-cursor, default); transition: all .18s; opacity: var(--send-op, 0.85);"><i id="tc-send-icon" class="ph ph-arrow-up" style="font-size: 19px; font-weight: 700;"></i></button>
+                  <button id="tc-send" title="Send" data-ui-id="chat.action.send" data-ui-label="Send message" data-ui-policy="control" style="width: 40px; height: 40px; border-radius: 12px; border: 0; background: var(--send-bg, var(--c-surface-2)); color: var(--send-ink, var(--c-muted)); display: grid; place-items: center; cursor: var(--send-cursor, default); transition: all .18s; opacity: var(--send-op, 0.85);"><i id="tc-send-icon" class="ph ph-arrow-up" style="font-size: 19px; font-weight: 700;"></i></button>
                 </div>
               </div>
               <p style="text-align: center; margin: 9px 0 0; font-size: 11.5px; color: var(--c-muted);">Thomas can make mistakes. Consider verifying important information.</p>
@@ -401,7 +402,7 @@
         </div>
 
         <!-- ===================== THOMAS CANVAS ===================== -->
-        <aside id="tc-canvas" style="display: none; flex: 0 0 auto; width: clamp(340px, 40vw, 560px); border-left: 1px solid var(--c-border); background: var(--c-sidebar); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); flex-direction: column;">
+        <aside id="tc-canvas" data-ui-id="chat.canvas-panel" data-ui-label="Thomas Canvas panel" data-ui-policy="move resize" data-ui-constraints="minWidth=320;minHeight=360;maxWidth=760" style="display: none; flex: 0 0 auto; width: clamp(340px, 40vw, 560px); border-left: 1px solid var(--c-border); background: var(--c-sidebar); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); flex-direction: column;">
           <div style="flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--c-border);">
             <span style="width: 28px; height: 28px; border-radius: 8px; background: var(--c-accent); display: grid; place-items: center; flex: 0 0 auto;">
               <span style="display: flex; gap: 3px;"><span style="width: 4px; height: 5px; border-radius: 1px; background: var(--c-accent-ink);"></span><span style="width: 4px; height: 5px; border-radius: 1px; background: var(--c-accent-ink);"></span></span>
@@ -418,11 +419,17 @@
     </main>
   </div>
 
+  <script src="/static/js/workspace_shell.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/ui_edit_layout.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/ui_edit_mode.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/unified_mode_shell.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/unified_code_lifecycle.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/unified_code_mode.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/unified_work_support.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/unified_work_mode.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/workspace_chat_transport.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/workspace_chat_drawer_view.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/workspace_chat_drawer.js?v=__THOMAS_WEB_BUILD__"></script>
   <script>
   (function () {
     "use strict";
@@ -535,6 +542,7 @@
     function applyTheme(name) {
       const t = THEMES[name]; if (!t) return;
       Object.entries(t.vars).forEach(([k, v]) => shell.style.setProperty(k, v));
+      if (window.ThomasWorkspaceShell) window.ThomasWorkspaceShell.applyTheme(name, { vars: t.vars, persist: false });
       shell.style.setProperty('--sw-1', t.sw[0]); shell.style.setProperty('--sw-2', t.sw[1]); shell.style.setProperty('--sw-3', t.sw[2]);
       const m = THEME_META[name];
       if (m) {
@@ -549,6 +557,9 @@
       // re-tint the welcome hero bot (it reads --bot-* vars, so re-render to pick up new values)
       const heroBot = welcomeEl.querySelector('[data-bot]');
       if (heroBot) heroBot.innerHTML = botHTML({ primary: 'var(--bot-primary)', secondary: 'var(--bot-secondary)', trim: 'var(--bot-trim)', glow: 'var(--bot-glow)', scale: heroBot.dataset.scale, flame: heroBot.dataset.flame });
+      document.querySelectorAll('.tc-workspace-frame').forEach((frame) => {
+        if (frame.contentWindow && window.ThomasWorkspaceShell) window.ThomasWorkspaceShell.sendTheme(frame, name, t.vars);
+      });
     }
     function selectTheme(name) {
       state.theme = name; state.themeMenuOpen = false; applyTheme(name);
@@ -692,29 +703,77 @@
       });
     }
     // Workspaces keep their OWN existing UI — open them in the preserved SPA,
-    // deep-linked to the right nav mode. The new design itself is chat-only.
+    // Bounded standalone routes avoid the full classic runtime. Compatible
+    // deep links remain while the other owner lanes are separated.
+    const WORKSPACE_ROUTES = {
+      mission: '/mission?embed=1',
+      my_stuff: '/my-stuff?embed=1',
+      settings: '/settings?embed=1',
+    };
+    const CLASSIC_WORKSPACE_ROUTE = '/classic?embed=1';
+    function workspaceFrame(mode) {
+      if (!WORKSPACE_ROUTES[mode]) return document.getElementById('tc-ws-frame');
+      let frame = document.getElementById('tc-direct-frame');
+      if (frame) return frame;
+      frame = document.createElement('iframe'); frame.id = 'tc-direct-frame'; frame.className = 'tc-workspace-frame'; frame.title = 'Workspace';
+      frame.style.cssText = 'display:none;position:absolute;inset:0;width:100%;height:100%;border:0;z-index:20;background:transparent;';
+      document.getElementById('tc-body-row').appendChild(frame); return frame;
+    }
+    function syncWorkspaceFrame(frame) {
+      const theme = THEMES[state.theme];
+      if (theme && window.ThomasWorkspaceShell) window.ThomasWorkspaceShell.sendTheme(frame, state.theme, theme.vars);
+      if (frame.contentWindow && frame.dataset.workspaceMode && !WORKSPACE_ROUTES[frame.dataset.workspaceMode]) {
+        frame.contentWindow.postMessage({ type: "thomas:workspace:navigate", mode: frame.dataset.workspaceMode }, location.origin);
+      }
+    }
     function openWorkspace(mode) {
-      const f = document.getElementById('tc-ws-frame');
+      const f = workspaceFrame(mode);
       if (!f) return;
-      f.src = mode === 'settings'
-        ? '/settings?embed=1'
-        : '/classic?nav=' + encodeURIComponent(mode) + '&embed=1';
+      const route = WORKSPACE_ROUTES[mode] || CLASSIC_WORKSPACE_ROUTE;
+      document.querySelectorAll('.tc-workspace-frame').forEach((frame) => { frame.style.display = 'none'; });
+      f.dataset.workspaceMode = mode;
+      f.onload = () => syncWorkspaceFrame(f);
+      if (f.dataset.route !== route) {
+        f.dataset.route = route;
+        f.src = route;
+      } else syncWorkspaceFrame(f);
       f.style.display = 'block';
+      const primary = document.getElementById('tc-primary-column');
+      const canvasPanel = document.getElementById('tc-canvas');
+      if (primary) { primary.style.visibility = 'hidden'; primary.inert = true; }
+      if (canvasPanel) { canvasPanel.style.visibility = 'hidden'; canvasPanel.inert = true; }
       state.workspaceOpen = true;
+      if (window.ThomasWorkspaceChat) window.ThomasWorkspaceChat.setWorkspace(mode);
     }
     function showChat() {
-      const f = document.getElementById('tc-ws-frame');
-      if (f) { f.style.display = 'none'; try { f.removeAttribute('src'); } catch (e) {} }
+      document.querySelectorAll('.tc-workspace-frame').forEach((frame) => { frame.style.display = 'none'; });
+      const primary = document.getElementById('tc-primary-column');
+      const canvasPanel = document.getElementById('tc-canvas');
+      if (primary) { primary.style.visibility = ''; primary.inert = false; }
+      if (canvasPanel) { canvasPanel.style.visibility = ''; canvasPanel.inert = false; }
       state.workspaceOpen = false;
+      if (window.ThomasWorkspaceChat) window.ThomasWorkspaceChat.setWorkspace(null);
     }
+    function stageUiAiEdit(event) {
+      const detail = event && event.detail || {};
+      if (!detail.identity || !detail.prompt) return;
+      if (state.workspaceOpen && window.ThomasWorkspaceChat) {
+        window.ThomasWorkspaceChat.open({ draft: `Update ${detail.label || detail.identity} (${detail.identity}): ${detail.prompt}` });
+        return;
+      }
+      showChat();
+      state.input = `In ${detail.workspace || 'this workspace'}, update ${detail.label || detail.identity} (${detail.identity}): ${detail.prompt}`;
+      inputEl.value = state.input; autosize(); inputEl.focus();
+    }
+    window.addEventListener('thomas:ui-ai-edit-request', stageUiAiEdit);
     function renderWorkspaces() {
       const workspaces = [
         // Code and Work are first-class modes above search. Do not duplicate their
         // legacy Forge/Workforce entry points in this secondary workspace list.
         { icon: 'ph-crosshair-simple', label: 'Mission Control', mode: 'mission' },
         { icon: 'ph-buildings',        label: 'Virtual Office',  mode: 'office' },
-        { icon: 'ph-pencil-ruler',     label: 'UI Editor',       mode: 'app_builder' },
-        { icon: 'ph-cards',            label: 'My Stuff',        mode: 'my_stuff' },
+        { icon: 'ph-pencil-ruler',     label: 'Canvas',          mode: 'app_builder' },
+        { icon: 'ph-cards',            label: 'Library',         mode: 'my_stuff' },
         { icon: 'ph-broadcast',        label: 'Channels',        mode: 'channels' },
         { icon: 'ph-coins',            label: 'Token Economy',   mode: 'token_economy' },
         { icon: 'ph-storefront',       label: 'Marketplace',     mode: 'marketplace' },
@@ -2355,7 +2414,10 @@
     document.getElementById('tc-newchat-top').addEventListener('click', newChat);
     document.getElementById('tc-sidebar-toggle').addEventListener('click', toggleSidebar);
     document.getElementById('tc-settings').addEventListener('click', () => openWorkspace('settings'));
-    document.getElementById('tc-canvas-btn').addEventListener('click', openConversationCanvas);
+    document.getElementById('tc-canvas-btn').addEventListener('click', () => {
+      if (state.workspaceOpen && window.ThomasWorkspaceChat) window.ThomasWorkspaceChat.toggle();
+      else openWorkspace('app_builder');
+    });
     document.getElementById('tc-canvas-close').addEventListener('click', closeCanvas);
     document.getElementById('tc-theme-btn').addEventListener('click', toggleThemeMenu);
     document.getElementById('tc-model-btn').addEventListener('click', toggleModelMenu);
@@ -2468,6 +2530,11 @@
         modeChanged,
         renderHistory: renderChats,
         setBusy: setExternalBusy,
+      });
+    }
+    if (window.ThomasWorkspaceChat) {
+      window.ThomasWorkspaceChat.connect({
+        getContext: () => ({ profile: state.profile, modelId: state.modelId, modelLabel: state.modelLabel, dials: Object.assign({}, state.dials) }),
       });
     }
 

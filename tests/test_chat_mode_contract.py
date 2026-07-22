@@ -6,7 +6,10 @@ from pathlib import Path
 
 from thomas.chat.session_store import SessionMeta
 from thomas.server.app_routes_init import _v2_sessions_as_chats
-from thomas.server.routes.chat_surface_namespace import parse_chat_surface_namespace
+from thomas.server.routes.chat_surface_namespace import (
+    parse_chat_surface_namespace,
+    session_namespace_matches,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CHAT_HTML = REPO_ROOT / "thomas" / "server" / "web" / "chat.html"
@@ -537,14 +540,53 @@ def test_code_adapter_lifecycle_behavior_in_node() -> None:
 def test_surface_namespace_fails_closed() -> None:
     assert parse_chat_surface_namespace({}).mode == "chat"
     assert parse_chat_surface_namespace({"surface_mode": "work", "context_id": "job-42"}).context_id == "job-42"
+    assert (
+        parse_chat_surface_namespace(
+            {"surface_mode": "workspace", "context_id": "workspace:virtual_office"}
+        ).context_id
+        == "workspace:office"
+    )
+    assert (
+        parse_chat_surface_namespace({"surface_mode": "workspace", "context_id": "workspace:canvas"}).context_id
+        == "workspace:app_builder"
+    )
+    assert (
+        parse_chat_surface_namespace({"surface_mode": "workspace", "context_id": "workspace:library"}).context_id
+        == "workspace:my_stuff"
+    )
+    assert (
+        parse_chat_surface_namespace(
+            {"surface_mode": "workspace", "context_id": "workspace:paper_trading"}
+        ).context_id
+        == "workspace:paper_trading"
+    )
 
     for payload in (
         {"surface_mode": "code"},
         {"surface_mode": "work"},
         {"surface_mode": "chat", "context_id": "job-42"},
+        {"surface_mode": "chat", "context_id": "workspace:mission"},
+        {"surface_mode": "workspace"},
+        {"surface_mode": "workspace", "context_id": "mission"},
+        {"surface_mode": "workspace", "context_id": "workspace:../settings"},
+        {"surface_mode": "workspace", "context_id": "workspace:"},
+        {"surface_mode": "workspace", "context_id": "workspace:not-a-real-route"},
     ):
         try:
             parse_chat_surface_namespace(payload)
         except ValueError:
             continue
         raise AssertionError(f"namespace should have failed closed: {payload}")
+
+
+def test_workspace_sessions_cannot_cross_route_namespaces() -> None:
+    mission = parse_chat_surface_namespace(
+        {"surface_mode": "workspace", "context_id": "workspace:mission"}
+    )
+    office = parse_chat_surface_namespace(
+        {"surface_mode": "workspace", "context_id": "workspace:office"}
+    )
+    meta = SessionMeta(session_id="resident", surface_mode="workspace", context_id="workspace:mission")
+
+    assert session_namespace_matches(meta, mission)
+    assert not session_namespace_matches(meta, office)

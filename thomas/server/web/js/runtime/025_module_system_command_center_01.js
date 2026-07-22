@@ -322,7 +322,7 @@ const MODULE_MODE_SEEDS = Object.freeze({
         ],
     },
     my_stuff: {
-        title: 'My Stuff',
+        title: 'Library',
         subtitle: 'Project board with launch controls, troubleshooting, and project-scoped Thomas chats.',
         pill: 'Launchpad',
         kpis: [],
@@ -577,6 +577,10 @@ function moduleEnsureRuntime() {
                 pendingStoreUrl: moduleReadPreferredMarketplaceStoreUrl(),
                 lastRefreshedAt: 0,
                 refreshPromise: null,
+                refreshSucceeded: false,
+                catalogSignature: '',
+                installedLastRefreshedAt: 0,
+                installedRefreshPromise: null,
             },
         };
     }
@@ -778,6 +782,174 @@ function moduleWritePreferredMarketplaceStoreUrl(urlRaw) {
     return normalized;
 }
 
+function moduleMarketplaceSetUiContract(node, {
+    id = '',
+    label = '',
+    component = '',
+    policy = 'move resize',
+    constraints = 'contain=parent,collision=avoid',
+    instanceKey = '',
+    group = '',
+} = {}) {
+    if (!(node instanceof Element)) return null;
+    if (id) node.setAttribute('data-ui-id', safeString(id));
+    if (label) node.setAttribute('data-ui-label', safeString(label));
+    if (component) node.setAttribute('data-ui-component', safeString(component));
+    if (policy) node.setAttribute('data-ui-policy', safeString(policy));
+    if (constraints) node.setAttribute('data-ui-constraints', safeString(constraints));
+    if (instanceKey) node.setAttribute('data-ui-instance-key', safeString(instanceKey));
+    if (group) node.setAttribute('data-ui-group', safeString(group));
+    return node;
+}
+
+function moduleMarketplaceStableKey(valueRaw) {
+    return safeString(valueRaw)
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9._:-]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'unknown';
+}
+
+function moduleMarketplaceEnsureIdentity(surface) {
+    if (!(surface instanceof Element)) return null;
+    const commandBar = surface.querySelector('.marketplace-command-bar');
+    if (!(commandBar instanceof Element)) return null;
+    let identity = commandBar.querySelector(':scope > .marketplace-identity');
+    if (!identity) {
+        identity = document.createElement('div');
+        identity.className = 'marketplace-identity';
+        identity.innerHTML = `
+            <span class="thomas-eyes-mark marketplace-eyes-mark" aria-hidden="true"><i></i><i></i></span>
+            <span class="marketplace-identity-copy"><strong>Thomas</strong><span>Marketplace</span></span>
+        `;
+        commandBar.prepend(identity);
+    }
+    return moduleMarketplaceSetUiContract(identity, {
+        id: 'marketplace.identity',
+        label: 'Thomas Marketplace identity',
+        component: 'identity-lockup',
+        policy: 'move',
+        constraints: 'contain=parent,minWidth=140,minHeight=32,maxWidth=260,collision=avoid',
+    });
+}
+
+function moduleApplyMarketplaceUiContracts(surfaceRaw) {
+    const surface = surfaceRaw instanceof Element
+        ? surfaceRaw
+        : document.querySelector('#moduleWorkspace[data-mode="marketplace"] .marketplace-surface');
+    if (!(surface instanceof Element)) return null;
+
+    surface.setAttribute('data-ui-workspace', 'marketplace');
+    moduleMarketplaceSetUiContract(surface, {
+        id: 'marketplace.shell',
+        label: 'Marketplace workspace',
+        component: 'workspace-shell',
+        policy: 'root protected',
+        constraints: 'preserve-runtime-ids,preserve-handlers',
+    });
+    moduleMarketplaceEnsureIdentity(surface);
+
+    const register = (selector, contract) => {
+        const node = surface.querySelector(selector);
+        if (node) moduleMarketplaceSetUiContract(node, contract);
+        return node;
+    };
+    register('.marketplace-sticky-head', {
+        id: 'marketplace.header', label: 'Marketplace header', component: 'workspace-header',
+        constraints: 'contain=parent,minWidth=300,minHeight=96,maxHeight=360,collision=avoid',
+    });
+    register('.marketplace-command-bar', {
+        id: 'marketplace.controls', label: 'Marketplace controls', component: 'control-bar',
+        policy: 'move resize protected-controls',
+        constraints: 'contain=parent,minWidth=300,minHeight=44,maxHeight=220,collision=avoid,preserve-handlers',
+    });
+    register('.marketplace-search-wrap', {
+        id: 'marketplace.search', label: 'Search Marketplace', component: 'search-control',
+        policy: 'move resize protected',
+        constraints: 'contain=parent,minWidth=220,minHeight=44,maxWidth=900,maxHeight=96,collision=avoid,preserve-handlers',
+    });
+    register('.marketplace-filter-rail', {
+        id: 'marketplace.filters', label: 'Marketplace category filters', component: 'repeating-control-group',
+        policy: 'move resize protected live-control-group',
+        constraints: 'items-runtime-owned,reposition-deny,resize-deny,add-deny,remove-deny,contain=parent,minWidth=260,minHeight=40,maxHeight=180,collision=avoid,preserve-handlers',
+    });
+    register('.marketplace-card-grid', {
+        id: 'marketplace.catalog', label: 'Marketplace package catalog', component: 'repeating-card-group',
+        policy: 'move resize',
+        constraints: 'items-runtime-owned,reposition-deny,resize-deny,add-deny,remove-deny,contain=parent,minWidth=280,minHeight=320,maxHeight=2400,collision=avoid,preserve-handlers',
+    });
+    register('.marketplace-selected-strip', {
+        id: 'marketplace.detail', label: 'Selected package details', component: 'detail-panel',
+        constraints: 'contain=parent,minWidth=280,minHeight=180,maxHeight=900,collision=avoid,preserve-handlers',
+    });
+    register('.marketplace-empty-state', {
+        id: 'marketplace.catalog.empty', label: 'Marketplace empty state', component: 'status-panel',
+        policy: 'move resize protected',
+        constraints: 'contain=parent,minWidth=260,minHeight=120,maxHeight=420,collision=avoid',
+    });
+
+    surface.querySelectorAll('.marketplace-summary-row').forEach((node, index) => {
+        moduleMarketplaceSetUiContract(node, {
+            id: index === 0 ? 'marketplace.status' : 'marketplace.status.notice',
+            label: index === 0 ? 'Marketplace catalog status' : 'Marketplace sync notice',
+            component: 'status-region',
+            policy: 'move resize protected',
+            constraints: 'contain=parent,minWidth=260,minHeight=28,maxHeight=160,collision=avoid',
+        });
+    });
+    surface.querySelectorAll('.marketplace-filter-chip').forEach((node) => {
+        const key = moduleMarketplaceStableKey(node.getAttribute('data-module-marketplace-filter'));
+        moduleMarketplaceSetUiContract(node, {
+            id: 'marketplace.filter', label: `Marketplace filter ${key}`, component: 'filter-control',
+            policy: 'protected live-control', constraints: 'preserve-handlers,reposition-deny,resize-deny',
+            instanceKey: key, group: 'marketplace.filters',
+        });
+    });
+    surface.querySelectorAll('.marketplace-card').forEach((card) => {
+        const keyedControl = card.querySelector('[data-module-marketplace-select], [data-module-item-id]');
+        const packageId = moduleMarketplaceStableKey(
+            keyedControl?.getAttribute('data-module-marketplace-select') || keyedControl?.getAttribute('data-module-item-id'),
+        );
+        moduleMarketplaceSetUiContract(card, {
+            id: 'marketplace.package', label: `Marketplace package ${packageId}`, component: 'live-record',
+            policy: 'protected live-record',
+            constraints: 'items-runtime-owned,reposition-deny,resize-deny,add-deny,remove-deny,preserve-handlers',
+            instanceKey: packageId, group: 'marketplace.packages',
+        });
+    });
+    surface.querySelectorAll('.marketplace-selected-fact').forEach((node) => {
+        const key = moduleMarketplaceStableKey(node.querySelector('span')?.textContent);
+        moduleMarketplaceSetUiContract(node, {
+            id: 'marketplace.detail.fact', label: `Package detail ${key}`, component: 'detail-fact',
+            policy: 'protected live-record', constraints: 'reposition-deny,resize-deny',
+            instanceKey: key, group: 'marketplace.detail-facts',
+        });
+    });
+    surface.querySelectorAll('button, input[type="search"], input[type="file"]').forEach((control) => {
+        const packageId = moduleMarketplaceStableKey(
+            control.getAttribute('data-module-item-id') || control.getAttribute('data-module-marketplace-select'),
+        );
+        const actionId = moduleMarketplaceStableKey(
+            control.getAttribute('data-module-action-id')
+            || (control.hasAttribute('data-module-marketplace-copy-id') ? 'copy-id' : '')
+            || (control.hasAttribute('data-module-marketplace-refresh') ? 'sync' : '')
+            || (control.hasAttribute('data-marketplace-import') || control.hasAttribute('data-marketplace-import-input') ? 'install-file' : '')
+            || (control.hasAttribute('data-module-marketplace-clear') ? 'clear-search' : '')
+            || (control.hasAttribute('data-module-marketplace-search') ? 'search' : '')
+            || (control.hasAttribute('data-module-marketplace-filter') ? `filter-${control.getAttribute('data-module-marketplace-filter')}` : ''),
+        );
+        moduleMarketplaceSetUiContract(control, {
+            id: packageId !== 'unknown' ? 'marketplace.package.action' : 'marketplace.control',
+            label: safeString(control.getAttribute('data-module-action-label') || control.textContent || actionId).trim(),
+            component: 'protected-control', policy: 'protected control',
+            constraints: 'preserve-runtime-ids,preserve-handlers,reposition-deny,resize-deny',
+            instanceKey: packageId !== 'unknown' ? `${packageId}:${actionId}` : actionId,
+            group: packageId !== 'unknown' ? 'marketplace.package-actions' : 'marketplace.controls',
+        });
+    });
+    return surface;
+}
+
 
 function moduleFetchJsonSafe(url, options = {}) {
     const normalizedUrl = safeString(url);
@@ -952,10 +1124,12 @@ function moduleSetInstalledPluginRows(rowsRaw = [], { render = true } = {}) {
 function moduleRefreshInstalledPluginNav({ force = false } = {}) {
     const state = moduleEnsureRuntime();
     if (!state?.marketplace) return null;
-    if (!force && state.marketplace.installedRefreshPromise) {
+    if (state.marketplace.installedRefreshPromise) {
         return state.marketplace.installedRefreshPromise;
     }
-    if (!force && Array.isArray(state.marketplace.plugins) && state.marketplace.plugins.length > 0) {
+    const installedFresh = Number(state.marketplace.installedLastRefreshedAt) > 0
+        && Date.now() - Number(state.marketplace.installedLastRefreshedAt) < MODULE_MARKETPLACE_REFRESH_TTL_MS;
+    if (!force && installedFresh && Array.isArray(state.marketplace.plugins)) {
         moduleRenderInstalledPluginNav();
         return null;
     }
@@ -983,13 +1157,14 @@ function moduleRefreshMarketplace({ force = false, storeUrl = '' } = {}) {
     const state = moduleEnsureRuntime();
     if (!state) return null;
     const now = Date.now();
-    if (!force && state.marketplace.refreshPromise) {
+    if (state.marketplace.refreshPromise) {
         return state.marketplace.refreshPromise;
     }
     if (
         !force &&
         Number(state.marketplace.lastRefreshedAt) > 0 &&
         now - Number(state.marketplace.lastRefreshedAt) < MODULE_MARKETPLACE_REFRESH_TTL_MS &&
+        state.marketplace.refreshSucceeded === true &&
         Array.isArray(state.marketplace.apps)
     ) {
         return null;
@@ -1015,12 +1190,12 @@ function moduleRefreshMarketplace({ force = false, storeUrl = '' } = {}) {
             state.marketplace.sourceLabel = safeString(syncPayload?.source_label);
             state.marketplace.storeUrl = normalizePreferredMarketplaceStoreUrl(syncPayload?.store_url || preferredStoreUrl);
             state.marketplace.pendingStoreUrl = state.marketplace.storeUrl || '';
-            state.marketplace.categories = Array.isArray(syncPayload?.categories) ? syncPayload.categories : [];
+            const nextCategories = Array.isArray(syncPayload?.categories) ? syncPayload.categories : [];
             state.marketplace.warning = safeString(syncPayload?.warning);
             state.marketplace.syncError = safeString(syncPayload?.sync_error);
             state.marketplace.degraded = Boolean(syncPayload?.degraded);
             moduleSetInstalledPluginRows(installedPlugins, { render: false });
-            state.marketplace.apps = plugins.map((plugin) => {
+            const nextApps = plugins.map((plugin) => {
                 const categoryId = safeString(plugin?.category).toLowerCase() || 'other';
                 const categoryLabel = safeString(plugin?.category_label) || safeString(plugin?.category) || 'Plugin';
                 const target = safeString(plugin?.target);
@@ -1085,11 +1260,25 @@ function moduleRefreshMarketplace({ force = false, storeUrl = '' } = {}) {
                     publisher_name: safeString(plugin?.publisher_name),
                 };
             }).filter((plugin) => safeString(plugin?.module_id));
+            const nextCatalogSignature = JSON.stringify({
+                storeUrl: state.marketplace.storeUrl,
+                channel: safeString(syncPayload?.channel) || 'stable',
+                categories: nextCategories,
+                plugins: nextApps,
+            });
+            state.marketplace.catalogChanged = nextCatalogSignature !== safeString(state.marketplace.catalogSignature);
+            if (state.marketplace.catalogChanged) {
+                state.marketplace.apps = nextApps;
+                state.marketplace.categories = nextCategories;
+                state.marketplace.catalogSignature = nextCatalogSignature;
+            }
             state.marketplace.error = '';
+            state.marketplace.refreshSucceeded = true;
             moduleWritePreferredMarketplaceStoreUrl(state.marketplace.storeUrl);
             moduleRenderInstalledPluginNav();
         } catch (error) {
             state.marketplace.error = safeString(error?.message) || 'Unable to refresh marketplace catalog.';
+            state.marketplace.refreshSucceeded = false;
             if (!Array.isArray(state.marketplace.apps)) state.marketplace.apps = [];
             if (!Array.isArray(state.marketplace.modules)) state.marketplace.modules = [];
             if (!Array.isArray(state.marketplace.plugins)) state.marketplace.plugins = [];
@@ -1097,7 +1286,9 @@ function moduleRefreshMarketplace({ force = false, storeUrl = '' } = {}) {
         } finally {
             state.marketplace.loading = false;
             state.marketplace.refreshPromise = null;
-            state.marketplace.lastRefreshedAt = Date.now();
+            if (state.marketplace.refreshSucceeded) {
+                state.marketplace.lastRefreshedAt = Date.now();
+            }
         }
     })();
     state.marketplace.refreshPromise = refreshPromise;

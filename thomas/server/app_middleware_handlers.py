@@ -793,6 +793,7 @@ def setup_middleware_and_handlers(
             "_chat_file_for": _chat_file_for,
             "_read_chat_from_disk": _read_chat_from_disk,
             "_build_tools": __import__("thomas.server.app_helpers", fromlist=["_build_tools"])._build_tools,
+            "_web_build_fingerprint": _web_build_fingerprint,
             "index": index,
             "classic": classic,
             "settings": settings,

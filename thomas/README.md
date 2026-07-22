@@ -41,7 +41,7 @@ dispatch.py (is it casual or actionable?)
 | `core/*.py` | Foundation: LLM client, config, RAG, event schemas |
 | `tools/*.py` | Built-in tools: file readers, database, sandbox, code search, etc. |
 | `server/` | HTTP server (aiohttp) + middleware + plugins |
-| `server/web/js/runtime/*.js` | **THE ACTIVE FRONTEND RUNTIME** (45 numbered files, combined 41K lines—all JS runs through these) |
+| `server/web/js/runtime/*.js` | **THE ACTIVE CLASSIC FRONTEND RUNTIME** (94 ordered split files) |
 | `server/web/js/app_runtime_primary.mjs` | **DEAD CODE (LEGACY)** — Pre-split monolith, not loaded by index.html |
 | `server/routes/*.py` | HTTP API endpoints (chat, memory, tasks, etc.) |
 
@@ -71,9 +71,9 @@ Some large Python files are split into parts:
 3. Restart the server for changes to take effect
 
 ### JavaScript Split Runtime
-The frontend runtime is split into 45 numbered files:
-- **`thomas/server/web/js/runtime/001.js` through `045.js`** — **THE ACTIVE RUNTIME** (combined 41,470 lines)
-- **`thomas/server/web/js/app_runtime_loader.js`** — Loads the 45 runtime files sequentially into global scope
+The classic frontend runtime is split into 94 ordered files:
+- **`thomas/server/web/js/runtime/*.js`** — **THE ACTIVE CLASSIC RUNTIME**
+- **`thomas/server/web/js/app_runtime_loader.js`** — Fetches those files in parallel and executes them in declared order
 - `thomas/server/web/js/app_runtime_primary.mjs` — **DEAD CODE (LEGACY)**. Pre-split monolith, not loaded.
 - `thomas/server/web/js/app_parts/` — **DEAD CODE**. These files are NOT loaded at runtime. Ignore them.
 
@@ -144,7 +144,7 @@ These were created to support a "pluggable domain" architecture that's not fully
 4. Restart server
 
 ### To change the UI:
-1. Edit the appropriate file in `thomas/server/web/js/runtime/` (numbered 001–045)
+1. Edit the appropriate file in `thomas/server/web/js/runtime/` declared by `app_runtime_loader.js`
 2. Or edit standalone scripts: token_economy.js, theme_rules.js, templates/tpl_settings.js
 3. Clear browser cache
 4. Reload the page

@@ -1,5 +1,29 @@
 /** Map transforms and full scene rendering. */
 
+function officeConfigureDynamicUi(node, { id, label, policy, instanceKey = '', constraints = '' }) {
+    if (!(node instanceof HTMLElement)) return node;
+    node.dataset.uiId = id;
+    node.dataset.uiLabel = label;
+    node.dataset.uiPolicy = policy;
+    if (instanceKey) node.dataset.uiInstanceKey = instanceKey;
+    if (constraints) node.dataset.uiConstraints = constraints;
+    return node;
+}
+
+function officeDecorateDraftAssetUiNode(node, space, asset) {
+    if (!(node instanceof HTMLElement)) return node;
+    const assetId = safeString(asset?.id);
+    const descriptor = OFFICE_DRAFT_ASSET_LIBRARY[safeString(asset?.type)] || {};
+    node.classList.add('office-live-asset');
+    return officeConfigureDynamicUi(node, {
+        id: 'virtual-office.asset',
+        instanceKey: assetId,
+        label: `${safeString(descriptor.label || asset?.type) || 'Office asset'} in ${safeString(space?.name) || 'office'}`,
+        policy: 'protected live-map-item',
+        constraints: 'no-move no-resize no-delete no-copy',
+    });
+}
+
 function officeRenderDraftMapMinimapThrottled(force = false) {
     const state = officeEnsureDraftMapState();
     const now = performance.now();
@@ -70,11 +94,18 @@ function officeRenderDraftMapScene(options = {}) {
     officeScene.style.width = '100%';
     officeScene.style.height = '100%';
     officeScene.style.overflow = 'hidden';
-    officeScene.style.backgroundColor = '#0a1321';
+    officeScene.classList.add('office-map-scene');
     officeScene.innerHTML = '';
     officeDraftDebugRenderMark('shell');
     const plane = document.createElement('div');
+    plane.className = 'office-map-plane';
     plane.dataset.officeMapPlane = '1';
+    officeConfigureDynamicUi(plane, {
+        id: 'virtual-office.map-plane',
+        label: 'Live office map',
+        policy: 'protected live-map-root',
+        constraints: 'no-move no-resize no-delete no-copy',
+    });
     plane.style.position = 'absolute';
     plane.style.left = '0';
     plane.style.top = '0';
@@ -96,68 +127,62 @@ function officeRenderDraftMapScene(options = {}) {
         const spaceNearViewport = officeDraftSpaceIntersectsViewport(space, viewportWorldRect, viewportPadding);
         const renderDetailedSpace = !overviewMode && spaceNearViewport;
         const room = document.createElement('section');
+        room.className = 'office-live-room';
         room.dataset.officeDraftSpaceId = safeString(space?.id);
         room.dataset.officeDraftOverview = overviewMode ? '1' : '0';
         room.dataset.officeDraftDetail = renderDetailedSpace ? '1' : '0';
+        room.dataset.officeDraftSelected = isSelectedSpace ? '1' : '0';
+        officeConfigureDynamicUi(room, {
+            id: 'virtual-office.room',
+            instanceKey: safeString(space?.id),
+            label: `${safeString(space?.name) || 'Office'} room`,
+            policy: 'protected live-map-group',
+            constraints: 'no-move no-resize no-delete no-copy',
+        });
         room.style.position = 'absolute';
         room.style.zIndex = '1';
         room.style.left = `${Math.round(Number(space?.x) || 0)}px`;
         room.style.top = `${Math.round(Number(space?.y) || 0)}px`;
         room.style.width = `${Math.round(Number(space?.width) || 0)}px`;
         room.style.height = `${Math.round(Number(space?.height) || 0)}px`;
-        room.style.border = isSelectedSpace ? '4px solid rgba(122, 181, 255, 0.82)' : '4px solid rgba(158, 196, 255, 0.62)';
-        room.style.borderRadius = overviewMode ? '30px' : '46px';
-        room.style.background = overviewMode ? officeDraftOverviewColor(space, 'shell') : palette.shell;
-        room.style.overflow = 'visible';
-        room.style.boxShadow = isSelectedSpace
-            ? 'inset 0 0 0 1px rgba(215, 232, 255, 0.08), 0 0 0 2px rgba(110, 169, 255, 0.14), 0 18px 42px rgba(0, 0, 0, 0.22)'
-            : 'inset 0 0 0 1px rgba(215, 232, 255, 0.05), 0 16px 38px rgba(0, 0, 0, 0.2)';
+        room.style.setProperty('--office-room-shell', overviewMode ? officeDraftOverviewColor(space, 'shell') : palette.shell);
 
         const roomInset = document.createElement('div');
-        roomInset.style.position = 'absolute';
-        roomInset.style.left = '24px';
-        roomInset.style.top = '24px';
-        roomInset.style.right = '24px';
-        roomInset.style.bottom = '24px';
-        roomInset.style.borderRadius = overviewMode ? '22px' : '32px';
-        roomInset.style.border = `1px solid ${palette.floorBorder}`;
-        roomInset.style.background = overviewMode ? officeDraftOverviewColor(space, 'floor') : palette.floor;
+        roomInset.className = 'office-live-room-floor';
+        roomInset.style.setProperty('--office-room-floor-border', palette.floorBorder);
+        roomInset.style.setProperty('--office-room-floor', overviewMode ? officeDraftOverviewColor(space, 'floor') : palette.floor);
         if (!overviewMode && safeString(palette.pattern)) {
-            roomInset.style.backgroundImage = `${palette.pattern}, ${palette.floor}`;
-            roomInset.style.backgroundSize = `${safeString(palette.patternSize) || '120px 120px'}, auto`;
+            roomInset.style.setProperty('--office-room-pattern', palette.pattern);
+            roomInset.style.setProperty('--office-room-pattern-size', safeString(palette.patternSize) || '120px 120px');
         }
         room.appendChild(roomInset);
 
         const roomLabel = document.createElement('button');
         roomLabel.type = 'button';
+        roomLabel.className = 'office-room-label';
         roomLabel.dataset.officeDraftSpaceLabel = safeString(space?.id);
+        roomLabel.dataset.officeDraftSelected = isSelectedSpace ? '1' : '0';
+        officeConfigureDynamicUi(roomLabel, {
+            id: 'virtual-office.room-label',
+            instanceKey: safeString(space?.id),
+            label: `${safeString(space?.name) || 'Office'} room label`,
+            policy: 'protected controls',
+        });
         roomLabel.textContent = safeString(space?.name) || 'Space';
-        roomLabel.style.position = 'absolute';
-        roomLabel.style.left = '42px';
-        roomLabel.style.top = '-32px';
-        roomLabel.style.padding = '10px 18px';
-        roomLabel.style.borderRadius = '18px 18px 10px 10px';
-        roomLabel.style.border = isSelectedSpace ? '2px solid rgba(128, 185, 255, 0.72)' : '2px solid rgba(214, 228, 247, 0.28)';
-        roomLabel.style.background = isSelectedSpace ? 'rgba(80, 128, 205, 0.9)' : 'rgba(43, 59, 88, 0.92)';
-        roomLabel.style.color = 'rgba(245, 248, 255, 0.96)';
-        roomLabel.style.fontSize = overviewMode ? '1rem' : '1.2rem';
-        roomLabel.style.fontWeight = '700';
-        roomLabel.style.letterSpacing = '0.12em';
-        roomLabel.style.textTransform = 'uppercase';
         roomLabel.style.cursor = state.editorOpen ? 'pointer' : 'default';
         room.appendChild(roomLabel);
 
         const roomAssets = Array.isArray(space?.assets) ? space.assets : [];
         if (renderDetailedSpace) {
             roomAssets.forEach((asset) => {
-                room.appendChild(officeDraftCreateAssetElement(space, asset, state));
+                room.appendChild(officeDecorateDraftAssetUiNode(officeDraftCreateAssetElement(space, asset, state), space, asset));
             });
         } else {
             room.appendChild(officeDraftCreateOverviewAssetDots(space, roomAssets, state));
         }
         if (safeString(state.catalogPreviewSpaceId) === safeString(space?.id) && safeString(state.catalogPendingType)) {
             const pendingType = safeString(state.catalogPendingType);
-            room.appendChild(officeDraftCreateAssetElement(space, {
+            const previewAsset = {
                 id: 'catalog-preview',
                 type: pendingType,
                 x: state.catalogPreviewX,
@@ -166,7 +191,8 @@ function officeRenderDraftMapScene(options = {}) {
                 colorVariant: officeDraftAssetDefaultColorVariant(pendingType),
                 scale: 1,
                 preview: true,
-            }, state));
+            };
+            room.appendChild(officeDecorateDraftAssetUiNode(officeDraftCreateAssetElement(space, previewAsset, state), space, previewAsset));
         }
 
         plane.appendChild(room);
@@ -174,7 +200,14 @@ function officeRenderDraftMapScene(options = {}) {
     officeDraftDebugRenderMark('rooms');
 
     const agentLayer = document.createElement('div');
+    agentLayer.className = 'office-agent-layer';
     agentLayer.dataset.officeDraftAgentLayer = 'global';
+    officeConfigureDynamicUi(agentLayer, {
+        id: 'virtual-office.agent-layer',
+        label: 'Live agent presence',
+        policy: 'protected live-map-group',
+        constraints: 'no-move no-resize no-delete no-copy',
+    });
     agentLayer.style.position = 'absolute';
     agentLayer.style.inset = '0';
     agentLayer.style.pointerEvents = state.editorOpen ? 'none' : 'auto';
@@ -206,47 +239,78 @@ function officeRenderDraftMapScene(options = {}) {
     officeDraftDebugRenderMark('plane-appended');
     if (officeSceneWrap instanceof HTMLElement && !officeSceneWrap.querySelector('[data-office-map-toolbar="1"]')) {
         const toolbar = document.createElement('div');
+        toolbar.className = 'office-map-toolbar';
         toolbar.dataset.officeMapToolbar = '1';
+        officeConfigureDynamicUi(toolbar, {
+            id: 'virtual-office.map-toolbar',
+            label: 'Office map controls',
+            policy: 'move resize',
+            constraints: 'minWidth=360;minHeight=44;maxWidth=960;maxHeight=120',
+        });
+
+        const brandMark = document.createElement('span');
+        brandMark.className = 'thomas-eyes-mark office-map-brand';
+        brandMark.setAttribute('aria-hidden', 'true');
+        brandMark.innerHTML = '<i></i><i></i>';
+        officeConfigureDynamicUi(brandMark, {
+            id: 'virtual-office.brand',
+            label: 'Thomas eyes',
+            policy: 'protected brand',
+            constraints: 'no-move no-resize no-delete no-copy',
+        });
+
+        const configureToolbarButton = (button, id, label) => {
+            button.className = 'office-control';
+            officeConfigureDynamicUi(button, { id, label, policy: 'protected controls' });
+        };
 
         const minimapBtn = document.createElement('button');
         minimapBtn.type = 'button';
         minimapBtn.dataset.officeMapToolbarMinimap = '1';
+        configureToolbarButton(minimapBtn, 'virtual-office.action.minimap', 'Toggle minimap');
         minimapBtn.textContent = 'Minimap';
         minimapBtn.addEventListener('click', officeToggleDraftMinimapMinimized);
 
         const editorBtn = document.createElement('button');
         editorBtn.type = 'button';
         editorBtn.dataset.officeMapToolbarEditor = '1';
-        editorBtn.textContent = 'Office Editor';
+        configureToolbarButton(editorBtn, 'virtual-office.action.office-layout', 'Open office layout tools');
+        editorBtn.textContent = 'Layout';
         editorBtn.addEventListener('click', officeToggleDraftEditor);
 
         const rosterBtn = document.createElement('button');
         rosterBtn.type = 'button';
         rosterBtn.dataset.officeMapToolbarRoster = '1';
+        configureToolbarButton(rosterBtn, 'virtual-office.action.agent-roster', 'Open agent roster');
         rosterBtn.textContent = 'Agent Roster';
         rosterBtn.addEventListener('click', officeToggleDraftAgentRoster);
 
         const chatBtn = document.createElement('button');
         chatBtn.type = 'button';
         chatBtn.dataset.officeMapToolbarChat = '1';
+        configureToolbarButton(chatBtn, 'virtual-office.action.agent-chat', 'Open agent chat');
         chatBtn.textContent = 'Chat';
         chatBtn.addEventListener('click', officeToggleDraftAgentChat);
 
         const saveBtn = document.createElement('button');
         saveBtn.type = 'button';
         saveBtn.dataset.officeMapToolbarSave = '1';
+        configureToolbarButton(saveBtn, 'virtual-office.action.save-layout', 'Save office layout');
         saveBtn.textContent = 'Save';
         saveBtn.addEventListener('click', officeDraftManualSaveLayout);
 
         const undoBtn = document.createElement('button');
         undoBtn.type = 'button';
         undoBtn.dataset.officeMapToolbarUndo = '1';
+        configureToolbarButton(undoBtn, 'virtual-office.action.undo-layout', 'Undo office layout change');
         undoBtn.textContent = 'Back';
         undoBtn.addEventListener('click', officeDraftUndoLastChange);
 
         const badge = document.createElement('span');
+        badge.className = 'office-map-badge';
         badge.dataset.officeMapBadge = '1';
 
+        toolbar.appendChild(brandMark);
         toolbar.appendChild(minimapBtn);
         toolbar.appendChild(editorBtn);
         toolbar.appendChild(rosterBtn);
@@ -258,7 +322,13 @@ function officeRenderDraftMapScene(options = {}) {
     }
     if (officeMinimap instanceof HTMLElement && !officeMinimap.querySelector('[data-office-minimap-resize="1"]')) {
         const resizeHandle = document.createElement('div');
+        resizeHandle.className = 'office-minimap-resize';
         resizeHandle.dataset.officeMinimapResize = '1';
+        officeConfigureDynamicUi(resizeHandle, {
+            id: 'virtual-office.action.resize-minimap',
+            label: 'Resize minimap',
+            policy: 'protected controls',
+        });
         resizeHandle.setAttribute('aria-label', 'Resize minimap');
         officeMinimap.appendChild(resizeHandle);
     }
@@ -266,7 +336,13 @@ function officeRenderDraftMapScene(options = {}) {
     if (minimapHead instanceof HTMLElement && !minimapHead.querySelector('[data-office-minimap-lock="1"]')) {
         const lockButton = document.createElement('button');
         lockButton.type = 'button';
+        lockButton.className = 'office-control office-minimap-lock';
         lockButton.dataset.officeMinimapLock = '1';
+        officeConfigureDynamicUi(lockButton, {
+            id: 'virtual-office.action.lock-minimap',
+            label: 'Lock minimap position',
+            policy: 'protected controls',
+        });
         lockButton.textContent = 'Lock';
         lockButton.addEventListener('click', officeToggleDraftMinimapLocked);
         minimapHead.prepend(lockButton);

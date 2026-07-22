@@ -10,25 +10,25 @@ The web frontend is the **user-facing interface** to Thomas. When a user opens T
 
 | Item | Status | Size | Purpose |
 |---|---|---|---|
-| `js/runtime/*.js` (001–045) | **ACTIVE** | 41,470 lines combined | **THE ONLY ACTIVE RUNTIME**—45 numbered files loaded by app_runtime_loader.js |
-| `js/app_runtime_loader.js` | ACTIVE | ~200 lines | Loads runtime files 001–045 sequentially into global scope |
+| `js/runtime/*.js` | **ACTIVE** | 94 split files | **THE ONLY ACTIVE RUNTIME**—ordered files loaded by app_runtime_loader.js |
+| `js/app_runtime_loader.js` | ACTIVE | ~150 lines | Fetches all runtime files in parallel, then executes them in declared order in global scope |
 | `js/app.js` | ACTIVE | ~100 lines | Entrypoint—loads app_runtime_loader.js |
 | `js/app_parts/` | **DEAD CODE** | Hundreds of files | **DO NOT EDIT**—never loaded at runtime |
 | `js/app_runtime_primary.mjs` | **DEAD CODE** (LEGACY) | 41,470 lines | Pre-split monolith—not loaded by index.html—replaced by js/runtime/ split |
 | `index.html` | ACTIVE | 78K | Main chat interface |
 | `settings.html` | ACTIVE | 45K | Settings UI |
 | `mission.html` | ACTIVE | 10K | Mission/task display |
-| `virtual_office.html` | ACTIVE | 2.7K | Virtual office interface |
+| `index.html#officeWorkspace` + `js/runtime/office_*.js` | ACTIVE | Embedded | Canonical Virtual Office workspace and live office runtime |
 | `companion.html` | ACTIVE | 7.5K | Mobile companion app |
 | `css/` | ACTIVE | Multiple files | Stylesheets |
 | `static/` | ACTIVE | Assets | Icons, images, etc. |
 
 ## CRITICAL: The Split Runtime Architecture
 
-**All JavaScript execution happens through 45 numbered files in `js/runtime/`:**
+**The classic JavaScript runtime executes through 94 ordered files in `js/runtime/`:**
 
 ```
-app_runtime_loader.js (loads sequentially)
+app_runtime_loader.js (parallel fetch, declared-order execution)
 ├── runtime/001_preamble.js
 ├── runtime/002_dom_setup.js
 ├── runtime/003_event_handlers.js
@@ -60,7 +60,7 @@ Loads <script src="js/app.js"></script>
         ↓
 app.js loads js/app_runtime_loader.js
         ↓
-app_runtime_loader.js sequentially loads runtime/001.js through runtime/045.js
+app_runtime_loader.js queues every declared runtime file for parallel fetch and ordered execution
         ↓
 All runtime files initialize in global scope:
     ├── Event listeners
@@ -82,14 +82,14 @@ User types message → Runtime handlers process it
 | `index.html` | Main page. User sees this when they visit "/" |
 | `settings.html` | Settings page. Loaded in sidebar or modal |
 | `mission.html` | Task/mission display and tracking |
-| `virtual_office.html` | Virtual office (multi-user space) |
+| `index.html#officeWorkspace` | Virtual Office workspace; behavior is implemented by the active `js/runtime/office_*.js` files |
 | `companion.html` | Mobile app version |
 
-Each HTML file is a **shell**—it contains structure and styling, but all logic runs through `app_runtime_primary.mjs`.
+The classic HTML shell loads the ordered `js/runtime/` files through `app_runtime_loader.js`. The former standalone `virtual_office*` shells were retired because the embedded workspace is the only canonical Office surface.
 
 ## Inside js/runtime/ (The Split Runtime)
 
-The 45 numbered files collectively contain all frontend logic:
+The 94 ordered runtime files collectively contain the classic frontend logic:
 
 ```javascript
 // runtime/001_preamble.js — Global state and utilities
@@ -184,7 +184,7 @@ Check for:
 → Clear browser cache: Ctrl+Shift+Delete
 → Hard-reload: Ctrl+Shift+R
 → Check CSS file imports in HTML
-→ Verify that `app_runtime_loader.js` is loading all 45 runtime files
+→ Verify that `app_runtime_loader.js` is loading all 94 declared runtime files in order
 
 **Issue:** WebSocket not connecting
 → Check browser console for connection errors

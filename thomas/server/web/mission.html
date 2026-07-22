@@ -3,265 +3,140 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
   <title>Thomas Mission Control</title>
-  <script src="https://unpkg.com/@phosphor-icons/web@1.1.0"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
-  
-  <link rel="stylesheet" href="mission.style01.css">
-
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='26' fill='%238b8cff'/%3E%3Crect x='28' y='39' width='14' height='20' rx='3' fill='%230a0b16'/%3E%3Crect x='58' y='39' width='14' height='20' rx='3' fill='%230a0b16'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/css/workspace_shell.css?v=__THOMAS_VERSION__">
+  <link rel="stylesheet" href="/static/css/ui_edit_mode.css?v=__THOMAS_VERSION__">
+  <link rel="stylesheet" href="/static/mission.style01.css?v=__THOMAS_VERSION__">
+  <script>
+    (function () {
+      try {
+        var params = new URLSearchParams(window.location.search || '');
+        if (params.get('embed') === '1') document.documentElement.classList.add('is-embedded');
+        var theme = String(localStorage.getItem('thomas_chat_theme') || 'nebula').toLowerCase();
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.dataset.thomasTheme = theme;
+      } catch (_) {
+        document.documentElement.dataset.theme = 'nebula';
+        document.documentElement.dataset.thomasTheme = 'nebula';
+      }
+    })();
+  </script>
 </head>
-<body>
-  <div class="container">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <div class="logo">
-          <i class="ph-rocket-launch"></i>
-          Thomas
-        </div>
-        <div class="subtitle">Mission Control v1.0</div>
+<body data-ui-workspace="mission">
+  <div class="mission-world" aria-hidden="true">
+    <span class="mission-orb mission-orb-a"></span>
+    <span class="mission-orb mission-orb-b"></span>
+    <span class="mission-grid-glow"></span>
+  </div>
+
+  <div class="mission-app" id="missionApp" data-ui-id="mission.workspace" data-ui-policy="root protected" data-ui-constraints="move=false;resize=false;preserveHandlers=true;preserveA11y=true">
+    <header class="mission-chrome" data-ui-id="mission.standalone-chrome" data-ui-policy="move resize" data-ui-constraints="minWidth=420;minHeight=56;preserveHandlers=true;preserveA11y=true">
+      <a class="mission-brand" href="/" aria-label="Back to Thomas Chat">
+        <span class="thomas-eyes-mark" aria-hidden="true"><span></span><span></span></span>
+        <span><strong>Thomas</strong><small>Local operations</small></span>
+      </a>
+      <div class="mission-chrome-actions" data-ui-id="mission.standalone-actions" data-ui-policy="protected controls" data-ui-constraints="move=false;resize=false;critical=true;preserveHandlers=true;preserveA11y=true">
+        <label class="theme-control" for="missionThemeSelect">
+          <span>Theme</span>
+          <select id="missionThemeSelect" data-thomas-theme-select aria-label="Mission Control theme">
+            <option value="nebula">Nebula Core</option>
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+            <option value="aurora">Aurora</option>
+            <option value="sandstone">Sandstone</option>
+          </select>
+        </label>
+        <a class="quiet-button" href="/">Chat</a>
       </div>
+    </header>
 
-      <div class="nav-section">
-        <div class="nav-item active" data-tab="missions">
-          <i class="ph-list-checks"></i>
-          <span>Missions</span>
-        </div>
-        <div class="nav-item" data-tab="activity">
-          <i class="ph-activity"></i>
-          <span>Activity</span>
-        </div>
-        <div class="nav-item" data-tab="approvals">
-          <i class="ph-seal-check"></i>
-          <span>Approvals</span>
-        </div>
-      </div>
-
-      <div class="kpi-section">
-        <div class="kpi-card">
-          <div class="kpi-label">Completed Today</div>
-          <div class="kpi-value" id="kpi-completed">0</div>
-          <div class="kpi-subtext">missions</div>
-        </div>
-
-        <div class="kpi-card">
-          <div class="kpi-label">Avg Completion</div>
-          <div class="kpi-value" id="kpi-completion-time">--</div>
-          <div class="kpi-subtext">minutes</div>
-        </div>
-
-        <div class="kpi-card">
-          <div class="kpi-label">Success Rate</div>
-          <div class="kpi-value" id="kpi-success-rate">--%</div>
-          <div class="kpi-subtext">system-wide</div>
-        </div>
-
-        <div class="kpi-card">
-          <div class="kpi-label">Active Agents</div>
-          <div class="kpi-value" id="kpi-active-agents">0</div>
-          <div class="kpi-subtext">online</div>
-        </div>
-
-        <div class="kpi-card">
-          <div class="kpi-label">Queue Depth</div>
-          <div class="kpi-value" id="kpi-queue-depth">0</div>
-          <div class="kpi-subtext">pending</div>
-        </div>
-      </div>
-    </aside>
-
-    <!-- Main Content -->
-    <main class="main-content">
-      <div class="header">
-        <div>
+    <main class="mission-content">
+      <section class="mission-hero" data-ui-id="mission.hero" data-ui-policy="move resize" data-ui-constraints="minWidth=300;minHeight=150;preserveHandlers=true;preserveA11y=true">
+        <div class="mission-hero-copy">
+          <span class="eyebrow">Operations workspace</span>
           <h1>Mission Control</h1>
+          <p>See what Thomas is doing, clear approvals, and schedule the next job without leaving the workspace.</p>
         </div>
-        <div class="header-controls">
-          <button class="btn btn-secondary btn-sm toggle-filter" id="toggle-filter">
-            <i class="ph-funnel"></i>
-            Filters
-          </button>
-          <button class="btn btn-primary btn-sm" id="btn-new-mission">
-            <i class="ph-plus"></i>
-            New Mission
-          </button>
+        <div class="mission-hero-actions" data-ui-id="mission.hero-actions" data-ui-policy="protected controls" data-ui-constraints="move=false;resize=false;critical=true;preserveHandlers=true;preserveA11y=true">
+          <span class="connection-pill is-connecting" id="missionConnection" role="status"><i></i><span>Connecting</span></span>
+          <button class="quiet-button" id="missionRefreshButton" type="button">Refresh</button>
+          <button class="primary-button" id="missionNewButton" type="button" aria-controls="missionCreatePanel" aria-expanded="false">New mission</button>
         </div>
-      </div>
+      </section>
 
-      <div class="tabs">
-        <div class="tab active" data-tab="missions">Missions</div>
-        <div class="tab" data-tab="activity">Activity Feed</div>
-        <div class="tab" data-tab="approvals">Approvals Queue</div>
-      </div>
+      <section class="mission-pulse" aria-label="Mission pulse" data-ui-id="mission.pulse" data-ui-policy="move resize" data-ui-constraints="minWidth=300;minHeight=105;preserveHandlers=true;preserveA11y=true">
+        <article class="pulse-card" data-ui-id="mission.pulse.now" data-ui-policy="move resize" data-ui-constraints="minWidth=180;minHeight=88">
+          <span>Now</span><strong id="pulseNowTitle">No active execution</strong><small id="pulseNowMeta">Waiting for live work</small>
+        </article>
+        <article class="pulse-card" data-ui-id="mission.pulse.next" data-ui-policy="move resize" data-ui-constraints="minWidth=180;minHeight=88">
+          <span>Next</span><strong id="pulseNextTitle">No scheduled run</strong><small id="pulseNextMeta">Create a job when ready</small>
+        </article>
+        <article class="pulse-card" data-ui-id="mission.pulse.blockers" data-ui-policy="move resize" data-ui-constraints="minWidth=180;minHeight=88">
+          <span>Blockers</span><strong id="pulseBlockerTitle">0 blockers</strong><small id="pulseBlockerMeta">Nothing needs attention</small>
+        </article>
+      </section>
 
-      <!-- Missions Tab -->
-      <div class="tab-content active" id="tab-missions">
-        <div style="overflow-x: auto;">
-          <table class="missions-table" id="missions-table">
-            <thead>
-              <tr>
-                <th onclick="sortTable(this)">Mission <i class="ph-arrow-up" style="font-size: 10px; margin-left: 4px;"></i></th>
-                <th onclick="sortTable(this)">Status</th>
-                <th onclick="sortTable(this)">Progress</th>
-                <th onclick="sortTable(this)">Agent</th>
-                <th onclick="sortTable(this)">Priority</th>
-                <th onclick="sortTable(this)">Created</th>
-              </tr>
-            </thead>
-            <tbody id="missions-list">
-              <tr>
-                <td colspan="6" class="empty-state">
-                  <div class="empty-state-icon"><i class="ph-inbox"></i></div>
-                  <div class="empty-state-title">No missions yet</div>
-                  <div>Create a new mission to get started</div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+      <section class="mission-metrics" aria-label="Mission metrics" data-ui-id="mission.metrics" data-ui-policy="move resize" data-ui-constraints="minWidth=300;minHeight=94;preserveHandlers=true;preserveA11y=true">
+        <article class="metric-card" data-ui-id="mission.metric.active" data-ui-policy="move resize" data-ui-constraints="minWidth=150;minHeight=80"><span>Active work</span><strong id="metricActive">0</strong><small id="metricActiveMeta">No active agents</small></article>
+        <article class="metric-card" data-ui-id="mission.metric.approvals" data-ui-policy="move resize" data-ui-constraints="minWidth=150;minHeight=80"><span>Approvals</span><strong id="metricApprovals">0</strong><small id="metricApprovalsMeta">Nothing waiting</small></article>
+        <article class="metric-card" data-ui-id="mission.metric.risk" data-ui-policy="move resize" data-ui-constraints="minWidth=150;minHeight=80"><span>Risk states</span><strong id="metricRisk">0</strong><small id="metricRiskMeta">No blocked work</small></article>
+        <article class="metric-card" data-ui-id="mission.metric.engine" data-ui-policy="move resize" data-ui-constraints="minWidth=150;minHeight=80"><span>Engine</span><strong id="metricEngine">--</strong><small id="metricEngineMeta">Checking runtime</small></article>
+      </section>
+
+      <section class="create-panel" id="missionCreatePanel" hidden data-ui-id="mission.create-panel" data-ui-policy="move resize" data-ui-constraints="minWidth=320;minHeight=300;preserveHandlers=true;preserveA11y=true">
+        <div class="panel-heading">
+          <div><span class="eyebrow">Schedule work</span><h2>Create a mission</h2></div>
+          <button class="icon-button" id="missionCreateClose" type="button" aria-label="Close mission form">&times;</button>
         </div>
-      </div>
-
-      <!-- Activity Tab -->
-      <div class="tab-content" id="tab-activity">
-        <div class="activity-feed" id="activity-feed">
-          <div class="empty-state">
-            <div class="empty-state-icon"><i class="ph-radio-button-off"></i></div>
-            <div class="empty-state-title">No activity yet</div>
-            <div>Live events will appear here</div>
+        <form id="missionCreateForm">
+          <div class="form-grid">
+            <label><span>Name</span><input id="missionName" name="name" maxlength="80" placeholder="Daily operations brief"></label>
+            <label><span>Run mode</span><select id="missionMode" name="mode"><option value="now">Run now</option><option value="once">Run once</option><option value="interval">Interval</option><option value="daily">Daily</option><option value="weekly">Weekly</option></select></label>
+            <label class="field-wide"><span>Task or goal</span><textarea id="missionGoal" name="goal" rows="3" required placeholder="Summarize priorities, blockers, and the next owner actions."></textarea></label>
+            <label><span>Workflow</span><select id="missionWorkflow" name="workflow"><option value="chain">Chain</option><option value="orchestrator_worker">Orchestrator + worker</option><option value="parallel">Parallel</option></select></label>
+            <label><span>Model profile <em>optional</em></span><input id="missionProfile" name="profile" placeholder="balanced"></label>
+            <label data-schedule-field="once" hidden><span>Run at</span><input id="missionRunAt" type="datetime-local" name="run_at"></label>
+            <label data-schedule-field="interval" hidden><span>Every seconds</span><input id="missionEvery" type="number" min="30" step="30" value="3600"></label>
+            <label data-schedule-field="timed" hidden><span>At</span><input id="missionAt" type="time" value="08:00"></label>
+            <label data-schedule-field="timed" hidden><span>Timezone</span><input id="missionTimezone" value="America/Chicago"></label>
+            <fieldset class="weekday-field field-wide" data-schedule-field="weekly" hidden><legend>Weekdays</legend><div id="missionWeekdays"><label><input type="checkbox" value="0" checked>Mon</label><label><input type="checkbox" value="1" checked>Tue</label><label><input type="checkbox" value="2" checked>Wed</label><label><input type="checkbox" value="3" checked>Thu</label><label><input type="checkbox" value="4" checked>Fri</label><label><input type="checkbox" value="5">Sat</label><label><input type="checkbox" value="6">Sun</label></div></fieldset>
           </div>
-        </div>
-      </div>
+          <label class="approval-check"><input id="missionRequiresApproval" type="checkbox"><span>Require manual approval before execution</span></label>
+          <div class="form-actions" data-ui-id="mission.create-actions" data-ui-policy="protected controls" data-ui-constraints="move=false;resize=false;critical=true;preserveHandlers=true;preserveA11y=true"><span id="missionCreateStatus" role="status">Ready</span><button class="primary-button" id="missionCreateSubmit" type="submit">Create mission</button></div>
+        </form>
+      </section>
 
-      <!-- Approvals Tab -->
-      <div class="tab-content" id="tab-approvals">
-        <div id="approvals-list">
-          <div class="empty-state">
-            <div class="empty-state-icon"><i class="ph-check-circle"></i></div>
-            <div class="empty-state-title">All clear!</div>
-            <div>No pending approvals</div>
-          </div>
-        </div>
+      <div class="mission-board">
+        <section class="panel live-panel" data-ui-id="mission.live-work" data-ui-policy="move resize" data-ui-constraints="minWidth=280;minHeight=220;preserveHandlers=true;preserveA11y=true">
+          <div class="panel-heading"><div><span class="eyebrow">Delegated agents</span><h2>Live work</h2></div><span class="panel-count" id="agentsCount">0 active</span></div>
+          <div class="card-list" id="agentsList" aria-live="polite"></div>
+        </section>
+
+        <section class="panel jobs-panel" data-ui-id="mission.jobs" data-ui-policy="move resize" data-ui-constraints="minWidth=320;minHeight=260;preserveHandlers=true;preserveA11y=true">
+          <div class="panel-heading"><div><span class="eyebrow">Tasks + schedules</span><h2>Mission queue</h2></div><span class="panel-count" id="jobsCount">0 jobs</span></div>
+          <div class="segmented" id="jobFilters" aria-label="Filter jobs" data-ui-id="mission.job-filters" data-ui-policy="protected controls" data-ui-constraints="move=false;resize=false;preserveHandlers=true;preserveA11y=true"><button class="is-active" type="button" data-filter="active">Active</button><button type="button" data-filter="all">All</button><button type="button" data-filter="scheduled">Scheduled</button></div>
+          <div class="card-list" id="jobsList" aria-live="polite"></div>
+        </section>
+
+        <section class="panel approvals-panel" data-ui-id="mission.approvals" data-ui-policy="move resize" data-ui-constraints="minWidth=280;minHeight=220;preserveHandlers=true;preserveA11y=true">
+          <div class="panel-heading"><div><span class="eyebrow">Owner decisions</span><h2>Approvals</h2></div><span class="panel-count" id="approvalsCount">0 waiting</span></div>
+          <div class="card-list" id="approvalsList" aria-live="polite"></div>
+        </section>
+
+        <section class="panel activity-panel" data-ui-id="mission.activity" data-ui-policy="move resize" data-ui-constraints="minWidth=280;minHeight=220;preserveHandlers=true;preserveA11y=true">
+          <div class="panel-heading"><div><span class="eyebrow">Latest changes</span><h2>Recent signals</h2></div><span class="panel-count" id="updatedAt">Not synced</span></div>
+          <div class="timeline" id="activityList" aria-live="polite"></div>
+        </section>
       </div>
     </main>
-
-    <!-- Right Panel -->
-    <aside class="right-panel">
-      <div class="panel-section">
-        <div class="panel-title">Agent Status</div>
-        <div id="agents-grid">
-          <div class="empty-state" style="padding: 20px;">
-            <div class="empty-state-icon"><i class="ph-robot"></i></div>
-            <div class="empty-state-title">No agents connected</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="panel-section">
-        <div class="panel-title">Pending Approvals</div>
-        <div id="approvals-panel">
-          <div class="empty-state" style="padding: 20px;">
-            <div class="empty-state-icon"><i class="ph-seal-check"></i></div>
-            <div class="empty-state-title">No pending items</div>
-          </div>
-        </div>
-      </div>
-    </aside>
   </div>
 
-  <!-- Modal for Creating Mission -->
-  <div class="modal" id="mission-modal">
-    <div class="modal-content">
-      <div class="modal-header">Create New Mission</div>
-      <form id="mission-form">
-        <div class="form-group">
-          <label class="form-label">Mission Name</label>
-          <input type="text" class="form-input" id="mission-name" placeholder="e.g., Data Analysis Report" required>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Goal Description</label>
-          <textarea class="form-textarea" id="mission-goal" placeholder="Describe what this mission should accomplish..." required></textarea>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Priority</label>
-          <div class="radio-group">
-            <label class="radio-option">
-              <input type="radio" name="priority" value="P1" required>
-              <span>P1 (Critical)</span>
-            </label>
-            <label class="radio-option">
-              <input type="radio" name="priority" value="P2">
-              <span>P2 (High)</span>
-            </label>
-            <label class="radio-option">
-              <input type="radio" name="priority" value="P3" checked>
-              <span>P3 (Med)</span>
-            </label>
-            <label class="radio-option">
-              <input type="radio" name="priority" value="P4">
-              <span>P4 (Low)</span>
-            </label>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Assigned Agent</label>
-          <select class="form-select" id="mission-agent" required>
-            <option value="">Select an agent...</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Autonomy Level</label>
-          <select class="form-select" id="mission-autonomy" required>
-            <option value="assisted">Assisted (Ask for approval)</option>
-            <option value="semi-autonomous">Semi-Autonomous (Rare checks)</option>
-            <option value="autonomous">Autonomous (No approval needed)</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Schedule</label>
-          <div class="radio-group">
-            <label class="radio-option">
-              <input type="radio" name="schedule-type" value="once" checked>
-              <span>Run once</span>
-            </label>
-            <label class="radio-option">
-              <input type="radio" name="schedule-type" value="cron">
-              <span>Recurring (Cron)</span>
-            </label>
-          </div>
-        </div>
-
-        <div class="form-group" id="cron-group" style="display: none;">
-          <label class="form-label">Cron Expression</label>
-          <input type="text" class="form-input" id="mission-cron" placeholder="e.g., 0 9 * * MON">
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Risk Class</label>
-          <select class="form-select" id="mission-risk" required>
-            <option value="low">Low Risk</option>
-            <option value="medium">Medium Risk</option>
-            <option value="high">High Risk (Requires approval)</option>
-          </select>
-        </div>
-
-        <div class="form-actions">
-          <button type="button" class="btn btn-cancel" onclick="closeModal()">Cancel</button>
-          <button type="submit" class="btn btn-primary">Create Mission</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Toast Container -->
-  <div class="toast-container" id="toast-container"></div>
-
-  
-  <script src="mission.script01.js"></script>
-
+  <div class="toast-stack" id="missionToasts" aria-live="polite" aria-atomic="true"></div>
+  <script defer src="/static/js/workspace_shell.js?v=__THOMAS_VERSION__"></script>
+  <script defer src="/static/js/ui_edit_layout.js?v=__THOMAS_VERSION__"></script>
+  <script defer src="/static/js/ui_edit_mode.js?v=__THOMAS_VERSION__"></script>
+  <script defer src="/static/mission.script01.js?v=__THOMAS_VERSION__"></script>
 </body>
 </html>

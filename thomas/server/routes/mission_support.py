@@ -13,6 +13,7 @@ import smtplib
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import OrderedDict
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from pathlib import Path
@@ -56,6 +57,8 @@ _MISSION_ALLOWED_JOB_KINDS = {
 _MISSION_ALLOWED_RISK_CLASSES = {"low", "medium", "high", "critical"}
 _MISSION_TERMINAL_JOB_STATUSES = {"succeeded", "failed", "cancelled", "dead"}
 _AUTOPILOT_OBJECTIVE_ID_RE = re.compile(r"^[A-Za-z0-9._-]{4,80}$")
+_LATEST_TERMINAL_RUN_EVENT_CACHE: OrderedDict[tuple[int, str], dict[str, Any] | None] = OrderedDict()
+_LATEST_TERMINAL_RUN_EVENT_CACHE_LIMIT = 512
 
 
 def _task_pack_key_for_path(path: Path) -> str:
@@ -648,7 +651,18 @@ def _room_for_tool_name(tool_name: str) -> str:
     return "tools"
 
 
-def _latest_run_event(run_store_mod: Any, run_id: str) -> dict[str, Any] | None:
+def _latest_run_event(
+    run_store_mod: Any,
+    run_id: str,
+    *,
+    terminal: bool = False,
+) -> dict[str, Any] | None:
+    cache_key = (id(run_store_mod), str(run_id))
+    if terminal and cache_key in _LATEST_TERMINAL_RUN_EVENT_CACHE:
+        _LATEST_TERMINAL_RUN_EVENT_CACHE.move_to_end(cache_key)
+        cached = _LATEST_TERMINAL_RUN_EVENT_CACHE[cache_key]
+        return dict(cached) if isinstance(cached, dict) else None
+
     latest: dict[str, Any] | None = None
     try:
         for evt in run_store_mod.stream_replay(run_id):
@@ -656,4 +670,9 @@ def _latest_run_event(run_store_mod: Any, run_id: str) -> dict[str, Any] | None:
                 latest = evt
     except Exception:
         return None
-    return latest
+    if terminal:
+        _LATEST_TERMINAL_RUN_EVENT_CACHE[cache_key] = dict(latest) if isinstance(latest, dict) else None
+        _LATEST_TERMINAL_RUN_EVENT_CACHE.move_to_end(cache_key)
+        while len(_LATEST_TERMINAL_RUN_EVENT_CACHE) > _LATEST_TERMINAL_RUN_EVENT_CACHE_LIMIT:
+            _LATEST_TERMINAL_RUN_EVENT_CACHE.popitem(last=False)
+    return dict(latest) if isinstance(latest, dict) else None

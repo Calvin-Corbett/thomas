@@ -37,7 +37,7 @@ def build_page_handlers(
             html = await asyncio.to_thread(
                 lambda: (web_dir / "chat.html").read_text(encoding="utf-8", errors="replace")
             )
-            web_build = web_build_fingerprint("chat.html")
+            web_build = web_build_fingerprint("chat.html", "js/workspace_shell.js")
             html = html.replace("__THOMAS_VERSION__", THOMAS_VERSION)
             html = html.replace("__THOMAS_WEB_BUILD__", web_build)
             return web.Response(
@@ -59,6 +59,15 @@ def build_page_handlers(
                 "js/app.js",
                 "js/app_runtime_loader.js",
                 "js/runtime/001_preamble.js",
+                "js/runtime/canvas_workspace_contract.js",
+                "js/runtime/canvas_workspace_runtime.js",
+                "js/runtime/048_ui_studio_canvas.js",
+                "js/workspace_shell.js",
+                "js/ui_edit_layout.js",
+                "js/ui_edit_mode.js",
+                "css/workspace_shell.css",
+                "css/virtual_office_workspace.css",
+                "css/ui_edit_mode.css",
                 "index.html",
             )
             html = html.replace("__THOMAS_VERSION__", THOMAS_VERSION)
@@ -75,10 +84,14 @@ def build_page_handlers(
         try:
             html = (web_dir / "settings.html").read_text(encoding="utf-8", errors="replace")
             web_build = web_build_fingerprint(
-                "js/app.js",
-                "js/app_runtime_loader.js",
-                "js/runtime/001_preamble.js",
-                "index.html",
+                "settings.html",
+                "settings.style01.css",
+                "settings.script01.js",
+                "js/workspace_shell.js",
+                "js/ui_edit_layout.js",
+                "js/ui_edit_mode.js",
+                "css/workspace_shell.css",
+                "css/ui_edit_mode.css",
             )
             html = html.replace("__THOMAS_VERSION__", THOMAS_VERSION)
             html = html.replace("__THOMAS_WEB_BUILD__", web_build)

@@ -263,6 +263,7 @@ function officeSyncReducedMotionPreference() {
 
 function initOfficeWorkspace() {
     if (!officeScene || !officeWorkspace) return;
+    if (typeof officeHydrateServerState === 'function') void officeHydrateServerState();
     if (!officeEnsureState()) return;
     officeState.active = !officeWorkspace.classList.contains('hidden') || officeWorkspace.classList.contains('chat-preview-active');
     if (officeState.active) {

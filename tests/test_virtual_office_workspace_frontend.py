@@ -4,12 +4,16 @@ from pathlib import Path
 from tests.web_ui_source import read_app_js_source
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-VIRTUAL_OFFICE_HTML = REPO_ROOT / "thomas" / "server" / "web" / "virtual_office.html"
-VIRTUAL_OFFICE_STATIC_HTML = REPO_ROOT / "thomas" / "server" / "web" / "static" / "virtual_office.html"
 LAYOUT_DEBUG_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "layout-debug-panel.css"
-OFFICE_AGENT_PROOF_SCRIPT = REPO_ROOT / "output" / "playwright" / "office-agent-chat-task-proof.mjs"
+VIRTUAL_OFFICE_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "virtual_office_workspace.css"
 APP_RUNTIME_LOADER = REPO_ROOT / "thomas" / "server" / "web" / "js" / "app_runtime_loader.js"
 RUNTIME_DIR = REPO_ROOT / "thomas" / "server" / "web" / "js" / "runtime"
+OFFICE_AGENT_ELEMENT = RUNTIME_DIR / "office_agent_element.js"
+OFFICE_AGENT_CHAT_PANELS = RUNTIME_DIR / "office_agent_chat_panels.js"
+OFFICE_MAP_SCENE = RUNTIME_DIR / "office_map_scene.js"
+OFFICE_MAP_VIEWPORT = RUNTIME_DIR / "office_map_state_viewport.js"
+OFFICE_ASSET_DETAIL_RENDERER = RUNTIME_DIR / "office_asset_detail_renderer.js"
+OFFICE_WORKSPACE_RUNTIME = RUNTIME_DIR / "022_virtual_office_06.js"
 
 
 def _read(path: Path) -> str:
@@ -24,48 +28,32 @@ def test_virtual_office_mode_is_reinserted_by_runtime() -> None:
     assert "id: 'office'" in js
 
 
-def test_virtual_office_proof_captures_each_default_room() -> None:
-    proof_js = _read(OFFICE_AGENT_PROOF_SCRIPT)
+def test_virtual_office_runtime_contracts_are_committed_sources() -> None:
+    map_js = _read(OFFICE_MAP_SCENE)
+    chat_js = _read(OFFICE_AGENT_CHAT_PANELS)
+    workspace_js = _read(OFFICE_WORKSPACE_RUNTIME)
+    runtime_js = read_app_js_source()
 
-    assert "const roomCloseupDir = path.join(outDir, 'room-closeups');" in proof_js
-    assert "const roomCloseupTargets = await page.evaluate(() => {" in proof_js
-    assert "const roomCloseupProof = [];" in proof_js
-    assert "roomCloseupProof.push({" in proof_js
-    assert "defaultRoomCloseupsCaptured: roomCloseupProof.length === layoutQualityProof.spaces" in proof_js
-    assert (
-        "defaultAgentLabelsDoNotOverlap: roomCloseupProof.every((room) => room.overlappingAgentLabels === 0)"
-        in proof_js
-    )
-    assert (
-        "defaultAgentBodiesDoNotStack: roomCloseupProof.every((room) => room.overlappingAgentBodies === 0)" in proof_js
-    )
-    assert (
-        "defaultAgentBodiesStayInAssignedRooms: roomCloseupProof.every((room) => room.agentBodiesOutsideAssignedRoom === 0)"
-        in proof_js
-    )
-    assert "const roomCommandProof = await page.evaluate((agentId) => {" in proof_js
-    assert "agentRoomNameCommandsTargetRooms: roomCommandProof.length === 4" in proof_js
-    assert "const broadCommandProof = await page.evaluate((agentId) => {" in proof_js
-    assert "agentBroadObjectCommandsResolveActions: broadCommandProof.length === 12" in proof_js
-    assert "const shellProof = await page.evaluate(() => ({" in proof_js
-    assert "topModelLabelResolved: shellProof.modelSetupLabel.length > 0" in proof_js
-    assert "topModelLabelUsesConfiguredModel: !/^connection & defaults$/i.test(shellProof.modelSetupLabel)" in proof_js
-    assert "agentChatModelLabelIsUserFacing: chatProof.chatModelLabel.includes('OpenAI')" in proof_js
-    assert "overviewFurnitureSilhouettesReadable: layoutQualityProof.overviewAssetCount >= 80" in proof_js
-    assert "readableOverviewAssetCount: readableOverviewAssets.length" in proof_js
-    assert "text: 'go to the lounge', roomId: 'room-break', spaceId: 'lounge', action: 'sit'" in proof_js
-    assert (
-        "text: 'walk to the research bay', roomId: 'room-research', spaceId: 'research-bay', action: 'research'"
-        in proof_js
-    )
-    assert (
-        "text: 'go to a focus pod and do deep work', spaceId: 'focus-pods', roomId: 'room-pods', assetType: 'focus_pod', action: 'work'"
-        in proof_js
-    )
-    assert (
-        "text: 'shoot a video at the green screen in content studio', spaceId: 'content-studio', roomId: 'room-content', assetType: 'green_screen', action: 'record'"
-        in proof_js
-    )
+    assert "function officeRenderDraftMapScene(options = {})" in map_js
+    assert "officePopulateDraftGlobalAgentLayer(agentLayer, state, renderNow, initialAgentAssignments, 'scene');" in map_js
+    assert "officeDraftCreateAssetElement(space, asset, state)" in map_js
+    assert "officeDraftHandleAgentClick" in runtime_js
+    assert "officeBindDraftAgentChatPanel(panel);" in chat_js
+    assert "officeDraftPersistLayout(state);" in workspace_js
+    assert "function officeStartMissionStream()" in runtime_js
+    assert "const url = '/api/mission/stream?interval=1.8';" in runtime_js
+    assert "Accept: 'application/x-ndjson'" in runtime_js
+
+
+def test_virtual_office_initial_camera_frames_the_active_room_when_full_map_is_too_small() -> None:
+    viewport_js = _read(OFFICE_MAP_VIEWPORT)
+
+    assert "function officeDraftFocusSpaceZoom(space, viewport)" in viewport_js
+    assert "function officeDraftApplyFocusedViewport(state, focusSpace, viewport)" in viewport_js
+    assert "if (fitZoom >= OFFICE_DRAFT_LEGIBLE_MIN_ZOOM)" in viewport_js
+    assert "if (officeDraftApplyFocusedViewport(state, focusSpace, viewport)) return;" in viewport_js
+    assert "viewport.width < 640 ? 0.38 : (viewport.width < 900 ? 0.5 : 0.64)" in viewport_js
+    assert "minimap as the whole-office navigator" in viewport_js
 
 
 def test_split_runtime_loader_boots_after_all_office_chunks() -> None:
@@ -87,9 +75,8 @@ def test_virtual_office_agent_selection_text_and_cosmetics_are_tight() -> None:
     js = read_app_js_source()
     css = _read(LAYOUT_DEBUG_CSS)
 
-    assert "const activeAgentId = safeString(state?.expandedRosterAgentId || officeState?.selectedAgentId);" in js
-    assert "const densityAllowsNames = Math.max(1, Number(total) || 1) <= 3;" in js
-    assert "showName: focused || (!activeAgentId && densityAllowsNames && zoom >= OFFICE_DRAFT_AGENT_NAME_ZOOM)," in js
+    assert "const densityAllowsNames = Math.max(1, Number(total) || 1) <= 3 || zoom >= 0.72;" in js
+    assert "showName: focused || (densityAllowsNames && zoom >= OFFICE_DRAFT_AGENT_NAME_ZOOM)," in js
     assert (
         "const speechText = typeof officeVisibleSpeech === 'function' ? officeVisibleSpeech(agent, now) : safeString(agent?.speech);"
         in js
@@ -97,10 +84,9 @@ def test_virtual_office_agent_selection_text_and_cosmetics_are_tight() -> None:
     assert "const speechContext = activity === 'talking' || activity === 'paused' || activity === 'dropped';" in js
     assert "showBubble: Boolean(safeString(speechText) && speechContext)," in js
     assert 'data-office-draft-agent-selection="1"' not in js
-    assert 'data-office-draft-agent-name="1" style="position:absolute;z-index:3;' in js
-    assert "padding:0;border:0;background:transparent" in js
-    assert 'data-office-draft-agent-bubble="1" style="position:absolute;z-index:4;' in js
-    assert "officeDraftSetStyleValue(el, 'border', '0');" in js
+    assert 'class="office-live-agent-name" data-office-draft-agent-name="1"' in js
+    assert 'class="office-live-agent-bubble" data-office-draft-agent-bubble="1"' in js
+    assert "el.className = 'office-live-agent';" in js
     assert "officeDraftSetStyleValue(el, 'zIndex', selected ? '80'" in js
     assert "const selectionEl = el.querySelector('[data-office-draft-agent-selection=\"1\"]');" not in js
     assert "transform:translateX(0) translateY(6px) scale(.92)" in js
@@ -108,7 +94,7 @@ def test_virtual_office_agent_selection_text_and_cosmetics_are_tight() -> None:
     assert "const bubbleLeft = Number(placement.x) > (Number(space?.width) || 0) - 260;" in js
     assert "officeDraftSetStyleValue(bubbleEl, 'left', bubbleLeft ? 'auto' : '136px');" in js
     assert "officeDraftSetStyleValue(bubbleEl, 'right', bubbleLeft ? '136px' : 'auto');" in js
-    assert "display:flex;align-items:flex-start;justify-content:center;width:96px;height:106px;margin:20px auto 0" in js
+    assert 'class="office-live-agent-robot" data-office-draft-agent-robot="1"' in js
 
     pixel_agent_block = css[css.index(".office-pixel-agent {") : css.index(".office-pixel-agent.facing-left")]
     assert "display: block;" in pixel_agent_block
@@ -121,6 +107,63 @@ def test_virtual_office_agent_selection_text_and_cosmetics_are_tight() -> None:
     assert "border-radius: 22px 22px 0 0" not in headset_before
     assert "box-shadow:" in headset_before
     assert ".office-pixel-agent.costume-headset::after" in css
+
+
+def test_virtual_office_modern_shell_uses_shared_chat_tokens_and_eyes_mark() -> None:
+    css = _read(VIRTUAL_OFFICE_CSS)
+    index = _read(REPO_ROOT / "thomas" / "server" / "web" / "index.html")
+
+    assert "#officeWorkspace.office-modern-workspace" in css
+    assert "color: var(--c-text);" in css
+    assert "var(--c-bg)" in css
+    assert "var(--c-sidebar)" in css
+    assert "var(--c-border)" in css
+    assert "var(--c-accent)" in css
+    assert "color-mix(in srgb, var(--office-room-shell)" in css
+    assert "color-mix(in srgb, var(--office-room-floor)" in css
+    assert 'var(--font-sans, "Manrope", system-ui, sans-serif)' in css
+    assert "#officeWorkspace .office-map-brand" in css
+    assert "@media (max-width: 900px)" in css
+    assert "@media (prefers-reduced-motion: reduce)" in css
+    assert "/static/css/virtual_office_workspace.css?v=__THOMAS_WEB_BUILD__" in index
+    for ui_id in (
+        "virtual-office.shell",
+        "virtual-office.stage",
+        "virtual-office.map",
+        "virtual-office.minimap",
+        "virtual-office.action.follow",
+    ):
+        assert f'data-ui-id="{ui_id}"' in index
+
+
+def test_virtual_office_live_ui_registers_stable_editor_contracts() -> None:
+    agent_js = _read(OFFICE_AGENT_ELEMENT)
+    asset_detail_js = _read(OFFICE_ASSET_DETAIL_RENDERER)
+    chat_js = _read(OFFICE_AGENT_CHAT_PANELS)
+    map_js = _read(OFFICE_MAP_SCENE)
+    workspace_js = _read(OFFICE_WORKSPACE_RUNTIME)
+
+    assert "el.dataset.uiId = 'virtual-office.agent';" in agent_js
+    assert "el.dataset.uiInstanceKey = safeString(agent?.id);" in agent_js
+    assert "el.dataset.uiPolicy = 'protected live-map-item';" in agent_js
+    assert "part.className = 'office-asset-detail';" in asset_detail_js
+    assert "var(--c-accent-line" in asset_detail_js
+    assert "function officeDraftChatMessageInstanceKey(agentId, entry)" in chat_js
+    assert "Math.abs(officeStableHash(seed)).toString(36)" in chat_js
+    assert 'data-ui-id="virtual-office.chat-message"' in chat_js
+    assert 'data-ui-instance-key="${escapeHtml(instanceKey)}"' in chat_js
+    assert "id: 'virtual-office.agent-chat'" in chat_js
+    assert "id: 'virtual-office.agent-roster'" in chat_js
+    assert "id: 'virtual-office.asset'" in map_js
+    assert "instanceKey: assetId" in map_js
+    assert "id: 'virtual-office.room'" in map_js
+    assert "id: 'virtual-office.map-toolbar'" in map_js
+    assert "brandMark.className = 'thomas-eyes-mark office-map-brand';" in map_js
+    assert "id: 'virtual-office.brand'" in map_js
+    assert "policy: 'protected controls'" in map_js
+    assert "officeWorkspace.dataset.uiId = 'virtual-office.shell';" in workspace_js
+    assert "officeDebugToggleBtn.dataset.uiPolicy = 'protected controls';" in workspace_js
+    assert "officeDebugOverlay.dataset.uiPolicy = 'protected critical-status';" in workspace_js
 
 
 def test_virtual_office_draft_map_runtime_hooks_present() -> None:
@@ -365,7 +408,7 @@ def test_virtual_office_draft_map_runtime_hooks_present() -> None:
     assert "activeTask?.title || agent?.lastOfficeActionMemory" in js
     assert "officeBusEmit('agent.office_command_complete'" in js
     assert "officePersistRuntimeState(Number(now) || performance.now(), { force: true });" in js
-    assert 'data-office-draft-agent-can="1" style="position:absolute;left:92px;top:70px;' in js
+    assert 'class="office-live-agent-can" data-office-draft-agent-can="1"' in js
     assert "officeDraftSetStyleValue(canEl, 'display', activity === 'drink' ? 'inline-flex' : 'none');" in js
     assert "function officeDraftAgentSocialLine(agent, space, index, total, activity, now = performance.now())" in js
     assert (
@@ -530,7 +573,7 @@ def test_virtual_office_workspace_wires_editor_roster_and_agents() -> None:
     assert "officeWorkspace.remove();" not in js
     assert "officeEditorToggleBtn.style.display = 'none';" in js
     assert "officeWorkspace?.querySelector('.office-bottom-dock')" in js
-    assert "mapToolbar.style.right = '14px';" in js
+    assert "mapToolbar.classList.add('office-map-toolbar');" in js
     assert "toolbarStatus.style.display = 'none';" in js
     assert "officeMinimap.style.height = `${state.minimapSize}px`;" in js
     assert (
@@ -541,11 +584,11 @@ def test_virtual_office_workspace_wires_editor_roster_and_agents() -> None:
     assert "officeFollowToggleBtn.textContent = state.minimapMinimized ? 'Show' : 'Hide';" in js
     assert "Virtual office minimap showing the current camera window." in js
     assert "minimapBtn.textContent = 'Minimap';" in js
-    assert "editorBtn.textContent = 'Office Editor';" in js
+    assert "editorBtn.textContent = 'Layout';" in js
     assert "rosterBtn.textContent = 'Agent Roster';" in js
     assert "chatBtn.textContent = 'Chat';" in js
     assert "saveBtn.textContent = 'Save';" in js
-    assert "editorToolbarBtn.textContent = 'Office Editor';" in js
+    assert "editorToolbarBtn.textContent = 'Layout';" in js
     assert "rosterToolbarBtn.textContent = 'Agent Roster';" in js
     assert "chatToolbarBtn.textContent = 'Chat';" in js
     assert "undoBtn.textContent = 'Back';" in js
@@ -569,8 +612,7 @@ def test_virtual_office_workspace_wires_editor_roster_and_agents() -> None:
     assert "state.catalogScrollTop = Math.max(0, Math.round(Number(catalogScroll.scrollTop) || 0));" in js
     assert "draftState.catalogScrollTop = 0;" in js
     assert "state.catalogScrollTop = 0;" in js
-    assert "editorPanel.style.width = '520px';" in js
-    assert "editorPanel.style.overflow = 'hidden';" in js
+    assert "editorPanel.classList.add('office-live-panel', 'office-layout-panel');" in js
     assert "Click and drag into a room to place a three-seat couch." in js
     assert "data-office-editor-rotation-step" in js
     assert 'data-office-editor-grid-toggle="1"' in js
@@ -592,7 +634,7 @@ def test_virtual_office_workspace_wires_editor_roster_and_agents() -> None:
     assert "state.gridEnabled = !state.gridEnabled;" in js
     assert "state.rotationStep = Number(rotationBtn.dataset.officeEditorRotationStep) || 15;" in js
     assert "state.catalogPendingType = safeString(assetType);" in js
-    assert "room.appendChild(officeDraftCreateAssetElement(space, {" in js
+    assert "room.appendChild(officeDecorateDraftAssetUiNode(officeDraftCreateAssetElement(space, previewAsset, state), space, previewAsset));" in js
     assert "id: 'catalog-preview'" in js
     assert "colorVariant: officeDraftAssetDefaultColorVariant(pendingType)" in js
     assert "officeSceneWrap.style.cursor = 'copy';" in js
@@ -627,9 +669,9 @@ def test_virtual_office_workspace_wires_editor_roster_and_agents() -> None:
     assert 'data-office-agent-chat-send="1"' in js
     assert "Thinking...</div>" in js
     assert "Waiting on ${escapeHtml(chatModelLabel)}" not in js
-    assert "chatPanel.style.width = '520px';" in js
-    assert "min-height:220px;max-height:420px;overflow-y:auto;overflow-x:hidden" in js
-    assert 'data-office-agent-chat-input="1" rows="3"' in js
+    assert "chatPanel.classList.add('office-live-panel');" in js
+    assert 'class="office-chat-log" data-office-agent-chat-log="1"' in js
+    assert 'class="office-field" data-office-agent-chat-input="1" rows="3"' in js
     assert 'data-office-roster-field="chatProfile"' in js
     assert 'data-office-roster-field="chatModelId"' in js
     assert "if (target.closest('[data-office-agent-chat-panel=\"1\"]')) return true;" in js
@@ -913,13 +955,11 @@ def test_virtual_office_workspace_wires_editor_roster_and_agents() -> None:
     assert "'support-desk': { scaleX: 0.6, scaleY: 0.6, minWidth: 900, minHeight: 680" in js
     assert "officeMinimap.addEventListener('pointerdown', officeHandleDraftMinimapPointerDown);" in js
     assert "resizeHandle.setAttribute('aria-label', 'Resize minimap');" in js
-    assert "resizeHandle.style.borderRight = '3px solid rgba(152, 193, 255, 0.92)';" in js
+    assert "officeConfigureDynamicUi(resizeHandle, {" in js
     assert "if (state.minimapRenderTimer) return;" in js
-    assert "roomLabel.style.top = '-32px';" in js
-    assert (
-        "room.style.border = isSelectedSpace ? '4px solid rgba(122, 181, 255, 0.82)' : '4px solid rgba(158, 196, 255, 0.62)';"
-        in js
-    )
+    assert "roomLabel.className = 'office-room-label';" in js
+    assert "room.className = 'office-live-room';" in js
+    assert "top: 58px;" in _read(VIRTUAL_OFFICE_CSS)
     assert "action: 'food'," in js
     assert "action: 'print'," in js
     assert "action: 'charge'," in js
@@ -932,10 +972,16 @@ def test_virtual_office_workspace_wires_editor_roster_and_agents() -> None:
     assert "if (activity === 'drink') {" in js
 
 
-def test_virtual_office_entry_points_are_placeholder_shells() -> None:
-    for html_path in (VIRTUAL_OFFICE_HTML, VIRTUAL_OFFICE_STATIC_HTML):
-        text = _read(html_path)
-        assert "Virtual office reset pending rebuild" in text
-        assert "Gather-style redesign" in text
-        assert "virtual_office.script01.js" not in text
-        assert "virtual_office.style01.css" not in text
+def test_virtual_office_legacy_standalone_duplicates_are_removed() -> None:
+    web_root = REPO_ROOT / "thomas" / "server" / "web"
+    for relative_path in (
+        "virtual_office.html",
+        "virtual_office.script01_part01.js",
+        "virtual_office.script01_part02.js",
+        "virtual_office.style01.css",
+        "static/virtual_office.html",
+        "static/virtual_office.script01_part01.js",
+        "static/virtual_office.script01_part02.js",
+        "static/virtual_office.style01.css",
+    ):
+        assert not (web_root / relative_path).exists(), relative_path

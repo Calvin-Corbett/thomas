@@ -30,6 +30,7 @@ from thomas.server.app_keys import (
     APP_TOOLS,
     ChatSession,
 )
+from thomas.server.routes.chat_surface_namespace import normalize_workspace_context_id
 from thomas.tools.registry import ToolRegistry
 
 from .app_runtime_guard import _runtime_guard_loop
@@ -42,7 +43,13 @@ _RUN_STORE_JANITOR_INTERVAL_SECONDS = 120
 _RUN_STORE_STALE_IDLE_SECONDS = 10 * 60
 
 
-def _v2_sessions_as_chats(sessions_dir: Path, *, limit: int = 300) -> list[dict[str, Any]]:
+def _v2_sessions_as_chats(
+    sessions_dir: Path,
+    *,
+    limit: int = 300,
+    surface_mode: str = "",
+    context_id: str = "",
+) -> list[dict[str, Any]]:
     """Convert the LIVE v2 session store (``.thomas/sessions_v2/chat_*.json`` — where
     every chat conducted through /api/v2/chat is saved) into the sidebar's chat-list
     schema. GET /api/chats historically read ONLY the legacy ``.thomas/chats`` directory
@@ -62,7 +69,8 @@ def _v2_sessions_as_chats(sessions_dir: Path, *, limit: int = 300) -> list[dict[
             return 0.0
 
     files.sort(key=_mtime, reverse=True)
-    for path in files[: max(1, int(limit))]:
+    result_limit = max(1, int(limit))
+    for path in files:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -71,6 +79,13 @@ def _v2_sessions_as_chats(sessions_dir: Path, *, limit: int = 300) -> list[dict[
             continue
         sid = str(data.get("session_id") or "").strip()
         if not sid:
+            continue
+        meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+        stored_surface = str(meta.get("surface_mode") or "chat").strip().lower()
+        stored_context = str(meta.get("context_id") or "").strip()
+        if surface_mode and stored_surface != surface_mode:
+            continue
+        if context_id and stored_context != context_id:
             continue
         conv = data.get("conversation") if isinstance(data.get("conversation"), dict) else {}
         msgs: list[dict[str, Any]] = []
@@ -87,14 +102,13 @@ def _v2_sessions_as_chats(sessions_dir: Path, *, limit: int = 300) -> list[dict[
         title = (first_user.strip().splitlines()[0][:60] if first_user.strip() else "New chat") or "New chat"
         saved_at = data.get("saved_at")
         updated_ms = int(float(saved_at) * 1000) if isinstance(saved_at, (int, float)) else int(_mtime(path) * 1000)
-        meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
         out.append(
             {
                 "id": sid,
                 "sessionId": sid,
                 "title": title,
-                "surfaceMode": str(meta.get("surface_mode") or "chat"),
-                "contextId": str(meta.get("context_id") or ""),
+                "surfaceMode": stored_surface,
+                "contextId": stored_context,
                 "model": str(meta.get("model_id") or ""),
                 "messages": msgs,
                 "createdAt": updated_ms,
@@ -102,6 +116,8 @@ def _v2_sessions_as_chats(sessions_dir: Path, *, limit: int = 300) -> list[dict[
                 "pinned": False,
             }
         )
+        if len(out) >= result_limit:
+            break
     return out
 
 
@@ -146,6 +162,7 @@ def _setup_routes_and_handlers(
     _chat_file_for = locals_dict.get("_chat_file_for")
     _read_chat_from_disk = locals_dict.get("_read_chat_from_disk")
     _build_tools = locals_dict.get("_build_tools")
+    _web_build_fingerprint = locals_dict.get("_web_build_fingerprint")
     index = locals_dict.get("index")
     classic = locals_dict.get("classic")
     settings = locals_dict.get("settings")
@@ -300,20 +317,31 @@ def _setup_routes_and_handlers(
         never appeared in Recent. Dedup by id; the newer ``updatedAt`` wins.
         """
         _require_api_access(request)
+        requested_surface = str(request.query.get("mode") or "").strip().lower()
+        requested_context = str(request.query.get("context_id") or "").strip()
+        if requested_surface and requested_surface not in {"chat", "work", "workspace"}:
+            raise web.HTTPBadRequest(text="mode must be chat, work, or workspace")
+        if requested_surface == "workspace":
+            if not requested_context:
+                raise web.HTTPBadRequest(text="context_id is required for workspace histories")
+            try:
+                requested_context = normalize_workspace_context_id(requested_context)
+            except ValueError as exc:
+                raise web.HTTPBadRequest(text=str(exc)) from exc
         legacy = await _load_all_chats_from_disk()
         sessions_dir = config.memory.root_path / ".thomas" / "sessions_v2"
-        live = await asyncio.to_thread(_v2_sessions_as_chats, sessions_dir)
+        live = await asyncio.to_thread(
+            _v2_sessions_as_chats,
+            sessions_dir,
+            surface_mode=requested_surface,
+            context_id=requested_context,
+        )
 
         def _ms(chat: dict[str, Any]) -> int:
             try:
                 return int(chat.get("updatedAt") or 0)
             except (TypeError, ValueError):
                 return 0
-
-        requested_surface = str(request.query.get("mode") or "").strip().lower()
-        requested_context = str(request.query.get("context_id") or "").strip()
-        if requested_surface and requested_surface not in {"chat", "work"}:
-            raise web.HTTPBadRequest(text="mode must be chat or work")
 
         by_id: dict[str, dict[str, Any]] = {}
         for chat in [*legacy, *live]:
@@ -638,6 +666,24 @@ def _setup_routes_and_handlers(
             log.warning("Preferences/memory routes unavailable: %s", e)
 
     _register_preferences_and_memory_routes(app)
+
+    def _register_office_state_routes(app_ref: web.Application) -> None:
+        if not callable(_require_api_access) or not callable(_read_json):
+            log.warning("Office state route registration skipped: missing runtime dependencies")
+            return
+        try:
+            from thomas.server.routes.office_state_aiohttp import register_office_state_routes
+
+            register_office_state_routes(
+                app_ref,
+                root=config.memory.root_path,
+                require_api_access=_require_api_access,
+                read_json=_read_json,
+            )
+        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError, ValueError) as exc:
+            log.warning("Office state routes unavailable: %s", exc)
+
+    _register_office_state_routes(app)
 
     def _register_search_routes(app_ref: web.Application) -> None:
         """Register conversation search APIs used by web search surfaces."""
@@ -1150,7 +1196,29 @@ def _setup_routes_and_handlers(
         static_root = (web_dir / "static").resolve()
         if not my_stuff_html.is_relative_to(static_root) or not my_stuff_html.is_file():
             raise web.HTTPNotFound()
-        return web.FileResponse(my_stuff_html)
+        try:
+            html = await asyncio.to_thread(my_stuff_html.read_text, encoding="utf-8", errors="replace")
+            web_build = (
+                _web_build_fingerprint(
+                    "static/my_stuff.html",
+                    "static/my_stuff.style01.css",
+                    "static/my_stuff.script01.js",
+                    "js/workspace_shell.js",
+                    "js/ui_edit_layout.js",
+                    "js/ui_edit_mode.js",
+                    "css/workspace_shell.css",
+                    "css/ui_edit_mode.css",
+                )
+                if callable(_web_build_fingerprint)
+                else "dev"
+            )
+            return web.Response(
+                text=html.replace("__THOMAS_WEB_BUILD__", web_build),
+                content_type="text/html",
+                headers={"Cache-Control": "no-store"},
+            )
+        except (OSError, UnicodeDecodeError):
+            return web.FileResponse(my_stuff_html)
 
     app.router.add_get("/my-stuff", my_stuff_page)
     app.router.add_get("/my-stuff/", my_stuff_page)
