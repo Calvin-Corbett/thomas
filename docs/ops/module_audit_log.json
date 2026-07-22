@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-07-22T22:22:38+00:00",
+  "updated_at": "2026-07-22T22:24:11+00:00",
   "latest_by_module": {
     "agent": {
       "id": "57b1f6f886114dd9ba83c89f94bfd1b8",
@@ -231,26 +231,24 @@
       "signature": "565aeeea4b99a17e0f249e3183a0e24faf509a87baa566922abc9bddb35cacbb"
     },
     "server": {
-      "id": "a21d3afc89664f0983eb1f0cc5089018",
+      "id": "5d506efd59aa4a4ab73d94373755991f",
       "module": "server",
-      "audited_at": "2026-07-22T22:22:38+00:00",
+      "audited_at": "2026-07-22T22:24:11+00:00",
       "auditor": "claude",
       "status": "pass",
-      "summary": "Model-credential health: a sign-in rejected after boot now marks /api/health degraded with a plain-language remedy, instead of health reporting ok while every chat turn 401s.",
+      "summary": "Model auth health moved to core so the orchestrator can report a rejected credential without a marketplace->server import.",
       "run_id": "",
       "files_touched": [
-        "thomas/server/app_core.py",
-        "thomas/server/model_auth_health.py"
+        "thomas/server/app_core.py"
       ],
       "file_hashes": {
-        "thomas/server/app_core.py": "7713aba679a1ce380717e6ee53836699ce4c8c183cb9865b5185a7e92af13551",
-        "thomas/server/model_auth_health.py": "c0273bb223c7c0045d619ff3f9cb2509b72d50d9c488d1452326570ed1ff774d"
+        "thomas/server/app_core.py": "19572603c55bb48fdb7957312d8c2bc541f478ca2fda9d79bb7f443841693e36"
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "e8c333b400a6f02cbcb495905f51b79d4530ed60d49336ae23043eded1cb76b2",
+      "prev_signature": "fba1528ee5f043d46942432553387ce4bd15360fffd6c056cb4b7df2b94efdc3",
       "signature_scheme": "sha256",
-      "signature": "fba1528ee5f043d46942432553387ce4bd15360fffd6c056cb4b7df2b94efdc3"
+      "signature": "09181e63c95aff1ec5fbaa7e7c22853520d783f3617f22ccd7b86f5e0a283e02"
     },
     "tools": {
       "id": "6baf6ae9bb2242c2825e72fd9c76ad31",
@@ -2484,6 +2482,26 @@
       "prev_signature": "e8c333b400a6f02cbcb495905f51b79d4530ed60d49336ae23043eded1cb76b2",
       "signature_scheme": "sha256",
       "signature": "fba1528ee5f043d46942432553387ce4bd15360fffd6c056cb4b7df2b94efdc3"
+    },
+    {
+      "id": "5d506efd59aa4a4ab73d94373755991f",
+      "module": "server",
+      "audited_at": "2026-07-22T22:24:11+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "Model auth health moved to core so the orchestrator can report a rejected credential without a marketplace->server import.",
+      "run_id": "",
+      "files_touched": [
+        "thomas/server/app_core.py"
+      ],
+      "file_hashes": {
+        "thomas/server/app_core.py": "19572603c55bb48fdb7957312d8c2bc541f478ca2fda9d79bb7f443841693e36"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "fba1528ee5f043d46942432553387ce4bd15360fffd6c056cb4b7df2b94efdc3",
+      "signature_scheme": "sha256",
+      "signature": "09181e63c95aff1ec5fbaa7e7c22853520d783f3617f22ccd7b86f5e0a283e02"
     }
   ]
 }

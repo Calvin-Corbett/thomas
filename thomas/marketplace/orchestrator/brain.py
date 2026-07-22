@@ -72,7 +72,7 @@ def _chat_failure_message(error: str | None) -> str:
     # Remember a rejected credential so /api/health can report that chat is
     # broken, instead of every message rediscovering it independently.
     try:
-        from thomas.server.model_auth_health import looks_like_auth_failure, record_auth_failure
+        from thomas.core.model_auth_health import looks_like_auth_failure, record_auth_failure
 
         if looks_like_auth_failure(detail):
             record_auth_failure(detail=str(error or ""))

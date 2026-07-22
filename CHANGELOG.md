@@ -150,6 +150,7 @@ Versioning: Semantic Versioning.
 - Module `thomas/server` audited by `claude` on 2026-07-22 (status: pass, sig: `4523c83bdd3a`).
 - Module `thomas/server` audited by `claude` on 2026-07-22 (status: pass, sig: `e8c333b400a6`).
 - Module `thomas/server` audited by `claude` on 2026-07-22 (status: pass, sig: `fba1528ee5f0`).
+- Module `thomas/server` audited by `claude` on 2026-07-22 (status: pass, sig: `09181e63c95a`).
 ## [0.19.22] - 2026-07-20
 
 ### Verified (Codex parity: chat attachments to workers, task queue)

@@ -411,7 +411,7 @@ def create_app(config: AppConfig | None = None):
         # instead of being rediscovered one failed message at a time.
         auth_health: dict[str, Any] = {"ok": True}
         try:
-            from thomas.server.model_auth_health import model_auth_health
+            from thomas.core.model_auth_health import model_auth_health
 
             auth_health = model_auth_health(request.app)
         except (ImportError, ModuleNotFoundError, OSError, ValueError, TypeError, KeyError) as exc:
