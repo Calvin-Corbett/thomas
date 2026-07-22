@@ -206,3 +206,8 @@ thomas_vs_*.docx
 # Worktree ledger snapshot (machine-specific paths; regenerated live by worktree_ledger.py)
 .thomas/WORKTREES.md
 .thomas/worktrees.json
+
+# Local runtime databases (events/meta/notifications). Written by a running
+# Thomas and regenerated on demand -- not source. Left untracked they show up as
+# working-tree dirt every session, which makes "is this repo clean?" ambiguous.
+data/
