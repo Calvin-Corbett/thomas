@@ -94,8 +94,9 @@ def _chat_failure_message(error: str | None) -> str:
         )
     ):
         return (
-            "Your ChatGPT sign-in has expired, so no model can be reached — switching models won't help. "
-            "Run `codex login` in a terminal to sign in again, then retry."
+            "Your ChatGPT sign-in has expired, so the ChatGPT-backed models can't be reached. "
+            "Run `codex login` in a terminal to sign in again — or switch to the Local model, "
+            "which doesn't need that sign-in."
         )
     if "rate-limit" in detail or "rate limit" in detail or "status 429" in detail:
         return "The selected model is temporarily rate-limited. Please wait a moment or choose another model."

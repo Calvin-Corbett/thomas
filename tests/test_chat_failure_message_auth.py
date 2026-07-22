@@ -32,12 +32,22 @@ def test_expired_signin_tells_you_to_log_in_again(error: str) -> None:
     assert "sign-in has expired" in msg, msg
 
 
-def test_expired_signin_does_not_advise_switching_models() -> None:
-    """The specific misdirection this fixes."""
+def test_expired_signin_names_the_working_alternative() -> None:
+    """Name the real problem AND the alternative that actually works.
+
+    The original message said "choose another model", which sent the user
+    hunting the model list. A first attempt at this fix over-corrected to "no
+    model can be reached" -- also wrong. Verified live: the same server answered
+    normally on the Local model (qwen2.5-coder) while the ChatGPT-backed models
+    401'd. Only the ChatGPT-backed ones are affected, and the message has to say
+    both things: how to restore them, and what still works right now.
+    """
     msg = _chat_failure_message(_REAL_401)
-    assert "another model" not in msg.lower()
-    # ...and it says why switching would be pointless.
-    assert "won't help" in msg
+    assert "codex login" in msg
+    assert "Local model" in msg
+    assert "ChatGPT-backed models" in msg
+    # must not imply the whole system is down
+    assert "no model can be reached" not in msg
 
 
 def test_rate_limit_still_suggests_another_model() -> None:
