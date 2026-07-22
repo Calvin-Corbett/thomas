@@ -41,6 +41,15 @@ except (ImportError, ModuleNotFoundError):  # pragma: no cover
         worktree_ledger = None  # type: ignore
         worktree_debt = None  # type: ignore
 
+# Branch-sprawl prevention. Worktrees were counted; branches were not, so a repo
+# could sit under the worktree ceiling while dozens of branches accumulated
+# unseen. Surfacing this at session start is what stops an agent with no context
+# from building on top of a stale branch.
+try:
+    from thomas.forge import branch_custodian
+except (ImportError, ModuleNotFoundError):  # pragma: no cover
+    branch_custodian = None  # type: ignore
+
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 ROUTER_DOC = "docs/ai/AGENT_ROUTER.md"
 LANE_CARD_PATHS = {
@@ -799,6 +808,47 @@ def _startup_worktree_inventory(repo_root: Path) -> dict[str, Any]:
         return {"ok": False, "error": str(exc), "summary": "", "warning": ""}
 
 
+def _startup_branch_inventory(repo_root: Path, *, trunk: str = "dev") -> dict[str, Any]:
+    """Surface branch sprawl at session start, beside the worktree inventory.
+
+    This is the awareness that prevents the recurring failure: an agent arriving
+    with no context, seeing a tidy worktree list, and happily branching again on
+    top of a pile nobody is tracking. Degrades quietly -- never raises.
+    """
+    if branch_custodian is None:  # pragma: no cover - import guard
+        return {"ok": False, "error": "branch_custodian unavailable", "summary": "", "warning": ""}
+    try:
+        git = branch_custodian.subprocess_git_runner(str(repo_root))
+        report = branch_custodian.survey(git, trunk=trunk)
+        warning = ""
+        if report.over_ceiling:
+            warning = (
+                f"BRANCH SPRAWL: {report.total} branches (ceiling {report.ceiling}). "
+                f"{len(report.reclaimable)} can be retired automatically; "
+                f"{len(report.needs_decision)} carry unique work. "
+                "Run `thomas consolidate` before creating another branch."
+            )
+        return {
+            "ok": True,
+            "total": report.total,
+            "ceiling": report.ceiling,
+            "over_ceiling": report.over_ceiling,
+            "reclaimable": len(report.reclaimable),
+            "needs_decision": len(report.needs_decision),
+            "summary": report.summary(),
+            "warning": warning,
+        }
+    except (
+        OSError,
+        ValueError,
+        TypeError,
+        RuntimeError,
+        subprocess.SubprocessError,
+        branch_custodian.BranchCustodianError,
+    ) as exc:  # pragma: no cover
+        return {"ok": False, "error": str(exc), "summary": "", "warning": ""}
+
+
 def build_startup_payload(
     *,
     summary: str,
@@ -832,6 +882,7 @@ def build_startup_payload(
     payload["branch_scan"] = _scan_related_branches(summary, paths)
     payload["orphaned_state"] = _detect_orphaned_dirty_state(ROOT)
     payload["worktree_inventory"] = _startup_worktree_inventory(ROOT)
+    payload["branch_inventory"] = _startup_branch_inventory(ROOT)
     return payload
 
 
