@@ -69,8 +69,34 @@ _CODE_PHRASE_FACT_RE = re.compile(
 def _chat_failure_message(error: str | None) -> str:
     """Turn provider failures into useful guidance without leaking internals."""
     detail = str(error or "").strip().lower()
+    # Remember a rejected credential so /api/health can report that chat is
+    # broken, instead of every message rediscovering it independently.
+    try:
+        from thomas.server.model_auth_health import looks_like_auth_failure, record_auth_failure
+
+        if looks_like_auth_failure(detail):
+            record_auth_failure(detail=str(error or ""))
+    except (ImportError, ModuleNotFoundError, OSError, ValueError, TypeError):  # pragma: no cover
+        pass
     if "oauth" in detail and ("not connected" in detail or "sign in" in detail):
         return "The ChatGPT model isn't connected yet. Choose the Local model or sign in through Easy Setup."
+    # An expired or revoked sign-in kills EVERY model, so the generic
+    # "choose another model" advice below sends people hunting through the model
+    # list for a problem no model can solve. Say what actually happened.
+    if any(
+        token in detail
+        for token in (
+            "token refresh failed",
+            "invalid_grant",
+            "http 401",
+            "status 401",
+            "unauthorized",
+        )
+    ):
+        return (
+            "Your ChatGPT sign-in has expired, so no model can be reached — switching models won't help. "
+            "Run `codex login` in a terminal to sign in again, then retry."
+        )
     if "rate-limit" in detail or "rate limit" in detail or "status 429" in detail:
         return "The selected model is temporarily rate-limited. Please wait a moment or choose another model."
     if any(token in detail for token in ("connection", "connecterror", "timed out", "timeout")):

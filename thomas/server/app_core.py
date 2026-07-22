@@ -404,6 +404,21 @@ def create_app(config: AppConfig | None = None):
             )
         except Exception:
             protected_mode = False
+
+        # A credential that dies AFTER boot was invisible here: health reported
+        # "ok" while every chat turn failed with a 401. Model auth is checked
+        # locally (no network call) so a broken sign-in shows up as degraded
+        # instead of being rediscovered one failed message at a time.
+        auth_health: dict[str, Any] = {"ok": True}
+        try:
+            from thomas.server.model_auth_health import model_auth_health
+
+            auth_health = model_auth_health(request.app)
+        except (ImportError, ModuleNotFoundError, OSError, ValueError, TypeError, KeyError) as exc:
+            log.debug("model auth health unavailable: %s", exc)
+        if not auth_health.get("ok", True):
+            degraded = [*degraded, "model_auth"]
+
         return web.json_response(
             {
                 "status": "degraded" if degraded else "ok",
@@ -412,6 +427,7 @@ def create_app(config: AppConfig | None = None):
                 "pid": os.getpid(),
                 "features": diag,
                 "degraded": degraded,
+                "model_auth": auth_health,
                 "crash_count": request.app.get(APP_CRASH_COUNT, 0),
                 "security": {"protected_mode": protected_mode},
             }

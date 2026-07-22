@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-07-22T18:26:12+00:00",
+  "updated_at": "2026-07-22T22:22:38+00:00",
   "latest_by_module": {
     "agent": {
       "id": "57b1f6f886114dd9ba83c89f94bfd1b8",
@@ -231,26 +231,26 @@
       "signature": "565aeeea4b99a17e0f249e3183a0e24faf509a87baa566922abc9bddb35cacbb"
     },
     "server": {
-      "id": "c2090d9f41854492839617056e9c3a75",
+      "id": "a21d3afc89664f0983eb1f0cc5089018",
       "module": "server",
-      "audited_at": "2026-07-22T18:26:12+00:00",
+      "audited_at": "2026-07-22T22:22:38+00:00",
       "auditor": "claude",
       "status": "pass",
-      "summary": "Per-session chat turn serialisation extracted to its own module; chat_v2 turn handler restored to its prior size. Verified max concurrent turns 1, per-session (unrelated sessions still parallel), fails open.",
+      "summary": "Model-credential health: a sign-in rejected after boot now marks /api/health degraded with a plain-language remedy, instead of health reporting ok while every chat turn 401s.",
       "run_id": "",
       "files_touched": [
-        "thomas/server/routes/chat_v2.py",
-        "thomas/server/routes/chat_v2_session_guard.py"
+        "thomas/server/app_core.py",
+        "thomas/server/model_auth_health.py"
       ],
       "file_hashes": {
-        "thomas/server/routes/chat_v2.py": "81cd135bf1933146e6406b636e944c247409bb96c0bab3b2f63689355889dbad",
-        "thomas/server/routes/chat_v2_session_guard.py": "277d16cec9f5e4da058561b5a290c61b6c453988947fa8dd710afb66ed569387"
+        "thomas/server/app_core.py": "7713aba679a1ce380717e6ee53836699ce4c8c183cb9865b5185a7e92af13551",
+        "thomas/server/model_auth_health.py": "c0273bb223c7c0045d619ff3f9cb2509b72d50d9c488d1452326570ed1ff774d"
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "4523c83bdd3ac8155c950095e538c88d47061e8aa822836f976230b8128a7ab3",
+      "prev_signature": "e8c333b400a6f02cbcb495905f51b79d4530ed60d49336ae23043eded1cb76b2",
       "signature_scheme": "sha256",
-      "signature": "e8c333b400a6f02cbcb495905f51b79d4530ed60d49336ae23043eded1cb76b2"
+      "signature": "fba1528ee5f043d46942432553387ce4bd15360fffd6c056cb4b7df2b94efdc3"
     },
     "tools": {
       "id": "6baf6ae9bb2242c2825e72fd9c76ad31",
@@ -2462,6 +2462,28 @@
       "prev_signature": "4523c83bdd3ac8155c950095e538c88d47061e8aa822836f976230b8128a7ab3",
       "signature_scheme": "sha256",
       "signature": "e8c333b400a6f02cbcb495905f51b79d4530ed60d49336ae23043eded1cb76b2"
+    },
+    {
+      "id": "a21d3afc89664f0983eb1f0cc5089018",
+      "module": "server",
+      "audited_at": "2026-07-22T22:22:38+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "Model-credential health: a sign-in rejected after boot now marks /api/health degraded with a plain-language remedy, instead of health reporting ok while every chat turn 401s.",
+      "run_id": "",
+      "files_touched": [
+        "thomas/server/app_core.py",
+        "thomas/server/model_auth_health.py"
+      ],
+      "file_hashes": {
+        "thomas/server/app_core.py": "7713aba679a1ce380717e6ee53836699ce4c8c183cb9865b5185a7e92af13551",
+        "thomas/server/model_auth_health.py": "c0273bb223c7c0045d619ff3f9cb2509b72d50d9c488d1452326570ed1ff774d"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "e8c333b400a6f02cbcb495905f51b79d4530ed60d49336ae23043eded1cb76b2",
+      "signature_scheme": "sha256",
+      "signature": "fba1528ee5f043d46942432553387ce4bd15360fffd6c056cb4b7df2b94efdc3"
     }
   ]
 }
