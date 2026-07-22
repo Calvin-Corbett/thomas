@@ -84,6 +84,7 @@ from thomas.server.routes.chat_v2_request_support import (
     handle_cancel_delegation as handle_cancel_delegation,
 )
 from thomas.server.routes.chat_v2_run_store import ChatV2RunLifecycle, start_chat_v2_run
+from thomas.server.routes.chat_v2_session_guard import session_serialised
 from thomas.server.routes.chat_v2_session_routes import (
     handle_mark_delegation_reported as handle_mark_delegation_reported,
 )
@@ -133,13 +134,10 @@ try:
         APP_GUARDED_TOOL_RUNNER,
         APP_GUARDRAILS_ENABLED,
         APP_MEMORY,
-        APP_SESSION_LOCKS,
-        APP_SESSION_LOCKS_LOCK,
         APP_TOOLS,
     )
 except ImportError:
     APP_CONFIG = APP_GUARDED_TOOL_RUNNER = APP_GUARDRAILS_ENABLED = APP_MEMORY = APP_TOOLS = None  # type: ignore[assignment]
-    APP_SESSION_LOCKS = APP_SESSION_LOCKS_LOCK = None  # type: ignore[assignment]
 
 log = logging.getLogger(__name__)
 _LEGACY_MODE_MIGRATIONS = {"batch": "max", "swarm": "max", "parallel": "max", "agent": "auto"}
@@ -167,63 +165,6 @@ def register_chat_v2_routes(
         chat_store_dir=chat_store_dir,
         require_api_access=require_api_access,
     )
-
-
-async def _session_turn_lock(app: web.Application, session_id: str) -> asyncio.Lock | None:
-    """Return the per-session turn lock, creating it on first use.
-
-    Returns ``None`` when the lock registry is unavailable so the caller fails
-    OPEN -- a missing guard must never make chat unusable.
-    """
-    if APP_SESSION_LOCKS is None or APP_SESSION_LOCKS_LOCK is None:
-        return None
-    locks = app.get(APP_SESSION_LOCKS)
-    registry_lock = app.get(APP_SESSION_LOCKS_LOCK)
-    if locks is None or registry_lock is None:
-        return None
-    async with registry_lock:
-        lock = locks.get(session_id)
-        if lock is None:
-            lock = asyncio.Lock()
-            locks[session_id] = lock
-        return lock
-
-
-def _peek_session_id(payload: Any) -> str:
-    if not isinstance(payload, dict):
-        return ""
-    return str(payload.get("session_id") or payload.get("sessionId") or "").strip()
-
-
-async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
-    """Serialise chat turns per session, then run the turn.
-
-    Chat V2 never adopted the session-run guard the legacy handler used, so two
-    requests for the SAME session both executed a turn concurrently and could
-    interleave conversation state. Rather than reject the second request (which
-    would silently drop the user's message), turns for one session are
-    serialised: the second waits for the first, then runs normally. Requests for
-    different sessions are unaffected.
-
-    Fails open: if the lock registry is missing, the turn still runs.
-    """
-    try:
-        payload = await request.json()
-    except (json.JSONDecodeError, ValueError, TypeError, UnicodeDecodeError):
-        # Malformed body -- let the turn handler produce the canonical 400.
-        return await _handle_chat_v2_turn(request)
-
-    sid = _peek_session_id(payload)
-    if not sid:
-        # No session id: a fresh session cannot contend with anything.
-        return await _handle_chat_v2_turn(request)
-
-    lock = await _session_turn_lock(request.app, sid)
-    if lock is None:
-        return await _handle_chat_v2_turn(request)
-
-    async with lock:
-        return await _handle_chat_v2_turn(request)
 
 
 async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
@@ -861,3 +802,7 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
     finally:
         run_lifecycle.finish(ok=run_ok)
     return response
+
+
+# Public entry point: the turn handler, serialised per session.
+handle_chat_v2 = session_serialised(_handle_chat_v2_turn)

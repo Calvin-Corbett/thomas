@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-07-22T18:19:37+00:00",
+  "updated_at": "2026-07-22T18:26:12+00:00",
   "latest_by_module": {
     "agent": {
       "id": "57b1f6f886114dd9ba83c89f94bfd1b8",
@@ -231,24 +231,26 @@
       "signature": "565aeeea4b99a17e0f249e3183a0e24faf509a87baa566922abc9bddb35cacbb"
     },
     "server": {
-      "id": "c5bb281f94864ea3b77fcb49e6588c03",
+      "id": "c2090d9f41854492839617056e9c3a75",
       "module": "server",
-      "audited_at": "2026-07-22T18:19:37+00:00",
+      "audited_at": "2026-07-22T18:26:12+00:00",
       "auditor": "claude",
       "status": "pass",
-      "summary": "Serialise chat turns per session in handle_chat_v2: Chat V2 had never adopted the session-run guard, so concurrent requests for one session both executed a turn. Verified max concurrent turns 1 (was 2); A/B against the unmodified handler shows zero regressions.",
+      "summary": "Per-session chat turn serialisation extracted to its own module; chat_v2 turn handler restored to its prior size. Verified max concurrent turns 1, per-session (unrelated sessions still parallel), fails open.",
       "run_id": "",
       "files_touched": [
-        "thomas/server/routes/chat_v2.py"
+        "thomas/server/routes/chat_v2.py",
+        "thomas/server/routes/chat_v2_session_guard.py"
       ],
       "file_hashes": {
-        "thomas/server/routes/chat_v2.py": "10ffa939704b2bfa378bbf7cfd600a143c5d7ced692e18b1b96ee697ddb316af"
+        "thomas/server/routes/chat_v2.py": "81cd135bf1933146e6406b636e944c247409bb96c0bab3b2f63689355889dbad",
+        "thomas/server/routes/chat_v2_session_guard.py": "277d16cec9f5e4da058561b5a290c61b6c453988947fa8dd710afb66ed569387"
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "93d3d3bdf8cea0b70a6bc66be095eb9f75c14b2a0ff0a4bf93708282822296ce",
+      "prev_signature": "4523c83bdd3ac8155c950095e538c88d47061e8aa822836f976230b8128a7ab3",
       "signature_scheme": "sha256",
-      "signature": "4523c83bdd3ac8155c950095e538c88d47061e8aa822836f976230b8128a7ab3"
+      "signature": "e8c333b400a6f02cbcb495905f51b79d4530ed60d49336ae23043eded1cb76b2"
     },
     "tools": {
       "id": "6baf6ae9bb2242c2825e72fd9c76ad31",
@@ -2438,6 +2440,28 @@
       "prev_signature": "93d3d3bdf8cea0b70a6bc66be095eb9f75c14b2a0ff0a4bf93708282822296ce",
       "signature_scheme": "sha256",
       "signature": "4523c83bdd3ac8155c950095e538c88d47061e8aa822836f976230b8128a7ab3"
+    },
+    {
+      "id": "c2090d9f41854492839617056e9c3a75",
+      "module": "server",
+      "audited_at": "2026-07-22T18:26:12+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "Per-session chat turn serialisation extracted to its own module; chat_v2 turn handler restored to its prior size. Verified max concurrent turns 1, per-session (unrelated sessions still parallel), fails open.",
+      "run_id": "",
+      "files_touched": [
+        "thomas/server/routes/chat_v2.py",
+        "thomas/server/routes/chat_v2_session_guard.py"
+      ],
+      "file_hashes": {
+        "thomas/server/routes/chat_v2.py": "81cd135bf1933146e6406b636e944c247409bb96c0bab3b2f63689355889dbad",
+        "thomas/server/routes/chat_v2_session_guard.py": "277d16cec9f5e4da058561b5a290c61b6c453988947fa8dd710afb66ed569387"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "4523c83bdd3ac8155c950095e538c88d47061e8aa822836f976230b8128a7ab3",
+      "signature_scheme": "sha256",
+      "signature": "e8c333b400a6f02cbcb495905f51b79d4530ed60d49336ae23043eded1cb76b2"
     }
   ]
 }
