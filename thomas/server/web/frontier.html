@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Operations — Thomas</title>
+<style>
+  :root {
+    --sheet: #f7f8fa;
+    --grid: #e2e6ee;
+    --card: #ffffff;
+    --ink: #16203a;
+    --ink-soft: #5a6683;
+    --rule: #dbe1ec;
+    --signal: #b5730b;
+    --signal-soft: #fdf3e0;
+    --live: #1d7a5f;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --sheet: #10141d;
+      --grid: #1a2130;
+      --card: #161c28;
+      --ink: #e6ebf5;
+      --ink-soft: #96a2bd;
+      --rule: #26304180;
+      --signal: #eab04a;
+      --signal-soft: #2a2113;
+      --live: #4cc79b;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    color: var(--ink);
+    background-color: var(--sheet);
+    /* Signature: measured graph-paper ground -- the instrument sheet. */
+    background-image:
+      linear-gradient(to right, var(--grid) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+    background-size: 28px 28px;
+    line-height: 1.5;
+  }
+
+  .masthead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--sheet);
+    border-bottom: 1px solid var(--rule);
+    padding: 14px 20px;
+  }
+  .masthead-inner {
+    max-width: 1080px;
+    margin: 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 18px;
+  }
+  .wordmark {
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin: 0;
+  }
+  .masthead p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+  .jump {
+    margin-left: auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .jump a {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    padding-bottom: 1px;
+  }
+  .jump a:hover, .jump a:focus-visible { color: var(--ink); border-bottom-color: var(--signal); }
+
+  main { max-width: 1080px; margin: 0 auto; padding: 26px 20px 72px; }
+
+  .surface { margin-bottom: 34px; }
+
+  /* Signature: the call-sign rail -- id, name, and live state carry real info. */
+  .rail {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 0;
+  }
+  .callsign {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: var(--signal);
+    background: var(--signal-soft);
+    padding: 2px 7px;
+    border-radius: 3px;
+    font-variant-numeric: tabular-nums;
+  }
+  .surface h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .surface .what {
+    margin: 6px 0 0;
+    font-size: 13px;
+    color: var(--ink-soft);
+    max-width: 62ch;
+  }
+  .state {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-soft); }
+  .state[data-live="yes"] { color: var(--live); }
+  .state[data-live="yes"] .dot { background: var(--live); }
+  .state[data-live="no"] { color: var(--signal); }
+  .state[data-live="no"] .dot { background: var(--signal); }
+
+  .mount {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    padding: 16px;
+    overflow-x: auto;
+  }
+
+  .unavailable {
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin: 0;
+  }
+  .unavailable code { font-family: var(--mono); font-size: 12px; color: var(--ink); }
+
+  a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--signal);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+  @media (max-width: 640px) {
+    .jump { margin-left: 0; width: 100%; }
+    .rail { flex-wrap: wrap; }
+    .state { margin-left: 0; width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <h1 class="wordmark">Thomas · Agent Operations</h1>
+    <p>Watch what the agents are doing, and step in.</p>
+    <nav class="jump" aria-label="Jump to a surface">
+      <a href="#cap-040">Steer</a>
+      <a href="#cap-137">Telemetry</a>
+      <a href="#cap-139">Progress</a>
+      <a href="#cap-147">Annotations</a>
+      <a href="#cap-148">Context</a>
+      <a href="#cap-149">Review</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <section class="surface" id="cap-040">
+    <div class="rail">
+      <span class="callsign">CAP-040</span>
+      <h2>Steer a running agent</h2>
+      <span class="state" data-surface-state="mountFleetReplyPanel"><span class="dot"></span>checking</span>
+    </div>
+    <p class="what" hidden></p>
+    <div class="mount" data-mount="mountFleetReplyPanel"></div>
+  </section>
+
+  <section class="surface" id="cap-137">
+    <div class="rail">
+      <span class="callsign">CAP-137</span>
+      <h2>Live run telemetry</h2>
+      <span class="state" data-surface-state="mountRunTelemetryPanel"><span class="dot"></span>checking</span>
+    </div>
+    <div class="mount" data-mount="mountRunTelemetryPanel"></div>
+  </section>
+
+  <section class="surface" id="cap-139">
+    <div class="rail">
+      <span class="callsign">CAP-139</span>
+      <h2>Worktree progress</h2>
+      <span class="state" data-surface-state="mountWorktreeProgressPanel"><span class="dot"></span>checking</span>
+    </div>
+    <div class="mount" data-mount="mountWorktreeProgressPanel"></div>
+  </section>
+
+  <section class="surface" id="cap-147">
+    <div class="rail">
+      <span class="callsign">CAP-147</span>
+      <h2>Source annotations</h2>
+      <span class="state" data-surface-state="mountSourceAnnotationPanel"><span class="dot"></span>checking</span>
+    </div>
+    <div class="mount" data-mount="mountSourceAnnotationPanel"></div>
+  </section>
+
+  <section class="surface" id="cap-148">
+    <div class="rail">
+      <span class="callsign">CAP-148</span>
+      <h2>Mention context</h2>
+      <span class="state" data-surface-state="mountMentionContextPanel"><span class="dot"></span>checking</span>
+    </div>
+    <div class="mount" data-mount="mountMentionContextPanel"></div>
+  </section>
+
+  <section class="surface" id="cap-149">
+    <div class="rail">
+      <span class="callsign">CAP-149</span>
+      <h2>Pull request review</h2>
+      <span class="state" data-surface-state="mountPrReviewPanel"><span class="dot"></span>checking</span>
+    </div>
+    <div class="mount" data-mount="mountPrReviewPanel"></div>
+  </section>
+
+</main>
+
+<script src="/static/js/fleet_reply_panel.js"></script>
+<script src="/static/js/run_telemetry_panel.js"></script>
+<script src="/static/js/worktree_progress_panel.js"></script>
+<script src="/static/js/source_annotation_panel.js"></script>
+<script src="/static/js/mention_context_panel.js"></script>
+<script src="/static/js/pr_review_panel.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  function setState(globalName, live, label) {
+    var el = document.querySelector('[data-surface-state="' + globalName + '"]');
+    if (!el) { return; }
+    el.setAttribute("data-live", live ? "yes" : "no");
+    var dot = el.querySelector(".dot");
+    el.textContent = "";
+    if (dot) { el.appendChild(dot); }
+    el.appendChild(document.createTextNode(label));
+  }
+
+  function mountAll() {
+    var targets = document.querySelectorAll("[data-mount]");
+    Array.prototype.forEach.call(targets, function (container) {
+      var name = container.getAttribute("data-mount");
+      var fn = window[name];
+      if (typeof fn !== "function") {
+        var note = document.createElement("p");
+        note.className = "unavailable";
+        note.textContent = "This surface did not load. Its script is missing: ";
+        var code = document.createElement("code");
+        code.textContent = name;
+        note.appendChild(code);
+        container.appendChild(note);
+        setState(name, false, "not loaded");
+        return;
+      }
+      try {
+        fn(container);
+        setState(name, true, "live");
+      } catch (err) {
+        var failed = document.createElement("p");
+        failed.className = "unavailable";
+        failed.textContent = "This surface failed to start: " + (err && err.message ? err.message : String(err));
+        container.appendChild(failed);
+        setState(name, false, "failed");
+      }
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", mountAll);
+  } else {
+    mountAll();
+  }
+})();
+</script>
+
+</body>
+</html>

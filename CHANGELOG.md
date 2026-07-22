@@ -11,6 +11,17 @@ Versioning: Semantic Versioning.
 
 - Concurrent Code runs are no longer hard-capped at 3: the ceiling is now live-configurable via `THOMAS_MAX_CONCURRENT_CODE_RUNS` (default 8, safety ceiling 64) so you can run many different Code projects at once. Same-project (same-conversation) runs are still serialized to protect that project's state; only distinct projects run in parallel. The "all N slots are busy" message now tells you how to raise the limit.
 
+### Added (Agent Operations surfaces — the frontier capability cores are now usable in the browser)
+
+- New **Agent Operations** page at `/static/frontier.html` puts six capability surfaces behind one console, each wired to its already-tested backend core over a real HTTP route:
+  - **Steer a running agent** (CAP-040) — send a free-text steer to a live fleet session and watch the delivery acknowledgement land (`delivered` → `acked`, or `failed` with the reason).
+  - **Live run telemetry** (CAP-137) — always-visible turns, tokens, rate, and completion projection; an unknown projection reads "unknown" instead of a fabricated ETA.
+  - **Worktree progress** (CAP-139) — per-worktree status, task-graph timing with the critical path called out, and a cost rollup.
+  - **Source annotations** (CAP-147) — author annotations anchored to a line range, open a conversation from one, and emit the resulting unified diff.
+  - **Mention context** (CAP-148) — resolve `@file` / `@thread` / `@session` mentions into typed context objects under a token budget, showing what was included and what was dropped.
+  - **Pull request review** (CAP-149) — risk-ranked hunks, threaded comments, an approval gate that stays blocked while a high-risk hunk has an unresolved blocking comment, and fix handoff.
+- Surfaces register through a single `frontier_surfaces` entry point, so one failing surface never takes the others down.
+
 ### Added (Frontier capability program — external integrations, real code behind injectable adapters)
 
 - Legacy code map (CAP-142): a symbols + edges map over a codebase with hash-gated O(changed) incremental ingest, a reverse-dependency impact set for a changed symbol, and a precision/recall accuracy report against a golden set.

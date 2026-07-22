@@ -458,6 +458,17 @@ def _setup_routes_and_handlers(
 
     _register_gateway_routes(app, config)
 
+    def _register_frontier_surfaces(app_ref: web.Application, config: AppConfig) -> None:
+        """Register the frontier capability surfaces (agent-ops panels)."""
+        try:
+            from thomas.server.routes.frontier_surfaces import register_frontier_surface_routes
+
+            register_frontier_surface_routes(app_ref, config)
+        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
+            log.debug("Frontier surfaces unavailable: %s", e)
+
+    _register_frontier_surfaces(app, config)
+
     def _register_engine_actions_routes(app_ref: web.Application) -> None:
         """Register the user-triggered manual engine-actions endpoint."""
         if not callable(_require_api_access) or not callable(_read_json):
