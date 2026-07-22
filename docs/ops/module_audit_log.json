@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-07-18T22:19:07+00:00",
+  "updated_at": "2026-07-22T17:17:38+00:00",
   "latest_by_module": {
     "agent": {
       "id": "57b1f6f886114dd9ba83c89f94bfd1b8",
@@ -231,54 +231,26 @@
       "signature": "565aeeea4b99a17e0f249e3183a0e24faf509a87baa566922abc9bddb35cacbb"
     },
     "server": {
-      "id": "e32d423932b34727a4abe6273af96f27",
+      "id": "5003640c844b4f2ca9dfb13fa4d84d8e",
       "module": "server",
-      "audited_at": "2026-07-18T22:19:07+00:00",
-      "auditor": "codex",
+      "audited_at": "2026-07-22T17:17:38+00:00",
+      "auditor": "claude",
       "status": "pass",
-      "summary": "Final unified lifecycle audit for server",
-      "run_id": "THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718",
+      "summary": "Background consolidation maintenance loop added and wired into server startup/cleanup; branch-sprawl audit runs on a cadence. 8 hermetic tests; verified in the real app lifecycle (task created on startup, cancelled on shutdown).",
+      "run_id": "",
       "files_touched": [
-        "thomas/server/app_keys.py",
-        "thomas/server/app_lifecycle.py",
-        "thomas/server/app_middleware_handlers.py",
-        "thomas/server/app_middleware_security.py",
-        "thomas/server/chat_delegation_artifact_verification.py",
-        "thomas/server/chat_delegation_deliverable.py",
-        "thomas/server/chat_delegation_deliverable_postprocess.py",
-        "thomas/server/chat_delegation_result_policy.py",
-        "thomas/server/chat_delegation_runner.py",
-        "thomas/server/routes/chat_v2_announcements.py",
-        "thomas/server/routes/deliverable_aiohttp.py",
-        "thomas/server/routes/evolve_agent_http_support.py",
-        "thomas/server/routes/evolve_agent_routes.py",
-        "thomas/server/web/chat.html",
-        "thomas/server/web/js/unified_code_mode.js",
-        "thomas/server/web/js/unified_work_mode.js"
+        "thomas/server/app_routes_init.py",
+        "thomas/server/consolidation_maintenance.py"
       ],
       "file_hashes": {
-        "thomas/server/app_keys.py": "2f0000047ff8acb1609064e56fb2eeaee1537a0edb31084904dda145d124c852",
-        "thomas/server/app_lifecycle.py": "a0aaae06d323beb1d2de8961dfae1ac25947d4351d7d4db1fc8f0cc7a3f2ffa9",
-        "thomas/server/app_middleware_handlers.py": "4c2c511f8e9657a194c0e007f65a8e528b5f9da7fb67fba85b720ebacc1ebd31",
-        "thomas/server/app_middleware_security.py": "70b0069d7df324321c7c50e76556c3413d6bdd324a4846b81a46c38fb7d77734",
-        "thomas/server/chat_delegation_artifact_verification.py": "e0c8f5717e36071b862008cc748fd07e60e7860452eafa399ea43ef1e0f6107c",
-        "thomas/server/chat_delegation_deliverable.py": "a939524f3e6de81a7bfdf783a7ec9dbe066865c613e696974ac1490e18137340",
-        "thomas/server/chat_delegation_deliverable_postprocess.py": "fd3876977930496de3c529543a85330b7055b6ee3b8a98ae26030ff7174711b1",
-        "thomas/server/chat_delegation_result_policy.py": "f11f4895ec3a1cec8c011beb7f07412c4949ba153aed611fc9c9c025d4c19cb3",
-        "thomas/server/chat_delegation_runner.py": "81a2f996c9353dff1092db33ffd81c8b7ac637b6cd85929b84dbde6038ddc741",
-        "thomas/server/routes/chat_v2_announcements.py": "05da942b15ec76b1e6b93b3db9733295b361f747d85f6c8b8b9dd587a4bfd438",
-        "thomas/server/routes/deliverable_aiohttp.py": "e835859a2f9980319b8fa2dc03d1ed3254991137d16de4e8b1897cba0515967a",
-        "thomas/server/routes/evolve_agent_http_support.py": "ef72c39834309417c90c192ca8ca32c1a3782249df5059076b3135e521aacf7e",
-        "thomas/server/routes/evolve_agent_routes.py": "b60e47c66cdb5cea1ed512e2bd9a06fb2cf51c418804f2f00522fa5d256322f4",
-        "thomas/server/web/chat.html": "af1d213824bac117edf7bbd2e058a56310cf71791d34a45c048f9a85ffbb8f45",
-        "thomas/server/web/js/unified_code_mode.js": "4f6e8d77863928d522286f4c57ef093b85d441c56cea92b4a1374888edc3cbe2",
-        "thomas/server/web/js/unified_work_mode.js": "f07a7af708a211b52c857c05ba9ee1c0e053fc389723b9ee3bc9191f6f8ca268"
+        "thomas/server/app_routes_init.py": "0f971802325353b475804894f3cff3ea7d1f381b092c9a73e4675f41fb16ff51",
+        "thomas/server/consolidation_maintenance.py": "0fd2e3db341a28d3598d6a4364a4ed8d493077cb5f42e92c8a28c07f849577d3"
       },
       "issues": [],
       "issue_count": 0,
-      "prev_signature": "889bced4ba255d3f13068a8bf551dfd220166e10c11ab95019b45b6d40b7d10f",
+      "prev_signature": "43f2a82a9a9294f77470fde24221082162c28a1cabe3344792ab3dba88a68848",
       "signature_scheme": "sha256",
-      "signature": "43f2a82a9a9294f77470fde24221082162c28a1cabe3344792ab3dba88a68848"
+      "signature": "93d3d3bdf8cea0b70a6bc66be095eb9f75c14b2a0ff0a4bf93708282822296ce"
     },
     "tools": {
       "id": "6baf6ae9bb2242c2825e72fd9c76ad31",
@@ -2426,6 +2398,28 @@
       "prev_signature": "889bced4ba255d3f13068a8bf551dfd220166e10c11ab95019b45b6d40b7d10f",
       "signature_scheme": "sha256",
       "signature": "43f2a82a9a9294f77470fde24221082162c28a1cabe3344792ab3dba88a68848"
+    },
+    {
+      "id": "5003640c844b4f2ca9dfb13fa4d84d8e",
+      "module": "server",
+      "audited_at": "2026-07-22T17:17:38+00:00",
+      "auditor": "claude",
+      "status": "pass",
+      "summary": "Background consolidation maintenance loop added and wired into server startup/cleanup; branch-sprawl audit runs on a cadence. 8 hermetic tests; verified in the real app lifecycle (task created on startup, cancelled on shutdown).",
+      "run_id": "",
+      "files_touched": [
+        "thomas/server/app_routes_init.py",
+        "thomas/server/consolidation_maintenance.py"
+      ],
+      "file_hashes": {
+        "thomas/server/app_routes_init.py": "0f971802325353b475804894f3cff3ea7d1f381b092c9a73e4675f41fb16ff51",
+        "thomas/server/consolidation_maintenance.py": "0fd2e3db341a28d3598d6a4364a4ed8d493077cb5f42e92c8a28c07f849577d3"
+      },
+      "issues": [],
+      "issue_count": 0,
+      "prev_signature": "43f2a82a9a9294f77470fde24221082162c28a1cabe3344792ab3dba88a68848",
+      "signature_scheme": "sha256",
+      "signature": "93d3d3bdf8cea0b70a6bc66be095eb9f75c14b2a0ff0a4bf93708282822296ce"
     }
   ]
 }
