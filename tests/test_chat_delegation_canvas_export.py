@@ -45,6 +45,32 @@ def test_chart_data_preserves_user_values() -> None:
     assert [(row.label, row.value) for row in rows] == [("Q1", 120.0), ("Q2", 135.0)]
 
 
+def test_function_words_in_the_request_are_not_chart_data() -> None:
+    """Backing data must describe the chart, not the sentence that asked for it.
+
+    Live incident, 2026-07-24: "make me a graph of the most popular programming
+    languages in 2026" scraped as the single row `in = 2026`, and because prompt
+    data outranks the rendered plan, the exported chart-data.csv contained that
+    instead of the seven bars actually drawn.
+    """
+    plan = json.dumps(
+        {
+            "title": "Most Popular Programming Languages",
+            "elements": [
+                {"kind": "number", "label": "Python", "value": 57},
+                {"kind": "number", "label": "JavaScript", "value": 55},
+            ],
+        }
+    )
+    title, rows = extract_chart_data(
+        "make me a graph of the most popular programming languages in 2026", plan
+    )
+
+    assert title == "Most Popular Programming Languages"
+    assert [(row.label, row.value) for row in rows] == [("Python", 57.0), ("JavaScript", 55.0)]
+    assert "in" not in {row.label.casefold() for row in rows}
+
+
 def test_export_static_chart_writes_pdf_and_backing_data(tmp_path: Path) -> None:
     pytest.importorskip("reportlab")
     files = export_static_chart(

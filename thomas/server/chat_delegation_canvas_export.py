@@ -46,12 +46,28 @@ def _plan_object(plan: str) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+# Function words are never data labels. Without this, "the most popular
+# programming languages in 2026" scrapes as the single row `in = 2026`, and
+# because prompt data outranks the rendered plan, the exported CSV and
+# spreadsheet then describe that instead of the seven bars actually drawn.
+# A person opening the backing data for their chart found one row reading
+# "in, 2026".
+_NON_LABEL_TEXT = """
+chart graph plot show make create draw line bar pie
+a an the of in on at to for from by with and or as is are was were be been
+this that these those it its into onto up down out off over under near per
+about above below after before during since until within through between
+top best most least more less than then vs versus around approximately
+year years month months day days week weeks time times
+"""
+_NON_LABEL_WORDS = frozenset(_NON_LABEL_TEXT.split())
+
+
 def _prompt_data(prompt: str) -> list[ChartDatum]:
     rows: list[ChartDatum] = []
-    blocked = {"chart", "graph", "plot", "show", "make", "create", "draw", "line", "bar", "pie"}
     for match in _PAIR_RE.finditer(str(prompt or "")):
         label = match.group(1).strip()
-        if label.casefold() in blocked:
+        if label.casefold() in _NON_LABEL_WORDS:
             continue
         value = float(match.group(2))
         if match.group(3):
