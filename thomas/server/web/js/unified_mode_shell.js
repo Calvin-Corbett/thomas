@@ -147,10 +147,12 @@
     return true;
   }
 
-  function newConversation() {
+  function newConversation(projectRoot, projectLabel) {
     if (runtime.mode === 'chat') return false;
     const current = adapter(runtime.mode);
-    if (current && current.newConversation) current.newConversation();
+    // Forward the arguments: the library picker names the project it chose, and
+    // dropping them here silently re-bound whatever was already selected.
+    if (current && current.newConversation) current.newConversation(projectRoot, projectLabel);
     return true;
   }
 

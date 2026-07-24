@@ -24,6 +24,8 @@ Versioning: Semantic Versioning.
 
 ### Fixed
 
+- **You can now pick what Thomas works on by looking at it.** The control beside Tools showed a single folder name — usually something like `exec-065aad17f4f8` — and its only trick was a native folder dialog. It is now a "Selected project" chip that opens your library above the composer, with every project shown as a live, running preview of the actual app. You recognise the snake game because you can see the snake game. Browse my PC and New project sit alongside. Clicking a card opens it. At most twelve previews run at once, so scrolling never starves the preview service, and each one is scaled to fill its tile exactly rather than sitting in a white box.
+
 - **The apps Thomas builds for you can finally be opened again.** Everything Thomas makes lands in a folder under `~/.thomas/workspaces`, and Code refused to open any folder without version history — which none of them had. So all 913 of them were unopenable, and picking one returned "project_root must be inside a git repository". Thomas now prepares its own folders on demand. Folders that belong to *you* are still never touched without asking: they are refused with an explanation instead, and no `.git` appears in your files behind your back.
 
 - **Not choosing a project no longer means "edit my own source code".** A Code conversation that arrived without a project — including one whose request body simply failed to parse — silently bound Thomas's own checkout and reported success. Anything the worker then wrote went into the product tree next to the code that wrote it, which is how a file of driving tips ended up in the repository root. The fallback is now a scratch project. Working on Thomas itself is still available; it just has to be asked for.

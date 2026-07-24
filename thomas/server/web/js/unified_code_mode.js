@@ -586,7 +586,7 @@
     const hasResults = Boolean(state.pendingApproval || visibleChanges.length || artifacts.length || state.filePreview);
     const preview = state.filePreview ? `<section class="tc-code-file-preview"><header><strong>${esc(state.filePreview.path)}</strong><button data-code-file-close aria-label="Close file preview"><i class="ph ph-x"></i></button></header><pre>${esc(state.filePreview.content)}</pre></section>` : '';
     const approval = state.pendingApproval ? `<section class="tc-code-approval" role="alert"><strong>Approval required</strong><p>${esc(state.pendingApproval.summary)}</p><div><button data-code-approve ${state.approvalBusy ? 'disabled' : ''}>${state.approvalBusy ? 'Approving...' : 'Approve once'}</button><button data-code-approval-cancel ${state.approvalBusy ? 'disabled' : ''}>Cancel</button></div></section>` : '';
-    const projectLabel = state.projectRoot.split(/[\\/]/).filter(Boolean).pop() || 'Choose a project';
+    const projectLabel = state.projectRoot ? projectDisplayLabel() : 'Choose a project';
     root.innerHTML = `<div class="tc-code-panel${state.drawerOpen ? ' is-drawer-open' : ''}" style="--tc-code-drawer-width:${clampDrawerWidth(state.drawerWidth)}px">
       <header class="tc-code-context"><button data-code-results-jump type="button" aria-expanded="${state.drawerOpen ? 'true' : 'false'}"><i class="ph ph-sidebar-simple"></i> Activity <small>${statusLabels[state.runStatus] || 'Ready'}</small>${hasResults ? '<span class="tc-code-activity-count" aria-hidden="true"></span>' : ''}</button></header>
       <div class="tc-code-layout">
@@ -731,7 +731,7 @@
     return true;
   }
 
-  async function newConversation(projectRoot) {
+  async function newConversation(projectRoot, projectLabel) {
     if (!canSwitchContext()) return false;
     const epoch = state.contextEpoch + 1;
     state.contextEpoch = epoch;
@@ -745,8 +745,11 @@
     state.activeId = data.conversation.id;
     state.conversation = data.conversation;
     state.projectRoot = data.conversation.project_root || requestedRoot;
-    try { localStorage.setItem('thomas_code_project_root', state.projectRoot); }
-    catch (error) { recordError(error, 'Project selection could not be saved for the next session.'); }
+    state.projectLabel = String(projectLabel || '').trim();
+    try {
+      localStorage.setItem('thomas_code_project_root', state.projectRoot);
+      localStorage.setItem('thomas_code_project_label', state.projectLabel);
+    } catch (error) { recordError(error, 'Project selection could not be saved for the next session.'); }
     const token = lifecycle().contextToken(state);
     await Promise.all([refresh(), loadTree('', { token, deferRender: true })]);
     render();
@@ -1123,6 +1126,9 @@
     // source repo — never use it as a scratch Code project.
     state.projectRoot = /[\\/](thomas|thomas-dev)[\\/]?$/i.test(_storedRoot) ? '' : _storedRoot;
     if (!state.projectRoot && _storedRoot) { try { localStorage.removeItem('thomas_code_project_root'); } catch (e) {} }
+    // Restore the human name alongside the path, or a returning user is back to
+    // reading "exec-25fb7d1499a6" off the chip.
+    state.projectLabel = state.projectRoot ? (localStorage.getItem('thomas_code_project_label') || '') : '';
   }
   catch (error) { recordError(error, 'The saved Code project could not be loaded.'); }
   try {
@@ -1130,13 +1136,24 @@
     if (Number.isFinite(savedDrawerWidth)) state.drawerWidth = clampDrawerWidth(savedDrawerWidth);
   } catch (error) { recordPreferenceWarning(error, 'The saved activity drawer width could not be loaded.'); }
 
+  function projectDisplayLabel() {
+    // A folder basename is a poor name for a thing Thomas built: every app it
+    // generates lives in ~/.thomas/workspaces/exec-<hash>, so the chip read
+    // "exec-065aad17f4f8". When the picker knows what the project actually is
+    // (the request that produced it), that wins.
+    if (state.projectLabel) return state.projectLabel;
+    const base = String(state.projectRoot || '').split(/[\\/]/).filter(Boolean).pop() || '';
+    if (!base) return 'Thomas library';
+    if (/^exec-[0-9a-f]{6,}$/i.test(base)) return 'Untitled app';
+    return base;
+  }
+
   function updateProjectButton() {
     const button = document.getElementById('tc-code-project-btn');
     if (!button) return;
-    const span = button.querySelector ? button.querySelector('span') : null;
-    const label = state.projectRoot.split(/[\\/]/).filter(Boolean).pop() || 'Project';
-    if (span) span.textContent = label;
-    button.title = state.projectRoot || 'Choose project folder';
+    const span = document.getElementById('tc-code-project-label');
+    if (span) span.textContent = projectDisplayLabel();
+    button.title = state.projectRoot || 'Choose what Thomas works on';
     button.disabled = state.running || state.approvalBusy || state.steeringBusy;
   }
 
@@ -1199,7 +1216,8 @@
     leave,
     refresh,
     renderHistory,
-    newConversation: () => safely(newConversation, 'Could not create the Code task.'),
+    newConversation: (projectRoot, projectLabel) =>
+      safely(() => newConversation(projectRoot, projectLabel), 'Could not create the Code task.'),
     pickProject: () => safely(pickProject, 'Could not choose the project folder.'),
     send: (message, context) => safely(() => send(message, context), 'The Code task failed unexpectedly.'),
     stop: () => { void safely(stop, 'Could not stop the Code task.'); },
