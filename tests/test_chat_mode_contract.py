@@ -269,7 +269,9 @@ def test_code_adapter_contains_async_failures_at_ui_boundaries() -> None:
     assert "void safely(() => loadFile" in text
     assert "void safely(approvePending" in text
     assert "void safely(() => steer" in text
-    assert "newConversation: () => safely(newConversation" in text
+    # newConversation takes a project root and label (the library picker names
+    # what it chose), so match the containment rather than a zero-argument form.
+    assert "safely(() => newConversation(projectRoot, projectLabel)" in text
     assert "send: (message, context) => safely(() => send(message, context)" in text
     assert "Promise.allSettled" in text
 

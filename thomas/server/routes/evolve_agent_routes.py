@@ -71,6 +71,17 @@ from .evolve_agent_runtime import (
 log = logging.getLogger(__name__)
 
 
+def _is_thomas_source(path: Any) -> bool:
+    """True when a path is the running server's own source checkout."""
+    try:
+        source = forge_code_projects.thomas_source_repo_root()
+        if source is None or not path:
+            return False
+        return Path(str(path)).expanduser().resolve() == Path(source).resolve()
+    except (OSError, ValueError):
+        return False
+
+
 def _friendly_project_error(exc: Exception, requested_root: Any = None) -> str:
     """Turn an internal validator message into something a person can act on.
 
@@ -844,15 +855,21 @@ def build_evolve_agent_handlers(
                     None, forge_code_projects.ensure_git_repo, requested_root
                 )
             # Choosing nothing must never mean "edit Thomas's own source". The
-            # fallback used to be _root(), the Thomas checkout, so any turn that
-            # arrived without a project -- including one whose JSON failed to
-            # parse -- silently bound the product tree and reported success.
-            # That is how a worker's deliverable ends up committed next to the
-            # code that wrote it. Working on Thomas stays available; it just has
-            # to be asked for.
-            fallback_root = await asyncio.get_running_loop().run_in_executor(
-                None, forge_code_projects.default_scratch_project, _root()
-            )
+            # fallback is _root(), and in a normal install that IS the Thomas
+            # checkout -- so any turn arriving without a project, including one
+            # whose JSON failed to parse and was treated as an empty body,
+            # silently bound the product tree and returned 200. That is how a
+            # worker's deliverable ends up written next to the code that wrote
+            # it. Working on Thomas stays available; it has to be asked for.
+            #
+            # Only that specific case is redirected. When _root() is some other
+            # repository it is a deliberate configuration and remains the
+            # default, which is also what the route's callers rely on.
+            fallback_root = _root()
+            if _is_thomas_source(fallback_root):
+                fallback_root = await asyncio.get_running_loop().run_in_executor(
+                    None, forge_code_projects.default_scratch_project, _root()
+                )
             project_root = forge_code_projects.validate_project_root(requested_root, fallback=fallback_root)
             settings = ForgeCodeSettings.from_payload(body if isinstance(body, dict) else {})
         except (forge_code_projects.ForgeCodeProjectError, ForgeCodeSettingsError) as exc:

@@ -24,6 +24,8 @@ Versioning: Semantic Versioning.
 
 ### Fixed
 
+- Opening a project Thomas prepared is now undoable. Preparing a folder ran `git init` and stopped, which left no commit to compare against — so change tracking showed nothing and Revert had nowhere to return to. A baseline commit is recorded when the folder is prepared, so the first edit can always be undone.
+
 - **Thomas no longer calls a deliverable "verified" when it has nothing to do with what you asked.** Success was inferred from a side effect — a non-empty file existed — so the wrong artifact passed as easily as the right one. That is how a request for a graph of current trends was closed as verified by a one-button arcade game. A deliverable is now also checked against the subject of the request, and fails when it shares nothing with it. The check is deliberately a floor rather than a grade: it stays silent when the request is too vague to test, when the file cannot be read, and when you asked for a file by name and that file was produced — a clicker game that calls itself Teal Tapper is a naming choice, not a wrong answer.
 
 - **You can now pick what Thomas works on by looking at it.** The control beside Tools showed a single folder name — usually something like `exec-065aad17f4f8` — and its only trick was a native folder dialog. It is now a "Selected project" chip that opens your library above the composer, with every project shown as a live, running preview of the actual app. You recognise the snake game because you can see the snake game. Browse my PC and New project sit alongside. Clicking a card opens it. At most twelve previews run at once, so scrolling never starves the preview service, and each one is scaled to fill its tile exactly rather than sitting in a white box.

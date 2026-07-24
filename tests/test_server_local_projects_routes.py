@@ -387,16 +387,16 @@ class TestServerLocalProjectsRoutes(AioHTTPTestCase):
         with (
             patch.object(local_projects.task_bot_runtime, "list_executions", return_value=[record]),
             patch.object(local_projects.task_bot_runtime, "get_execution", return_value=record),
-            patch("thomas.server.routes.local_projects_aiohttp.deliverable_kind", return_value="web"),
+            patch("thomas.server.routes.local_projects_generated.deliverable_kind", return_value="web"),
             patch(
-                "thomas.server.routes.local_projects_aiohttp.deliverable_url",
+                "thomas.server.routes.local_projects_generated.deliverable_url",
                 return_value=f"/deliverable/{execution_id}/My%20Stuff/frontier-demo.html",
             ),
             patch(
-                "thomas.server.routes.local_projects_aiohttp.deliverable_entry",
+                "thomas.server.routes.local_projects_generated.deliverable_entry",
                 return_value="My Stuff/frontier-demo.html",
             ),
-            patch("thomas.server.routes.local_projects_aiohttp._workspace_dir", return_value=generated_root),
+            patch("thomas.server.routes.local_projects_generated._workspace_dir", return_value=generated_root),
         ):
             listed = await self.client.get("/api/local/projects")
             self.assertEqual(listed.status, 200)
