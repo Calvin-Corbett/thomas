@@ -179,11 +179,25 @@ def _read_registry(app: web.Application) -> list[dict[str, Any]]:
         return []
 
 
+# Bumped on every registry write. Callers that cache a derived view of the
+# registry compare this instead of trying to hook each writer -- there are five
+# write sites across two modules today, and per-site invalidation is the kind of
+# thing a sixth one silently forgets.
+_registry_revision = 0
+
+
+def registry_revision() -> int:
+    """Monotonic count of registry writes. A cheap staleness check for caches."""
+    return _registry_revision
+
+
 def _write_registry(app: web.Application, projects: list[dict[str, Any]]) -> None:
+    global _registry_revision
     path = _registry_path(app)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
         json.dump({"version": _REGISTRY_VERSION, "projects": projects}, f)
+    _registry_revision += 1
 
 
 def _resolve_project_root(path_raw: Any) -> Path:

@@ -217,6 +217,61 @@ def _generated_deliverable_projects(*, start_index: int = 0, limit: int = _MAX_P
     return projects
 
 
+# Building the catalogue costs seconds: list_executions(refresh=True) rebuilds a
+# summary from every execution record on disk, each row is then re-read
+# individually, and each project is walked with rglob. All of it is synchronous
+# file I/O, so running it inline in an async handler stops the whole server --
+# measured at 4.5s per call, during which an unrelated /api/health went from 19ms
+# to 4547ms. The catalogue is also the thing a project picker asks for the moment
+# it opens, so the freeze lands exactly when someone is interacting.
+#
+# It moves to a worker thread (the event loop stays free) behind a short cache
+# (reopening the picker is instant). Writers call _invalidate_projects_cache() so
+# a newly imported project never fails to appear.
+_PROJECTS_CACHE_TTL_S = 20.0
+# (built_at, registry_revision_at_build, projects)
+_projects_cache: tuple[float, int, list[dict[str, Any]]] | None = None
+_projects_cache_lock: asyncio.Lock | None = None
+
+
+def _build_projects_catalogue(app: web.Application) -> list[dict[str, Any]]:
+    """Assemble the full catalogue. Blocking -- call from a worker thread."""
+    projects = _refresh_projects(app)
+    generated = _generated_deliverable_projects(
+        start_index=len(projects), limit=max(0, _MAX_PROJECTS - len(projects))
+    )
+    return projects + generated
+
+
+def _cache_is_fresh(cached: tuple[float, int, list[dict[str, Any]]] | None) -> bool:
+    if cached is None:
+        return False
+    built_at, revision_at_build, _ = cached
+    if _helpers.registry_revision() != revision_at_build:
+        return False  # someone imported, renamed, or deleted a project
+    return (time.monotonic() - built_at) < _PROJECTS_CACHE_TTL_S
+
+
+async def _projects_catalogue(app: web.Application) -> list[dict[str, Any]]:
+    """The catalogue, off the event loop, cached briefly, built at most once."""
+    global _projects_cache, _projects_cache_lock
+    cached = _projects_cache
+    if _cache_is_fresh(cached):
+        return cached[2]
+    if _projects_cache_lock is None:
+        _projects_cache_lock = asyncio.Lock()
+    # Single-flight: several callers arriving during a cold rebuild wait for the
+    # one in progress instead of each starting their own multi-second scan.
+    async with _projects_cache_lock:
+        cached = _projects_cache
+        if _cache_is_fresh(cached):
+            return cached[2]
+        revision = _helpers.registry_revision()
+        projects = await asyncio.to_thread(_build_projects_catalogue, app)
+        _projects_cache = (time.monotonic(), revision, projects)
+        return projects
+
+
 def _find_generated_deliverable_project(project_id: str, *, index: int = 0) -> dict[str, Any] | None:
     execution_id = _generated_execution_id(project_id)
     if not execution_id:
@@ -254,11 +309,7 @@ def register_local_project_routes(
     async def api_local_projects_list(request: web.Request) -> web.Response:
         require_api_access(request)
         require_loopback(request)
-        projects = _refresh_projects(request.app)
-        generated = _generated_deliverable_projects(
-            start_index=len(projects), limit=max(0, _MAX_PROJECTS - len(projects))
-        )
-        projects = projects + generated
+        projects = await _projects_catalogue(request.app)
         return web.json_response({"ok": True, "count": len(projects), "projects": projects})
 
     async def api_local_projects_import(request: web.Request) -> web.Response:
