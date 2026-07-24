@@ -104,3 +104,24 @@ def test_preparing_an_already_prepared_project_is_a_no_op(
     monkeypatch.setattr(forge_code_projects, "is_thomas_owned", lambda _path: True)
 
     assert forge_code_projects.ensure_git_repo(project) is False
+
+
+def test_a_folder_name_cannot_act_as_a_git_option(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """git parses a leading "--" as an option, so passing a caller-supplied path
+    as a positional argument lets the folder's NAME choose a flag. `--template`
+    copies hooks out of the named directory, and those run on the next git
+    command. Found by probing the bind route with adversarial paths."""
+    hostile = tmp_path / "--template=evil"
+    hostile.mkdir(parents=True)
+    (hostile / "app.txt").write_text("content", encoding="utf-8")
+    monkeypatch.setattr(forge_code_projects, "is_thomas_owned", lambda _path: True)
+
+    assert forge_code_projects.ensure_git_repo(hostile) is True
+
+    # The repository must exist INSIDE the oddly named folder, which only
+    # happens when the path was the working directory rather than an argument.
+    assert (hostile / ".git").is_dir()
+    returncode, _stdout, _stderr = _run_git(hostile, ["rev-parse", "--verify", "HEAD"])
+    assert returncode == 0

@@ -126,8 +126,14 @@ def ensure_git_repo(path: str | Path) -> bool:
     if (candidate / ".git").exists():
         return False
     try:
+        # The directory is passed as the working directory, never as a
+        # positional argument. git parses a leading "--" as an option, so a
+        # folder literally named --template=<dir> would become one -- and that
+        # option copies hooks out of the named directory, which then run on the
+        # next git command. Naming a folder cannot be allowed to choose a flag.
         proc = subprocess.run(
-            ["git", "init", "--initial-branch=main", str(candidate)],
+            ["git", "init", "--initial-branch=main"],
+            cwd=str(candidate),
             capture_output=True,
             text=True,
             timeout=15,
@@ -219,8 +225,12 @@ def default_scratch_project(catalog_root: str | Path) -> Path:
     try:
         scratch.mkdir(parents=True, exist_ok=True)
         if not (scratch / ".git").exists():
+            # cwd rather than a positional path, for the same reason as
+            # ensure_git_repo: a directory name must never be able to act as a
+            # git option.
             proc = subprocess.run(
-                ["git", "init", "--initial-branch=main", str(scratch)],
+                ["git", "init", "--initial-branch=main"],
+                cwd=str(scratch),
                 capture_output=True,
                 text=True,
                 timeout=15,
