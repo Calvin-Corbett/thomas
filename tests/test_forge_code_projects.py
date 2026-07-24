@@ -64,3 +64,43 @@ def test_tree_is_scoped_metadata_only_and_hides_internal_directories(tmp_path: P
     assert [entry["path"] for entry in nested["entries"]] == ["src/app.py"]
     with pytest.raises(forge_code_tree.ForgeCodeTreeError):
         forge_code_tree.list_project_tree(project, "../outside")
+
+
+def test_a_thomas_owned_folder_is_prepared_with_a_revertible_baseline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Everything Thomas builds lands in a folder with no version history, so
+    the 913 apps it had made were unopenable. Preparing one must also leave a
+    baseline: Revert is `git checkout -- <file>`, which needs a commit to
+    return to, or the first edit becomes permanent."""
+    project = tmp_path / "workspaces" / "exec-abc123"
+    project.mkdir(parents=True)
+    (project / "app.html").write_text("original", encoding="utf-8")
+    monkeypatch.setattr(forge_code_projects, "is_thomas_owned", lambda _path: True)
+
+    assert forge_code_projects.ensure_git_repo(project) is True
+    assert (project / ".git").exists()
+
+    returncode, _stdout, _stderr = _run_git(project, ["rev-parse", "--verify", "HEAD"])
+    assert returncode == 0, "a prepared project must have a baseline commit"
+
+    (project / "app.html").write_text("edited by Thomas", encoding="utf-8")
+    _run_git(project, ["checkout", "--", "app.html"])
+    assert (project / "app.html").read_text(encoding="utf-8") == "original"
+
+
+def test_a_users_own_folder_is_never_initialised_behind_their_back(tmp_path: Path) -> None:
+    outside = tmp_path / "MyVacationPhotos"
+    outside.mkdir()
+
+    assert forge_code_projects.ensure_git_repo(outside) is False
+    assert not (outside / ".git").exists()
+
+
+def test_preparing_an_already_prepared_project_is_a_no_op(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = _repo(tmp_path / "already")
+    monkeypatch.setattr(forge_code_projects, "is_thomas_owned", lambda _path: True)
+
+    assert forge_code_projects.ensure_git_repo(project) is False

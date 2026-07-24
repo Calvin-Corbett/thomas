@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
 from pathlib import Path
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 
 class ForgeCodeProjectError(ValueError):
@@ -137,7 +140,67 @@ def ensure_git_repo(path: str | Path) -> bool:
         raise ForgeCodeProjectError(
             f"project folder could not be prepared for editing: {proc.stderr.strip()[:200]}"
         )
+    _seal_initial_commit(candidate)
     return True
+
+
+def _seal_initial_commit(root: Path) -> None:
+    """Record what was already there, so the first edit can be undone.
+
+    An initialised repo with no commits is not revertible: Revert is
+    ``git checkout -- <file>`` and change attribution is ``git status``, both of
+    which need a baseline. Without this, opening an app Thomas built would let
+    it be edited and leave no way back to the version that worked.
+
+    Best effort by design -- failing to seal must not stop someone opening their
+    project, it only means the first edit has no prior version to compare with.
+    """
+    identity = [
+        "-c",
+        "user.name=Thomas",
+        "-c",
+        "user.email=thomas@localhost",
+        "-c",
+        "commit.gpgsign=false",
+    ]
+    try:
+        head = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--verify", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if head.returncode == 0:
+            return  # already has history
+        subprocess.run(
+            ["git", "-C", str(root), *identity, "add", "-A"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            encoding="utf-8",
+            errors="replace",
+        )
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                *identity,
+                "commit",
+                "--allow-empty",
+                "-m",
+                "Baseline: contents before Thomas opened this project",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except (OSError, subprocess.SubprocessError) as exc:  # pragma: no cover - defensive
+        log.warning("could not seal a baseline commit in %s: %s", root, exc)
 
 
 def default_scratch_project(catalog_root: str | Path) -> Path:
