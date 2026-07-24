@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import secrets
 import time
 from contextlib import suppress
@@ -394,6 +395,24 @@ def _validate_transition(current: str, new_state: str, *, allow_same: bool) -> N
         raise ValueError(f"invalid runtime transition `{current}` -> `{new_state}`")
 
 
+# The worker's structured stop protocol -- the GIVE_UP marker and its
+# what_failed / what_was_tried / why_blocked fields -- is control traffic
+# between the agent and the engine. It reached the chat thread verbatim, so
+# someone who asked for a one-page 401k guide for their employees was told
+# "why_blocked: The workspace does not contain scripts/forge/gates/
+# monolith_guard.py, and the available tools provide file operations only".
+# The human sentence in front of it is kept; the protocol is not shown.
+_WORKER_PROTOCOL_RE = re.compile(r"(?i)\b(?:GIVE_UP|what_failed|what_was_tried|why_blocked)\b[ \t]*:?")
+
+
+def _user_facing_summary(text: str) -> str:
+    """The part of a worker summary that is addressed to a person."""
+    match = _WORKER_PROTOCOL_RE.search(text)
+    if match is None:
+        return text
+    return text[: match.start()].strip(" .;:-\n\t")
+
+
 def update_execution(
     execution_id: str,
     *,
@@ -434,7 +453,14 @@ def update_execution(
     if scope is not None:
         payload["scope"] = [str(item).strip() for item in scope if str(item).strip()]
     if progress_summary is not None:
-        payload["progress_summary"] = str(progress_summary or "").strip()
+        raw_summary = str(progress_summary or "").strip()
+        shown = _user_facing_summary(raw_summary)
+        # Keep the whole thing when there is no human sentence to show, rather
+        # than replacing a diagnosis with silence; and keep the original beside
+        # it either way so nothing is lost for debugging.
+        payload["progress_summary"] = shown or raw_summary
+        if shown and shown != raw_summary:
+            payload["progress_detail"] = raw_summary
     if blocker is not None:
         payload["blocker"] = str(blocker or "").strip()
     if reported_to_chat_at is not None:
