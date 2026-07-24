@@ -123,6 +123,24 @@ class ArtifactIntentTests(unittest.TestCase):
         self.assertTrue(real["checkable"])
         self.assertFalse(real["matches_request"])
 
+    def test_an_absolute_path_cannot_escape_the_workspace(self):
+        """On Windows an absolute path WINS the join, so work_dir / "C:/x.html"
+        is simply C:\\x.html -- it survives the ".." test and then reads a file
+        outside the workspace, naming its full path in a user-visible message.
+        Containment is verified after resolving, not inferred from the string."""
+        with TemporaryDirectory() as tmp:
+            outside = Path(tmp) / "outside.html"
+            outside.write_text("<p>unrelated content</p>", encoding="utf-8")
+            work = Path(tmp) / "workspace"
+            work.mkdir()
+
+            for escape in (str(outside), "C:/Windows/system.html", "../outside.html"):
+                with self.subTest(escape=escape):
+                    self.assertEqual(
+                        artifact_intent_issues("make a graph of current technology trends", work, [escape]),
+                        [],
+                    )
+
     def test_path_traversal_in_a_recorded_artifact_is_ignored(self):
         with TemporaryDirectory() as tmp:
             root = self._write(tmp, "index.html", ARCADE_GAME)

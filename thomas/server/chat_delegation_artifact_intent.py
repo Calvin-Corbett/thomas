@@ -128,11 +128,25 @@ def artifact_intent_issues(
 
     checked = 0
     unrelated: list[tuple[str, int]] = []
+    try:
+        base = work_dir.resolve()
+    except (OSError, ValueError):
+        return []
     for raw in created_files:
         rel = str(raw or "").strip().replace("\\", "/").lstrip("/")
         if not rel or ".." in Path(rel).parts:
             continue
         path = work_dir / rel
+        # Containment is checked after resolving, not inferred from the string.
+        # A leading "C:/" survives the ".." test and then WINS the join on
+        # Windows, so work_dir / "C:/secret.html" is simply C:\secret.html --
+        # this read files outside the workspace and named their full path in a
+        # user-visible message. Resolving also settles symlinks and short names.
+        try:
+            if not path.resolve().is_relative_to(base):
+                continue
+        except (OSError, ValueError):
+            continue
         if path.suffix.casefold() not in _READABLE_SUFFIXES:
             continue
         text = _readable_text(path)
