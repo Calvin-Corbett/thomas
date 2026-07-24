@@ -296,6 +296,18 @@ class DeliverablePreviewService:
     def configure(self, *, main_origin: str) -> None:
         self._main_origin = str(main_origin or "").rstrip("/")
 
+    def is_live_capability(self, capability: str) -> bool:
+        """True while a capability still authorises preview requests.
+
+        Preview cookies are set for the whole of 127.0.0.1, so they reach the
+        main server too, where they accumulate until they overflow its header
+        limit. That server sweeps them, and asks here first: a capability that is
+        still granted belongs to a preview that may yet request its stylesheet
+        or script, and expiring it mid-load would break multi-file apps.
+        """
+        grant = self._grants.get(str(capability or ""))
+        return grant is not None and grant.expires_at > time.time()
+
     async def stop(self) -> None:
         async with self._lock:
             grants = list(self._grants.values())

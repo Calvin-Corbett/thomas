@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 
 from thomas.core.config import AppConfig
 from thomas.server.app_keys import (
+    APP_DELIVERABLE_PREVIEW_SERVICE,
     APP_SECRETS,
     APP_SESSION_ACTIVE_RUNS,
     APP_SESSION_ACTIVE_RUNS_LOCK,
@@ -26,6 +27,10 @@ from thomas.server.app_keys import (
     APP_SESSION_LOCKS_LOCK,
     APP_TASK_LEDGER,
 )
+
+# Cookie the deliverable preview origin sets per capability. Named here because
+# this server has to recognise them as not its own; see the drain middleware.
+_PREVIEW_COOKIE_PREFIX = "thomas_preview_"
 from thomas.server.app_middleware_security import (
     _BEARER_TOKEN_RE as _BEARER_TOKEN_RE,
 )
@@ -112,10 +117,21 @@ def setup_middleware_and_handlers(
     @web.middleware
     async def drain_stray_preview_cookies(request: web.Request, handler):  # type: ignore[no-untyped-def]
         resp = await handler(request)
-        stray = [name for name in request.cookies if name.startswith("thomas_preview_")]
-        if stray and not bool(getattr(resp, "prepared", False)):
-            for name in stray[:64]:  # bounded: a reply must not itself blow the header budget
-                resp.del_cookie(name, path="/")
+        names = [name for name in request.cookies if name.startswith(_PREVIEW_COOKIE_PREFIX)]
+        if not names or bool(getattr(resp, "prepared", False)):
+            return resp
+        service = request.app.get(APP_DELIVERABLE_PREVIEW_SERVICE)
+        stray = []
+        for name in names:
+            capability = name[len(_PREVIEW_COOKIE_PREFIX) :]
+            # A capability that is still granted belongs to a preview that may
+            # yet fetch its stylesheet or script. Expiring that mid-load would
+            # break multi-file apps, so only dead ones are swept.
+            if service is not None and service.is_live_capability(capability):
+                continue
+            stray.append(name)
+        for name in stray[:64]:  # bounded: the reply must not blow the budget itself
+            resp.del_cookie(name, path="/")
         return resp
 
     app.middlewares.append(drain_stray_preview_cookies)

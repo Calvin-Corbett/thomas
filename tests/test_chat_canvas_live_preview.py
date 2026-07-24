@@ -117,7 +117,16 @@ def test_root_chat_restores_reviewed_canvas_only_on_explicit_open() -> None:
     assert "function openConversationCanvas()" in text
     assert "restored.chatId === state.activeChat" in text
     assert "restored.sessionId === String(state.sessionId || '')" in text
-    assert "document.getElementById('tc-canvas-btn').addEventListener('click', openConversationCanvas);" in text
+    # The Canvas button must route to the INLINE panel, never to a workspace.
+    # It was rebound to openWorkspace('app_builder') during the unified-shell
+    # work, which hides both the chat and the Canvas -- the opposite of what the
+    # control says. Assert the routing rather than one literal binding, because
+    # the handler now also closes an open panel and defers to the resident drawer
+    # inside a workspace.
+    canvas_binding = text.split("getElementById('tc-canvas-btn').addEventListener('click'", 1)[1].split("});", 1)[0]
+    assert "openConversationCanvas()" in canvas_binding
+    assert "closeCanvas()" in canvas_binding
+    assert "openWorkspace(" not in canvas_binding
     assert "state.restoredCanvas = null;" in text
     restore_body = text.split("async function restoreVerifiedChatArtifacts", 1)[1].split("function selectChat", 1)[0]
     assert "openCanvas(" not in restore_body
