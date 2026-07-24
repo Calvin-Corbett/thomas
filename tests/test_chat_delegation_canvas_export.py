@@ -122,6 +122,78 @@ def test_axis_ticks_and_source_notes_are_not_data_rows() -> None:
     assert not any(row.value == 0 for row in rows)
 
 
+_AXIS_CHART = (
+    '<div style="left:100px;top:40px;">Coffee Consumption by Country</div>'
+    '<div style="left:60px;top:200px;">12</div>'
+    '<div style="left:60px;top:300px;">6</div>'
+    '<div style="left:60px;top:400px;">0</div>'
+    '<div style="left:148px;top:445px;">Finland</div>'
+    '<div style="left:256px;top:445px;">Norway</div>'
+    '<div style="left:364px;top:445px;">Iceland</div>'
+)
+
+
+def test_plan_values_take_the_names_the_chart_is_drawn_with() -> None:
+    """Live incident, 2026-07-24: a coffee chart reading Finland, Norway,
+    Iceland exported "Series 1..5". The plan carried the numbers and no labels,
+    the render carried the labels, and nothing joined them. An axis label row is
+    a run of text boxes sharing a y coordinate."""
+    plan = json.dumps(
+        {
+            "title": "Coffee Consumption by Country",
+            "elements": [
+                {"kind": "number", "value": 12},
+                {"kind": "number", "value": 9.9},
+                {"kind": "number", "value": 9},
+            ],
+        }
+    )
+    _, rows = extract_chart_data("chart of coffee consumption by country", plan, _AXIS_CHART)
+
+    assert [(row.label, row.value) for row in rows] == [
+        ("Finland", 12.0),
+        ("Norway", 9.9),
+        ("Iceland", 9.0),
+    ]
+
+
+def test_names_are_not_guessed_when_the_counts_disagree() -> None:
+    """Pairing four values against three names would mean choosing which value
+    belongs to which label. Confidently wrong labels are worse than honest
+    placeholders."""
+    plan = json.dumps(
+        {
+            "title": "Coffee",
+            "elements": [{"kind": "number", "value": v} for v in (12, 9.9, 9, 8.7)],
+        }
+    )
+    _, rows = extract_chart_data("chart of coffee consumption", plan, _AXIS_CHART)
+
+    assert [row.label for row in rows] == ["Series 1", "Series 2", "Series 3", "Series 4"]
+
+
+def test_axis_ticks_are_never_mistaken_for_category_names() -> None:
+    from thomas.server.chat_delegation_canvas_export import _rendered_axis_labels
+
+    assert _rendered_axis_labels(_AXIS_CHART) == ["Finland", "Norway", "Iceland"]
+
+
+def test_labels_already_supplied_by_the_plan_are_left_alone() -> None:
+    plan = json.dumps(
+        {
+            "title": "Coffee",
+            "elements": [
+                {"kind": "number", "label": "Brazil", "value": 5},
+                {"kind": "number", "label": "Peru", "value": 4},
+                {"kind": "number", "label": "Kenya", "value": 3},
+            ],
+        }
+    )
+    _, rows = extract_chart_data("chart of coffee", plan, _AXIS_CHART)
+
+    assert [row.label for row in rows] == ["Brazil", "Peru", "Kenya"]
+
+
 def test_prompt_supplied_values_still_outrank_the_rendered_page() -> None:
     rendered = "<html><body><p>Alpha &middot; 99%</p><p>Beta &middot; 98%</p></body></html>".replace(
         "&middot;", "·"

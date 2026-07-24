@@ -169,6 +169,44 @@ def _trim_to_label(raw: str) -> str:
     return " ".join(words)
 
 
+# An absolutely positioned text div: its x, its y, and what it says.
+_POSITIONED_TEXT_RE = re.compile(
+    r"<div[^>]*style=\"[^\"]*left:\s*(-?[\d.]+)px[^\"]*top:\s*(-?[\d.]+)px[^\"]*\"[^>]*>([^<>]{1,48})</div>",
+    re.IGNORECASE,
+)
+_NUMERIC_TEXT_RE = re.compile(r"^[\s\d.,%+-]*$")
+_UNNAMED_ROW_RE = re.compile(r"^Series \d+$")
+
+
+def _rendered_axis_labels(html: str) -> list[str]:
+    """The chart's category labels, read from the row they are drawn on.
+
+    Many charts put the categories along an axis and the values somewhere else
+    entirely, so nothing pairs them in the flattened text -- a coffee chart
+    renders "Finland Norway Iceland Denmark Netherlands" in one place and its
+    bars in another. What DOES connect them is layout: an axis label row is a
+    run of text boxes sharing a y coordinate, ordered by x. That is the run this
+    returns, so a caller holding values in plan order can name them.
+    """
+    rows: dict[str, list[tuple[float, str]]] = {}
+    for match in _POSITIONED_TEXT_RE.finditer(str(html or "")):
+        text = " ".join(match.group(3).split())
+        if not text or _NUMERIC_TEXT_RE.match(text):
+            continue  # axis ticks are not categories
+        try:
+            left, top = float(match.group(1)), float(match.group(2))
+        except ValueError:
+            continue
+        rows.setdefault(f"{top:.0f}", []).append((left, text))
+    if not rows:
+        return []
+    # The widest run of non-numeric boxes on one line is the category axis.
+    best = max(rows.values(), key=len)
+    if len(best) < 2:
+        return []
+    return [text for _left, text in sorted(best, key=lambda pair: pair[0])]
+
+
 def extract_chart_data(prompt: str, plan: str, rendered_html: str = "") -> tuple[str, list[ChartDatum]]:
     spec = _plan_object(plan)
     title = str(spec.get("title") or "").strip() or "Thomas chart"
@@ -193,7 +231,29 @@ def extract_chart_data(prompt: str, plan: str, rendered_html: str = "") -> tuple
             geometry = row.get("geometry") if isinstance(row.get("geometry"), dict) else {}
             value = float(geometry.get("h") or geometry.get("w") or 0)
             rows.append(ChartDatum(label=str(row.get("label") or f"Series {index}"), value=value))
+    rows = _name_unlabelled_rows(rows, rendered_html)
     return title, rows or [ChartDatum(label="Series 1", value=1.0)]
+
+
+def _name_unlabelled_rows(rows: list[ChartDatum], rendered_html: str) -> list[ChartDatum]:
+    """Give plan values the names the chart is actually drawn with.
+
+    A plan often carries the numbers and no labels, which exported as
+    "Series 1..5" beside a chart plainly reading Finland, Norway, Iceland. The
+    values are right and the names are on the page, so join them.
+
+    Only when EVERY row is unnamed and the counts match exactly. A partial match
+    would mean guessing which value belongs to which name, and a spreadsheet
+    with confidently wrong labels is worse than one with honest placeholders.
+    """
+    if not rows or not any(_UNNAMED_ROW_RE.match(row.label) for row in rows):
+        return rows
+    if not all(_UNNAMED_ROW_RE.match(row.label) for row in rows):
+        return rows
+    labels = _rendered_axis_labels(rendered_html)
+    if len(labels) != len(rows):
+        return rows
+    return [ChartDatum(label=label, value=row.value) for label, row in zip(labels, rows)]
 
 
 def _clean_note(prompt: str) -> str:
