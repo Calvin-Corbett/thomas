@@ -2528,12 +2528,21 @@
         const logicalW = 1200;
         const logicalH = Math.round(logicalW * (box.height / (box.width || 1)) ) || 750;
         const scale = (box.width || 184) / logicalW;
-        // sandbox WITHOUT allow-same-origin, matching the Canvas frames: these
-        // pages were written by a model and can contain anything. Scripts are
-        // allowed so the preview shows the app actually running, but the frame
-        // gets an opaque origin, so it cannot reach the parent DOM, read
-        // storage, or call /api/* as the user.
-        holder.innerHTML = `<iframe src="${esc(src)}" sandbox="allow-scripts" tabindex="-1" aria-hidden="true" scrolling="no" loading="lazy"
+        // These pages were written by a model, so pin their capabilities in the
+        // markup as well as in the response. The iframe attribute INTERSECTS
+        // with the server's CSP sandbox, so this is a floor, not a grant.
+        //
+        // allow-same-origin is included deliberately. The deliverable is served
+        // from its own ephemeral 127.0.0.1:<port>, which is already a different
+        // origin from the chat page -- "same-origin" here means the app's own
+        // origin, never the parent's, and the parent stays unreachable either
+        // way. Dropping it would give the frame an opaque origin instead, which
+        // makes web storage throw: 15 of the 297 generated apps on this machine
+        // use localStorage, including the snake game and Orbit. Breaking real
+        // apps to re-state a boundary the origin already enforces is a bad
+        // trade. allow-forms is not carried over from the CSP -- a preview is
+        // pointer-events:none and has nothing to submit.
+        holder.innerHTML = `<iframe src="${esc(src)}" sandbox="allow-scripts allow-same-origin" tabindex="-1" aria-hidden="true" scrolling="no" loading="lazy"
           style="position:absolute;top:0;left:0;width:${logicalW}px;height:${logicalH}px;border:0;transform:scale(${scale.toFixed(4)});transform-origin:top left;pointer-events:none;"></iframe>`;
         holder.dataset.libMountedFrame = '1';
         _libraryMounted.push(holder);
