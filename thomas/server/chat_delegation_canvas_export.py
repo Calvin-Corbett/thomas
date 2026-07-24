@@ -63,6 +63,8 @@ year years month months day days week weeks time times
 _NON_LABEL_WORDS = frozenset(_NON_LABEL_TEXT.split())
 _NOISE_BLOCK_RE = re.compile(r"<(style|script)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
 _TAG_STRIP_RE = re.compile(r"<[^>]+>")
+# Legend/bullet glyphs that introduce a chart series in rendered output.
+_MARKER_RE = re.compile(r"[●○▪■•‣⁃▸▶·∙]")
 
 
 def _prompt_data(prompt: str) -> list[ChartDatum]:
@@ -101,30 +103,39 @@ def _rendered_data(html: str) -> list[ChartDatum]:
         return []
     text = _NOISE_BLOCK_RE.sub(" ", text)
     text = " ".join(_TAG_STRIP_RE.sub(" ", text).split())
-    found: list[tuple[str, float, bool]] = []
+    found: list[tuple[str, float, bool, bool]] = []
     for match in _RENDERED_PAIR_RE.finditer(text):
         label = (match.group(1) or match.group(3) or "").strip(" -·:=")
         raw_value = match.group(2) or match.group(4)
         if not label or raw_value is None:
             continue
-        label = _trim_to_label(label)
-        if not label:
+        trimmed = _trim_to_label(label)
+        if not trimmed:
             continue
         try:
             value = float(raw_value)
         except ValueError:
             continue
-        found.append((label, value, "%" in match.group(0)))
+        # Where the label itself began, so we can see what introduces it.
+        label_start = match.start() + label.rfind(trimmed) if trimmed in label else match.start()
+        lead = text[max(0, label_start - 3) : label_start]
+        found.append((trimmed, value, "%" in match.group(0), bool(_MARKER_RE.search(lead))))
 
-    # Chart rows share a format. When most carry a percent sign, the ones that
-    # do not are prose -- the heading "Household Energy Use by Source - 2026"
-    # otherwise reads as the data point Source = 2026.
+    # Chart rows share a format, so the odd one out is prose. Two passes, each
+    # applied only when the format is actually the majority signal:
+    #  - a legend marker: "● Drive alone 68.7%" is data, while the axis tick
+    #    "...ACS 1-Year estimates 0 %" that precedes it is not.
+    #  - a percent sign: the heading "Household Energy Use by Source - 2026"
+    #    otherwise reads as the data point Source = 2026.
+    marked = [row for row in found if row[3]]
+    if len(marked) >= 2:
+        found = marked
     percent_rows = [row for row in found if row[2]]
     if len(percent_rows) >= 2:
         found = percent_rows
 
     rows: list[ChartDatum] = []
-    for label, value, _ in found:
+    for label, value, _percent, _marked in found:
         if any(row.label.casefold() == label.casefold() for row in rows):
             continue
         rows.append(ChartDatum(label=label, value=value))

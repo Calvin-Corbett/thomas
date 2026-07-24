@@ -102,6 +102,26 @@ def test_backing_data_comes_from_the_chart_that_was_drawn() -> None:
     assert 2026.0 not in {value for _, value in pairs}
 
 
+def test_axis_ticks_and_source_notes_are_not_data_rows() -> None:
+    """Live incident, 2026-07-24: a commute chart exported a seventh row,
+    "ACS 1-Year estimates, 0" -- the y-axis baseline glued to the source note.
+    The real series each carry a legend marker; the axis label does not."""
+    rendered = (
+        "<html><body><h1>How Americans Commute to Work</h1>"
+        "<p>Source: U.S. Census Bureau, 2023 ACS 1-Year estimates</p>"
+        "<span>0</span><span>% of workers</span>"
+        "<ul><li>&#9679; Drive alone 68.7%</li><li>&#9679; Carpool 8.6%</li>"
+        "<li>&#9679; Public transit 3.6%</li><li>&#9679; Worked at home 13.7%</li></ul>"
+        "</body></html>"
+    ).replace("&#9679;", "●")
+
+    _, rows = extract_chart_data("chart showing how people commute to work", "", rendered)
+    labels = [row.label for row in rows]
+
+    assert labels == ["Drive alone", "Carpool", "Public transit", "Worked at home"]
+    assert not any(row.value == 0 for row in rows)
+
+
 def test_prompt_supplied_values_still_outrank_the_rendered_page() -> None:
     rendered = "<html><body><p>Alpha &middot; 99%</p><p>Beta &middot; 98%</p></body></html>".replace(
         "&middot;", "·"
