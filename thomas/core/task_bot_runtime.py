@@ -423,6 +423,7 @@ def update_execution(
     progress_summary: str | None = None,
     blocker: str | None = None,
     proof_status: str | None = None,
+    salvaged_artifacts: list[str] | None = None,
     reported_to_chat_at: str | None = None,
     bot_id: str | None = None,
     backend_type: str | None = None,
@@ -461,6 +462,15 @@ def update_execution(
         payload["progress_summary"] = shown or raw_summary
         if shown and shown != raw_summary:
             payload["progress_detail"] = raw_summary
+    if salvaged_artifacts is not None:
+        # Files that exist in the workspace of a run that did NOT succeed.
+        # Deliberately not written as proof: a proof means "this is the verified
+        # answer", and these are only "this is what was on disk when it stopped".
+        # Kept in their own field so a failed run can show its work without any
+        # path that reads proof mistaking it for a completed deliverable.
+        payload["salvaged_artifacts"] = [
+            str(item).strip() for item in salvaged_artifacts if str(item or "").strip()
+        ]
     if blocker is not None:
         payload["blocker"] = str(blocker or "").strip()
     if reported_to_chat_at is not None:
@@ -708,14 +718,23 @@ def fail_execution(
     summary: str = "",
     blocker: str = "",
     proof_status: str | None = None,
+    salvaged_artifacts: list[str] | None = None,
     repo_root: str | Path | None = None,
 ) -> dict[str, Any]:
+    """Record a terminal failure, optionally keeping what the run had produced.
+
+    A run that stops without succeeding often leaves real work behind -- a
+    finished PDF sitting in its workspace while the user is told nothing was
+    produced. ``salvaged_artifacts`` keeps that evidence on the record instead
+    of discarding it, without claiming the run succeeded.
+    """
     return update_execution(
         execution_id,
         state="failed",
         progress_summary=summary,
         blocker=blocker,
         proof_status=proof_status or "failed",
+        salvaged_artifacts=salvaged_artifacts,
         heartbeat=False,
         actor=actor,
         repo_root=repo_root,

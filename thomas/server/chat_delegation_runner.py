@@ -194,6 +194,21 @@ async def _run_agent_worker_supervised(
     threaded_kwargs["emitter"] = _ThreadsafeDelegationEmitter(emitter, loop)
     thread_task = asyncio.create_task(asyncio.to_thread(_run_worker_thread_entry, runner, app, threaded_kwargs))
 
+    def _salvage() -> list[str]:
+        """Whatever the run actually left on disk when it stopped.
+
+        The workspace sweep only ran in the success finaliser, so a run that
+        was cancelled or timed out reported that nothing was produced while a
+        finished file sat in its workspace. Recorded on the failure so the work
+        is not thrown away with the run -- it is NOT written as proof, because
+        it has not been verified as the answer to anything.
+        """
+        try:
+            return _snapshot_workspace_files(worker_kwargs.get("work_dir"))
+        except (OSError, RuntimeError, TypeError, ValueError):
+            log.debug("workspace salvage failed for %s", execution_id, exc_info=True)
+            return []
+
     def _log_thread_result(task: asyncio.Task[Any]) -> None:
         try:
             task.result()
@@ -215,6 +230,7 @@ async def _run_agent_worker_supervised(
                 actor=bot.name,
                 summary=summary,
                 blocker="cancelled",
+                salvaged_artifacts=_salvage(),
                 repo_root=repo_root,
             )
             failed = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
@@ -237,6 +253,7 @@ async def _run_agent_worker_supervised(
                 actor=bot.name,
                 summary=summary,
                 blocker="provider_native_timeout",
+                salvaged_artifacts=_salvage(),
                 repo_root=repo_root,
             )
             failed = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))

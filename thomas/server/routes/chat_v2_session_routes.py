@@ -182,6 +182,10 @@ async def handle_delegation_detail(request: web.Request) -> web.Response:
             }
         )
     pending = [str(p).strip() for p in (row.get("pending_instructions") or []) if str(p).strip()]
+    # Files a run left behind when it did not succeed. Reported separately from
+    # proof so a surface can offer them without implying the task completed --
+    # recording them and never showing them would lose the work just as surely.
+    salvaged = [str(p).strip() for p in (row.get("salvaged_artifacts") or []) if str(p).strip()]
     return web.json_response(
         {
             "ok": True,
@@ -191,6 +195,7 @@ async def handle_delegation_detail(request: web.Request) -> web.Response:
             "last_progress": str(row.get("progress_summary") or "").strip(),
             "steps": steps,
             "pending_instructions": pending,
+            "salvaged_artifacts": salvaged,
         }
     )
 

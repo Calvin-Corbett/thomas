@@ -24,6 +24,8 @@ Versioning: Semantic Versioning.
 
 ### Fixed
 
+- **A task that fails no longer throws away what it made.** The sweep that collects a run's files ran only when the run succeeded, so cancelling one — or letting it time out — discarded the evidence along with it. That is why a finished PDF could sit in a workspace while you were told nothing was produced. Files left behind are now recorded on the failure and reported alongside it. They are deliberately not recorded as proof: proof means "this is the verified answer", and these mean "this is what was on disk when it stopped".
+
 - **Asking Code a question no longer comes back as a failure.** A run that changed no files was only accepted as an answer if it had used no tools at all — but answering "what does this project do?" requires reading files, so a correct answer was reported as a failed run with a fabricated exit code, and the answer itself was hidden behind the error. Reading is no longer treated as a failed edit. The guard it must not weaken is intact: if the agent tried to write and nothing changed, that is still a failure, and when the tools cannot be identified the stricter old rule still applies.
 
 - Opening a project Thomas prepared is now undoable. Preparing a folder ran `git init` and stopped, which left no commit to compare against — so change tracking showed nothing and Revert had nowhere to return to. A baseline commit is recorded when the folder is prepared, so the first edit can always be undone.
