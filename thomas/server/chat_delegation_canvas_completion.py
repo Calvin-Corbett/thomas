@@ -66,6 +66,7 @@ def complete_canvas_delivery(
             work_dir,
             prompt=prompt,
             plan=str(canvas_record.get("plan") or ""),
+            rendered_html=html,
         )
         primary = created[0] if created else "chart.pdf"
         summary = f"Reviewed the live chart and delivered {primary} with backing data."

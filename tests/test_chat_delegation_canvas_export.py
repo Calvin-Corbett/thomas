@@ -71,6 +71,46 @@ def test_function_words_in_the_request_are_not_chart_data() -> None:
     assert "in" not in {row.label.casefold() for row in rows}
 
 
+def test_backing_data_comes_from_the_chart_that_was_drawn() -> None:
+    """The rendered document outranks the plan, and beats prose around it.
+
+    Live incident, 2026-07-24: a chart showing Electricity 45% through Other
+    renewables 5% shipped a spreadsheet reading "Series 1, 100", because the
+    plan's elements carried no usable label/value pairs and nothing consulted
+    the page itself.
+    """
+    rendered = (
+        "<html><head><style>.bar{display:grid}</style></head><body>"
+        "<h1>Household Energy Use by Source &mdash; 2026</h1>"
+        "<p>Illustrative projected share of annual household site energy use</p>"
+        "<ul><li>Electricity &middot; 45%</li><li>Natural gas &middot; 35%</li>"
+        "<li>LPG / propane &middot; 8%</li><li>Heating oil &middot; 7%</li>"
+        "<li>Other renewables &middot; 5%</li></ul></body></html>"
+    ).replace("&mdash;", "—").replace("&middot;", "·")
+
+    _, rows = extract_chart_data("make me a chart of household energy use", "", rendered)
+    pairs = [(row.label, row.value) for row in rows]
+
+    assert pairs == [
+        ("Electricity", 45.0),
+        ("Natural gas", 35.0),
+        ("LPG / propane", 8.0),
+        ("Heating oil", 7.0),
+        ("Other renewables", 5.0),
+    ]
+    # The heading's trailing year must not become a data point.
+    assert 2026.0 not in {value for _, value in pairs}
+
+
+def test_prompt_supplied_values_still_outrank_the_rendered_page() -> None:
+    rendered = "<html><body><p>Alpha &middot; 99%</p><p>Beta &middot; 98%</p></body></html>".replace(
+        "&middot;", "·"
+    )
+    _, rows = extract_chart_data("chart Q1 120 Q2 135", _plan(), rendered)
+
+    assert [(row.label, row.value) for row in rows] == [("Q1", 120.0), ("Q2", 135.0)]
+
+
 def test_export_static_chart_writes_pdf_and_backing_data(tmp_path: Path) -> None:
     pytest.importorskip("reportlab")
     files = export_static_chart(

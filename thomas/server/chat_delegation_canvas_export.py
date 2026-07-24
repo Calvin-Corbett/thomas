@@ -61,6 +61,8 @@ top best most least more less than then vs versus around approximately
 year years month months day days week weeks time times
 """
 _NON_LABEL_WORDS = frozenset(_NON_LABEL_TEXT.split())
+_NOISE_BLOCK_RE = re.compile(r"<(style|script)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
+_TAG_STRIP_RE = re.compile(r"<[^>]+>")
 
 
 def _prompt_data(prompt: str) -> list[ChartDatum]:
@@ -77,12 +79,95 @@ def _prompt_data(prompt: str) -> list[ChartDatum]:
     return rows[:16]
 
 
-def extract_chart_data(prompt: str, plan: str) -> tuple[str, list[ChartDatum]]:
+# A label followed by its value in the chart the user is looking at, e.g.
+# "Electricity · 45%", "Natural gas: 35", "LPG / propane — 8%".
+# "#" and "." belong in labels: C#, .NET, Node.js are data, not punctuation.
+_RENDERED_PAIR_RE = re.compile(
+    r"([A-Za-z][A-Za-z0-9 /&'#.+-]{0,38}?)\s*[·:=–—-]\s*(-?\d+(?:\.\d+)?)\s*%?"
+    r"|([A-Za-z][A-Za-z0-9 /&'#.+-]{0,38}?)\s+(-?\d+(?:\.\d+)?)\s*%",
+)
+
+
+def _rendered_data(html: str) -> list[ChartDatum]:
+    """Read the chart's own labels and values out of what was rendered.
+
+    The plan is an intermediate; the rendered document is the thing the user is
+    actually looking at. Deriving backing data from anything else is how a chart
+    showing Electricity 45% and Natural gas 35% shipped a spreadsheet reading
+    "Series 1, 100".
+    """
+    text = str(html or "")
+    if not text.strip():
+        return []
+    text = _NOISE_BLOCK_RE.sub(" ", text)
+    text = " ".join(_TAG_STRIP_RE.sub(" ", text).split())
+    found: list[tuple[str, float, bool]] = []
+    for match in _RENDERED_PAIR_RE.finditer(text):
+        label = (match.group(1) or match.group(3) or "").strip(" -·:=")
+        raw_value = match.group(2) or match.group(4)
+        if not label or raw_value is None:
+            continue
+        label = _trim_to_label(label)
+        if not label:
+            continue
+        try:
+            value = float(raw_value)
+        except ValueError:
+            continue
+        found.append((label, value, "%" in match.group(0)))
+
+    # Chart rows share a format. When most carry a percent sign, the ones that
+    # do not are prose -- the heading "Household Energy Use by Source - 2026"
+    # otherwise reads as the data point Source = 2026.
+    percent_rows = [row for row in found if row[2]]
+    if len(percent_rows) >= 2:
+        found = percent_rows
+
+    rows: list[ChartDatum] = []
+    for label, value, _ in found:
+        if any(row.label.casefold() == label.casefold() for row in rows):
+            continue
+        rows.append(ChartDatum(label=label, value=value))
+    # One pair is far more likely to be prose than a chart.
+    return rows[:16] if len(rows) >= 2 else []
+
+
+def _trim_to_label(raw: str) -> str:
+    """Reduce a matched run back to the label itself.
+
+    The pattern can reach backwards across surrounding prose, so
+    "...annual household site energy use Electricity" arrives whole. A chart
+    label starts at a capital, so keep the trailing run from the last capitalised
+    word onward: that yields "Electricity", while "Natural gas" and
+    "LPG / propane" survive intact.
+    """
+    words = raw.split()
+    if not words:
+        return ""
+    start = 0
+    for index, word in enumerate(words):
+        if word[:1].isupper():
+            start = index
+    words = words[start:]
+    while words and words[0].casefold() in _NON_LABEL_WORDS:
+        words.pop(0)
+    if not words or len(words) > 4:
+        return ""
+    if all(word.casefold() in _NON_LABEL_WORDS for word in words):
+        return ""
+    return " ".join(words)
+
+
+def extract_chart_data(prompt: str, plan: str, rendered_html: str = "") -> tuple[str, list[ChartDatum]]:
     spec = _plan_object(plan)
     title = str(spec.get("title") or "").strip() or "Thomas chart"
     rows = _prompt_data(prompt)
     if rows:
         return title, rows
+    # Prefer what was drawn over what was planned.
+    rendered = _rendered_data(rendered_html)
+    if rendered:
+        return title, rendered
     elements = spec.get("elements") if isinstance(spec.get("elements"), list) else []
     numbers = [row for row in elements if isinstance(row, dict) and row.get("kind") == "number"]
     for index, row in enumerate(numbers[:16], 1):
@@ -318,16 +403,22 @@ def _draw_pie_png(draw: Any, rows: list[ChartDatum], *, donut: bool) -> None:
         draw.text((588, y + 1), f"{row.label[:24]}  {row.value:g}", fill=(40, 48, 66), font=legend)
 
 
-def export_static_chart(work_dir: str | Path, *, prompt: str, plan: str) -> list[str]:
+def export_static_chart(
+    work_dir: str | Path, *, prompt: str, plan: str, rendered_html: str = ""
+) -> list[str]:
     """Write the chart (honoring an explicit PNG request) plus source data.
 
     Fails closed when the chosen renderer's runtime is absent, falling back to
     the reviewed PDF when PNG rendering is unavailable.
+
+    ``rendered_html`` is the document the user is actually looking at; its own
+    labels and values are the truest source for the backing data that ships
+    beside it.
     """
 
     root = Path(work_dir)
     root.mkdir(parents=True, exist_ok=True)
-    title, rows = extract_chart_data(prompt, plan)
+    title, rows = extract_chart_data(prompt, plan, rendered_html)
     kind = _chart_kind(prompt)
     csv_path = root / "chart-data.csv"
 
