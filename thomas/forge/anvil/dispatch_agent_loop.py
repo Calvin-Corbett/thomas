@@ -6,6 +6,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from thomas.agent.loop_tool_protocol import is_inspection_tool
+
 from .bridge_config import emergency_stop_active, emergency_stop_path
 from .bridge_prompts import compose_headless_prompt
 from .build_verify import _verify_and_iterate
@@ -405,9 +407,11 @@ def dispatch_via_agent_loop(
     saw_reply = False
     saw_refusal = False
     saw_tool_activity = False
+    saw_named_tool = False
+    saw_mutating_tool = False
 
     def emit_event(event: dict[str, Any]) -> None:
-        nonlocal saw_reply, saw_refusal, saw_tool_activity
+        nonlocal saw_reply, saw_refusal, saw_tool_activity, saw_named_tool, saw_mutating_tool
         kind = str(event.get(FORGE_EVENT_KEY) or "")
         if kind in {"final", "say"}:
             reply_text = str(event.get("text") or "")
@@ -417,6 +421,13 @@ def dispatch_via_agent_loop(
                 saw_refusal = True
         elif kind in {"tool", "tool_result"}:
             saw_tool_activity = True
+            # Only ``tool`` carries a name; ``tool_result`` does not. Record what
+            # we can, and stay conservative about what we cannot see.
+            name = str(event.get("name") or "").strip()
+            if name and name != "tool":
+                saw_named_tool = True
+                if not is_inspection_tool(name):
+                    saw_mutating_tool = True
         emit_sink(event)
 
     def _run_pass(p: str) -> tuple[int, str]:
@@ -456,7 +467,18 @@ def dispatch_via_agent_loop(
 
     changed = forge_code_git.project_delta_since(cwd, snap_before)
     action_refused = saw_refusal
-    conversation_reply = rc == 0 and not changed and saw_reply and not saw_tool_activity and not action_refused
+    # A run that changed nothing can still have answered the question. Any tool
+    # use at all used to disqualify that, so "inspect this and explain it" --
+    # which must read files to answer -- came back as a failure with a
+    # fabricated exit 1, on top of a correct answer that was then hidden.
+    #
+    # Reading is not a failed edit. The relaxation applies only with positive
+    # evidence: we saw tool names, and every one of them was read-only. If a
+    # mutating tool ran and nothing changed, that is still a failure, and if the
+    # names were never visible we cannot tell, so the old strict rule stands.
+    read_only_run = saw_named_tool and not saw_mutating_tool
+    tools_disqualify = saw_tool_activity and not read_only_run
+    conversation_reply = rc == 0 and not changed and saw_reply and not tools_disqualify and not action_refused
     if rc != 0:
         reason = f"verification failed (exit {rc}) after fix attempts" if verify_failed else f"agent loop exited {rc}"
     elif action_refused:
@@ -464,7 +486,7 @@ def dispatch_via_agent_loop(
         reason = f"GPT could not complete the requested action{detail}"
     elif not changed:
         if conversation_reply:
-            reason = "GPT replied without changing files"
+            reason = "GPT answered from the project without changing files" if read_only_run else "GPT replied without changing files"
         else:
             reason = "GPT ran but made NO repo changes (no-op) — nothing to review"
     else:

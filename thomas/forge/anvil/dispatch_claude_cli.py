@@ -24,6 +24,18 @@ from .forge_event_stream import (
 # touch the network. The human watcher reviews the resulting diff and runs the tests.
 SAFE_CLI_TOOLS = ("Read", "Edit", "Write", "Glob", "Grep", "MultiEdit", "NotebookEdit")
 
+# Claude's own tool vocabulary, which is not Thomas's. Used to tell a run that
+# only looked from one that tried to change something: a request to inspect and
+# explain must read files to answer, and reading is not a failed edit. Anything
+# not listed is assumed capable of writing, so an unrecognised tool stays strict.
+_CLI_READ_ONLY_TOOLS = frozenset(
+    {"read", "glob", "grep", "notebookread", "todoread", "websearch", "webfetch", "ls"}
+)
+
+
+def _is_read_only_cli_tool(tool_name: str) -> bool:
+    return str(tool_name or "").strip().casefold() in _CLI_READ_ONLY_TOOLS
+
 
 @dataclass
 class CliDispatchResult:
@@ -161,9 +173,11 @@ def dispatch_via_claude_cli(
     saw_reply = False
     saw_refusal = False
     saw_tool_activity = False
+    saw_named_tool = False
+    saw_mutating_tool = False
 
     def emit_event(event: dict[str, Any]) -> None:
-        nonlocal saw_reply, saw_refusal, saw_tool_activity
+        nonlocal saw_reply, saw_refusal, saw_tool_activity, saw_named_tool, saw_mutating_tool
         kind = str(event.get(FORGE_EVENT_KEY) or "")
         if kind in {"final", "say"}:
             reply_text = str(event.get("text") or "")
@@ -173,6 +187,12 @@ def dispatch_via_claude_cli(
                 saw_refusal = True
         elif kind in {"tool", "tool_result"}:
             saw_tool_activity = True
+            # Only ``tool`` carries a name; ``tool_result`` does not.
+            name = str(event.get("name") or "").strip()
+            if name and name != "tool":
+                saw_named_tool = True
+                if not _is_read_only_cli_tool(name):
+                    saw_mutating_tool = True
         emit_sink(event)
 
     def _run_pass(p: str) -> tuple[int, str]:
@@ -239,7 +259,12 @@ def dispatch_via_claude_cli(
 
     changed = forge_code_git.project_delta_since(cwd, snap_before)
     action_refused = saw_refusal
-    conversation_reply = rc == 0 and not changed and saw_reply and not saw_tool_activity and not action_refused
+    # See the same rule in dispatch_agent_loop: a run that changed nothing can
+    # still have answered. Relaxed only with positive evidence -- names were
+    # visible and every one was read-only.
+    read_only_run = saw_named_tool and not saw_mutating_tool
+    tools_disqualify = saw_tool_activity and not read_only_run
+    conversation_reply = rc == 0 and not changed and saw_reply and not tools_disqualify and not action_refused
     if rc != 0:
         reason = f"verification failed (exit {rc}) after fix attempts" if verify_failed else f"claude exited {rc}"
     elif action_refused:

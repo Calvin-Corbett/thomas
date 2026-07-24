@@ -26,6 +26,20 @@ _CODE_TOOL_ALIASES = {
 }
 _MAX_PRE_EDIT_INSPECTIONS = 6
 _MAX_POST_EDIT_INSPECTIONS = 6
+
+
+def is_inspection_tool(tool_name: str) -> bool:
+    """True when a tool can only look, never change anything.
+
+    Callers deciding whether a run that changed no files nonetheless succeeded
+    need this: reading a file to answer a question is not evidence of an edit
+    that failed, while attempting a write and changing nothing is. Unknown names
+    answer False, so an unrecognised tool is treated as capable of writing.
+    """
+    raw = str(tool_name or "").strip()
+    if not raw:
+        return False
+    return _CODE_TOOL_ALIASES.get(raw, raw) in _CODE_INSPECTION_TOOLS
 _SHELL_MUTATION_COMMAND_RE = re.compile(
     r"(?:^|[;&|]\s*|\s)(?:python(?:3)?|py|node|deno|bun|ruby|perl|cmd\s+/c|"
     r"sed\s+-i|npm\s+(?:i|install|uninstall|update)|npx|pnpm|yarn|"

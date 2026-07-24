@@ -24,6 +24,8 @@ Versioning: Semantic Versioning.
 
 ### Fixed
 
+- **Asking Code a question no longer comes back as a failure.** A run that changed no files was only accepted as an answer if it had used no tools at all — but answering "what does this project do?" requires reading files, so a correct answer was reported as a failed run with a fabricated exit code, and the answer itself was hidden behind the error. Reading is no longer treated as a failed edit. The guard it must not weaken is intact: if the agent tried to write and nothing changed, that is still a failure, and when the tools cannot be identified the stricter old rule still applies.
+
 - Opening a project Thomas prepared is now undoable. Preparing a folder ran `git init` and stopped, which left no commit to compare against — so change tracking showed nothing and Revert had nowhere to return to. A baseline commit is recorded when the folder is prepared, so the first edit can always be undone.
 
 - **Thomas no longer calls a deliverable "verified" when it has nothing to do with what you asked.** Success was inferred from a side effect — a non-empty file existed — so the wrong artifact passed as easily as the right one. That is how a request for a graph of current trends was closed as verified by a one-button arcade game. A deliverable is now also checked against the subject of the request, and fails when it shares nothing with it. The check is deliberately a floor rather than a grade: it stays silent when the request is too vague to test, when the file cannot be read, and when you asked for a file by name and that file was produced — a clicker game that calls itself Teal Tapper is a naming choice, not a wrong answer.
