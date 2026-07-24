@@ -70,6 +70,43 @@ from .evolve_agent_runtime import (
 
 log = logging.getLogger(__name__)
 
+
+def _friendly_project_error(exc: Exception, requested_root: Any = None) -> str:
+    """Turn an internal validator message into something a person can act on.
+
+    These strings go straight to the screen. The raw ones are written for whoever
+    is reading the traceback -- "project_root must be inside a git repository"
+    names an internal argument and a tool the reader may not use, states a rule
+    without a reason, and offers no way forward. Someone who just wanted to open
+    their own folder is simply stopped.
+    """
+    raw = str(exc)
+    name = ""
+    if requested_root:
+        try:
+            name = Path(str(requested_root)).name
+        except (OSError, ValueError):
+            name = ""
+    where = f'"{name}"' if name else "That folder"
+
+    if "must be inside a git repository" in raw:
+        return (
+            f"{where} doesn't have version history yet, so Thomas can't undo its own edits there. "
+            "Thomas sets this up automatically for folders it created. For your own folders it "
+            "asks first, so nothing is added to your files without you knowing."
+        )
+    if "does not exist" in raw:
+        return f"{where} isn't there any more. It may have been moved, renamed, or deleted."
+    if "must be a directory" in raw:
+        return f"{where} is a file, not a folder. Pick the folder that contains your project."
+    if "could not be inspected" in raw:
+        return f"Thomas couldn't read {where}. It may be on a drive that's disconnected, or permission is denied."
+    if "could not be prepared for editing" in raw:
+        return f"Thomas couldn't get {where} ready to edit. The folder may be read-only."
+    if "unavailable repository root" in raw or "not a directory" in raw:
+        return f"{where} looks like a broken project folder. Try picking it again, or choose a different one."
+    return f"Thomas can't open {where} right now."
+
 APP_EVOLVE_AGENT_TASK = "evolve_agent_task"
 APP_EVOLVE_AGENT_DRAIN = "evolve_agent_drain"
 APP_EVOLVE_AGENT_SESSION = "evolve_agent_session"
@@ -796,11 +833,38 @@ def build_evolve_agent_handlers(
         source = (body or {}).get("source_evolve_item")
         if not isinstance(source, dict):
             source = None
+        requested_root = (body or {}).get("project_root")
         try:
-            project_root = forge_code_projects.validate_project_root((body or {}).get("project_root"), fallback=_root())
+            # Everything Thomas builds lands in ~/.thomas/workspaces/<exec-id>,
+            # which is never a git repo -- so every app Thomas made for the user
+            # was unopenable until now. Prepare Thomas's own folders on demand.
+            # Folders outside ~/.thomas belong to the user and are left alone.
+            if requested_root:
+                await asyncio.get_running_loop().run_in_executor(
+                    None, forge_code_projects.ensure_git_repo, requested_root
+                )
+            # Choosing nothing must never mean "edit Thomas's own source". The
+            # fallback used to be _root(), the Thomas checkout, so any turn that
+            # arrived without a project -- including one whose JSON failed to
+            # parse -- silently bound the product tree and reported success.
+            # That is how a worker's deliverable ends up committed next to the
+            # code that wrote it. Working on Thomas stays available; it just has
+            # to be asked for.
+            fallback_root = await asyncio.get_running_loop().run_in_executor(
+                None, forge_code_projects.default_scratch_project, _root()
+            )
+            project_root = forge_code_projects.validate_project_root(requested_root, fallback=fallback_root)
             settings = ForgeCodeSettings.from_payload(body if isinstance(body, dict) else {})
         except (forge_code_projects.ForgeCodeProjectError, ForgeCodeSettingsError) as exc:
-            return web.json_response({"ok": False, "error": str(exc), "code": "invalid_code_configuration"}, status=400)
+            return web.json_response(
+                {
+                    "ok": False,
+                    "error": _friendly_project_error(exc, requested_root),
+                    "detail": str(exc),
+                    "code": "invalid_code_configuration",
+                },
+                status=400,
+            )
         conv = forge_code_store.new_conversation(
             project_root,
             title=title or None,

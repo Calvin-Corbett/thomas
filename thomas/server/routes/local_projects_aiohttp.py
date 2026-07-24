@@ -132,8 +132,12 @@ def _generated_deliverable_project(record: dict[str, Any], *, index: int = 0) ->
         return None
     entry = deliverable_entry(execution_id) or ""
     entry_name = Path(entry).name or "generated-app.html"
-    display_name = Path(entry_name).stem or execution_id
     project_id = _generated_project_id(execution_id)
+    # What the user asked for, not what the file happens to be called. 88 of 113
+    # generated apps are named "index" because the name was the filename stem --
+    # a list of them is unusable, and it is the reason none of this was findable.
+    request_title = _request_title(record)
+    display_name = request_title or Path(entry_name).stem or execution_id
     summary = _generated_deliverable_summary(
         _safe_text(record.get("progress_summary") or record.get("summary")), entry_name
     )
@@ -156,6 +160,7 @@ def _generated_deliverable_project(record: dict[str, Any], *, index: int = 0) ->
     return {
         "id": project_id,
         "name": display_name,
+        "request_title": request_title,
         "root_path": root_path,
         "kind": "generated_deliverable",
         "project_type": "web_app",
@@ -215,6 +220,51 @@ def _generated_deliverable_projects(*, start_index: int = 0, limit: int = _MAX_P
         if len(projects) >= limit:
             break
     return projects
+
+
+_TITLE_MAX_CHARS = 72
+# Leading politeness and framing the user typed but did not mean as a title.
+_TITLE_LEAD_NOISE = (
+    "please ",
+    "can you ",
+    "could you ",
+    "i want you to ",
+    "i want ",
+    "i need you to ",
+    "i need ",
+    "hey thomas ",
+    "thomas ",
+)
+
+
+def _request_title(record: dict[str, Any]) -> str:
+    """A card title in the user's own words: what they asked Thomas to make.
+
+    ``summary`` on an execution record is the original ask ("Make a small snake
+    game i can play"). ``progress_summary`` is the worker talking to itself
+    ("Created index.html. why_blocked: The required monolith guard script is
+    absent...") and must never reach a card.
+    """
+    text = " ".join(_safe_text(record.get("summary")).split())
+    if not text:
+        return ""
+    lowered = text.lower()
+    for lead in _TITLE_LEAD_NOISE:
+        if lowered.startswith(lead):
+            text = text[len(lead) :].lstrip()
+            break
+    if not text:
+        return ""
+    # One sentence is a title; a paragraph is not.
+    for stop in (". ", "! ", "? ", "\n"):
+        head = text.split(stop, 1)[0]
+        if len(head) >= 12:
+            text = head
+    text = text.rstrip(" .")
+    if len(text) > _TITLE_MAX_CHARS:
+        clipped = text[:_TITLE_MAX_CHARS].rsplit(" ", 1)[0].rstrip(" ,;:-")
+        text = f"{clipped or text[:_TITLE_MAX_CHARS]}…"
+    return text[:1].upper() + text[1:] if text else ""
 
 
 # Building the catalogue costs seconds: list_executions(refresh=True) rebuilds a

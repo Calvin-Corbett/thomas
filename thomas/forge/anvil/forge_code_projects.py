@@ -76,6 +76,70 @@ def thomas_source_repo_root() -> Path | None:
     return None
 
 
+def thomas_owned_root() -> Path:
+    """The ~/.thomas tree: folders Thomas itself creates and manages."""
+    return (Path.home() / ".thomas").expanduser()
+
+
+def is_thomas_owned(path: str | Path) -> bool:
+    """True when a path lives inside Thomas's own data directory.
+
+    Only these are safe to git-init automatically. A folder the user browsed to
+    on their PC is theirs, and silently creating a .git in it is not ours to do.
+    """
+    try:
+        candidate = Path(path).expanduser().resolve()
+    except (OSError, ValueError):
+        return False
+    try:
+        candidate.relative_to(thomas_owned_root().resolve())
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def ensure_git_repo(path: str | Path) -> bool:
+    """Make a Thomas-owned folder bindable by Code. Returns True if it initialised one.
+
+    Code requires a git toplevel because that is what Revert and change
+    attribution are built on -- Revert is literally ``git checkout -- <file>``.
+    But Thomas writes every app it builds into ``~/.thomas/workspaces/<exec-id>``
+    and never inits one, so the 913 apps it has made for the user were all
+    unopenable: the picker offered them and binding them returned
+    "project_root must be inside a git repository".
+
+    Initialising is the smaller, safer half of the fix. It only ever touches
+    Thomas's own tree; anything outside it is refused here and handled by the
+    caller, because putting a .git in a user's folder without asking is not a
+    thing a tool should do quietly.
+    """
+    candidate = Path(path).expanduser()
+    if not is_thomas_owned(candidate):
+        return False
+    try:
+        candidate.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise ForgeCodeProjectError("project folder could not be created") from exc
+    if (candidate / ".git").exists():
+        return False
+    try:
+        proc = subprocess.run(
+            ["git", "init", "--initial-branch=main", str(candidate)],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ForgeCodeProjectError("project folder could not be prepared for editing") from exc
+    if proc.returncode != 0:
+        raise ForgeCodeProjectError(
+            f"project folder could not be prepared for editing: {proc.stderr.strip()[:200]}"
+        )
+    return True
+
+
 def default_scratch_project(catalog_root: str | Path) -> Path:
     """Default project for a NEW Code conversation when the user picked none.
 
