@@ -11,6 +11,22 @@ class _CanvasStall(RuntimeError):
     """A retryable Canvas provider or semantic-review failure."""
 
 
+# There is deliberately NO deadline on thinking. A reasoning model can work for
+# minutes before it emits a first token, and the transport reports nothing at all
+# while it does -- so a time-to-first-token wall cannot tell "still thinking" from
+# "hung", and it guesses wrong on exactly the requests worth waiting for. The old
+# 75s wall killed real work twice per run and surfaced as "the Canvas failed".
+#
+# What remains is not a work deadline, it is a dead-socket backstop. A hung
+# provider would otherwise hold _CANVAS_LLM_LOCK forever and take every later
+# Canvas job down with it, so silence this long is treated as a broken
+# connection rather than a slow one.
+_DEAD_SOCKET_S = 900.0
+
+# Once tokens are actually flowing, a long gap does mean the stream died.
+_MID_STREAM_IDLE_S = 120.0
+
+
 async def run_canvas_worker(
     *,
     execution_id: str,
@@ -104,7 +120,7 @@ async def run_canvas_worker(
                 events = llm.stream_chat(messages=messages, tools=None).__aiter__()
                 event_count = 0
                 while True:
-                    timeout = 30.0 if got_first else 75.0
+                    timeout = _MID_STREAM_IDLE_S if got_first else _DEAD_SOCKET_S
                     try:
                         event = await asyncio.wait_for(events.__anext__(), timeout=timeout)
                     except StopAsyncIteration:
@@ -114,7 +130,16 @@ async def run_canvas_worker(
                         )
                         break
                     except asyncio.TimeoutError as exc:
-                        reason = "no first token" if not got_first else "stalled mid-stream"
+                        # Say what actually happened. "canvas_failed" in the issue
+                        # ledger told nobody whether the model was slow, the socket
+                        # was dead, or the request never left -- so every occurrence
+                        # cost a fresh investigation.
+                        reason = (
+                            f"no data at all for {timeout:.0f}s before the first token "
+                            f"({event_count} stream events) -- treating the connection as dead"
+                            if not got_first
+                            else f"stream went silent for {timeout:.0f}s after {token_count} tokens"
+                        )
                         raise _CanvasStall(reason) from exc
                     event_count += 1
                     event_type = str(getattr(event, "type", "") or "")

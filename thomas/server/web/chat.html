@@ -1914,7 +1914,11 @@
     // while it works (no fake placeholder), and renders the actual artifact the
     // moment it lands. A finished artifact always wins over the building view.
     let canvasState = { mode: 'blank', worker: '', progress: '', url: '', name: '' };
-    function openCanvas() { state.artifactOpen = true; canvasEl.style.display = 'flex'; canvasEl.style.animation = 'tc-slide-in .3s cubic-bezier(.4,0,.2,1) both'; shell.classList.add('tc-canvas-open'); renderCanvas(); }
+    // openWorkspace() parks the Canvas with visibility+inert (not display), and
+    // only showChat() clears them. Opening the panel therefore has to clear them
+    // too, or a Canvas opened after any workspace visit is display:flex and still
+    // invisible and unclickable.
+    function openCanvas() { state.artifactOpen = true; canvasEl.style.display = 'flex'; canvasEl.style.visibility = ''; canvasEl.inert = false; canvasEl.style.animation = 'tc-slide-in .3s cubic-bezier(.4,0,.2,1) both'; shell.classList.add('tc-canvas-open'); renderCanvas(); }
     function closeCanvas() { state.artifactOpen = false; canvasEl.style.display = 'none'; shell.classList.remove('tc-canvas-open'); }
     function resetCanvasForConversation() {
       closeCanvas();
@@ -2414,9 +2418,16 @@
     document.getElementById('tc-newchat-top').addEventListener('click', newChat);
     document.getElementById('tc-sidebar-toggle').addEventListener('click', toggleSidebar);
     document.getElementById('tc-settings').addEventListener('click', () => openWorkspace('settings'));
+    // In Chat this button is the Canvas toggle — it opens the inline panel where
+    // Thomas is drawing and closes it again, restoring whatever this conversation
+    // last rendered. It must NOT navigate to the app_builder workspace: that hides
+    // the chat AND the Canvas, which is the opposite of what the control says.
+    // The full Canvas workspace is still reachable from the sidebar.
+    // Inside a workspace the button keeps its other meaning (resident-Thomas drawer).
     document.getElementById('tc-canvas-btn').addEventListener('click', () => {
       if (state.workspaceOpen && window.ThomasWorkspaceChat) window.ThomasWorkspaceChat.toggle();
-      else openWorkspace('app_builder');
+      else if (state.artifactOpen) closeCanvas();
+      else openConversationCanvas();
     });
     document.getElementById('tc-canvas-close').addEventListener('click', closeCanvas);
     document.getElementById('tc-theme-btn').addEventListener('click', toggleThemeMenu);
