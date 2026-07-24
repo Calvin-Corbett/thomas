@@ -8,6 +8,8 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
+from thomas.server import chat_delegation_artifact_intent as artifact_intent
+
 _ARTIFACT_NAME_RE = re.compile(
     r"(?<![A-Za-z0-9_.-])([A-Za-z0-9][A-Za-z0-9_.-]{0,120}\."
     r"(?:md|txt|json|csv|tsv|html|htm|pdf|docx|xlsx|pptx|py|js|ts|tsx|jsx|css|svg))\b",
@@ -93,6 +95,14 @@ def _hidden_completion_review_passes(
         for tool in failed_tools
         if str(tool) and str(tool) not in recovered_reads and str(tool) not in optional_failures
     ]
+    # Does the artifact have anything to do with the request? Every other check
+    # here asks whether *something* was produced, which a wrong deliverable
+    # passes as easily as a right one -- an arcade game satisfied a request for
+    # a graph of current trends, and a football game closed "start a local dev
+    # server". This is the only check that can tell those apart.
+    intent = artifact_intent.intent_evidence(prompt, root, list(created_files))
+    intent_issues = list(intent.get("issues") or [])
+
     evidence: dict[str, Any] = {
         "prompt": str(prompt or ""),
         "summary": str(summary or ""),
@@ -100,10 +110,13 @@ def _hidden_completion_review_passes(
         "failed_tools": list(failed_tools),
         "unrecovered_failed_tools": unrecovered_failures,
         "missing_or_empty": missing_or_empty,
+        "artifact_intent": intent,
     }
 
     def _score(_work: Any, _rubric: dict[str, Any], lens: str) -> float:
         if not verified_candidate or unrecovered_failures or missing_or_empty or not str(summary or "").strip():
+            return 0.0
+        if intent_issues:
             return 0.0
         return 9.0 if lens in {"correctness", "completeness", "robustness"} else 8.0
 
