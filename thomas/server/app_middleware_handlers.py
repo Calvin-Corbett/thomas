@@ -96,6 +96,30 @@ def setup_middleware_and_handlers(
 
     app.middlewares.append(security_headers)
 
+    # Deliverable previews run on their own ephemeral 127.0.0.1 port and set one
+    # capability cookie each. Cookies carry no port, so every one of those is
+    # also sent HERE, where it means nothing -- and they last an hour. Enough of
+    # them (about 115, at 69 bytes each) overflow aiohttp's 8190-byte header
+    # limit and this server starts refusing every request with a 400 before any
+    # handler runs, which reads as the app being broken with no way back except
+    # waiting them out or clearing cookies by hand. Observed for real while
+    # exercising the project library.
+    #
+    # This server never needs one, so receiving one means it leaked. Expire it.
+    # Draining them here also recovers a browser that has already filled up,
+    # which nothing else can do: the preview server cannot reach this origin's
+    # cookie jar, and the user has no obvious way to.
+    @web.middleware
+    async def drain_stray_preview_cookies(request: web.Request, handler):  # type: ignore[no-untyped-def]
+        resp = await handler(request)
+        stray = [name for name in request.cookies if name.startswith("thomas_preview_")]
+        if stray and not bool(getattr(resp, "prepared", False)):
+            for name in stray[:64]:  # bounded: a reply must not itself blow the header budget
+                resp.del_cookie(name, path="/")
+        return resp
+
+    app.middlewares.append(drain_stray_preview_cookies)
+
     @web.middleware
     async def no_cache_ui_assets(request: web.Request, handler):  # type: ignore[no-untyped-def]
         resp = await handler(request)

@@ -54,7 +54,14 @@ async def serve_async(
     app[APP_SHUTDOWN_EVENT] = shutdown_event
     app[APP_RESTART_REQUESTED] = False
 
-    runner = web.AppRunner(app)
+    # Headroom above aiohttp's 8190-byte default so an oversized Cookie header
+    # is a nuisance rather than a wall. Deliverable previews leave one cookie
+    # each in the 127.0.0.1 jar, and cookies carry no port, so they arrive here
+    # too; past the default this server rejects every request with a 400 BEFORE
+    # any handler or middleware runs, and the drain that clears them can never
+    # execute. Parsing the request is what makes recovery possible at all.
+    # This is a ceiling for a local, loopback-bound UI, not an invitation.
+    runner = web.AppRunner(app, max_field_size=32768)
     await runner.setup()
     preview_service = app.get(APP_DELIVERABLE_PREVIEW_SERVICE)
     if preview_service is not None:
