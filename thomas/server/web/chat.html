@@ -2528,7 +2528,12 @@
         const logicalW = 1200;
         const logicalH = Math.round(logicalW * (box.height / (box.width || 1)) ) || 750;
         const scale = (box.width || 184) / logicalW;
-        holder.innerHTML = `<iframe src="${esc(src)}" tabindex="-1" aria-hidden="true" scrolling="no" loading="lazy"
+        // sandbox WITHOUT allow-same-origin, matching the Canvas frames: these
+        // pages were written by a model and can contain anything. Scripts are
+        // allowed so the preview shows the app actually running, but the frame
+        // gets an opaque origin, so it cannot reach the parent DOM, read
+        // storage, or call /api/* as the user.
+        holder.innerHTML = `<iframe src="${esc(src)}" sandbox="allow-scripts" tabindex="-1" aria-hidden="true" scrolling="no" loading="lazy"
           style="position:absolute;top:0;left:0;width:${logicalW}px;height:${logicalH}px;border:0;transform:scale(${scale.toFixed(4)});transform-origin:top left;pointer-events:none;"></iframe>`;
         holder.dataset.libMountedFrame = '1';
         _libraryMounted.push(holder);
