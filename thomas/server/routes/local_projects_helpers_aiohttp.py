@@ -175,7 +175,7 @@ def _read_registry(app: web.Application) -> list[dict[str, Any]]:
         if not isinstance(projects, list):
             return []
         return projects
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):  # pragma: no cover - unreadable registry
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError):  # pragma: no cover
         return []
 
 
@@ -722,7 +722,10 @@ def _refresh_projects(app: web.Application) -> list[dict[str, Any]]:
             root = Path(project.get("root_path"))
             updated = _build_project_dossier(root, existing=project, touch=False, index=index)
             projects[index] = updated
-        except (OSError, AttributeError, TypeError, ValueError):  # pragma: no cover - keep the stale row
+        # RecursionError is deliberate: a dossier parses JSON inside the project,
+        # and a deeply nested file raises that, not ValueError. It would abort the
+        # refresh -- and the catalogue caches only on success, so every retry fails.
+        except (OSError, AttributeError, TypeError, ValueError, RecursionError):  # pragma: no cover
             pass
     return projects
 

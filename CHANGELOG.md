@@ -24,6 +24,8 @@ Versioning: Semantic Versioning.
 
 ### Fixed
 
+- Hardening from an adversarial review of this session's own changes: only the Canvas build frame may tell the page it is ready (any frame could, including the library previews, and a forged signal could silently blank part of a Canvas render); closing the library now unloads its previews rather than leaving them running behind a shut panel; a summary that merely mentions a worker-protocol word keeps its sentence, where before "Added a give_up flag to the retry loop" was truncated to "Added a"; and one deeply nested JSON file in one project can no longer take down the whole project list.
+
 - **A task that fails no longer throws away what it made.** The sweep that collects a run's files ran only when the run succeeded, so cancelling one — or letting it time out — discarded the evidence along with it. That is why a finished PDF could sit in a workspace while you were told nothing was produced. Files left behind are now recorded on the failure and reported alongside it. They are deliberately not recorded as proof: proof means "this is the verified answer", and these mean "this is what was on disk when it stopped".
 
 - **Asking Code a question no longer comes back as a failure.** A run that changed no files was only accepted as an answer if it had used no tools at all — but answering "what does this project do?" requires reading files, so a correct answer was reported as a failed run with a fabricated exit code, and the answer itself was hidden behind the error. Reading is no longer treated as a failed edit. The guard it must not weaken is intact: if the agent tried to write and nothing changed, that is still a failure, and when the tools cannot be identified the stricter old rule still applies.

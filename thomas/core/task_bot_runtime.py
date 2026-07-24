@@ -402,7 +402,16 @@ def _validate_transition(current: str, new_state: str, *, allow_same: bool) -> N
 # "why_blocked: The workspace does not contain scripts/forge/gates/
 # monolith_guard.py, and the available tools provide file operations only".
 # The human sentence in front of it is kept; the protocol is not shown.
-_WORKER_PROTOCOL_RE = re.compile(r"(?i)\b(?:GIVE_UP|what_failed|what_was_tried|why_blocked)\b[ \t]*:?")
+# Matched by SHAPE, not by the words alone. The protocol emits either the bare
+# marker on its own line or a labelled "field:" -- so a summary that merely
+# mentions one of these words keeps its sentence. Matching the bare token
+# anywhere turned "Added a give_up flag to the retry loop" into "Added a".
+_WORKER_PROTOCOL_RE = re.compile(
+    r"^[ \t]*GIVE_UP\b[ \t]*:?[ \t]*$"  # the bare marker, alone on its line
+    r"|\bGIVE_UP[ \t]*:"  # or labelled, which is unambiguous anywhere
+    r"|\b(?:what_failed|what_was_tried|why_blocked)[ \t]*:",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 
 def _user_facing_summary(text: str) -> str:

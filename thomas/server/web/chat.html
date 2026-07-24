@@ -2039,7 +2039,18 @@
     // (postMessages sent before the iframe loads would be lost).
     window.addEventListener('message', function (e) {
       const d = e && e.data;
-      if (d && d.t === 'ready') { _build.ready = true; _buildDeliver(); }
+      if (!d || d.t !== 'ready') return;
+      // Only the build frame may say it is ready. Every frame on this page can
+      // post here, including the library previews, which render pages a model
+      // wrote. A forged 'ready' arriving before the real shell installs its
+      // listener makes _buildDeliver flush queued elements into a window that
+      // is not listening and then advance past them, so that batch of the
+      // Canvas silently renders empty. Matching on source is what the rest of
+      // the UI already does (workspace_shell.js, workspace_chat_drawer.js).
+      const frame = canvasBody.querySelector('iframe.tc-build-frame');
+      if (!frame || e.source !== frame.contentWindow) return;
+      _build.ready = true;
+      _buildDeliver();
     });
     function canvasConstruct(execId, shellHtml, elements, done, finalHtml) {
       if (canvasState.mode === 'render') return;
@@ -2435,6 +2446,13 @@
 
     function teardownLibraryPreviews() {
       if (_libraryObserver) { try { _libraryObserver.disconnect(); } catch (e) {} _libraryObserver = null; }
+      // Unload the frames as well as forgetting them. Dropping only the
+      // bookkeeping left a dozen model-written pages running behind a closed
+      // panel, still holding preview grants and still able to post messages at
+      // this window. The LRU evictor already clears holders this way.
+      _libraryMounted.forEach(function (holder) {
+        try { holder.innerHTML = ''; delete holder.dataset.libMountedFrame; } catch (e) {}
+      });
       _libraryMounted = [];
     }
 

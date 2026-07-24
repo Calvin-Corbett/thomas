@@ -42,6 +42,18 @@ class UserFacingSummaryTests(unittest.TestCase):
                     "Built the thing",
                 )
 
+    def test_a_summary_that_merely_mentions_a_protocol_word_is_left_alone(self):
+        """Matching the bare token anywhere turned "Added a give_up flag to the
+        retry loop" into "Added a". The protocol always writes a labelled field
+        or the marker alone on its line, so match that shape, not the word."""
+        for summary in (
+            "Added a give_up flag to the retry loop",
+            "Refactored why_blocked handling in the parser",
+            "Documented what_failed semantics for the team",
+        ):
+            with self.subTest(summary=summary):
+                self.assertEqual(_user_facing_summary(summary), summary)
+
     def test_a_pure_protocol_message_yields_nothing_to_show(self):
         """Callers substitute their own wording rather than print the protocol."""
         summary = "GIVE_UP\nwhat_failed: tests\nwhat_was_tried: retry\nwhy_blocked: no shell"
