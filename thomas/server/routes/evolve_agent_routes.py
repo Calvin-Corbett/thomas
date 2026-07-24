@@ -82,6 +82,29 @@ def _is_thomas_source(path: Any) -> bool:
         return False
 
 
+def _unspecified_project_root(root: Path) -> Path:
+    """Where a Code conversation goes when the user chose no project.
+
+    Never Thomas's own source. That used to be the fallback, so any turn
+    arriving without a project -- including one whose JSON failed to parse and
+    was treated as an empty body -- silently bound the product tree and returned
+    200, which is how a worker's deliverable ends up written beside the code
+    that wrote it.
+
+    A configured root that is some other repository is a deliberate choice and
+    is still honoured. But it must actually be bindable: in an installed copy
+    the computed root is the package's parent directory, which is not a
+    repository at all, and failing there would leave someone unable to start
+    anything. Scratch is the answer in both cases.
+    """
+    if not _is_thomas_source(root):
+        try:
+            return forge_code_projects.validate_project_root(root, fallback=root)
+        except forge_code_projects.ForgeCodeProjectError:
+            pass
+    return forge_code_projects.default_scratch_project(root)
+
+
 def _friendly_project_error(exc: Exception, requested_root: Any = None) -> str:
     """Turn an internal validator message into something a person can act on.
 
@@ -850,27 +873,15 @@ def build_evolve_agent_handlers(
             # which is never a git repo -- so every app Thomas made for the user
             # was unopenable until now. Prepare Thomas's own folders on demand.
             # Folders outside ~/.thomas belong to the user and are left alone.
+            loop = asyncio.get_running_loop()
             if requested_root:
-                await asyncio.get_running_loop().run_in_executor(
-                    None, forge_code_projects.ensure_git_repo, requested_root
-                )
-            # Choosing nothing must never mean "edit Thomas's own source". The
-            # fallback is _root(), and in a normal install that IS the Thomas
-            # checkout -- so any turn arriving without a project, including one
-            # whose JSON failed to parse and was treated as an empty body,
-            # silently bound the product tree and returned 200. That is how a
-            # worker's deliverable ends up written next to the code that wrote
-            # it. Working on Thomas stays available; it has to be asked for.
-            #
-            # Only that specific case is redirected. When _root() is some other
-            # repository it is a deliberate configuration and remains the
-            # default, which is also what the route's callers rely on.
-            fallback_root = _root()
-            if _is_thomas_source(fallback_root):
-                fallback_root = await asyncio.get_running_loop().run_in_executor(
-                    None, forge_code_projects.default_scratch_project, _root()
-                )
-            project_root = forge_code_projects.validate_project_root(requested_root, fallback=fallback_root)
+                await loop.run_in_executor(None, forge_code_projects.ensure_git_repo, requested_root)
+                project_root = forge_code_projects.validate_project_root(requested_root, fallback=_root())
+            else:
+                # Resolved only when nothing was chosen, so a request that names
+                # its project never pays for creating a scratch repo it will not
+                # use. Both calls shell out to git, so they run off the loop.
+                project_root = await loop.run_in_executor(None, _unspecified_project_root, _root())
             settings = ForgeCodeSettings.from_payload(body if isinstance(body, dict) else {})
         except (forge_code_projects.ForgeCodeProjectError, ForgeCodeSettingsError) as exc:
             return web.json_response(
