@@ -2371,6 +2371,21 @@
     // therefore destroy sockets while the user scrolled, so frames are mounted
     // only as cards come into view and never more than PREVIEW_BUDGET at once.
     const LIBRARY_PREVIEW_BUDGET = 12;
+    // Every DISTINCT preview costs a cookie in the 127.0.0.1 jar for an hour,
+    // and cookies carry no port, so the deliverable service's cookies are sent
+    // to this app too. At ~71 bytes each, 115 of them exceed the 8190-byte
+    // header limit and every request to Thomas starts failing with a 400 until
+    // they expire. With 111 generated apps, one unbroken scroll of this shelf
+    // very nearly gets there on its own -- no other surface mounts previews in
+    // that quantity, so this panel is the only thing that can reach it.
+    //
+    // 32 is not arbitrary: it is the deliverable service's own concurrent-grant
+    // ceiling (_MAX_ACTIVE_PREVIEW_GRANTS), so this asks for nothing the server
+    // would not already hold. Past it, cards keep their title and monogram and
+    // simply do not go live. Re-showing something already mounted is free --
+    // the grant, and therefore the cookie, already exists.
+    const LIBRARY_DISTINCT_PREVIEW_CAP = 32;
+    let _librarySeenPreviews = new Set();
     state.libraryMenuOpen = false;
     state.libraryProjects = null;
     state.libraryLoading = false;
@@ -2451,7 +2466,7 @@
       // panel, still holding preview grants and still able to post messages at
       // this window. The LRU evictor already clears holders this way.
       _libraryMounted.forEach(function (holder) {
-        try { holder.innerHTML = ''; delete holder.dataset.libMountedFrame; } catch (e) {}
+        try { libraryRestMonogram(holder); delete holder.dataset.libMountedFrame; } catch (e) {}
       });
       _libraryMounted = [];
     }
@@ -2474,6 +2489,19 @@
       }
     }
 
+    function libraryMonogram(name, accent) {
+      const letter = String(name || '?').trim().charAt(0).toUpperCase() || '?';
+      return `<span style="position:absolute;inset:0;display:grid;place-items:center;background:linear-gradient(135deg, ${accent}22, ${accent}0a);color:${accent};font-size:24px;font-weight:800;">${esc(letter)}</span>`;
+    }
+
+    // Unloading a preview puts its tile back to the monogram rather than to
+    // nothing, so eviction while scrolling never leaves an empty rectangle.
+    function libraryRestMonogram(holder) {
+      const card = holder.closest('[data-lib-card]');
+      const name = (card && card.getAttribute('data-lib-label')) || '';
+      holder.innerHTML = libraryMonogram(name, 'var(--c-accent)');
+    }
+
     function libraryCardHTML(p, i) {
       const title = esc(p.request_title || p.name || 'Untitled');
       const when = relativeWhen(p.updated_at || p.created_at);
@@ -2481,9 +2509,14 @@
       const meta = [file, when].filter(Boolean).join(' · ');
       const url = String(p.artifact_url || '');
       const accent = esc(String((p.board_icon && p.board_icon.accent) || 'var(--c-accent)'));
+      // The monogram is the resting state of every tile, not just of the ones
+      // with nothing to show. A card that has not mounted yet -- because it is
+      // below the fold, or past the preview budget -- then reads as a project
+      // rather than as a blank rectangle, and a live preview simply replaces it.
+      const monogram = libraryMonogram(p.request_title || p.name, accent);
       const preview = url
-        ? `<span data-lib-frame="${esc(url)}" style="position:absolute;inset:0;display:block;background:#fff;"></span>`
-        : `<span style="position:absolute;inset:0;display:grid;place-items:center;background:linear-gradient(135deg, ${accent}22, ${accent}0a);color:${accent};font-size:22px;font-weight:800;">${esc((p.name || '?').trim().charAt(0).toUpperCase())}</span>`;
+        ? `<span data-lib-frame="${esc(url)}" style="position:absolute;inset:0;display:block;background:var(--c-surface);">${monogram}</span>`
+        : monogram;
       return `<button data-lib-card="${esc(p.root_path || '')}" data-lib-label="${title}" title="${title}"
         style="display:flex;flex-direction:column;text-align:left;padding:0;border:1px solid var(--c-border);border-radius:12px;overflow:hidden;background:var(--c-surface);cursor:pointer;font-family:inherit;transition:border-color .15s, transform .15s;">
         <span style="position:relative;display:block;width:100%;aspect-ratio:16/10;overflow:hidden;border-bottom:1px solid var(--c-border);">${preview}</span>
@@ -2532,11 +2565,17 @@
       if (!holders.length) return;
       const mount = (holder) => {
         if (holder.dataset.libMountedFrame === '1') return;
+        const key = holder.getAttribute('data-lib-frame') || '';
+        // A grant already taken costs nothing to show again; a new one does.
+        // Past the budget the tile simply keeps the monogram it was rendered
+        // with, so it still reads as a project rather than as a blank.
+        if (!_librarySeenPreviews.has(key) && _librarySeenPreviews.size >= LIBRARY_DISTINCT_PREVIEW_CAP) return;
+        _librarySeenPreviews.add(key);
         if (_libraryMounted.length >= LIBRARY_PREVIEW_BUDGET) {
           // Budget is spent: release the least-recently shown frame first so the
           // preview service never sees more than LIBRARY_PREVIEW_BUDGET grants.
           const oldest = _libraryMounted.shift();
-          if (oldest) { oldest.innerHTML = ''; delete oldest.dataset.libMountedFrame; }
+          if (oldest) { libraryRestMonogram(oldest); delete oldest.dataset.libMountedFrame; }
         }
         const src = holder.getAttribute('data-lib-frame') || '';
         // Render each app at a desktop width, then scale that down to exactly
