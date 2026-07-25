@@ -16,32 +16,47 @@ class _CanvasCancelled(RuntimeError):
 
 
 # How often the wait for the next stream event pauses to notice a cancellation.
-# The wait itself can legitimately last minutes, and asyncio.wait_for cannot be
-# interrupted, so it is taken in slices instead of one long sleep. Nothing about
-# the deadline changes -- the slices are added up against the same budget -- but
-# pressing cancel now takes effect within seconds rather than never.
+# The wait itself can legitimately last minutes, so it is taken in slices instead
+# of one long sleep. Nothing about the deadline changes -- the slices are added up
+# against the same budget -- but pressing cancel takes effect within seconds.
 _CANCEL_POLL_S = 3.0
 
 
 async def _next_event(events: Any, budget_s: float, cancelled: Callable[[], bool]) -> Any:
     """Await the next stream event without becoming deaf to cancellation.
 
-    asyncio.wait_for cannot be interrupted once it is waiting, so a single long
-    wait makes the run uncancellable for its whole duration. The same budget is
-    spent in short slices instead, checking between them. Raises TimeoutError
-    when the budget is exhausted, exactly as the single wait did.
+    The step is started ONCE and then polled with asyncio.wait, which reports a
+    timeout without disturbing what it is waiting on.
+
+    It must not be `asyncio.wait_for(events.__anext__(), slice_s)` in a retry
+    loop. wait_for CANCELS its awaitable on timeout, and a cancelled __anext__
+    does not leave the generator resumable -- it throws CancelledError in at the
+    suspension point and tears the generator down mid-HTTP-read. The next slice
+    then calls __anext__ on a dead generator and gets StopAsyncIteration, which
+    reads exactly like a model that politely returned nothing. Every Canvas run
+    died this way: the request reached the API, got HTTP 200, and was killed
+    ~3s later while the reasoning model was still thinking, several seconds
+    before its first token. The user saw "Canvas generation failed"; the
+    diagnostics said "0 events, 0 tokens"; nothing anywhere said "we hung up".
     """
     waited = 0.0
-    while True:
-        if cancelled():
-            raise _CanvasCancelled()
-        if waited >= budget_s:
-            raise asyncio.TimeoutError()
-        slice_s = min(_CANCEL_POLL_S, budget_s - waited)
-        try:
-            return await asyncio.wait_for(events.__anext__(), timeout=slice_s)
-        except asyncio.TimeoutError:
+    pending = asyncio.ensure_future(events.__anext__())
+    try:
+        while True:
+            if cancelled():
+                raise _CanvasCancelled()
+            if waited >= budget_s:
+                raise asyncio.TimeoutError()
+            slice_s = min(_CANCEL_POLL_S, budget_s - waited)
+            done, _ = await asyncio.wait({pending}, timeout=slice_s)
+            if done:
+                return pending.result()
             waited += slice_s
+    finally:
+        # Only ever cancel on the way out -- budget exhausted, user cancelled, or
+        # this coroutine itself was cancelled. Never between slices.
+        if not pending.done():
+            pending.cancel()
 
 
 # There is deliberately NO deadline on thinking. A reasoning model can work for
