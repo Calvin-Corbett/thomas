@@ -481,3 +481,55 @@ class TestWorkflowRunner(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(out.get("pattern"), "chain")
         self.assertEqual(len(out.get("steps", [])), 1)
         self.assertEqual(len(broker.calls), 0)
+
+
+class _SilentWorkerAdapter:
+    """Decomposes into one worker that comes back with nothing at all."""
+
+    async def generate_json(  # noqa: D401
+        self,
+        *,
+        system_prompt,
+        user_prompt,
+        session_id=None,
+        schema_hint=None,
+        profile=None,
+        model_id=None,
+    ):
+        if "You are an orchestrator. Decompose the goal" in system_prompt:
+            return {
+                "workers": [
+                    {
+                        "name": "checklist-builder",
+                        "prompt": "build the checklist",
+                        "capability": "artifact_creation",
+                    }
+                ]
+            }
+        if "synthes" in system_prompt.lower():
+            return {"output": "synthesized", "summary": "ok"}
+        return {"output": "", "summary": ""}
+
+
+class WorkerOutcomeHonestyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_worker_that_produced_nothing_is_not_ok(self):
+        """ok was hardcoded True for anything that did not raise, so a worker
+        returning nothing still counted as success and the mission reported
+        succeeded. Live case: an artifact_creation worker came back with prose
+        and no artifact, ok=true, and Work recorded the job as succeeded.
+
+        This layer has no artifact channel, so it cannot judge whether the
+        output is the RIGHT thing -- only whether there is one."""
+        runner = WorkflowRunner(chat_adapter=_SilentWorkerAdapter(), session_id="s1")
+
+        # Marking the empty worker as failed feeds the existing fail-closed
+        # rule, so the whole run stops rather than synthesising a confident
+        # final answer out of nothing -- which is what reached Work as
+        # "succeeded" before.
+        with self.assertRaises(WorkflowExecutionError) as caught:
+            await runner.run(
+                {"workflow": "orchestrator_worker", "goal": "make a checklist", "worker_count": 1}
+            )
+
+        self.assertIn("no output", str(caught.exception))
+        self.assertIn("checklist-builder", str(caught.exception))

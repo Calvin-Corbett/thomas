@@ -566,7 +566,15 @@ class WorkflowRunner:
                 response = worker_exec.payload
                 output_text = _text(response.get("output") or response.get("text"))
                 summary_text = _text(response.get("summary")) or output_text[:300]
-                return {
+                # ok used to be True for anything that did not raise, so a worker
+                # that came back with nothing at all still counted as a success
+                # and the mission reported succeeded. Producing nothing is the
+                # one failure this layer can recognise without guessing: there is
+                # no artifact channel in this schema, so whether the output is
+                # the RIGHT thing cannot be judged here -- only whether there is
+                # one. Deliberately a floor, not a verdict on quality.
+                produced_something = bool(output_text.strip() or summary_text.strip())
+                result = {
                     "name": worker.name,
                     "prompt": worker.prompt,
                     "capability": worker.capability,
@@ -576,8 +584,11 @@ class WorkflowRunner:
                     "attempt_count": len(worker_exec.attempts),
                     "output": output_text,
                     "summary": summary_text,
-                    "ok": True,
+                    "ok": produced_something,
                 }
+                if not produced_something:
+                    result["error"] = "worker returned no output"
+                return result
             except Exception as exc:
                 return {
                     "name": worker.name,
