@@ -268,7 +268,12 @@ def _render_element(el: Any, i: int, sw: int, sh: int) -> tuple[str, str] | None
         return (
             "div",
             f'<div class="el count-up" data-count="{valstr}" style="{common};left:{x:.0f}px;top:{y:.0f}px;'
-            f'{wstyle}font-size:{size:.0f}px;font-weight:{weight};color:{_esc(color)};white-space:nowrap;line-height:1.1">0</div>',
+            # Ships its FINAL value, not "0". The count-up script zeroes every
+            # [data-count] before the first paint, so the animation is unchanged
+            # -- but when the script does not run, the chart reads its real
+            # numbers instead of a full set of confident zeroes.
+            f'{wstyle}font-size:{size:.0f}px;font-weight:{weight};color:{_esc(color)};'
+            f'white-space:nowrap;line-height:1.1">{_esc(valstr)}</div>',
         )
     if kind == "text":
         x, y = _num(g.get("x")), _num(g.get("y"))
@@ -437,7 +442,7 @@ def build_canvas_html(spec_text: str) -> str:
     return (
         '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        f"<style>{css}</style></head><body>"
+        f"<style>{css}</style>{_CANVAS_NOSCRIPT_FALLBACK}</head><body>"
         f'<div id="tc-fit" style="width:100%;overflow:hidden">'
         f'<div id="tc-stage" data-reveal="pending" style="width:{sw}px;height:{sh}px;background:{_esc(bg)};transform-origin:top left">'
         f"{svg_layer}{div_inner}</div></div>"
@@ -548,6 +553,41 @@ _CANVAS_CSS_TEMPLATE = (
     "[data-draw]{stroke-dashoffset:0 !important}}"
 )
 
+# The reveal is driven entirely by script: the document ships with
+# data-reveal="pending", which holds every element at opacity 0 behind an opaque
+# full-bleed cover, and only JS flips it to "play". So if the script does not run
+# -- JS disabled, a strict CSP where the file is opened, a frame sandboxed
+# without allow-scripts, a mail or document preview pane -- the deliverable is a
+# BLANK WHITE PAGE. Not a degraded diagram: nothing at all, and no error saying
+# so. Someone who asked for a diagram cannot tell that from a broken product.
+#
+# This restates the reduced-motion escape hatch above, which already proves the
+# static state is presentable -- it is the same declarations, applied when
+# scripting rather than motion is unavailable. With JS the block is inert
+# (browsers ignore noscript content when scripting is on), so the animation is
+# untouched.
+#
+# `transition:none` is load-bearing, not tidiness. `.el` transitions opacity, so
+# merely declaring the final opacity starts a transition toward it -- and a
+# transition only advances while the document's animation timeline runs. In a
+# background or throttled tab the timeline is frozen, the transition never
+# progresses, and the computed opacity stays at 0: the page is blank again,
+# through a rule that says `opacity:1 !important`. Verified by injecting these
+# declarations into a real pending document: without this line 0 of 10 elements
+# became visible, with it all 10 did. The reduced-motion block above kills
+# transitions for the same reason.
+_CANVAS_NOSCRIPT_FALLBACK = (
+    "<noscript><style>"
+    ".el,.vec,#tc-stage::after{transition:none !important;will-change:auto !important}"
+    "#tc-stage::after{opacity:0 !important}"
+    "#tc-stage[data-reveal='pending'] .rise-fade,#tc-stage[data-reveal='pending'] .count-up,"
+    "#tc-stage[data-reveal='pending'] .scale-in,#tc-stage[data-reveal='pending'] .grow-y,"
+    "#tc-stage[data-reveal='pending'] .grow-x,#tc-stage[data-reveal='pending'] .sweep"
+    "{opacity:1 !important;transform:none !important}"
+    "[data-draw]{stroke-dashoffset:0 !important}"
+    "</style></noscript>"
+)
+
 _CANVAS_JS_TEMPLATE = (
     "(function(){var stage=document.getElementById('tc-stage');if(!stage)return;"
     "function __fit(){var w=document.documentElement.clientWidth||window.innerWidth||__SW__;"
@@ -555,6 +595,10 @@ _CANVAS_JS_TEMPLATE = (
     "var f=document.getElementById('tc-fit');if(f)f.style.height=(__SH__*s)+'px';}"
     "window.addEventListener('resize',__fit);__fit();"
     "var reduced=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;"
+    # Each count-up ships its final value so a script-less render shows real
+    # numbers. Zero them here -- this runs at end of body, before the first
+    # paint, so the count-up still starts from 0 with no flash of the answer.
+    "if(!reduced)document.querySelectorAll('[data-count]').forEach(function(el){el.textContent='0';});"
     "document.querySelectorAll('[data-draw]').forEach(function(p){try{var L=p.getTotalLength();"
     "p.style.strokeDasharray=L;p.style.strokeDashoffset=L;}catch(e){}});"
     "var played=false;"
