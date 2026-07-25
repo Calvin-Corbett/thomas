@@ -235,6 +235,33 @@ def extract_chart_data(prompt: str, plan: str, rendered_html: str = "") -> tuple
     return title, rows or [ChartDatum(label="Series 1", value=1.0)]
 
 
+_BAR_RE = re.compile(
+    r"<div[^>]*style=\"[^\"]*left:\s*(-?[\d.]+)px[^\"]*top:\s*(-?[\d.]+)px[^\"]*width:\s*([\d.]+)px[^\"]*height:\s*([\d.]+)px",
+    re.IGNORECASE,
+)
+
+
+def _rendered_bar_centres(html: str) -> list[tuple[float, float]]:
+    """Each drawn bar as (horizontal centre, height), tallest bar = largest value.
+
+    The per-bar value labels in these charts all read 0 because the bars animate
+    upward, so the numbers on the page are useless. The GEOMETRY is not: height
+    is how the chart encodes magnitude, and that is what makes it possible to
+    tell which label owns which value without trusting list order.
+    """
+    bars: list[tuple[float, float]] = []
+    for match in _BAR_RE.finditer(str(html or "")):
+        try:
+            left, _top, width, height = (float(match.group(i)) for i in (1, 2, 3, 4))
+        except ValueError:
+            continue
+        # A bar is tall and narrow; this also filters out backdrops and panels.
+        if height <= 0 or width <= 0 or width > 240:
+            continue
+        bars.append((left + width / 2.0, height))
+    return bars
+
+
 def _name_unlabelled_rows(rows: list[ChartDatum], rendered_html: str) -> list[ChartDatum]:
     """Give plan values the names the chart is actually drawn with.
 
@@ -242,18 +269,64 @@ def _name_unlabelled_rows(rows: list[ChartDatum], rendered_html: str) -> list[Ch
     "Series 1..5" beside a chart plainly reading Finland, Norway, Iceland. The
     values are right and the names are on the page, so join them.
 
-    Only when EVERY row is unnamed and the counts match exactly. A partial match
-    would mean guessing which value belongs to which name, and a spreadsheet
-    with confidently wrong labels is worse than one with honest placeholders.
+    Matching them by list order is NOT safe, and shipped wrong data the second
+    time it met a real chart: a languages chart exported French 1528 above
+    English 1184, because the plan lists its numbers in a different order from
+    the one the bars are drawn in. Count agreement says nothing about order.
+
+    So the join goes through the geometry instead. Height is how a bar chart
+    encodes magnitude, so the tallest bar owns the largest value; each label is
+    matched to the bar above it by horizontal position, and the values are
+    handed out in height order. Anything that does not line up cleanly keeps
+    its placeholder, because a spreadsheet with confidently wrong labels is
+    worse than one that admits it does not know.
     """
-    if not rows or not any(_UNNAMED_ROW_RE.match(row.label) for row in rows):
-        return rows
-    if not all(_UNNAMED_ROW_RE.match(row.label) for row in rows):
+    if not rows or not all(_UNNAMED_ROW_RE.match(row.label) for row in rows):
         return rows
     labels = _rendered_axis_labels(rendered_html)
-    if len(labels) != len(rows):
+    bars = _rendered_bar_centres(rendered_html)
+    if len(labels) != len(rows) or len(bars) != len(rows):
         return rows
-    return [ChartDatum(label=label, value=row.value) for label, row in zip(labels, rows)]
+
+    # Pair each label with the bar nearest it horizontally, refusing to guess if
+    # any bar would have to serve two labels.
+    remaining = list(bars)
+    label_heights: list[float] = []
+    for index, _label in enumerate(labels):
+        centre = _label_centre(rendered_html, labels, index)
+        if centre is None or not remaining:
+            return rows
+        nearest = min(remaining, key=lambda bar: abs(bar[0] - centre))
+        if abs(nearest[0] - centre) > _LABEL_BAR_TOLERANCE_PX:
+            return rows
+        remaining.remove(nearest)
+        label_heights.append(nearest[1])
+
+    # Tallest bar takes the largest value, and so on down.
+    by_height = sorted(range(len(labels)), key=lambda i: label_heights[i], reverse=True)
+    by_value = sorted(rows, key=lambda row: row.value, reverse=True)
+    named: list[ChartDatum | None] = [None] * len(labels)
+    for rank, label_index in enumerate(by_height):
+        named[label_index] = ChartDatum(label=labels[label_index], value=by_value[rank].value)
+    if any(item is None for item in named):
+        return rows
+    return [item for item in named if item is not None]
+
+
+_LABEL_BAR_TOLERANCE_PX = 60.0
+
+
+def _label_centre(html: str, labels: list[str], index: int) -> float | None:
+    """Horizontal centre of the axis label at ``index``, as drawn."""
+    wanted = labels[index]
+    for match in _POSITIONED_TEXT_RE.finditer(str(html or "")):
+        if " ".join(match.group(3).split()) != wanted:
+            continue
+        try:
+            return float(match.group(1))
+        except ValueError:
+            return None
+    return None
 
 
 def _clean_note(prompt: str) -> str:

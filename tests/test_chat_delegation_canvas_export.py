@@ -122,11 +122,17 @@ def test_axis_ticks_and_source_notes_are_not_data_rows() -> None:
     assert not any(row.value == 0 for row in rows)
 
 
+# A bar chart the way these are actually drawn: absolutely positioned bars whose
+# HEIGHT encodes the value, an axis label row sharing one y coordinate, and
+# per-bar value labels that read 0 because the bars animate upward.
 _AXIS_CHART = (
     '<div style="left:100px;top:40px;">Coffee Consumption by Country</div>'
     '<div style="left:60px;top:200px;">12</div>'
     '<div style="left:60px;top:300px;">6</div>'
     '<div style="left:60px;top:400px;">0</div>'
+    '<div class="el grow-y" style="left:130px;top:180px;width:64px;height:240px;"></div>'
+    '<div class="el grow-y" style="left:238px;top:222px;width:64px;height:198px;"></div>'
+    '<div class="el grow-y" style="left:346px;top:240px;width:64px;height:180px;"></div>'
     '<div style="left:148px;top:445px;">Finland</div>'
     '<div style="left:256px;top:445px;">Norway</div>'
     '<div style="left:364px;top:445px;">Iceland</div>'
@@ -155,6 +161,49 @@ def test_plan_values_take_the_names_the_chart_is_drawn_with() -> None:
         ("Norway", 9.9),
         ("Iceland", 9.0),
     ]
+
+
+def test_values_follow_the_bars_not_the_plans_ordering() -> None:
+    """Live incident, 2026-07-24: a languages chart exported French 1528 above
+    English 1184, because the plan lists its numbers in a different order from
+    the one the bars are drawn in. Count agreement says nothing about order, so
+    the join goes through the geometry: the tallest bar owns the largest value.
+    """
+    # Deliberately shuffled: the plan's first number is NOT the first bar's.
+    plan = json.dumps(
+        {
+            "title": "Coffee",
+            "elements": [
+                {"kind": "number", "value": 9.0},
+                {"kind": "number", "value": 12.0},
+                {"kind": "number", "value": 9.9},
+            ],
+        }
+    )
+    _, rows = extract_chart_data("chart of coffee consumption", plan, _AXIS_CHART)
+
+    # Bar heights are Finland 240 > Norway 198 > Iceland 180.
+    assert [(row.label, row.value) for row in rows] == [
+        ("Finland", 12.0),
+        ("Norway", 9.9),
+        ("Iceland", 9.0),
+    ]
+
+
+def test_names_are_not_guessed_without_bars_to_match_against() -> None:
+    """Without geometry there is no way to know which value belongs to which
+    label, so the placeholders stay rather than being confidently wrong."""
+    plan = json.dumps(
+        {"title": "Coffee", "elements": [{"kind": "number", "value": v} for v in (12, 9.9, 9)]}
+    )
+    label_only = (
+        '<div style="left:148px;top:445px;">Finland</div>'
+        '<div style="left:256px;top:445px;">Norway</div>'
+        '<div style="left:364px;top:445px;">Iceland</div>'
+    )
+    _, rows = extract_chart_data("chart of coffee consumption", plan, label_only)
+
+    assert [row.label for row in rows] == ["Series 1", "Series 2", "Series 3"]
 
 
 def test_names_are_not_guessed_when_the_counts_disagree() -> None:
