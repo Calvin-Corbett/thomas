@@ -54,6 +54,10 @@ from thomas.server.openai_codex_oauth_flow import (
 class OpenAICodexOAuthError(RuntimeError):
     """Raised when ChatGPT/Codex OAuth cannot complete or refresh."""
 
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
 
 def decode_jwt_payload(jwt: str | None) -> dict[str, Any]:
     token = str(jwt or "").strip()
@@ -182,27 +186,28 @@ def import_local_codex_token(
     server restarts use Thomas's normal encrypted/guarded storage path.
     """
 
-    if read_openai_codex_token(secret_store, profile) is not None:
-        return read_openai_codex_token(secret_store, profile)
+    stored = read_openai_codex_token(secret_store, profile)
+    if token_is_access_ready(stored):
+        return stored
     if str(os.environ.get("THOMAS_IMPORT_LOCAL_CODEX_AUTH", "1")).strip().casefold() in {
         "0",
         "false",
         "no",
         "off",
     }:
-        return None
+        return stored
     configured = str(codex_home or os.environ.get("CODEX_HOME") or "").strip()
     root = Path(configured).expanduser() if configured else Path.home() / ".codex"
     source = root / "auth.json"
     try:
         if not source.is_file() or source.stat().st_size > 1024 * 1024:
-            return None
+            return stored
         payload = json.loads(source.read_text(encoding="utf-8"))
     except (OSError, TypeError, ValueError, json.JSONDecodeError):
-        return None
+        return stored
     tokens = payload.get("tokens") if isinstance(payload, dict) else None
     if not isinstance(tokens, dict):
-        return None
+        return stored
     imported = {
         "access_token": str(tokens.get("access_token") or "").strip(),
         "refresh_token": str(tokens.get("refresh_token") or "").strip(),
@@ -210,11 +215,23 @@ def import_local_codex_token(
         "account_id": str(tokens.get("account_id") or "").strip(),
     }
     if not imported["access_token"] and not imported["refresh_token"]:
-        return None
+        return stored
+    candidate = normalize_token_payload(imported)
+    if stored is not None:
+        stored_pair = (
+            str(stored.get("access_token") or "").strip(),
+            str(stored.get("refresh_token") or "").strip(),
+        )
+        imported_pair = (
+            str(candidate.get("access_token") or "").strip(),
+            str(candidate.get("refresh_token") or "").strip(),
+        )
+        if imported_pair == stored_pair or not token_is_access_ready(candidate):
+            return stored
     try:
         return write_openai_codex_token(secret_store, profile, imported, persist=True)
     except (OpenAICodexOAuthError, OSError, RuntimeError, TypeError, ValueError):
-        return None
+        return stored
 
 
 def write_openai_codex_token(
@@ -348,7 +365,11 @@ async def refresh_openai_codex_token(
     except (httpx.HTTPError, OSError) as exc:
         raise OpenAICodexOAuthError("Token refresh could not reach the OAuth service.") from exc
     if int(resp.status_code) >= 400:
-        raise OpenAICodexOAuthError(f"Token refresh failed with HTTP {int(resp.status_code)}.")
+        status_code = int(resp.status_code)
+        raise OpenAICodexOAuthError(
+            f"Token refresh failed with HTTP {status_code}.",
+            status_code=status_code,
+        )
     try:
         obj = resp.json()
     except Exception as e:
@@ -370,7 +391,23 @@ async def ensure_openai_codex_access_token(
         return str(token.get("access_token") or "").strip()
     if not token_is_refreshable(token):
         raise OpenAICodexOAuthError("ChatGPT OAuth is not connected. Run Easy Setup or sign in first.")
-    refreshed = await refresh_openai_codex_token(str(token.get("refresh_token") or ""))
+    try:
+        refreshed = await refresh_openai_codex_token(str(token.get("refresh_token") or ""))
+    except OpenAICodexOAuthError as exc:
+        if exc.status_code not in {400, 401}:
+            raise
+        replacement = import_local_codex_token(store, profile)
+        old_pair = (
+            str(token.get("access_token") or "").strip(),
+            str(token.get("refresh_token") or "").strip(),
+        )
+        replacement_pair = (
+            str((replacement or {}).get("access_token") or "").strip(),
+            str((replacement or {}).get("refresh_token") or "").strip(),
+        )
+        if replacement_pair != old_pair and token_is_access_ready(replacement, leeway_s=leeway_s):
+            return replacement_pair[0]
+        raise
     normalized = write_openai_codex_token(store, profile, refreshed, persist=True)
     return str(normalized.get("access_token") or "").strip()
 

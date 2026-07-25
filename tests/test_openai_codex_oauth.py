@@ -1,5 +1,6 @@
 import base64
 import json
+import os
 import tempfile
 import time
 import unittest
@@ -54,6 +55,14 @@ def _token_payload(*, email: str = "test@example.com", exp: int | None = None) -
         "id_token": _jwt(claims),
         "expires_in": 3600,
     }
+
+
+def _write_codex_auth(codex_home: Path, tokens: dict) -> None:
+    codex_home.mkdir()
+    (codex_home / "auth.json").write_text(
+        json.dumps({"auth_mode": "chatgpt", "tokens": tokens}),
+        encoding="utf-8",
+    )
 
 
 def test_authorize_url_matches_codex_pkce_shape() -> None:
@@ -202,7 +211,10 @@ class TestOpenAICodexTokenStore(unittest.TestCase):
                 async def post(self, *_args, **_kwargs):
                     return _SecretResponse()
 
-            with patch("thomas.server.openai_codex_oauth.httpx.AsyncClient", return_value=_RejectingClient()):
+            with (
+                patch.dict(os.environ, {"CODEX_HOME": str(Path(root) / "missing-codex-home")}),
+                patch("thomas.server.openai_codex_oauth.httpx.AsyncClient", return_value=_RejectingClient()),
+            ):
                 with pytest.raises(OpenAICodexOAuthError, match="HTTP 400") as caught:
                     __import__("asyncio").run(ensure_openai_codex_access_token("chatgpt", secret_store=store))
 
@@ -253,6 +265,113 @@ def test_import_local_codex_token_adopts_existing_app_login(tmp_path) -> None:
     assert imported["account_id"] == "acct_local"
     assert "must-not-be-imported" not in json.dumps(imported)
     assert has_openai_codex_token(store, "openai_codex") is True
+
+
+def test_import_local_codex_token_replaces_expired_store_with_ready_rotated_pair(tmp_path) -> None:
+    from thomas.server.secrets import SecretStore
+
+    store = SecretStore(tmp_path / "thomas-secrets")
+    expired = _token_payload(email="stale@example.com", exp=int(time.time() - 60))
+    expired["refresh_token"] = "stale-refresh"
+    expired.pop("expires_in", None)
+    write_openai_codex_token(store, "openai_codex", expired, persist=True)
+
+    current = _token_payload(email="current@example.com")
+    current["refresh_token"] = "current-refresh"
+    codex_home = tmp_path / ".codex"
+    _write_codex_auth(codex_home, current)
+
+    imported = import_local_codex_token(store, "openai_codex", codex_home=codex_home)
+
+    assert imported is not None
+    assert imported["access_token"] == current["access_token"]
+    assert imported["refresh_token"] == "current-refresh"
+
+
+def test_import_local_codex_token_does_not_replace_access_ready_store(tmp_path) -> None:
+    from thomas.server.secrets import SecretStore
+
+    store = SecretStore(tmp_path / "thomas-secrets")
+    stored = _token_payload(email="stored@example.com")
+    stored["refresh_token"] = "stored-refresh"
+    write_openai_codex_token(store, "openai_codex", stored, persist=True)
+
+    local = _token_payload(email="local@example.com", exp=int(time.time() + 7200))
+    local["refresh_token"] = "local-refresh"
+    codex_home = tmp_path / ".codex"
+    _write_codex_auth(codex_home, local)
+
+    imported = import_local_codex_token(store, "openai_codex", codex_home=codex_home)
+
+    assert imported is not None
+    assert imported["access_token"] == stored["access_token"]
+    assert imported["refresh_token"] == "stored-refresh"
+
+
+def test_ensure_recovers_once_from_rejected_stale_refresh_with_ready_local_pair(tmp_path, monkeypatch) -> None:
+    from thomas.server.secrets import SecretStore
+
+    store = SecretStore(tmp_path / "thomas-secrets")
+    expired = _token_payload(email="stale@example.com", exp=int(time.time() - 60))
+    expired["refresh_token"] = "stale-refresh"
+    expired.pop("expires_in", None)
+    write_openai_codex_token(store, "openai_codex", expired, persist=True)
+
+    current = _token_payload(email="current@example.com")
+    current["refresh_token"] = "current-refresh"
+    codex_home = tmp_path / ".codex"
+    _write_codex_auth(codex_home, current)
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    refresh_attempts = 0
+
+    async def rejected_refresh(refresh_token: str):
+        nonlocal refresh_attempts
+        refresh_attempts += 1
+        assert refresh_token == "stale-refresh"
+        raise OpenAICodexOAuthError("Token refresh failed with HTTP 401.", status_code=401)
+
+    with patch("thomas.server.openai_codex_oauth.refresh_openai_codex_token", rejected_refresh):
+        access_token = __import__("asyncio").run(
+            ensure_openai_codex_access_token("openai_codex", secret_store=store)
+        )
+
+    assert refresh_attempts == 1
+    assert access_token == current["access_token"]
+    persisted = read_openai_codex_token(store, "openai_codex")
+    assert persisted is not None
+    assert persisted["refresh_token"] == "current-refresh"
+
+
+def test_ensure_does_not_replace_with_same_or_expired_local_pair(tmp_path, monkeypatch) -> None:
+    from thomas.server.secrets import SecretStore
+
+    store = SecretStore(tmp_path / "thomas-secrets")
+    expired = _token_payload(email="stale@example.com", exp=int(time.time() - 60))
+    expired["refresh_token"] = "stale-refresh"
+    expired.pop("expires_in", None)
+    write_openai_codex_token(store, "openai_codex", expired, persist=True)
+
+    unusable = _token_payload(email="also-stale@example.com", exp=int(time.time() - 30))
+    unusable["refresh_token"] = "different-but-unusable"
+    unusable.pop("expires_in", None)
+    codex_home = tmp_path / ".codex"
+    _write_codex_auth(codex_home, unusable)
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    refresh_attempts = 0
+
+    async def rejected_refresh(_refresh_token: str):
+        nonlocal refresh_attempts
+        refresh_attempts += 1
+        raise OpenAICodexOAuthError("Token refresh failed with HTTP 400.", status_code=400)
+
+    with patch("thomas.server.openai_codex_oauth.refresh_openai_codex_token", rejected_refresh):
+        with pytest.raises(OpenAICodexOAuthError, match="HTTP 400"):
+            __import__("asyncio").run(ensure_openai_codex_access_token("openai_codex", secret_store=store))
+
+    assert refresh_attempts == 1
+    persisted = read_openai_codex_token(store, "openai_codex")
+    assert persisted is not None
+    assert persisted["refresh_token"] == "stale-refresh"
 
 
 def test_import_local_codex_token_can_be_disabled(tmp_path, monkeypatch) -> None:
