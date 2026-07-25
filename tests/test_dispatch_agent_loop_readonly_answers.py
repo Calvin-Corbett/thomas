@@ -12,6 +12,7 @@ both directions.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -19,6 +20,7 @@ import pytest
 
 from thomas.forge.anvil.dispatch_agent_loop import dispatch_via_agent_loop
 from thomas.forge.anvil.forge_event_stream import FORGE_EVENT_KEY
+from thomas.server.routes.evolve_agent_runtime import _confirmed_conversation_reply
 
 
 @pytest.fixture()
@@ -126,3 +128,124 @@ def test_no_tools_at_all_is_unchanged_behaviour(repo: Path) -> None:
     result = _dispatch(repo, [_answer("It is a small Python project.")])
 
     assert result.ok is True, result.reason
+
+
+# The SUBPROCESS Code path re-derives the same verdict from the persisted
+# transcript, in a third place. It kept the old strict rule after the two
+# dispatchers were fixed, so a read-only run taking that route was still
+# recorded as "no change made" with the answer buried under it.
+def _transcript(*events: dict) -> str:
+    return "\n".join(json.dumps(e) for e in events)
+
+
+def _tool(name: str) -> dict:
+    return {FORGE_EVENT_KEY: "tool", "name": name, "text": f"used {name}"}
+
+
+def test_transcript_verdict_accepts_a_read_only_answer() -> None:
+    text = _transcript(
+        _tool("fs.read_file"),
+        {FORGE_EVENT_KEY: "tool_result", "text": "VALUE = 1"},
+        _tool("code.search"),
+        {FORGE_EVENT_KEY: "final", "text": "Here is what the project does."},
+    )
+
+    assert _confirmed_conversation_reply(text) is True
+
+
+def test_transcript_verdict_still_rejects_an_attempted_edit() -> None:
+    text = _transcript(
+        _tool("fs.read_file"),
+        _tool("fs.write_file"),
+        {FORGE_EVENT_KEY: "final", "text": "I updated the file."},
+    )
+
+    assert _confirmed_conversation_reply(text) is False
+
+
+def test_transcript_verdict_stays_strict_without_tool_names() -> None:
+    """tool_result carries no name, so a transcript of only those cannot prove
+    the run was read-only and keeps the previous behaviour."""
+    text = _transcript(
+        {FORGE_EVENT_KEY: "tool_result", "text": "something"},
+        {FORGE_EVENT_KEY: "final", "text": "An answer."},
+    )
+
+    assert _confirmed_conversation_reply(text) is False
+
+
+def test_all_three_verdict_sites_agree_on_a_read_only_run(repo: Path) -> None:
+    """The point of the change: the same run must not be judged differently
+    depending on which execution route it happened to take."""
+    events = [
+        _tool("fs.read_file"),
+        {FORGE_EVENT_KEY: "final", "text": "Here is what the project does."},
+    ]
+
+    in_process = _dispatch(repo, events)
+
+    assert in_process.ok is True, in_process.reason
+    assert _confirmed_conversation_reply(_transcript(*events)) is True
+
+
+# The relaxation above was INERT in production for its first hours: it needs a
+# tool name, and the only forge event the agent loop actually produces around a
+# tool is tool_result, whose name the translator was dropping. Events.tool_start
+# has no callers anywhere in the repo, so the TOOL_START branch never runs.
+# These drive the REAL AgentEvent types through the real translator.
+def _translate(events: list) -> list[dict]:
+    from thomas.forge.anvil.dispatch_agent_loop import _AgentLoopForgeTranslator
+
+    captured: list[dict] = []
+    translator = _AgentLoopForgeTranslator(captured.append)
+    for kind, data in events:
+        translator.feed(kind.value, data)
+    translator.close()
+    return captured
+
+
+def test_the_real_tool_result_event_carries_its_tool_name() -> None:
+    """The name has to survive translation, or every downstream check that asks
+    whether a run only read gets an anonymous event and assumes the worst."""
+    from thomas.core.events import EventType
+
+    out = _translate(
+        [
+            (EventType.TOOL_RESULT, {"tool_id": "1", "tool_name": "fs.read_file", "result": "x", "ok": True}),
+            (EventType.AGENT_DONE, {"text": "Here is how it works."}),
+        ]
+    )
+
+    tool_events = [e for e in out if e.get(FORGE_EVENT_KEY) == "tool_result"]
+    assert tool_events, "the loop emits TOOL_RESULT; it must reach the forge stream"
+    assert tool_events[0].get("name") == "fs.read_file"
+
+
+def test_a_real_read_only_transcript_is_judged_an_answer() -> None:
+    """End to end through the shapes production actually emits: no synthetic
+    'tool' events, only TOOL_RESULT, which is all the agent loop ever sends."""
+    from thomas.core.events import EventType
+
+    out = _translate(
+        [
+            (EventType.TOOL_RESULT, {"tool_id": "1", "tool_name": "fs.read_file", "result": "x", "ok": True}),
+            (EventType.TOOL_RESULT, {"tool_id": "2", "tool_name": "code.search", "result": "y", "ok": True}),
+            (EventType.AGENT_DONE, {"text": "It keeps score in a variable."}),
+        ]
+    )
+
+    assert _confirmed_conversation_reply(_transcript(*out)) is True
+
+
+def test_a_real_write_transcript_is_still_not_an_answer() -> None:
+    from thomas.core.events import EventType
+
+    out = _translate(
+        [
+            (EventType.TOOL_RESULT, {"tool_id": "1", "tool_name": "fs.read_file", "result": "x", "ok": True}),
+            (EventType.TOOL_RESULT, {"tool_id": "2", "tool_name": "fs.write_file", "result": "ok", "ok": True}),
+            (EventType.AGENT_DONE, {"text": "Updated it."}),
+        ]
+    )
+
+    assert _confirmed_conversation_reply(_transcript(*out)) is False

@@ -17,6 +17,7 @@ from typing import Any
 
 from aiohttp import web
 
+from thomas.agent.loop_tool_protocol import is_inspection_tool
 from thomas.forge.anvil import forge_code_deliverables, forge_code_git, forge_code_store, run_report
 from thomas.server.app_keys import APP_ENGINE_MANAGER
 
@@ -44,9 +45,23 @@ log = logging.getLogger(__name__)
 
 
 def _confirmed_conversation_reply(transcript: str) -> bool:
-    """Return true for a reply-only structured turn, never tool activity or raw text."""
+    """Return true for a structured turn that answered without changing files.
+
+    Reading is not a failed edit. A request to inspect and explain something
+    must read files to answer it, and disqualifying any tool use meant those
+    runs were recorded as "no change made" with the answer buried underneath.
+
+    This mirrors the rule in dispatch_agent_loop and dispatch_claude_cli on
+    purpose: three separate places decide this same question, and if they
+    disagree the failure does not go away, it just moves to whichever one the
+    request happened to take. Relaxed only on positive evidence -- tool names
+    were present and every one of them was read-only.
+    """
 
     saw_reply = False
+    saw_tool = False
+    saw_named_tool = False
+    saw_mutating_tool = False
     for raw in str(transcript or "").splitlines():
         try:
             event = json.loads(raw)
@@ -56,9 +71,17 @@ def _confirmed_conversation_reply(transcript: str) -> bool:
             continue
         kind = str(event.get("fc") or "")
         if kind in {"tool", "tool_result"}:
-            return False
-        if kind in {"final", "say"} and str(event.get("text") or "").strip():
+            saw_tool = True
+            # Only the tool event carries a name; tool_result does not.
+            name = str(event.get("name") or "").strip()
+            if name and name != "tool":
+                saw_named_tool = True
+                if not is_inspection_tool(name):
+                    saw_mutating_tool = True
+        elif kind in {"final", "say"} and str(event.get("text") or "").strip():
             saw_reply = True
+    if saw_tool and not (saw_named_tool and not saw_mutating_tool):
+        return False
     return saw_reply
 
 

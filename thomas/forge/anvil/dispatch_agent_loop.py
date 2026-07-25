@@ -143,6 +143,15 @@ class _AgentLoopForgeTranslator:
             self._emit(
                 {
                     FORGE_EVENT_KEY: "tool_result",
+                    # Carry the tool's name. TOOL_START is never emitted by the
+                    # agent loop -- Events.tool_start has no callers anywhere --
+                    # so this is the ONLY place a name reaches the forge stream.
+                    # Without it, everything downstream that asks "did this run
+                    # only read?" gets an unnamed event, cannot tell reading from
+                    # writing, and falls back to treating every tool call as a
+                    # failed edit. That is what reported correct read-only
+                    # answers as no-ops.
+                    "name": str(data.get("tool_name") or ""),
                     "text": str(data.get("result") or "")[:500],
                     "is_error": not bool(data.get("ok", True)),
                 }
