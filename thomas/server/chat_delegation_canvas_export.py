@@ -46,25 +46,27 @@ def _plan_object(plan: str) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-# Function words are never data labels. Without this, "the most popular
-# programming languages in 2026" scrapes as the single row `in = 2026`, and
-# because prompt data outranks the rendered plan, the exported CSV and
-# spreadsheet then describe that instead of the seven bars actually drawn.
-# A person opening the backing data for their chart found one row reading
-# "in, 2026".
+# Words that are never data labels. Without this, "the most popular languages
+# in 2026" scrapes as the single row `in = 2026`, and because prompt data
+# outranks everything the exported CSV, spreadsheet and PDF all describe that
+# instead of the chart. Someone opening the data behind their chart found one
+# row reading "in, 2026".
 _NON_LABEL_TEXT = """
 chart graph plot show make create draw line bar pie
 a an the of in on at to for from by with and or as is are was were be been
 this that these those it its into onto up down out off over under near per
 about above below after before during since until within through between
 top best most least more less than then vs versus around approximately
-year years month months day days week weeks time times
+year years month months day days week weeks time times last next across
 """
 _NON_LABEL_WORDS = frozenset(_NON_LABEL_TEXT.split())
-_NOISE_BLOCK_RE = re.compile(r"<(style|script)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
-_TAG_STRIP_RE = re.compile(r"<[^>]+>")
-# Legend/bullet glyphs that introduce a chart series in rendered output.
-_MARKER_RE = re.compile(r"[●○▪■•‣⁃▸▶·∙]")
+
+# A single scraped pair is prose, not a dataset. "bar chart of CO2 emissions"
+# yields one row (CO = 2) and "the last 10 years" yields another (last = 10);
+# either one used to outrank the entire rendered chart and ship as its data.
+# Real supplied data comes in series -- "Q1 120 Q2 135" -- so require at least
+# two rows before believing the prompt over the plan.
+_MIN_PROMPT_ROWS = 2
 
 
 def _prompt_data(prompt: str) -> list[ChartDatum]:
@@ -78,145 +80,15 @@ def _prompt_data(prompt: str) -> list[ChartDatum]:
             label = f"{label} (%)"
         if not any(row.label.casefold() == label.casefold() for row in rows):
             rows.append(ChartDatum(label=label, value=value))
-    return rows[:16]
+    return rows[:16] if len(rows) >= _MIN_PROMPT_ROWS else []
 
 
-# A label followed by its value in the chart the user is looking at, e.g.
-# "Electricity · 45%", "Natural gas: 35", "LPG / propane — 8%".
-# "#" and "." belong in labels: C#, .NET, Node.js are data, not punctuation.
-_RENDERED_PAIR_RE = re.compile(
-    r"([A-Za-z][A-Za-z0-9 /&'#.+-]{0,38}?)\s*[·:=–—-]\s*(-?\d+(?:\.\d+)?)\s*%?"
-    r"|([A-Za-z][A-Za-z0-9 /&'#.+-]{0,38}?)\s+(-?\d+(?:\.\d+)?)\s*%",
-)
-
-
-def _rendered_data(html: str) -> list[ChartDatum]:
-    """Read the chart's own labels and values out of what was rendered.
-
-    The plan is an intermediate; the rendered document is the thing the user is
-    actually looking at. Deriving backing data from anything else is how a chart
-    showing Electricity 45% and Natural gas 35% shipped a spreadsheet reading
-    "Series 1, 100".
-    """
-    text = str(html or "")
-    if not text.strip():
-        return []
-    text = _NOISE_BLOCK_RE.sub(" ", text)
-    text = " ".join(_TAG_STRIP_RE.sub(" ", text).split())
-    found: list[tuple[str, float, bool, bool]] = []
-    for match in _RENDERED_PAIR_RE.finditer(text):
-        label = (match.group(1) or match.group(3) or "").strip(" -·:=")
-        raw_value = match.group(2) or match.group(4)
-        if not label or raw_value is None:
-            continue
-        trimmed = _trim_to_label(label)
-        if not trimmed:
-            continue
-        try:
-            value = float(raw_value)
-        except ValueError:
-            continue
-        # Where the label itself began, so we can see what introduces it.
-        label_start = match.start() + label.rfind(trimmed) if trimmed in label else match.start()
-        lead = text[max(0, label_start - 3) : label_start]
-        found.append((trimmed, value, "%" in match.group(0), bool(_MARKER_RE.search(lead))))
-
-    # Chart rows share a format, so the odd one out is prose. Two passes, each
-    # applied only when the format is actually the majority signal:
-    #  - a legend marker: "● Drive alone 68.7%" is data, while the axis tick
-    #    "...ACS 1-Year estimates 0 %" that precedes it is not.
-    #  - a percent sign: the heading "Household Energy Use by Source - 2026"
-    #    otherwise reads as the data point Source = 2026.
-    marked = [row for row in found if row[3]]
-    if len(marked) >= 2:
-        found = marked
-    percent_rows = [row for row in found if row[2]]
-    if len(percent_rows) >= 2:
-        found = percent_rows
-
-    rows: list[ChartDatum] = []
-    for label, value, _percent, _marked in found:
-        if any(row.label.casefold() == label.casefold() for row in rows):
-            continue
-        rows.append(ChartDatum(label=label, value=value))
-    # One pair is far more likely to be prose than a chart.
-    return rows[:16] if len(rows) >= 2 else []
-
-
-def _trim_to_label(raw: str) -> str:
-    """Reduce a matched run back to the label itself.
-
-    The pattern can reach backwards across surrounding prose, so
-    "...annual household site energy use Electricity" arrives whole. A chart
-    label starts at a capital, so keep the trailing run from the last capitalised
-    word onward: that yields "Electricity", while "Natural gas" and
-    "LPG / propane" survive intact.
-    """
-    words = raw.split()
-    if not words:
-        return ""
-    start = 0
-    for index, word in enumerate(words):
-        if word[:1].isupper():
-            start = index
-    words = words[start:]
-    while words and words[0].casefold() in _NON_LABEL_WORDS:
-        words.pop(0)
-    if not words or len(words) > 4:
-        return ""
-    if all(word.casefold() in _NON_LABEL_WORDS for word in words):
-        return ""
-    return " ".join(words)
-
-
-# An absolutely positioned text div: its x, its y, and what it says.
-_POSITIONED_TEXT_RE = re.compile(
-    r"<div[^>]*style=\"[^\"]*left:\s*(-?[\d.]+)px[^\"]*top:\s*(-?[\d.]+)px[^\"]*\"[^>]*>([^<>]{1,48})</div>",
-    re.IGNORECASE,
-)
-_NUMERIC_TEXT_RE = re.compile(r"^[\s\d.,%+-]*$")
-_UNNAMED_ROW_RE = re.compile(r"^Series \d+$")
-
-
-def _rendered_axis_labels(html: str) -> list[str]:
-    """The chart's category labels, read from the row they are drawn on.
-
-    Many charts put the categories along an axis and the values somewhere else
-    entirely, so nothing pairs them in the flattened text -- a coffee chart
-    renders "Finland Norway Iceland Denmark Netherlands" in one place and its
-    bars in another. What DOES connect them is layout: an axis label row is a
-    run of text boxes sharing a y coordinate, ordered by x. That is the run this
-    returns, so a caller holding values in plan order can name them.
-    """
-    rows: dict[str, list[tuple[float, str]]] = {}
-    for match in _POSITIONED_TEXT_RE.finditer(str(html or "")):
-        text = " ".join(match.group(3).split())
-        if not text or _NUMERIC_TEXT_RE.match(text):
-            continue  # axis ticks are not categories
-        try:
-            left, top = float(match.group(1)), float(match.group(2))
-        except ValueError:
-            continue
-        rows.setdefault(f"{top:.0f}", []).append((left, text))
-    if not rows:
-        return []
-    # The widest run of non-numeric boxes on one line is the category axis.
-    best = max(rows.values(), key=len)
-    if len(best) < 2:
-        return []
-    return [text for _left, text in sorted(best, key=lambda pair: pair[0])]
-
-
-def extract_chart_data(prompt: str, plan: str, rendered_html: str = "") -> tuple[str, list[ChartDatum]]:
+def extract_chart_data(prompt: str, plan: str) -> tuple[str, list[ChartDatum]]:
     spec = _plan_object(plan)
     title = str(spec.get("title") or "").strip() or "Thomas chart"
     rows = _prompt_data(prompt)
     if rows:
         return title, rows
-    # Prefer what was drawn over what was planned.
-    rendered = _rendered_data(rendered_html)
-    if rendered:
-        return title, rendered
     elements = spec.get("elements") if isinstance(spec.get("elements"), list) else []
     numbers = [row for row in elements if isinstance(row, dict) and row.get("kind") == "number"]
     for index, row in enumerate(numbers[:16], 1):
@@ -231,102 +103,7 @@ def extract_chart_data(prompt: str, plan: str, rendered_html: str = "") -> tuple
             geometry = row.get("geometry") if isinstance(row.get("geometry"), dict) else {}
             value = float(geometry.get("h") or geometry.get("w") or 0)
             rows.append(ChartDatum(label=str(row.get("label") or f"Series {index}"), value=value))
-    rows = _name_unlabelled_rows(rows, rendered_html)
     return title, rows or [ChartDatum(label="Series 1", value=1.0)]
-
-
-_BAR_RE = re.compile(
-    r"<div[^>]*style=\"[^\"]*left:\s*(-?[\d.]+)px[^\"]*top:\s*(-?[\d.]+)px[^\"]*width:\s*([\d.]+)px[^\"]*height:\s*([\d.]+)px",
-    re.IGNORECASE,
-)
-
-
-def _rendered_bar_centres(html: str) -> list[tuple[float, float]]:
-    """Each drawn bar as (horizontal centre, height), tallest bar = largest value.
-
-    The per-bar value labels in these charts all read 0 because the bars animate
-    upward, so the numbers on the page are useless. The GEOMETRY is not: height
-    is how the chart encodes magnitude, and that is what makes it possible to
-    tell which label owns which value without trusting list order.
-    """
-    bars: list[tuple[float, float]] = []
-    for match in _BAR_RE.finditer(str(html or "")):
-        try:
-            left, _top, width, height = (float(match.group(i)) for i in (1, 2, 3, 4))
-        except ValueError:
-            continue
-        # A bar is tall and narrow; this also filters out backdrops and panels.
-        if height <= 0 or width <= 0 or width > 240:
-            continue
-        bars.append((left + width / 2.0, height))
-    return bars
-
-
-def _name_unlabelled_rows(rows: list[ChartDatum], rendered_html: str) -> list[ChartDatum]:
-    """Give plan values the names the chart is actually drawn with.
-
-    A plan often carries the numbers and no labels, which exported as
-    "Series 1..5" beside a chart plainly reading Finland, Norway, Iceland. The
-    values are right and the names are on the page, so join them.
-
-    Matching them by list order is NOT safe, and shipped wrong data the second
-    time it met a real chart: a languages chart exported French 1528 above
-    English 1184, because the plan lists its numbers in a different order from
-    the one the bars are drawn in. Count agreement says nothing about order.
-
-    So the join goes through the geometry instead. Height is how a bar chart
-    encodes magnitude, so the tallest bar owns the largest value; each label is
-    matched to the bar above it by horizontal position, and the values are
-    handed out in height order. Anything that does not line up cleanly keeps
-    its placeholder, because a spreadsheet with confidently wrong labels is
-    worse than one that admits it does not know.
-    """
-    if not rows or not all(_UNNAMED_ROW_RE.match(row.label) for row in rows):
-        return rows
-    labels = _rendered_axis_labels(rendered_html)
-    bars = _rendered_bar_centres(rendered_html)
-    if len(labels) != len(rows) or len(bars) != len(rows):
-        return rows
-
-    # Pair each label with the bar nearest it horizontally, refusing to guess if
-    # any bar would have to serve two labels.
-    remaining = list(bars)
-    label_heights: list[float] = []
-    for index, _label in enumerate(labels):
-        centre = _label_centre(rendered_html, labels, index)
-        if centre is None or not remaining:
-            return rows
-        nearest = min(remaining, key=lambda bar: abs(bar[0] - centre))
-        if abs(nearest[0] - centre) > _LABEL_BAR_TOLERANCE_PX:
-            return rows
-        remaining.remove(nearest)
-        label_heights.append(nearest[1])
-
-    # Tallest bar takes the largest value, and so on down.
-    by_height = sorted(range(len(labels)), key=lambda i: label_heights[i], reverse=True)
-    by_value = sorted(rows, key=lambda row: row.value, reverse=True)
-    named: list[ChartDatum | None] = [None] * len(labels)
-    for rank, label_index in enumerate(by_height):
-        named[label_index] = ChartDatum(label=labels[label_index], value=by_value[rank].value)
-    if any(item is None for item in named):
-        return rows
-    return [item for item in named if item is not None]
-
-
-_LABEL_BAR_TOLERANCE_PX = 60.0
-
-
-def _label_centre(html: str, labels: list[str], index: int) -> float | None:
-    """Horizontal centre of the axis label at ``index``, as drawn."""
-    wanted = labels[index]
-    for match in _POSITIONED_TEXT_RE.finditer(str(html or "")):
-        if " ".join(match.group(3).split()) != wanted:
-            continue
-        try:
-            return float(match.group(1))
-        except ValueError:
-            return None
-    return None
 
 
 def _clean_note(prompt: str) -> str:
@@ -547,22 +324,16 @@ def _draw_pie_png(draw: Any, rows: list[ChartDatum], *, donut: bool) -> None:
         draw.text((588, y + 1), f"{row.label[:24]}  {row.value:g}", fill=(40, 48, 66), font=legend)
 
 
-def export_static_chart(
-    work_dir: str | Path, *, prompt: str, plan: str, rendered_html: str = ""
-) -> list[str]:
+def export_static_chart(work_dir: str | Path, *, prompt: str, plan: str) -> list[str]:
     """Write the chart (honoring an explicit PNG request) plus source data.
 
     Fails closed when the chosen renderer's runtime is absent, falling back to
     the reviewed PDF when PNG rendering is unavailable.
-
-    ``rendered_html`` is the document the user is actually looking at; its own
-    labels and values are the truest source for the backing data that ships
-    beside it.
     """
 
     root = Path(work_dir)
     root.mkdir(parents=True, exist_ok=True)
-    title, rows = extract_chart_data(prompt, plan, rendered_html)
+    title, rows = extract_chart_data(prompt, plan)
     kind = _chart_kind(prompt)
     csv_path = root / "chart-data.csv"
 
