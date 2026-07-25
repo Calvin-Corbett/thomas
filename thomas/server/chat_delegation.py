@@ -26,6 +26,7 @@ from thomas.server.chat_delegation_canvas import (
     run_canvas_worker,
 )
 from thomas.server.chat_delegation_canvas_completion import complete_canvas_delivery
+from thomas.server.chat_delegation_canvas_worker import _CanvasCancelled
 from thomas.server.chat_delegation_deliverable import (  # noqa: F401
     _FAILURE_LANGUAGE_RE,
     _build_result_summary,
@@ -546,6 +547,24 @@ async def _start_canvas_worker_delegation(
                 record_runtime=_record_runtime,
                 runtime_policy=runtime_policy,
             )
+        except _CanvasCancelled:
+            # Stopping because the user asked is not a failure, and must not be
+            # reported as one. Before this the flag was never read at all: the
+            # run continued, the record stayed in `executing` indefinitely, and
+            # the chat could only repeat its last status while the user asked
+            # again and again what was happening.
+            summary = "Cancelled by user."
+            canvas_finish(execution_id, "failed")
+            task_bot_runtime.fail_execution(
+                execution_id,
+                actor=bot.name,
+                summary=summary,
+                blocker="cancelled",
+                repo_root=root,
+            )
+            rec = _normalize_record(task_bot_runtime.get_execution(execution_id, root))
+            await emitter.failed(rec, specialist_id=specialist_id, bot=bot, text=summary)
+            return
         except Exception as exc:  # noqa: BLE001 - surface as a failed card, don't crash anything
             log.exception("Canvas worker failed for %s (%s)", execution_id, type(exc).__name__)
             canvas_finish(execution_id, "failed")

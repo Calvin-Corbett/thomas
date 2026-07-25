@@ -11,6 +11,39 @@ class _CanvasStall(RuntimeError):
     """A retryable Canvas provider or semantic-review failure."""
 
 
+class _CanvasCancelled(RuntimeError):
+    """The user asked for this Canvas run to stop."""
+
+
+# How often the wait for the next stream event pauses to notice a cancellation.
+# The wait itself can legitimately last minutes, and asyncio.wait_for cannot be
+# interrupted, so it is taken in slices instead of one long sleep. Nothing about
+# the deadline changes -- the slices are added up against the same budget -- but
+# pressing cancel now takes effect within seconds rather than never.
+_CANCEL_POLL_S = 3.0
+
+
+async def _next_event(events: Any, budget_s: float, cancelled: Callable[[], bool]) -> Any:
+    """Await the next stream event without becoming deaf to cancellation.
+
+    asyncio.wait_for cannot be interrupted once it is waiting, so a single long
+    wait makes the run uncancellable for its whole duration. The same budget is
+    spent in short slices instead, checking between them. Raises TimeoutError
+    when the budget is exhausted, exactly as the single wait did.
+    """
+    waited = 0.0
+    while True:
+        if cancelled():
+            raise _CanvasCancelled()
+        if waited >= budget_s:
+            raise asyncio.TimeoutError()
+        slice_s = min(_CANCEL_POLL_S, budget_s - waited)
+        try:
+            return await asyncio.wait_for(events.__anext__(), timeout=slice_s)
+        except asyncio.TimeoutError:
+            waited += slice_s
+
+
 # There is deliberately NO deadline on thinking. A reasoning model can work for
 # minutes before it emits a first token, and the transport reports nothing at all
 # while it does -- so a time-to-first-token wall cannot tell "still thinking" from
@@ -41,6 +74,7 @@ async def run_canvas_worker(
 ) -> str:
     """Generate, review, and publish a self-contained Canvas document."""
 
+    from thomas.core import task_bot_runtime
     from thomas.server import chat_delegation_canvas as canvas
     from thomas.server.chat_budget_ledger import ChatBudgetError, budget_context, get_chat_budget_ledger
     from thomas.server.chat_budget_scope import scope_from_runtime_policy
@@ -103,6 +137,21 @@ async def run_canvas_worker(
         except (AttributeError, RuntimeError, TypeError, ValueError):
             return
 
+    def _cancelled() -> bool:
+        """Has the user asked this run to stop?
+
+        Nothing in the Canvas path asked this before, so a cancel set the flag
+        and no code ever read it: the run kept going, the record stayed in
+        `executing` for as long as the server lived, and the chat could only
+        repeat its last status. Observed on a live request for a banana graph --
+        seven minutes of "Planning the design", a cancel that did nothing, and
+        Thomas explaining that it could not see inside the worker.
+        """
+        try:
+            return bool(task_bot_runtime.is_cancel_requested(execution_id, repo_root=root))
+        except (AttributeError, OSError, RuntimeError, TypeError, ValueError):
+            return False  # never let a bookkeeping error kill a healthy run
+
     async def stream(
         messages: list[dict[str, Any]],
         *,
@@ -124,7 +173,7 @@ async def run_canvas_worker(
                 while True:
                     timeout = _MID_STREAM_IDLE_S if got_first else _DEAD_SOCKET_S
                     try:
-                        event = await asyncio.wait_for(events.__anext__(), timeout=timeout)
+                        event = await _next_event(events, timeout, _cancelled)
                     except StopAsyncIteration:
                         canvas._diag(
                             f"[stream] {label} a{attempt}: StopAsyncIteration after "
@@ -173,6 +222,12 @@ async def run_canvas_worker(
                 if text.strip():
                     return text
                 last_error = "empty output"
+            except _CanvasCancelled:
+                # Listed before the handlers below because it is a RuntimeError
+                # and would otherwise be swallowed as a retryable fault -- the
+                # run would be retried instead of stopped, which is the opposite
+                # of what was asked.
+                raise
             except _CanvasStall as exc:
                 last_error = str(exc)
                 canvas._diag(f"[stream] {label} a{attempt}: STALL {exc}")

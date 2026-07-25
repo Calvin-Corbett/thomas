@@ -560,6 +560,24 @@ async def stream_openai_codex(
                             await asyncio.sleep(delay)
                         continue
                     raise last_error
+                if not stream_event_emitted:
+                    # The response completed and carried nothing. Returning here
+                    # hands the caller an empty stream that is indistinguishable
+                    # from a successful one, and every layer above then invents
+                    # its own explanation: the Canvas worker calls it "empty
+                    # output", retries, and finally reports "Canvas generation
+                    # failed before a verified result was produced" -- while the
+                    # diagnostics show only "0 events, 0 tokens". Someone asking
+                    # for a graph is told the canvas failed, with nothing
+                    # anywhere saying the model returned an empty completion.
+                    raise LLMError(
+                        "ChatGPT/Codex completed the response without returning any content. "
+                        "This usually means the request was rejected upstream (most often "
+                        "expired or missing credentials) rather than that the model had "
+                        "nothing to say.",
+                        status=502,
+                        retryable=True,
+                    )
                 return
 
         except httpx.HTTPStatusError as e:
