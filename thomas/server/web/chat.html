@@ -1113,6 +1113,15 @@
             <a href="${esc(url)}" target="_blank" rel="noopener" title="Open in new tab" style="color:var(--c-muted);display:flex;"><i class="ph ph-arrow-square-out" style="font-size:14px;"></i></a>
             <button data-artifact-toggle title="Collapse" style="border:0;background:transparent;color:var(--c-muted);cursor:pointer;display:flex;padding:0;"><i class="ph ph-caret-up" style="font-size:14px;"></i></button>
           </div>
+          <!-- Deliberately NOT sandboxed, unlike the library previews. These
+               frames show whatever the deliverable is, and most of them are
+               PDFs; Chrome refuses to instantiate its PDF viewer inside a
+               sandboxed frame, so the attribute renders a blank white box
+               instead of the document (measured side by side). Containment
+               here comes from the response: the preview is served from its own
+               ephemeral origin under a CSP carrying sandbox, connect-src self
+               and frame-ancestors. The library frames can carry the attribute
+               because they only ever point at HTML. -->
           <iframe src="${esc(src)}" title="${esc(name)}" style="display:block;width:100%;height:600px;border:0;background:#fff;"></iframe>
         </div>`;
       }
