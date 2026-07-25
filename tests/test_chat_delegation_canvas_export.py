@@ -180,3 +180,105 @@ def test_static_chart_export_fails_closed_when_reportlab_is_missing(
 
     assert not (tmp_path / "chart.pdf").exists()
     assert not (tmp_path / "chart-data.csv").exists()
+
+
+def _banana_plan() -> str:
+    """The plan shape that shipped "Series 1..5" for a banana chart.
+
+    Values live on `number` elements; the variety names are separate `text`
+    elements sitting under each bar, exactly as the planner is instructed.
+    """
+    elements = []
+    varieties = [("Cavendish", 9.2), ("Gros Michel", 9.0), ("Lady Finger", 8.8)]
+    for i, (name, score) in enumerate(varieties):
+        x = 120 + i * 180
+        elements.append({"kind": "bar", "geometry": {"x": x, "y": 300, "w": 80, "h": 150}})
+        elements.append({"kind": "number", "value": score, "geometry": {"x": x, "y": 280}})
+        elements.append({"kind": "text", "label": name, "geometry": {"x": x, "y": 460}})
+    return json.dumps({"title": "Best Banana Varieties", "elements": elements})
+
+
+def test_axis_labels_are_paired_with_their_values() -> None:
+    """The regression: a graph of banana varieties that named no bananas.
+
+    The exporter read only `number` elements, found no labels on them, and wrote
+    Series 1..5 -- real data under meaningless names.
+    """
+    title, rows = extract_chart_data("make me a graph of the best banana varieties", _banana_plan())
+
+    assert title == "Best Banana Varieties"
+    assert [(r.label, r.value) for r in rows] == [
+        ("Cavendish", 9.2),
+        ("Gros Michel", 9.0),
+        ("Lady Finger", 8.8),
+    ]
+
+
+def test_pairing_never_substitutes_geometry_for_a_value() -> None:
+    """Guards the defect that got the previous attempt reverted: bar heights
+    exported as data. The bars above are 150px tall; the values are ~9."""
+    _title, rows = extract_chart_data("graph the best banana varieties", _banana_plan())
+
+    assert all(r.value < 100 for r in rows), [r.value for r in rows]
+    assert 150.0 not in [r.value for r in rows]
+
+
+def test_a_distant_label_is_not_borrowed_for_a_bar() -> None:
+    """A label three bars away is not this bar's label -- better an honest
+    placeholder than a confidently wrong name."""
+    plan = json.dumps(
+        {
+            "title": "Sparse",
+            "elements": [
+                {"kind": "number", "value": 5, "geometry": {"x": 100, "y": 280}},
+                {"kind": "text", "label": "Somewhere Else", "geometry": {"x": 640, "y": 460}},
+            ],
+        }
+    )
+    _title, rows = extract_chart_data("bar chart of things", plan)
+
+    assert [(r.label, r.value) for r in rows] == [("Series 1", 5.0)]
+
+
+def test_an_explicit_label_on_the_number_still_wins() -> None:
+    """Pairing is a fallback, not an override."""
+    plan = json.dumps(
+        {
+            "title": "Explicit",
+            "elements": [
+                {"kind": "number", "label": "Q1", "value": 120, "geometry": {"x": 100, "y": 280}},
+                {"kind": "text", "label": "Not This", "geometry": {"x": 100, "y": 460}},
+            ],
+        }
+    )
+    _title, rows = extract_chart_data("bar chart", plan)
+
+    assert [(r.label, r.value) for r in rows] == [("Q1", 120.0)]
+
+
+def test_each_label_is_claimed_by_only_one_value() -> None:
+    """Two bars must not both take the same axis label."""
+    plan = json.dumps(
+        {
+            "title": "Two",
+            "elements": [
+                {"kind": "number", "value": 1, "geometry": {"x": 100, "y": 280}},
+                {"kind": "number", "value": 2, "geometry": {"x": 110, "y": 280}},
+                {"kind": "text", "label": "Alpha", "geometry": {"x": 100, "y": 460}},
+                {"kind": "text", "label": "Beta", "geometry": {"x": 112, "y": 460}},
+            ],
+        }
+    )
+    _title, rows = extract_chart_data("bar chart", plan)
+
+    labels = [r.label for r in rows]
+    assert len(set(labels)) == len(labels), labels
+    assert set(labels) == {"Alpha", "Beta"}
+
+
+def test_a_plan_with_no_text_elements_is_unchanged() -> None:
+    """Pairing must not disturb the plans that already worked."""
+    title, rows = extract_chart_data("quarterly revenue chart", _plan())
+
+    assert title == "Quarterly Revenue"
+    assert [(r.label, r.value) for r in rows] == [("Q1", 120.0), ("Q2", 135.0)]

@@ -27,6 +27,10 @@ _INTERACTIVE_RE = re.compile(
     r"drill[- ]?down|click(?:able)?|drag(?:gable)?|toggle|selector|dropdown)\b",
     re.I,
 )
+# A bar's axis label sits under that bar. On the 720x520 stage a bar column is
+# rarely under ~40px wide, so a label further than this horizontally belongs to
+# a different bar and is not borrowed.
+_LABEL_COLUMN_TOLERANCE_PX = 60.0
 _PAIR_RE = re.compile(
     r"(?<![\w.])([A-Za-z][A-Za-z0-9_-]{0,23})\s*(?::|=|-)?\s*\$?(-?\d+(?:\.\d+)?)\s*(%)?",
     re.I,
@@ -83,6 +87,68 @@ def _prompt_data(prompt: str) -> list[ChartDatum]:
     return rows[:16] if len(rows) >= _MIN_PROMPT_ROWS else []
 
 
+def _point(element: Any) -> tuple[float, float] | None:
+    """The plan's own declared position for an element, if it gave one."""
+    if not isinstance(element, dict):
+        return None
+    geometry = element.get("geometry")
+    if not isinstance(geometry, dict):
+        return None
+    try:
+        return float(geometry.get("x")), float(geometry.get("y"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _category_names(elements: list[Any], numbers: list[dict[str, Any]]) -> dict[int, str]:
+    """Recover each value's category name from the neighbouring axis label.
+
+    In this plan format a bar chart's categories are NOT stored on the number
+    elements -- the planner is told "value labels sit just above each bar, axis
+    labels just below", so the value is a `number` and the name it belongs to is
+    a separate `text` element under the same bar. Reading only `number` elements
+    therefore yields five real values and zero names, and the export shipped
+    "Series 1..5" -- a chart of banana varieties naming no bananas.
+
+    Values are NEVER derived here. Only the name is recovered, by pairing on the
+    coordinates the planner itself declared. An earlier attempt to read values
+    out of rendered bar geometry corrupted the data (CSS pixel heights exported
+    under real category names) and was reverted; this stays clear of that by
+    treating geometry as an index into the plan, never as data.
+    """
+    texts: list[tuple[float, float, str]] = []
+    for element in elements:
+        if not isinstance(element, dict) or element.get("kind") != "text":
+            continue
+        label = str(element.get("label") or "").strip()
+        point = _point(element)
+        if label and point is not None:
+            texts.append((point[0], point[1], label))
+    if not texts:
+        return {}
+
+    names: dict[int, str] = {}
+    claimed: set[int] = set()
+    for index, number in enumerate(numbers):
+        origin = _point(number)
+        if origin is None:
+            continue
+        # Prefer a label sitting BELOW the value (the axis tick); fall back to
+        # the nearest label on the same column if the plan stacks them
+        # differently. Ties go to whichever is horizontally closest.
+        below = [i for i, (_x, y, _t) in enumerate(texts) if y > origin[1] and i not in claimed]
+        pool = below or [i for i in range(len(texts)) if i not in claimed]
+        if not pool:
+            continue
+        best = min(pool, key=lambda i: (abs(texts[i][0] - origin[0]), abs(texts[i][1] - origin[1])))
+        # A label three bars away is not this bar's label.
+        if abs(texts[best][0] - origin[0]) > _LABEL_COLUMN_TOLERANCE_PX:
+            continue
+        claimed.add(best)
+        names[index] = texts[best][2]
+    return names
+
+
 def extract_chart_data(prompt: str, plan: str) -> tuple[str, list[ChartDatum]]:
     spec = _plan_object(plan)
     title = str(spec.get("title") or "").strip() or "Thomas chart"
@@ -91,12 +157,14 @@ def extract_chart_data(prompt: str, plan: str) -> tuple[str, list[ChartDatum]]:
         return title, rows
     elements = spec.get("elements") if isinstance(spec.get("elements"), list) else []
     numbers = [row for row in elements if isinstance(row, dict) and row.get("kind") == "number"]
+    names = _category_names(elements, numbers)
     for index, row in enumerate(numbers[:16], 1):
         try:
             value = float(row.get("value"))
         except (TypeError, ValueError):
             continue
-        rows.append(ChartDatum(label=str(row.get("label") or f"Series {index}"), value=value))
+        label = str(row.get("label") or "").strip() or names.get(index - 1, "").strip()
+        rows.append(ChartDatum(label=label or f"Series {index}", value=value))
     if not rows:
         bars = [row for row in elements if isinstance(row, dict) and row.get("kind") == "bar"]
         for index, row in enumerate(bars[:16], 1):
