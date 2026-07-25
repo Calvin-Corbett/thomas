@@ -111,14 +111,16 @@ async def run_canvas_worker(
         on_text: Callable[[str], None] | None = None,
     ) -> str:
         last_error = "stalled"
+        attempts_used = 0
         for attempt in range(2):
+            attempts_used = attempt + 1
             parts: list[str] = []
             token_count = 0
             got_first = False
+            event_count = 0
             try:
                 canvas._diag(f"[stream] {label} a{attempt}: opening; client={type(llm).__name__}")
                 events = llm.stream_chat(messages=messages, tools=None).__aiter__()
-                event_count = 0
                 while True:
                     timeout = _MID_STREAM_IDLE_S if got_first else _DEAD_SOCKET_S
                     try:
@@ -174,12 +176,22 @@ async def run_canvas_worker(
             except _CanvasStall as exc:
                 last_error = str(exc)
                 canvas._diag(f"[stream] {label} a{attempt}: STALL {exc}")
+                # A stall with no data whatsoever is a dead connection, not a
+                # model thinking. Retrying spends the whole wait again while
+                # holding the global canvas lock, so one broken request would
+                # block every other conversation's canvas for twice as long --
+                # and a socket that produced nothing the first time has no more
+                # reason to speak the second. A stall AFTER data arrived is
+                # different, and is still worth one retry.
+                if not got_first and event_count == 0:
+                    canvas._diag(f"[stream] {label}: dead connection, not retrying")
+                    break
             except (AttributeError, ConnectionError, OSError, RuntimeError, TypeError, ValueError) as exc:
                 last_error = type(exc).__name__
                 canvas._diag(f"[stream] {label} a{attempt}: EXC {last_error}")
             if attempt == 0:
                 await asyncio.sleep(1.5)
-        raise _CanvasStall(f"2 attempts: {last_error}")
+        raise _CanvasStall(f"{attempts_used} attempt(s): {last_error}")
 
     await canvas._CANVAS_LLM_LOCK.acquire()
     budget_reconciled = False

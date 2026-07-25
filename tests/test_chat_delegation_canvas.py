@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from thomas.server import chat_delegation
+from thomas.server import chat_delegation_canvas_worker as canvas_worker
 from thomas.server.chat_budget_ledger import get_chat_budget_ledger
 from thomas.server.chat_delegation_canvas import canvas_get, run_canvas_worker
 
@@ -456,3 +457,42 @@ class TestDeterministicRenderer(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class _DeadSocketLLM:
+    """A provider that accepts the request and then never says anything."""
+
+    def __init__(self) -> None:
+        self.calls: list[list[dict[str, object]]] = []
+
+    async def stream_chat(self, *, messages, tools=None):  # noqa: ANN001, ANN202
+        self.calls.append(list(messages))
+        await asyncio.sleep(3600)
+        yield SimpleNamespace(type="done", data={})  # pragma: no cover - never reached
+
+
+class CanvasDeadConnectionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_silent_connection_is_not_retried(self) -> None:
+        """The canvas LLM lock is global and is held across every attempt, so
+        retrying a socket that produced nothing blocks every OTHER
+        conversation's canvas for twice as long -- and a connection that said
+        nothing the first time has no more reason to speak the second.
+
+        A stall AFTER data arrived is a different thing and is still retried.
+        """
+        llm = _DeadSocketLLM()
+
+        with patch.object(canvas_worker, "_DEAD_SOCKET_S", 0.05):
+            with tempfile.TemporaryDirectory() as d:
+                with patch(
+                    "thomas.server.chat_delegation_canvas.build_canvas_llm", return_value=llm
+                ):
+                    with self.assertRaises(Exception) as caught:
+                        await run_canvas_worker(
+                            execution_id="exec-canvas-dead",
+                            prompt="Draw a simple bar chart of quarterly sales",
+                            root=Path(d),
+                        )
+
+        self.assertEqual(len(llm.calls), 1, "a dead connection must not be dialled twice")
+        self.assertIn("1 attempt", str(caught.exception))
