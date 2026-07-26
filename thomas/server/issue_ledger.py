@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -24,11 +25,34 @@ log = logging.getLogger(__name__)
 _LOCK = threading.Lock()
 _MAX_LINES = 2000
 _TRIM_TO = 1200
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _issues_path(repo_root: str | Path | None = None) -> Path:
-    root = Path(repo_root) if repo_root else Path(__file__).resolve().parents[2]
+    root = Path(repo_root) if repo_root else _REPO_ROOT
     return root / "runtime" / "logs" / "issues.jsonl"
+
+
+def _is_test_run_writing_to_the_real_ledger(path: Path) -> bool:
+    """A test appending to the ledger the running app reads back.
+
+    This file is the evidence Thomas self-reviews from, and the answer to
+    Calvin's "is there a system tracking every time it says issues". The suite
+    drives the same worker code paths with fixture prompts, so every run
+    appended entries like `do the thing`, `x` and
+    `Answer with verified model attribution.` to the production ledger. About
+    two thirds of a week's entries were fixtures, which means the report meant
+    to say "what broke today" was mostly reporting that the tests ran.
+
+    Only the real repo's file is protected: a test that deliberately points at
+    a tmp root is exercising the ledger on purpose and must still work.
+    """
+    if not os.environ.get("PYTEST_CURRENT_TEST"):
+        return False
+    try:
+        return path.resolve() == (_REPO_ROOT / "runtime" / "logs" / "issues.jsonl").resolve()
+    except OSError:
+        return False
 
 
 def record_issue(
@@ -49,6 +73,8 @@ def record_issue(
             "context": {str(k)[:40]: str(v)[:200] for k, v in (context or {}).items()},
         }
         path = _issues_path(repo_root)
+        if _is_test_run_writing_to_the_real_ledger(path):
+            return
         with _LOCK:
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("a", encoding="utf-8") as fh:
