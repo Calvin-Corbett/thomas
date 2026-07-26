@@ -381,10 +381,25 @@ async def run_canvas_worker(
             ]
         assert review is not None
         canvas.canvas_set_review(execution_id, review.to_dict())
-        if not review.passed:
-            raise _CanvasStall(
-                "canvas review failed after repair: " + "; ".join(issue.message for issue in review.issues)
-            )
+        # Every other review issue is an objective property of the render -- it
+        # is empty, it is a placeholder, its chart has no values, its labels sit
+        # against the wrong numbers. `subject_mismatch` is different in kind: it
+        # asks whether enough of the user's own WORDS reappear in the output,
+        # which is a lexical guess that collapses the moment the user misspells
+        # the subject -- exactly when the model had to interpret rather than
+        # copy. "make me a graph pofmrvenue from am deup company" built a clean
+        # revenue chart twice and both were thrown away, because "pofmrvenue"
+        # cannot appear in any correct render. The user saw "Canvas generation
+        # failed" and got nothing for a typo.
+        #
+        # A render that might be about the wrong thing is still worth more than
+        # no render: it is visible in one glance and corrected in one sentence,
+        # whereas a failure leaves nothing to correct. So this alone no longer
+        # discards the work -- it is recorded on the review for the UI, and the
+        # objective failures still stop delivery.
+        blocking = [issue for issue in review.issues if issue.code != "subject_mismatch"]
+        if blocking:
+            raise _CanvasStall("canvas review failed after repair: " + "; ".join(issue.message for issue in blocking))
         if budget_scope is not None:
             usage = getattr(llm, "session_usage", None)
             usage_after = max(
