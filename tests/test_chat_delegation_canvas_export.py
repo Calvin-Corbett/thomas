@@ -11,6 +11,7 @@ from thomas.server.chat_delegation_canvas_export import (
     ChartExportUnavailable,
     _chart_format,
     _clean_note,
+    _printed_value,
     export_static_chart,
     extract_chart_data,
     is_static_chart_request,
@@ -231,13 +232,14 @@ def test_a_distant_label_is_not_borrowed_for_a_bar() -> None:
             "title": "Sparse",
             "elements": [
                 {"kind": "number", "value": 5, "geometry": {"x": 100, "y": 280}},
+                {"kind": "number", "value": 7, "geometry": {"x": 200, "y": 280}},
                 {"kind": "text", "label": "Somewhere Else", "geometry": {"x": 640, "y": 460}},
             ],
         }
     )
     _title, rows = extract_chart_data("bar chart of things", plan)
 
-    assert [(r.label, r.value) for r in rows] == [("Series 1", 5.0)]
+    assert [(r.label, r.value) for r in rows] == [("Series 1", 5.0), ("Series 2", 7.0)]
 
 
 def test_an_explicit_label_on_the_number_still_wins() -> None:
@@ -248,12 +250,14 @@ def test_an_explicit_label_on_the_number_still_wins() -> None:
             "elements": [
                 {"kind": "number", "label": "Q1", "value": 120, "geometry": {"x": 100, "y": 280}},
                 {"kind": "text", "label": "Not This", "geometry": {"x": 100, "y": 460}},
+                {"kind": "number", "label": "Q2", "value": 135, "geometry": {"x": 220, "y": 280}},
+                {"kind": "text", "label": "Nor This", "geometry": {"x": 220, "y": 460}},
             ],
         }
     )
     _title, rows = extract_chart_data("bar chart", plan)
 
-    assert [(r.label, r.value) for r in rows] == [("Q1", 120.0)]
+    assert [(r.label, r.value) for r in rows] == [("Q1", 120.0), ("Q2", 135.0)]
 
 
 def test_each_label_is_claimed_by_only_one_value() -> None:
@@ -399,3 +403,115 @@ def test_a_partially_paired_plan_is_not_reshuffled() -> None:
     _title, rows = extract_chart_data("bar chart", plan)
 
     assert [r.label for r in rows] == ["First", "Second"]
+
+
+def _commute_plan() -> str:
+    """The real shape of Calvin's commute chart: every value is PRINTED as a
+    text element and the plan declares no `number` element at all."""
+    rows = [("Drive alone", "68.7%"), ("Work from home", "15.2%"), ("Carpool", "8.6%"),
+            ("Transit", "3.1%"), ("Walk", "2.5%"), ("Other", "1.9%")]
+    elements = [
+        {"kind": "text", "label": "How Americans Commute to Work", "geometry": {"x": 64, "y": 60}},
+        {"kind": "text", "label": "Workers age 16+, United States, 2022", "geometry": {"x": 64, "y": 86}},
+        {"kind": "text", "label": "Source: U.S. Census Bureau, ACS 2022 (1-year estimates)",
+         "geometry": {"x": 64, "y": 478}},
+    ]
+    for i, (name, printed) in enumerate(rows):
+        x = 108 + i * 104
+        elements.append({"kind": "text", "label": printed, "geometry": {"x": x, "y": 150 + i * 40}})
+        elements.append({"kind": "text", "label": name, "geometry": {"x": x, "y": 430}})
+    return json.dumps({"title": "How Americans Commute to Work", "elements": elements})
+
+
+def test_values_the_plan_prints_as_text_are_still_data() -> None:
+    """Refusing to read printed values left a chart of real, visible data with
+    no data file beside it -- the chart clearly showed 68.7% Drive alone."""
+    title, rows = extract_chart_data("make me a chart showing how people commute to work", _commute_plan())
+
+    assert title == "How Americans Commute to Work"
+    assert [(r.label, r.value) for r in rows] == [
+        ("Drive alone", 68.7),
+        ("Work from home", 15.2),
+        ("Carpool", 8.6),
+        ("Transit", 3.1),
+        ("Walk", 2.5),
+        ("Other", 1.9),
+    ]
+
+
+def test_a_source_citation_is_not_a_data_row() -> None:
+    """The original export shipped a leading row `ACS 1-Year estimates, 0`."""
+    _title, rows = extract_chart_data("chart how people commute", _commute_plan())
+
+    assert all("Source" not in r.label and "ACS" not in r.label for r in rows)
+    assert all(r.value != 0 for r in rows)
+
+
+def test_axis_ticks_are_not_mistaken_for_values() -> None:
+    """Ticks print as numbers too. They are excluded by requiring a value to
+    pair with a CATEGORY label -- ticks have no category beneath them."""
+    elements = [
+        {"kind": "text", "label": tick, "geometry": {"x": 84, "y": 200 + i * 75}}
+        for i, tick in enumerate(["1,500", "1,000", "500", "0"])
+    ]
+    for i, (name, printed) in enumerate([("English", "1528"), ("Mandarin", "1184")]):
+        x = 151 + i * 110
+        elements.append({"kind": "text", "label": printed, "geometry": {"x": x, "y": 171}})
+        elements.append({"kind": "text", "label": name, "geometry": {"x": x, "y": 450}})
+    plan = json.dumps({"title": "Languages", "elements": elements})
+
+    _title, rows = extract_chart_data("chart the most spoken languages", plan)
+
+    assert [(r.label, r.value) for r in rows] == [("English", 1528.0), ("Mandarin", 1184.0)]
+
+
+def test_a_year_in_a_caption_is_not_a_data_point() -> None:
+    """The whole string must be the number, or a subtitle mentioning 2022
+    becomes a row."""
+    assert _printed_value("2022") == 2022.0
+    assert _printed_value("Workers age 16+, United States, 2022") is None
+    assert _printed_value("68.7%") == 68.7
+    assert _printed_value("1,528") == 1528.0
+    assert _printed_value("$1,200") == 1200.0
+    assert _printed_value("Q1") is None
+    assert _printed_value("") is None
+
+
+def test_printed_values_still_refuse_a_chart_of_one() -> None:
+    """One paired value is not a chart; better no data file than a lone row."""
+    elements = [
+        {"kind": "text", "label": "42", "geometry": {"x": 100, "y": 150}},
+        {"kind": "text", "label": "Only", "geometry": {"x": 100, "y": 430}},
+    ]
+    plan = json.dumps({"title": "Lonely", "elements": elements})
+
+    _title, rows = extract_chart_data("bar chart", plan)
+
+    assert rows == []
+
+
+def test_a_single_bar_is_not_a_chart() -> None:
+    """Calvin's household-energy chart shipped the lone row `Series 1, 100`,
+    and a rerun of his commute chart produced one 100% bar subtitled
+    "Illustrative distribution". Attaching a one-row spreadsheet presents a
+    model's hedge as a finding."""
+    plan = json.dumps(
+        {
+            "title": "How People Commute to Work",
+            "elements": [
+                {"kind": "number", "value": 100, "geometry": {"x": 240, "y": 282}},
+                {"kind": "text", "label": "% of workers", "geometry": {"x": 240, "y": 316}},
+            ],
+        }
+    )
+
+    _title, rows = extract_chart_data("make me a chart showing how people commute to work", plan)
+
+    assert rows == []
+
+
+def test_two_real_rows_are_still_enough() -> None:
+    """The floor must not reject genuinely small charts."""
+    _title, rows = extract_chart_data("quarterly revenue chart", _plan())
+
+    assert [(r.label, r.value) for r in rows] == [("Q1", 120.0), ("Q2", 135.0)]

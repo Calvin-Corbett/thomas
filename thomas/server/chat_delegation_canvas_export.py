@@ -104,6 +104,38 @@ def _point(element: Any) -> tuple[float, float] | None:
         return None
 
 
+_PRINTED_VALUE_RE = re.compile(r"^[$€£]?\s*(-?\d{1,3}(?:,\d{3})+|-?\d+(?:\.\d+)?)\s*%?$")
+
+
+def _printed_value(text: str) -> float | None:
+    """The number a value label prints, or None if it is not purely a number.
+
+    The WHOLE string must be the number. "68.7%" and "1,528" are values;
+    "Workers age 16+, 2022" and "Q1" are not, so a caption that merely contains
+    a year cannot become a data point.
+    """
+    match = _PRINTED_VALUE_RE.match(str(text or "").strip())
+    if not match:
+        return None
+    try:
+        return float(match.group(1).replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _text_elements(elements: list[Any]) -> list[tuple[float, float, str]]:
+    """Every positioned `text` element as (x, y, label)."""
+    out: list[tuple[float, float, str]] = []
+    for element in elements:
+        if not isinstance(element, dict) or element.get("kind") != "text":
+            continue
+        label = str(element.get("label") or "").strip()
+        point = _point(element)
+        if label and point is not None:
+            out.append((point[0], point[1], label))
+    return out
+
+
 def _reading_order(placed: list[tuple[int, float, float]]) -> list[int]:
     """Row indices in the order a reader meets them in the drawn chart.
 
@@ -149,21 +181,21 @@ def _category_names(
     under real category names) and was reverted; this stays clear of that by
     treating geometry as an index into the plan, never as data.
     """
-    texts: list[tuple[float, float, str]] = []
-    for element in elements:
-        if not isinstance(element, dict) or element.get("kind") != "text":
-            continue
-        label = str(element.get("label") or "").strip()
-        point = _point(element)
-        if label and point is not None:
-            texts.append((point[0], point[1], label))
+    texts = [t for t in _text_elements(elements) if _printed_value(t[2]) is None]
+    return _category_names_for(texts, [_point(number) for number in numbers])
+
+
+def _category_names_for(
+    texts: list[tuple[float, float, str]],
+    origins: list[tuple[float, float] | None],
+) -> dict[int, tuple[str, float, float]]:
+    """Pair each origin with the category label that belongs to it."""
     if not texts:
         return {}
 
     names: dict[int, tuple[str, float, float]] = {}
     claimed: set[int] = set()
-    for index, number in enumerate(numbers):
-        origin = _point(number)
+    for index, origin in enumerate(origins):
         if origin is None:
             continue
         # Both orientations have to work, and they hide the label in different
@@ -196,6 +228,43 @@ def _category_names(
     return names
 
 
+def _printed_rows(elements: list[Any]) -> list[ChartDatum]:
+    """Values a plan PRINTS as text rather than declaring as `number` elements.
+
+    Plans routinely write the value label as text -- "68.7%" above "Drive
+    alone" -- and declare no `number` element at all. Refusing to read those
+    left a chart of real, visible data with no data file beside it.
+
+    This is transcription, not inference: the figure returned is the figure the
+    chart displays. That is the line separating it from the reverted attempt to
+    read values out of bar geometry, where 24 pixels of height was reported as
+    the value 24.
+
+    Axis ticks print as numbers too ("1,500", "1,000", "500", "0"). They are
+    excluded for free by requiring a value to pair with a CATEGORY label: ticks
+    sit in their own column with no category beneath them, so they never pair.
+    """
+    texts = _text_elements(elements)
+    values = [(x, y, _printed_value(t)) for x, y, t in texts]
+    candidates = [(x, y, v) for x, y, v in values if v is not None]
+    labels = [(x, y, t) for (x, y, t), (_x, _y, v) in zip(texts, values) if v is None]
+    if len(candidates) < _MIN_PROMPT_ROWS or not labels:
+        return []
+
+    names = _category_names_for(labels, [(x, y) for x, y, _v in candidates])
+    rows: list[ChartDatum] = []
+    placed: list[tuple[int, float, float]] = []
+    for index, (_x, _y, value) in enumerate(candidates[:16]):
+        paired = names.get(index)
+        if paired is None:
+            continue  # an axis tick, or a stray figure in a caption
+        placed.append((len(rows), paired[1], paired[2]))
+        rows.append(ChartDatum(label=paired[0], value=float(value)))
+    if len(rows) < _MIN_PROMPT_ROWS:
+        return []
+    return [rows[i] for i in _reading_order(placed)]
+
+
 def extract_chart_data(prompt: str, plan: str) -> tuple[str, list[ChartDatum]]:
     spec = _plan_object(plan)
     title = str(spec.get("title") or "").strip() or "Thomas chart"
@@ -221,6 +290,16 @@ def extract_chart_data(prompt: str, plan: str) -> tuple[str, list[ChartDatum]]:
     # partially-paired plan is never shuffled on incomplete information.
     if len(placed) == len(rows) and len(rows) > 1:
         rows = [rows[i] for i in _reading_order(placed)]
+    if not rows:
+        rows = _printed_rows(elements)
+    if len(rows) < _MIN_PROMPT_ROWS:
+        # A chart of one bar is not a chart. When the model hedges -- Calvin's
+        # "how people commute" came back as a single 100% bar subtitled
+        # "Illustrative distribution", and his household-energy chart as the
+        # lone row `Series 1, 100` -- attaching a one-row spreadsheet dresses
+        # that hedge up as a finding. The rendered chart still ships; the data
+        # file does not.
+        rows = []
     # When the plan draws a chart with `bar` elements and no `number` elements,
     # there is no data here -- only a picture of one. This used to fall back to
     # the bars' pixel geometry and then, failing that, to a literal
