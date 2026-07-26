@@ -35,7 +35,11 @@ _REVIEW_SYSTEM = (
     "false claims of completion, confusing replies).\n"
     "2. FAILURES — tasks that failed or stalled, with the apparent root cause.\n"
     "3. FIX FIRST — the single highest-leverage fix, and the next two.\n"
-    "Be specific and honest; never invent evidence; if the window is quiet, say so briefly."
+    "Be specific and honest; never invent evidence; if the window is quiet, say so briefly.\n"
+    "Message excerpts are LENGTH-CAPPED for this review and a cut one ends with a "
+    "[+N more chars…] marker. That marker means the excerpt was shortened here, NOT that the "
+    "reply was cut off in front of the user — never report a truncated excerpt as an "
+    "incomplete or interrupted answer."
 )
 
 
@@ -72,7 +76,17 @@ def _recent_session_excerpts(store_dir: Path, cutoff: datetime) -> list[str]:
             content = msg.get("content")
             if isinstance(content, list):
                 content = " ".join(str(p.get("text", "")) for p in content if isinstance(p, dict))
-            text = " ".join(str(content or "").split())[:_MAX_MSG_CHARS]
+            # Mark the cut. Silently truncating the evidence makes the reviewer
+            # manufacture exactly the class of bug that truncation resembles: a
+            # complete 1,200-char answer about IRAs, chopped at 300, was
+            # reported as "the response terminated mid-answer" and filed as a
+            # product failure with the cut point quoted as proof. A self-review
+            # that invents defects from its own excerpting sends whoever acts on
+            # it chasing something that never happened.
+            full = " ".join(str(content or "").split())
+            text = full[:_MAX_MSG_CHARS]
+            if len(full) > _MAX_MSG_CHARS:
+                text += f" [+{len(full) - _MAX_MSG_CHARS} more chars…]"
             if role in ("user", "assistant") and text:
                 lines.append(f"{role}: {text}")
         if lines:
