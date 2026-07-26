@@ -39,6 +39,17 @@ _TERMINAL_PENDING_RE = re.compile(
     re.IGNORECASE,
 )
 _ATTACHED_DOCUMENTS_BOUNDARY_RE = re.compile(r"\n\s*\[Attached documents\]\s*\n", re.IGNORECASE)
+# A follow-up turn is threaded with a note listing what the previous run left in
+# the workspace, so the new worker can edit those files instead of asking the
+# user to re-upload them. That note NAMES files, and the requested-artifact
+# scanner read the names as a demand: "rerun the chart" was failed for a
+# "missing exact requested artifact chart-data.xlsx" that nobody had asked for
+# and that the rerun had no reason to produce. It describes what already exists,
+# which is the opposite of what must be created.
+_SEEDED_WORKSPACE_NOTE_RE = re.compile(
+    r"\n*\s*\[The workspace already contains the earlier deliverable\(s\):[^\]]*\]",
+    re.IGNORECASE,
+)
 _RECOVERABLE_READ_TOOLS = {"fs.read_file", "fs_read_file", "fs.list_dir", "fs_list_dir"}
 _OPTIONAL_ENRICHMENT_TOOLS = {"create_skill", "skills.create", "skill.create"}
 
@@ -130,8 +141,14 @@ def _hidden_completion_review_passes(
 
 
 def _explicit_request_text(prompt: str) -> str:
-    """Exclude attachment bodies from output-artifact requirement inference."""
-    text = str(prompt or "")
+    """Only the part of the prompt that can be ASKING for an output file.
+
+    Attachment bodies are excluded because they are input, and the seeded-
+    workspace note because it is inventory: it lists what a previous turn left
+    behind so the worker edits those files rather than asking for them again.
+    Reading either as a request invents requirements the user never stated.
+    """
+    text = _SEEDED_WORKSPACE_NOTE_RE.sub(" ", str(prompt or ""))
     boundary = _ATTACHED_DOCUMENTS_BOUNDARY_RE.search(text)
     return text[: boundary.start()] if boundary else text
 
