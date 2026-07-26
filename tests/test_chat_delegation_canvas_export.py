@@ -282,3 +282,120 @@ def test_a_plan_with_no_text_elements_is_unchanged() -> None:
 
     assert title == "Quarterly Revenue"
     assert [(r.label, r.value) for r in rows] == [("Q1", 120.0), ("Q2", 135.0)]
+
+
+def test_a_drawing_of_a_chart_is_not_chart_data() -> None:
+    """The defect behind Calvin's "make me a chart of the most spoken
+    languages": the plan drew eight `bar` elements and stated no values, so the
+    export fell back to the bars' pixel geometry and shipped eight rows reading
+    `Series N, 24` -- eight bars, 24 pixels each -- as verified backing data.
+    A reader cannot tell that from a real measurement."""
+    plan = json.dumps(
+        {
+            "title": "Most Spoken Languages",
+            "elements": [
+                {"kind": "bar", "geometry": {"x": 90 + i * 70, "y": 300, "w": 24, "h": 24}}
+                for i in range(8)
+            ],
+        }
+    )
+
+    _title, rows = extract_chart_data("make me a chart of the most spoken languages", plan)
+
+    assert rows == []
+
+
+def test_no_values_means_no_invented_single_row() -> None:
+    """An empty plan used to yield a literal ChartDatum("Series 1", 1.0)."""
+    _title, rows = extract_chart_data("make me a bar chart of something", "{}")
+
+    assert rows == []
+
+
+def test_export_refuses_to_write_files_it_cannot_back(tmp_path: Path) -> None:
+    """Fail the export, not silently write a PDF and spreadsheet of inventions."""
+    plan = json.dumps(
+        {"title": "Drawing only", "elements": [{"kind": "bar", "geometry": {"h": 24}}]}
+    )
+
+    with pytest.raises(ChartExportUnavailable, match="no chart values"):
+        export_static_chart(tmp_path, prompt="make me a bar chart", plan=plan)
+
+    assert not (tmp_path / "chart.pdf").exists()
+    assert not (tmp_path / "chart-data.csv").exists()
+    assert not (tmp_path / "chart-data.xlsx").exists()
+
+
+def test_a_plan_that_states_its_values_still_exports(tmp_path: Path) -> None:
+    """The refusal must be narrow: real data still ships."""
+    pytest.importorskip("reportlab")
+    files = export_static_chart(
+        tmp_path, prompt="Create a bar chart showing Q1 120 and Q2 135", plan=_plan()
+    )
+
+    assert files[:2] == ["chart.pdf", "chart-data.csv"]
+
+
+def test_rows_follow_the_chart_not_the_plan_element_order() -> None:
+    """Calvin's "most spoken languages" chart drew English first and tallest,
+    but the planner emitted that element last, so the exported table listed
+    English (1528) beneath Arabic (335). Every pair was correct and the table
+    still read as wrong."""
+    elements = [
+        {"kind": "number", "value": 1184, "geometry": {"x": 261, "y": 222}},
+        {"kind": "text", "label": "Mandarin Chinese", "geometry": {"x": 261, "y": 450}},
+        {"kind": "number", "value": 609, "geometry": {"x": 371, "y": 309}},
+        {"kind": "text", "label": "Hindi", "geometry": {"x": 371, "y": 450}},
+        {"kind": "number", "value": 335, "geometry": {"x": 591, "y": 350}},
+        {"kind": "text", "label": "Standard Arabic", "geometry": {"x": 591, "y": 450}},
+        # Drawn first in the chart, emitted last in the plan.
+        {"kind": "number", "value": 1528, "geometry": {"x": 151, "y": 171}},
+        {"kind": "text", "label": "English", "geometry": {"x": 151, "y": 450}},
+    ]
+    plan = json.dumps({"title": "Most Spoken Languages", "elements": elements})
+
+    _title, rows = extract_chart_data("chart of the most spoken languages", plan)
+
+    assert [(r.label, r.value) for r in rows] == [
+        ("English", 1528.0),
+        ("Mandarin Chinese", 1184.0),
+        ("Hindi", 609.0),
+        ("Standard Arabic", 335.0),
+    ]
+
+
+def test_a_horizontal_bar_chart_is_ordered_top_to_bottom() -> None:
+    """Orientation must not be assumed. In a horizontal bar chart the value
+    label rides sideways with the bar, so sorting on x would order the table by
+    magnitude rather than by category."""
+    elements = []
+    for i, (name, value) in enumerate(
+        [("Alpha", 90.0), ("Beta", 10.0), ("Gamma", 50.0)]
+    ):
+        y = 120 + i * 80
+        # Value label sits at the END of the bar -- its x tracks the value.
+        elements.append({"kind": "number", "value": value, "geometry": {"x": 100 + value * 4, "y": y}})
+        elements.append({"kind": "text", "label": name, "geometry": {"x": 60, "y": y + 6}})
+    plan = json.dumps({"title": "Horizontal", "elements": elements})
+
+    _title, rows = extract_chart_data("bar chart", plan)
+
+    assert [r.label for r in rows] == ["Alpha", "Beta", "Gamma"]
+
+
+def test_a_partially_paired_plan_is_not_reshuffled() -> None:
+    """Reordering on incomplete position data would be worse than plan order."""
+    plan = json.dumps(
+        {
+            "title": "Partial",
+            "elements": [
+                {"kind": "number", "label": "First", "value": 1, "geometry": {"x": 400, "y": 200}},
+                {"kind": "number", "label": "Second", "value": 2},
+                {"kind": "text", "label": "Zed", "geometry": {"x": 400, "y": 460}},
+            ],
+        }
+    )
+
+    _title, rows = extract_chart_data("bar chart", plan)
+
+    assert [r.label for r in rows] == ["First", "Second"]

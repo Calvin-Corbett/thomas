@@ -31,6 +31,10 @@ _INTERACTIVE_RE = re.compile(
 # rarely under ~40px wide, so a label further than this horizontally belongs to
 # a different bar and is not borrowed.
 _LABEL_COLUMN_TOLERANCE_PX = 60.0
+# Rows in a horizontal bar chart are far further apart than a label's own
+# height, so this only needs to absorb baseline drift between a value and the
+# category name beside it -- not to reach the next bar.
+_LABEL_ROW_TOLERANCE_PX = 24.0
 _PAIR_RE = re.compile(
     r"(?<![\w.])([A-Za-z][A-Za-z0-9_-]{0,23})\s*(?::|=|-)?\s*\$?(-?\d+(?:\.\d+)?)\s*(%)?",
     re.I,
@@ -100,7 +104,36 @@ def _point(element: Any) -> tuple[float, float] | None:
         return None
 
 
-def _category_names(elements: list[Any], numbers: list[dict[str, Any]]) -> dict[int, str]:
+def _reading_order(placed: list[tuple[int, float, float]]) -> list[int]:
+    """Row indices in the order a reader meets them in the drawn chart.
+
+    Plan-element order is NOT reading order. The planner emitted the English bar
+    last, so a correctly paired export still listed English (1528, the tallest
+    bar and the first one drawn) beneath Arabic (335) -- the numbers were right
+    and the table still read as wrong.
+
+    Which axis to sort on cannot be assumed, because the coordinate that varies
+    with the VALUE differs by chart orientation: in a column chart the value
+    label rides up and down with the bar, so y is meaningless and x is the
+    stable axis; in a horizontal bar chart it is the reverse. Sorting on the
+    wrong one silently orders the table by magnitude instead of by category.
+    So this sorts on the CATEGORY labels, and picks the axis those labels
+    actually spread along.
+    """
+    if len(placed) < 2:
+        return [index for index, _x, _y in placed]
+    xs = [x for _i, x, _y in placed]
+    ys = [y for _i, _x, y in placed]
+    spread_x = max(xs) - min(xs)
+    spread_y = max(ys) - min(ys)
+    if spread_x >= spread_y:
+        return [i for i, _x, _y in sorted(placed, key=lambda p: (p[1], p[2]))]
+    return [i for i, _x, _y in sorted(placed, key=lambda p: (p[2], p[1]))]
+
+
+def _category_names(
+    elements: list[Any], numbers: list[dict[str, Any]]
+) -> dict[int, tuple[str, float, float]]:
     """Recover each value's category name from the neighbouring axis label.
 
     In this plan format a bar chart's categories are NOT stored on the number
@@ -127,25 +160,39 @@ def _category_names(elements: list[Any], numbers: list[dict[str, Any]]) -> dict[
     if not texts:
         return {}
 
-    names: dict[int, str] = {}
+    names: dict[int, tuple[str, float, float]] = {}
     claimed: set[int] = set()
     for index, number in enumerate(numbers):
         origin = _point(number)
         if origin is None:
             continue
-        # Prefer a label sitting BELOW the value (the axis tick); fall back to
-        # the nearest label on the same column if the plan stacks them
-        # differently. Ties go to whichever is horizontally closest.
-        below = [i for i, (_x, y, _t) in enumerate(texts) if y > origin[1] and i not in claimed]
-        pool = below or [i for i in range(len(texts)) if i not in claimed]
-        if not pool:
-            continue
-        best = min(pool, key=lambda i: (abs(texts[i][0] - origin[0]), abs(texts[i][1] - origin[1])))
-        # A label three bars away is not this bar's label.
-        if abs(texts[best][0] - origin[0]) > _LABEL_COLUMN_TOLERANCE_PX:
+        # Both orientations have to work, and they hide the label in different
+        # places. A column chart puts the category tick BELOW the value, sharing
+        # its x. A horizontal bar chart puts it to the LEFT, sharing its y --
+        # and there the value label slides sideways with the bar, so the two can
+        # be hundreds of pixels apart in x and still belong together. Looking
+        # only down a column left every horizontal chart labelled "Series N".
+        best: int | None = None
+        best_cost: float | None = None
+        for i, (tx, ty, _text) in enumerate(texts):
+            if i in claimed:
+                continue
+            cost: float | None = None
+            if ty > origin[1] and abs(tx - origin[0]) <= _LABEL_COLUMN_TOLERANCE_PX:
+                cost = abs(tx - origin[0])
+            if tx < origin[0] and abs(ty - origin[1]) <= _LABEL_ROW_TOLERANCE_PX:
+                row_cost = abs(ty - origin[1])
+                cost = row_cost if cost is None else min(cost, row_cost)
+            if cost is None:
+                continue
+            if best_cost is None or cost < best_cost:
+                best, best_cost = i, cost
+        # A label three bars away is not this bar's label -- an honest
+        # placeholder beats a confidently wrong name.
+        if best is None:
             continue
         claimed.add(best)
-        names[index] = texts[best][2]
+        names[index] = (texts[best][2], texts[best][0], texts[best][1])
     return names
 
 
@@ -158,20 +205,33 @@ def extract_chart_data(prompt: str, plan: str) -> tuple[str, list[ChartDatum]]:
     elements = spec.get("elements") if isinstance(spec.get("elements"), list) else []
     numbers = [row for row in elements if isinstance(row, dict) and row.get("kind") == "number"]
     names = _category_names(elements, numbers)
+    placed: list[tuple[int, float, float]] = []
     for index, row in enumerate(numbers[:16], 1):
         try:
             value = float(row.get("value"))
         except (TypeError, ValueError):
             continue
-        label = str(row.get("label") or "").strip() or names.get(index - 1, "").strip()
+        paired = names.get(index - 1)
+        label = str(row.get("label") or "").strip() or (paired[0].strip() if paired else "")
+        if paired is not None:
+            placed.append((len(rows), paired[1], paired[2]))
         rows.append(ChartDatum(label=label or f"Series {index}", value=value))
-    if not rows:
-        bars = [row for row in elements if isinstance(row, dict) and row.get("kind") == "bar"]
-        for index, row in enumerate(bars[:16], 1):
-            geometry = row.get("geometry") if isinstance(row.get("geometry"), dict) else {}
-            value = float(geometry.get("h") or geometry.get("w") or 0)
-            rows.append(ChartDatum(label=str(row.get("label") or f"Series {index}"), value=value))
-    return title, rows or [ChartDatum(label="Series 1", value=1.0)]
+    # Emit in the order the chart is read, not the order the planner happened to
+    # emit its elements. Only reorder when every row's position is known, so a
+    # partially-paired plan is never shuffled on incomplete information.
+    if len(placed) == len(rows) and len(rows) > 1:
+        rows = [rows[i] for i in _reading_order(placed)]
+    # When the plan draws a chart with `bar` elements and no `number` elements,
+    # there is no data here -- only a picture of one. This used to fall back to
+    # the bars' pixel geometry and then, failing that, to a literal
+    # ChartDatum("Series 1", 1.0). Both are inventions, and both shipped under a
+    # "verified" badge with backing data files attached. Asking for the most
+    # spoken languages returned eight rows reading `Series N, 24` -- eight bars,
+    # 24 pixels each. A reader cannot tell that from a real measurement.
+    #
+    # No rows is the honest answer. The caller delivers the chart the user can
+    # actually see and omits the data files rather than fabricating them.
+    return title, rows
 
 
 def _clean_note(prompt: str) -> str:
@@ -402,6 +462,12 @@ def export_static_chart(work_dir: str | Path, *, prompt: str, plan: str) -> list
     root = Path(work_dir)
     root.mkdir(parents=True, exist_ok=True)
     title, rows = extract_chart_data(prompt, plan)
+    if not rows:
+        # Nothing here is measurable. Writing a PDF and a spreadsheet anyway is
+        # what produced "verified" deliverables containing invented series.
+        raise ChartExportUnavailable(
+            "the reviewed plan carries no chart values, only a drawing of them"
+        )
     kind = _chart_kind(prompt)
     csv_path = root / "chart-data.csv"
 
