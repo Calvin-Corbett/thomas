@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -176,3 +177,52 @@ def files_changed_since(
 
     after = workspace_mtimes(work_dir)
     return sorted(filename for filename, metadata in after.items() if baseline.get(filename) != metadata)[:limit]
+
+
+# A self-contained NEW build: a build verb + "a/an" + a deliverable noun. This is
+# the one case where files from earlier in the conversation are certainly
+# irrelevant, so it is the only thing that suppresses seeding.
+_FRESH_BUILD_RE = re.compile(
+    r"^\s*(?:please\s+|can you\s+|could you\s+|i(?:'?d| would)?\s+(?:like|want|need)\s+(?:you\s+to\s+)?)*"
+    r"(?:make|build|create|write|generate|design|develop|code|implement|produce|draw|render|scaffold)\s+"
+    r"(?:me\s+)?(?:a|an)\s+(?:\w+[\s-]+){0,3}"
+    r"(?:app|application|game|page|website|site|webpage|web[\s-]*app|script|tool|dashboard|form|"
+    r"component|widget|api|server|bot|landing[\s-]*page|report|document|spreadsheet|chart|graph|"
+    r"diagram|slideshow|presentation|story|poem|essay|article|cli|extension|plugin|calculator|"
+    r"timer|clock|quiz|survey|chatbot|portfolio|blog|store|shop|simulator|visuali[sz]er|tracker|"
+    r"generator|editor|viewer|player|browser|terminal|notebook|wiki|forum|gallery|map)\b",
+    re.IGNORECASE,
+)
+# "the second one", "that list" — a reference to an earlier result, which is a
+# genuine follow-up even when phrased like a fresh build.
+_LIST_REF_RE = re.compile(
+    r"^\s*(?:the\s+)?(?:first|second|third|fourth|fifth|last|next|previous|other)\b"
+    r"|^\s*(?:that|those|these|this)\s+(?:one|list|file|chart|table|item)s?\b",
+    re.IGNORECASE,
+)
+
+
+def prompt_allows_workspace_seed(prompt: str) -> bool:
+    """Whether earlier deliverables should be COPIED into this task's workspace.
+
+    Deliberately more permissive than ``prompt_needs_handoff``, because the two
+    decisions carry opposite risk. Attaching the prior conversation can make a
+    worker build the wrong thing, so that gate is strict and its docstring is
+    right that a false negative is cheap there. Copying files is not that bet:
+    a false positive leaves a few unused files in a scratch directory, while a
+    false negative means the worker cannot SEE the file it was told to edit.
+
+    Sharing the strict gate is why "change tuesday to 9 and add sat 7" failed.
+    It is plainly about the chart from one turn earlier, but it names none of
+    the pronouns the follow-up patterns look for, so nothing was copied, the
+    worker opened an empty directory, produced nothing, and the run was
+    recorded as failed(no_evidence) -- the second most common failure in the
+    logs. "can you update that to include saturday" and "change the title"
+    failed the same way.
+
+    So: copy unless the request is a self-contained NEW build.
+    """
+    text = str(prompt or "").strip()
+    if not text:
+        return False
+    return not (_FRESH_BUILD_RE.match(text) and not _LIST_REF_RE.match(text))

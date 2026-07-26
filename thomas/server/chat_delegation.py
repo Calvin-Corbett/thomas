@@ -84,6 +84,7 @@ from thomas.server.chat_delegation_worker_config import (  # noqa: F401
     _self_recovery_attempts,
 )
 from thomas.server.chat_delegation_workspace import ensure_task_workspace as _ensure_task_workspace
+from thomas.server.chat_delegation_workspace import prompt_allows_workspace_seed
 from thomas.server.chat_delegation_workspace import seed_workspace_from_previous as _seed_workspace_from_previous
 from thomas.server.issue_ledger import record_issue
 from thomas.server.model_runtime_receipt import validate_model_runtime_receipt
@@ -748,15 +749,23 @@ async def _start_agent_worker_delegation(
     # Normal deliverables run in a clean per-task workspace; self-development uses the
     # live checkout directly and is gated later on actual source-file changes.
     work_dir = root if targets_live_repo else _ensure_task_workspace(execution_id)
-    if not targets_live_repo and prompt_needs_handoff(prompt):
+    if not targets_live_repo and prompt_allows_workspace_seed(prompt):
         # Follow-ups reference the previous deliverable ("add a 6th row to it")
         # — the new worker must SEE that file, not ask the user to upload it.
         _seeded = _seed_workspace_from_previous(work_dir, session_id, exclude_execution_id=execution_id, repo_root=root)
         if _seeded:
+            # Copying is permissive; INSTRUCTING is not. "Modify those files in
+            # place" is a directive, and aiming it at a request that only might
+            # be a follow-up is how a worker ends up editing a chart when it was
+            # asked for something new. So the strict follow-up gate still
+            # decides whether the files are an order or merely available.
+            names = ", ".join(_seeded[:8])
             prompt = (
                 f"{prompt}\n\n[The workspace already contains the earlier deliverable(s): "
-                + ", ".join(_seeded[:8])
-                + ". Modify those files in place.]"
+                f"{names}. Modify those files in place.]"
+                if prompt_needs_handoff(prompt)
+                else f"{prompt}\n\n[Earlier files from this conversation are already in the workspace: "
+                f"{names}. Use or edit them only if this request refers to them.]"
             )
 
     _os_name = _platform.system() or "this"

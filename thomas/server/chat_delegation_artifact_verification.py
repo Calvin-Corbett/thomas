@@ -47,7 +47,8 @@ _ATTACHED_DOCUMENTS_BOUNDARY_RE = re.compile(r"\n\s*\[Attached documents\]\s*\n"
 # and that the rerun had no reason to produce. It describes what already exists,
 # which is the opposite of what must be created.
 _SEEDED_WORKSPACE_NOTE_RE = re.compile(
-    r"\n*\s*\[The workspace already contains the earlier deliverable\(s\):[^\]]*\]",
+    r"\n*\s*\[(?:The workspace already contains the earlier deliverable\(s\):"
+    r"|Earlier files from this conversation are already in the workspace:)[^\]]*\]",
     re.IGNORECASE,
 )
 _RECOVERABLE_READ_TOOLS = {"fs.read_file", "fs_read_file", "fs.list_dir", "fs_list_dir"}
