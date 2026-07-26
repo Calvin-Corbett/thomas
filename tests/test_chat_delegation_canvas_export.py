@@ -515,3 +515,151 @@ def test_two_real_rows_are_still_enough() -> None:
     _title, rows = extract_chart_data("quarterly revenue chart", _plan())
 
     assert [(r.label, r.value) for r in rows] == [("Q1", 120.0), ("Q2", 135.0)]
+
+
+def _donut_plan() -> str:
+    """The real shape of Calvin's household-energy chart: a donut whose centre
+    holds only the TOTAL, with the categories in a legend beside the ring."""
+    elements = [
+        {"kind": "text", "label": "U.S. Household Energy Use by Source, 2026",
+         "geometry": {"x": 56, "y": 64}},
+        {"kind": "text", "label": "Projected residential delivered energy - approximate quadrillion Btu",
+         "geometry": {"x": 56, "y": 94}},
+        {"kind": "text",
+         "label": "Approx. U.S. 2026 projection based on EIA Annual Energy Outlook 2023 residential sector data.",
+         "geometry": {"x": 56, "y": 474}},
+        {"kind": "number", "value": 10.7, "geometry": {"x": 252, "y": 282}},
+        {"kind": "text", "label": "QUADRILLION BTU", "geometry": {"x": 252, "y": 308}},
+        {"kind": "text", "label": "Electricity  5.2 • 48.6%", "geometry": {"x": 478, "y": 225}},
+        {"kind": "text", "label": "Natural gas  4.3 • 40.2%", "geometry": {"x": 478, "y": 281}},
+        {"kind": "text", "label": "Petroleum  0.8 • 7.5%", "geometry": {"x": 478, "y": 337}},
+        {"kind": "text", "label": "Renewables  0.4 • 3.7%", "geometry": {"x": 478, "y": 393}},
+    ]
+    return json.dumps({"title": "U.S. Household Energy Use by Source, 2026", "elements": elements})
+
+
+def test_a_donut_legend_is_read_as_the_breakdown() -> None:
+    """The centre number is the TOTAL, not a category, so the number path finds
+    exactly one row and correctly rejects it -- and the real breakdown, sitting
+    in the legend, was never exported at all."""
+    _title, rows = extract_chart_data("chart household energy use by source", _donut_plan())
+
+    assert [(r.label, r.value) for r in rows] == [
+        ("Electricity", 5.2),
+        ("Natural gas", 4.3),
+        ("Petroleum", 0.8),
+        ("Renewables", 0.4),
+    ]
+
+
+def test_the_donut_total_is_not_exported_as_a_category() -> None:
+    """10.7 quadrillion Btu is the sum, not a slice."""
+    _title, rows = extract_chart_data("chart household energy use", _donut_plan())
+
+    assert all(r.value != 10.7 for r in rows)
+    assert all("QUADRILLION" not in r.label.upper() for r in rows)
+
+
+def test_a_source_sentence_containing_years_is_not_a_legend_row() -> None:
+    """The caption names 2026 and 2023. It is excluded because it does not end
+    with its figure and does not share a column with other entries."""
+    _title, rows = extract_chart_data("chart household energy use", _donut_plan())
+
+    assert all("EIA" not in r.label for r in rows)
+    assert all(r.value not in (2026.0, 2023.0) for r in rows)
+
+
+def test_one_legend_line_alone_is_not_a_legend() -> None:
+    """A single "Name 12" string somewhere on a poster is not a breakdown."""
+    plan = json.dumps(
+        {
+            "title": "Poster",
+            "elements": [
+                {"kind": "text", "label": "Revenue 12", "geometry": {"x": 400, "y": 200}},
+                {"kind": "text", "label": "A heading", "geometry": {"x": 60, "y": 60}},
+            ],
+        }
+    )
+
+    _title, rows = extract_chart_data("bar chart", plan)
+
+    assert rows == []
+
+
+def test_the_planner_declared_series_is_authoritative() -> None:
+    """The rest of this module reverse-engineers numbers out of the drawing,
+    and every chart shape needs its own rule. A stated series needs none."""
+    plan = json.dumps(
+        {
+            "title": "U.S. Household Energy Use by Source, 2026",
+            "elements": [
+                {"kind": "number", "value": 11, "geometry": {"x": 252, "y": 282}},
+                {"kind": "text", "label": "quadrillion Btu", "geometry": {"x": 252, "y": 308}},
+                {"kind": "text", "label": "Electricity", "geometry": {"x": 478, "y": 225}},
+                {"kind": "text", "label": "5.1 quads - 46%", "geometry": {"x": 478, "y": 245}},
+            ],
+            "data": [
+                {"label": "Electricity", "value": 5.1},
+                {"label": "Natural gas", "value": 4.4},
+                {"label": "Petroleum", "value": 0.8},
+                {"label": "Renewables", "value": 0.7},
+            ],
+        }
+    )
+
+    title, rows = extract_chart_data("chart household energy use by source in 2026", plan)
+
+    assert title == "U.S. Household Energy Use by Source, 2026"
+    assert [(r.label, r.value) for r in rows] == [
+        ("Electricity", 5.1),
+        ("Natural gas", 4.4),
+        ("Petroleum", 0.8),
+        ("Renewables", 0.7),
+    ]
+
+
+def test_a_declared_series_tolerates_a_stringified_value() -> None:
+    """Models write "48%" where a number was asked for."""
+    plan = json.dumps(
+        {
+            "title": "Shares",
+            "data": [{"label": "Yes", "value": "48%"}, {"label": "No", "value": "52%"}],
+        }
+    )
+
+    _title, rows = extract_chart_data("pie chart", plan)
+
+    assert [(r.label, r.value) for r in rows] == [("Yes", 48.0), ("No", 52.0)]
+
+
+def test_a_malformed_data_block_falls_back_instead_of_failing() -> None:
+    """An unusable `data` block must not cost the drawing-derived series."""
+    elements = []
+    for i, (name, score) in enumerate([("Cavendish", 9.2), ("Gros Michel", 9.0)]):
+        x = 120 + i * 180
+        elements.append({"kind": "number", "value": score, "geometry": {"x": x, "y": 280}})
+        elements.append({"kind": "text", "label": name, "geometry": {"x": x, "y": 460}})
+    plan = json.dumps({"title": "Bananas", "elements": elements, "data": "not a list"})
+
+    _title, rows = extract_chart_data("chart the best bananas", plan)
+
+    assert [(r.label, r.value) for r in rows] == [("Cavendish", 9.2), ("Gros Michel", 9.0)]
+
+
+def test_a_declared_series_of_one_is_still_not_a_chart() -> None:
+    plan = json.dumps({"title": "Lonely", "data": [{"label": "Total", "value": 100}]})
+
+    _title, rows = extract_chart_data("bar chart", plan)
+
+    assert rows == []
+
+
+def test_user_supplied_numbers_still_outrank_the_declared_series() -> None:
+    """Numbers the user typed remain the numbers they want charted."""
+    plan = json.dumps(
+        {"title": "T", "data": [{"label": "X", "value": 1}, {"label": "Y", "value": 2}]}
+    )
+
+    _title, rows = extract_chart_data("bar chart Alpha 3, Beta 7, Gamma 5", plan)
+
+    assert [(r.label, r.value) for r in rows] == [("Alpha", 3.0), ("Beta", 7.0), ("Gamma", 5.0)]

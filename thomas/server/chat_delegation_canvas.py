@@ -691,8 +691,26 @@ _PLAN_SYSTEM = (
     '     "ease":"ease-out|overshoot|cubic-bezier(...)","dur_ms":<int>}\n'
     "  ],\n"
     '  "sequence": {"order":["id", "..."],"stagger_ms":<int 50-90>,\n'
-    '               "stagger_from":"first|center|last","total_ms":<int ~1300>,"hero":"<primary id>"}\n'
+    '               "stagger_from":"first|center|last","total_ms":<int ~1300>,"hero":"<primary id>"},\n'
+    '  "data": [{"label":"<category>","value":<number>}, ...]   // charts only — see DATA\n'
     "}\n"
+    "\n"
+    # Everything downstream used to reverse-engineer the series back out of the
+    # DRAWING -- pairing value labels to axis labels by pixel coordinates. That
+    # works until the next plan draws the same chart differently: bar+number,
+    # bar+text, donut with "Electricity 5.2 - 48.6%" as one legend string, donut
+    # with the name and the figure as two separate elements. Each shape needed
+    # its own rule and the one after it broke again, and when a rule missed, the
+    # user got a chart with no data file. The planner already knows the exact
+    # series -- it just was never asked to write it down.
+    "DATA — if the visual is a chart (bars, columns, pie, donut, line, area, scatter), you MUST "
+    'also emit the top-level "data" array: one {"label","value"} per category, the SAME numbers '
+    "you drew, in the order they read in the chart. Labels are the category names a person would "
+    "say out loud (Electricity, Drive alone, Cavendish) — never Series 1. Values are plain "
+    "numbers: no % sign, no units, no thousands separators (write 5.2 and 1528, not 5.2 quads and "
+    '1,528). Put the unit in the subtitle instead. Omit "data" only for non-charts (diagrams, UI '
+    "mockups, illustrations). This is what the reader downloads as a spreadsheet, so it must match "
+    "the picture exactly.\n"
     "\n"
     "GEOMETRY — a code renderer draws these, so give EXACT pixel numbers in the 720x520 stage, "
     "top-left origin. Per kind:\n"
@@ -736,6 +754,18 @@ _PLAN_SYSTEM = (
     "\n"
     "RULES:\n"
     "- Real numbers and real hex colors only — never placeholders or prose in geometry.\n"
+    # Without this the model hedges on anything factual: "how people commute to
+    # work" came back as ONE bar reading 100%, captioned "Illustrative
+    # distribution". That is the shape of a chart with none of the information,
+    # and it is what makes Thomas feel useless to someone who just wanted to
+    # know how people get to work.
+    "- CHART THE ACTUAL FIGURES. If the request names something real — a country, a market, a "
+    "language, a species, a survey, a year — give the real breakdown as best you know it, with "
+    "a small caption naming where the figures come from. NEVER invent a stand-in distribution, "
+    "never caption a visual illustrative / sample / example / dummy / representative, and never "
+    "collapse a real breakdown into a single 100% bar. If your numbers are approximate, still "
+    "give the real breakdown and say approximate in the caption: an honest estimate of the real "
+    "thing is useful, a made-up shape is not. A chart needs at least 2 categories to be a chart.\n"
     "- The CASCADE comes from sequence.stagger_ms across sequence.order. Pick motion from the "
     "CONTENT, never a chart category: a diagram arrow and a line series are both draw-stroke; a KPI "
     "and a chart total are both count-up. Background settles first; the hero animates last.\n"

@@ -228,6 +228,63 @@ def _category_names_for(
     return names
 
 
+_LEGEND_ROW_RE = re.compile(
+    r"^(?P<name>[^\d•·|][^•·|]*?)"          # a category name, not starting with a digit
+    r"\s{1,}(?P<value>-?\d{1,3}(?:,\d{3})*(?:\.\d+)?)"  # its value
+    r"\s*%?"                                 # which may itself be a percentage
+    r"(?:\s*[•·|,–-]\s*-?[\d.,]+\s*%?)?$"   # and may be followed by a share
+)
+# Legend entries sit in one column; this is the drift allowed within it.
+_LEGEND_COLUMN_TOLERANCE_PX = 14.0
+
+
+def _legend_rows(elements: list[Any]) -> list[ChartDatum]:
+    """Rows from a legend that prints "Electricity  5.2 • 48.6%" as one string.
+
+    A donut or pie states its categories in a legend beside the ring, with the
+    name and the figure in a single text element, and puts only the TOTAL in the
+    middle as a number. Reading number elements alone therefore found one row
+    (the total, correctly rejected as "a chart of one") and the real breakdown
+    was never exported at all.
+
+    Two guards keep a caption from becoming data: the string must END with its
+    figure, and at least two such strings must share one column -- a legend is
+    a column, a stray sentence is not. So "…EIA Annual Energy Outlook 2023
+    residential sector data." is skipped despite containing years.
+    """
+    candidates: list[tuple[float, float, str, float]] = []
+    for x, y, text in _text_elements(elements):
+        match = _LEGEND_ROW_RE.match(text)
+        if not match:
+            continue
+        name = match.group("name").strip(" \t:-–—")
+        if not name or not any(ch.isalpha() for ch in name):
+            continue
+        try:
+            value = float(match.group("value").replace(",", ""))
+        except ValueError:
+            continue
+        candidates.append((x, y, name, value))
+
+    columns: dict[int, list[tuple[float, float, str, float]]] = {}
+    for entry in candidates:
+        key = int(entry[0] // _LEGEND_COLUMN_TOLERANCE_PX)
+        columns.setdefault(key, []).append(entry)
+        if key:  # tolerate an entry straddling a bucket boundary
+            columns.setdefault(key - 1, []).append(entry)
+    best = max(columns.values(), key=len, default=[])
+    if len(best) < _MIN_PROMPT_ROWS:
+        return []
+    seen: set[tuple[float, float]] = set()
+    unique = []
+    for x, y, name, value in sorted(best, key=lambda e: (e[1], e[0])):
+        if (x, y) in seen:
+            continue
+        seen.add((x, y))
+        unique.append(ChartDatum(label=name, value=value))
+    return unique[:16]
+
+
 def _printed_rows(elements: list[Any]) -> list[ChartDatum]:
     """Values a plan PRINTS as text rather than declaring as `number` elements.
 
@@ -265,12 +322,47 @@ def _printed_rows(elements: list[Any]) -> list[ChartDatum]:
     return [rows[i] for i in _reading_order(placed)]
 
 
+def _declared_rows(spec: dict[str, Any]) -> list[ChartDatum]:
+    """The series the planner stated outright, in its own `data` block.
+
+    Preferred over every other path here, because the rest of this module
+    reverse-engineers the numbers back out of the DRAWING -- pairing value
+    labels to axis labels by pixel coordinates. That works until the next plan
+    draws the same chart differently (bar+number, bar+text, a donut legend as
+    one string, a donut legend as two elements), and each new shape needs its
+    own rule while the previous one quietly stops matching. Asked directly, the
+    planner just writes the series down.
+    """
+    declared = spec.get("data")
+    if not isinstance(declared, list):
+        return []
+    rows: list[ChartDatum] = []
+    for entry in declared[:16]:
+        if not isinstance(entry, dict):
+            continue
+        label = str(entry.get("label") or "").strip()
+        raw = entry.get("value")
+        if isinstance(raw, str):
+            raw = _printed_value(raw)  # tolerate "5.2" or "48%" slipping through
+        try:
+            value = float(raw)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            continue
+        if not label or math.isnan(value) or math.isinf(value):
+            continue
+        rows.append(ChartDatum(label=label, value=value))
+    return rows if len(rows) >= _MIN_PROMPT_ROWS else []
+
+
 def extract_chart_data(prompt: str, plan: str) -> tuple[str, list[ChartDatum]]:
     spec = _plan_object(plan)
     title = str(spec.get("title") or "").strip() or "Thomas chart"
     rows = _prompt_data(prompt)
     if rows:
         return title, rows
+    declared = _declared_rows(spec)
+    if declared:
+        return title, declared
     elements = spec.get("elements") if isinstance(spec.get("elements"), list) else []
     numbers = [row for row in elements if isinstance(row, dict) and row.get("kind") == "number"]
     names = _category_names(elements, numbers)
@@ -292,6 +384,10 @@ def extract_chart_data(prompt: str, plan: str) -> tuple[str, list[ChartDatum]]:
         rows = [rows[i] for i in _reading_order(placed)]
     if not rows:
         rows = _printed_rows(elements)
+    if len(rows) < _MIN_PROMPT_ROWS:
+        # A donut puts only its TOTAL in the middle and its categories in a
+        # legend beside the ring, so the number path finds exactly one row.
+        rows = _legend_rows(elements) or rows
     if len(rows) < _MIN_PROMPT_ROWS:
         # A chart of one bar is not a chart. When the model hedges -- Calvin's
         # "how people commute" came back as a single 100% bar subtitled
