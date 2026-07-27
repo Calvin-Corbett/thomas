@@ -14,11 +14,7 @@ from typing import Any
 from thomas.core.autonomy import autonomy_level_name
 from thomas.core.events import EventType
 from thomas.observability.journal import TaskJournal, journal_skip_reason
-from thomas.observability.task_ledger import (
-    classify_completion_state,
-    derive_active_goal,
-    extract_missing_inputs,
-)
+from thomas.observability.task_ledger import derive_active_goal
 from thomas.server.model_runtime_receipt import model_runtime_receipt
 from thomas.server.routes.vibe_trace import (
     build_vibe_trace_event,
@@ -415,7 +411,7 @@ async def stream_agent_events(
             deps.task_ledger_update(
                 sid,
                 status="blocked",
-                missing_inputs=extract_missing_inputs(err),
+                missing_inputs=[],
                 last_progress=err,
                 source="chat.error",
                 force_event=True,
@@ -451,7 +447,7 @@ async def stream_agent_events(
                 deps.task_ledger_update(
                     sid,
                     status="blocked",
-                    missing_inputs=extract_missing_inputs(end_msg),
+                    missing_inputs=[],
                     last_progress=end_msg,
                     source="chat.end",
                     force_event=True,
@@ -580,15 +576,11 @@ async def stream_agent_events(
             except Exception:
                 pass
 
-        ledger_status, ledger_missing_inputs, ledger_progress = classify_completion_state(
-            assistant_text=assistant_text,
-            token_report=token_report,
-        )
         deps.task_ledger_update(
             sid,
-            status=ledger_status,
-            missing_inputs=ledger_missing_inputs,
-            last_progress=ledger_progress or "Turn completed.",
+            status="complete",
+            missing_inputs=[],
+            last_progress=" ".join(assistant_text.split())[:1200] or "Turn completed.",
             source="chat.done",
             force_event=True,
         )

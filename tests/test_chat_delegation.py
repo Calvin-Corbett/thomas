@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from thomas.server import chat_delegation, chat_delegation_runner, chat_delegation_worker_config
+from thomas.server import chat_delegation, chat_delegation_runner
 
 
 class _BotStub:
@@ -59,17 +59,27 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
             chat_delegation_runner._WORKER_FIRST_EVENT_TIMEOUT_S,
         )
 
-    async def test_max_mode_skips_exploratory_conversation(self):
+    async def test_structured_dispatch_runs_even_when_prompt_is_conversational(self):
         emit_event = AsyncMock()
-        result = await chat_delegation.start_background_delegation(
-            {},
-            session_id="sess-chat",
-            prompt="let's think through this and plan how it should work",
-            mode="max",
-            recent_messages=[],
-            emit_event=emit_event,
-        )
-        self.assertIsNone(result)
+        expected = {"execution_id": "exec-chat"}
+        with (
+            patch("thomas.server.chat_delegation.pick_bot_for_specialist", return_value=_BotStub()),
+            patch(
+                "thomas.server.chat_delegation._start_agent_worker_delegation",
+                new=AsyncMock(return_value=expected),
+            ) as start_worker,
+        ):
+            result = await chat_delegation.start_background_delegation(
+                {},
+                session_id="sess-chat",
+                prompt="let's think through this and plan how it should work",
+                mode="max",
+                recent_messages=[],
+                emit_event=emit_event,
+            )
+
+        self.assertEqual(result, expected)
+        start_worker.assert_awaited_once()
         emit_event.assert_not_awaited()
 
     async def test_auto_reply_first_force_can_dispatch(self):
@@ -155,6 +165,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 emit_event=emit_event,
                 model_id="gpt-5.6-terra",
                 reasoning_effort="high",
+                specialist_id="coding",
             )
 
         self.assertEqual(result, expected)
@@ -162,80 +173,27 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
         self.assertIn("switched the task to Task Manager", fallback.await_args.kwargs["fallback_reason"])
         emit_event.assert_not_awaited()
 
-    async def test_forced_multi_agent_prompt_fans_out_multiple_distinct_bots(self):
+    async def test_prompt_wording_does_not_create_implicit_fanout(self):
         emit_event = AsyncMock()
-        bot_stubs = [
-            type(
-                "BotStub",
-                (),
-                {
-                    "id": "nova",
-                    "name": "Nova",
-                    "to_event_dict": lambda self: {"bot_id": "nova", "bot_name": "Nova"},
-                },
-            )(),
-            type(
-                "BotStub",
-                (),
-                {
-                    "id": "zach",
-                    "name": "Zach",
-                    "to_event_dict": lambda self: {"bot_id": "zach", "bot_name": "Zach"},
-                },
-            )(),
-            type(
-                "BotStub",
-                (),
-                {
-                    "id": "trey",
-                    "name": "Trey",
-                    "to_event_dict": lambda self: {"bot_id": "trey", "bot_name": "Trey"},
-                },
-            )(),
-        ]
-        records = [
-            {
-                "execution_id": "exec-1",
-                "task_id": "task-1",
-                "session_id": "sess-multi",
-                "backend_type": "task_manager",
-                "state": "queued",
-                "summary": "helper one",
-                "last_progress": "Queued for background execution.",
-                "bot_id": "nova",
-                "bot_name": "Nova",
-            },
-            {
-                "execution_id": "exec-2",
-                "task_id": "task-2",
-                "session_id": "sess-multi",
-                "backend_type": "task_manager",
-                "state": "queued",
-                "summary": "helper two",
-                "last_progress": "Queued for background execution.",
-                "bot_id": "zach",
-                "bot_name": "Zach",
-            },
-            {
-                "execution_id": "exec-3",
-                "task_id": "task-3",
-                "session_id": "sess-multi",
-                "backend_type": "task_manager",
-                "state": "queued",
-                "summary": "helper three",
-                "last_progress": "Queued for background execution.",
-                "bot_id": "trey",
-                "bot_name": "Trey",
-            },
-        ]
+        record = {
+            "execution_id": "exec-1",
+            "task_id": "task-1",
+            "session_id": "sess-multi",
+            "backend_type": "task_manager",
+            "state": "queued",
+            "summary": "Spawn exactly three real sub-agents now and keep the response short.",
+            "last_progress": "Queued for background execution.",
+            "bot_id": "nova",
+            "bot_name": "Nova",
+        }
         with (
             patch(
                 "thomas.server.chat_delegation.pick_bot_for_specialist",
-                side_effect=bot_stubs,
+                return_value=_BotStub(),
             ) as pick_bot,
             patch(
                 "thomas.server.chat_delegation._start_agent_worker_delegation",
-                new=AsyncMock(side_effect=records),
+                new=AsyncMock(return_value=record),
             ) as start_task,
         ):
             result = await chat_delegation.start_background_delegation(
@@ -248,15 +206,13 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 force=True,
             )
 
-        self.assertEqual(result, records)
-        self.assertEqual(start_task.await_count, 3)
-        self.assertEqual(pick_bot.call_count, 3)
-        exclude_sets = [set(call.kwargs.get("exclude") or set()) for call in pick_bot.call_args_list]
-        self.assertEqual(exclude_sets[0], set())
-        self.assertEqual(exclude_sets[1], {"nova"})
-        self.assertEqual(exclude_sets[2], {"nova", "zach"})
-        helper_prompts = [call.kwargs["prompt"] for call in start_task.await_args_list]
-        self.assertTrue(all("[Helper assignment]" in prompt for prompt in helper_prompts))
+        self.assertEqual(result, record)
+        start_task.assert_awaited_once()
+        pick_bot.assert_called_once_with("reasoning")
+        self.assertEqual(
+            start_task.await_args.kwargs["prompt"],
+            "Spawn exactly three real sub-agents now and keep the response short.",
+        )
         emit_event.assert_not_awaited()
 
     def test_normalize_record_populates_bot_name(self):
@@ -311,273 +267,18 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(record["artifacts"], [])
         self.assertEqual(record["artifact_url"], "")
 
-    def test_requested_delegate_count_parses_multi_agent_prompt(self):
-        self.assertEqual(
-            chat_delegation._requested_delegate_count("Spawn exactly three real sub-agents now."),
-            3,
-        )
-        self.assertEqual(chat_delegation._requested_delegate_count("launch a couple helpers"), 2)
-        self.assertEqual(chat_delegation._requested_delegate_count("just do the task"), 1)
-
-    def test_artifact_write_intent_requires_an_explicit_creation_request(self):
-        direct_requests = (
-            "Okay, make me a web app.",
-            "Create report.pdf.",
-            "Edit report.pdf.",
-            "Update the web app.",
-            "Fix the generated game.js.",
-            "Recreate report.pdf.",
-            "Build a playable browser game.",
-            "Write a detailed quarterly sales performance report.",
-            "Render a graph.",
-            "Analyze these sales figures, then create a report.pdf.",
-            "Use the attached requirements to build a website.",
-            "Implement a Python CLI.",
-            "I need a web app built.",
-            "Help me create a PDF report.",
-            "Could I get a spreadsheet?",
-            "Create a PDF and post it here in chat.",
-            "I need a PDF report with an analysis of quarterly revenue.",
-            "Create report.pdf. Do not create a file other than report.pdf.",
-            "First analyze these figures, then create report.pdf.",
-            "Build a REST API.",
-            "Please have report.pdf generated from these figures.",
-            "Analyze these figures and create report.pdf.",
-            "Do not create a file except report.pdf; create that report.",
-            "Design a website.",
-            "Review the requirements. Then create a report.pdf.",
-            "Don't create any files except report.md.",
-            "Code a small web app.",
-            "I'd like a spreadsheet.",
-            "Could you have a PDF report generated?",
-            "Analyze the numbers. After that, create report.pdf.",
-            "Only create report.md.",
-            "Don't write anything except report.md.",
-            "Please create an analysis of quarterly revenue in report.pdf.",
-        )
-        answer_only_requests = (
-            "Explain how to create a PDF.",
-            "How do I create a PDF?",
-            "Analyze whether we should build a web app.",
-            "Read report.pdf and summarize it.",
-            "Do not create files; answer in chat.",
-            "Recommend a web-app framework.",
-            "Create an explanation of how to build a web app.",
-            "I need an analysis of a web app.",
-            "Write a report here in chat; do not create a file.",
-            "Generate a chart directly in the answer, not as a file.",
-            "Create no files; just write a report in chat.",
-            "Write a detailed quarterly sales report here in chat.",
-            "Give me a report directly in the chat.",
-            "Write a report in this chat.",
-            "Create a chart in the response.",
-            "Produce a report as text in your reply.",
-            "Write recommendations for a website.",
-            "Draft a comparison of API styles.",
-            "Could you write a report right here in chat?",
-        )
-
-        for prompt in direct_requests:
-            with self.subTest(prompt=prompt):
-                self.assertTrue(chat_delegation_worker_config._prompt_requires_artifact_write(prompt))
-        for prompt in answer_only_requests:
-            with self.subTest(prompt=prompt):
-                self.assertFalse(chat_delegation_worker_config._prompt_requires_artifact_write(prompt))
-
-    def test_requested_delegate_items_parse_distinct_numbered_outputs_only(self):
-        prompt = (
-            "Create these three separate deliverables:\n"
-            "1. A playable Trey game\n"
-            "2. A printable Trey chart\n"
-            "3. Trey's banana bread recipe as Markdown"
-        )
-        self.assertEqual(
-            chat_delegation._requested_delegate_items(prompt),
-            [
-                "A playable Trey game",
-                "A printable Trey chart",
-                "Trey's banana bread recipe as Markdown",
-            ],
-        )
-        self.assertEqual(
-            chat_delegation._requested_delegate_items("Follow these steps:\n1. Mix\n2. Bake"),
-            [],
-        )
-        self.assertEqual(
-            chat_delegation._requested_delegate_items(
-                "Create two separate outputs:\n1. one.md\n2. two.md\nKeep each separate."
-            ),
-            ["one.md", "two.md"],
-        )
-        self.assertEqual(
-            chat_delegation._requested_delegate_items(
-                "Review these tasks, but do not execute them:\n1. Email my boss\n2. Delete the draft"
-            ),
-            [],
-        )
-        self.assertEqual(
-            chat_delegation._requested_delegate_items(
-                "List these two deliverables, but don't do them:\n1. Email my boss\n2. Delete the draft"
-            ),
-            [],
-        )
-        for discussion_only in (
-            "Here are two separate outputs for discussion:\n1. Email my boss\n2. Delete the draft",
-            "These are separate deliverables I am considering:\n1. Email my boss\n2. Delete the draft",
-            "What do these two separate tasks mean?\n1. Email my boss\n2. Delete the draft",
-            "Before I create anything, review these two separate deliverables:\n1. Email my boss\n2. Delete the draft",
-            "Should I create these two separate deliverables? Explain first:\n1. Email my boss\n2. Delete the draft",
-            "I need these two separate deliverables reviewed, not produced:\n1. Email my boss\n2. Delete the draft",
-            "Create these two separate outputs only after I approve them:\n1. alpha.md\n2. beta.md",
-            "I want these two separate outputs listed only, not created:\n1. alpha.md\n2. beta.md",
-            "Create a cake using these steps:\n1. Mix the dry ingredients separately\n2. Bake",
-            "Create a cake with separate steps:\n1. Mix\n2. Bake",
-            "Create one output using these separate steps:\n1. Install dependencies\n2. Run tests",
-            "Create one final output with these deliverables:\n1. Mix batter\n2. Bake cake",
-            "Create a single combined output with these deliverables:\n1. Mix batter\n2. Bake cake",
-            "Create one final downloadable output with these deliverables:\n1. report.md\n2. chart.html",
-            "Create exactly one polished output from these deliverables:\n1. report.md\n2. chart.html",
-            "Create one consolidated report with these separate deliverables:\n1. Intro\n2. Summary",
-            "Create a report with these deliverables:\n1. Intro\n2. Summary",
-            "Create a document containing these separate outputs:\n1. Intro\n2. Summary",
-            "Create a unified report with these deliverables:\n1. Intro\n2. Summary",
-            "Create a cohesive final report with these deliverables:\n1. Intro\n2. Summary",
-            "Create a package with these deliverables:\n1. report.md\n2. chart.html",
-            "Create one zip archive containing these deliverables:\n1. report.md\n2. chart.html",
-            "Create one dashboard with these outputs:\n1. Revenue panel\n2. Expense panel",
-            "Create a single workbook containing these deliverables:\n1. Revenue tab\n2. Expense tab",
-            "Create one PowerPoint deck with these outputs:\n1. Intro slide\n2. Summary slide",
-            "Create these two separate outputs if I approve them later:\n1. report.md\n2. chart.html",
-            "Create these two separate outputs once I approve them:\n1. report.md\n2. chart.html",
-            "Create these two separate outputs after I approve them:\n1. report.md\n2. chart.html",
-            "Create these two separate outputs when I approve them:\n1. report.md\n2. chart.html",
-            "Create these two separate outputs pending my approval:\n1. report.md\n2. chart.html",
-            "Create these separate outputs:\n1. Title\n2. Sections\nCombine them into one final report.",
-            "Create these separate outputs:\n1. First gather data\n2. Then write the final report",
-            "Create these separate outputs:\n1. Draft report only after I approve\n2. Draft chart only after I approve",
-            "Create these separate outputs:\n1. Overview\n2. Appendix\nPut both into one final handbook.",
-        ):
-            self.assertEqual(chat_delegation._requested_delegate_items(discussion_only), [], discussion_only)
-        for executable in (
-            "I need these two separate deliverables:\n1. alpha.md\n2. beta.md",
-            "Please give me these two outputs:\n1. alpha.md\n2. beta.md",
-            "Could you create these two separate deliverables:\n1. alpha.md\n2. beta.md",
-            "Create and then review these two outputs:\n1. alpha.md\n2. beta.md",
-            "Create these two deliverables and review each before presenting:\n1. alpha.md\n2. beta.md",
-            "Create each of these deliverables separately:\n1. alpha.md\n2. beta.md",
-            "Produce each of these as a separate output now:\n1. metrics.json\n2. dashboard.svg",
-            "Create a final report and a chart as separate deliverables:\n1. Final report\n2. Chart",
-            "Create one report and one chart as separate deliverables:\n1. Report\n2. Chart",
-            "Create a complete document and a game as separate outputs:\n1. Document\n2. Game",
-            "Create a PDF and a chart as separate deliverables:\n1. PDF\n2. Chart",
-        ):
-            expected = [
-                re.sub(r"^\s*\d+[.)]\s*", "", line).strip()
-                for line in executable.splitlines()
-                if re.match(r"^\s*\d+[.)]\s*", line)
-            ]
-            self.assertEqual(chat_delegation._requested_delegate_items(executable), expected)
-        self.assertEqual(
-            chat_delegation._requested_delegate_items(
-                "Create these two separate deliverables:\n"
-                "1. A report that should analyze Q1 only\n"
-                "2. A draft email; do not send it"
-            ),
-            ["A report that should analyze Q1 only", "A draft email; do not send it"],
-        )
-        self.assertEqual(
-            chat_delegation._requested_delegate_items(
-                "Create three separate deliverables using these exact filenames:\n"
-                "- trey-game.html\n"
-                "- trey-chart.pdf\n"
-                "- banana-bread.md"
-            ),
-            ["trey-game.html", "trey-chart.pdf", "banana-bread.md"],
-        )
-        self.assertEqual(
-            chat_delegation._requested_delegate_items("I need two separate outputs:\n* analysis.csv\n* summary.pdf"),
-            ["analysis.csv", "summary.pdf"],
-        )
-        self.assertEqual(
-            chat_delegation._requested_delegate_items(
-                "Deploy the app as one run with these sequential steps:\n"
-                "- Install dependencies\n"
-                "- Build the release\n"
-                "- Deploy production"
-            ),
-            [],
-        )
-        for combined in (
-            "Create one dashboard containing these three outputs:\n- Revenue\n- Costs\n- Margin",
-            "Create a single workbook containing these three outputs:\n- Revenue\n- Costs\n- Margin",
-            "Create one PowerPoint deck containing these three outputs:\n- Intro\n- Analysis\n- Close",
-            "Create one zip archive containing these three deliverables:\n- report.md\n- data.csv\n- chart.html",
-        ):
-            self.assertEqual(chat_delegation._requested_delegate_items(combined), [], combined)
-
-    async def test_numbered_deliverables_fan_out_one_to_one(self):
+    async def test_model_declared_canvas_is_honored_without_prompt_reclassification(self):
         emit_event = AsyncMock()
-        bots = [
-            type(
-                "BotStub",
-                (),
-                {
-                    "id": f"bot-{index}",
-                    "name": f"Bot {index}",
-                    "to_event_dict": lambda self: {"bot_id": self.id, "bot_name": self.name},
-                },
-            )()
-            for index in range(1, 4)
-        ]
-        records = [{"execution_id": f"exec-{index}"} for index in range(1, 4)]
-        prompt = (
-            "Create these three separate deliverables:\n"
-            "1. A playable Trey game\n"
-            "2. A printable Trey chart\n"
-            "3. Trey's banana bread recipe"
-        )
-        with (
-            patch("thomas.server.chat_delegation.pick_bot_for_specialist", side_effect=bots),
-            patch(
-                "thomas.server.chat_delegation._start_agent_worker_delegation",
-                new=AsyncMock(side_effect=records),
-            ) as start_task,
-        ):
-            result = await chat_delegation.start_background_delegation(
-                {},
-                session_id="sess-items",
-                prompt=prompt,
-                mode="auto",
-                recent_messages=[],
-                emit_event=emit_event,
-                force=True,
-                surface="canvas",
-            )
-
-        self.assertEqual(result, records)
-        self.assertEqual(start_task.await_count, 3)
-        self.assertTrue(all(call.kwargs["group_expected_count"] == 3 for call in start_task.await_args_list))
-        assigned = [call.kwargs["prompt"] for call in start_task.await_args_list]
-        items = chat_delegation._requested_delegate_items(prompt)
-        for item, helper_prompt in zip(items, assigned, strict=True):
-            self.assertIn(f"Your only assigned deliverable is: {item}", helper_prompt)
-            self.assertIn("only this item", helper_prompt)
-            for other in items:
-                if other != item:
-                    self.assertNotIn(other, helper_prompt)
-
-    async def test_model_declared_canvas_is_rejected_for_ordinary_chat(self):
-        emit_event = AsyncMock()
-        ordinary_record = {"execution_id": "exec-ordinary"}
+        canvas_record = {"execution_id": "exec-canvas"}
         with (
             patch("thomas.server.chat_delegation.pick_bot_for_specialist", return_value=_BotStub()),
             patch(
                 "thomas.server.chat_delegation._start_canvas_worker_delegation",
-                new=AsyncMock(),
+                new=AsyncMock(return_value=canvas_record),
             ) as start_canvas,
             patch(
                 "thomas.server.chat_delegation._start_agent_worker_delegation",
-                new=AsyncMock(return_value=ordinary_record),
+                new=AsyncMock(),
             ) as start_agent,
         ):
             result = await chat_delegation.start_background_delegation(
@@ -591,22 +292,22 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 surface="canvas",
             )
 
-        self.assertEqual(result, ordinary_record)
-        start_canvas.assert_not_awaited()
-        start_agent.assert_awaited_once()
+        self.assertEqual(result, canvas_record)
+        start_canvas.assert_awaited_once()
+        start_agent.assert_not_awaited()
 
-    async def test_read_only_artifact_bypasses_canvas_for_guarded_agent_failure(self):
+    async def test_model_declared_canvas_receives_structured_read_only_policy(self):
         emit_event = AsyncMock()
-        blocked_record = {"execution_id": "exec-blocked", "state": "failed"}
+        canvas_record = {"execution_id": "exec-canvas", "state": "executing"}
         with (
             patch("thomas.server.chat_delegation.pick_bot_for_specialist", return_value=_BotStub()),
             patch(
                 "thomas.server.chat_delegation._start_canvas_worker_delegation",
-                new=AsyncMock(),
+                new=AsyncMock(return_value=canvas_record),
             ) as start_canvas,
             patch(
                 "thomas.server.chat_delegation._start_agent_worker_delegation",
-                new=AsyncMock(return_value=blocked_record),
+                new=AsyncMock(),
             ) as start_agent,
         ):
             result = await chat_delegation.start_background_delegation(
@@ -621,9 +322,10 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 surface="canvas",
             )
 
-        self.assertEqual(result, blocked_record)
-        start_canvas.assert_not_awaited()
-        start_agent.assert_awaited_once()
+        self.assertEqual(result, canvas_record)
+        start_canvas.assert_awaited_once()
+        self.assertEqual(start_canvas.await_args.kwargs["file_access"], 0)
+        start_agent.assert_not_awaited()
 
     async def test_canvas_worker_receives_selected_profile(self):
         emit_event = AsyncMock()
@@ -655,24 +357,6 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
         start_canvas.assert_awaited_once()
         self.assertEqual(start_canvas.await_args.kwargs["profile"], "openai_codex")
         start_agent.assert_not_awaited()
-
-    def test_isolated_helper_keeps_shared_constraints_without_sibling_items(self):
-        prompt = (
-            "Create these two separate deliverables:\n"
-            "1. A revenue chart\n"
-            "2. A written forecast\n"
-            "Use attached.csv as the sole data source. Keep each result separate."
-        )
-        helper = chat_delegation._helper_prompt(
-            prompt,
-            helper_index=1,
-            helper_count=2,
-            bot_name="Nova",
-            assigned_item="A revenue chart",
-        )
-        self.assertTrue(chat_delegation_worker_config._prompt_requires_artifact_write(helper))
-        self.assertIn("attached.csv as the sole data source", helper)
-        self.assertNotIn("A written forecast", helper)
 
     async def test_delegation_emitter_reports_full_lifecycle(self):
         emit_event = AsyncMock()
@@ -714,23 +398,12 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(payloads[2]["receipt"]["ok"])
         self.assertEqual(payloads[3]["state"], "failed")
 
-    def test_helper_utilities_cover_repo_root_summary_and_specialist(self):
+    def test_helper_utilities_cover_repo_root_and_summary(self):
         self.assertEqual(chat_delegation._resolve_repo_root("."), Path(".").resolve())
         # Task cards are titled with a real name now, not a raw prompt truncation.
         self.assertEqual(
             chat_delegation.derive_task_title("hey thomas can you please build me a pac-man game"),
             "Build a pac-man game",
-        )
-        self.assertEqual(chat_delegation._infer_specialist("Please investigate and compare this."), "research")
-        self.assertEqual(chat_delegation._infer_specialist("Run this command and configure it."), "tools")
-        self.assertEqual(chat_delegation._infer_specialist("Just think it through."), "reasoning")
-        self.assertEqual(
-            chat_delegation._helper_prompt("Do the task", helper_index=1, helper_count=1, bot_name="Nova"),
-            "Do the task",
-        )
-        self.assertIn(
-            "[Helper assignment]",
-            chat_delegation._helper_prompt("Do the task", helper_index=2, helper_count=3, bot_name="Zach"),
         )
 
     def test_session_active_delegations_filters_normalizes_and_builds_digest(self):
@@ -841,6 +514,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 emit_event=emit_event,
                 model_id="gpt-5.6-terra",
                 reasoning_effort="high",
+                specialist_id="coding",
             )
 
         self.assertEqual(result, expected)
@@ -972,18 +646,28 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
         emitter.failed.assert_not_awaited()
         fail_execution.assert_not_called()
 
-    async def test_read_only_artifact_request_fails_before_worker_handoff(self):
+    async def test_artifact_wording_does_not_trigger_file_access_rejection(self):
         emitter = SimpleNamespace(started=AsyncMock(), failed=AsyncMock())
         payload = {
             "execution_id": "exec-read-only-artifact",
             "conversation_id": "sess-read-only-artifact",
             "backend_type": chat_delegation.PROVIDER_NATIVE_BACKEND,
-            "state": "failed",
+            "state": "executing",
             "summary": "Make a web app.",
-            "progress_summary": "Open Tools > File access > Workspace, then retry.",
-            "blocker": "file_access_too_low_for_artifact",
+            "progress_summary": "Provider-native worker is running.",
             "bot_id": "nova",
         }
+
+        def _supervisor(*_args, **_kwargs):  # noqa: ANN202
+            async def _noop():
+                return None
+
+            return _noop()
+
+        def _create_task(coro):  # noqa: ANN001, ANN202
+            coro.close()
+            return SimpleNamespace()
+
         with (
             patch(
                 "thomas.server.chat_delegation.task_bot_runtime.create_execution",
@@ -992,9 +676,14 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
             patch("thomas.server.chat_delegation.task_bot_runtime.update_execution") as update_execution,
             patch("thomas.server.chat_delegation.task_bot_runtime.fail_execution") as fail_execution,
             patch("thomas.server.chat_delegation.task_bot_runtime.get_execution", return_value=payload),
-            patch("thomas.server.chat_delegation._ensure_task_workspace") as ensure_workspace,
-            patch("thomas.server.chat_delegation._run_agent_worker_supervised") as run_supervisor,
-            patch("thomas.server.chat_delegation.asyncio.create_task") as create_task,
+            patch(
+                "thomas.server.chat_delegation._ensure_task_workspace",
+                return_value=Path("workspace").resolve(),
+            ) as ensure_workspace,
+            patch(
+                "thomas.server.chat_delegation._run_agent_worker_supervised", side_effect=_supervisor
+            ) as run_supervisor,
+            patch("thomas.server.chat_delegation.asyncio.create_task", side_effect=_create_task) as create_task,
         ):
             record = await chat_delegation._start_agent_worker_delegation(
                 {},
@@ -1007,19 +696,14 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 file_access=0,
             )
 
-        self.assertEqual(record["state"], "failed")
-        self.assertEqual(record["blocker"], "file_access_too_low_for_artifact")
-        fail_execution.assert_called_once()
-        failure = fail_execution.call_args.kwargs
-        self.assertEqual(failure["blocker"], "file_access_too_low_for_artifact")
-        self.assertIn("Tools > File access > Workspace", failure["summary"])
-        self.assertIn("retry", failure["summary"])
-        update_execution.assert_not_called()
-        ensure_workspace.assert_not_called()
-        run_supervisor.assert_not_called()
-        create_task.assert_not_called()
-        emitter.started.assert_not_awaited()
-        emitter.failed.assert_awaited_once()
+        self.assertEqual(record["state"], "executing")
+        fail_execution.assert_not_called()
+        self.assertEqual(update_execution.call_count, 4)
+        ensure_workspace.assert_called_once_with("exec-read-only-artifact")
+        run_supervisor.assert_called_once()
+        create_task.assert_called_once()
+        emitter.started.assert_awaited_once()
+        emitter.failed.assert_not_awaited()
 
     async def test_self_development_prompt_requires_project_file_access(self):
         emitter = SimpleNamespace(started=AsyncMock(), failed=AsyncMock())
@@ -1051,6 +735,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 emitter=emitter,
                 repo_root=None,
                 file_access=1,
+                workspace="project",
             )
 
         self.assertEqual(record["state"], "failed")
@@ -1167,6 +852,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                     emitter=emitter,
                     repo_root=root,
                     file_access=2,
+                    workspace="project",
                 )
 
         self.assertEqual(captured["work_dir"], root)
@@ -1738,13 +1424,14 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
         emitter.completed.assert_awaited_once()
         emitter.failed.assert_not_awaited()
 
-    async def test_run_agent_worker_live_repo_rejects_docs_only_for_code_task(self):
+    async def test_run_agent_worker_live_repo_does_not_classify_docs_from_prompt(self):
         emitter = SimpleNamespace(progress=AsyncMock(), completed=AsyncMock(), failed=AsyncMock())
 
         with tempfile.TemporaryDirectory() as d:
             root = Path(d).resolve()
             target = root / "docs" / "self_development" / "note.md"
             fail_called = False
+            complete_called = False
 
             async def _events():  # noqa: ANN202
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -1759,12 +1446,17 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 fail_called = True
                 return None
 
+            def _complete_execution(*_args, **_kwargs):  # noqa: ANN202
+                nonlocal complete_called
+                complete_called = True
+                return {"execution_id": "exec-native", "state": "completed", "proof_status": "verified"}
+
             def _get_execution(*_args, **_kwargs):  # noqa: ANN202
                 return {
                     "execution_id": "exec-native",
                     "conversation_id": "sess-native",
                     "backend_type": chat_delegation.PROVIDER_NATIVE_BACKEND,
-                    "state": "failed" if fail_called else "executing",
+                    "state": "failed" if fail_called else ("completed" if complete_called else "executing"),
                     "summary": "Fix route and tests.",
                     "progress_summary": "self-development task changed only documentation files",
                     "bot_id": "nova",
@@ -1780,6 +1472,11 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                     "thomas.server.chat_delegation.task_bot_runtime.fail_execution",
                     side_effect=_fail_execution,
                 ) as fail_execution,
+                patch("thomas.server.chat_delegation.task_bot_runtime.attach_proof"),
+                patch(
+                    "thomas.server.chat_delegation.task_bot_runtime.complete_execution",
+                    side_effect=_complete_execution,
+                ) as complete_execution,
                 patch("thomas.server.chat_delegation.task_bot_runtime.get_execution", side_effect=_get_execution),
             ):
                 await chat_delegation._run_agent_worker(
@@ -1796,10 +1493,10 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                     autonomy_level=1,
                 )
 
-        fail_execution.assert_called_once()
-        self.assertIn("only documentation files", fail_execution.call_args.kwargs["summary"])
-        emitter.failed.assert_awaited_once()
-        emitter.completed.assert_not_awaited()
+        fail_execution.assert_not_called()
+        complete_execution.assert_called_once()
+        emitter.completed.assert_awaited_once()
+        emitter.failed.assert_not_awaited()
 
     async def test_run_agent_worker_reports_failure(self):
         emitter = SimpleNamespace(progress=AsyncMock(), completed=AsyncMock(), failed=AsyncMock())

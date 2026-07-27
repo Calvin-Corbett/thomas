@@ -1,9 +1,8 @@
-"""OrchestratorBrain — Thomas's core delegation engine.
+"""OrchestratorBrain — Thomas's model-owned conversation engine.
 
-Thomas is a BRAIN.  He never executes tools or writes code himself.
-He classifies intent, creates delegation contracts, dispatches to
-specialist sub-agents, validates their output, and synthesises the
-final response.
+Every ordinary chat turn reaches Thomas's reasoning model. The model may
+answer directly or invoke a structured capability such as ``send_task``;
+deterministic code validates those calls but never infers intent from prose.
 
 Architecture synthesised from:
     - OpenAI Agents SDK: explicit handoffs with schema validation
@@ -24,7 +23,6 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from thomas.agent.dispatch import DispatchDecision, should_dispatch
 from thomas.agent.response_tone import strip_sandbox_links
 from thomas.chat.conversation import ConversationManager
 from thomas.chat.event_stream import EventDispatcher
@@ -42,28 +40,6 @@ from thomas.marketplace.orchestrator.protocol import (
 from thomas.marketplace.orchestrator.registry import SpecialistRegistry
 
 log = logging.getLogger(__name__)
-
-_STATUS_FOLLOWUP_RE = (
-    r"\b(?:status|progress|update|done yet|finished|still running|"
-    r"what'?s happening|where are we|how(?:'s| is) (?:that|it|this|the task|the project|the background work) going)\b"
-)
-_BACKGROUND_REFERENCE_RE = r"\b(?:background|worker|delegat|parallel)\b"
-_TOOLS_ROUTE_RE = re.compile(
-    r"(?:\buse\s+(?:your\s+)?(?:file|files|tool|tools)\b|"
-    r"\b(?:file|files|tool|tools)\b.*\b(?:repo|repository|workspace|folder|directory|path)\b|"
-    r"\btop[- ]level\s+files?\b|"
-    r"\bcurrent\s+(?:repo|repository|workspace)\b|"
-    r"\b(?:shell|command|directory listing|list files)\b)",
-    re.I,
-)
-_CODE_PHRASE_RECALL_RE = re.compile(
-    r"\b(?:what\s+was|what\s+is|recall|remind\s+me).{0,120}\bcode\s+phrase\b", re.I | re.S
-)
-_CODE_PHRASE_FACT_RE = re.compile(
-    r"\b(?:temporary\s+)?code\s+phrase(?:\s+for\b[^.?!:\n\r]*?)?(?:\s+is\b|\s*[=:])\s*"
-    r"([A-Za-z0-9][A-Za-z0-9 _-]{1,80})",
-    re.I,
-)
 
 
 def _chat_failure_message(error: str | None) -> str:
@@ -103,25 +79,6 @@ def _chat_failure_message(error: str | None) -> str:
     if any(token in detail for token in ("connection", "connecterror", "timed out", "timeout")):
         return "I couldn't reach the selected model. I retried once; please check that it is running and try again."
     return "I couldn't get an answer from the selected model. I retried once; please try again or choose another model."
-
-
-def _wants_background_status(prompt: str) -> bool:
-    import re
-
-    return bool(re.search(_STATUS_FOLLOWUP_RE, str(prompt or ""), re.I))
-
-
-def _should_answer_background_status_directly(prompt: str, active_tasks: list[dict[str, Any]] | None) -> bool:
-    import re
-
-    text = str(prompt or "").strip().lower()
-    if "[internal structured response contract]" in text:
-        return False
-    if not _wants_background_status(text):
-        return False
-    if active_tasks:
-        return True
-    return bool(re.search(_BACKGROUND_REFERENCE_RE, text, re.I))
 
 
 _STATUS_ACTIVE_STATES = {"queued", "requested", "classified", "claimed", "executing", "running", "in_progress"}
@@ -371,40 +328,6 @@ def _completion_delivery_line(note: str) -> str:
     return "Quick update — " + " ".join(bullets)
 
 
-def _clean_recalled_phrase(raw: str) -> str:
-    phrase = re.split(r"\b(?:reply|respond|answer)\b|[.?!\n\r]", str(raw or ""), maxsplit=1, flags=re.I)[0]
-    return phrase.strip(" \t'\"`:-")
-
-
-def _answer_memory_recall_from_context(
-    prompt: str,
-    conversation: ConversationManager,
-    memory_ctx: MemoryContext,
-) -> str:
-    """Answer narrow recall prompts directly when the fact is visible in context."""
-    if not _CODE_PHRASE_RECALL_RE.search(str(prompt or "")):
-        return ""
-
-    sources: list[str] = []
-    try:
-        for msg in reversed(conversation.get_context_window(max_tokens=8_000)):
-            content = str(msg.get("content") or "")
-            if content and content.strip() != str(prompt or "").strip():
-                sources.append(content)
-    except Exception:
-        pass
-
-    sources.extend([memory_ctx.episodic, memory_ctx.working, memory_ctx.semantic])
-    for source in sources:
-        match = _CODE_PHRASE_FACT_RE.search(str(source or ""))
-        if not match:
-            continue
-        phrase = _clean_recalled_phrase(match.group(1))
-        if phrase:
-            return phrase
-    return ""
-
-
 # Default token budgets by mode
 _MODE_BUDGETS = {
     "fast": 1_500,
@@ -462,20 +385,17 @@ class OrchestratorBrain:
         send_task: Any = None,
         update_task: Any = None,
         operate: Any = None,
+        work_onboarding_update: Any = None,
         display_prompt: str | None = None,
     ) -> ConversationManager:
-        """Process a user message.
+        """Process one model-owned user turn.
 
-        In V2 chat Thomas should remain the only visible speaker. The route can
-        still start background work in parallel, but the user-facing reply stays
-        conversational here.
+        Compatibility arguments from the former dispatch-first path remain in
+        the signature while callers migrate, but none may select a semantic
+        route. Thomas's reasoning model sees the conversation and structured
+        task context, then chooses whether to answer or call a capability.
         """
-        _ = is_first_message
-        # background_ack_only used to short-circuit to a canned "Working on that
-        # now." line and skip the model entirely. That is gone: every visible
-        # reply is model-authored. The route still launches background work in
-        # parallel; here we just always let Thomas actually answer.
-        _ = background_ack_only
+        _ = (is_first_message, dispatch_actionable, background_ack_only)
         turn_start = time.monotonic()
 
         # Private/project context may enrich the model prompt, but history must
@@ -483,22 +403,8 @@ class OrchestratorBrain:
         # display prompt so internal context never reappears as a user message.
         conversation = conversation.append_message("user", display_prompt if display_prompt is not None else prompt)
 
-        try:
-            decision = should_dispatch(
-                prompt,
-                recent_messages=conversation.get_context_window(max_tokens=8_000),
-                active_tasks=active_tasks,
-                mode=mode,
-            )
-        except Exception as dispatch_err:
-            log.warning("Dispatch classification failed, treating turn as conversational: %s", dispatch_err)
-            decision = DispatchDecision(action="casual", reason="classifier_error")
-
-        log.debug("Dispatch: %s -> %s (%s)", prompt[:40], decision.action, decision.reason)
-
-        # Compute any just-finished background work ONCE, before routing, so the
-        # result is reported back no matter which branch handles this turn — a casual
-        # reply, an "any update?" status question, or a brand-new actionable ask.
+        # Compute any just-finished background work once, then make it model
+        # context. This is factual state enrichment, not an intent classifier.
         # CRITICAL: only MARK a completion reported AFTER the chosen handler has
         # actually delivered it (the _mark_completions_reported calls below), never at
         # compute time — otherwise a branch that doesn't deliver would silently lose
@@ -506,44 +412,6 @@ class OrchestratorBrain:
         fresh_completions = _collect_unreported_completions(session_id, active_tasks)
         completion_note = _build_completion_note(fresh_completions)
 
-        if _should_answer_background_status_directly(prompt, active_tasks):
-            conversation = await self._handle_background_status(
-                session_id=session_id,
-                conversation=conversation,
-                prompt=prompt,
-                dispatcher=dispatcher,
-                turn_start=turn_start,
-                active_tasks=active_tasks,
-                completion_note=completion_note,
-            )
-            # The status summary renders only its completed-bucket window, so mark
-            # reported ONLY the fresh completions it actually displayed — a fresh row
-            # crowded past the window stays unreported and surfaces on a later turn
-            # (via the casual/note path, which shows every fresh row it marks).
-            displayed = _displayed_completion_ids(active_tasks)
-            _mark_completions_reported(
-                session_id,
-                [r for r in fresh_completions if str(r.get("execution_id") or "").strip() in displayed],
-            )
-            return conversation
-
-        if decision.action == "dispatch" and dispatch_actionable:
-            conversation = await self._handle_actionable(
-                session_id=session_id,
-                conversation=conversation,
-                prompt=prompt,
-                dispatcher=dispatcher,
-                mode=mode,
-                autonomy_level=autonomy_level,
-                token_economy=token_economy,
-                turn_start=turn_start,
-                images=images,
-                completion_note=completion_note,
-            )
-            _mark_completions_reported(session_id, fresh_completions)
-            return conversation
-
-        reply_kind = "casual" if decision.action == "casual" else "conversation"
         conversation = await self._handle_casual(
             session_id=session_id,
             conversation=conversation,
@@ -553,11 +421,12 @@ class OrchestratorBrain:
             autonomy_level=autonomy_level,
             token_economy=token_economy,
             turn_start=turn_start,
-            reply_kind=reply_kind,
+            reply_kind="conversation",
             active_task_digest=active_task_digest,
             send_task=send_task,
             update_task=update_task,
             operate=operate,
+            work_onboarding_update=work_onboarding_update,
             completion_note=completion_note,
             images=images,
         )
@@ -638,6 +507,7 @@ class OrchestratorBrain:
         send_task: Any = None,
         update_task: Any = None,
         operate: Any = None,
+        work_onboarding_update: Any = None,
         completion_note: str = "",
         images: list[dict[str, Any]] | None = None,
     ) -> ConversationManager:
@@ -675,40 +545,6 @@ class OrchestratorBrain:
             memory_ctx.working = f"{memory_ctx.working}\n\n{completion_note}".strip()
         delivered_prefix = _completion_delivery_line(completion_note) if completion_note else ""
 
-        recalled_answer = _answer_memory_recall_from_context(prompt, conversation, memory_ctx)
-        if recalled_answer:
-            # The memory-recall short-circuit does not run the model, so deliver any
-            # finished-work note deterministically here.
-            if delivered_prefix:
-                await dispatcher.emit_text(delivered_prefix + "\n\n")
-            await dispatcher.emit_text(recalled_answer)
-            conversation = conversation.append_message(
-                "assistant",
-                f"{delivered_prefix}\n\n{recalled_answer}".strip() if delivered_prefix else recalled_answer,
-                metadata={"specialists": ["reasoning"], "mode": reply_kind, "source": "memory_recall"},
-            )
-            await memory_coord.capture_episode(
-                turn_number=conversation.length // 2,
-                user_message=prompt,
-                assistant_response=recalled_answer[:500],
-                thinking="memory_recall",
-                tool_calls=[],
-                specialist="reasoning",
-            )
-            elapsed = int((time.monotonic() - turn_start) * 1000)
-            await dispatcher.emit_done(
-                session_id=session_id,
-                conversation_version=conversation.version,
-                thinking_summary="memory_recall",
-                total_thinking_ms=0,
-                iterations=1,
-                tool_calls=0,
-                tokens_used=0,
-                specialists_used=["reasoning"],
-                total_elapsed_ms=elapsed,
-            )
-            return conversation
-
         result = await self._dispatch_single(
             session_id=session_id,
             specialist_id="reasoning",
@@ -724,6 +560,7 @@ class OrchestratorBrain:
             send_task=send_task,
             update_task=update_task,
             operate=operate,
+            work_onboarding_update=work_onboarding_update,
             images=images,
         )
 
@@ -838,8 +675,13 @@ class OrchestratorBrain:
             )
 
         # ── Route to specialists ──────────────────────────────────
-        thinking.append("Selecting best approach...")
-        route = await self._classify_and_route(prompt, conversation, memory_ctx)
+        thinking.append("Using Thomas's model-owned conversation path...")
+        route = RouteDecision(
+            specialists=["reasoning"],
+            parallel=False,
+            reasoning="Structured model tools own downstream selection",
+            confidence=1.0,
+        )
         thinking.append(f"Route: {route.reasoning}")
         thinking.end()
 
@@ -958,81 +800,6 @@ class OrchestratorBrain:
 
     # ── internal methods ─────────────────────────────────────────
 
-    async def _classify_and_route(
-        self,
-        prompt: str,
-        conversation: ConversationManager,
-        memory_ctx: MemoryContext,
-    ) -> RouteDecision:
-        """Use the brain's LLM to classify intent and decide routing.
-
-        Falls back to the 'reasoning' specialist if classification fails.
-        """
-        available = self.registry.specialist_ids
-        if not available:
-            return RouteDecision(
-                specialists=["reasoning"],
-                reasoning="No specialists available; using default reasoning.",
-            )
-
-        if "tools" in available and _TOOLS_ROUTE_RE.search(str(prompt or "")):
-            return RouteDecision(
-                specialists=["tools"],
-                parallel=False,
-                reasoning="Deterministic tools route for explicit file or tool request.",
-                confidence=0.98,
-            )
-
-        # Build routing prompt
-        routing_prompt = self.registry.build_routing_prompt(prompt)
-
-        try:
-            # Ask the brain's LLM for a routing decision
-            messages = [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are Thomas's orchestrator brain. Your job is to classify "
-                        "the user's intent and route to the best specialist. "
-                        "Available specialists are listed below. "
-                        "Respond ONLY with valid JSON."
-                    ),
-                },
-                {"role": "user", "content": routing_prompt},
-            ]
-
-            # Use the LLM for routing (fast mode, low token budget)
-            response = await self._call_llm(messages, max_tokens=300)
-
-            # Parse JSON response
-            try:
-                decision = json.loads(response)
-                specialists = decision.get("specialists", [])
-                # Validate specialist IDs exist
-                specialists = [s for s in specialists if s in available]
-                if not specialists:
-                    specialists = [available[0]]
-
-                return RouteDecision(
-                    specialists=specialists,
-                    parallel=decision.get("parallel", False),
-                    reasoning=decision.get("reasoning", "LLM routing decision"),
-                    confidence=decision.get("confidence", 0.8),
-                )
-            except (json.JSONDecodeError, KeyError):
-                log.warning("Failed to parse routing response, using fallback")
-
-        except Exception as exc:
-            log.warning("Routing LLM call failed: %s", exc)
-
-        # Fallback: use first available specialist
-        fallback = "reasoning" if "reasoning" in available else available[0]
-        return RouteDecision(
-            specialists=[fallback],
-            reasoning=f"Fallback routing to {fallback}",
-            confidence=0.5,
-        )
-
     async def _dispatch_single(
         self,
         session_id: str,
@@ -1049,6 +816,7 @@ class OrchestratorBrain:
         send_task: Any = None,
         update_task: Any = None,
         operate: Any = None,
+        work_onboarding_update: Any = None,
         images: list[dict[str, Any]] | None = None,
     ) -> DelegationResult:
         """Dispatch to a single specialist with contract + token."""
@@ -1161,6 +929,10 @@ class OrchestratorBrain:
                 # Thomas's bounded direct-action callback. The server owns the
                 # allowlist, policy runner, audit, and post-action readback proof.
                 "operate": operate,
+                # Work onboarding state is a model-authored structured call.
+                # Browser/runtime code validates the envelope but never parses
+                # either participant's prose to infer workflow state.
+                "work_onboarding_update": work_onboarding_update,
                 # Thomas's OWN memory — store/recall inline, never a task.
                 "remember": _remember_cb,
                 "recall": _recall_cb,
@@ -1185,6 +957,8 @@ class OrchestratorBrain:
                 "fs.read_file",
                 "fs.list_dir",
                 "fs.search",
+                "skills.list",
+                "skills.use",
                 "send_task",
                 "update_task",
                 "remember",

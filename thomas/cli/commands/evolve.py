@@ -33,16 +33,10 @@ from thomas.forge.anvil.evolve import (
     run_evolve_session,
     utc_now_iso,
 )
-from thomas.forge.anvil.evolve_chat import (
-    interpret_evolve_message,
-    resolve_approval_ids,
-    status_summary,
-)
 from thomas.forge.anvil.evolve_loop import (
     approve_pending,
     load_loop_state,
     reject_pending,
-    request_pause,
     run_evolve_loop,
 )
 from thomas.forge.anvil.evolve_planner import plan_backlog, render_backlog_markdown
@@ -519,7 +513,8 @@ def evolve_dispatch_command(
     if use_funnel:
         try:
             definition, plan = compose_from_funnel(goal, project_root=root, profile=profile)
-        except Exception as exc:  # noqa: BLE001
+        except (ImportError, ModuleNotFoundError, OSError, RuntimeError, TypeError, ValueError, KeyError) as exc:
+            # Composing is an enhancement; the raw goal is still dispatchable.
             click.echo(f"(funnel compose failed: {exc}; dispatching the raw goal)")
 
     # Prior turns of this Forge Code conversation, so the dispatched turn is a real
@@ -531,7 +526,9 @@ def evolve_dispatch_command(
             from thomas.forge.anvil import forge_code_store
 
             history = forge_code_store.history_turns(root, conversation_id)
-        except Exception as exc:  # noqa: BLE001 - history is additive; never block a dispatch
+        except (ImportError, ModuleNotFoundError, OSError, RuntimeError, TypeError, ValueError, KeyError) as exc:
+            # History is additive; never block a dispatch because prior turns
+            # could not be read.
             click.echo(f"(history load failed: {exc}; dispatching without prior turns)")
 
     live = bool(execute and yes and cfg.enabled)
@@ -777,69 +774,6 @@ def evolve_reject(approval_id: str, repo_root: Path | None, reason: str, as_json
         click.echo(f"Rejected evolve session: {payload['session'].get('session_id')}")
         return
     click.echo(f"Rejected: {payload['approval'].get('title')}")
-
-
-@evolve.command("chat")
-@click.argument("message")
-@click.option("--repo-root", type=click.Path(file_okay=False, path_type=Path), default=None)
-@click.option("--interpret-only", is_flag=True, help="Only print the parsed intent; take no action.")
-@click.option("--posture", default="", help="Override posture for a start intent.")
-@click.option("--profile", default="", help="Model profile for a start/approve action.")
-@click.option("--max-iterations", default=6, show_default=True, type=int)
-@click.option("--max-promotions", default=4, show_default=True, type=int)
-@click.option("--json", "as_json", is_flag=True)
-def evolve_chat_command(
-    message: str,
-    repo_root: Path | None,
-    interpret_only: bool,
-    posture: str,
-    profile: str,
-    max_iterations: int,
-    max_promotions: int,
-    as_json: bool,
-) -> None:
-    """Talk to the evolve loop in plain language: start, status, pause, approve, reject."""
-    intent = interpret_evolve_message(message)
-    if interpret_only:
-        _emit_json(intent.to_dict())
-        return
-
-    resolved_root = resolve_repo_root(repo_root)
-    reply = intent.reply
-    if intent.action == "start":
-        resolved_posture = parse_posture(posture or intent.posture or "auto_safe").value
-        state = run_evolve_loop(
-            resolved_root,
-            posture=resolved_posture,
-            focus=intent.focus,
-            max_iterations=max_iterations,
-            max_promotions=max_promotions,
-            profile=profile,
-        )
-    elif intent.action == "status":
-        state = load_loop_state(resolved_root).to_dict()
-        reply = f"{intent.reply} {status_summary(state)}"
-    elif intent.action == "pause":
-        state = request_pause(resolved_root)
-    elif intent.action in ("approve", "reject"):
-        ids = resolve_approval_ids(load_loop_state(resolved_root).to_dict(), intent.approval_ref)
-        if not ids:
-            reply = "Nothing is waiting for your approval right now."
-        else:
-            for approval_id in ids:
-                if intent.action == "approve":
-                    approve_pending(resolved_root, approval_id, profile=profile)
-                else:
-                    reject_pending(resolved_root, approval_id, reason="dismissed via chat")
-        state = load_loop_state(resolved_root).to_dict()
-    else:  # help
-        state = load_loop_state(resolved_root).to_dict()
-
-    payload = {"ok": True, "action": intent.action, "reply": reply, "intent": intent.to_dict(), "state": state}
-    if as_json:
-        _emit_json(payload)
-        return
-    click.echo(reply)
 
 
 def register_evolve_commands(cli_group: click.Group) -> None:

@@ -94,14 +94,15 @@ class TestSendTaskTool(unittest.IsolatedAsyncioTestCase):
 
         # The claim is TRUE: send_task was actually invoked.
         self.assertEqual(captured.get("title"), "Build a Pac-Man game")
-        # Instructions forward the USER'S RAW request, not the model's reworded version
-        # (Calvin, 2026-06-26: the task manager reads the real ask, undistorted).
-        self.assertEqual(captured.get("instructions"), "build me a pac-man game")
+        # The structured brief chosen by Thomas is authoritative. Replacing it
+        # with the latest raw utterance is what turned a graph follow-up into a
+        # detached, generic build task.
+        self.assertEqual(captured.get("instructions"), "Build a pac-man browser game")
         # A task_request event was surfaced for the UI/brain.
         self.assertTrue(any(e.get("type") == "task_request" for e in events))
         # Final reply is the model's own confirmation — not a canned line.
         done = next(e for e in events if e.get("type") == "done")
-        self.assertIn("Pac-Man", done.get("content", ""))
+        self.assertIn("running now", done.get("content", ""))
         # Tool offered on pass 1, withdrawn on pass 2 (no double-dispatch).
         self.assertIsNotNone(llm.calls[0]["tools"])
         self.assertIsNone(llm.calls[1]["tools"])
@@ -163,7 +164,7 @@ class TestSendTaskTool(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("built all three", visible.lower())
         self.assertIn("running now", visible.lower())
 
-    async def test_text_form_tool_call_drops_false_pre_call_completion_claim(self):
+    async def test_text_form_tool_call_never_dispatches(self):
         async def send_task(*, title, instructions, surface=""):
             return None
 
@@ -183,8 +184,8 @@ class TestSendTaskTool(unittest.IsolatedAsyncioTestCase):
         ]
         events, _ = await _run(scripts, send_task)
         visible = "".join(str(event.get("text") or "") for event in events if event.get("type") == "text")
-        self.assertNotIn("built all three", visible.lower())
-        self.assertTrue(any(event.get("type") == "task_request" for event in events))
+        self.assertIn("send_task", visible)
+        self.assertFalse(any(event.get("type") == "task_request" for event in events))
 
     async def test_no_tool_call_means_no_dispatch_no_fake(self):
         called = {"n": 0}

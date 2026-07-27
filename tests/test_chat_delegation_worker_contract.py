@@ -62,7 +62,10 @@ async def test_worker_instructions_expose_browser_and_artifact_contract() -> Non
         await chat_delegation._start_agent_worker_delegation(
             {},
             session_id="sess-native",
-            prompt="Use browser.open and browser.extract, then create agentic_report.md.",
+            prompt=(
+                "Use browser.open and browser.extract, then fs.write_file agentic_report.md "
+                "and verify it with fs.read_file."
+            ),
             specialist_id="coding",
             bot=_BotStub(),
             emitter=emitter,
@@ -78,6 +81,9 @@ async def test_worker_instructions_expose_browser_and_artifact_contract() -> Non
     assert "preserve exact requested filenames" in instructions
     assert "Never put bracketed placeholders" in instructions
     assert "Read back the exact requested artifact" in instructions
+    assert captured["prompt"].startswith("Use browser.open and browser.extract")
+    assert "preflight_events" not in captured
+    assert "preflight_baseline" not in captured
     assert len(created_coroutines) == 1
     emitter.started.assert_awaited_once()
 

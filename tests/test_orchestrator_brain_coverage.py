@@ -9,7 +9,7 @@ from thomas.chat.conversation import ConversationManager
 from thomas.chat.memory_layers import MemoryContext
 from thomas.marketplace.orchestrator import brain as brain_mod
 from thomas.marketplace.orchestrator.brain import OrchestratorBrain
-from thomas.marketplace.orchestrator.protocol import DelegationResult, RouteDecision, SpecialistStatus
+from thomas.marketplace.orchestrator.protocol import DelegationResult, SpecialistStatus
 from thomas.marketplace.orchestrator.registry import SpecialistRegistry
 
 
@@ -55,14 +55,6 @@ class _Registry:
 
     def build_routing_prompt(self, prompt: str) -> str:
         return f"route this: {prompt}"
-
-
-class _ChatDictLLM:
-    async def chat(self, *, messages: list[dict[str, object]]) -> dict[str, object]:
-        _ = messages
-        return {
-            "text": '{"specialists":["tools","missing"],"parallel":true,"reasoning":"json route","confidence":0.93}'
-        }
 
 
 class _CompleteLLM:
@@ -131,26 +123,6 @@ class _MemoryCoordinator:
         self.captured.append(dict(kwargs))
 
 
-@pytest.mark.asyncio
-async def test_classify_and_route_uses_llm_json_and_default_fallbacks() -> None:
-    brain = OrchestratorBrain(
-        config=None,
-        llm=_ChatDictLLM(),
-        memory_engine=None,
-        registry=_Registry(["reasoning", "tools"]),
-    )
-
-    routed = await brain._classify_and_route("inspect the repo", ConversationManager(), MemoryContext())
-    assert routed.specialists == ["tools"]
-    assert routed.parallel is True
-    assert routed.reasoning == "json route"
-
-    empty = OrchestratorBrain(config=None, llm=None, memory_engine=None, registry=_Registry([]))
-    fallback = await empty._classify_and_route("anything", ConversationManager(), MemoryContext())
-    assert fallback.specialists == ["reasoning"]
-    assert "No specialists available" in fallback.reasoning
-
-
 def test_registry_binds_request_scoped_specialist_copies() -> None:
     original_llm = object()
     request_llm = object()
@@ -177,25 +149,6 @@ def test_chat_failure_message_explains_auth_and_transient_failures() -> None:
     assert "Local model" in auth
     assert "retried once" in transient
     assert "retried once" in unknown
-
-
-@pytest.mark.asyncio
-async def test_classify_and_route_falls_back_when_llm_output_is_bad_json() -> None:
-    class _BadLLM:
-        async def chat(self, *, messages: list[dict[str, object]]) -> dict[str, object]:
-            _ = messages
-            return {"text": "not-json"}
-
-    brain = OrchestratorBrain(
-        config=None,
-        llm=_BadLLM(),
-        memory_engine=None,
-        registry=_Registry(["reasoning", "coding"]),
-    )
-
-    routed = await brain._classify_and_route("write code", ConversationManager(), MemoryContext())
-    assert routed.specialists == ["reasoning"]
-    assert routed.confidence == 0.5
 
 
 @pytest.mark.asyncio
@@ -364,7 +317,7 @@ async def test_dispatch_parallel_and_synthesise_cover_fallback_paths(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_handle_casual_and_actionable_emit_done_and_stream_output(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_model_owned_handler_emits_done_and_streams_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     created_coordinators: list[_MemoryCoordinator] = []
 
     def _fake_memory_coordinator(*args: object, **kwargs: object) -> _MemoryCoordinator:
@@ -410,61 +363,13 @@ async def test_handle_casual_and_actionable_emit_done_and_stream_output(monkeypa
     assert created_coordinators[-1].captured
     assert dispatcher.done_payloads[-1]["thinking_summary"] == "conversation"
 
-    async def _routed(*args: object, **kwargs: object) -> RouteDecision:
-        _ = args
-        _ = kwargs
-        return RouteDecision(specialists=["reasoning"], parallel=False, reasoning="direct")
-
-    async def _successful_dispatch_single(**kwargs: object) -> DelegationResult:
-        assert kwargs["images"] == [{"type": "image_url", "image_url": {"url": "data:image/png;base64,BBBB"}}]
-        return DelegationResult(
-            specialist_id="reasoning",
-            content='{"response":"clean answer"}',
-            tool_calls=[{"type": "tool_result", "name": "ls"}],
-            iterations=2,
-            tokens_used=17,
-        )
-
-    monkeypatch.setattr(brain, "_classify_and_route", _routed)
-    monkeypatch.setattr(brain, "_dispatch_single", _successful_dispatch_single)
-    dispatcher = _Dispatcher()
-    actionable = await brain._handle_actionable(
-        session_id="sess-2",
-        conversation=ConversationManager(),
-        prompt="Use your tools and answer.",
-        dispatcher=dispatcher,
-        mode="auto",
-        autonomy_level=3,
-        token_economy="optimal",
-        turn_start=0.0,
-        images=[{"type": "image_url", "image_url": {"url": "data:image/png;base64,BBBB"}}],
-    )
-    assert dispatcher.memory_refreshes
+    # There is intentionally no separate actionable handler. The same model
+    # path receives tools and decides whether to call them.
     # No canned "Working on that —" prefix: the only visible text is the model's
     # actual answer. The reply must not start with a templated acknowledgment.
-    streamed = "".join(dispatcher.text_parts)
-    assert not streamed.startswith("Working on that")
-    assert "clean answer" in streamed
-    assert "clean answer" in (actionable.last_assistant_message() or "")
-    assert not (actionable.last_assistant_message() or "").startswith("Working on that")
-    assert dispatcher.done_payloads[-1]["tool_calls"] == 1
 
 
-def test_background_status_helpers_cover_active_failed_and_mixed_states() -> None:
-    assert brain_mod._wants_background_status("what is the status?") is True
-    assert brain_mod._wants_background_status("tell me a joke") is False
-
-    assert (
-        brain_mod._should_answer_background_status_directly("what is the status of the background worker?", []) is True
-    )
-    assert brain_mod._should_answer_background_status_directly("tell me a joke", []) is False
-    assert (
-        brain_mod._should_answer_background_status_directly(
-            "[Internal structured response contract] return status for parallel workers", []
-        )
-        is False
-    )
-
+def test_background_status_formatter_covers_active_failed_and_mixed_states() -> None:
     active = brain_mod._summarize_background_status(
         [{"state": "running", "summary": "Build release", "last_progress": "Step 2"}]
     )
@@ -495,47 +400,6 @@ def test_background_status_helpers_cover_active_failed_and_mixed_states() -> Non
     )
     assert "mixed outcomes" in only_other.lower()
     assert "Stuck" in only_other and "Pending" in only_other
-
-
-def test_code_phrase_recall_prefers_visible_memory_fact() -> None:
-    conversation = (
-        ConversationManager()
-        .append_message(
-            "user",
-            "Memory smoke test: remember that the temporary code phrase for this live QA run is SILVER MAPLE 482. "
-            "Reply with exactly: stored",
-        )
-        .append_message("assistant", "stored")
-        .append_message("user", "What was the temporary code phrase for this live QA run? Reply with only the phrase.")
-        .append_message("assistant", "Sorry, I had trouble with that.")
-        .append_message("user", "What was the temporary code phrase for this live QA run?")
-    )
-    memory_ctx = MemoryContext(
-        working="Earlier unrelated code phrase is UIVAL-FRESH-27",
-        episodic="[Recent thread memory] temporary code phrase for this live QA run is SILVER MAPLE 482",
-        semantic="",
-    )
-
-    answer = brain_mod._answer_memory_recall_from_context(
-        "What was the temporary code phrase for this live QA run?",
-        conversation,
-        memory_ctx,
-    )
-
-    assert answer == "SILVER MAPLE 482"
-
-    compacted_conversation = ConversationManager().append_message(
-        "user",
-        "What was the temporary code phrase for this live QA run?",
-    )
-    assert (
-        brain_mod._answer_memory_recall_from_context(
-            "What was the temporary code phrase for this live QA run?",
-            compacted_conversation,
-            memory_ctx,
-        )
-        == "SILVER MAPLE 482"
-    )
 
 
 @pytest.mark.asyncio

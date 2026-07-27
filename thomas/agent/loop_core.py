@@ -1,12 +1,6 @@
 """Core agent loop initialization and message building.
 
-Provides:
-- LoopState: state tracking across iterations
-- AgentLoop class initialization and constructor
-- System prompt and message building
-- Message history management
-- Routing and intent detection helpers
-- Basic query classification
+Provides core state, initialization, system-message construction, and history management.
 """
 
 from __future__ import annotations
@@ -21,7 +15,6 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from thomas.agent.conversation import ConversationIntelligence
 from thomas.agent.guidance import load_cached_purpose_brief
 from thomas.agent.project_instructions import (
     discover_project_instructions,
@@ -67,38 +60,6 @@ if TYPE_CHECKING:
     from thomas.memory import MemoryEngine
 
 log = logging.getLogger(__name__)
-
-# Compiled regex patterns for performance (used repeatedly in methods)
-_ACTION_INTENT_PATTERN = re.compile(
-    r"\b("
-    r"run|execute|edit|write|create|delete|remove|install|apply|patch|commit"
-    r"|open|search|find|read|fix|debug|build|deploy"
-    r"|make|change|update|modify|add|set|adjust|move|resize|implement"
-    r"|refactor|rename|replace|merge|revert|undo|redo|configure|setup"
-    r"|check|look|show|list|scan|analyze|locate|explore|inspect|test"
-    r"|start|stop|restart|enable|disable|toggle|switch|connect|send"
-    r"|download|upload|fetch|pull|push|sync|copy|paste|duplicate|clone"
-    r"|convert|transform|generate|scaffold|migrate|optimize|clean|format"
-    r"|put|do|help|handle|process|use|try|give|tell|explain"
-    r")\b",
-    re.IGNORECASE,
-)
-_BLOCKED_RESPONSE_PATTERN = re.compile(
-    r"\b("
-    r"i(?: still)? need|"
-    r"please provide|"
-    r"cannot proceed|"
-    r"can't proceed|"
-    r"unable to continue|"
-    r"to continue,?|"
-    r"before i can|"
-    r"missing|"
-    r"i require"
-    r")\b"
-)
-_TOKEN_PATTERN = re.compile(r"\b\d{6,12}:[A-Za-z0-9_-]{20,}\b")
-_NUMERIC_ID_PATTERN = re.compile(r"\s*-?\d{5,}\s*")
-_FILE_PATH_PATTERN = re.compile(r"[A-Za-z]:\\\\|/|\\\\|\\.py\b|\\.js\b|\\.ts\b|\\.json\b|\\.toml\b|\\.md\b")
 
 _TPM_HEADROOM_DEFAULT = 0.90
 
@@ -178,8 +139,6 @@ class AgentLoop:
         self._system_prompt = system_prompt
         # Preserve the caller-provided list object even if it's empty.
         self._conversation = conversation if conversation is not None else []
-        # Conversation intelligence tracker for multi-turn coherence
-        self._conv_intel = ConversationIntelligence(max_turns=12)
         self._memory = memory
         resolved_thread_id = str(thread_id or "").strip()
         if not resolved_thread_id:
@@ -570,7 +529,7 @@ class AgentLoop:
     def _history_preserve_counts(self, route: RouteDecision) -> tuple[int, int]:
         """Choose how much conversation history to preserve per route."""
         path = str(getattr(route, "path", "") or "")
-        if path in ("casual_chat", "personal_context", "assistant_meta", "general"):
+        if path in ("casual_chat", "personal_context", "assistant_meta", "general", "model_owned"):
             if self._context_preserve_mode in {"continuous", "persistent", "high_context", "chatty"}:
                 return 0, 12
             return 0, 10
@@ -581,7 +540,7 @@ class AgentLoop:
     def _history_token_cap(self, route: RouteDecision) -> int:
         """Route-specific soft cap for conversation history tokens."""
         path = str(getattr(route, "path", "") or "")
-        if path in ("casual_chat", "personal_context", "assistant_meta", "general"):
+        if path in ("casual_chat", "personal_context", "assistant_meta", "general", "model_owned"):
             if self._context_preserve_mode in {"continuous", "persistent", "high_context", "chatty"}:
                 return 5200
             return 2200
@@ -627,30 +586,6 @@ class AgentLoop:
             parsed_default = 0.90
         return max(0.5, min(parsed_default, 1.0))
 
-    @staticmethod
-    def _has_explicit_action_intent(prompt: str) -> bool:
-        """Check if prompt contains explicit action words."""
-        return bool(_ACTION_INTENT_PATTERN.search(str(prompt or "").lower()))
-
-    @staticmethod
-    def _is_low_intent_route(path: str) -> bool:
-        """Check if route is low-intent (casual chat, etc)."""
-        return str(path or "") in ("casual_chat", "assistant_meta", "personal_context", "general")
-
-    @staticmethod
-    def _is_tool_usage_question(prompt: str) -> bool:
-        """Detect meta-questions about tool usage."""
-        src = str(prompt or "").strip().lower()
-        if not src:
-            return False
-        if "tool" not in src:
-            return False
-        if not ("?" in src or re.match(r"^(what|which|did you|tell me|list|show)\b", src)):
-            return False
-        if not any(k in src for k in ("use", "used", "using", "call", "called", "try", "tried")):
-            return False
-        return any(k in src for k in ("what", "which", "did you", "tell me", "list", "show"))
-
     def _recent_tool_names(self, limit: int = 80) -> list[str]:
         """Extract recently used tool names from conversation history."""
         names: list[str] = []
@@ -689,196 +624,3 @@ class AgentLoop:
             )
         lines = [f"{idx}. `{name}`" for idx, name in enumerate(names[:20], start=1)]
         return "Based on recorded conversation events, these tools were used:\n" + "\n".join(lines)
-
-    def _latest_assistant_message(self) -> str:
-        """Return most recent assistant text message from conversation history."""
-        for msg in reversed(list(self._conversation or [])):
-            if not isinstance(msg, dict):
-                continue
-            if str(msg.get("role") or "").strip().lower() != "assistant":
-                continue
-            content = msg.get("content")
-            if isinstance(content, str) and content.strip():
-                return content.strip()
-        return ""
-
-    def _is_ack_turn(self, text: str) -> bool:
-        """Check if text is a simple acknowledgment."""
-        s = str(text or "").strip().lower()
-        if not s:
-            return False
-        words = re.findall(r"[a-z0-9']+", s)
-        if len(s) <= 20 and s in {
-            "ok",
-            "okay",
-            "sure",
-            "yes",
-            "yep",
-            "yeah",
-            "continue",
-            "go",
-            "go ahead",
-            "proceed",
-            "do it",
-            "sounds good",
-            "works",
-        }:
-            return True
-        if len(words) > 4:
-            return False
-        return bool(re.fullmatch(r"(ok|okay|sure|yes|yep|yeah|continue|go ahead|proceed|do it)", s))
-
-    def _looks_like_requested_input(self, text: str) -> bool:
-        """Check if text looks like a response to a request for input."""
-        s = str(text or "").strip()
-        if not s:
-            return False
-        token_like = bool(_TOKEN_PATTERN.search(s))
-        numeric_id_like = bool(_NUMERIC_ID_PATTERN.fullmatch(s))
-        return token_like or numeric_id_like
-
-    def _is_blocked_response(self, text: str) -> bool:
-        """Check if response indicates the model is blocked."""
-        s = str(text or "").strip().lower()
-        if not s:
-            return False
-        return bool(_BLOCKED_RESPONSE_PATTERN.search(s))
-
-    def _is_project_related_prompt(self, prompt: str) -> bool:
-        """Heuristic for whether a prompt likely needs repo/project context."""
-        if not prompt:
-            return False
-
-        # Obvious coding/project signals
-        keywords = (
-            "code",
-            "bug",
-            "error",
-            "traceback",
-            "stack",
-            "exception",
-            "repo",
-            "project",
-            "file",
-            "folder",
-            "directory",
-            "path",
-            "function",
-            "class",
-            "refactor",
-            "test",
-            "build",
-            "run",
-            "compile",
-            "install",
-            "package",
-            "pip",
-            "npm",
-            "yarn",
-            "pnpm",
-            "git",
-            "diff",
-            "patch",
-            "fix",
-            "crash",
-            "log",
-            "debug",
-            "setup",
-            "set up",
-            "configure",
-            "integration",
-            "integrate",
-            "deploy",
-            "telegram",
-            "discord",
-            "slack",
-            "bot",
-            "token",
-        )
-        prompt_l = prompt.lower()
-        if any(k in prompt_l for k in keywords):
-            return True
-
-        # File-ish patterns (paths, extensions)
-        return bool(_FILE_PATH_PATTERN.search(prompt))
-
-    def _sync_user_message_to_intelligence(self, text: str) -> None:
-        """Sync a user message to the conversation intelligence tracker.
-
-        This ensures the intelligence system stays in sync with the main
-        conversation list.
-
-        Args:
-            text: The user message content
-        """
-        if not text:
-            return
-        try:
-            self._conv_intel.update("user", text)
-        except Exception as e:
-            log.debug("Failed to sync user message to intelligence: %s", e)
-
-    def _sync_assistant_message_to_intelligence(self, text: str) -> None:
-        """Sync an assistant message to the conversation intelligence tracker.
-
-        This ensures the intelligence system stays in sync with the main
-        conversation list.
-
-        Args:
-            text: The assistant message content
-        """
-        if not text:
-            return
-        try:
-            self._conv_intel.update("assistant", text)
-        except Exception as e:
-            log.debug("Failed to sync assistant message to intelligence: %s", e)
-
-    def check_if_followup(self, message: str) -> bool:
-        """Check if a message is a follow-up using conversation intelligence.
-
-        Args:
-            message: The user message to check
-
-        Returns:
-            True if the message is detected as a follow-up
-        """
-        try:
-            return self._conv_intel.is_followup(message)
-        except Exception as e:
-            log.debug("Failed to check follow-up status: %s", e)
-            return False
-
-    def resolve_message_references(self, message: str) -> str:
-        """Resolve pronouns and references in a message using conversation context.
-
-        If the message is ambiguous (short, has pronouns, or is a follow-up),
-        this injects relevant conversation context to help the LLM understand
-        what the user is referring to.
-
-        Args:
-            message: The user message to potentially augment
-
-        Returns:
-            The message, possibly with conversation context injected
-        """
-        try:
-            return self._conv_intel.resolve_references(message)
-        except Exception as e:
-            log.debug("Failed to resolve message references: %s", e)
-            return message
-
-    def detect_user_confusion(self, message: str) -> bool:
-        """Detect if the user appears confused by the prior response.
-
-        Args:
-            message: The user's current message
-
-        Returns:
-            True if the user appears confused
-        """
-        try:
-            return self._conv_intel.detect_confusion(message)
-        except Exception as e:
-            log.debug("Failed to detect confusion: %s", e)
-            return False

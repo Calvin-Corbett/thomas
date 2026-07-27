@@ -4,7 +4,7 @@ Provides:
 - TPM (tokens per minute) rate limiting
 - Memory context retrieval and policy application
 - Research library integration
-- Event recording and profile hint capture
+- Event recording
 - Token budgeting and usage reporting
 """
 
@@ -13,15 +13,11 @@ from __future__ import annotations
 import inspect
 import logging
 import os
-import re
 import threading
 import time
 from typing import TYPE_CHECKING, Any
 
-from thomas.agent.prompt_templates import (
-    format_input_continuity_hint,
-    format_library_context,
-)
+from thomas.agent.prompt_templates import format_library_context
 
 if TYPE_CHECKING:
     from thomas.agent.loop_core import AgentLoop
@@ -33,33 +29,6 @@ _MEMORY_RETRIEVAL_TIMEOUT_S = 10.0
 _MEMORY_INTERRUPT_JOIN_S = 0.5
 
 _MEMORY_POLICY_WARNED_SET: set[int] = set()
-_MEMORY_RELEVANCE_STOPWORDS = {
-    "a",
-    "an",
-    "and",
-    "are",
-    "do",
-    "for",
-    "how",
-    "i",
-    "is",
-    "it",
-    "me",
-    "my",
-    "of",
-    "or",
-    "the",
-    "to",
-    "what",
-    "when",
-    "where",
-    "who",
-    "why",
-    "you",
-    "your",
-}
-
-
 def _context_preserve_mode(agent: AgentLoop) -> str:
     """Read the current context-preserve behavior for memory policy."""
     if agent is None:
@@ -71,43 +40,6 @@ def _should_preserve_context(agent: AgentLoop) -> bool:
     """Return true when low-intent routes should keep broader memory state."""
     mode = _context_preserve_mode(agent)
     return mode in {"continuous", "persistent", "high_context", "chatty"}
-
-
-def _memory_relevance_tokens(text: str) -> set[str]:
-    return {
-        tok
-        for tok in re.findall(r"\b\w+\b", str(text or "").lower())
-        if len(tok) >= 2 and tok not in _MEMORY_RELEVANCE_STOPWORDS
-    }
-
-
-def validate_memory_relevance(query: str, memory_text: str) -> float:
-    """
-    Check relevance between query and retrieved memory using query-term coverage.
-
-    Returns a relevance score from 0.0 to 1.0.
-    If score < 0.1, the memory is likely irrelevant and should be discarded.
-    """
-    if not query or not memory_text:
-        return 0.0
-
-    normalized_query = " ".join(str(query or "").lower().split())
-    normalized_memory = " ".join(str(memory_text or "").lower().split())
-    if normalized_query and normalized_query in normalized_memory:
-        return 1.0
-
-    query_tokens = _memory_relevance_tokens(query)
-    memory_tokens = _memory_relevance_tokens(memory_text)
-    if not query_tokens or not memory_tokens:
-        return 0.0
-
-    intersection = len(query_tokens & memory_tokens)
-    if intersection <= 0:
-        return 0.0
-
-    coverage = intersection / len(query_tokens)
-    density = intersection / len(memory_tokens)
-    return max(coverage, min(1.0, coverage + (density * 0.25)))
 
 
 def retrieve_memory(
@@ -187,8 +119,7 @@ def retrieve_memory(
         # code context). The LLM is far better at deciding what's relevant
         # from memory than a token-overlap heuristic. Always include
         # retrieved memory and let the model sort it out.
-        relevance = validate_memory_relevance(prompt, retrieved_text)
-        log.debug("Memory retrieved (relevance=%.2f, %.1f ms)", relevance, elapsed_ms)
+        log.debug("Memory retrieved (%.1f ms); frontier model owns relevance", elapsed_ms)
         return retrieved_text
 
     except Exception as e:  # REVIEWED: log-and-continue — optional feature, fallback to empty
@@ -423,46 +354,6 @@ def record_event(agent: AgentLoop, etype: str, text: str) -> None:
         log.warning("Memory record failed: %s", e)
 
 
-def capture_profile_hints(agent: AgentLoop, text: str) -> None:
-    """Promote stable user hints into global pins for cross-session continuity."""
-    if agent._memory is None or not agent._memory.started:
-        return
-    if not text:
-        return
-
-    def _norm(v: str, max_len: int = 200) -> str:
-        cleaned = " ".join(v.strip().split())
-        return cleaned[:max_len].strip()
-
-    updates: dict[str, str] = {}
-
-    m_name = re.search(r"\b(?:my name is|i am|i'm)\s+([A-Za-z][A-Za-z0-9_\-]{1,32})\b", text, re.I)
-    if m_name:
-        updates["user.name"] = _norm(m_name.group(1), max_len=40)
-
-    m_call = re.search(r"\bcall me\s+([A-Za-z][A-Za-z0-9_\-]{1,32})\b", text, re.I)
-    if m_call:
-        updates["user.preferred_name"] = _norm(m_call.group(1), max_len=40)
-
-    m_pref = re.search(r"\bi (?:prefer|like|want)\s+(.+?)(?:[.!?]|$)", text, re.I)
-    if m_pref:
-        updates["user.preference"] = _norm(m_pref.group(1))
-
-    m_goal = re.search(r"\b(?:my goal is|i need to|i want to)\s+(.+?)(?:[.!?]|$)", text, re.I)
-    if m_goal:
-        updates["user.current_goal"] = _norm(m_goal.group(1))
-
-    if not updates:
-        return
-
-    try:
-        for key, value in updates.items():
-            if value:
-                agent._memory.pin(key, value)
-    except Exception as e:  # REVIEWED: log-and-continue — optional profile pin operation
-        log.warning("Profile hint capture failed: %s", e)
-
-
 def build_token_report(
     agent: AgentLoop,
     *,
@@ -611,35 +502,3 @@ def usage_delta(before: dict[str, int], after: dict[str, int]) -> dict[str, int]
         int(after.get("completion_tokens", 0) or 0) - int(before.get("completion_tokens", 0) or 0),
         int(after.get("total_tokens", 0) or 0) - int(before.get("total_tokens", 0) or 0),
     )
-
-
-def input_continuity_hint(agent: AgentLoop, prompt_text: str) -> str:
-    """Infer whether the user just supplied data requested in the prior turn."""
-    src = str(prompt_text or "").strip()
-    if not src:
-        return ""
-    prev_assistant = agent._latest_assistant_message()
-    if not prev_assistant:
-        return ""
-
-    prev_l = prev_assistant.lower()
-    src_l = src.lower()
-    hints: list[str] = []
-
-    # If the assistant asked for Telegram token and the user sent a token-like payload,
-    # force continuity so the model treats this as the requested answer.
-    token_like = bool(re.search(r"\b\d{6,12}:[A-Za-z0-9_-]{20,}\b", src))
-    if ("telegram" in prev_l or "botfather" in prev_l) and "token" in prev_l and token_like:
-        hints.append("User likely provided the Telegram bot token you requested.")
-
-    id_requested = any(k in prev_l for k in ("chat id", "user id", "bot id", "allowed chat", "which id"))
-    numeric_id_like = bool(re.fullmatch(r"\s*-?\d{5,}\s*", src))
-    if id_requested and numeric_id_like:
-        hints.append("User likely provided the numeric ID you requested.")
-
-    if "you asked me" in src_l and ("id" in src_l or "token" in src_l):
-        hints.append("Do not re-ask the same field; acknowledge prior request and continue.")
-
-    if not hints:
-        return ""
-    return format_input_continuity_hint("\n".join(f"- {h}" for h in hints)).strip()

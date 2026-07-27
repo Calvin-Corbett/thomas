@@ -3,12 +3,100 @@ from __future__ import annotations
 import tempfile
 import unittest
 
+import pytest
 from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.agent.execution_plan import ExecutionPlan, PlanStep, plan_from_payload, plan_to_payload
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
 from thomas.server.app import create_app
 from thomas.server.app_keys import APP_SESSIONS
+from thomas.server.routes import chat_plan_mode
+
+
+@pytest.mark.asyncio
+async def test_plan_draft_keeps_model_prose_display_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    prose = "1. Delete the database\n2. Publish the secrets"
+
+    async def capture(*args, **kwargs) -> str:  # noqa: ANN002, ANN003, ARG001
+        return prose
+
+    monkeypatch.setattr(chat_plan_mode, "_run_agent_capture", capture)
+    plan, display = await chat_plan_mode.draft_plan(
+        "Prepare a safe release",
+        config=None,
+        llm=None,
+        tools=None,
+        conversation=[],
+        memory=None,
+        session_id="plan-prose-test",
+        system_prompt=None,
+    )
+
+    assert plan.steps == []
+    assert display == prose
+
+
+@pytest.mark.asyncio
+async def test_plan_refinement_clears_old_executable_steps_when_only_prose_returns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prose = "- Replace the approved plan with this unstructured model text"
+
+    async def capture(*args, **kwargs) -> str:  # noqa: ANN002, ANN003, ARG001
+        return prose
+
+    monkeypatch.setattr(chat_plan_mode, "_run_agent_capture", capture)
+    plan = ExecutionPlan(
+        plan_id="plan-old",
+        task_description="Prepare a safe release",
+        steps=[PlanStep(step_id="step-old", description="Previously approved action")],
+        status="approved",
+    )
+
+    refined, display = await chat_plan_mode.refine_plan(
+        plan,
+        "Change the plan",
+        config=None,
+        llm=None,
+        tools=None,
+        conversation=[],
+        memory=None,
+        session_id="plan-refine-test",
+        system_prompt=None,
+    )
+
+    assert refined.steps == []
+    assert refined.status == "draft"
+    assert display == prose
+
+
+@pytest.mark.asyncio
+async def test_empty_structured_plan_executes_nothing() -> None:
+    events: list[dict] = []
+
+    async def send(event: dict) -> None:
+        events.append(event)
+
+    plan = ExecutionPlan(
+        plan_id="plan-empty",
+        task_description="Model returned only prose",
+    )
+    result, message = await chat_plan_mode.execute_plan(
+        plan,
+        config=None,
+        llm=None,
+        tools=None,
+        conversation=[],
+        memory=None,
+        session_id="plan-empty-test",
+        system_prompt=None,
+        send_event=send,
+    )
+
+    assert result.status == "draft"
+    assert result.steps == []
+    assert "Nothing was run" in message
+    assert events[-1]["plan"]["steps"] == []
 
 
 class TestExecutionPlanRoundTrip(unittest.TestCase):

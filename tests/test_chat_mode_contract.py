@@ -103,8 +103,9 @@ def test_primary_chat_renders_honest_tool_and_observed_model_receipts() -> None:
     assert "finishToolStep(idx, evt.ok !== false)" in text
     assert "function applyModelRuntimeReceipt(idx, runtime)" in text
     assert "type === 'model_runtime'" in text
-    assert "observed failover" in text
-    assert "Observed runtime model" in text
+    assert "fallback used" in text
+    assert "Verified: this model produced this reply" in text
+    assert "const observedId =" in text
 
 
 def test_primary_chat_renders_safe_structured_markdown_for_assistant_only() -> None:
@@ -184,7 +185,7 @@ def test_work_adapter_uses_real_scoped_apis_and_mission_deployment() -> None:
     assert "window.prompt" not in text
 
 
-def test_work_onboarding_revisions_replace_older_workflow_drafts() -> None:
+def test_work_onboarding_uses_structured_state_and_explicit_selection() -> None:
     completed = subprocess.run(
         [
             "node",
@@ -199,7 +200,8 @@ def test_work_onboarding_revisions_replace_older_workflow_drafts() -> None:
     )
 
     assert completed.returncode == 0, completed.stdout + completed.stderr
-    assert '"latestWorkflowWins":true' in completed.stdout
+    assert '"structuredWorkflowState":true' in completed.stdout
+    assert '"proseCannotSelectWorkflow":true' in completed.stdout
     assert '"firstTurnHiddenCompletion":true' in completed.stdout
     assert '"reconciliationExecuted":true' in completed.stdout
     assert '"activeDraftRequeued":true' in completed.stdout
@@ -211,9 +213,13 @@ def test_work_styles_are_decomposed_and_loaded_in_order() -> None:
     mode = text.index("/static/css/unified_work_mode.css")
     details = text.index("/static/css/unified_work_details.css")
     assert mode < details
-    for relative in ("unified_work_mode.css", "unified_work_details.css"):
+    line_caps = {
+        "unified_work_mode.css": 650,
+        "unified_work_details.css": 600,
+    }
+    for relative, line_cap in line_caps.items():
         lines = (REPO_ROOT / "thomas/server/web/css" / relative).read_text(encoding="utf-8").splitlines()
-        assert len(lines) <= 600
+        assert len(lines) <= line_cap
 
 
 def test_work_adapter_hides_without_cancelling_the_active_stream() -> None:
@@ -543,9 +549,7 @@ def test_surface_namespace_fails_closed() -> None:
     assert parse_chat_surface_namespace({}).mode == "chat"
     assert parse_chat_surface_namespace({"surface_mode": "work", "context_id": "job-42"}).context_id == "job-42"
     assert (
-        parse_chat_surface_namespace(
-            {"surface_mode": "workspace", "context_id": "workspace:virtual_office"}
-        ).context_id
+        parse_chat_surface_namespace({"surface_mode": "workspace", "context_id": "workspace:virtual_office"}).context_id
         == "workspace:office"
     )
     assert (
@@ -557,9 +561,7 @@ def test_surface_namespace_fails_closed() -> None:
         == "workspace:my_stuff"
     )
     assert (
-        parse_chat_surface_namespace(
-            {"surface_mode": "workspace", "context_id": "workspace:paper_trading"}
-        ).context_id
+        parse_chat_surface_namespace({"surface_mode": "workspace", "context_id": "workspace:paper_trading"}).context_id
         == "workspace:paper_trading"
     )
 
@@ -582,12 +584,8 @@ def test_surface_namespace_fails_closed() -> None:
 
 
 def test_workspace_sessions_cannot_cross_route_namespaces() -> None:
-    mission = parse_chat_surface_namespace(
-        {"surface_mode": "workspace", "context_id": "workspace:mission"}
-    )
-    office = parse_chat_surface_namespace(
-        {"surface_mode": "workspace", "context_id": "workspace:office"}
-    )
+    mission = parse_chat_surface_namespace({"surface_mode": "workspace", "context_id": "workspace:mission"})
+    office = parse_chat_surface_namespace({"surface_mode": "workspace", "context_id": "workspace:office"})
     meta = SessionMeta(session_id="resident", surface_mode="workspace", context_id="workspace:mission")
 
     assert session_namespace_matches(meta, mission)

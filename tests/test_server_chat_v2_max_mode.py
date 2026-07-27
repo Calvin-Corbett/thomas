@@ -259,7 +259,7 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         )
         return create_app(cfg)
 
-    async def test_max_mode_streams_thomas_reply_and_background_delegation(self):
+    async def test_max_mode_streams_reply_and_leaves_dispatch_to_model(self):
         _FakeBrain.calls = []
         _FakeDelegationStarter.calls = []
         with (
@@ -284,16 +284,12 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertIn("application/x-ndjson", str(resp.headers.get("Content-Type") or ""))
 
         event_types = [str(evt.get("type") or "") for evt in events]
-        self.assertIn("delegation_started", event_types)
+        self.assertNotIn("delegation_started", event_types)
         reply_text = "".join(str(evt.get("text") or "") for evt in events if evt.get("type") == "text")
         self.assertEqual(reply_text, "Thomas reply.")
         self.assertNotIn("Got it. Sending", reply_text)
-        self.assertEqual(len(_FakeDelegationStarter.calls), 1)
-        self.assertEqual(_FakeDelegationStarter.calls[0]["mode"], "max")
-        self.assertEqual(_FakeDelegationStarter.calls[0]["model_id"], "gpt-5.6-luna")
-        self.assertEqual(_FakeDelegationStarter.calls[0]["reasoning_effort"], "xhigh")
+        self.assertEqual(_FakeDelegationStarter.calls, [])
         self.assertEqual(len(_FakeBrain.calls), 1)
-        self.assertFalse(bool(_FakeBrain.calls[0].get("dispatch_actionable", True)))
 
     async def test_session_delegations_endpoint_returns_runtime_state(self):
         with patch(
@@ -402,7 +398,7 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertFalse(bool(_FakeBrain.calls[0].get("background_ack_only", False)))
         self.assertEqual(str(_FakeBrain.calls[0].get("prompt") or ""), "please implement this plan")
 
-    async def test_auto_mode_forces_live_repo_self_development_to_background(self):
+    async def test_live_repo_words_do_not_force_background_dispatch(self):
         _FakeBrain.calls = []
         _FakeDelegationStarter.calls = []
         prompt = (
@@ -429,15 +425,11 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         events = _parse_ndjson(await resp.text())
         event_types = [str(evt.get("type") or "") for evt in events]
-        self.assertIn("delegation_started", event_types)
-        self.assertEqual(len(_FakeDelegationStarter.calls), 1)
-        self.assertEqual(_FakeDelegationStarter.calls[0]["prompt"], prompt)
-        self.assertEqual(_FakeDelegationStarter.calls[0]["file_access"], 2)
-        self.assertTrue(_FakeDelegationStarter.calls[0]["force"])
-        self.assertEqual(_FakeDelegationStarter.calls[0]["autonomy_level"], 3)
+        self.assertNotIn("delegation_started", event_types)
+        self.assertEqual(_FakeDelegationStarter.calls, [])
         self.assertEqual(len(_FakeBrain.calls), 1)
-        self.assertFalse(bool(_FakeBrain.calls[0].get("dispatch_actionable", True)))
-        self.assertIsNone(_FakeBrain.calls[0].get("send_task"))
+        self.assertIsNotNone(_FakeBrain.calls[0].get("send_task"))
+        self.assertEqual(_FakeBrain.calls[0].get("prompt"), prompt)
 
     async def test_auto_mode_low_autonomy_keeps_actionable_request_inline(self):
         _FakeBrain.calls = []
@@ -463,11 +455,11 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertNotIn("delegation_started", event_types)
         self.assertEqual(_FakeDelegationStarter.calls, [])
         self.assertEqual(len(_FakeBrain.calls), 1)
-        self.assertFalse(bool(_FakeBrain.calls[0].get("dispatch_actionable", True)))
-        self.assertFalse(bool(_FakeBrain.calls[0].get("background_ack_only", False)))
+        self.assertNotIn("dispatch_actionable", _FakeBrain.calls[0])
+        self.assertNotIn("background_ack_only", _FakeBrain.calls[0])
         self.assertEqual(str(_FakeBrain.calls[0].get("prompt") or ""), "please implement this plan")
 
-    async def test_auto_mode_enables_inline_actionable_for_explicit_file_tool_requests(self):
+    async def test_file_tool_words_do_not_toggle_a_hidden_actionable_route(self):
         _FakeBrain.calls = []
         _FakeDelegationStarter.calls = []
         with (
@@ -487,9 +479,9 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         self.assertEqual(_FakeDelegationStarter.calls, [])
         self.assertEqual(len(_FakeBrain.calls), 1)
-        self.assertTrue(bool(_FakeBrain.calls[0].get("dispatch_actionable", False)))
+        self.assertNotIn("dispatch_actionable", _FakeBrain.calls[0])
 
-    async def test_auto_mode_can_launch_background_delegation_when_user_requests_reply_first(self):
+    async def test_reply_first_words_do_not_prelaunch_background_work(self):
         _FakeBrain.calls = []
         _FakeDelegationStarter.calls = []
         with (
@@ -509,13 +501,11 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         events = _parse_ndjson(await resp.text())
         event_types = [str(evt.get("type") or "") for evt in events]
-        self.assertIn("delegation_started", event_types)
-        self.assertEqual(len(_FakeDelegationStarter.calls), 1)
-        self.assertEqual(_FakeDelegationStarter.calls[0]["mode"], "auto")
+        self.assertNotIn("delegation_started", event_types)
+        self.assertEqual(_FakeDelegationStarter.calls, [])
         self.assertEqual(len(_FakeBrain.calls), 1)
-        self.assertFalse(bool(_FakeBrain.calls[0].get("dispatch_actionable", True)))
 
-    async def test_auto_mode_l4_launches_background_delegation_for_explicit_subagent_request(self):
+    async def test_subagent_words_do_not_prelaunch_background_work(self):
         _FakeBrain.calls = []
         _FakeDelegationStarter.calls = []
         with (
@@ -536,13 +526,8 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         events = _parse_ndjson(await resp.text())
         event_types = [str(evt.get("type") or "") for evt in events]
-        self.assertIn("delegation_started", event_types)
-        self.assertEqual(len(_FakeDelegationStarter.calls), 1)
-        self.assertEqual(_FakeDelegationStarter.calls[0]["mode"], "auto")
-        self.assertEqual(
-            str(_FakeDelegationStarter.calls[0]["prompt"] or ""),
-            "Spawn exactly three real sub-agents now and keep the response short.",
-        )
+        self.assertNotIn("delegation_started", event_types)
+        self.assertEqual(_FakeDelegationStarter.calls, [])
         self.assertEqual(len(_FakeBrain.calls), 1)
         self.assertEqual(
             str(_FakeBrain.calls[0].get("prompt") or ""),
@@ -574,7 +559,7 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(_FakeDelegationStarter.calls, [])
         self.assertEqual(len(_FakeBrain.calls), 1)
 
-    async def test_chat_v2_max_token_economy_routes_to_max_delegation(self):
+    async def test_token_economy_does_not_prelaunch_delegation(self):
         _FakeBrain.calls = []
         _FakeDelegationStarter.calls = []
         with (
@@ -595,14 +580,12 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
 
         self.assertEqual(resp.status, 200)
         events = _parse_ndjson(await resp.text())
-        self.assertIn("delegation_started", [str(event.get("type") or "") for event in events])
+        self.assertNotIn("delegation_started", [str(event.get("type") or "") for event in events])
         reply_text = "".join(str(event.get("text") or "") for event in events if event.get("type") == "text")
-        self.assertIn("Max review is running", reply_text)
-        self.assertIn("fresh graders pass it", reply_text)
-        self.assertEqual(_FakeBrain.calls, [])
-        self.assertEqual(len(_FakeDelegationStarter.calls), 1)
-        self.assertEqual(_FakeDelegationStarter.calls[0]["mode"], "max")
-        self.assertEqual(_FakeDelegationStarter.calls[0]["effort"], "max")
+        self.assertEqual(reply_text, "Thomas reply.")
+        self.assertEqual(len(_FakeBrain.calls), 1)
+        self.assertIsNotNone(_FakeBrain.calls[0].get("send_task"))
+        self.assertEqual(_FakeDelegationStarter.calls, [])
 
     async def test_chat_v2_max_token_economy_respects_low_autonomy_cap(self):
         _FakeBrain.calls = []
@@ -627,7 +610,7 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(len(_FakeBrain.calls), 1)
         self.assertEqual(_FakeDelegationStarter.calls, [])
 
-    async def test_max_mode_forwards_file_access_economy_and_guardrails_to_worker(self):
+    async def test_max_mode_controls_do_not_start_worker_without_model_call(self):
         _FakeBrain.calls = []
         _FakeDelegationStarter.calls = []
         with (
@@ -648,11 +631,8 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
             )
 
         self.assertEqual(resp.status, 200)
-        self.assertEqual(len(_FakeDelegationStarter.calls), 1)
-        worker_call = _FakeDelegationStarter.calls[0]
-        self.assertEqual(worker_call["file_access"], 4)
-        self.assertEqual(worker_call["effort"], "max")
-        self.assertEqual(worker_call["guardrails"], "fortress")
+        self.assertEqual(_FakeDelegationStarter.calls, [])
+        self.assertEqual(len(_FakeBrain.calls), 1)
 
     async def test_chat_v2_transcribe_route_accepts_audio_upload(self):
         from unittest.mock import AsyncMock
@@ -744,7 +724,7 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertTrue(_FakeBrain.init_calls)
         self.assertIsNone(_FakeBrain.init_calls[-1]["memory_engine"])
 
-    async def test_chat_v2_persists_memory_off_and_propagates_it_to_later_workers(self):
+    async def test_chat_v2_persists_memory_off_across_later_model_turns(self):
         _FakeBrain.init_calls = []
         _FakeDelegationStarter.calls = []
         with (
@@ -773,16 +753,19 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
 
         self.assertEqual(first.status, 200)
         self.assertEqual(second.status, 200)
-        self.assertEqual([call["memory_enabled"] for call in _FakeDelegationStarter.calls[-2:]], [False, False])
+        self.assertEqual(_FakeDelegationStarter.calls, [])
         self.assertIsNone(_FakeBrain.init_calls[-1]["memory_engine"])
         meta = await self.app[chat_v2_routes.APP_SESSION_STORE].load_meta("sess-memory-persisted-off")
         self.assertIsNotNone(meta)
         self.assertFalse(meta.memory_enabled)
 
     async def test_reasoning_effort_does_not_override_independent_token_economy(self):
+        _FakeBrain.calls = []
+        _FakeLLMClient.calls = []
         _FakeDelegationStarter.calls = []
         with (
             patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain),
+            patch("thomas.server.routes.chat_v2.LLMClient", _FakeLLMClient),
             patch("thomas.server.routes.chat_v2.start_background_delegation", _FakeDelegationStarter.start),
         ):
             resp = await self.client.post(
@@ -798,8 +781,9 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
             )
 
         self.assertEqual(resp.status, 200)
-        self.assertEqual(_FakeDelegationStarter.calls[-1]["reasoning_effort"], "xhigh")
-        self.assertEqual(_FakeDelegationStarter.calls[-1]["effort"], "cheap")
+        self.assertEqual(_FakeDelegationStarter.calls, [])
+        self.assertEqual(_FakeLLMClient.calls[-1]["reasoning_effort"], "xhigh")
+        self.assertEqual(_FakeBrain.calls[-1]["token_economy"], "cheap")
 
     async def test_chat_v2_applies_model_id_from_payload(self):
         _FakeBrain.calls = []
@@ -940,11 +924,7 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(len(_FakeLLMClient.calls), 2)
         self.assertEqual(_FakeLLMClient.calls[-1]["model"], "gpt-5.6-terra")
         self.assertEqual(_FakeLLMClient.calls[-1]["reasoning_effort"], "xhigh")
-        self.assertTrue(_FakeDelegationStarter.calls)
-        self.assertEqual(_FakeDelegationStarter.calls[-1]["profile"], "local")
-        self.assertEqual(_FakeDelegationStarter.calls[-1]["model_id"], "gpt-5.6-terra")
-        self.assertEqual(_FakeDelegationStarter.calls[-1]["reasoning_effort"], "xhigh")
-        self.assertEqual(_FakeDelegationStarter.calls[-1]["effort"], "optimal")
+        self.assertEqual(_FakeDelegationStarter.calls, [])
 
     async def test_chat_v2_session_delete_evicts_cached_llm(self):
         _FakeBrain.calls = []
@@ -974,7 +954,7 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         cache = self.app[chat_v2_routes.APP_SESSION_LLM_CACHE]
         self.assertNotIn("sess-cache-delete", cache)
 
-    async def test_reply_first_background_constrains_visible_prompt(self):
+    async def test_reply_first_words_are_not_rewritten_before_model(self):
         _FakeBrain.calls = []
         _FakeDelegationStarter.calls = []
         prompt = (
@@ -998,9 +978,8 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         self.assertEqual(len(_FakeBrain.calls), 1)
         visible_prompt = str(_FakeBrain.calls[0].get("prompt") or "")
-        self.assertIn("[Visible reply constraint]", visible_prompt)
-        self.assertIn("Reply fast with one sentence now", visible_prompt)
-        self.assertNotIn("draft a detailed hour-by-hour Friday plan.", visible_prompt)
+        self.assertEqual(visible_prompt, prompt)
+        self.assertEqual(_FakeDelegationStarter.calls, [])
 
     async def test_chat_v2_rejects_empty_message_payload(self):
         resp = await self.client.post(
@@ -1066,7 +1045,7 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         self.assertEqual(len(_FakeBrain.calls), 1)
 
-    async def test_chat_v2_surfaces_launcher_failure_as_delegation_failed_event(self):
+    async def test_launcher_is_not_called_without_structured_model_dispatch(self):
         _FakeBrain.calls = []
 
         async def _boom(*args, **kwargs):  # noqa: ANN002, ANN003
@@ -1090,9 +1069,8 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         events = _parse_ndjson(await resp.text())
         failure_events = [evt for evt in events if evt.get("type") == "delegation_failed"]
-        self.assertEqual(len(failure_events), 1)
-        self.assertEqual(failure_events[0].get("error_code"), "delegation_start_failed")
-        self.assertNotIn("delegation launcher blew up", str(failure_events[0]))
+        self.assertEqual(failure_events, [])
+        self.assertEqual(len(_FakeBrain.calls), 1)
 
     async def test_chat_v2_emits_error_event_when_brain_raises(self):
         with patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrainBoom):

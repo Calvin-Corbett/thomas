@@ -5,6 +5,8 @@ from scripts import doc as mod
 DELETED_RUNNER_PATHS = {
     "scripts/forge/gates/competitive_scope_gate.py",
     "scripts/forge/gates/reference_cli_metric_parity_gate.py",
+    "tests/test_chat_controls.py",
+    "tests/test_model_switching.py",
     "tests/test_reference_cli_metric_parity_gate.py",
 }
 
@@ -14,9 +16,7 @@ def test_active_doc_runner_gate_and_test_paths_exist() -> None:
 
 
 def test_retired_deleted_doc_runner_paths_are_documented() -> None:
-    active_gate_paths = {
-        path for _label, command in mod.GATE_COMMANDS for path in mod._iter_command_file_args(command)
-    }
+    active_gate_paths = {path for _label, command in mod.GATE_COMMANDS for path in mod._iter_command_file_args(command)}
     active_test_paths = set(mod.CRITICAL_TEST_FILES)
     retired_paths = {check.path for check in mod.RETIRED_DOC_RUNNER_CHECKS}
     retired_messages = "\n".join(mod._retired_check_messages()).lower()

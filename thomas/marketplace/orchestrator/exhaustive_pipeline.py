@@ -3,16 +3,17 @@
 When a task runs at Exhaustive Effort, this orchestrator sequences the full quality
 pipeline:
 
-    task manager (classify + analyze)
-      -> intent review        (confidence-gated: only when the task is unclear)
-      -> staff the crew       (Effort-scaled team from the router)
+    task manager (validate structured routing metadata)
+      -> intent review        (only when explicitly requested)
+      -> staff the crew       (structured route plus Effort policy)
       -> research + rubric     (what "good" looks like)
       -> crew work
       -> verify + adversarial review  (with a bounded remediation loop)
       -> deliver
 
-The orchestration and decision logic (intent gating, staffing, the remediation
-loop) live here and are unit-testable WITHOUT a live model. The heavy stages
+The orchestration and decision logic (explicit intent gating, staffing, the
+remediation loop) live here and are unit-testable WITHOUT a live model. Task
+prose is passed to workers but is never inspected for routing. The heavy stages
 (research, crew work, verification, review) are injected callables so they can be
 stubbed in tests and supplied by later steps — verification by Step 6, adversarial
 review by Step 7. Lighter Effort levels do NOT use this pipeline; they run the
@@ -22,7 +23,7 @@ ordinary single worker.
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -92,9 +93,9 @@ class ExhaustivePipeline:
         verify_fn: Callable[[PipelineContext], Awaitable[bool]] | None = None,
         review_fn: Callable[[PipelineContext], Awaitable[bool]] | None = None,
         intent_review_fn: Callable[[PipelineContext], Awaitable[bool]] | None = None,
-        classify: Callable[[str], task_router.TaskRoute] | None = None,
+        route: Callable[..., task_router.TaskRoute] | None = None,
         assemble: Callable[..., list[tuple[str, Any]]] | None = None,
-        analyze: Callable[[str], task_decomposer.TaskAnalysis] | None = None,
+        normalize_analysis: Callable[..., task_decomposer.TaskAnalysis] | None = None,
     ) -> None:
         self._emit = emit
         self._research = research_fn or _stub_research
@@ -102,25 +103,35 @@ class ExhaustivePipeline:
         self._verify = verify_fn or _stub_verify
         self._review = review_fn or _stub_review
         self._intent_review = intent_review_fn or _auto_confirm_intent
-        self._classify = classify or task_router.classify_task
+        self._route = route or task_router.route_task
         self._assemble = assemble or task_router.assemble_team
-        self._analyze = analyze or task_decomposer.analyze_task
+        self._normalize_analysis = normalize_analysis or task_decomposer.normalize_task_analysis
 
     async def _event(self, stage: str, ctx: PipelineContext, **extra: Any) -> None:
         ctx.stages.append(stage)
         if self._emit is not None:
             await self._emit({"type": "pipeline_stage", "stage": stage, "task_type": ctx.task_type, **extra})
 
-    async def run(self, prompt: str, *, effort: str = "exhaustive", autonomy_level: int = 4) -> PipelineContext:
+    async def run(
+        self,
+        prompt: str,
+        *,
+        effort: str = "exhaustive",
+        autonomy_level: int = 4,
+        task_type: str | None = None,
+        lead_specialty: str | None = None,
+        crew_specialties: Sequence[object] | None = None,
+        task_analysis: Mapping[str, Any] | task_decomposer.TaskAnalysis | None = None,
+    ) -> PipelineContext:
         ctx = PipelineContext(prompt=str(prompt or ""), effort=effort, autonomy_level=autonomy_level)
 
-        # 1. Task manager — classify the task and analyze clarity.
-        route = self._classify(ctx.prompt)
+        # Validate structured routing metadata without inspecting the prompt.
+        route = self._route(task_type, lead_specialty=lead_specialty)
         ctx.task_type = route.task_type
-        ctx.analysis = self._analyze(ctx.prompt)
+        ctx.analysis = self._normalize_analysis(task_analysis)
         await self._event("task_manager", ctx, clarity=ctx.analysis.clarity_score)
 
-        # 2. Intent review — only when the analysis says the task is unclear.
+        # Intent review runs only when a structured caller explicitly asks.
         if ctx.analysis.needs_intent_review:
             ctx.intent_confirmed = bool(await self._intent_review(ctx))
             await self._event("intent_review", ctx, confirmed=ctx.intent_confirmed)
@@ -129,8 +140,15 @@ class ExhaustivePipeline:
                 await self._event("aborted", ctx, reason=ctx.aborted)
                 return ctx
 
-        # 3. Staff the crew — Effort-scaled team from the router.
-        ctx.crew = list(self._assemble(route, ctx.effort, ctx.autonomy_level))
+        # Staffing follows exact structured fields plus the explicit Effort dial.
+        ctx.crew = list(
+            self._assemble(
+                route,
+                ctx.effort,
+                ctx.autonomy_level,
+                specialties=crew_specialties,
+            )
+        )
         await self._event("staff_crew", ctx, crew=[bot.name for _spec, bot in ctx.crew])
 
         # 4. Research -> rubric — establish what "good" looks like.

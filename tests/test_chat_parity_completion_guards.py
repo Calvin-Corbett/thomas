@@ -13,36 +13,14 @@ from thomas.server import chat_delegation_exhaustive_runner, exhaustive_runtime
 from thomas.server.chat_delegation_deliverable import _WorkerRetry
 from thomas.server.chat_delegation_result_policy import worker_text_is_confirmed_answer
 from thomas.server.chat_delegation_runner import _finalize_live_repo_completion
-from thomas.server.chat_delegation_worker_config import _requested_delegate_items
 
 
-class TestCombinedContainerFanoutGuard(unittest.TestCase):
-    def test_container_wording_variants_remain_one_task(self) -> None:
-        prompts = (
-            "Build a single dashboard that includes the following three outputs:\n"
-            "1. Revenue chart\n2. Cost chart\n3. Margin chart",
-            "Create one workbook that contains these three outputs:\n1. Revenue sheet\n2. Cost sheet\n3. Margin sheet",
-            "Produce one archive composed of these three deliverables:\n1. revenue.csv\n2. costs.csv\n3. margin.csv",
-            "Build a dashboard with three outputs:\n1. Revenue chart\n2. Cost chart\n3. Margin chart",
-            "Create the following three outputs inside one dashboard:\n"
-            "1. Revenue chart\n2. Cost chart\n3. Margin chart",
-            "Create three outputs in a single workbook:\n1. Revenue sheet\n2. Cost sheet\n3. Margin sheet",
-        )
-        for prompt in prompts:
-            with self.subTest(prompt=prompt.splitlines()[0]):
-                self.assertEqual(_requested_delegate_items(prompt), [])
-
-    def test_true_separate_deliverables_still_fan_out(self) -> None:
-        prompt = "Create three separate files:\n1. revenue.csv\n2. costs.csv\n3. margin.csv"
-        self.assertEqual(_requested_delegate_items(prompt), ["revenue.csv", "costs.csv", "margin.csv"])
-
-
-class TestActionReceiptGuard(unittest.TestCase):
-    def test_real_world_claim_needs_a_matching_successful_receipt(self) -> None:
+class TestStructuredWorkerTerminalGuard(unittest.TestCase):
+    def test_terminal_answer_status_does_not_classify_claim_wording(self) -> None:
         prompt = "Mail the signed contract to the client."
         claim = ["Mailed the signed contract to the client."]
-        self.assertFalse(worker_text_is_confirmed_answer(claim, prompt=prompt))
-        self.assertFalse(
+        self.assertTrue(worker_text_is_confirmed_answer(claim, prompt=prompt))
+        self.assertTrue(
             worker_text_is_confirmed_answer(
                 claim,
                 prompt=prompt,
@@ -56,6 +34,13 @@ class TestActionReceiptGuard(unittest.TestCase):
                 prompt=prompt,
                 succeeded_tools=["email.send"],
                 failed_tools=[],
+            )
+        )
+        self.assertFalse(
+            worker_text_is_confirmed_answer(
+                claim,
+                prompt=prompt,
+                failed_tools=["email.send"],
             )
         )
 

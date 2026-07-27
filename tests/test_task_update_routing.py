@@ -33,14 +33,16 @@ def _mk(repo: Path, session: str, summary: str) -> str:
     return eid
 
 
-def test_resolve_prefers_running_over_terminal() -> None:
+def test_resolve_requires_an_exact_structured_reference() -> None:
     rows = [
         {"execution_id": "exec-aaaa1111", "state": "completed"},
         {"execution_id": "exec-bbbb2222", "state": "executing"},
     ]
     with patch.object(cd, "session_active_delegations", return_value=rows):
-        # A bare suffix that matches the running one resolves to it.
-        assert cd.resolve_active_task_ref("s", "bbbb2222") == "exec-bbbb2222"
+        # A guessed suffix is not promoted to a task selection.
+        assert cd.resolve_active_task_ref("s", "bbbb2222") is None
+        # The exact raw execution id is accepted.
+        assert cd.resolve_active_task_ref("s", "exec-bbbb2222") == "exec-bbbb2222"
         # The bracketed digest form is accepted.
         assert cd.resolve_active_task_ref("s", "[task exec-bbbb2222]") == "exec-bbbb2222"
         # No plausible match returns None (caller tells the user instead of guessing).

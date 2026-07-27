@@ -9,7 +9,6 @@ import json
 import logging
 import os
 import random
-import re
 import sys
 import threading
 import time
@@ -245,7 +244,7 @@ class ThomasREPL(ThomasREPLActivityMixin, ThomasREPLPanelsMixin, ThomasREPLRunti
                 config.default_model = resolved_profile
                 if resolved_model_id:
                     config.models[resolved_profile].model = resolved_model_id
-        except Exception:
+        except (KeyError, RuntimeError, TypeError, ValueError):
             resolved_profile = str(config.default_model)
         self._current_model: str = resolved_profile
         self._autonomy_level: int = 3
@@ -343,7 +342,7 @@ class ThomasREPL(ThomasREPLActivityMixin, ThomasREPLPanelsMixin, ThomasREPLRunti
             try:
                 self._memory = AutonomyMemoryEngine(config)
                 self._memory.start()
-            except Exception as e:
+            except (OSError, RuntimeError, TypeError, ValueError) as e:
                 self._console.print(f"[yellow]Memory engine failed to start: {e}[/yellow]")
                 self._memory = None
         self._restore_conversation_state()
@@ -521,7 +520,7 @@ class ThomasREPL(ThomasREPLActivityMixin, ThomasREPLPanelsMixin, ThomasREPLRunti
                 self._transition_ui_state(ReplUiState.IDLE)
             try:
                 event.current_buffer.cancel_completion()
-            except Exception:
+            except (AttributeError, RuntimeError):
                 pass
             event.app.exit(result="")
 
@@ -655,7 +654,7 @@ class ThomasREPL(ThomasREPLActivityMixin, ThomasREPLPanelsMixin, ThomasREPLRunti
 
         try:
             import msvcrt
-        except Exception:
+        except ImportError:
             return
 
         while not stop.is_set():
@@ -670,7 +669,7 @@ class ThomasREPL(ThomasREPLActivityMixin, ThomasREPLPanelsMixin, ThomasREPLRunti
                 if key == "\x00":
                     if msvcrt.kbhit():
                         _ = msvcrt.getwch()
-            except Exception:
+            except OSError:
                 return
 
     async def _run_agent_turn(self, prompt: str) -> None:
@@ -736,7 +735,7 @@ class ThomasREPL(ThomasREPLActivityMixin, ThomasREPLPanelsMixin, ThomasREPLRunti
         if command == "/skill":
             try:
                 return sorted(list_all_skills().keys())
-            except Exception:
+            except (OSError, RuntimeError, TypeError, ValueError):
                 return []
         if command == "/worktree":
             return ["create", "list", "remove"]
@@ -755,7 +754,7 @@ class ThomasREPL(ThomasREPLActivityMixin, ThomasREPLPanelsMixin, ThomasREPLRunti
             return ""
         try:
             current_model = str(self.config.models.get(current_profile).model or "").strip()
-        except Exception:
+        except (AttributeError, KeyError, TypeError):
             current_model = ""
         return build_model_label(current_profile, current_model)
 
@@ -868,7 +867,7 @@ class ThomasREPL(ThomasREPLActivityMixin, ThomasREPLPanelsMixin, ThomasREPLRunti
     def _truncate_to_terminal(self, text: str) -> str:
         try:
             width = int(self._console.size.width or 120)
-        except Exception:
+        except (AttributeError, TypeError, ValueError):
             width = 120
         width = max(20, width - 1)
         if len(text) <= width:
@@ -908,7 +907,7 @@ class ThomasREPL(ThomasREPLActivityMixin, ThomasREPLPanelsMixin, ThomasREPLRunti
             # Cursor is on the next line after Enter; clear both lines so input is ephemeral.
             sys.stdout.write("\r\033[2K\033[1A\033[2K\r")
             sys.stdout.flush()
-        except Exception:
+        except OSError:
             return
 
     def _print_turn(self, role: str, text: str) -> None:
@@ -989,7 +988,7 @@ class ThomasREPL(ThomasREPLActivityMixin, ThomasREPLPanelsMixin, ThomasREPLRunti
                     app = get_app()
                     if app.current_buffer:
                         app.current_buffer.start_completion(select_first=True)
-                except Exception:
+                except (AttributeError, RuntimeError):
                     return
 
             overlay_kwargs["pre_run"] = _start_completion_immediately
@@ -1148,7 +1147,7 @@ class ThomasREPL(ThomasREPLActivityMixin, ThomasREPLPanelsMixin, ThomasREPLRunti
         model_profile = str(self._current_model or "").strip()
         try:
             current_cfg = self.config.get_model(model_profile)
-        except Exception:
+        except (KeyError, RuntimeError, TypeError, ValueError):
             current_cfg = None
         if current_cfg is None:
             return False
@@ -1216,54 +1215,6 @@ class ThomasREPL(ThomasREPLActivityMixin, ThomasREPLPanelsMixin, ThomasREPLRunti
         label = f"[bold magenta]{AUTO_LABEL}[/bold magenta]"
         self._console.print(f"{label} [dim]{text}[/dim]")
 
-    def _handle_nl_model(self, text: str) -> bool:
-        """Handle natural-language model switches or listing. Returns True if handled."""
-        t = text.strip()
-        if not t:
-            return False
-
-        t_lower = t.lower()
-        if "model" in t_lower and any(k in t_lower for k in ("list", "show", "what models", "available")):
-            available = list(self.config.models.keys())
-            self._console.print(f"Current: [cyan]{self._current_model}[/cyan]  Available: {', '.join(available)}")
-            return True
-
-        # e.g. "switch to model local", "use model local", "set model local", "switch to local"
-
-        m = re.match(r"^(switch|use|set|change)\\s+(to\\s+)?(model\\s+)?(?P<name>[\\w\\-\\.:]+)\\s*$", t_lower)
-        if not m:
-            return False
-
-        name = m.group("name")
-        # Map back to exact model key if case differs
-        for key in self.config.models:
-            if key.lower() == name:
-                name = key
-                break
-        if name in self.config.models:
-            self._current_model = name
-            self._runtime_context_window = None
-            self._runtime_context_window_profile = None
-            self._last_context_source = None
-            if self._llm:
-                # Reset client so it re-reads the new model config
-                try:
-                    import asyncio
-
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        loop.create_task(self._llm.close())
-                    else:
-                        loop.run_until_complete(self._llm.close())
-                except Exception as e:
-                    log.debug("Failed to close LLM while switching model: %s", e)
-                self._llm = None
-            self._console.print(f"[dim]Switched to [cyan]{name}[/cyan][/dim]")
-            return True
-
-        self._console.print(f"[red]Unknown model '{name}'. Available: {', '.join(self.config.models.keys())}[/red]")
-        return True
-
     async def run(self) -> None:
         """Main REPL loop."""
         version = _get_version()
@@ -1293,7 +1244,7 @@ class ThomasREPL(ThomasREPLActivityMixin, ThomasREPLPanelsMixin, ThomasREPLRunti
             connected = self._mcp_bridge.list_servers()
             if connected:
                 self._console.print(f"[dim]MCP servers: {', '.join(connected)}[/dim]")
-        except Exception as e:
+        except (ConnectionError, OSError, RuntimeError, TypeError, ValueError) as e:
             log.debug("MCP startup failed: %s", e)
 
         while True:
@@ -1331,10 +1282,6 @@ class ThomasREPL(ThomasREPLActivityMixin, ThomasREPLPanelsMixin, ThomasREPLRunti
                 if handled:
                     continue
                 # Unknown slash-like input can be treated as plain text.
-            elif self._handle_nl_model(user_input):
-                self._append_transcript_turn("user", user_input)
-                continue
-
             # For plain text chat, render user input once in the transcript.
             self._append_transcript_turn("user", user_input)
 
@@ -1356,7 +1303,7 @@ class ThomasREPL(ThomasREPLActivityMixin, ThomasREPLPanelsMixin, ThomasREPLRunti
         if self._mcp_bridge:
             try:
                 await self._mcp_bridge.disconnect_all()
-            except Exception as e:
+            except (ConnectionError, OSError, RuntimeError, TypeError, ValueError) as e:
                 log.debug("MCP cleanup failed: %s", e)
 
         # Prompt about worktree cleanup

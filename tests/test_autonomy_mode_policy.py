@@ -1,34 +1,32 @@
-from thomas.marketplace.autonomy.mode_policy import apply_workflow_mode_policy, classify_task
+from thomas.marketplace.autonomy.mode_policy import apply_workflow_mode_policy
 
 
-def test_classify_task_detects_coding_signals() -> None:
-    payload = {"goal": "Fix bug in src/app.py and add a unit test"}
-    assert classify_task(payload) == "coding"
-
-
-def test_mode_policy_uses_coding_pipeline_for_max_coding() -> None:
+def test_max_mode_does_not_classify_coding_prose_or_select_a_pipeline() -> None:
     payload, meta = apply_workflow_mode_policy(
         {
             "goal": "Refactor function in repo and add tests",
+            "workflow": "chain",
             "mode": "thinking",
             "token_economy": "max",
         }
     )
-    assert payload.get("workflow") == "coding_pipeline"
-    assert int(payload.get("max_rounds") or 0) >= 1
-    assert bool(meta.get("applied"))
-    assert str(meta.get("reason") or "") == "max_coding_pipeline"
+    assert payload["workflow"] == "chain"
+    assert "worker_count" not in payload
+    assert meta["applied"] is False
+    assert meta["task_class"] == "general"
+    assert meta["reason"] == "structured_routing_only"
 
 
-def test_mode_policy_keeps_general_task_unchanged() -> None:
+def test_explicit_structured_workflow_and_task_class_are_preserved() -> None:
     payload, meta = apply_workflow_mode_policy(
         {
-            "goal": "Summarize this meeting",
-            "workflow": "chain",
+            "goal": "Any prose is content",
+            "workflow": "coding_pipeline",
+            "task_class": "coding",
             "mode": "auto",
             "token_economy": "optimal",
         }
     )
-    assert payload.get("workflow") == "chain"
-    assert not bool(meta.get("applied"))
-    assert str(meta.get("task_class") or "") == "general"
+    assert payload["workflow"] == "coding_pipeline"
+    assert meta["effective_workflow"] == "coding_pipeline"
+    assert meta["task_class"] == "coding"

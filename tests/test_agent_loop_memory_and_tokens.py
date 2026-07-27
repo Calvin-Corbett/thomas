@@ -6,7 +6,7 @@ from typing import Any
 from unittest.mock import patch
 
 from thomas.agent.loop import AgentLoop
-from thomas.agent.loop_streaming import apply_memory_policy, retrieve_memory, validate_memory_relevance
+from thomas.agent.loop_streaming import apply_memory_policy, retrieve_memory
 from thomas.agent.routing import RouteDecision
 from thomas.core.config import AppConfig, ModelConfig
 from thomas.core.events import EventType
@@ -189,9 +189,18 @@ class TestAgentLoopMemoryAndTokens(unittest.TestCase):
         self.assertIn("prompt_to_completion_ratio", token_report)
         self.assertIn("suggestions", token_report)
         self.assertIn("route", token_report)
-        # Profile hints should be promoted to pins.
-        self.assertIn("user.name", memory.pins)
-        self.assertIn("user.preference", memory.pins)
+        # Free-form user prose is persisted as conversation memory, but it is
+        # not locally classified into profile pins.  A frontier-model tool
+        # call or an explicit structured memory action owns that semantic
+        # choice.
+        self.assertEqual({}, memory.pins)
+        self.assertTrue(
+            any(
+                event["etype"] == "user_message"
+                and event["text"] == "my name is Alex and I prefer concise replies."
+                for event in memory.events
+            )
+        )
 
     def test_route_applies_thread_memory_policy_for_casual_chat(self) -> None:
         agent, memory = self._build_agent()
@@ -380,19 +389,6 @@ class TestAgentLoopMemoryAndTokens(unittest.TestCase):
         self.assertIn("Purpose Brief", enabled_text)
         self.assertIn("Project Instructions", enabled_text)
         self.assertIn("SKILLS", enabled_text)
-
-    def test_validate_memory_relevance_prefers_query_term_coverage(self) -> None:
-        strong = validate_memory_relevance(
-            "deployment target cloudflare workers",
-            "Durable memory: deployment target is Cloudflare Workers.",
-        )
-        weak = validate_memory_relevance(
-            "deployment target cloudflare workers",
-            "Durable memory: favorite pizza toppings are mushrooms and olives.",
-        )
-
-        self.assertGreater(strong, 0.5)
-        self.assertEqual(weak, 0.0)
 
     def test_agent_loop_generates_unique_fallback_ids_when_not_provided(self) -> None:
         cfg = AppConfig(

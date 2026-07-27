@@ -1,48 +1,42 @@
-"""Pre-dispatch task analysis (Step 3)."""
+"""Structured task analysis validation."""
 
 from __future__ import annotations
 
 import unittest
 
-from thomas.core.task_decomposer import INTENT_REVIEW_THRESHOLD, analyze_task
+from thomas.core.task_decomposer import TaskAnalysis, normalize_task_analysis
 
 
 class TestTaskDecomposer(unittest.TestCase):
-    def test_clear_well_specified_task_no_review(self):
-        a = analyze_task(
-            "Add a logout button to the navbar that clears the session so that the user returns to the login page"
+    def test_missing_analysis_uses_neutral_no_review_default(self):
+        analysis = normalize_task_analysis()
+        self.assertEqual(analysis.clarity_score, 100)
+        self.assertEqual(analysis.complexity, "unspecified")
+        self.assertEqual(analysis.recommended_effort, "")
+        self.assertFalse(analysis.needs_intent_review)
+
+    def test_structured_analysis_is_preserved(self):
+        analysis = normalize_task_analysis(
+            {
+                "clarity_score": 35,
+                "complexity": "hard",
+                "recommended_effort": "exhaustive",
+                "needs_intent_review": True,
+            }
         )
-        self.assertGreaterEqual(a.clarity_score, INTENT_REVIEW_THRESHOLD)
-        self.assertEqual(a.complexity, "moderate")
-        self.assertFalse(a.needs_intent_review)
+        self.assertEqual(analysis, TaskAnalysis(35, "hard", "exhaustive", True))
 
-    def test_vague_task_low_clarity_triggers_review(self):
-        a = analyze_task("just fix it somehow")
-        self.assertLess(a.clarity_score, INTENT_REVIEW_THRESHOLD)
-        self.assertTrue(a.needs_intent_review)
-
-    def test_short_task_low_clarity(self):
-        a = analyze_task("make it")
-        self.assertLess(a.clarity_score, INTENT_REVIEW_THRESHOLD)
-
-    def test_complex_task_is_hard_and_needs_review(self):
-        a = analyze_task(
-            "migrate the auth system across multiple services and integrate the distributed pipeline end to end"
+    def test_invalid_fields_are_safely_normalized(self):
+        analysis = normalize_task_analysis(
+            {
+                "clarity_score": 900,
+                "complexity": "invented",
+                "recommended_effort": "infinite",
+            }
         )
-        self.assertEqual(a.complexity, "hard")
-        self.assertTrue(a.needs_intent_review)
-        self.assertEqual(a.recommended_effort, "diligent")
-
-    def test_simple_task_recommends_brisk(self):
-        a = analyze_task("print hello world")
-        self.assertEqual(a.complexity, "simple")
-        self.assertEqual(a.recommended_effort, "brisk")
-
-    def test_clarity_is_bounded(self):
-        for prompt in ("", "x", "a b c d e f g h i j k l m n o p"):
-            a = analyze_task(prompt)
-            self.assertGreaterEqual(a.clarity_score, 0)
-            self.assertLessEqual(a.clarity_score, 100)
+        self.assertEqual(analysis.clarity_score, 100)
+        self.assertEqual(analysis.complexity, "unspecified")
+        self.assertEqual(analysis.recommended_effort, "")
 
 
 if __name__ == "__main__":

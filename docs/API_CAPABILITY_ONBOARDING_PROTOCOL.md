@@ -34,7 +34,8 @@ Goal: ship capabilities safely, with parity across UI/CLI and durable docs in li
 ## 3) Implement with Surface Parity
 
 1. Wire backend execution path.
-2. Ensure user-triggered capability changes via conversation are reflected in UI state.
+2. Reflect capability changes in UI state only after an explicit UI/API control or
+   a structured capability call selected by the frontier model.
 3. Apply corresponding UI + CLI updates in the same change set.
 4. Do not ship capability flags that only work in one surface.
 

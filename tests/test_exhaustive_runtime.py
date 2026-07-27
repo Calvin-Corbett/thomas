@@ -52,14 +52,9 @@ class TestExhaustiveRouting(unittest.TestCase):
             (0.0, True, "grader returned invalid structured output"),
         )
 
-    def test_answer_only_decision_does_not_enable_tools(self):
-        self.assertFalse(er._task_needs_tools("Recommend whether Chat, Code, or Work should be the default."))
-        self.assertTrue(er._task_needs_tools("Create a playable web game in index.html."))
-        self.assertTrue(er._task_needs_tools("I need a PDF report for the board."))
-        self.assertTrue(er._task_needs_tools("Please give me a PDF report."))
-        self.assertTrue(er._task_needs_tools("I would like a playable game."))
-        self.assertTrue(er._task_needs_tools("Use web.search to research the latest release."))
-        self.assertTrue(er._task_needs_tools("Analyze the attached spreadsheet."))
+    def test_prompt_tool_and_artifact_classifiers_are_removed(self):
+        self.assertFalse(hasattr(er, "_task_needs_tools"))
+        self.assertFalse(hasattr(er, "_task_needs_artifacts"))
 
     def test_artifact_evidence_reads_back_named_files_and_validates_pdf_header(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -68,13 +63,21 @@ class TestExhaustiveRouting(unittest.TestCase):
             (root / "chart-data.csv").write_text("Quarter,Value\nQ1,12\n", encoding="utf-8")
 
             passed, artifacts, issues = er._artifact_evidence(
-                "Deliver chart.pdf plus chart-data.csv.",
+                ["chart.pdf", "chart-data.csv"],
                 directory,
             )
 
         self.assertTrue(passed)
         self.assertEqual(artifacts, ["chart-data.csv", "chart.pdf"])
         self.assertEqual(issues, [])
+
+    def test_artifact_evidence_rejects_unsafe_structured_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "report.pdf").write_bytes(b"%PDF-1.7\nproof")
+            passed, _artifacts, issues = er._artifact_evidence(["../report.pdf"], directory)
+
+        self.assertFalse(passed)
+        self.assertEqual(issues, ["invalid_expected_path"])
 
 
 class TestRunExhaustivePipeline(unittest.IsolatedAsyncioTestCase):
@@ -118,6 +121,7 @@ class TestRunExhaustivePipeline(unittest.IsolatedAsyncioTestCase):
                 specialist_id="coding",
                 file_access=2,
                 runtime_policy=runtime_policy,
+                expected_artifacts=["report.pdf"],
             )
 
         reviewer_calls = [call for call in captured if str(call.get("role") or "").startswith("reviewer-")]
@@ -238,7 +242,8 @@ class TestRunExhaustivePipeline(unittest.IsolatedAsyncioTestCase):
         self.assertIn("fs.write_file", tools_seen)
         self.assertTrue(ctx.verified)
         self.assertTrue(ctx.review_passed)
-        self.assertIs(ctx.rubric["tools_required"], True)
+        self.assertIs(ctx.rubric["tools_available"], True)
+        self.assertIs(ctx.rubric["tools_required"], False)
         self.assertGreaterEqual(len(receipts), 4)
         self.assertIn("crew_work", {receipt["pass_kind"] for receipt in receipts})
         self.assertEqual(

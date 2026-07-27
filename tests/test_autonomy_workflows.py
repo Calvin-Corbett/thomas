@@ -301,6 +301,21 @@ class TestWorkflowRunner(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(out.get("workers", [])), 2)
         self.assertEqual(out.get("final_output"), "synthesized")
 
+    async def test_orchestrator_without_count_uses_one_worker(self):
+        runner = WorkflowRunner(
+            chat_adapter=_ChainParallelAdapter(),
+            session_id="s1",
+            default_profile="chat-profile",
+            capabilities_by_profile={"chat-profile": {"chat": True, "video_gen": True}},
+        )
+        out = await runner.run(
+            {
+                "workflow": "orchestrator_worker",
+                "goal": "build a short campaign plan",
+            }
+        )
+        self.assertEqual(len(out.get("workers", [])), 1)
+
     async def test_orchestrator_ignores_untrusted_model_profile_without_registry(self):
         adapter = _InventedProfileAdapter()
         runner = WorkflowRunner(chat_adapter=adapter, session_id="s1")

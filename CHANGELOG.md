@@ -9,6 +9,18 @@ Versioning: Semantic Versioning.
 
 ### Changed
 
+- Chat can no longer infer autopilot or preflight behavior from prompt wording; those actions require structured runtime state.
+- Chat reply-versus-dispatch decisions now come from Thomas's structured model call; persona titles remain display text and cannot decide whether work starts.
+- Whole-request task contracts now come from Thomas's structured execution plan instead of a prompt-derived local task-definition classifier.
+- Removed phrase-based chat controls and model switching so ordinary messages reach Thomas; settings now use explicit UI/API fields or model-owned structured capabilities.
+- Delegation, worker handoff, Canvas review, artifact verification, and exhaustive execution now exchange structured status and evidence instead of reclassifying worker prose.
+- Chat task cards and task-ledger state now come from structured runtime/delegation events rather than local prompt-word matching.
+- Disconnected constraint, conversation, intelligence, cost-routing, and NLU keyword classifiers have been retired so they cannot quietly regain ownership of prompt meaning.
+- Agent execution now follows structured tool, autonomy, and stream events without a second local layer inferring intent from the user's wording.
+- Memory no longer promotes facts or profile hints by pattern-matching ordinary chat prose; only the explicit structured Remember action writes global memory, while library curation and exact-repeat deduplication remain available.
+- Work and Max now execute the workflow, task type, specialist list, fan-out, and intent-review fields Thomas selected explicitly; missing metadata uses a neutral one-worker path instead of guessing from task wording.
+- The browser now reacts only to structured runtime events and explicit controls: follow-up suggestions stay universal, task and office activity comes from delegation metadata, onboarding accepts visible choices, and game/work surfaces no longer guess intent from prompt keywords.
+- Natural-language semantic routing is now owned exclusively by Thomas's GPT-5.6 frontier-model turn. Regex/keyword classifiers no longer decide reply versus dispatch, Canvas versus task, specialist, fanout, project workspace, task update, UI control, Discord action, web prelaunch, workflow, model switching, or skill selection. Post-model prompt/prose classifiers no longer reinterpret or auto-reject the structured choice, and local suspicious-word matching no longer blocks a turn before the frontier model sees it. The dispatcher remains available through structured `send_task` calls, Code exposes capabilities without prompt-word filtering, and structured `skills.list` / `skills.use` let the model choose trusted skills organically. Source contracts prevent deterministic prose routing from being reintroduced.
 - Concurrent Code runs are no longer hard-capped at 3: the ceiling is now live-configurable via `THOMAS_MAX_CONCURRENT_CODE_RUNS` (default 8, safety ceiling 64) so you can run many different Code projects at once. Same-project (same-conversation) runs are still serialized to protect that project's state; only distinct projects run in parallel. The "all N slots are busy" message now tells you how to raise the limit.
 
 ### Added (Build identity — which Thomas am I looking at)

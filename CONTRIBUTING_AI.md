@@ -65,3 +65,50 @@ Every PR from this workflow must include:
 Changes should be narrow, deterministic, and reversible. If behavior is uncertain,
 prefer a two-step workflow: update tests first to lock expected behavior, then
 implement to satisfy them.
+
+## Semantic Intent Ownership
+
+Thomas's conversational judgment comes from the configured frontier model, not a
+keyword router in front of it. For every natural-language turn, give the frontier
+model the conversation and the structured capabilities it is allowed to use. The
+model alone decides whether to reply directly or invoke a capability.
+
+Do not add regex, keyword, fuzzy-match, scoring, or secondary-classifier logic that
+infers any of the following from ordinary user prose:
+
+- reply versus dispatch;
+- specialist, skill, mode, surface, or workspace selection;
+- task count, decomposition, handoff, continuation, or live-project targeting;
+- cancel, update, monitor, or other side-effect intent;
+- a tool call encoded as assistant prose.
+
+Do not pre-reject, quarantine, relabel, or require a local approval merely because
+ordinary prompt text matches a suspicious-word pattern. Provider policy owns
+model-input safety. Local authorization begins only after the model requests a
+concrete structured action whose risk can be evaluated from its typed payload.
+
+This rule applies before and after the model call. It is not acceptable to prelaunch
+work before the model decides, reclassify a structured tool call from its text, or
+scan the model's visible reply and turn prose into a side effect. If no valid
+structured call exists, no semantic action occurred.
+
+Deterministic code still owns governance after a structured choice. It may parse and validate a structured
+payload, normalize literal schema values, enforce authorization and risk policy,
+veto unsafe actions, redact secrets, check paths and URLs, apply resource limits,
+and verify execution receipts. Those checks may narrow or reject a model request;
+they must not invent, promote, or substitute a semantic request.
+
+Explicit structured client controls remain valid. An exact `$skill-name` invocation
+is also an explicit control; skill discovery may present available skills to the
+model, but ordinary prose must not be keyword-ranked into a skill behind its back.
+
+When changing orchestration, add regression coverage for both directions:
+
+1. a structured model call produces the requested governed action with its supplied
+   fields preserved; and
+2. similar words in user or assistant prose produce no side effect on their own.
+
+Do not write a blanket "no regex" test. Regex remains appropriate for schema,
+path, URL, protocol, redaction, and artifact verification. It is not appropriate
+for deciding whether natural-language prompt content is allowed to reach Thomas.
+Tests should name the semantic decision boundary they protect.

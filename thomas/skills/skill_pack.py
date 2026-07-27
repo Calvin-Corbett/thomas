@@ -12,9 +12,8 @@ It provides three capabilities that make skills portable across installs:
 2. Versioned import (:func:`import_pack`) - validate the schema version
    (rejecting unknown/newer majors), verify the content hash, and rebuild a
    :class:`PortableSkill`. ``export_pack`` -> ``import_pack`` is lossless.
-3. Default relevance selection (:func:`select_relevant`) - deterministically
-   rank skills against a query and return the top-``k`` so the most relevant
-   skills are auto-selected by default.
+Skill selection is intentionally absent. Thomas discovers skills through
+structured tools and chooses one with the frontier model.
 """
 
 from __future__ import annotations
@@ -31,7 +30,6 @@ __all__ = [
     "SkillPackError",
     "export_pack",
     "import_pack",
-    "select_relevant",
 ]
 
 # Explicit pack schema version (independent of any individual skill's version).
@@ -40,7 +38,6 @@ __all__ = [
 PACK_SCHEMA_VERSION = "1.0"
 
 _HASH_ALGO = "sha256"
-_TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
 class SkillPackError(ValueError):
@@ -254,60 +251,3 @@ def _constant_time_eq(left: str, right: str) -> bool:
     for a, b in zip(left, right):
         result |= ord(a) ^ ord(b)
     return result == 0
-
-
-def _tokenize(text: str) -> list[str]:
-    return _TOKEN_RE.findall(_as_str(text).lower())
-
-
-def _relevance_score(portable: PortableSkill, query_tokens: set[str]) -> int:
-    if not query_tokens:
-        return 0
-    name_tokens = set(_tokenize(portable.name))
-    keyword_tokens = set()
-    for keyword in portable.keywords:
-        keyword_tokens.update(_tokenize(keyword))
-    description_tokens = set(_tokenize(portable.description))
-    body_tokens = set(_tokenize(portable.body))
-
-    score = 0
-    for token in query_tokens:
-        if token in name_tokens:
-            score += 5
-        if token in keyword_tokens:
-            score += 4
-        if token in description_tokens:
-            score += 2
-        if token in body_tokens:
-            score += 1
-    return score
-
-
-def select_relevant(skills: Any, query: str, k: int = 5) -> list[Any]:
-    """Rank ``skills`` by relevance to ``query`` and return the top ``k``.
-
-    Scoring is a deterministic weighted token match across name (5), keywords
-    (4), description (2) and body (1). Ties break by skill name, then by
-    original order, so results are stable. Empty inputs (no skills, empty query,
-    or ``k <= 0``) return an empty list.
-    """
-
-    items = list(skills or [])
-    if not items or k <= 0:
-        return []
-
-    query_tokens = set(_tokenize(query))
-    if not query_tokens:
-        return []
-
-    ranked: list[tuple[int, str, int, Any]] = []
-    for index, skill in enumerate(items):
-        portable = _coerce_portable(skill)
-        score = _relevance_score(portable, query_tokens)
-        if score <= 0:
-            continue
-        # Sort key: higher score first (negated), then name asc, then stable index.
-        ranked.append((-score, portable.name.lower(), index, skill))
-
-    ranked.sort(key=lambda row: (row[0], row[1], row[2]))
-    return [row[3] for row in ranked[:k]]

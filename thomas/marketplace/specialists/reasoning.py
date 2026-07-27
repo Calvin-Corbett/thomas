@@ -6,8 +6,8 @@ complex reasoning, and multi-step planning tasks.
 
 from __future__ import annotations
 
+import inspect
 import json
-import re
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -23,67 +23,70 @@ from thomas.core.send_task_tool import (
     UPDATE_TASK_TOOL,
     UPDATE_TASK_TOOL_NAME,
 )
+from thomas.core.work_onboarding_tool import (
+    WORK_ONBOARDING_UPDATE_TOOL,
+    WORK_ONBOARDING_UPDATE_TOOL_NAME,
+)
 from thomas.marketplace.orchestrator.protocol import CapabilityToken, DelegationContract
 from thomas.marketplace.specialists.base import BaseSpecialist
 from thomas.marketplace.specialists.reasoning_context import (
-    honest_handoff_confirmation as _honest_handoff_confirmation,
+    read_tool_specs as _read_tool_specs,
 )
-from thomas.marketplace.specialists.reasoning_context import read_tool_specs as _read_tool_specs
-from thomas.marketplace.specialists.reasoning_context import repo_self_context as _repo_self_context
+from thomas.marketplace.specialists.reasoning_context import (
+    repo_self_context as _repo_self_context,
+)
 from thomas.marketplace.specialists.reasoning_task_briefs import build_send_task_instructions
-from thomas.marketplace.specialists.reasoning_text_tools import (
-    TEXT_TOOLCALL_START_RE as _TEXT_TOOLCALL_START_RE,
-)
-from thomas.marketplace.specialists.reasoning_text_tools import (
-    canonical_text_tool_name as _canonical_text_tool_name,
-)
-from thomas.marketplace.specialists.reasoning_text_tools import (
-    parse_text_toolcall as _parse_text_toolcall,
-)
-from thomas.marketplace.specialists.reasoning_text_tools import (
-    safe_stream_prefix_len as _safe_stream_prefix_len,
-)
-from thomas.marketplace.specialists.web_research import (
-    collect_explicit_web_evidence,
-    explicit_web_search_requested,
-)
 
-# The chat model sometimes NARRATES a hand-off ("on it — I've handed that off") but
-# never actually calls the send_task tool, so no worker ever starts. This matches that
-# kind of CLAIM in the model's own reply, so a backstop can complete the real hand-off.
-# It reads the MODEL'S OUTPUT (did it say it handed off?), never the user's input — so
-# it's not the regex "is this a task?" classifier Calvin retired.
-_CLAIMS_HANDOFF_RE = re.compile(
-    r"(hand(?:ed|ing)?\s+(?:it|this|that|the\s+\w+)?\s*off"
-    r"|handed\s+(?:it|this|that)?\s*(?:to|over)"
-    r"|sent\s+(?:it|this|that)\s+(?:to|over)"
-    r"|\bon\s+it\b"
-    r"|task\s+manager"
-    r"|task\s+card"
-    r"|i'?ll\s+get\s+(?:it|this|that|you).*(?:built|made|done|set\s+up|going)"
-    r"|i'?ve\s+(?:sent|handed|kicked|passed|routed)"
-    r"|(?:building|making|creating|designing)\s+(?:it|this|that)\s+now"
-    r"|the\s+(?:worker|team|crew).*(?:will|are|is|on\s+it))",
-    re.I,
-)
 # Read-only filesystem tools the chat layer may use to ground answers. NEVER write/shell.
-_READ_TOOL_NAMES = ("fs.read_file", "fs.list_dir", "fs.search", "web.search", "web.fetch")
+_READ_TOOL_NAMES = (
+    "fs.read_file",
+    "fs.list_dir",
+    "fs.search",
+    "web.search",
+    "web.fetch",
+    "skills.list",
+    "skills.use",
+)
 
-# The model sometimes CLAIMS it stopped/cancelled a running task ("I've cancelled the
-# jazz report") without actually calling update_task — a false claim that leaves the
-# worker running. When that happens and there IS a running task the user's request
-# resolves to, the backstop executes the cancel for real so the words become true.
-_CLAIMS_CANCEL_RE = re.compile(r"\b(cancel|cancell?ed|cancell?ing|stop|stopp?ed|stopping|halt|abort|kill)\w*\b", re.I)
-# The model sometimes writes a tool CALL as plain text — `send_task {…}` or
-# `update_task {…}` — instead of invoking it. It's a real gpt-5.5/codex quirk: the
-# JSON lands in the content channel, so no function_call fires and nothing happens
-# (no worker starts; no task gets cancelled). We watch the stream for this literal
-# ANYWHERE (the cancel form often arrives after a sentence of prose), suppress the
-# raw JSON from the user, then honor the intent by calling the tool for real.
-# (chat sweep, 2026-06-27)
-# Matches the literal however the model dresses it: `send_task {…}`, `update_task(…)`,
-# `[update_task {…}]`, or `[update_task] {…}` (it wraps the call in brackets and may put
-# a `]` between the name and the JSON).
+_STRUCTURED_TOOL_ALIASES = {
+    "web_search": "web.search",
+    "web_fetch": "web.fetch",
+}
+
+
+def _structured_tool_name(name: str) -> str:
+    """Normalize only provider-level aliases on a structured tool call."""
+    normalized = str(name or "").strip().lower()
+    return _STRUCTURED_TOOL_ALIASES.get(normalized, normalized)
+
+
+async def _invoke_send_task(
+    callback: Any,
+    *,
+    title: str,
+    instructions: str,
+    surface: str,
+    specialist: str,
+    workspace: str,
+) -> Any:
+    """Call the structured dispatcher while supporting older callback shapes."""
+    kwargs = {
+        "title": title,
+        "instructions": instructions,
+        "surface": surface,
+        "specialist": specialist,
+        "workspace": workspace,
+    }
+    try:
+        parameters = inspect.signature(callback).parameters.values()
+    except (TypeError, ValueError):
+        parameters = ()
+    if parameters and not any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters):
+        accepted = {parameter.name for parameter in parameters}
+        kwargs = {name: value for name, value in kwargs.items() if name in accepted}
+    return await callback(**kwargs)
+
+
 # Thomas's identity is a product law, not a model-specific personality toggle.
 # He is the persistent user-owned operator around a replaceable model. The direct
 # action surface stays intentionally small and server-governed; heavy work remains
@@ -337,6 +340,7 @@ class ReasoningSpecialist(BaseSpecialist):
         remember = None
         recall = None
         operate = None
+        work_onboarding_update = None
         try:
             _ctx = getattr(contract, "input_context", None) or {}
             send_task = _ctx.get("send_task")
@@ -344,12 +348,14 @@ class ReasoningSpecialist(BaseSpecialist):
             remember = _ctx.get("remember")
             recall = _ctx.get("recall")
             operate = _ctx.get("operate")
+            work_onboarding_update = _ctx.get("work_onboarding_update")
         except Exception:
             send_task = None
             update_task = None
             remember = None
             recall = None
             operate = None
+            work_onboarding_update = None
         # Tools the chat layer may use: READ-ONLY repo tools (fs.read_file/list_dir/
         # search) so it can ground answers in the real repo, plus send_task to hand
         # actionable work off. It still never writes/builds — the token is scoped
@@ -367,6 +373,8 @@ class ReasoningSpecialist(BaseSpecialist):
                 built.append(RECALL_TOOL)
             if operate:
                 built.append(OPERATE_TOOL)
+            if work_onboarding_update:
+                built.append(WORK_ONBOARDING_UPDATE_TOOL)
             tools = built or None
 
         # No hand-off tool this turn (autonomy L1/L2) → clamp the eager "say 'on it'"
@@ -374,31 +382,6 @@ class ReasoningSpecialist(BaseSpecialist):
         # Appended last so it wins on recency over the identity prompt above.
         if not send_task:
             messages[0]["content"] += "\n\n" + _NO_DISPATCH_HONESTY
-
-        # Explicit web.search is a bounded read. Collect evidence before the
-        # model can confuse research with a write or demand higher autonomy.
-        if explicit_web_search_requested(prompt) and token.permits_tool("web.search"):
-            web_evidence = await collect_explicit_web_evidence(self.tools, prompt)
-            yield {
-                "type": "tool_result",
-                "name": "web.search",
-                "ok": web_evidence.ok,
-                "calls": list(web_evidence.calls),
-            }
-            messages.append(
-                {
-                    "role": "system",
-                    "content": (
-                        "Thomas already completed the requested read-only web research. "
-                        "Answer from the evidence below, cite the source URLs, and do not "
-                        "mention autonomy or delegation. If evidence is insufficient, say "
-                        "exactly what could not be verified.\n\n" + web_evidence.text
-                    ),
-                }
-            )
-            # The read already ran; withdraw tools so providers synthesize instead
-            # of redundantly emitting another call as visible JSON.
-            tools = None
 
         response = ""
         dispatched_titles: list[str] = []
@@ -413,20 +396,10 @@ class ReasoningSpecialist(BaseSpecialist):
                     streamed_parts: list[str] = []
                     tool_ends: list[dict[str, str]] = []
                     stream_err: str | None = None
-                    # When tools are offered, buffer this pass until the stream
-                    # declares whether it is actually calling one. Otherwise a
-                    # provider can stream "Done, I built it" before its later
-                    # send_task call; those bytes cannot be retracted after the
-                    # work is merely handed off.
-                    defer_prose_until_tool_decision = bool(tools)
-                    # Stream prose token-by-token, but hold back only a trailing run that
-                    # could be a tool CALL the model writes as plain text ('send_task {…}' /
-                    # '[update_task] {…}', sometimes after a sentence of prose). The instant
-                    # the literal is confirmed we flush the prose before it and suppress the
-                    # rest, so the raw JSON NEVER reaches the user — without chunking normal
-                    # replies (the live "typing" effect is preserved).
-                    hold = ""
-                    suppress_textcall = False
+                    # With tools available, buffer this pass until the provider
+                    # declares whether it emitted a structured call. That keeps
+                    # pre-call prose from making an unearned completion claim.
+                    buffer_prose = bool(tools)
                     async for stream_event in self.llm.stream_chat(messages=messages, tools=tools):
                         event_type = str(getattr(stream_event, "type", "") or "")
                         data = getattr(stream_event, "data", {}) or {}
@@ -435,24 +408,8 @@ class ReasoningSpecialist(BaseSpecialist):
                             if not token_text:
                                 continue
                             streamed_parts.append(token_text)
-                            if suppress_textcall:
-                                continue  # swallow the leaked JSON; executed after the stream
-                            hold += token_text
-                            m = _TEXT_TOOLCALL_START_RE.search(hold)
-                            if m:
-                                # Emit the prose before the literal (trim a dangling '[' or
-                                # whitespace the call was wrapped in), then suppress the rest.
-                                pre = re.sub(r"[\s\[]*$", "", hold[: m.start()])
-                                if pre and not defer_prose_until_tool_decision:
-                                    yield {"type": "text", "text": pre}
-                                suppress_textcall = True
-                                hold = ""
-                                continue
-                            if not defer_prose_until_tool_decision:
-                                k = _safe_stream_prefix_len(hold)
-                                if k and not handed_off:
-                                    yield {"type": "text", "text": hold[:k]}
-                                    hold = hold[k:]
+                            if not buffer_prose and not handed_off:
+                                yield {"type": "text", "text": token_text}
                         elif event_type == "tool_call_end":
                             tool_ends.append(
                                 {
@@ -464,142 +421,25 @@ class ReasoningSpecialist(BaseSpecialist):
                         elif event_type == "error":
                             stream_err = str(data.get("error") or "Unknown streaming error")
                             break
-                    # Flush the hold-back tail when it was just normal prose.
-                    if hold and not suppress_textcall and not handed_off and not tool_ends:
-                        yield {"type": "text", "text": hold}
-                        hold = ""
+                    if buffer_prose and streamed_parts and not handed_off and not tool_ends:
+                        yield {"type": "text", "text": "".join(streamed_parts)}
                     if stream_err:
                         yield {"type": "error", "error": f"Reasoning failed: {stream_err}"}
                         return
-
-                    # The model wrote a tool call as TEXT (the JSON we just suppressed)
-                    # instead of invoking it, so nothing happened. Honor the clear intent
-                    # by calling the tool for real, then confirm honestly — never leave the
-                    # raw JSON or a dead non-action.
-                    if suppress_textcall and not tool_ends:
-                        parsed = _parse_text_toolcall("".join(streamed_parts))
-                        _name = parsed[0] if parsed else ""
-                        _args = parsed[1] if parsed else {}
-                        if _name == "send_task" and send_task:
-                            _title = str(_args.get("title") or "").strip() or (
-                                str(prompt or "").strip()[:60] or "New task"
-                            )
-                            _instructions = build_send_task_instructions(prompt, _args, _title, multi_dispatch=False)
-                            _surface = str(_args.get("surface") or "").strip().lower()
-                            if _surface not in ("canvas", "task"):
-                                _surface = ""
-                            try:
-                                await send_task(title=_title, instructions=_instructions, surface=_surface)
-                                dispatched_titles.append(_title)
-                                handed_off = True
-                                yield {"type": "task_request", "title": _title}
-                                response = (
-                                    "On it — drawing it on the canvas now."
-                                    if _surface == "canvas"
-                                    else "On it — handed that to the crew. You'll see it on the task card."
-                                )
-                            except Exception as exc:
-                                response = f"I tried to hand that off but hit an error: {exc}"
-                            yield {"type": "text", "text": response}
-                            break
-                        if _name == "update_task" and update_task:
-                            _ref = str(_args.get("task_ref") or "").strip()
-                            _upd = str(_args.get("update") or "").strip()
-                            _cancel = bool(_args.get("cancel"))
-                            try:
-                                outcome = await update_task(task_ref=_ref, update=_upd, cancel=_cancel)
-                            except Exception as exc:
-                                outcome = {"ok": False, "error": str(exc)}
-                            if isinstance(outcome, dict) and outcome.get("ok"):
-                                handed_off = True
-                                task_action_verb = "cancelled" if outcome.get("action") == "cancel" else "updated"
-                                yield {"type": "task_update", "ok": True, "action": outcome.get("action")}
-                                response = (
-                                    "Done — I've cancelled that task; the worker is stopping."
-                                    if task_action_verb == "cancelled"
-                                    else "Done — I've passed that change to the running task."
-                                )
-                            else:
-                                _err = (outcome or {}).get("error", "I couldn't match a running task to change.")
-                                response = f"I couldn't update that task: {_err}"
-                            yield {"type": "text", "text": response}
-                            break
-                        if _name == "operate" and operate:
-                            try:
-                                receipt = await operate(
-                                    action=str(_args.get("action") or ""),
-                                    key=str(_args.get("key") or ""),
-                                    value=_args.get("value"),
-                                )
-                            except (LookupError, OSError, RuntimeError, TypeError, ValueError) as exc:
-                                receipt = {"ok": False, "error": f"Inline action failed: {exc}"}
-                            action_receipts.append(dict(receipt or {}))
-                            yield {
-                                "type": "tool_result",
-                                "name": "operate",
-                                "ok": bool((receipt or {}).get("ok")),
-                                "result": receipt,
-                            }
-                            if (receipt or {}).get("ok"):
-                                response = "Done — I performed that action and verified the resulting state."
-                            else:
-                                response = (
-                                    f"I did not change it: {(receipt or {}).get('error', 'the action was denied.')}"
-                                )
-                            yield {"type": "text", "text": response}
-                            break
-                        if _name in _READ_TOOL_NAMES:
-                            if not token.permits_tool(_name):
-                                result_text = f"Permission denied: '{_name}' (you have read-only access)."
-                                ok = False
-                            elif self.tools and hasattr(self.tools, "execute"):
-                                try:
-                                    res = await self.tools.execute(_name, _args)
-                                    ok = bool(getattr(res, "ok", True))
-                                    payload = getattr(res, "data", None) if ok else getattr(res, "error", None)
-                                    result_text = json.dumps(payload, ensure_ascii=False, default=str)[:6000]
-                                except (LookupError, OSError, RuntimeError, TypeError, ValueError) as exc:
-                                    ok = False
-                                    result_text = f"Read failed: {exc}"
-                            else:
-                                ok = False
-                                result_text = "No read-only grounding tools are available right now."
-                            call_id = f"text-read-{_pass}"
-                            yield {"type": "tool_result", "name": _name, "ok": ok}
-                            messages.append(
-                                {
-                                    "role": "assistant",
-                                    "content": "",
-                                    "tool_calls": [
-                                        {
-                                            "id": call_id,
-                                            "type": "function",
-                                            "function": {
-                                                "name": _name,
-                                                "arguments": json.dumps(_args, ensure_ascii=False),
-                                            },
-                                        }
-                                    ],
-                                }
-                            )
-                            messages.append({"role": "tool", "tool_call_id": call_id, "content": result_text})
-                            continue
-                        # No dispatch tool (L1/L2) or unparseable → never show raw JSON; offer honestly.
-                        response = "I can hand that to the crew — raise the autonomy level and I'll start it."
-                        yield {"type": "text", "text": response}
-                        break
 
                     if tool_ends and tools:
                         assistant_tool_calls: list[dict[str, Any]] = []
                         tool_results: list[dict[str, Any]] = []
                         send_task_calls = sum(
-                            1 for tc in tool_ends if _canonical_text_tool_name(tc["name"]) == SEND_TASK_TOOL_NAME
+                            1 for tc in tool_ends if _structured_tool_name(tc["name"]) == SEND_TASK_TOOL_NAME
                         )
                         for tc in tool_ends:
-                            name = _canonical_text_tool_name(tc["name"])
+                            name = _structured_tool_name(tc["name"])
                             try:
                                 args = json.loads(tc["arguments"] or "{}")
-                            except Exception:
+                                if not isinstance(args, dict):
+                                    args = {}
+                            except (json.JSONDecodeError, TypeError, ValueError):
                                 args = {}
                             if name == SEND_TASK_TOOL_NAME and send_task:
                                 title = str(args.get("title") or "").strip() or "New task"
@@ -607,14 +447,26 @@ class ReasoningSpecialist(BaseSpecialist):
                                 instructions = build_send_task_instructions(
                                     prompt, args, title, multi_dispatch=send_task_calls > 1
                                 )
-                                # The MODEL declares the surface (canvas vs task) — organic
-                                # routing, not a regex. Empty => routing falls back to a tightened
-                                # visual hint. (Calvin's no-keyword law, 2026-06-27.)
+                                # The model owns each semantic selection. Runtime
+                                # code only validates the structured enum values.
                                 surface = str(args.get("surface") or "").strip().lower()
                                 if surface not in ("canvas", "task"):
-                                    surface = ""
+                                    surface = "task"
+                                specialist = str(args.get("specialist") or "").strip().lower()
+                                if specialist not in ("reasoning", "coding", "research", "tools", "writing", "data"):
+                                    specialist = "reasoning"
+                                workspace = str(args.get("workspace") or "").strip().lower()
+                                if workspace not in ("isolated", "project"):
+                                    workspace = "isolated"
                                 try:
-                                    await send_task(title=title, instructions=instructions, surface=surface)
+                                    await _invoke_send_task(
+                                        send_task,
+                                        title=title,
+                                        instructions=instructions,
+                                        surface=surface,
+                                        specialist=specialist,
+                                        workspace=workspace,
+                                    )
                                     dispatched_titles.append(title)
                                     handed_off = True
                                     yield {"type": "task_request", "title": title}
@@ -692,6 +544,32 @@ class ReasoningSpecialist(BaseSpecialist):
                                     "ok": bool((receipt or {}).get("ok")),
                                     "result": receipt,
                                 }
+                            elif name == WORK_ONBOARDING_UPDATE_TOOL_NAME and work_onboarding_update:
+                                try:
+                                    receipt = await work_onboarding_update(
+                                        phase=str(args.get("phase") or ""),
+                                        confirmed_goal=str(args.get("confirmed_goal") or ""),
+                                        workflows=args.get("workflows"),
+                                        selected_workflow_id=str(args.get("selected_workflow_id") or ""),
+                                        selected_workflow_configured=bool(args.get("selected_workflow_configured")),
+                                    )
+                                except (LookupError, RuntimeError, TypeError, ValueError) as exc:
+                                    receipt = {"ok": False, "error": f"Work onboarding update failed: {exc}"}
+                                result_text = json.dumps(receipt, ensure_ascii=False, default=str)
+                                yield {
+                                    "type": "tool_result",
+                                    "name": name,
+                                    "ok": bool((receipt or {}).get("ok")),
+                                    "result": receipt,
+                                }
+                                if bool((receipt or {}).get("ok")) and tools:
+                                    remaining_tools = [
+                                        spec
+                                        for spec in tools
+                                        if str((spec.get("function") or {}).get("name") or "")
+                                        != WORK_ONBOARDING_UPDATE_TOOL_NAME
+                                    ]
+                                    tools = remaining_tools or None
                             elif name in _READ_TOOL_NAMES:
                                 # Token-gated read execution. The read-only token denies
                                 # write/shell, so this can only ever read.
@@ -736,49 +614,17 @@ class ReasoningSpecialist(BaseSpecialist):
                         continue
 
                     response = "".join(streamed_parts).strip()
-                    # BACKSTOP (cancel): the model said it stopped/cancelled a task but never
-                    # called update_task, leaving the worker running — a false claim. If the
-                    # user's request resolves to a real RUNNING task, do the cancel for real so
-                    # the words become true. resolve gates it (subject/ordinal match) — an
-                    # unrelated claim resolves to nothing and cancels nothing. (chat sweep 2026-06-27)
-                    if not handed_off and update_task and _CLAIMS_CANCEL_RE.search(response or ""):
-                        try:
-                            _outcome = await update_task(task_ref=str(prompt or ""), update="", cancel=True)
-                        except Exception:
-                            _outcome = None
-                        if isinstance(_outcome, dict) and _outcome.get("ok"):
-                            handed_off = True
-                            task_action_verb = "cancelled"
-                            yield {"type": "task_update", "ok": True, "action": "cancel"}
-                            if not response:
-                                response = "Done — I've cancelled that task; the worker is stopping."
-                    # BACKSTOP: the model claimed a hand-off in its words but never called
-                    # send_task, so no worker would start. Complete the real hand-off with
-                    # the user's RAW request. Only at L3+ (at L2 Thomas offers and waits for
-                    # a yes). This executes the model's OWN stated decision — it does not
-                    # classify whether the user's message is a task.
-                    if not handed_off and send_task and _CLAIMS_HANDOFF_RE.search(response or ""):
-                        try:
-                            _alvl = int(
-                                ((getattr(contract, "input_context", None) or {}).get("autonomy") or {}).get("level")
-                                or 2
-                            )
-                        except Exception:
-                            _alvl = 2
-                        if _alvl >= 3:
-                            _bt = str(prompt or "").strip()[:60] or "task"
-                            try:
-                                # Backstop: the model narrated a hand-off but didn't call the
-                                # tool, so it never declared a surface — let routing fall back to
-                                # the tightened visual hint (surface="").
-                                await send_task(title=_bt, instructions=str(prompt or ""), surface="")
-                                handed_off = True
-                                dispatched_titles.append(_bt)
-                                yield {"type": "task_request", "title": _bt}
-                            except Exception:
-                                pass
                     if handed_off and dispatched_titles:
-                        response = _honest_handoff_confirmation(response)
+                        # A deterministic receipt is safe because the structured
+                        # call already succeeded. Prose alone never creates work.
+                        response = "On it — this is running now, and I'll share the result when it's ready."
+                        yield {"type": "text", "text": response}
+                    elif task_action_verb:
+                        response = (
+                            "Done — I've cancelled that task; the worker is stopping."
+                            if task_action_verb == "cancelled"
+                            else "Done — I've passed that change to the running task."
+                        )
                         yield {"type": "text", "text": response}
                     break
             else:

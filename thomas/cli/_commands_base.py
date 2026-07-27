@@ -39,7 +39,7 @@ def _resolve_model_profile_name(config: AppConfig, profile_name: str | None) -> 
         from thomas.core.model_resolution import resolve_model_profile_name as _resolver
 
         return _resolver(config, profile_name)
-    except Exception:
+    except (KeyError, RuntimeError, TypeError, ValueError):
         # Broad catch: resolver failures fall back to the legacy local lookup to preserve CLI startup.
         logging.getLogger(__name__).exception("Model profile resolver failed; using local fallback.")
         requested = str(profile_name or "").strip()
@@ -165,48 +165,6 @@ def _prepare_runtime_data_environment(
 argparse.ArgumentParser.add_subparsers._p026_browser_wrapped = True
 
 
-def _parse_model_switch_prompt(prompt: str, config: AppConfig) -> tuple[str | None, str | None, str | None]:
-    """
-    Parse natural-language model switch requests.
-    Returns (model_name, new_prompt, message).
-    - model_name: selected model or None
-    - new_prompt: remaining prompt to answer (None if no user question)
-    - message: optional user-facing message to print and exit early
-    """
-    text = prompt.strip()
-    if not text:
-        return None, None, None
-
-    lower = text.lower()
-    # List models
-    if "model" in lower and any(k in lower for k in ("list", "show", "what models", "available")):
-        available = ", ".join(config.models.keys())
-        return None, None, f"Available models: {available} (current: {config.default_model})"
-
-    import re
-
-    m = re.match(r"^(switch|use|set|change)\s+(to\s+)?(model\s+)?(?P<name>[\w\-\.:]+)(?P<rest>.*)$", lower)
-    if not m:
-        return None, None, None
-
-    name = m.group("name")
-    rest = (m.group("rest") or "").strip()
-    for key in config.models.keys():
-        if key.lower() == name:
-            name = key
-            break
-
-    if name not in config.models:
-        available = ", ".join(config.models.keys())
-        return None, None, f"Unknown model '{name}'. Available: {available}"
-
-    # Allow inline question: "use model X: question"
-    if rest.startswith(":"):
-        rest = rest[1:].strip()
-
-    return name, (rest or None), None
-
-
 def _setup_logging(verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.WARNING
     formatter = _RedactingFormatter("%(asctime)s [%(name)s] %(levelname)s: %(message)s", datefmt="%H:%M:%S")
@@ -288,7 +246,7 @@ def _apply_env_tool_denylist(registry: ToolRegistry) -> None:
         if any(name == tok or name.startswith(f"{tok}.") or category == tok for tok in deny):
             try:
                 registry.unregister(name)
-            except Exception:  # pragma: no cover - best-effort pruning
+            except (KeyError, RuntimeError, TypeError, ValueError):  # pragma: no cover - best-effort pruning
                 # Broad catch: unregister() signatures vary across ToolRegistry versions; denylist pruning is advisory.
                 log.debug("Failed to unregister denylist tool %r; skipping.", name, exc_info=True)
 
@@ -306,7 +264,7 @@ def _build_memory(config: AppConfig):
     except ImportError:
         logging.getLogger(__name__).warning("Memory engine import failed; continuing without memory.")
         return None
-    except Exception:
+    except (OSError, RuntimeError, TypeError, ValueError):
         # Broad catch: memory is optional for CLI chat and should not prevent command startup.
         logging.getLogger(__name__).exception("Memory engine failed to start; continuing without memory.")
         return None
@@ -318,7 +276,7 @@ def _build_library(config: AppConfig):
         from thomas.library import ResearchLibrary, default_library_root
 
         return ResearchLibrary(default_library_root(config))
-    except Exception:
+    except (OSError, RuntimeError, TypeError, ValueError):
         # Broad catch: library support is optional and CLI commands can continue without it.
         logging.getLogger(__name__).exception("Library init failed; continuing without library support.")
         return None
@@ -636,27 +594,6 @@ def chat(
             click.echo(f"Config error: {e}", err=True)
         sys.exit(recorder.finish(OUTCOME_USAGE_ERROR, error="; ".join(errors)))
 
-    # Natural-language model switching for single-shot chat
-    if model_name is None:
-        nl_model, nl_prompt, nl_message = _parse_model_switch_prompt(prompt, config)
-        if nl_message:
-            click.echo(nl_message)
-            recorder.finish(OUTCOME_SUCCESS)
-            return
-        if nl_model:
-            selected_profile = _resolve_model_profile_name(config, nl_model)
-            if not selected_profile:
-                message = f"Unknown model profile '{nl_model}'. Available: {', '.join(config.models.keys())}"
-                click.echo(message, err=True)
-                sys.exit(recorder.finish(OUTCOME_USAGE_ERROR, error=message))
-            model_name = selected_profile
-            if nl_prompt is None:
-                click.echo(f"Switched to model '{model_name}' for this run. Ask a question.")
-                recorder.finish(OUTCOME_SUCCESS)
-                return
-            prompt = nl_prompt
-            recorder.prompt = prompt
-
     from thomas.core.model_resolution import resolve_effective_model
 
     try:
@@ -666,7 +603,7 @@ def chat(
             env_profile=str(os.environ.get("THOMAS_DEFAULT_MODEL", "")).strip(),
             user_id="default",
         )
-    except Exception:
+    except (KeyError, RuntimeError, TypeError, ValueError):
         # Broad catch: model resolution fallback preserves legacy CLI behavior when runtime resolution fails.
         log.exception("Effective model resolution failed; falling back to configured default.")
         resolved_profile = ""
@@ -702,7 +639,7 @@ def chat(
     except TimeoutError as exc:
         click.echo(f"Timed out: {exc}", err=True)
         sys.exit(recorder.finish(OUTCOME_TIMEOUT, error=str(exc) or "timeout"))
-    except Exception as exc:
+    except (ConnectionError, OSError, RuntimeError, TypeError, ValueError) as exc:
         log.exception("Headless chat run failed.")
         click.echo(f"Error: {exc}", err=True)
         raise SystemExit(recorder.finish(OUTCOME_AGENT_ERROR, error=f"{type(exc).__name__}: {exc}")) from exc

@@ -138,7 +138,7 @@ class TestReasoningWebTools(unittest.IsolatedAsyncioTestCase):
         done = next(event for event in events if event.get("type") == "done")
         self.assertIn("https://example.test/release-notes", str(done.get("content") or ""))
 
-    async def test_openai_style_text_call_is_suppressed_normalized_and_executed(self) -> None:
+    async def test_tool_shaped_prose_does_not_execute_a_web_call(self) -> None:
         registry = _Registry()
         specialist = ReasoningSpecialist(config=None, llm=_TextCallLLM(), tools=registry)
         token = CapabilityToken(
@@ -158,12 +158,13 @@ class TestReasoningWebTools(unittest.IsolatedAsyncioTestCase):
         ):
             events.append(event)
 
-        self.assertEqual(registry.calls, [("web.search", {"query": "latest ChatGPT release notes"})])
+        # Only a provider-issued structured tool_call_end may create a side
+        # effect. Text that merely resembles a tool call is still just text.
+        self.assertEqual(registry.calls, [])
         visible = "".join(str(event.get("text") or "") for event in events if event.get("type") == "text")
-        self.assertNotIn('"name": "web_search"', visible)
-        self.assertIn("https://example.test/release-notes", visible)
+        self.assertIn('"name": "web_search"', visible)
 
-    async def test_explicit_search_collects_evidence_before_local_model_answers(self) -> None:
+    async def test_prompt_words_do_not_prelaunch_web_search(self) -> None:
         registry = _Registry()
         llm = _EvidenceLLM()
         specialist = ReasoningSpecialist(config=None, llm=llm, tools=registry)
@@ -184,13 +185,13 @@ class TestReasoningWebTools(unittest.IsolatedAsyncioTestCase):
         ):
             events.append(event)
 
-        self.assertEqual([name for name, _ in registry.calls], ["web.search", "web.fetch"])
-        system_messages = [
-            str(message.get("content") or "") for message in llm.calls[0]["messages"] if message.get("role") == "system"
-        ]
-        self.assertTrue(any("Jul 9, 2026" in message for message in system_messages))
-        tool_event = next(event for event in events if event.get("type") == "tool_result")
-        self.assertTrue(tool_event.get("ok"))
+        # Naming a capability in natural language does not bypass the model.
+        # The capability is offered, and the model remains the only component
+        # that can choose a structured call.
+        self.assertEqual(registry.calls, [])
+        offered = {spec["function"]["name"] for spec in llm.calls[0]["tools"]}
+        self.assertEqual(offered, {"web.search", "web.fetch"})
+        self.assertFalse(any(event.get("type") == "tool_result" for event in events))
         visible = "".join(str(event.get("text") or "") for event in events if event.get("type") == "text")
         self.assertIn("July 9, 2026", visible)
 

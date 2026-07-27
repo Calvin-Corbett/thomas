@@ -12,7 +12,6 @@ from thomas.skills.skill_pack import (
     SkillPackError,
     export_pack,
     import_pack,
-    select_relevant,
 )
 
 
@@ -128,64 +127,3 @@ def test_import_requires_mapping_and_fields():
         import_pack({})
     with pytest.raises(SkillPackError, match="skill' payload"):
         import_pack({"schema_version": PACK_SCHEMA_VERSION})
-
-
-# --- Default relevance selection -------------------------------------------
-
-
-def _skills_for_ranking() -> list[PortableSkill]:
-    return [
-        PortableSkill(
-            name="pdf-forms",
-            description="Fill and extract fields from PDF forms.",
-            keywords=["pdf", "forms"],
-        ),
-        PortableSkill(
-            name="calendar",
-            description="Schedule and manage calendar events.",
-            keywords=["calendar", "events"],
-        ),
-        PortableSkill(
-            name="spreadsheet",
-            description="Read and write spreadsheet data.",
-            keywords=["excel", "csv"],
-        ),
-    ]
-
-
-def test_select_relevant_ranks_clearly_relevant_first():
-    skills = _skills_for_ranking()
-    ranked = select_relevant(skills, "extract fields from a pdf form", k=2)
-    assert ranked[0].name == "pdf-forms"  # clearly-relevant skill ranked first
-    assert len(ranked) == 1  # non-matching skills scored zero and are excluded
-
-
-def test_select_relevant_is_deterministic():
-    skills = _skills_for_ranking()
-    first = select_relevant(skills, "pdf form extraction", k=3)
-    second = select_relevant(skills, "pdf form extraction", k=3)
-    assert [s.name for s in first] == [s.name for s in second]
-
-
-def test_select_relevant_tie_break_is_stable_by_name():
-    tied = [
-        PortableSkill(name="zebra", keywords=["alpha"]),
-        PortableSkill(name="apple", keywords=["alpha"]),
-    ]
-    ranked = select_relevant(tied, "alpha", k=2)
-    assert [s.name for s in ranked] == ["apple", "zebra"]  # name-asc tie-break
-
-
-def test_select_relevant_excludes_zero_score_skills():
-    skills = _skills_for_ranking()
-    ranked = select_relevant(skills, "pdf", k=5)
-    names = {s.name for s in ranked}
-    assert names == {"pdf-forms"}  # only the matching skill returned
-
-
-def test_select_relevant_handles_empty_inputs():
-    skills = _skills_for_ranking()
-    assert select_relevant([], "pdf") == []  # no skills
-    assert select_relevant(skills, "") == []  # empty query
-    assert select_relevant(skills, "pdf", k=0) == []  # non-positive k
-    assert select_relevant(None, "pdf") == []  # None skills

@@ -156,34 +156,6 @@ class TestEvolveLoopRoutes(unittest.IsolatedAsyncioTestCase):
             assert control.exists()
             assert json.loads(control.read_text(encoding="utf-8"))["stop"] is True
 
-    async def test_chat_help_on_empty_message(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            app = web.Application()
-            handlers = _handlers(app, Path(tmp))
-            resp = await handlers["chat"](_FakeRequest(json_body={"message": "   "}))
-            assert _body(resp)["action"] == "help"
-
-    async def test_chat_pause_intent_writes_control(self):
-        import thomas.server.routes.evolve_loop_routes as mod
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            original = mod._run_evolve_cli
-
-            async def fake_interpret(_root, _args):
-                return {"action": "pause", "reply": "Pausing."}
-
-            mod._run_evolve_cli = fake_interpret
-            try:
-                app = web.Application()
-                handlers = _handlers(app, root)
-                resp = await handlers["chat"](_FakeRequest(json_body={"message": "stop evolving"}))
-                payload = _body(resp)
-                assert payload["action"] == "pause"
-                assert (root / ".thomas" / "evolve" / "loop" / "control.json").exists()
-            finally:
-                mod._run_evolve_cli = original
-
 
 if __name__ == "__main__":
     unittest.main()

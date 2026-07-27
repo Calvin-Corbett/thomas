@@ -2,14 +2,13 @@ import json
 import tempfile
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
 from thomas.core.llm import TokenUsage
 from thomas.server.app import create_app
-from thomas.server.routes.chat_v2_keys import APP_SESSION_LLM_CACHE
 
 
 def _parse_ndjson(blob: str):
@@ -88,10 +87,7 @@ class TestServerDoneUsageContract(AioHTTPTestCase):
         sid = str((await sess_resp.json()).get("session_id") or "")
         self.assertTrue(sid)
 
-        with (
-            patch("thomas.server.routes.chat_v2.OrchestratorBrain.process_message", _fake_process_message),
-            patch("thomas.server.routes.chat_v2.effective_effort", return_value="optimal"),
-        ):
+        with patch("thomas.server.routes.chat_v2.OrchestratorBrain.process_message", _fake_process_message):
             resp = await self.client.post(
                 "/api/v2/chat",
                 json={
@@ -125,39 +121,9 @@ class TestServerDoneUsageContract(AioHTTPTestCase):
         self.assertTrue(all(v >= 0 for v in seqs))
         self.assertEqual(seqs, sorted(seqs))
 
-    async def test_ui_control_done_has_run_and_session_usage(self):
-        sess_resp = await self.client.post("/api/session/new")
-        self.assertEqual(sess_resp.status, 200)
-        sid = str((await sess_resp.json()).get("session_id") or "")
-        self.assertTrue(sid)
-
-        resp = await self.client.post(
-            "/api/v2/chat",
-            json={
-                "session_id": sid,
-                "profile": "local",
-                "mode": "fast",
-                "text": "please turn on tool details",
-            },
-        )
-        self.assertEqual(resp.status, 200)
-        events = _parse_ndjson(await resp.text())
-        self.assertTrue(events)
-
-        done_events = [e for e in events if e.get("type") == "done"]
-        self.assertEqual(len(done_events), 1)
-        done = done_events[0]
-        self.assertEqual(done.get("usage"), {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0})
-        self.assertEqual(done.get("run_usage"), {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0})
-        self.assertEqual(done.get("session_usage"), {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0})
-        self.assertEqual([int(e.get("seq")) for e in events], sorted(int(e.get("seq")) for e in events))
-
-    async def test_ui_control_preserves_existing_cumulative_session_usage(self):
-        session_id = "usage-ui-control-cumulative"
-        with (
-            patch("thomas.server.routes.chat_v2.OrchestratorBrain.process_message", _fake_process_message),
-            patch("thomas.server.routes.chat_v2.effective_effort", return_value="optimal"),
-        ):
+    async def test_two_model_owned_turns_preserve_cumulative_session_usage(self):
+        session_id = "usage-model-cumulative"
+        with patch("thomas.server.routes.chat_v2.OrchestratorBrain.process_message", _fake_process_message):
             seeded = await self.client.post(
                 "/api/v2/chat",
                 json={
@@ -169,95 +135,25 @@ class TestServerDoneUsageContract(AioHTTPTestCase):
                 },
             )
             await seeded.read()
-        self.assertEqual(seeded.status, 200)
-
-        response = await self.client.post(
-            "/api/v2/chat",
-            json={"session_id": session_id, "profile": "local", "message": "please turn on tool details"},
-        )
-        self.assertEqual(response.status, 200)
-        done = [event for event in _parse_ndjson(await response.text()) if event.get("type") == "done"]
-        self.assertEqual(len(done), 1)
-        self.assertEqual(done[0]["usage"], {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0})
-        self.assertEqual(done[0]["run_usage"], {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0})
-        self.assertEqual(done[0]["session_usage"], {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18})
-
-    async def test_discord_terminal_preserves_normalized_cumulative_session_usage(self):
-        session_id = "usage-discord-cumulative"
-        with (
-            patch("thomas.server.routes.chat_v2.OrchestratorBrain.process_message", _fake_process_message),
-            patch("thomas.server.routes.chat_v2.effective_effort", return_value="optimal"),
-        ):
-            seeded = await self.client.post(
-                "/api/v2/chat",
-                json={
-                    "session_id": session_id,
-                    "profile": "local",
-                    "mode": "fast",
-                    "token_economy": "optimal",
-                    "message": "seed provider usage",
-                },
-            )
-            await seeded.read()
-        self.assertEqual(seeded.status, 200)
-        self.app[APP_SESSION_LLM_CACHE][session_id].llm.session_usage = None
-
-        with patch("thomas.server.routes.chat_v2.resolve_discord_chat_command", return_value="Discord is ready."):
-            response = await self.client.post(
-                "/api/v2/chat",
-                json={"session_id": session_id, "profile": "local", "message": "show discord status"},
-            )
-            response_body = await response.text()
-        self.assertEqual(response.status, 200)
-        done = [event for event in _parse_ndjson(response_body) if event.get("type") == "done"]
-        self.assertEqual(len(done), 1)
-        self.assertEqual(done[0]["usage"], {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0})
-        self.assertEqual(done[0]["run_usage"], {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0})
-        self.assertEqual(done[0]["session_usage"], {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 18})
-
-    async def test_exhaustive_max_terminal_preserves_normalized_cumulative_session_usage(self):
-        session_id = "usage-exhaustive-cumulative"
-        with (
-            patch("thomas.server.routes.chat_v2.OrchestratorBrain.process_message", _fake_process_message),
-            patch("thomas.server.routes.chat_v2.effective_effort", return_value="optimal"),
-        ):
-            seeded = await self.client.post(
-                "/api/v2/chat",
-                json={
-                    "session_id": session_id,
-                    "profile": "local",
-                    "mode": "fast",
-                    "token_economy": "optimal",
-                    "message": "seed provider usage",
-                },
-            )
-            await seeded.read()
-        self.assertEqual(seeded.status, 200)
-
-        with (
-            patch("thomas.server.routes.chat_v2.effective_effort", return_value="max"),
-            patch(
-                "thomas.server.routes.chat_v2.start_background_delegation",
-                AsyncMock(return_value={"execution_id": "exec-usage-max"}),
-            ),
-        ):
             response = await self.client.post(
                 "/api/v2/chat",
                 json={
                     "session_id": session_id,
                     "profile": "local",
-                    "mode": "max",
-                    "message": "build and freshly grade the complete report",
+                    "mode": "fast",
+                    "token_economy": "optimal",
+                    "message": "continue the conversation",
                 },
             )
             response_body = await response.text()
+
+        self.assertEqual(seeded.status, 200)
         self.assertEqual(response.status, 200)
         done = [event for event in _parse_ndjson(response_body) if event.get("type") == "done"]
         self.assertEqual(len(done), 1)
-        self.assertTrue(done[0]["max_review_pending"])
-        self.assertEqual(done[0]["usage"], {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0})
-        self.assertEqual(done[0]["run_usage"], {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0})
-        self.assertEqual(done[0]["session_usage"], {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18})
+        self.assertEqual(done[0]["usage"], {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18})
+        self.assertEqual(done[0]["run_usage"], {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18})
+        self.assertEqual(done[0]["session_usage"], {"prompt_tokens": 22, "completion_tokens": 14, "total_tokens": 36})
 
     async def test_malformed_and_missing_provider_usage_are_normalized(self):
         for index, (processor, expected) in enumerate(
@@ -267,10 +163,7 @@ class TestServerDoneUsageContract(AioHTTPTestCase):
             )
         ):
             session_id = f"usage-normalization-{index}"
-            with (
-                patch("thomas.server.routes.chat_v2.OrchestratorBrain.process_message", processor),
-                patch("thomas.server.routes.chat_v2.effective_effort", return_value="optimal"),
-            ):
+            with patch("thomas.server.routes.chat_v2.OrchestratorBrain.process_message", processor):
                 response = await self.client.post(
                     "/api/v2/chat",
                     json={

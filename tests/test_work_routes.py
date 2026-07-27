@@ -89,15 +89,18 @@ def test_work_ui_exposes_scoped_memory_readiness_and_automation_controls() -> No
     assert "Configure one" in text
     assert "function onboardingWorkflowCandidates()" in text
     assert "function selectedOnboardingWorkflow(candidates)" in text
-    assert ".filter(Boolean)" in text
-    assert "const ordinals = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth']" in text
+    assert "state.structuredOnboardingState" in text
+    assert "data-work-select-workflow" in text
+    assert "work_onboarding_state: options.workOnboardingState" in text
+    assert "const selectionText" not in text
+    assert "const ordinals" not in text
+    assert "Workflow:\\s*" not in text
     assert "onboardingInstruction(jobName, turn)" in text
-    assert "do not discuss tools, connectors, cadence, or execution" in text
+    assert "call work_onboarding_update once" in text
     assert "function confirmedOnboardingGoal()" in text
     assert "function onboardingWorkflowDrafts(candidates)" in text
     assert "selected_workflow_id: selected ? state.onboardingWorkflowId : ''" in text
     assert "const savedWorkflowId = String(fields.selected_workflow_id || '')" in text
-    assert "state.onboardingWorkflowId = drafts[position].id" in text
     assert "const persistedIndex = drafts.findIndex" in text
     assert "function activeJobDraft(app = state.activeApp)" in text
     assert "async function persistJobDraft(patch)" in text

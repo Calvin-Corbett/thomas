@@ -11,22 +11,20 @@ vm.createContext(context);
 vm.runInContext(fs.readFileSync(supportPath, 'utf8'), context, { filename: supportPath });
 
 const state = {
-  messages: [
-    {
-      role: 'thomas',
-      text: [
-        'Workflow: Invoice intake | Purpose: Save every invoice without checking duplicates. | Type: manual',
-        'Workflow: Owner report | Purpose: Send the owner a daily processing report. | Type: scheduled',
-        'Workflow: Archive records | Purpose: Archive approved invoices with a durable receipt. | Type: manual',
-      ].join('\n'),
-    },
-    { role: 'user', text: 'Revise invoice intake so it is safe.' },
-    {
-      role: 'thomas',
-      text: 'Workflow: Invoice intake | Purpose: Check duplicates and require owner approval before saving. | Type: event',
-    },
-  ],
+  messages: [{ role: 'user', text: 'Choose Invoice intake.' }],
   connectors: [],
+  onboardingWorkflowId: '',
+  structuredOnboardingState: {
+    phase: 'workflow_mapping',
+    confirmed_goal: 'Process invoices safely.',
+    selected_workflow_id: '',
+    selected_workflow_configured: false,
+    workflows: [
+      { id: 'invoice-intake', name: 'Invoice intake', purpose: 'Check duplicates and require owner approval before saving.', type: 'event', connector_suggestions: [] },
+      { id: 'owner-report', name: 'Owner report', purpose: 'Send the owner a daily processing report.', type: 'scheduled', connector_suggestions: [] },
+      { id: 'archive-records', name: 'Archive records', purpose: 'Archive approved invoices with a durable receipt.', type: 'manual', connector_suggestions: [] },
+    ],
+  },
 };
 const support = context.window.ThomasWorkSupport.create({
   state,
@@ -45,46 +43,17 @@ assert.equal(candidates[0].name, 'Invoice intake');
 assert.equal(candidates[0].purpose, 'Check duplicates and require owner approval before saving.');
 assert.equal(candidates[0].type, 'event');
 assert.equal(candidates[1].name, 'Owner report');
-
-state.messages.push({
-  role: 'thomas',
-  text: [
-    'Workflow: Mail triage | Purpose: Classify every new customer message safely. | Type: event',
-    'Workflow: Escalation review | Purpose: Route urgent messages for owner approval. | Type: manual',
-    'Workflow: Daily summary | Purpose: Deliver a verified daily operations summary. | Type: scheduled',
-  ].join('\n'),
-});
-const replacedMap = support.onboardingWorkflowCandidates();
-assert.deepEqual(Array.from(replacedMap, row => row.name), ['Mail triage', 'Escalation review', 'Daily summary']);
-
-state.messages = [
-  {
-    role: 'thomas',
-    text: [
-      'Workflow: Invoice intake | Purpose: Validate and save every incoming invoice. | Type: event',
-      'Workflow: Owner report | Purpose: Deliver a verified daily processing report. | Type: scheduled',
-      'Workflow: Archive records | Purpose: Archive approved invoices with a durable receipt. | Type: manual',
-    ].join('\n'),
-  },
-  { role: 'user', text: 'Choose Invoice intake.' },
-];
-let selectionCandidates = support.onboardingWorkflowCandidates();
-assert.equal(support.selectedOnboardingWorkflow(selectionCandidates).name, 'Invoice intake');
-state.messages.push({ role: 'thomas', text: 'Which mailbox should this workflow read from?' });
-state.messages.push({ role: 'user', text: 'Actually switch from Invoice intake to Owner report.' });
-selectionCandidates = support.onboardingWorkflowCandidates();
-const switched = support.selectedOnboardingWorkflow(selectionCandidates);
-assert.equal(switched.name, 'Owner report');
-assert.equal(support.onboardingConfigurationReady(selectionCandidates, switched), false);
-state.messages.push({ role: 'thomas', text: 'What time should the report arrive?' });
-state.messages.push({ role: 'user', text: 'Send it at 8 AM Central on weekdays.' });
-assert.equal(support.onboardingConfigurationReady(selectionCandidates, switched), true);
-
-state.messages = [{
-  role: 'thomas',
-  text: Array.from({ length: 7 }, (_, index) => `Workflow: Flow ${index + 1} | Purpose: Complete distinct outcome number ${index + 1} safely. | Type: manual`).join('\n'),
-}];
-assert.equal(support.onboardingWorkflowCandidates().length, 7);
+assert.equal(support.selectedOnboardingWorkflow(candidates), null);
+state.messages.push({ role: 'user', text: 'Actually switch to Owner report and make it urgent.' });
+assert.equal(support.selectedOnboardingWorkflow(candidates), null);
+state.onboardingWorkflowId = 'owner-report';
+state.structuredOnboardingState.selected_workflow_id = 'owner-report';
+const selected = support.selectedOnboardingWorkflow(candidates);
+assert.equal(selected.name, 'Owner report');
+assert.equal(support.onboardingConfigurationReady(candidates, selected), false);
+state.structuredOnboardingState.selected_workflow_configured = true;
+assert.equal(support.onboardingConfigurationReady(candidates, selected), true);
+assert.equal(support.confirmedOnboardingGoal(), 'Process invoices safely.');
 
 let workAdapter;
 const busyStates = [];
@@ -264,11 +233,10 @@ modeState.formDirty = false;
 
 console.log(JSON.stringify({
   ok: true,
-  latestWorkflowWins: true,
-  latestMapReplaces: true,
-  switchTargetsDestination: true,
-  configurationAnswerRequired: true,
-  overflowPreserved: true,
+  structuredWorkflowState: true,
+  proseCannotSelectWorkflow: true,
+  explicitSelectionWorks: true,
+  modelConfigurationStateRequired: true,
   firstTurnHiddenCompletion: true,
   reconciliationExecuted: true,
   activeDraftRequeued: true,

@@ -7,7 +7,15 @@ from pathlib import Path
 from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_READ_TOOL_NAMES = ("fs.read_file", "fs.list_dir", "fs.search", "web.search", "web.fetch")
+_READ_TOOL_NAMES = (
+    "fs.read_file",
+    "fs.list_dir",
+    "fs.search",
+    "web.search",
+    "web.fetch",
+    "skills.list",
+    "skills.use",
+)
 _PREMATURE_HANDOFF_COMPLETION_RE = re.compile(
     r"\b(?:done|finished|completed|built|created|made|delivered|ready)\b"
     r"|\bi(?:'ve| have)\s+(?:got|built|created|made|finished|completed)\b",

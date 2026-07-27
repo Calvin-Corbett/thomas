@@ -10,7 +10,6 @@ from typing import Any
 
 from aiohttp import web
 
-from thomas.agent.dispatch import should_dispatch
 from thomas.core.llm import LLMClient
 from thomas.server.routes.chat_v2_keys import APP_SESSION_LLM_CACHE, APP_VOICE_BRIDGE
 from thomas.tools.voice import VoiceBridge
@@ -25,26 +24,6 @@ class _CachedSessionLLM:
     lock: asyncio.Lock
 
 
-_BACKGROUND_REPLY_NOW_RE = (
-    r"(?:answer|reply|respond)\s+(?:now|first|quickly|fast)"
-    r"|(?:quick|fast)\s+(?:reply|answer|response)|don't wait"
-)
-_BACKGROUND_DELEGATION_RE = (
-    r"(?:background|delegate|delegation|parallel|while you work|in the background)"
-    r"|(?:rest|deeper work|longer work)\s+(?:(?:in|into)\s+)?background"
-)
-_EXPLICIT_DELEGATION_RE = (
-    r"(?:spawn|start|launch|run|use|create)\s+(?:exactly\s+|real\s+|live\s+|multiple\s+|few\s+|three\s+|four\s+|five\s+)*"
-    r"(?:sub[- ]?agents?|agents?|helpers?|workers?)"
-    r"|(?:delegate|delegation|parallel|multi-agent|multi agent|swarm)\b"
-)
-_INLINE_TOOL_REQUEST_RE = re.compile(
-    r"(?:\buse\s+(?:your\s+)?(?:file|files|tool|tools)\b|"
-    r"\b(?:file|files|tool|tools)\b.*\b(?:repo|repository|workspace|folder|directory|path)\b|"
-    r"\btop[- ]level\s+files?\b|\bcurrent\s+(?:repo|repository|workspace)\b|"
-    r"\b(?:shell|command|directory listing|list files)\b)",
-    re.I,
-)
 _UNSUPPORTED_GAP_CLAIM_RE = re.compile(
     r"\b(?:missing|outstanding|unfinished|not included|wasn['â€™]?t created|weren['â€™]?t created|not yet)\b|"
     r"\b(?:other|remaining|next)\s+(?:item|task|deliverable)\b|"
@@ -59,12 +38,6 @@ _UNSUPPORTED_GAP_CLAIM_RE = re.compile(
     r"(?:follow|come|arrive)\b|\b(?:will|to)\s+follow\s+(?:soon|shortly|later)\b",
     re.IGNORECASE,
 )
-_BACKGROUND_SPLIT_PATTERNS = (
-    r"\bthen,?\s+in the background\b",
-    r"\bin the background\b",
-    r"\bwhile you work\b",
-    r"\bdelegate the rest\b",
-)
 _EXTERNAL_TOOL_PREFIXES = (
     "browser.",
     "web.",
@@ -77,66 +50,6 @@ _EXTERNAL_TOOL_PREFIXES = (
     "slack.",
     "discord.",
 )
-
-
-def _requests_reply_first_background(prompt: str) -> bool:
-    text = str(prompt or "").strip().lower()
-    return bool(text and re.search(_BACKGROUND_REPLY_NOW_RE, text) and re.search(_BACKGROUND_DELEGATION_RE, text))
-
-
-def _requests_explicit_delegation(prompt: str) -> bool:
-    text = str(prompt or "").strip().lower()
-    return bool(text and re.search(_EXPLICIT_DELEGATION_RE, text))
-
-
-def _requires_inline_tool_execution(prompt: str) -> bool:
-    text = str(prompt or "").strip()
-    return bool(text and _INLINE_TOOL_REQUEST_RE.search(text))
-
-
-def _should_auto_background_actionable(
-    prompt: str,
-    *,
-    mode: str,
-    autonomy_level: int,
-    recent_messages: list[dict[str, Any]] | None = None,
-    active_tasks: list[dict[str, Any]] | None = None,
-    requires_inline_tools: bool = False,
-) -> bool:
-    normalized_mode = str(mode or "").strip().lower()
-    if normalized_mode != "auto" or int(autonomy_level or 0) < 3 or requires_inline_tools:
-        return False
-    # Resolve this through the public route module so compatibility tests and
-    # downstream embedders can replace the dispatcher at the historic patch
-    # point after the helper split.
-    from thomas.server.routes import chat_v2
-
-    dispatcher = getattr(chat_v2, "should_dispatch", should_dispatch)
-    decision = dispatcher(
-        prompt,
-        recent_messages=recent_messages,
-        active_tasks=active_tasks,
-        mode=normalized_mode,
-    )
-    return str(decision.action or "").strip().lower() == "dispatch"
-
-
-def _foreground_reply_prompt(prompt: str) -> str:
-    text = str(prompt or "").strip()
-    if not text:
-        return text
-    cut_idx: int | None = None
-    for pattern in _BACKGROUND_SPLIT_PATTERNS:
-        match = re.search(pattern, text, re.I)
-        if match:
-            cut_idx = match.start() if cut_idx is None else min(cut_idx, match.start())
-    visible_prompt = text[:cut_idx].rstrip(" ,.;:") if cut_idx is not None else text
-    return (
-        (visible_prompt or text)
-        + "\n\n[Visible reply constraint]\n"
-        + "Give only the immediate user-facing answer in one or two sentences. "
-        + "Do not include the deferred background work, long-form deliverable, or any narration about delegation."
-    )
 
 
 def _uploaded_audio_format(filename: str = "", content_type: str = "") -> str:

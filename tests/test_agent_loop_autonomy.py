@@ -81,11 +81,13 @@ def test_autonomy_level_1_forces_manual_tools_policy() -> None:
     assert int(start.data.get("autonomy_level") or 0) == 1
 
 
-def test_autonomy_level_4_keeps_casual_turns_lightweight() -> None:
-    start = _collect_start("hey how are you", autonomy_level=4)
-    assert start is not None
-    assert start.data.get("tools_policy") == "never"
-    assert str(start.data.get("autonomy_name") or "").lower() == "full autonomy"
+def test_autonomy_level_4_does_not_hide_tools_based_on_casual_wording() -> None:
+    casual = _collect_start("hey how are you", autonomy_level=4)
+    coding = _collect_start("fix this bug in app.py", autonomy_level=4)
+    assert casual is not None and coding is not None
+    assert casual.data.get("tools_policy") == "always"
+    assert coding.data.get("tools_policy") == "always"
+    assert str(casual.data.get("autonomy_name") or "").lower() == "full autonomy"
 
 
 def test_autonomy_level_4_forces_full_auto_on_action_turns() -> None:
@@ -102,7 +104,7 @@ def test_autonomy_level_2_keeps_guarded_auto_policy() -> None:
     assert int(start.data.get("autonomy_level") or 0) == 2
 
 
-def test_autonomy_level_4_reprompts_instead_of_stalling_on_clarifier() -> None:
+def test_autonomy_level_4_does_not_rewrite_or_suppress_a_model_question() -> None:
     cfg = AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
     tools = ToolRegistry()
     tools.register(_DummyTool())
@@ -118,22 +120,13 @@ def test_autonomy_level_4_reprompts_instead_of_stalling_on_clarifier() -> None:
     events = asyncio.run(run_once())
     done = next((e for e in events if e.type == EventType.AGENT_DONE), None)
     assert done is not None
-    assert llm.calls >= 2
+    assert llm.calls == 1
 
     text_events = [e for e in events if e.type == EventType.TEXT_DELTA]
     combined = "".join(str(e.data.get("text") or "") for e in text_events)
-    assert "Which file should I edit?" not in combined
-    assert "Proceeding with sensible defaults" in combined
+    assert "Which file should I edit?" in combined
+    assert "Proceeding with sensible defaults" not in combined
 
     token_report = done.data.get("token_report") or {}
     continuity = token_report.get("continuity") or {}
-    assert int(continuity.get("full_auto_reprompt_count") or 0) >= 1
-
-
-def test_ack_turn_detection_ignores_explanatory_continue_sentence() -> None:
-    cfg = AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
-    tools = ToolRegistry()
-    tools.register(_DummyTool())
-    agent = AgentLoop(cfg, _DummyLocalLLM(), tools, conversation=[], autonomy_level=4)
-    assert agent._is_ack_turn("continue") is True
-    assert agent._is_ack_turn("continue about what I said before, I am just talking to you right now") is False
+    assert int(continuity.get("full_auto_reprompt_count") or 0) == 0

@@ -242,7 +242,7 @@ def test_chat_runtime_renders_hover_timestamps_and_inline_edit_panel() -> None:
     )
 
 
-def test_chat_runtime_uses_task_strip_without_office_delegation_bridge() -> None:
+def test_chat_runtime_uses_structured_office_delegation_bridge() -> None:
     text = _read_all_runtime_js()
     assert "const CHAT_THINKING_UI_ENABLED = false;" in text
     assert "function robotAmbientStatusText(channel = 'thinking') {" in text
@@ -259,10 +259,7 @@ def test_chat_runtime_uses_task_strip_without_office_delegation_bridge() -> None
     sync_start = text.index("function _syncDelegationWorkerVisual(evt, status, taskText) {")
     sync_end = text.index("function _delegationActivityId(evt) {", sync_start)
     sync_block = text[sync_start:sync_end]
-    assert "void evt;" in sync_block
-    assert "void status;" in sync_block
-    assert "void taskText;" in sync_block
-    assert "officeQueueTask(" not in sync_block
+    assert "officeSyncStructuredDelegationTask(evt, status, taskText);" in sync_block
     assert "officeBeginTeleportSequence(" not in sync_block
     assert "_syncDelegationWorkerVisual(evt, status, taskText);" in text
 

@@ -29,6 +29,7 @@ log = logging.getLogger(__name__)
 
 APP_EVOLVE_TASK = "evolve_loop_task"
 _REPO_MARKERS = ("pyproject.toml", "thomas", ".git")
+_JSON_BODY_ERRORS = (json.JSONDecodeError, UnicodeDecodeError)
 
 
 def _default_repo_root() -> Path:
@@ -74,20 +75,6 @@ def _write_control(root: Path, **flags: Any) -> None:
     (directory / "control.json").write_text(json.dumps(flags, ensure_ascii=False), encoding="utf-8")
 
 
-def _status_line(state: dict[str, Any]) -> str:
-    counters = state.get("counters") or {}
-    pending = state.get("pending_count") or 0
-    parts = [
-        f"loop is {state.get('status', 'idle')}",
-        f"{int(counters.get('promoted', 0))} promoted",
-        f"{int(pending)} awaiting you",
-    ]
-    current = state.get("current")
-    if isinstance(current, dict) and current.get("title"):
-        parts.append(f"on: {current.get('title')}")
-    return " -- ".join(parts) + "."
-
-
 def _task_running(task: Any) -> bool:
     if task is None:
         return False
@@ -104,7 +91,7 @@ def _task_running(task: Any) -> bool:
 async def _json_body(request: web.Request) -> dict[str, Any]:
     try:
         body = await request.json()
-    except Exception:  # noqa: BLE001 - a malformed body is treated as empty
+    except _JSON_BODY_ERRORS:
         return {}
     return body if isinstance(body, dict) else {}
 
@@ -245,40 +232,6 @@ def build_evolve_loop_handlers(
         await _spawn_evolve_cli(_root(), ["reject", approval_id, "--reason", reason, "--json"])
         return web.json_response({"ok": True, "queued": True, "approval_id": approval_id})
 
-    async def chat(request: web.Request) -> web.Response:
-        require_api_access(request)
-        body = await _json_body(request)
-        message = str(body.get("message") or "").strip()
-        root = _root()
-        if not message:
-            return web.json_response(
-                {"ok": True, "action": "help", "reply": "Tell me what to evolve.", "state": _read_state(root)}
-            )
-        # Interpret in forge via the CLI (no forge import here), then act with our
-        # existing machinery so the server stays decoupled from the engine.
-        intent = await _run_evolve_cli(root, ["chat", message, "--interpret-only", "--json"]) or {}
-        action = str(intent.get("action") or "help")
-        reply = str(intent.get("reply") or "")
-        if action == "start":
-            if _task_running(app.get(APP_EVOLVE_TASK)):
-                reply = "I'm already evolving -- watch the progress below."
-            else:
-                args = ["loop", "--json", "--posture", str(intent.get("posture") or "auto_safe") or "auto_safe"]
-                focus = str(intent.get("focus") or "")
-                if focus:
-                    args += ["--focus", focus]
-                app[APP_EVOLVE_TASK] = await _spawn_evolve_cli(root, args)
-        elif action == "status":
-            reply = (reply + " " + _status_line(_read_state(root))).strip()
-        elif action == "pause":
-            _write_control(root, stop=True)
-        elif action in ("approve", "reject"):
-            # approve re-derives + promotes (heavy) -> run detached.
-            app[f"evolve_chat_{action}"] = await _spawn_evolve_cli(root, ["chat", message, "--json"])
-        state = _read_state(root)
-        state["running_task"] = _task_running(app.get(APP_EVOLVE_TASK))
-        return web.json_response({"ok": True, "action": action, "reply": reply, "state": state})
-
     return {
         "status": status,
         "plan": plan,
@@ -288,7 +241,6 @@ def build_evolve_loop_handlers(
         "pause": pause,
         "approve": approve,
         "reject": reject,
-        "chat": chat,
     }
 
 
@@ -308,4 +260,3 @@ def register_evolve_loop_routes(
     app.router.add_post("/api/evolve/loop/pause", handlers["pause"])
     app.router.add_post("/api/evolve/loop/approve/{approval_id}", handlers["approve"])
     app.router.add_post("/api/evolve/loop/reject/{approval_id}", handlers["reject"])
-    app.router.add_post("/api/evolve/loop/chat", handlers["chat"])

@@ -23,9 +23,11 @@ hard-coded global paths.
   - Route registration and web contracts.
   - Wires tool registry, memory, secrets, policy, and diagnostics into aiohttp app.
 - `thomas/agent`
-  - **Dispatch-first chat architecture**: `dispatch.py` classifies messages as casual
-    (Thomas replies directly) or actionable (dispatched to workboard task manager).
-    `chat_dispatcher.py` bridges chat to `WORKBOARD.md`. See `docs/CHAT_EXECUTION_MODEL.md`.
+  - **Model-owned chat orchestration**: the frontier model receives the conversation
+    and chooses whether to reply or invoke a structured capability such as
+    `send_task`. A dispatcher still bridges an explicit model tool call to governed
+    execution, but deterministic code must not classify natural-language intent or
+    promote a message into work. See `docs/CHAT_EXECUTION_MODEL.md`.
   - Agent loop (`loop.py` facade over `loop_core.py`, `loop_execution.py`, `loop_streaming.py`,
     `loop_tool_exec.py`, `loop_planning.py`, `loop_helpers.py`, `loop_tools.py`, `loop_completion.py`)
     handles LLM streaming, tool execution, and context management for both casual replies and worker agents.
@@ -66,7 +68,7 @@ guards to make changes pass.
    - Configuration and profile context from `thomas/core/config.py`.
    - Route selection (direct/assistant mode, autonomy, policy gates).
 3. **Orchestrator**
-   - `thomas/agent` plans whether to answer directly or invoke tools.
+   - The frontier model plans whether to answer directly or invoke tools.
    - Tool calls are created as typed payloads and passed through policy/approval hooks.
 4. **Tool execution**
    - Tool name/args resolve through registry.
@@ -104,6 +106,22 @@ guards to make changes pass.
 - **Safety contract**
   - Preserve validation boundaries and refusal behavior (`errors`/exceptions)
     instead of silently coercing invalid input.
+- **Semantic intent ownership contract**
+  - Natural-language meaning belongs to the frontier model. Deterministic code must
+    not infer reply-vs-dispatch, specialist, skill, surface, task decomposition,
+    cancel/update intent, or tool actions from words, regexes, scores, or fallback
+    classifiers.
+  - A semantic action begins only with a valid structured model tool call or an
+    explicit structured client control. Missing or malformed calls have no semantic
+    side effects.
+  - Natural-language prompt content must not be locally auto-rejected before the
+    frontier model. Provider policy owns model-input safety; local authorization
+    starts with concrete structured action payloads.
+  - Deterministic policy may validate schemas, normalize literal enum values, enforce
+    permissions and risk limits, veto unsafe calls, and verify results. It may not
+    select, promote, or replace the model's semantic decision.
+  - Exact, literal invocations such as `$skill-name` remain explicit controls. They
+    are not permission to keyword-match ordinary prose into a skill.
 
 When uncertain, search existing references first, keep diffs small, and update
 `ARCHITECTURE.md` + `CONTRIBUTING_AI.md` when interface expectations change.

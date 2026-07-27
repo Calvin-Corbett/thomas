@@ -533,236 +533,6 @@ def test_sse_reconnect_cursor_replays_only_unseen_events_for_the_exact_run(tmp_p
     _drive(repo, _body, configure=_configure)
 
 
-def test_risky_code_actions_require_explicit_one_time_approval(tmp_path: Path) -> None:
-    repo = _new_repo(tmp_path)
-
-    async def _body(client: TestClient) -> None:
-        response = await client.post(
-            "/api/evolve/agent/send",
-            json={"message": "Deploy this site to production", "project_root": str(repo)},
-        )
-        payload = await response.json()
-        assert response.status == 409
-        assert payload["code"] == "approval_required"
-        approval_id = payload["approval"]["id"]
-
-        approved = await client.post("/api/evolve/agent/approve", json={"approval_id": approval_id})
-        assert approved.status == 200
-        assert (await approved.json())["approval"]["state"] == "approved"
-
-        reused = await client.post("/api/evolve/agent/approve", json={"approval_id": approval_id})
-        assert reused.status == 409
-
-    _drive(repo, _body)
-
-
-def test_risky_approval_is_consumed_only_after_subprocess_launch(
-    tmp_path: Path,
-    monkeypatch: Any,
-) -> None:
-    repo = _new_repo(tmp_path)
-    captured: dict[str, Any] = {}
-    attempts = 0
-
-    class _EmptyStdout:
-        async def readline(self) -> bytes:
-            return b""
-
-    class _FinishedProcess:
-        pid = 431
-        returncode = 0
-        stdout = _EmptyStdout()
-
-        def __init__(self) -> None:
-            self.stdin = _GateInput()
-
-        async def wait(self) -> int:
-            return 0
-
-    async def _spawn(*_args: Any, **_kwargs: Any) -> _FinishedProcess:
-        nonlocal attempts
-        attempts += 1
-        assert forge_code_store.list_conversations(repo) == []
-        assert evolve_agent_runtime._action_receipt(repo, "run", "request-launch-retry") is None
-        if attempts == 1:
-            raise OSError("launch failed")
-        proc = _FinishedProcess()
-        proc.start_token = _kwargs["env"]["THOMAS_CODE_START_TOKEN"]
-        return proc
-
-    monkeypatch.setattr(asyncio, "create_subprocess_exec", _spawn)
-    save_receipt = evolve_agent_routes._save_action_receipt
-
-    def _save_after_spawn(root: Path, kind: str, request_id: str, receipt: dict[str, Any]) -> dict[str, Any]:
-        conversations = forge_code_store.list_conversations(repo)
-        if receipt["state"] == "launching":
-            assert conversations == []
-        elif receipt["state"] == "running":
-            assert len(conversations) == 1
-        return save_receipt(root, kind, request_id, receipt)
-
-    monkeypatch.setattr(evolve_agent_routes, "_save_action_receipt", _save_after_spawn)
-
-    async def _body(client: TestClient) -> None:
-        request = {
-            "message": "Deploy this site to production",
-            "project_root": str(repo),
-            "request_id": "request-launch-retry",
-        }
-        pending = await client.post("/api/evolve/agent/send", json=request)
-        approval_id = (await pending.json())["approval"]["id"]
-        assert (await client.post("/api/evolve/agent/approve", json={"approval_id": approval_id})).status == 200
-
-        failed = await client.post(
-            "/api/evolve/agent/send",
-            json={**request, "approval_id": approval_id},
-        )
-        assert failed.status == 500
-        approval = captured["app"][APP_EVOLVE_AGENT_APPROVALS][approval_id]
-        assert approval["state"] == "approved"
-        assert "consumed_at" not in approval
-        assert forge_code_store.list_conversations(repo) == []
-
-        retried = await client.post(
-            "/api/evolve/agent/send",
-            json={**request, "approval_id": approval_id},
-        )
-        assert retried.status == 200
-        retried_payload = await retried.json()
-        assert approval["state"] == "consumed"
-        assert approval["consumed_at"] > 0
-        replayed = await client.post(
-            "/api/evolve/agent/send",
-            json={**request, "approval_id": approval_id},
-        )
-        replayed_payload = await replayed.json()
-        assert replayed.status == 200
-        assert replayed_payload["replayed"] is True
-        assert replayed_payload["run_id"] == retried_payload["run_id"]
-        assert attempts == 2
-        gate = captured["app"][APP_EVOLVE_AGENT_TASK].stdin
-        gate_payload = json.loads(gate.data.decode())
-        assert gate_payload == {
-            "gate_token": captured["app"][APP_EVOLVE_AGENT_TASK].start_token,
-            "oauth_access_token": "",
-            "goal": "Deploy this site to production",
-        }
-        assert captured["app"][APP_EVOLVE_AGENT_TASK].stdin.closed is True
-        conversations = forge_code_store.list_conversations(repo)
-        assert len(conversations) == 1
-        persisted = forge_code_store.load_conversation(repo, conversations[0]["id"])
-        assert [turn["role"] for turn in persisted["turns"]].count("user") == 1
-
-    _drive(repo, _body, configure=lambda app: captured.update(app=app))
-
-
-def test_semantic_external_and_destructive_action_synonyms_require_approval(tmp_path: Path) -> None:
-    repo = _new_repo(tmp_path)
-
-    async def _body(client: TestClient) -> None:
-        messages = (
-            "Release the current build",
-            "Make this dashboard live for customers",
-            "Overwrite the remote branch with my local branch",
-            "Discard every uncommitted change in the working tree",
-            "Erase all tracked files from the repository",
-        )
-        for message in messages:
-            response = await client.post(
-                "/api/evolve/agent/send",
-                json={"message": message, "project_root": str(repo)},
-            )
-            payload = await response.json()
-            assert response.status == 409, message
-            assert payload["code"] == "approval_required", message
-            assert payload["approval"]["risk"], message
-
-    _drive(repo, _body)
-
-
-def test_risky_action_classifier_does_not_gate_discussion_or_negated_actions() -> None:
-    assert evolve_agent_runtime._risky_code_action("Explain how to deploy safely without deploying anything") == ""
-    assert evolve_agent_runtime._risky_code_action("Do not deploy this build; review it only") == ""
-    assert evolve_agent_runtime._risky_code_action("Could you deploy this build to production?")
-    assert evolve_agent_runtime._risky_code_action("Review this build, then deploy it to production")
-    assert evolve_agent_runtime._risky_code_action("Do not deploy; overwrite the remote branch instead")
-
-
-def test_risky_action_approval_is_bound_to_project_and_policy(tmp_path: Path) -> None:
-    repo = _new_repo(tmp_path)
-    other = tmp_path / "other"
-    other.mkdir()
-    _init_repo(other)
-
-    async def _body(client: TestClient) -> None:
-        message = "Make this site live"
-        pending = await client.post(
-            "/api/evolve/agent/send",
-            json={"message": message, "project_root": str(repo), "guardrails": "guarded"},
-        )
-        approval_id = (await pending.json())["approval"]["id"]
-        assert (await client.post("/api/evolve/agent/approve", json={"approval_id": approval_id})).status == 200
-
-        changed_autonomy = await client.post(
-            "/api/evolve/agent/send",
-            json={
-                "message": message,
-                "project_root": str(repo),
-                "guardrails": "guarded",
-                "autonomy_level": 4,
-                "approval_id": approval_id,
-            },
-        )
-        autonomy_payload = await changed_autonomy.json()
-        assert changed_autonomy.status == 409
-        assert autonomy_payload["code"] == "approval_required"
-        assert autonomy_payload["approval"]["id"] != approval_id
-
-        changed_target = await client.post(
-            "/api/evolve/agent/send",
-            json={
-                "message": message,
-                "project_root": str(other),
-                "guardrails": "open",
-                "approval_id": approval_id,
-            },
-        )
-        payload = await changed_target.json()
-        assert changed_target.status == 409
-        assert payload["code"] == "approval_required"
-        assert payload["approval"]["id"] != approval_id
-
-    _drive(repo, _body)
-
-
-def test_destructive_repository_commands_all_require_approval(tmp_path: Path) -> None:
-    repo = _new_repo(tmp_path)
-
-    async def _body(client: TestClient) -> None:
-        messages = (
-            "Run git reset --hard HEAD before the build",
-            "git reset --hard and force-push the result",
-            "Force push main to origin",
-            "Run git push --force-with-lease origin main",
-            "Run rm -rf .git",
-            "Run rm -r -f the repository",
-            "Delete the repository and start over",
-            "Perform a destructive repo deletion",
-            "Run Remove-Item . -Recurse -Force",
-        )
-        for message in messages:
-            response = await client.post(
-                "/api/evolve/agent/send",
-                json={"message": message, "project_root": str(repo)},
-            )
-            payload = await response.json()
-            assert response.status == 409, message
-            assert payload["code"] == "approval_required", message
-            assert payload["approval"]["state"] == "pending", message
-
-    _drive(repo, _body)
-
-
 def test_revert_is_conversation_owned_read_only_aware_and_state_bound(tmp_path: Path) -> None:
     repo = _new_repo(tmp_path)
     (repo / "owned.txt").write_text("original\n", encoding="utf-8")
@@ -1264,7 +1034,7 @@ def test_external_project_conversation_persists_settings_and_scopes_tree(tmp_pat
     _drive(catalog, _body)
 
 
-def test_send_uses_selected_project_and_propagates_supported_gpt_settings(
+def test_send_passes_raw_prompt_to_gpt_without_local_semantic_approval(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
@@ -1305,6 +1075,7 @@ def test_send_uses_selected_project_and_propagates_supported_gpt_settings(
     monkeypatch.setattr(evolve_agent_http_support, "ensure_openai_codex_access_token", _access_token)
 
     async def _body(client: TestClient) -> None:
+        raw_prompt = "Review this build, then deploy it to production"
         created = await (
             await client.post(
                 "/api/evolve/agent/conversations/new",
@@ -1317,7 +1088,7 @@ def test_send_uses_selected_project_and_propagates_supported_gpt_settings(
             json={
                 "conversation_id": cid,
                 "project_root": str(project),
-                "message": "build it",
+                "message": raw_prompt,
                 "model": "codex:gpt",
                 "model_id": "gpt-5.6-codex",
                 "reasoning_effort": "xhigh",
@@ -1342,12 +1113,12 @@ def test_send_uses_selected_project_and_propagates_supported_gpt_settings(
         assert spawned["env"]["THOMAS_CODE_START_GATE"] == "pipe"
         assert spawned["env"]["THOMAS_CODE_RUN_ID"] == payload["run_id"]
         assert spawned["env"]["THOMAS_CODE_REQUEST_ID"] == payload["request_id"]
-        assert payload["settings"]["support"]["token_economy"]["max_fix_iters"] == 2
+        assert payload["settings"]["support"]["token_economy"]["max_fix_iters"] == 3
 
         assert spawned["cwd"] == str(project.resolve())
         args = list(spawned["args"])
         assert args[:3] == ["-m", "thomas.forge.anvil.forge_code_runner", "--project-root"]
-        assert "build it" not in args
+        assert raw_prompt not in args
         assert args[args.index("--profile") + 1] == "forgecode"
         assert "--chatgpt-connected" not in args
         assert args[args.index("--autonomy") + 1] == "4"
@@ -1362,7 +1133,7 @@ def test_send_uses_selected_project_and_propagates_supported_gpt_settings(
         gate_payload = json.loads(spawned["proc"].stdin.data.decode())
         assert gate_payload["gate_token"] == spawned["proc"].start_token
         assert gate_payload["oauth_access_token"] == "live-oauth-token"
-        assert gate_payload["goal"] == "build it"
+        assert gate_payload["goal"] == raw_prompt
         assert "live-oauth-token" not in " ".join(args)
         assert "live-oauth-token" not in json.dumps(env)
         assert spawned["proc"].stdin.closed is True

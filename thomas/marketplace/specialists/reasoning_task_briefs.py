@@ -28,10 +28,10 @@ def build_send_task_instructions(
 ) -> str:
     """Compose the instructions a dispatched worker receives.
 
-    Single dispatch forwards the USER'S RAW request, not the model's reworded
-    version — the chat layer is told it "can't build", so its rewordings hedge
-    or mangle the ask while the task manager reads the original correctly.
-    (Calvin, 2026-06-26.)
+    A single dispatch trusts the model-authored structured instructions. The
+    model has the full conversation and can resolve follow-ups such as "you
+    pick" into the actual deliverable; replacing that brief with only the
+    latest raw turn destroys the subject and caused graphs to become games.
 
     A multi-part ask ("do A and B") arrives as SEVERAL send_task calls in one
     turn. Forwarding the full raw prompt to each worker made every worker
@@ -50,4 +50,4 @@ def build_send_task_instructions(
                 f"is one part. Build ONLY this task's deliverable.]\n{raw_ask}"
             )
         return brief
-    return raw_ask or per_task or title
+    return per_task or raw_ask or title

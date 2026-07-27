@@ -166,7 +166,6 @@ def _build_test_app(
         "_task_ledger_update": None,
         "_model_cfg_with_secrets": None,
         "_failover_cfgs_with_secrets": None,
-        "_resolve_natural_model_switch_request": None,
         "_chat_file_for": None,
         "_read_chat_from_disk": None,
         "_build_tools": None,
@@ -224,19 +223,14 @@ async def test_task_ledger_routes_enrich_snapshot_and_validate_history_limit(
     )
     app, _ = _build_test_app(tmp_path, monkeypatch, ledger=ledger, sessions={"sess-1": session})
 
-    import thomas.marketplace.observability.task_ledger as task_ledger_mod
-
-    monkeypatch.setattr(task_ledger_mod, "derive_active_goal", lambda user_text, current_goal="": "Finish invoice")
-    monkeypatch.setattr(task_ledger_mod, "extract_missing_inputs", lambda progress_text: ["customer_email"])
-
     client = await _start_client(app)
     try:
         response = await client.get("/api/task-ledger/current?session_id=sess-1")
         assert response.status == 200
         payload = await response.json()
-        assert payload["snapshot"]["active_goal"] == "Finish invoice"
-        assert payload["snapshot"]["status"] == "blocked"
-        assert payload["snapshot"]["missing_inputs"] == ["customer_email"]
+        assert payload["snapshot"]["active_goal"] == ""
+        assert payload["snapshot"]["status"] == "in_progress"
+        assert payload["snapshot"]["missing_inputs"] == []
 
         invalid = await client.get("/api/task-ledger/history?limit=oops")
         assert invalid.status == 400
@@ -528,10 +522,6 @@ def test_optional_route_registration_wires_runtime_dependencies(
     async def _read_chat_from_disk(chat_id: str) -> dict[str, object]:
         return {"id": chat_id}
 
-    async def _resolve_model_switch_request(text: str, user_id: str = "", session_id: str = "") -> str | None:
-        _ = user_id, session_id
-        return "local" if text else None
-
     locals_dict = {
         "_require_api_access": lambda request: None,
         "_require_loopback": lambda request: None,
@@ -547,7 +537,6 @@ def test_optional_route_registration_wires_runtime_dependencies(
         "_task_ledger_update": lambda session_id, goal=None, status="in_progress": None,
         "_model_cfg_with_secrets": lambda cfg, profile, model_cfg: {"profile": profile, "model": model_cfg.model},
         "_failover_cfgs_with_secrets": lambda cfg, profile: [{"profile": "backup"}],
-        "_resolve_natural_model_switch_request": _resolve_model_switch_request,
         "_chat_file_for": lambda chat_id: tmp_path / f"{chat_id}.json",
         "_read_chat_from_disk": _read_chat_from_disk,
         "_build_tools": lambda runtime_cfg: [{"name": "shell"}],
@@ -666,7 +655,6 @@ async def test_route_edges_cover_missing_ledger_engine_tool_registry_and_unknown
             "_task_ledger_update": None,
             "_model_cfg_with_secrets": None,
             "_failover_cfgs_with_secrets": None,
-            "_resolve_natural_model_switch_request": None,
             "_chat_file_for": None,
             "_read_chat_from_disk": None,
             "_build_tools": None,
@@ -789,7 +777,6 @@ def test_route_registration_skips_when_runtime_guards_missing(
                 "_task_ledger_update": None,
                 "_model_cfg_with_secrets": None,
                 "_failover_cfgs_with_secrets": None,
-                "_resolve_natural_model_switch_request": None,
                 "_chat_file_for": None,
                 "_read_chat_from_disk": None,
                 "_build_tools": None,
@@ -944,10 +931,6 @@ def test_route_registration_logs_module_failures(tmp_path: Path, monkeypatch: py
     async def _read_chat_from_disk(chat_id: str) -> dict[str, object]:
         return {"id": chat_id}
 
-    async def _resolve_model_switch_request(text: str, user_id: str = "", session_id: str = "") -> str | None:
-        _ = text, user_id, session_id
-        return None
-
     async def _simple_page(_request: web.Request) -> web.Response:
         return web.Response(text="ok")
 
@@ -983,7 +966,6 @@ def test_route_registration_logs_module_failures(tmp_path: Path, monkeypatch: py
                     "model": model_cfg.model,
                 },
                 "_failover_cfgs_with_secrets": lambda cfg_ref, profile: [{"profile": "backup"}],
-                "_resolve_natural_model_switch_request": _resolve_model_switch_request,
                 "_chat_file_for": lambda chat_id: tmp_path / f"{chat_id}.json",
                 "_read_chat_from_disk": _read_chat_from_disk,
                 "_build_tools": lambda runtime_cfg: [{"name": "shell"}],

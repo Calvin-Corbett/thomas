@@ -123,6 +123,7 @@ class WindowsAuthGate:
 
     def _show_windows_dialog(self, action_description: str, reason: str) -> bool:
         try:
+            import pywintypes
             import win32api
             import win32cred
         except ImportError:
@@ -145,7 +146,7 @@ class WindowsAuthGate:
 
         try:
             username = win32api.GetUserName()
-        except Exception:
+        except (OSError, pywintypes.error):
             username = ""
 
         try:
@@ -160,121 +161,14 @@ class WindowsAuthGate:
             )
             # result == 0 means ERROR_SUCCESS (user confirmed)
             return result == 0
-        except Exception as e:
+        except (OSError, pywintypes.error) as e:
             log.error("WindowsAuthGate: dialog error: %s", e)
             return False
 
 
-# ---------------------------------------------------------------------------
-# Suspicious prompt detection
-# ---------------------------------------------------------------------------
-
-# NOTE: The dialog below uses CredUIPromptForCredentials (username+password).
-# For a proper Windows Hello PIN prompt, use CredUIPromptForWindowsCredentials
-# with CREDUIWIN_AUTHPACKAGE_ONLY. That requires pywin32 >= 228 and is a
-# future improvement.
-
-# Patterns that indicate a prompt may be attempting to manipulate Thomas into
-# bypassing guardrails, extracting system internals, or impersonating an
-# authorized upgrade process.
-#
-# Design rules for patterns:
-#   - Must be specific enough to not fire on normal developer instructions.
-#   - "respond only in valid json" is NORMAL — do NOT flag it.
-#   - "level 5 autonomy" is in SOUL.md — do NOT flag it.
-#   - Require at least two suspicious signals in proximity, or very specific phrasing.
-_SUSPICIOUS_PATTERNS = (
-    # Fake authority / impersonation — requires specific impersonation phrasing
-    r"(?:openai|anthropic|grok|deepmind)\s+(?:has\s+)?authoriz(?:ed|es)\s+you",
-    r"i\s+am\s+(?:your\s+)?(?:developer|creator|owner)\s+.*override",
-    r"maintenance\s+mode\s+.*disable\s+(?:all\s+)?(?:safety|guardrail|filter)",
-    # System prompt extraction — must ask to reveal/paste the actual prompt
-    r"(?:paste|print|output|reveal|show)\s+(?:me\s+)?(?:your\s+)?(?:full\s+)?system\s+prompt",
-    r"(?:repeat|output)\s+(?:everything|all)\s+(?:above|before)\s+(?:this|verbatim)",
-    r"what\s+(?:are\s+)?your\s+(?:exact\s+)?(?:hidden\s+)?instructions",
-    # Guardrail bypass — explicit bypass language only
-    r"(?:ignore|bypass|override|disable)\s+(?:all\s+)?(?:your\s+)?(?:safety|guardrail|filter|restriction)s?",
-    r"(?:ignore|disregard)\s+(?:all\s+)?(?:previous|prior)\s+instructions?\s+and",
-    r"pretend\s+(?:you\s+have\s+)?no\s+(?:restrictions?|rules?|guidelines?)",
-    # Self-rewrite attacks — must target rules/identity specifically
-    r"rewrite\s+(?:your\s+)?(?:core\s+)?(?:rules?|identity|soul|instructions?)",
-    r"add\s+(?:a\s+)?(?:permanent|ironclad|unbreakable)\s+rule\s+(?:that\s+)?(?:you\s+)?(?:must|will|shall)",
-)
-
-import re as _re
-
-_SUSPICIOUS_RE = _re.compile(
-    "|".join(_SUSPICIOUS_PATTERNS),
-    _re.IGNORECASE | _re.DOTALL,
-)
-
-_NO_HUMAN_MODES = {"human", "allow", "deny"}
-
-
-def _normalize_no_human_mode(value: str | None) -> str:
-    mode = str(value or "human").strip().lower()
-    if mode in _NO_HUMAN_MODES:
-        return mode
-    return "human"
-
-
-def check_prompt_suspicious(text: str) -> tuple[bool, str]:
-    """Return (is_suspicious, matched_pattern) for a given prompt text."""
-    m = _SUSPICIOUS_RE.search(str(text or ""))
-    if m:
-        return True, m.group(0)[:80]
-    return False, ""
-
-
-def gate_suspicious_prompt(
-    text: str,
-    action_description: str = "Proceed with flagged request",
-    precomputed: tuple | None = None,
-    no_human_mode: str | None = None,
-) -> bool:
-    """If the prompt looks suspicious, require Windows PIN before continuing.
-
-    Args:
-        text: The prompt text to check.
-        action_description: Label shown in the Windows auth dialog.
-        precomputed: Optional (is_suspicious, matched) tuple from a prior
-            check_prompt_suspicious() call. If provided, skips the regex scan.
-
-    Returns True if the user authorized (or prompt is clean).
-    Returns False if suspicious AND user cancelled/failed PIN.
-    """
-    if precomputed is not None:
-        suspicious, matched = precomputed
-    else:
-        suspicious, matched = check_prompt_suspicious(text)
-
-    if not suspicious:
-        return True
-
-    mode = _normalize_no_human_mode(no_human_mode)
-    if mode == "allow":
-        log.warning(
-            "Suspicious prompt detected (matched: %r). no-human mode allow: bypassing PIN gate.",
-            matched,
-        )
-        return True
-    if mode == "deny":
-        log.warning(
-            "Suspicious prompt detected (matched: %r). no-human mode deny: blocking request.",
-            matched,
-        )
-        return False
-
-    log.warning("Suspicious prompt detected (matched: %r). Requiring Windows PIN.", matched)
-    gate = get_auth_gate()
-    return gate.request_authorization(
-        action_description,
-        reason=(
-            f"This request matched a suspicious pattern: '{matched}'\n\n"
-            "If this is really you, enter your Windows PIN to proceed.\n"
-            "Cancel to abort."
-        ),
-    )
+# Prompt content is never regex-scanned or pre-rejected here. Provider policy
+# handles model safety, while this module authorizes concrete structured
+# high-risk actions after Thomas has chosen them.
 
 
 # ---------------------------------------------------------------------------

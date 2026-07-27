@@ -1,7 +1,7 @@
 """Unified /api/v2/chat route.
-Thomas remains the only conversational voice on this route. In Max mode we
-can launch silent background delegation in parallel, but user-visible text is
-still streamed only from Thomas.
+
+Thomas is always the first semantic decision-maker. The route provides
+structured capabilities; it never infers intent from the user's wording.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from typing import Any
 
 from aiohttp import web
 
-from thomas.agent.dispatch import should_dispatch
 from thomas.chat.conversation import ConversationManager
 from thomas.chat.event_stream import EventDispatcher
 from thomas.chat.session_store import SessionMeta, SessionStore
@@ -24,14 +23,10 @@ from thomas.core.action_receipt import ActionReceipt
 from thomas.core.autonomy import DEFAULT_AUTONOMY_LEVEL
 from thomas.core.file_access import READ_ONLY, parse_file_access_level
 from thomas.core.llm import LLMClient
-from thomas.core.token_economy import effective_effort
 from thomas.marketplace.orchestrator.brain import OrchestratorBrain
 from thomas.marketplace.orchestrator.registry import SpecialistRegistry
-from thomas.models.chat_controls import resolve_ui_control_request
 from thomas.server.chat_budget_ledger import ChatBudgetError, ChatBudgetExceeded
 from thomas.server.chat_delegation import (
-    _prompt_targets_live_thomas_repo,
-    _requested_delegate_items,
     apply_task_update,
     build_active_task_digest,
     session_active_delegations,
@@ -44,7 +39,6 @@ from thomas.server.chat_runtime_policy import (
     resolve_chat_runtime_policy,
 )
 from thomas.server.model_runtime_receipt import model_runtime_receipt
-from thomas.server.routes.autopilot import maybe_auto_start_autopilot_from_chat
 from thomas.server.routes.chat_surface_namespace import (
     SessionNamespaceBindError,
     bind_chat_surface_session,
@@ -53,7 +47,6 @@ from thomas.server.routes.chat_surface_namespace import (
 from thomas.server.routes.chat_task_ledger import (
     record_chat_task_failed,
     record_chat_task_finished,
-    record_chat_task_pending,
     record_chat_task_started,
 )
 from thomas.server.routes.chat_v2_announcements import (
@@ -99,32 +92,23 @@ from thomas.server.routes.chat_v2_support import (
     _CachedSessionLLM,
     _cleanup_cached_session_llms,
     _evict_session_llm,
-    _foreground_reply_prompt,
     _is_external_tool_name,
     _llm_signature,
     _normalize_reasoning_effort,
     _PrivacyRestrictedTools,
     _refresh_cached_llm,
-    _requests_explicit_delegation,
-    _requests_reply_first_background,
-    _requires_inline_tool_execution,
     _resolve_privacy_controls,
-    _should_auto_background_actionable,
     _uploaded_audio_format,
     _voice_bridge_for_request,
 )
-from thomas.server.routes.chat_v2_ui_control import _chat_stream_headers, _handle_ui_control_turn
+from thomas.server.routes.chat_v2_ui_control import _chat_stream_headers
 from thomas.server.routes.chat_v2_usage import UsageReceiptDispatcher
 from thomas.server.routes.chat_v2_work_context import (
     WorkContextError,
     resolve_work_private_context,
 )
-from thomas.server.routes.discord_channels_support import (
-    build_discord_request_context,
-    resolve_discord_chat_command,
-    stream_static_chat_events,
-)
 from thomas.server.work_connector_runtime import request_work_tools
+from thomas.server.work_onboarding_state import validate_work_onboarding_state
 from thomas.server.workspace_specialist_runtime import handle_workspace_chat_v2, workspace_chat_route_context
 from thomas.tools.voice import VoiceBridge as VoiceBridge
 
@@ -294,6 +278,23 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
         runtime_policy, app_config, turn_token_economy, requested_token_economy=token_economy
     )
     work_onboarding = surface_mode == "work" and not private_context
+    work_onboarding_state: dict[str, Any] = {}
+    if work_onboarding:
+        raw_onboarding_state = payload.get("work_onboarding_state")
+        if raw_onboarding_state is None:
+            raw_onboarding_state = {
+                "phase": "goal_discovery",
+                "confirmed_goal": "",
+                "workflows": [],
+                "selected_workflow_id": "",
+                "selected_workflow_configured": False,
+            }
+        if not isinstance(raw_onboarding_state, dict):
+            return web.json_response({"error": "work_onboarding_state must be an object"}, status=400)
+        try:
+            work_onboarding_state = validate_work_onboarding_state(**raw_onboarding_state)
+        except (TypeError, ValueError) as exc:
+            return web.json_response({"error": str(exc)}, status=400)
     requested_model_id = runtime_policy.model_id
     payload_reasoning_effort = _normalize_reasoning_effort(str(payload.get("reasoning_effort", "") or ""))
     requested_reasoning_effort = payload_reasoning_effort or runtime_policy.model.reasoning_effort
@@ -325,17 +326,6 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
         )
         return await handle_workspace_chat_v2(request, route_context=route_context)
     registry: SpecialistRegistry = request.app[APP_SPECIALIST_REGISTRY]
-    try:
-        await maybe_auto_start_autopilot_from_chat(
-            request,
-            text=raw_prompt,
-            session_id=sid,
-            profile=requested_profile,
-            model_id=requested_model_id or None,
-            autonomy_level=turn_autonomy_level,
-        )
-    except (KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
-        log.warning("Chat V2 could not auto-start a continuous objective: %s", exc)
     project_context = ""
     project_receipt: dict[str, Any] = {}
     if project_id:
@@ -350,56 +340,6 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
             )
         except web.HTTPException as exc:
             return web.json_response({"error": exc.text or exc.reason}, status=exc.status)
-
-    control = resolve_ui_control_request(prompt)
-    if control is not None and not temporary:
-        return await _handle_ui_control_turn(
-            request,
-            payload=payload,
-            sid=sid,
-            prompt=prompt,
-            mode=mode,
-            autonomy_level=autonomy_level,
-            conversation=conversation,
-            session_store=session_store,
-            meta=meta,
-            control=control,
-            token_economy_meta=token_economy_meta,
-        )
-
-    discord_context = build_discord_request_context(payload, sid)
-    try:
-        discord_reply = resolve_discord_chat_command(
-            text=raw_prompt,
-            cfg=app_config,
-            sid=sid,
-            request_context=discord_context,
-        )
-    except (OSError, RuntimeError, TypeError, ValueError) as exc:
-        log.warning("Discord chat command failed safely (%s)", type(exc).__name__)
-        discord_reply = "Discord status is temporarily unavailable."
-    if discord_reply is not None:
-        conversation = conversation.append_message("user", history_prompt).append_message(
-            "assistant",
-            discord_reply,
-        )
-        if not temporary:
-            await session_store.save(sid, conversation, meta, force=True)
-        return await stream_static_chat_events(
-            request=request,
-            sid=sid,
-            reply_text=discord_reply,
-            token_economy_meta=token_economy_meta,
-            start_t=time.monotonic(),
-            headers={
-                **_chat_stream_headers(request),
-                "X-Thomas-Temporary": "true" if temporary else "false",
-                "X-Thomas-External-Access": "allowed" if external_access else "blocked",
-            },
-            done_fields={"conversation_version": conversation.version},
-            prior_session_tokens=meta.token_spend,
-            mode=turn_mode,
-        )
 
     try:
         llm, llm_lock, model_profile = await initialize_chat_v2_llm(
@@ -529,37 +469,9 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
     is_first_message = conversation.length == 0
     recent_messages = conversation.get_context_window(max_tokens=8_000)
     current_active_tasks = session_active_delegations(sid)
-    launcher_task: asyncio.Task[Any] | None = None
-    live_repo_background = bool(turn_autonomy_level >= 3 and _prompt_targets_live_thomas_repo(prompt))
-    dispatch_inline_actionable = False if live_repo_background else _requires_inline_tool_execution(prompt)
-    reply_first_background = bool(mode == "auto" and _requests_reply_first_background(prompt))
-    explicit_delegation = bool(turn_autonomy_level >= 4 and _requests_explicit_delegation(prompt))
-    explicit_deliverables = [] if work_onboarding else _requested_delegate_items(prompt)
-    exhaustive_requested = effective_effort(worker_effort, turn_autonomy_level) == "max"
-    delegation_mode = "max" if exhaustive_requested else turn_mode
-    auto_actionable_background = False
-    launch_background = (
-        False
-        if work_onboarding
-        else bool(
-            delegation_mode == "max"
-            or reply_first_background
-            or explicit_delegation
-            or explicit_deliverables
-            or live_repo_background
-        )
-    )
-    force_background = (
-        False
-        if work_onboarding
-        else bool(reply_first_background or explicit_delegation or explicit_deliverables or live_repo_background)
-    )
-    delegation_autonomy_level = 4 if explicit_deliverables else turn_autonomy_level
-    background_ack_only = False
-    if temporary:
-        launch_background = False
-        force_background = False
-    visible_prompt = _foreground_reply_prompt(prompt) if reply_first_background else prompt
+    # Natural-language routing stops here. Thomas sees the complete turn and
+    # decides whether to call the structured dispatcher capability.
+    visible_prompt = prompt
     if project_context:
         visible_prompt = (
             visible_prompt.rstrip()
@@ -574,6 +486,15 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
             + "\n\n[Job-private context]\n"
             + "Use this context only for the current Work job. Never quote this wrapper back to the user.\n"
             + private_context
+        )
+    if work_onboarding:
+        visible_prompt = (
+            visible_prompt.rstrip()
+            + "\n\n[Structured Work onboarding state]\n"
+            + json.dumps(work_onboarding_state, ensure_ascii=False)
+            + "\nUse the work_onboarding_update function once before answering. Preserve an explicit "
+            + "selected_workflow_id exactly; only the browser's workflow buttons may change it. "
+            + "Do not encode workflow state in prose because the browser will not parse it."
         )
 
     app_tools = request_tools
@@ -592,9 +513,16 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
     )
     operate_cb = inline_operator.execute if app_tools is not None else None
 
-    async def _send_task(*, title: str, instructions: str, surface: str = "") -> None:
+    async def _send_task(
+        *,
+        title: str,
+        instructions: str,
+        surface: str = "task",
+        specialist: str = "reasoning",
+        workspace: str = "isolated",
+    ) -> None:
         """Organic dispatch: the model calls this to hand work to the task manager.
-        surface ('canvas'|'task'|'') is the MODEL's choice of where the work appears."""
+        Routing fields are structured MODEL choices, never inferred from prose."""
         await start_background_delegation(
             request.app,
             session_id=sid,
@@ -613,12 +541,14 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
             guardrail_modes=thomas_guardrail_modes,
             session_llm=llm,
             surface=surface,
+            specialist_id=specialist,
+            workspace=workspace,
             work_context_id=context_id if surface_mode == "work" else "",
             memory_enabled=memory_enabled,
             runtime_policy=worker_runtime_policy,
         )
 
-    send_task_cb = _send_task if (turn_autonomy_level >= 3 and not launch_background and not temporary) else None
+    send_task_cb = _send_task if (turn_autonomy_level >= 3 and not temporary and not work_onboarding) else None
 
     reset_runtime_trace = getattr(llm, "reset_runtime_trace", None)
     if callable(reset_runtime_trace):
@@ -631,40 +561,32 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
 
     update_task_cb = _update_task if turn_autonomy_level >= 3 and not temporary else None
 
-    async def _launch_requested_background() -> dict[str, Any] | list[dict[str, Any]] | None:
-        return await start_background_delegation(
-            request.app,
-            session_id=sid,
-            prompt=prompt,
-            mode=delegation_mode,
-            recent_messages=recent_messages,
-            emit_event=_emit_background_event,
-            force=force_background,
-            autonomy_level=delegation_autonomy_level,
-            file_access=file_access,
-            profile=model_profile or None,
-            model_id=requested_model_id or None,
-            reasoning_effort=requested_reasoning_effort or None,
-            effort=worker_effort,
-            guardrails=thomas_guardrails,
-            guardrail_modes=thomas_guardrail_modes,
-            session_llm=llm,
-            work_context_id=context_id if surface_mode == "work" else "",
-            memory_enabled=memory_enabled,
-            runtime_policy=worker_runtime_policy,
+    async def _work_onboarding_update(
+        *,
+        phase: str,
+        confirmed_goal: str,
+        workflows: Any,
+        selected_workflow_id: str,
+        selected_workflow_configured: bool,
+    ) -> dict[str, Any]:
+        state = validate_work_onboarding_state(
+            phase=phase,
+            confirmed_goal=confirmed_goal,
+            workflows=workflows,
+            selected_workflow_id=selected_workflow_id,
+            selected_workflow_configured=selected_workflow_configured,
         )
+        explicit_selection = str(work_onboarding_state.get("selected_workflow_id") or "")
+        if state["selected_workflow_id"] != explicit_selection:
+            raise ValueError("selected_workflow_id may change only through the browser's explicit workflow controls")
+        await dispatcher.emit({"type": "work_onboarding_state", "state": state})
+        return {"ok": True, "state": state}
+
+    work_onboarding_update_cb = _work_onboarding_update if work_onboarding else None
 
     try:
-        launched_record: dict[str, Any] | list[dict[str, Any]] | None = None
-        if launch_background:
-            if exhaustive_requested:
-                launched_record = await _launch_requested_background()
-            else:
-                launcher_task = run_lifecycle.track_launcher(asyncio.create_task(_launch_requested_background()))
-                await asyncio.sleep(0)
-
         active_tasks = session_active_delegations(sid)
-        active_task_digest = build_active_task_digest(sid) if active_tasks or launch_background else ""
+        active_task_digest = build_active_task_digest(sid) if active_tasks else ""
 
         async def _run_brain_turn() -> ConversationManager:
             set_budget_scope = getattr(llm, "set_budget_scope", None)
@@ -687,88 +609,42 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
                     is_first_message=turn_conversation.length == 0,
                     active_task_digest=active_task_digest,
                     active_tasks=active_tasks,
-                    dispatch_actionable=dispatch_inline_actionable,
-                    background_ack_only=background_ack_only,
                     send_task=send_task_cb,
                     update_task=update_task_cb,
                     operate=operate_cb,
+                    work_onboarding_update=work_onboarding_update_cb,
                     display_prompt=history_prompt,
                 )
             finally:
                 if callable(set_budget_scope):
                     set_budget_scope(previous_budget_scope)
 
-        if exhaustive_requested and launched_record:
-            primary_record = launched_record[0] if isinstance(launched_record, list) else launched_record
-            execution_id = str(primary_record.get("execution_id") or "")
-            status_text = (
-                "Max review is running. I’ll present the result only after the crew and fresh graders pass it."
-            )
-            await dispatcher.emit({"type": "text", "text": status_text})
-            conversation = conversation.append_message("user", history_prompt).append_message(
-                "assistant",
-                status_text,
-                metadata={"max_review_pending": execution_id or True},
-            )
-            if not temporary:
-                await session_store.save(sid, conversation, meta, force=True)
-            await record_chat_task_pending(
-                request.app,
-                session_id=sid,
-                progress=status_text,
-                temporary=temporary,
-            )
-            await dispatcher.emit_done(
-                session_id=sid,
-                conversation_version=conversation.version,
-                max_review_pending=True,
-            )
-        else:
-            if llm_lock is not None:
-                async with llm_lock:
-                    conversation = await _run_brain_turn()
-                    if not temporary:
-                        await session_store.save(sid, conversation, meta, force=True)
-            else:
+        if llm_lock is not None:
+            async with llm_lock:
                 conversation = await _run_brain_turn()
                 if not temporary:
                     await session_store.save(sid, conversation, meta, force=True)
+        else:
+            conversation = await _run_brain_turn()
+            if not temporary:
+                await session_store.save(sid, conversation, meta, force=True)
 
-            await record_chat_task_finished(
-                request.app,
-                session_id=sid,
-                assistant_text=conversation.last_assistant_message() or "",
-                temporary=temporary,
-            )
-            await dispatcher.emit(
-                {
-                    "type": "model_runtime",
-                    "runtime": model_runtime_receipt(
-                        llm,
-                        requested_profile=model_profile,
-                        requested_model_id=requested_model_id,
-                    ),
-                }
-            )
-
-        if launcher_task is not None:
-            try:
-                await asyncio.wait_for(asyncio.shield(launcher_task), timeout=0.75)
-            except asyncio.TimeoutError:
-                pass
-            except Exception as exc:
-                log.warning("Max-mode delegation launcher failed for session %s: %s", sid[:12], exc, exc_info=True)
-                await dispatcher.emit(
-                    {
-                        "type": "delegation_failed",
-                        "session_id": sid,
-                        "backend_type": "task_manager",
-                        "state": "failed",
-                        "summary": prompt[:160],
-                        "last_progress": "Background delegation failed to start safely.",
-                        "error_code": "delegation_start_failed",
-                    }
-                )
+        await record_chat_task_finished(
+            request.app,
+            session_id=sid,
+            assistant_text=conversation.last_assistant_message() or "",
+            temporary=temporary,
+        )
+        await dispatcher.emit(
+            {
+                "type": "model_runtime",
+                "runtime": model_runtime_receipt(
+                    llm,
+                    requested_profile=model_profile,
+                    requested_model_id=requested_model_id,
+                ),
+            }
+        )
 
     except Exception as exc:
         run_ok = False

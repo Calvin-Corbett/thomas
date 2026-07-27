@@ -10,6 +10,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import sqlite3
 import time
 from pathlib import Path
 from typing import Any
@@ -17,12 +18,7 @@ from typing import Any
 from aiohttp import web
 
 from thomas.agent.loop import AgentLoop
-from thomas.agent.task_definition import (
-    augment_prompt_with_task_definition,
-    derive_task_definition,
-    evaluate_task_result,
-    should_activate_task_definition,
-)
+from thomas.core.llm_shared import LLMError
 from thomas.server.app_keys import (
     APP_ACTION_AUDIT,
     APP_GUARDED_TOOL_RUNNER,
@@ -40,6 +36,19 @@ from .chat_aiohttp_helpers import (
 log = logging.getLogger(__name__)
 
 _DEFAULT_AGENT_LOOP = AgentLoop
+_RUN_STORE_ERRORS = (AttributeError, OSError, RuntimeError, sqlite3.Error, TypeError, ValueError)
+_PLUGIN_HOOK_ERRORS = (ImportError, AttributeError, KeyError, OSError, RuntimeError, TypeError, ValueError)
+_CHAT_TURN_ERRORS = (
+    AttributeError,
+    ImportError,
+    KeyError,
+    LLMError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    web.HTTPException,
+)
 
 
 async def execute_agent_loop(
@@ -100,7 +109,7 @@ async def execute_agent_loop(
             value = int(next_seq["value"])
             if value < 0:
                 value = 0
-        except Exception:
+        except (TypeError, ValueError, OverflowError):
             value = 0
         next_seq["value"] = value + 1
         return value
@@ -117,11 +126,11 @@ async def execute_agent_loop(
             if run_store_writer is not None:
                 try:
                     out.setdefault("seq", int(run_store_writer.seq))
-                except Exception as e:
+                except (AttributeError, TypeError, ValueError, OverflowError) as e:
                     log.warning("Run writer seq assignment failed: %s", e)
                 try:
                     run_store_writer.record(out)
-                except Exception as e:
+                except _RUN_STORE_ERRORS as e:
                     log.warning("Run writer record failed: %s", e)
             if "seq" not in out:
                 out["seq"] = _next_seq()
@@ -195,7 +204,7 @@ async def execute_agent_loop(
                 HookRunRequest(hook=name, payload=payload, strict=False, continue_on_error=True),
                 plugins=plugins,
             )
-        except Exception as exc:  # REVIEWED: plugin dispatch must never break a turn
+        except _PLUGIN_HOOK_ERRORS as exc:  # REVIEWED: plugin dispatch must never break a turn
             log.debug("Plugin hook dispatch for %r failed (non-fatal): %s", name, exc)
 
     requested_runtime = {
@@ -227,7 +236,7 @@ async def execute_agent_loop(
             candidate = getattr(chat_route_compat, "AgentLoop", _DEFAULT_AGENT_LOOP)
             if candidate is not None and candidate is not _DEFAULT_AGENT_LOOP:
                 agent_cls = candidate
-        except Exception:
+        except ImportError:
             pass
         if agent_cls is _DEFAULT_AGENT_LOOP:
             try:
@@ -236,7 +245,7 @@ async def execute_agent_loop(
                 candidate = getattr(server_app, "AgentLoop", _DEFAULT_AGENT_LOOP)
                 if candidate is not None:
                     agent_cls = candidate
-            except Exception:
+            except ImportError:
                 agent_cls = AgentLoop
 
     agent_base_kwargs = {
@@ -326,60 +335,6 @@ async def execute_agent_loop(
                 if isinstance(seed_event, dict):
                     await send(seed_event)
 
-        task_definition_payload: dict[str, Any] | None = None
-        if should_activate_task_definition(
-            prompt_text=raw_user_text,
-            applied_token_economy=requested_token_economy,
-            requested_job_type=requested_job_type,
-        ):
-            derived_definition = derive_task_definition(raw_user_text)
-            task_definition_payload = derived_definition.to_dict()
-            session.task_definition = dict(task_definition_payload)
-            session.task_evaluation = None
-            session.task_definition_status = "defining"
-            prompt = augment_prompt_with_task_definition(prompt, task_definition_payload)
-            deps.task_ledger_update(
-                sid,
-                status="in_progress",
-                missing_inputs=[],
-                last_progress="Defining what a good result looks like before execution.",
-                source="chat.task_definition",
-                force_event=True,
-            )
-            await send(
-                {
-                    "type": "task_phase",
-                    "phase": "defining",
-                    "label": "Defining task",
-                    "session_id": sid,
-                }
-            )
-            await send(
-                {
-                    "type": "task_definition",
-                    "session_id": sid,
-                    "status": "ready",
-                    "definition": task_definition_payload,
-                }
-            )
-            session.task_definition_status = "executing"
-            deps.task_ledger_update(
-                sid,
-                status="in_progress",
-                missing_inputs=[],
-                last_progress="Task definition ready. Executing against the defined success contract.",
-                source="chat.task_execution",
-                force_event=True,
-            )
-            await send(
-                {
-                    "type": "task_phase",
-                    "phase": "executing",
-                    "label": "Executing",
-                    "session_id": sid,
-                }
-            )
-
         from thomas.server.routes.vibe import build_vibe_graph_event
 
         await send(
@@ -462,51 +417,7 @@ async def execute_agent_loop(
             apply_usage_budget=apply_usage_budget,
             normalize_usage_payload=normalize_usage_payload,
         )
-        if task_definition_payload is not None:
-            session.task_definition_status = "evaluating"
-            await send(
-                {
-                    "type": "task_phase",
-                    "phase": "evaluating",
-                    "label": "Evaluating result",
-                    "session_id": sid,
-                }
-            )
-            evaluation = evaluate_task_result(
-                task_definition_payload,
-                response_text=str(run_done.get("text") or ""),
-                token_report=run_done.get("token_report") if isinstance(run_done.get("token_report"), dict) else {},
-                run_ok=run_done.get("ok"),
-            )
-            session.task_evaluation = dict(evaluation)
-            session.task_definition_status = "complete"
-            if str(evaluation.get("status") or "") == "failed":
-                deps.task_ledger_update(
-                    sid,
-                    status="blocked",
-                    missing_inputs=[],
-                    last_progress=str(evaluation.get("summary") or "Task evaluation failed."),
-                    source="chat.task_evaluation",
-                    force_event=True,
-                )
-            else:
-                deps.task_ledger_update(
-                    sid,
-                    status="complete",
-                    missing_inputs=[],
-                    last_progress=str(evaluation.get("summary") or "Task evaluation passed."),
-                    source="chat.task_evaluation",
-                    force_event=True,
-                )
-            await send(
-                {
-                    "type": "task_evaluation",
-                    "session_id": sid,
-                    "evaluation": evaluation,
-                    "task_definition_status": session.task_definition_status,
-                }
-            )
-    except Exception as e:
+    except _CHAT_TURN_ERRORS as e:
         from thomas.server.routes.chat_aiohttp_streaming import extract_missing_inputs
 
         run_done["ok"] = False
@@ -522,7 +433,7 @@ async def execute_agent_loop(
         try:
             await emit_vibe("response.done", "error", detail=run_done["error"], kind="result")
             await send({"type": "error", "error": run_done["error"]})
-        except Exception as send_err:
+        except (AttributeError, KeyError, OSError, RuntimeError, TypeError, ValueError) as send_err:
             log.warning("Failed to stream chat error payload: %s", send_err)
     finally:
         # Safety-finalize journal if it wasn't already finalized
@@ -536,7 +447,7 @@ async def execute_agent_loop(
                 )
         try:
             await llm.close()
-        except Exception as _llm_close_err:
+        except (OSError, RuntimeError) as _llm_close_err:
             log.warning("LLM client close failed: %s", _llm_close_err)
         if run_store_enabled:
             try:
@@ -549,18 +460,18 @@ async def execute_agent_loop(
                     tool_calls=run_done.get("tool_calls"),
                     usage=run_done.get("usage"),
                 )
-            except Exception as e:
+            except _RUN_STORE_ERRORS as e:
                 log.warning("Run store finalize failed: %s", e)
         if run_store_writer is not None:
             try:
                 run_store_writer.close()
-            except Exception as e:
+            except _RUN_STORE_ERRORS as e:
                 log.warning("Run writer close failed: %s", e)
         # Clean up per-session interrupt queue.
         _SESSION_MSG_QUEUES.pop(sid, None)
         try:
             await response.write_eof()
-        except Exception as eof_err:
+        except (OSError, RuntimeError) as eof_err:
             log.warning("Failed to close chat stream cleanly: %s", eof_err)
 
     return response

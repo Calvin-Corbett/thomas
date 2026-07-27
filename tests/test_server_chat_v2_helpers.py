@@ -29,19 +29,6 @@ def test_chat_v2_registration_requires_access_guard(tmp_path) -> None:
 
 
 def test_chat_v2_helper_predicates_and_formatters() -> None:
-    assert mod._requests_reply_first_background("Reply now and do the rest in the background") is True
-    assert mod._requests_reply_first_background("just answer this") is False
-
-    assert mod._requests_explicit_delegation("Spawn exactly three real sub-agents now") is True
-    assert mod._requests_explicit_delegation("just think about it") is False
-
-    assert mod._requires_inline_tool_execution("Use your file tools and name three top-level files") is True
-    assert mod._requires_inline_tool_execution("hello there") is False
-
-    constrained = mod._foreground_reply_prompt("Answer now, then in the background draft a plan.")
-    assert "[Visible reply constraint]" in constrained
-    assert "draft a plan" not in constrained.split("[Visible reply constraint]")[0]
-
     assert mod._uploaded_audio_format("voice.wave", "") == "wav"
     assert mod._uploaded_audio_format("", "audio/mpeg") == "mp3"
     assert mod._uploaded_audio_format("", "audio/ogg") == "ogg"
@@ -324,26 +311,6 @@ async def test_privacy_restricted_tools_never_execute_external_tools() -> None:
     assert [tool.name for tool in restricted.search("anything")] == ["fs.read"]
     assert "browser.open" not in restricted
     assert "fs.read" in restricted
-
-
-def test_auto_background_actionable_helper_respects_mode_autonomy_inline_tools(monkeypatch: pytest.MonkeyPatch) -> None:
-    decision = SimpleNamespace(action="dispatch")
-    monkeypatch.setattr(mod, "should_dispatch", lambda *args, **kwargs: decision)
-    assert mod._should_auto_background_actionable("do the task", mode="max", autonomy_level=4) is False
-    assert mod._should_auto_background_actionable("do the task", mode="auto", autonomy_level=2) is False
-    assert (
-        mod._should_auto_background_actionable("do the task", mode="auto", autonomy_level=4, requires_inline_tools=True)
-        is False
-    )
-    assert mod._should_auto_background_actionable("do the task", mode="auto", autonomy_level=4) is True
-
-    monkeypatch.setattr(mod, "should_dispatch", lambda *args, **kwargs: SimpleNamespace(action="answer"))
-    assert mod._should_auto_background_actionable("do the task", mode="auto", autonomy_level=4) is False
-
-
-def test_auto_background_actionable_keeps_memory_prompt_inline() -> None:
-    prompt = "Memory smoke test: remember that the temporary code phrase is BLUE CEDAR 936. Reply with exactly: stored"
-    assert mod._should_auto_background_actionable(prompt, mode="auto", autonomy_level=4) is False
 
 
 @pytest.mark.asyncio

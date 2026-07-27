@@ -159,7 +159,7 @@ def _run_once(prompt: str, *, llm=None, job_type=None, non_coder_profile: bool =
 
 
 def test_rules_of_road_report_is_attached_to_done_event() -> None:
-    events = _run_once("hello there")
+    events = _run_once("hello there", llm=_StaticTextLLM("Hello."))
     done = [e for e in events if e.type == EventType.AGENT_DONE]
     assert done
     token_report = done[-1].data.get("token_report", {})
@@ -170,43 +170,37 @@ def test_rules_of_road_report_is_attached_to_done_event() -> None:
     assert "passed" in rules
 
 
-def test_rules_of_road_auto_retry_runs_then_gate_blocks_bare_done() -> None:
-    # New contract (CAP-004): a run whose validation still fails may NOT end in
-    # a bare AGENT_DONE. After the quality retry, the completion gate demands a
-    # fix-or-give-up pass; without an explicit diagnosed give-up, completion is
-    # blocked with AGENT_ERROR instead of AGENT_DONE.
+def test_rules_of_road_auto_retry_runs_then_structured_gate_blocks() -> None:
+    # The configured remediation pass runs exactly once. If concrete validation still
+    # fails, completion is blocked without interpreting the assistant's words.
     events = _run_once("fix configuration in thomas.toml")
     starts = [e for e in events if e.type == EventType.AGENT_START]
     done = [e for e in events if e.type == EventType.AGENT_DONE]
     errs = [e for e in events if e.type == EventType.AGENT_ERROR]
-    assert len(starts) == 3  # initial pass + one auto-retry + one give-up demand pass
+    assert len(starts) == 2  # initial pass + one auto-retry
     assert len(done) == 0
     assert len(errs) >= 1
     assert "Completion gate blocked AGENT_DONE" in str(errs[-1].data.get("error") or "")
 
 
-def test_rules_of_road_retry_carries_failed_write_requirements_forward() -> None:
-    # The retry response now gives up explicitly (CAP-004 contract), so the run
-    # completes as a diagnosed give-up while the carried-forward failed write
-    # requirement is still visible in the attached rules report.
+def test_rules_of_road_retry_does_not_accept_give_up_prose() -> None:
+    # The retry response contains the old GIVE_UP control words. They are plain
+    # assistant text now and cannot override failed coding verification.
     events = _run_once(
         "fix bug in app.py",
         llm=_WriteThenNoopRetryLLM(),
         job_type="coding",
     )
     done = [e for e in events if e.type == EventType.AGENT_DONE]
-    assert len(done) == 1
-    rules = done[-1].data.get("token_report", {}).get("rules_of_road", {})
-    assert rules.get("attempt") == 1
-    assert rules.get("passed") is False
-    failed_ids = {c.get("id") for c in list(rules.get("checks") or []) if c.get("required") and not c.get("passed")}
-    assert "coding_verification" in failed_ids
-    assert done[-1].data.get("gave_up") is True
-    diagnosis = done[-1].data.get("give_up_diagnosis") or {}
-    assert "verification" in str(diagnosis.get("what_failed") or "")
+    errors = [e for e in events if e.type == EventType.AGENT_ERROR]
+    starts = [e for e in events if e.type == EventType.AGENT_START]
+    assert not done
+    assert len(starts) == 2
+    assert errors
+    assert "Completion gate blocked AGENT_DONE" in str(errors[-1].data.get("error") or "")
 
 
-def test_non_coder_strict_gate_blocks_workaround_completion() -> None:
+def test_non_coder_profile_does_not_classify_workaround_prose() -> None:
     events = _run_once(
         "fix this issue all the way through",
         llm=_StaticTextLLM("I applied a temporary workaround for now. The issue is still failing."),
@@ -214,15 +208,13 @@ def test_non_coder_strict_gate_blocks_workaround_completion() -> None:
         non_coder_profile=True,
     )
     done = [e for e in events if e.type == EventType.AGENT_DONE]
-    errs = [e for e in events if e.type == EventType.AGENT_ERROR]
     starts = [e for e in events if e.type == EventType.AGENT_START]
-    assert len(done) == 0
-    assert len(errs) >= 1
-    assert len(starts) == 3  # strict gate raises retry floor to 2
-    assert "Issue-ownership quality gate blocked completion" in str(errs[-1].data.get("error") or "")
+    assert len(done) == 1
+    assert len(starts) == 1
+    assert done[-1].data["text"].startswith("I applied a temporary workaround")
 
 
-def test_non_coder_strict_gate_forces_quality_when_disabled() -> None:
+def test_non_coder_profile_does_not_create_a_hidden_prose_gate() -> None:
     cfg = AppConfig(
         models={"local": ModelConfig(name="local", model="dummy")},
         default_model="local",
@@ -246,10 +238,8 @@ def test_non_coder_strict_gate_forces_quality_when_disabled() -> None:
 
     events = asyncio.run(_collect())
     done = [e for e in events if e.type == EventType.AGENT_DONE]
-    errs = [e for e in events if e.type == EventType.AGENT_ERROR]
-    assert len(done) == 0
-    assert len(errs) >= 1
-    assert "Issue-ownership quality gate blocked completion" in str(errs[-1].data.get("error") or "")
+    assert len(done) == 1
+    assert done[-1].data["text"].startswith("I used a workaround")
 
 
 def test_code_output_guard_retries_invalid_python_then_finishes() -> None:

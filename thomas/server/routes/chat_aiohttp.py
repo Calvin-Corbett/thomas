@@ -13,11 +13,6 @@ async def api_chat(request: web.Request) -> web.StreamResponse:
     if not await deps.begin_session_run(sid):
         raise web.HTTPConflict(text="session is already processing another request")
     session_run_guard_active = True
-    if control_req is not None:
-        async with session_lock:
-            return await handle_ui_control_chat_fn(
-                request,
-            )
     swarm_response = await maybe_handle_swarm_mode(
         request=request,
     )

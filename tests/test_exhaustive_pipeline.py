@@ -28,19 +28,33 @@ class TestExhaustivePipeline(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(ctx.result)
         self.assertTrue(ctx.verified and ctx.review_passed)
 
-    async def test_ambiguous_task_triggers_intent_review(self):
+    async def test_ambiguous_prose_does_not_trigger_a_hidden_intent_review(self):
         pipe = ExhaustivePipeline()
         ctx = await pipe.run("just fix it somehow")
-        self.assertIn("intent_review", ctx.stages)
+        self.assertNotIn("intent_review", ctx.stages)
+        self.assertEqual(ctx.task_type, "general")
 
-    async def test_unconfirmed_intent_aborts_before_staffing(self):
+    async def test_explicit_unconfirmed_intent_aborts_before_staffing(self):
         async def deny(_ctx) -> bool:
             return False
 
         pipe = ExhaustivePipeline(intent_review_fn=deny)
-        ctx = await pipe.run("just fix it somehow")
+        ctx = await pipe.run(
+            "Any prose",
+            task_analysis={"needs_intent_review": True, "clarity_score": 20},
+        )
         self.assertEqual(ctx.aborted, "intent_not_confirmed")
         self.assertNotIn("staff_crew", ctx.stages)
+
+    async def test_structured_task_type_and_specialties_control_staffing(self):
+        pipe = ExhaustivePipeline()
+        ctx = await pipe.run(
+            "This prose says build research debug but does not route anything.",
+            task_type="research-topic",
+            crew_specialties=["data", "critic"],
+        )
+        self.assertEqual(ctx.task_type, "research-topic")
+        self.assertEqual([specialty for specialty, _bot in ctx.crew], ["data", "critic"])
 
     async def test_remediation_loop_runs_when_verify_fails_then_passes(self):
         verify_calls = {"n": 0}

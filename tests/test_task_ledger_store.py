@@ -5,9 +5,7 @@ from pathlib import Path
 
 from thomas.marketplace.observability.task_ledger import (
     TaskLedgerStore,
-    classify_completion_state,
     derive_active_goal,
-    extract_missing_inputs,
 )
 
 
@@ -55,11 +53,8 @@ def test_store_persists_snapshot_and_history() -> None:
         assert history[1]["source"] == "chat.route"
 
 
-def test_goal_derivation_preserves_ack_followups() -> None:
-    keep = derive_active_goal("ok", current_goal="Fix CI workflow", route_input_source="history_augmented")
-    assert keep == "Fix CI workflow"
-    replace = derive_active_goal("Implement task ledger API", current_goal="Fix CI workflow")
-    assert replace == "Implement task ledger API"
+def test_goal_derivation_does_not_classify_followup_words() -> None:
+    assert derive_active_goal("ok", current_goal="Fix CI workflow", route_input_source="history_augmented") == "Ok"
 
 
 def test_goal_derivation_produces_clean_title_not_raw_prompt() -> None:
@@ -69,23 +64,3 @@ def test_goal_derivation_produces_clean_title_not_raw_prompt() -> None:
         "Build a pac-man game"
     )
     assert derive_active_goal("i need you to fix the login bug", current_goal="") == "Fix the login bug"
-
-
-def test_missing_input_extraction_and_completion_classification() -> None:
-    missing = extract_missing_inputs("I need your GitHub token and repository URL to continue.")
-    assert "GitHub token" in missing
-    assert "URL/endpoint" in missing
-
-    status_blocked, blocked_inputs, _ = classify_completion_state(
-        assistant_text="Please provide your API key before I can continue.",
-        token_report={"rules_of_road": {"passed": True}},
-    )
-    assert status_blocked == "blocked"
-    assert "API key" in blocked_inputs
-
-    status_complete, complete_inputs, _ = classify_completion_state(
-        assistant_text="Done. Changes are implemented and verified.",
-        token_report={"rules_of_road": {"passed": True}},
-    )
-    assert status_complete == "complete"
-    assert complete_inputs == []

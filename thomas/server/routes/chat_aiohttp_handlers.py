@@ -14,12 +14,10 @@ from aiohttp import web
 from thomas.agent.execution_plan import plan_from_payload
 from thomas.agent.loop import AgentLoop
 from thomas.core.config import AppConfig
-from thomas.models.chat_controls import resolve_ui_control_request
 from thomas.server.app_keys import (
     APP_SESSIONS,
     ChatSession,
 )
-from thomas.server.chat_control_mode import handle_ui_control_chat
 
 from .chat_aiohttp_helpers import (
     _SESSION_MSG_QUEUES,
@@ -34,8 +32,6 @@ from .chat_plan_mode import build_plan_payload, serialize_web_slash_specs
 
 log = logging.getLogger(__name__)
 _DEFAULT_AGENT_LOOP = AgentLoop
-_DEFAULT_RESOLVE_UI_CONTROL_REQUEST = resolve_ui_control_request
-_DEFAULT_HANDLE_UI_CONTROL_CHAT = handle_ui_control_chat
 
 
 def register_chat_routes(
@@ -187,13 +183,19 @@ def register_chat_routes(
             if session_run_guard_active:
                 try:
                     await deps.end_session_run(sid)
-                except Exception as guard_err:
+                except (KeyError, RuntimeError, TypeError, ValueError) as guard_err:
                     log.warning("[thomas] session run guard cleanup failed: %s", guard_err)
                 if fork_parent_sid is not None and forked_sid is not None:
+                    fork_sessions: dict[str, Any] | None = None
                     try:
-                        sessions = _resolve_app_value(request.app, APP_SESSIONS, expected_type=dict, required=True)
-                        parent_session = sessions.get(fork_parent_sid)
-                        fork_session = sessions.get(forked_sid)
+                        fork_sessions = _resolve_app_value(
+                            request.app,
+                            APP_SESSIONS,
+                            expected_type=dict,
+                            required=True,
+                        )
+                        parent_session = fork_sessions.get(fork_parent_sid)
+                        fork_session = fork_sessions.get(forked_sid)
                         if isinstance(parent_session, ChatSession) and isinstance(fork_session, ChatSession):
                             if not isinstance(parent_session.conversation, list):
                                 parent_session.conversation = []
@@ -202,10 +204,11 @@ def register_chat_routes(
                                 if merge_start < len(fork_session.conversation):
                                     for msg in fork_session.conversation[merge_start:]:
                                         parent_session.conversation.append(_clone_conversation_fallback(msg))
-                    except Exception as merge_err:
+                    except (AttributeError, KeyError, RuntimeError, TypeError, ValueError) as merge_err:
                         log.warning("Parallel fork merge failed: %s", merge_err)
                     finally:
-                        sessions.pop(forked_sid, None)
+                        if fork_sessions is not None:
+                            fork_sessions.pop(forked_sid, None)
 
     async def _api_chat_inner(
         request: web.Request,

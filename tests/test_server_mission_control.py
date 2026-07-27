@@ -285,7 +285,7 @@ class TestServerMissionControl(AioHTTPTestCase):
         self.assertTrue(terminal_statuses)
         self.assertTrue(terminal_statuses.issubset({"cancelled", "canceled", "failed", "succeeded", "dead"}))
 
-    async def test_chat_prompt_auto_starts_autopilot_objective(self):
+    async def test_chat_prompt_does_not_auto_start_autopilot_objective(self):
         session_resp = await self.client.post("/api/session/new")
         self.assertEqual(session_resp.status, 200)
         session_id = str((await session_resp.json()).get("session_id") or "")
@@ -308,11 +308,9 @@ class TestServerMissionControl(AioHTTPTestCase):
         self.assertEqual(list_resp.status, 200)
         list_payload = await list_resp.json()
         self.assertIs(list_payload.get("ok"), True)
-        self.assertNotIn("unavailable", list_payload)
         rows = list_payload.get("objectives") or []
-        self.assertGreaterEqual(len(rows), 1)
         goals = [str(row.get("goal") or "").lower() for row in rows]
-        self.assertTrue(any("24/7" in goal or "continuously" in goal for goal in goals))
+        self.assertFalse(any("24/7" in goal or "continuously" in goal for goal in goals))
 
     async def test_mission_approval_actions_404_when_unavailable(self):
         autonomy = await self.client.post(

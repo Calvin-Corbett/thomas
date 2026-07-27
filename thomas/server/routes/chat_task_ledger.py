@@ -12,7 +12,6 @@ from aiohttp import web
 
 from thomas.marketplace.observability.task_ledger import (
     TaskLedgerStore,
-    classify_completion_state,
     derive_active_goal,
 )
 from thomas.server.app_keys import APP_TASK_LEDGER
@@ -111,17 +110,17 @@ async def record_chat_task_finished(
     assistant_text: str,
     temporary: bool,
 ) -> None:
-    """Classify the final assistant reply and persist its terminal task state."""
+    """Persist success from the runtime terminal event, never from reply prose."""
     ledger = None if temporary else _task_ledger(app)
     if ledger is None:
         return
 
     def update() -> None:
-        status, missing_inputs, progress = classify_completion_state(assistant_text=assistant_text)
+        progress = " ".join(str(assistant_text or "").split())[:1200]
         ledger.update(
             session_id,
-            status=status,
-            missing_inputs=missing_inputs,
+            status="complete",
+            missing_inputs=[],
             last_progress=progress or "Turn completed.",
             source="chat_v2.done",
             force_event=True,

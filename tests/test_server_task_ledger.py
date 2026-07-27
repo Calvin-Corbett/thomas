@@ -6,7 +6,6 @@ from unittest.mock import patch
 from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
-from thomas.core.events import AgentEvent, EventType
 from thomas.server.app import create_app
 
 
@@ -20,37 +19,34 @@ def _parse_ndjson(blob: str):
     return out
 
 
-class _FakeAgentLoopTaskLedger:
-    route_path = "coding_task"
-    done_text = "Done. Implemented and verified."
-    done_token_report = {"rules_of_road": {"passed": True}}
+class _FakeModelTurn:
+    reply = "Done. Implemented and verified."
+    calls: list[dict[str, object]] = []
 
-    def __init__(self, *args, **kwargs):  # noqa: ANN002, ANN003
-        _ = args
-        _ = kwargs
 
-    async def run(self, prompt, **kwargs):  # noqa: ANN001
-        _ = prompt
-        mode = str(kwargs.get("mode") or "auto")
-        yield AgentEvent(
-            type=EventType.AGENT_START,
-            data={
-                "route": {"path": str(type(self).route_path), "confidence": 1.0},
-                "route_input_source": "prompt_only",
-                "mode": mode,
-                "tools_policy": "auto",
-                "autonomy_level": 3,
-                "autonomy_name": "Standard",
-            },
-        )
-        yield AgentEvent.text_delta(type(self).done_text)
-        yield AgentEvent.agent_done(
-            text=type(self).done_text,
-            iterations=1,
-            tool_calls=0,
-            usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
-            token_report=dict(type(self).done_token_report),
-        )
+async def _fake_process_message(
+    _brain,
+    session_id,
+    conversation,
+    prompt,
+    dispatcher,
+    **kwargs,
+):  # noqa: ANN001
+    _FakeModelTurn.calls.append({"prompt": prompt, **kwargs})
+    updated = conversation.append_message("user", prompt)
+    await dispatcher.emit_text(_FakeModelTurn.reply)
+    updated = updated.append_message(
+        "assistant",
+        _FakeModelTurn.reply,
+        metadata={"specialists": ["reasoning"], "mode": "conversation"},
+    )
+    await dispatcher.emit_done(
+        session_id=session_id,
+        conversation_version=updated.version,
+        iterations=1,
+        tool_calls=0,
+    )
+    return updated
 
 
 class TestServerTaskLedger(AioHTTPTestCase):
@@ -94,10 +90,12 @@ class TestServerTaskLedger(AioHTTPTestCase):
     async def test_task_ledger_current_and_history_endpoints(self):
         sid = await self._new_session_id()
 
-        _FakeAgentLoopTaskLedger.route_path = "coding_task"
-        _FakeAgentLoopTaskLedger.done_text = "Done. Implemented and verified."
-        _FakeAgentLoopTaskLedger.done_token_report = {"rules_of_road": {"passed": True}}
-        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopTaskLedger):
+        _FakeModelTurn.reply = "Done. Implemented and verified."
+        _FakeModelTurn.calls = []
+        with patch(
+            "thomas.server.routes.chat_v2.OrchestratorBrain.process_message",
+            _fake_process_message,
+        ):
             chat_resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -129,19 +127,21 @@ class TestServerTaskLedger(AioHTTPTestCase):
         events = history_payload.get("events") or []
         self.assertGreaterEqual(len(events), 3)
         sources = {str(item.get("source") or "") for item in events}
-        self.assertIn("chat.request", sources)
-        self.assertIn("chat.route", sources)
-        self.assertIn("chat.done", sources)
+        self.assertIn("chat_v2.request", sources)
+        self.assertIn("chat_v2.done", sources)
+        self.assertNotIn("chat.route", sources)
+        self.assertEqual(len(_FakeModelTurn.calls), 1)
 
-    async def test_task_definition_is_created_for_max_mode_task_requests(self):
+    async def test_max_mode_prompt_does_not_synthesize_task_contract_from_words(self):
         sid = await self._new_session_id()
 
-        _FakeAgentLoopTaskLedger.route_path = "coding_task"
-        _FakeAgentLoopTaskLedger.done_text = (
+        _FakeModelTurn.reply = (
             "Completed and verified. I opened the page, clicked Start, and confirmed the snake visibly moves."
         )
-        _FakeAgentLoopTaskLedger.done_token_report = {"rules_of_road": {"passed": True}}
-        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopTaskLedger):
+        with patch(
+            "thomas.server.routes.chat_v2.OrchestratorBrain.process_message",
+            _fake_process_message,
+        ):
             chat_resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -153,25 +153,24 @@ class TestServerTaskLedger(AioHTTPTestCase):
             )
         self.assertEqual(chat_resp.status, 200)
         events = _parse_ndjson(await chat_resp.text())
-        self.assertTrue(any(e.get("type") == "task_definition" for e in events))
-        self.assertTrue(any(e.get("type") == "task_evaluation" for e in events))
+        self.assertFalse(any(e.get("type") == "task_definition" for e in events))
+        self.assertFalse(any(e.get("type") == "task_evaluation" for e in events))
 
         current_resp = await self.client.get(f"/api/task-ledger/current?session_id={sid}")
         self.assertEqual(current_resp.status, 200)
         current_payload = await current_resp.json()
-        task_definition = current_payload.get("task_definition") or {}
-        task_evaluation = current_payload.get("task_evaluation") or {}
-        self.assertEqual(str(current_payload.get("task_definition_status") or ""), "complete")
-        self.assertEqual(str(task_definition.get("deliverable_type") or ""), "interactive_game")
-        self.assertEqual(str(task_evaluation.get("status") or ""), "passed")
+        self.assertEqual(str(current_payload.get("task_definition_status") or ""), "idle")
+        self.assertEqual(current_payload.get("task_definition"), {})
+        self.assertEqual(current_payload.get("task_evaluation"), {})
 
-    async def test_task_ledger_marks_blocked_when_missing_input_is_detected(self):
+    async def test_task_ledger_does_not_infer_blocked_state_from_assistant_prose(self):
         sid = await self._new_session_id()
 
-        _FakeAgentLoopTaskLedger.route_path = "coding_task"
-        _FakeAgentLoopTaskLedger.done_text = "I need your API key and repository URL to continue."
-        _FakeAgentLoopTaskLedger.done_token_report = {"rules_of_road": {"passed": True}}
-        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopTaskLedger):
+        _FakeModelTurn.reply = "I need your API key and repository URL to continue."
+        with patch(
+            "thomas.server.routes.chat_v2.OrchestratorBrain.process_message",
+            _fake_process_message,
+        ):
             chat_resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -185,45 +184,17 @@ class TestServerTaskLedger(AioHTTPTestCase):
         current_resp = await self.client.get(f"/api/task-ledger/current?session_id={sid}")
         self.assertEqual(current_resp.status, 200)
         state = (await current_resp.json()).get("state") or {}
-        self.assertEqual(str(state.get("status") or ""), "blocked")
-        missing = [str(x) for x in (state.get("missing_inputs") or [])]
-        self.assertIn("API key", missing)
-        self.assertIn("URL/endpoint", missing)
+        self.assertEqual(str(state.get("status") or ""), "complete")
+        self.assertEqual(state.get("missing_inputs"), [])
+        self.assertEqual(str(state.get("last_progress") or ""), _FakeModelTurn.reply)
 
-    async def test_task_ledger_updates_for_batch_mode_completion(self):
+    async def test_task_ledger_updates_after_batch_mode_migrates_to_model_owned_max(self):
         sid = await self._new_session_id()
 
-        # Batch mode bypasses AgentLoop entirely and talks to the provider
-        # batch endpoint, so the AgentLoop patch alone is not enough — the
-        # real OpenAICompatBatchClient would do a live HTTP POST to xAI and
-        # fail with "Incorrect API key" against the test-only credentials.
-        # We patch the batch client with a fake whose result body matches
-        # the per-test assertion (`BATCH_LEDGER_DONE`), so the chat.done
-        # ledger event records the right `last_progress`.
-        from tests.test_server_batch_mode import _FakeBatchClient
-
-        class _BatchClientWithLedgerMarker(_FakeBatchClient):
-            async def list_batch_results(self, *, batch_id, limit=200, pagination_token=""):
-                _ = batch_id
-                _ = limit
-                _ = pagination_token
-                return {
-                    "results": [
-                        {
-                            "batch_request_id": "req_test_123",
-                            "response": {
-                                "completion_response": {"choices": [{"message": {"content": "BATCH_LEDGER_DONE"}}]}
-                            },
-                        }
-                    ]
-                }
-
-        _FakeAgentLoopTaskLedger.route_path = "batch_task"
-        _FakeAgentLoopTaskLedger.done_text = "BATCH_LEDGER_DONE"
-        _FakeAgentLoopTaskLedger.done_token_report = {"rules_of_road": {"passed": True}}
-        with (
-            patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopTaskLedger),
-            patch("thomas.server.app.OpenAICompatBatchClient", _BatchClientWithLedgerMarker),
+        _FakeModelTurn.reply = "BATCH_LEDGER_DONE"
+        with patch(
+            "thomas.server.routes.chat_v2.OrchestratorBrain.process_message",
+            _fake_process_message,
         ):
             chat_resp = await self.client.post(
                 "/api/chat",
@@ -237,6 +208,10 @@ class TestServerTaskLedger(AioHTTPTestCase):
         self.assertEqual(chat_resp.status, 200)
         events = _parse_ndjson(await chat_resp.text())
         self.assertTrue(any(e.get("type") == "done" for e in events))
+        migration = [event for event in events if event.get("type") == "mode_migrated"]
+        self.assertEqual(len(migration), 1)
+        self.assertEqual(migration[0].get("from"), "batch")
+        self.assertEqual(migration[0].get("to"), "max")
 
         current_resp = await self.client.get(f"/api/task-ledger/current?session_id={sid}")
         self.assertEqual(current_resp.status, 200)
@@ -248,17 +223,18 @@ class TestServerTaskLedger(AioHTTPTestCase):
         self.assertEqual(history_resp.status, 200)
         history_events = (await history_resp.json()).get("events") or []
         sources = {str(item.get("source") or "") for item in history_events}
-        self.assertIn("chat.request", sources)
-        self.assertIn("chat.route", sources)
-        self.assertIn("chat.done", sources)
+        self.assertIn("chat_v2.request", sources)
+        self.assertIn("chat_v2.done", sources)
+        self.assertNotIn("chat.route", sources)
 
-    async def test_task_ledger_updates_for_swarm_mode_completion(self):
+    async def test_task_ledger_updates_after_swarm_mode_migrates_to_model_owned_max(self):
         sid = await self._new_session_id()
 
-        _FakeAgentLoopTaskLedger.route_path = "swarm"
-        _FakeAgentLoopTaskLedger.done_text = "SWARM_LEDGER_DONE"
-        _FakeAgentLoopTaskLedger.done_token_report = {"rules_of_road": {"passed": True}}
-        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopTaskLedger):
+        _FakeModelTurn.reply = "SWARM_LEDGER_DONE"
+        with patch(
+            "thomas.server.routes.chat_v2.OrchestratorBrain.process_message",
+            _fake_process_message,
+        ):
             chat_resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -271,6 +247,10 @@ class TestServerTaskLedger(AioHTTPTestCase):
         self.assertEqual(chat_resp.status, 200)
         events = _parse_ndjson(await chat_resp.text())
         self.assertTrue(any(e.get("type") == "done" for e in events))
+        migration = [event for event in events if event.get("type") == "mode_migrated"]
+        self.assertEqual(len(migration), 1)
+        self.assertEqual(migration[0].get("from"), "swarm")
+        self.assertEqual(migration[0].get("to"), "max")
 
         current_resp = await self.client.get(f"/api/task-ledger/current?session_id={sid}")
         self.assertEqual(current_resp.status, 200)
@@ -282,9 +262,9 @@ class TestServerTaskLedger(AioHTTPTestCase):
         self.assertEqual(history_resp.status, 200)
         history_events = (await history_resp.json()).get("events") or []
         sources = {str(item.get("source") or "") for item in history_events}
-        self.assertIn("chat.request", sources)
-        self.assertIn("chat.route", sources)
-        self.assertIn("chat.done", sources)
+        self.assertIn("chat_v2.request", sources)
+        self.assertIn("chat_v2.done", sources)
+        self.assertNotIn("chat.route", sources)
 
 
 if __name__ == "__main__":

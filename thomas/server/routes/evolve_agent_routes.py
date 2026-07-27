@@ -60,7 +60,6 @@ from .evolve_agent_runtime import (
     _release_code_activity_lease,
     _release_code_start_gate,
     _request_id,
-    _risky_code_action,
     _run_replay_available,
     _save_action_receipt,
     _sse_frame,
@@ -305,8 +304,7 @@ def build_evolve_agent_handlers(
 
     async def _start_run(body: dict[str, Any], message: str) -> web.Response:
         catalog_root = _root()
-        approval_id = str(body.get("approval_id") or "").strip()
-        request_id = _request_id(body, fallback=approval_id)
+        request_id = _request_id(body)
         action_hash = _code_action_hash(message, body)
         replay = _action_receipt(catalog_root, "run", request_id)
         if replay is not None:
@@ -371,39 +369,6 @@ def build_evolve_agent_handlers(
                 },
                 status=409,
             )
-        approval_to_consume: dict[str, Any] | None = None
-        risk = _risky_code_action(message)
-        if risk:
-            approvals = app[APP_EVOLVE_AGENT_APPROVALS]
-            approval = approvals.get(approval_id) if approval_id else None
-            valid = bool(
-                isinstance(approval, dict)
-                and approval.get("state") == "approved"
-                and approval.get("action_hash") == action_hash
-                and float(approval.get("expires_at") or 0) >= time.time()
-            )
-            if not valid:
-                approval_id = f"approval-{secrets.token_urlsafe(10)}"
-                approvals[approval_id] = {
-                    "id": approval_id,
-                    "state": "pending",
-                    "action_hash": action_hash,
-                    "risk": risk,
-                    "summary": f"Allow Code mode to {risk}?",
-                    "expires_at": time.time() + 600,
-                }
-                return web.json_response(
-                    {
-                        "ok": False,
-                        "error": "explicit approval is required for this external or destructive action",
-                        "code": "approval_required",
-                        "approval": {
-                            key: value for key, value in approvals[approval_id].items() if key != "action_hash"
-                        },
-                    },
-                    status=409,
-                )
-            approval_to_consume = approval
         try:
             settings = ForgeCodeSettings.from_payload(body)
         except ForgeCodeSettingsError as exc:
@@ -499,8 +464,6 @@ def build_evolve_agent_handlers(
             "settings": capability_report,
         }
         reservation = {"state": "launching", "action_hash": action_hash, "response": response}
-        if approval_to_consume is not None:
-            approval_to_consume.update({"state": "executing", "executing_at": time.time()})
         proc, persisted, activity_token, gate_release_state = None, None, "", {"payload_write_attempted": False}
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -568,9 +531,7 @@ def build_evolve_agent_handlers(
                 retry_safe = forge_code_store.load_conversation(project_root, cid) == conv
             if retry_safe:
                 _delete_action_receipt(catalog_root, "run", request_id)
-            _finish_approval_execution(approval_to_consume, succeeded=delivered)
             raise
-        _finish_approval_execution(approval_to_consume, succeeded=True)
         _track_process(
             proc,
             transcript,

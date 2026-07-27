@@ -19,7 +19,6 @@ from unittest.mock import AsyncMock, patch
 from thomas.chat.conversation import ConversationManager
 from thomas.marketplace.orchestrator import brain as brain_mod
 from thomas.marketplace.orchestrator.brain import OrchestratorBrain
-from thomas.marketplace.orchestrator.protocol import RouteDecision
 
 
 class _FakeDispatcher:
@@ -97,7 +96,6 @@ class TestCompletionReport(unittest.IsolatedAsyncioTestCase):
         dispatcher = _FakeDispatcher()
         with (
             patch("thomas.marketplace.orchestrator.brain.MemoryCoordinator", _FakeMemoryCoordinator),
-            patch("thomas.marketplace.orchestrator.brain._answer_memory_recall_from_context", return_value=""),
             patch.object(OrchestratorBrain, "_dispatch_single", new=AsyncMock(side_effect=_capture)),
         ):
             updated = await _brain().process_message(
@@ -128,7 +126,6 @@ class TestCompletionReport(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("thomas.marketplace.orchestrator.brain.MemoryCoordinator", _FakeMemoryCoordinator),
-            patch("thomas.marketplace.orchestrator.brain._answer_memory_recall_from_context", return_value=""),
             patch.object(OrchestratorBrain, "_dispatch_single", new=AsyncMock(side_effect=_echo)),
         ):
             brain = _brain()
@@ -154,24 +151,19 @@ class TestCompletionReport(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first.last_assistant_message(), "REPORTED")
         self.assertEqual(second.last_assistant_message(), "nothing-new")
 
-    async def test_actionable_branch_reports_finished_work(self) -> None:
-        """A finished task surfaces even when the next message is a new actionable
-        ask (previously only the casual branch reported it)."""
+    async def test_new_request_keeps_finished_work_in_model_context(self) -> None:
+        """Prompt wording cannot route around factual completion context."""
         dispatcher = _FakeDispatcher()
-
-        async def _route(*args, **kwargs):  # noqa: ANN002, ANN003
-            _ = (args, kwargs)
-            return RouteDecision(specialists=["reasoning"], reasoning="test")
+        captured: dict = {}
 
         async def _single(**kwargs):  # noqa: ANN003
-            _ = kwargs
+            captured["memory_ctx"] = kwargs.get("memory_ctx")
             return types.SimpleNamespace(
                 ok=True, content="On the new thing now.", tokens_used=3, tool_calls=[], iterations=1
             )
 
         with (
             patch("thomas.marketplace.orchestrator.brain.MemoryCoordinator", _FakeMemoryCoordinator),
-            patch.object(OrchestratorBrain, "_classify_and_route", new=AsyncMock(side_effect=_route)),
             patch.object(OrchestratorBrain, "_dispatch_single", new=AsyncMock(side_effect=_single)),
         ):
             updated = await _brain().process_message(
@@ -184,9 +176,8 @@ class TestCompletionReport(unittest.IsolatedAsyncioTestCase):
                 dispatch_actionable=True,
             )
 
-        streamed = "".join(dispatcher.text_parts)
-        self.assertIn("Taylor", streamed)  # the completion was reported on the actionable branch
-        self.assertIn("Taylor", updated.last_assistant_message() or "")
+        self.assertIn("Background work just finished", captured["memory_ctx"].working)
+        self.assertEqual(updated.last_assistant_message(), "On the new thing now.")
 
 
 class TestDurableDedup(unittest.IsolatedAsyncioTestCase):
@@ -206,7 +197,6 @@ class TestDurableDedup(unittest.IsolatedAsyncioTestCase):
         task["reported_to_chat_at"] = "2026-06-16T00:00:00+00:00"
         with (
             patch("thomas.marketplace.orchestrator.brain.MemoryCoordinator", _FakeMemoryCoordinator),
-            patch("thomas.marketplace.orchestrator.brain._answer_memory_recall_from_context", return_value=""),
             patch("thomas.marketplace.orchestrator.brain._mark_completion_reported") as mark,
             patch.object(OrchestratorBrain, "_dispatch_single", new=AsyncMock(side_effect=_capture)),
         ):
@@ -230,7 +220,6 @@ class TestDurableDedup(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("thomas.marketplace.orchestrator.brain.MemoryCoordinator", _FakeMemoryCoordinator),
-            patch("thomas.marketplace.orchestrator.brain._answer_memory_recall_from_context", return_value=""),
             patch("thomas.marketplace.orchestrator.brain._mark_completion_reported") as mark,
             patch.object(OrchestratorBrain, "_dispatch_single", new=AsyncMock(side_effect=_capture)),
         ):
@@ -278,7 +267,7 @@ class TestStatusSummaryReportsCompleted(unittest.TestCase):
         self.assertIn("needs attention", s.lower())
 
 
-class TestStatusBranchScopedMark(unittest.IsolatedAsyncioTestCase):
+class TestModelOwnedCompletionMark(unittest.IsolatedAsyncioTestCase):
     """Round-4 M3: on the status branch, mark reported ONLY the fresh completions the
     summary actually displayed. A fresh completion crowded past the displayed window
     must stay unreported (so a later turn delivers it) — never marked-but-not-shown."""
@@ -286,7 +275,7 @@ class TestStatusBranchScopedMark(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         brain_mod._reported_completions.clear()
 
-    async def test_only_displayed_fresh_completions_are_marked(self) -> None:
+    async def test_status_words_do_not_bypass_model_and_fresh_context_is_marked(self) -> None:
         # 4 already-reported completed rows (ordered first) + 2 fresh ones. The summary
         # shows the first 5 completed -> {4 reported, fresh-1}. fresh-2 is crowded out.
         reported = [
@@ -304,6 +293,11 @@ class TestStatusBranchScopedMark(unittest.IsolatedAsyncioTestCase):
             {"execution_id": "fresh-2", "session_id": "sess-live", "state": "completed", "summary": "fresh two"},
         ]
         marked: list[str] = []
+        captured: dict = {}
+
+        async def _capture(**kwargs):  # noqa: ANN003
+            captured["memory_ctx"] = kwargs.get("memory_ctx")
+            return types.SimpleNamespace(ok=True, content="I can see the current task state.", tokens_used=1)
 
         with (
             patch("thomas.marketplace.orchestrator.brain.MemoryCoordinator", _FakeMemoryCoordinator),
@@ -311,6 +305,7 @@ class TestStatusBranchScopedMark(unittest.IsolatedAsyncioTestCase):
                 "thomas.marketplace.orchestrator.brain._mark_completion_reported",
                 side_effect=lambda eid: marked.append(eid),
             ),
+            patch.object(OrchestratorBrain, "_dispatch_single", new=AsyncMock(side_effect=_capture)),
         ):
             await _brain().process_message(
                 session_id="sess-live",
@@ -322,9 +317,9 @@ class TestStatusBranchScopedMark(unittest.IsolatedAsyncioTestCase):
                 dispatch_actionable=False,
             )
 
-        # fresh-1 is within the displayed window -> marked; fresh-2 is not -> left for later.
-        self.assertIn("fresh-1", marked)
-        self.assertNotIn("fresh-2", marked)
+        self.assertIn("fresh one", captured["memory_ctx"].working)
+        self.assertIn("fresh two", captured["memory_ctx"].working)
+        self.assertEqual(set(marked), {"fresh-1", "fresh-2"})
         # Already-reported rows are never re-marked.
         self.assertFalse(any(m.startswith("rep-") for m in marked))
 

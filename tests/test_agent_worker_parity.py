@@ -23,7 +23,6 @@ from thomas.core.events import EventType
 from thomas.server import worker_runtime
 from thomas.server.chat_budget_ledger import get_chat_budget_ledger
 from thomas.server.routes.chat_v2_keys import APP_CHAT_BUDGET_LEDGER
-from thomas.tools.base import ToolResult
 
 
 class _FakeLLM:
@@ -100,44 +99,49 @@ def _app_with_model(provider: str, model: str, profile: str) -> dict:
 
 
 class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
-    def test_explicit_tool_contract_prunes_unrelated_worker_tools(self):
+    async def test_prompt_tool_names_do_not_prune_worker_registry(self):
+        captured_names: set[str] = set()
+
         class _Registry:
             def __init__(self) -> None:
                 self._tools = {
                     "fs.read_file": object(),
                     "fs.write_file": object(),
                     "shell.exec": object(),
-                    "web.search": object(),
+                    "dummy.echo": object(),
                 }
 
             def unregister(self, name):  # noqa: ANN001
                 self._tools.pop(name, None)
 
-        registry = _Registry()
-        selected = worker_runtime._apply_explicit_tool_contract(
-            "Create the files using fs.write_file and then call fs.read_file to verify each one.",
-            registry,
-        )
+        class _RegistryCaptureLoop:
+            def __init__(self, _config, _llm, tools, **_kwargs):  # noqa: ANN001
+                captured_names.update(tools._tools)
 
-        self.assertEqual(selected, frozenset({"fs.read_file", "fs.write_file"}))
-        self.assertEqual(set(registry._tools), {"fs.read_file", "fs.write_file"})
-
-    def test_tool_names_without_an_explicit_contract_do_not_prune(self):
-        class _Registry:
-            def __init__(self) -> None:
-                self._tools = {"fs.write_file": object(), "shell.exec": object()}
-
-            def unregister(self, name):  # noqa: ANN001
-                self._tools.pop(name, None)
+            async def run(self, _prompt, **_kwargs):  # noqa: ANN001, ANN202
+                yield SimpleNamespace(type=EventType.AGENT_DONE, data={"text": "done"})
 
         registry = _Registry()
-        selected = worker_runtime._apply_explicit_tool_contract(
-            "Compare fs.write_file with shell.exec.",
-            registry,
-        )
+        with TemporaryDirectory() as tmp:
+            app = _app_with_model("openai_codex", "gpt-5.6", "chatgpt")
+            with (
+                patch.object(worker_runtime, "LLMClient", _FakeLLM),
+                patch.object(worker_runtime, "AgentLoop", _RegistryCaptureLoop),
+                patch("thomas.server.app_helpers._build_tools", return_value=registry),
+            ):
+                _ = [
+                    event
+                    async for event in worker_runtime.run_agent_worker_events(
+                        app,
+                        prompt="Call fs.write_file, then fs.read_file.",
+                        instructions="Use the model-selected tools.",
+                        work_dir=tmp,
+                        profile="chatgpt",
+                    )
+                ]
 
-        self.assertEqual(selected, frozenset())
-        self.assertEqual(set(registry._tools), {"fs.write_file", "shell.exec"})
+        self.assertEqual(captured_names, {"dummy.echo", "fs.read_file", "fs.write_file", "shell.exec"})
+        self.assertEqual(set(registry._tools), captured_names)
 
     async def test_worker_emits_one_terminal_runtime_receipt_after_late_failover(self):
         class _LateFailoverLLM(_FakeLLM):
@@ -197,7 +201,7 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
             events.index(runtime_events[0]), next(i for i, event in enumerate(events) if event["type"] == "done")
         )
 
-    async def test_worker_materializes_explicit_fenced_artifacts_from_prose(self):
+    async def test_worker_never_materializes_fenced_artifacts_from_prose(self):
         prose = (
             "report.md\n```markdown\n# Verified report\nREPORT-MARKER\n```\n"
             "data.csv\n```csv\nItem,Value\nAlpha,17\n```\n"
@@ -226,7 +230,7 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
 
             async def execute(self, name, args):  # noqa: ANN001, ANN202
                 calls.append((name, args))
-                return ToolResult(ok=True, data=f"ok {args['path']}")
+                raise AssertionError("prose must not execute a tool")
 
         _FakeLLM.instances = []
         registry = _Registry()
@@ -250,55 +254,13 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
                     )
                 ]
 
-        self.assertEqual(
-            [(name, args["path"]) for name, args in calls],
-            [
-                ("fs.write_file", "report.md"),
-                ("fs.read_file", "report.md"),
-                ("fs.write_file", "data.csv"),
-                ("fs.read_file", "data.csv"),
-            ],
-        )
-        self.assertEqual(set(registry._tools), {"fs.read_file", "fs.write_file"})
+        self.assertEqual(calls, [])
+        self.assertEqual(set(registry._tools), {"fs.read_file", "fs.write_file", "shell.exec"})
         self.assertEqual(
             [event["text"] for event in events if event["type"] == "text"],
-            ["Created and verified report.md, data.csv."],
+            [prose],
         )
-        self.assertEqual([event["type"] for event in events].count("tool_output"), 4)
-
-    async def test_explicit_browser_preflight_runs_named_read_only_pair_in_order(self):
-        calls = []
-
-        class _Registry:
-            async def execute(self, name, args):  # noqa: ANN001, ANN202
-                calls.append((name, args))
-                if name == "browser.open":
-                    return ToolResult(ok=True, data={"title": "Example Domain"})
-                if name == "browser.extract":
-                    return ToolResult(ok=True, data=["Example Domain"])
-                if name == "fs.write_file":
-                    return ToolResult(ok=True, data="wrote")
-                return ToolResult(ok=True, data="verified")
-
-        events, evidence = await worker_runtime._explicit_browser_preflight(
-            (
-                "Call browser.open on https://example.com using session_id agentic-parity.\n"
-                "Then call browser.extract on that session with selector h1.\n"
-                "Call fs.write_file to create agentic_report.md, then fs.read_file to verify it."
-            ),
-            _Registry(),
-        )
-
-        self.assertEqual(
-            [name for name, _args in calls],
-            ["browser.open", "browser.extract", "fs.write_file", "fs.read_file"],
-        )
-        self.assertEqual(calls[0][1]["session"], "agentic-parity")
-        self.assertEqual(calls[1][1]["selector"], "h1")
-        self.assertEqual([event["type"] for event in events], ["tool_start", "tool_output"] * 4)
-        self.assertIn("Example Domain", evidence)
-        self.assertIn("agentic_report.md", calls[2][1]["path"])
-        self.assertIn("https://example.com", calls[2][1]["content"])
+        self.assertEqual([event["type"] for event in events].count("tool_output"), 0)
 
     async def test_worker_emits_first_progress_before_app_config_access(self):
         # A live provider/model setup can be slow. The delegation layer must get a

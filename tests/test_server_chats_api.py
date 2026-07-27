@@ -112,17 +112,13 @@ class TestServerChatsApiLocal(AioHTTPTestCase):
         self.assertEqual([row["id"] for row in work_rows], ["work-mail"])
         self.assertEqual(work_rows[0]["contextId"], "mail:triage")
 
-        workspace_response = await self.client.get(
-            "/api/chats?mode=workspace&context_id=workspace:mission"
-        )
+        workspace_response = await self.client.get("/api/chats?mode=workspace&context_id=workspace:mission")
         self.assertEqual(workspace_response.status, 200)
         workspace_rows = (await workspace_response.json())["chats"]
         self.assertEqual([row["id"] for row in workspace_rows], ["workspace-mission"])
         self.assertEqual(workspace_rows[0]["contextId"], "workspace:mission")
 
-        workspace_alias = await self.client.get(
-            "/api/chats?mode=workspace&context_id=workspace:mission_control"
-        )
+        workspace_alias = await self.client.get("/api/chats?mode=workspace&context_id=workspace:mission_control")
         self.assertEqual(workspace_alias.status, 200)
         self.assertEqual(
             [row["id"] for row in (await workspace_alias.json())["chats"]],
@@ -167,13 +163,9 @@ class TestServerChatsApiLocal(AioHTTPTestCase):
             )
 
         resident = AsyncMock(side_effect=_resident)
-        autopilot = AsyncMock(side_effect=AssertionError("workspace reached Chat autopilot"))
-        discord = Mock(side_effect=AssertionError("workspace reached Discord command routing"))
         orchestrator = Mock(side_effect=AssertionError("workspace created the general orchestrator"))
         with (
             patch("thomas.server.routes.chat_v2.handle_workspace_chat_v2", resident),
-            patch("thomas.server.routes.chat_v2.maybe_auto_start_autopilot_from_chat", autopilot),
-            patch("thomas.server.routes.chat_v2.resolve_discord_chat_command", discord),
             patch("thomas.server.routes.chat_v2.OrchestratorBrain", orchestrator),
         ):
             response = await self.client.post(
@@ -189,8 +181,6 @@ class TestServerChatsApiLocal(AioHTTPTestCase):
         self.assertEqual(response.status, 200)
         self.assertEqual((await response.json())["path"], "workspace_resident")
         resident.assert_awaited_once()
-        autopilot.assert_not_awaited()
-        discord.assert_not_called()
         orchestrator.assert_not_called()
 
 

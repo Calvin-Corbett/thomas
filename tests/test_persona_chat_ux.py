@@ -1,22 +1,19 @@
 """Persona-driven chat-UX acceptance checks.
 
 Operationalizes Calvin's "act as several different people" directive at the unit
-level: run realistic task asks from each persona through the two pieces a live
-chat would exercise immediately — task-card titling and the (legacy) dispatch
-classifier — and assert the UX invariants from CHAT_UX_RUBRIC_2026-06-14.md:
+level: run realistic task asks from each persona through task-card titling and
+assert the UX invariants from CHAT_UX_RUBRIC_2026-06-14.md:
 
   * the task card gets a REAL name, never a raw-prompt truncation;
   * the title is not conversational filler ("hey can you...");
   * the title is concise and sentence-cased.
 
-The dispatch decision is recorded (not asserted) because the regex classifier is
-known-imperfect — that record is the evidence base for the Phase-2 work that
-replaces it with a model-driven `send_task` tool.
+Whether to create a task is intentionally absent from this deterministic test;
+that decision belongs to Thomas through the structured `send_task` tool.
 """
 
 import unittest
 
-from thomas.agent.dispatch import should_dispatch
 from thomas.core.task_titling import derive_task_title
 
 # (persona, prompt) — each prompt is a non-trivial task, in that persona's voice.
@@ -67,19 +64,6 @@ class TestPersonaTaskTitles(unittest.TestCase):
                 # Concise, sentence-cased.
                 self.assertLessEqual(len(title.split()), 11, f"title too long: {title!r}")
                 self.assertTrue(title[0].isupper() or not title[0].isalpha())
-
-    def test_dispatch_decisions_are_recorded_for_phase2(self):
-        # Not an assertion of correctness — a captured snapshot of how the legacy
-        # regex classifies each persona task. Every one of these IS a real task;
-        # any "casual" verdict here is a Phase-2 (model-driven dispatch) target.
-        misjudged = []
-        for persona, prompt in PERSONA_TASKS:
-            decision = should_dispatch(prompt, mode="auto")
-            if decision.action != "dispatch":
-                misjudged.append((persona, decision.reason, prompt))
-        # We only require that the classifier runs cleanly on every persona input;
-        # the misjudged list is informational evidence, surfaced on failure only.
-        self.assertIsInstance(misjudged, list)
 
 
 if __name__ == "__main__":

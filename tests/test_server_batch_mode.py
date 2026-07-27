@@ -80,22 +80,9 @@ class TestServerBatchMode(AioHTTPTestCase):
         events = _parse_ndjson(await resp.text())
         migration = [event for event in events if event.get("type") == "mode_migrated"]
         self.assertEqual(migration[0].get("to"), "max")
+        self.assertEqual(_FakeBrain.calls[0].get("prompt"), "run this as long horizon")
         self.assertEqual(_FakeBrain.calls[0].get("mode"), "max")
         self.assertTrue(any(event.get("type") == "done" for event in events))
-
-    async def test_conversational_batch_control_returns_a_max_patch(self):
-        resp = await self.client.post(
-            "/api/chat",
-            json={"profile": "local", "mode": "fast", "text": "set mode to batch"},
-        )
-        self.assertEqual(resp.status, 200)
-        events = _parse_ndjson(await resp.text())
-        patch_events = [event for event in events if event.get("type") == "ui_state_patch"]
-        self.assertEqual((patch_events[0].get("patch") or {}).get("mode"), "max")
-        self.assertIn(
-            "batch execution mode is retired",
-            "".join(str(event.get("text") or "") for event in events if event.get("type") == "text"),
-        )
 
 
 if __name__ == "__main__":

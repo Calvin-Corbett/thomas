@@ -160,12 +160,6 @@ def _validate_benchmark_code_output(
             issue = f"{issue} (expected a non-trivial continuation for entry point '{entry_point}', avoid no-op stubs)"
         return False, issue, entry_point
 
-    # Import here to avoid circular dependency
-    from thomas.agent.response_tone import prompt_requests_code_output
-
-    if not prompt_requests_code_output(prompt_text):
-        return False, "prompt did not request benchmark code output", entry_point
-
     return True, "", entry_point
 
 

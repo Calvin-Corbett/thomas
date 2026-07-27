@@ -181,22 +181,27 @@ async function proveScopedSwitch() {
     pendingApproval: { id: 'old-approval' }, pendingRequest: { message: 'old' }, artifacts: [{ file: 'old.html' }],
     filePreview: { path: 'old.js', content: 'old' }, terminalTool: 'shell', changes: [{ file: 'old.js' }], tree: [{ name: 'old.js' }],
   });
-  let calls = 0;
-  fetchHandler = async () => { calls += 1; throw new Error('switch fetched while running'); };
-  if (await api.loadConversation('new') !== false || calls) throw new Error('conversation switch was not blocked while running');
+  let contextCalls = 0;
+  fetchHandler = async url => {
+    if (url === '/api/issues') return response({ ok: true });
+    contextCalls += 1;
+    throw new Error('switch fetched before run identity was available');
+  };
+  if (await api.loadConversation('new') !== false || contextCalls) throw new Error('conversation switch was not blocked before the run could be parked');
   if (state.activeId !== 'old' || oldSource.closed) throw new Error('blocked switch mutated the live context');
 
-  state.running = false;
-  busy = false;
+  state.runId = 'run-old';
   state.liveEvents = [];
   fetchHandler = async url => {
     if (url.endsWith('/conversations/new')) return response({ ok: true, conversation: { id: 'new', project_root: '/new', turns: [] } });
     if (url.includes('/changes?')) return response({ changed: [{ file: 'new.js' }] });
     if (url.includes('/tree')) return response({ ok: true, entries: [{ name: 'new.js', kind: 'file', path: 'new.js' }], path: '' });
+    if (url.includes('/status?conversation_id=new')) return response({ ok: true, running: false });
     throw new Error(`unexpected switch fetch ${url}`);
   };
-  if (await api.loadConversation('new') !== true) throw new Error('conversation switch did not complete');
-  if (!oldSource.closed || state.activeId !== 'new' || state.projectRoot !== '/new') throw new Error('conversation switch did not adopt the new context');
+  if (await api.loadConversation('new') !== true) throw new Error('identified running conversation was not parked and switched');
+  if (!oldSource.closed || state.parkedRuns?.old?.runId !== 'run-old') throw new Error('running conversation was not parked with its run identity');
+  if (state.activeId !== 'new' || state.projectRoot !== '/new' || state.running || busy) throw new Error('conversation switch did not adopt the new idle context');
   if (state.pendingApproval || state.artifacts.length || state.filePreview || state.terminalTool) throw new Error('conversation switch leaked prior run state');
   if (state.changes[0].file !== 'new.js' || state.tree[0].name !== 'new.js') throw new Error('conversation switch did not scope loaded state');
 
@@ -219,7 +224,7 @@ async function proveSteeringConfirmation() {
   let sendCalls = 0;
   fetchHandler = async url => {
     if (url.endsWith('/steer')) return response({ ok: true });
-    if (url.endsWith('/status')) return response({ ok: true, running: true });
+    if (url.includes('/status')) return response({ ok: true, running: true });
     if (url.endsWith('/send')) { sendCalls += 1; return response({ ok: true }); }
     throw new Error(`unexpected steering timeout fetch ${url}`);
   };
@@ -230,7 +235,7 @@ async function proveSteeringConfirmation() {
 
   fetchHandler = async url => {
     if (url.endsWith('/steer')) return response({ ok: true });
-    if (url.endsWith('/status')) return response({ ok: true, running: false });
+    if (url.includes('/status')) return response({ ok: true, running: false });
     if (url.endsWith('/send')) { sendCalls += 1; return response({ ok: true, conversation_id: 'c1', project_root: '/repo', run_id: 'run-c1', run_state: 'running' }); }
     if (url.endsWith('/conversations')) return response({ conversations: [] });
     throw new Error(`unexpected steering restart fetch ${url}`);
@@ -414,7 +419,7 @@ async function proveCompletedReplayDurability() {
   if (!state.liveEvents.some(event => event.type === 'error' && event.text.includes('durable Code reply'))) throw new Error('unconfirmed completed replay hid its persistence failure');
 }
 
-async function proveFinishingBlocksRapidResend() {
+async function proveFinishingQueuesRapidResend() {
   resetState();
   Object.assign(state, { activeId: 'c1', projectRoot: '/repo', conversation: { id: 'c1', turns: [] }, running: true, runStatus: 'completed', runId: 'run-old', runProof: { conversationId: 'c1', runId: 'run-old' }, liveEvents: [{ type: 'say', text: 'old progress' }], artifacts: [{ file: 'old.html' }] });
   busy = true;
@@ -431,15 +436,17 @@ async function proveFinishingBlocksRapidResend() {
   };
   const finishing = api.finishRun();
   await Promise.resolve();
-  let blocked = false;
-  try { await api.send('too soon', {}); } catch (error) { blocked = /saving its result/.test(String(error.message)); }
-  if (!blocked || sendCalls || !state.running || !busy) throw new Error('rapid resend was accepted before durable finish');
+  if (await api.send('next queued task', {}) !== true) throw new Error('rapid resend was not accepted into the Code queue');
+  if (sendCalls || !state.running || !busy || state.queuedSends?.[0]?.message !== 'next queued task') {
+    throw new Error('rapid resend bypassed or was lost from the durable-finish queue');
+  }
 
   Object.assign(state, { runId: 'run-new', runProof: { conversationId: 'c1', runId: 'run-new' }, liveEvents: [{ type: 'say', text: 'new progress' }], artifacts: [{ file: 'new.html' }] });
   releaseHistory();
   await finishing;
   if (!state.running || !busy || state.runProof?.runId !== 'run-new') throw new Error('old finisher released the newer run');
   if (state.liveEvents[0]?.text !== 'new progress' || state.artifacts[0]?.file !== 'new.html') throw new Error('old finisher erased the newer run evidence');
+  if (sendCalls || state.queuedSends?.[0]?.message !== 'next queued task') throw new Error('old finisher misdelivered the queued task into the newer run');
 }
 
 async function proveLostSendRetryAndCursor() {
@@ -534,7 +541,7 @@ await proveTransientStreamFailure();
 await proveTerminalDedup();
 await proveMissingPersistedTurn();
 await proveCompletedReplayDurability();
-await proveFinishingBlocksRapidResend();
+await proveFinishingQueuesRapidResend();
 await proveLostSendRetryAndCursor();
 await proveAccessibleDrawerAndPickerErrors();
 console.warn = originalWarn;

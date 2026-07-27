@@ -1,9 +1,9 @@
 """Goal -> subtask decomposition as a verifiable dependency graph (CAP-053).
 
 Where :mod:`thomas.agent.swarm` models a ``TaskGraph`` of work items with
-dependencies, and :mod:`thomas.agent.task_definition` derives a single
-"what good looks like" contract for a whole request, this module sits between
-them: it represents a *decomposed goal* as a directed acyclic graph in which
+dependencies, the model-owned execution plan supplies the whole-request
+contract. This module sits between them: it represents a *decomposed goal* as
+a directed acyclic graph in which
 **every node carries its own rubric and its own verifier**.
 
 A node is not "done" because a worker said so. A node is done only when its
