@@ -19,7 +19,7 @@ MODULES = {
         "tier": "core",
         "depends_on": ["tools", "server", "marketplace"],
         "health": "yellow",
-        "debt": "scheduler.py exceeds 900 lines, config.py exceeds 900 lines, workspace_sync_engine.py exceeds 840 lines, rag_index.py exceeds 830 lines, agent_presence.py exceeds 1160 lines, boot_doctor.py exceeds 1140 lines, ui_workflow_engine.py exceeds 804 lines, llm_client.py exceeds 833 lines; core imports tools/server --should be inverted; TODO[batch-8]: core llm_client imports marketplace --hoist marketplace LLM provider interface into core to resolve this real layering inversion",
+        "debt": "scheduler.py exceeds 900 lines, config.py exceeds 900 lines, workspace_sync_engine.py exceeds 840 lines, rag_index.py exceeds 830 lines, agent_presence.py exceeds 1160 lines, boot_doctor.py exceeds 1140 lines, llm_client.py exceeds 833 lines; core imports tools/server --should be inverted; TODO[batch-8]: core llm_client imports marketplace --hoist marketplace LLM provider interface into core to resolve this real layering inversion",
         "description": "LLM client, persistence, config, events",
     },
     "agent": {
@@ -38,7 +38,7 @@ MODULES = {
             "benchmarks",
         ],
         "health": "yellow",
-        "debt": "swarm.py exceeds 1130 lines, loop_execution.py exceeds 1190 lines, response_tone.py exceeds 860 lines, loop_core.py exceeds 800 lines, skills_runtime.py exceeds 838 lines",
+        "debt": "swarm.py exceeds 1130 lines, loop_execution.py exceeds 1000 lines",
         "description": "Agent loop, tool execution, streaming, guidance",
     },
     "vault": {
@@ -80,7 +80,7 @@ MODULES = {
             "notifications",
         ],
         "health": "yellow",
-        "debt": "routes/companion_aiohttp.py exceeds 850 lines, routes/asset_studio_aiohttp.py exceeds 1080 lines, app_routes_init.py exceeds 800 lines, routes/marketplace_catalog_aiohttp.py exceeds 1020 lines, routes/chat_aiohttp_streaming.py exceeds 810 lines, routes/evolve_agent_routes.py exceeds 926 lines, routes/evolve_agent_runtime.py exceeds 823 lines, chat_delegation.py exceeds 916 lines, chat_delegation_deliverable.py exceeds 807 lines, chat_delegation_runner.py exceeds 810 lines, routes/chat_v2.py exceeds 808 lines (sat exactly at the 800 cap; the per-session turn guard was extracted to its own module to keep the addition minimal, but the turn handler itself wants splitting); TODO[batch-8]: server chat-plan-mode route imports cli --server should not depend on cli (cli is the consumer of server, not the other way); extract shared command-handling into core or expose via a thin interface; TODO[batch-8]: server discord-channels routes import integrations --server tier should not depend on ext tier; integrations should expose a server-facing interface or move shared code to core",
+        "debt": "routes/companion_aiohttp.py exceeds 850 lines, routes/asset_studio_aiohttp.py exceeds 1080 lines, app_routes_init.py exceeds 800 lines, routes/marketplace_catalog_aiohttp.py exceeds 1020 lines, routes/evolve_agent_routes.py exceeds 926 lines; TODO[batch-8]: server chat-plan-mode route imports cli --server should not depend on cli (cli is the consumer of server, not the other way); extract shared command-handling into core or expose via a thin interface; TODO[batch-8]: server discord-channels routes import integrations --server tier should not depend on ext tier; integrations should expose a server-facing interface or move shared code to core",
         "description": "aiohttp web server, API routing, static serving",
     },
     "cli": {
@@ -112,7 +112,7 @@ MODULES = {
             "desktop_operator",
         ],
         "health": "yellow",
-        "debt": "repl.py exceeds 1810 lines, repl_runtime.py exceeds 1170 lines, parity_commands.py exceeds 1180 lines, _commands_base.py exceeds 930 lines, _commands_models.py exceeds 820 lines, commands/evolve.py exceeds 836 lines",
+        "debt": "repl.py exceeds 1810 lines, repl_runtime.py exceeds 1170 lines, parity_commands.py exceeds 1180 lines, _commands_base.py exceeds 930 lines, _commands_models.py exceeds 820 lines",
         "description": "Click CLI commands and entry points",
     },
     "memory": {
@@ -313,7 +313,7 @@ MODULES = {
         "tier": "support",
         "depends_on": ["core", "tools", "plugins", "server"],
         "health": "yellow",
-        "debt": "asset_studio/contracts.py exceeds 870 lines, autonomy/workflows.py exceeds 1050 lines, db_internals/query_parser.py exceeds 890 lines, observability/run_store.py exceeds 920 lines, orchestrator/brain.py exceeds 970 lines, doc_processing/extraction.py exceeds 801 lines, specialists/reasoning.py exceeds 818 lines; TODO[batch-8]: marketplace publisher imports server --factor HTTP push behind an interface so marketplace does not reach up into server (plugins dep is housekeeping: publisher legitimately interacts with plugin definitions)",
+        "debt": "asset_studio/contracts.py exceeds 870 lines, autonomy/workflows.py exceeds 1050 lines, db_internals/query_parser.py exceeds 890 lines, observability/run_store.py exceeds 920 lines, orchestrator/brain.py exceeds 970 lines, doc_processing/extraction.py exceeds 801 lines; TODO[batch-8]: marketplace publisher imports server --factor HTTP push behind an interface so marketplace does not reach up into server (plugins dep is housekeeping: publisher legitimately interacts with plugin definitions)",
         "description": "Marketplace domain algorithms and utilities",
     },
     "markdown": {
