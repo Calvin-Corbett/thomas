@@ -11,6 +11,13 @@ Versioning: Semantic Versioning.
 
 - Concurrent Code runs are no longer hard-capped at 3: the ceiling is now live-configurable via `THOMAS_MAX_CONCURRENT_CODE_RUNS` (default 8, safety ceiling 64) so you can run many different Code projects at once. Same-project (same-conversation) runs are still serialized to protect that project's state; only distinct projects run in parallel. The "all N slots are busy" message now tells you how to raise the limit.
 
+### Added (Build identity — which Thomas am I looking at)
+
+- **A small chip in the bottom-right corner of the chat now names the port, the version and the commit** the running server was built from — `:8899 · v0.19.23 · 54507302`. This repository routinely has more than a dozen worktrees checked out at once, several reporting the same version string, and the launcher only printed the version to a console that is closed by the time anyone is looking at the browser. The commit is the part that actually tells two instances apart.
+- Clicking the chip copies the line, which is the quickest way to answer "what build are you on".
+- When the working tree has uncommitted edits the chip turns amber and says `uncommitted`, because a build made from a modified tree is not the commit printed beside it.
+- `/api/health` reports the same identity under `build`. Resolving it cannot slow down or break the health check: it is cached after the first call, times out if git hangs, and falls back to the version alone when there is no repository.
+
 ### Added (Branch custodian — sprawl is detected and consolidated instead of accumulating)
 
 - Thomas tracked *worktrees* but never counted **branches**, so a repository could sit under the worktree ceiling while dozens of branches piled up invisibly — and the remedy the alarm printed, `thomas consolidate`, was never implemented, so following the instructions exactly led to a dead end. The branch custodian closes that loop: it classifies every branch against trunk as **contained** (nothing outside trunk — safe to delete), **superseded** (diverged, but every change already exists in trunk), **unique work** (carries content trunk lacks), or **active** (recently touched), then proposes the safe action for each. Dry run by default.

@@ -390,6 +390,21 @@ def create_app(config: AppConfig | None = None):
     app[APP_BOOT_DURATION] = time.time() - _boot_start
     app[APP_CRASH_COUNT] = 0
 
+    def _build_identity() -> dict[str, object]:
+        """Never let build identity, a display nicety, break the health check.
+
+        build_info already swallows a missing, failing or hanging git, so the
+        realistic failures left are import-time ones. Whatever gets through,
+        health still answers with the version it does know.
+        """
+        try:
+            from thomas.core.build_info import build_info
+
+            return build_info()
+        except (ImportError, ModuleNotFoundError, OSError, ValueError, TypeError, AttributeError) as exc:
+            log.debug("build identity unavailable: %s", exc)
+            return {"version": str(THOMAS_VERSION)}
+
     async def api_health(request: web.Request) -> web.Response:
         diag = request.app.get(APP_DIAGNOSTICS, {})
         boot_time = request.app.get(APP_BOOT_TIME, 0)
@@ -423,6 +438,10 @@ def create_app(config: AppConfig | None = None):
             {
                 "status": "degraded" if degraded else "ok",
                 "version": str(THOMAS_VERSION),
+                # The version alone cannot tell two instances apart -- several
+                # worktrees here sit on the same version string at once -- so
+                # health also names the commit it was built from.
+                "build": _build_identity(),
                 "uptime_s": round(time.time() - boot_time, 1) if boot_time else 0,
                 "pid": os.getpid(),
                 "features": diag,

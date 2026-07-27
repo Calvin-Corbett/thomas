@@ -427,7 +427,44 @@
         </aside>
       </div>
     </main>
+
+    <!-- Build identity. Several worktrees of this repo run at once and can all
+         report the same version, so the chip names the port, the version AND
+         the commit -- the commit is the only one of the three that actually
+         tells two instances apart. It sits inside the shell to inherit the
+         theme tokens. Quiet at rest, legible on hover, and it turns amber when
+         the tree has uncommitted edits, because that build is not the commit
+         it claims to be. -->
+    <button id="tc-build-badge" type="button" hidden title="Copy this build's details"
+      aria-label="Build identity. Click to copy.">
+      <span id="tc-build-text">&#8230;</span>
+    </button>
   </div>
+
+  <style>
+    /* Everything lives here rather than inline. An inline `color` outranks any
+       stylesheet rule without !important, so styling the base state inline
+       silently killed both the hover state and the uncommitted-tree state --
+       the attribute was set and nothing changed colour. */
+    #tc-build-badge {
+      position: absolute; right: 10px; bottom: 8px; z-index: 40;
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 4px 10px; border-radius: 999px;
+      border: 1px solid var(--c-border); background: var(--c-surface);
+      font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .02em;
+      line-height: 1; color: var(--c-muted); cursor: pointer; opacity: .55;
+      transition: opacity .14s ease, color .14s ease, border-color .14s ease;
+    }
+    #tc-build-badge[hidden] { display: none; }
+    #tc-build-badge:hover, #tc-build-badge:focus-visible { opacity: 1; color: var(--c-dim); border-color: var(--c-border-2); }
+    #tc-build-badge:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+    /* An uncommitted tree is the one state worth interrupting for: what is
+       running is not the commit named beside it. */
+    #tc-build-badge[data-dirty="1"] { color: #e8b45c; border-color: rgba(232,180,92,.42); opacity: .82; }
+    #tc-build-badge[data-dirty="1"]:hover, #tc-build-badge[data-dirty="1"]:focus-visible { color: #f5cd85; opacity: 1; }
+    @media (prefers-reduced-motion: reduce) { #tc-build-badge { transition: none; } }
+    @media (max-width: 640px) { #tc-build-badge { display: none; } }
+  </style>
 
   <script src="/static/js/workspace_shell.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/ui_edit_layout.js?v=__THOMAS_WEB_BUILD__"></script>
@@ -2796,6 +2833,57 @@
         renderChats();
       } catch (e) {}
     }
+    // Which Thomas is this? The version alone cannot answer that when several
+    // worktrees are checked out at once and all report the same string, so the
+    // chip carries the port, the version and the commit, and marks a tree with
+    // uncommitted edits. Clicking copies the whole line, which is the fastest
+    // way to answer "what build are you on".
+    async function mountBuildBadge() {
+      const badge = document.getElementById('tc-build-badge');
+      const label = document.getElementById('tc-build-text');
+      if (!badge || !label) return;
+      const port = location.port || (location.protocol === 'https:' ? '443' : '80');
+      let build = null;
+      try {
+        const r = await fetch('/api/health', { cache: 'no-store' });
+        if (r.ok) {
+          const d = await r.json();
+          build = (d && typeof d.build === 'object' && d.build) ? d.build : { version: d && d.version };
+        }
+      } catch (e) { /* offline is itself worth showing */ }
+
+      const parts = [':' + port];
+      if (build && build.version) parts.push('v' + build.version);
+      if (build && build.commit) parts.push(build.commit);
+      // "uncommitted" rather than the git term: it states the fact plainly for
+      // anyone reading the corner of their screen.
+      if (build && build.dirty) parts.push('uncommitted');
+      const line = build ? parts.join(' · ') : ':' + port + ' · no answer';
+
+      label.textContent = line;
+      badge.hidden = false;
+      if (build && build.dirty) badge.setAttribute('data-dirty', '1');
+      const detail = [
+        line,
+        build && build.branch ? 'branch ' + build.branch : '',
+        build && build.root ? build.root : '',
+        build && build.dirty ? 'Uncommitted changes: this is not exactly the commit named above.' : '',
+      ].filter(Boolean).join('\n');
+      badge.title = detail + '\n\nClick to copy.';
+
+      badge.addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(detail.split('\n\n')[0]); }
+        catch (e) {
+          const t = document.createElement('textarea');
+          t.value = line; document.body.appendChild(t); t.select();
+          try { document.execCommand('copy'); } catch (e2) {}
+          t.remove();
+        }
+        label.textContent = 'Copied';
+        setTimeout(() => { label.textContent = line; }, 1200);
+      });
+    }
+
     async function boot() {
       // live model → header pill + send payload
       try {
@@ -2886,6 +2974,7 @@
     autosize();
     setupMic();
     renderAttachments();
+    mountBuildBadge();
     boot();
   })();
   </script>
