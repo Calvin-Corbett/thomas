@@ -1100,6 +1100,46 @@
     if (!(options && options.deferRender)) render();
     return true;
   }
+  function readProjectFile(conversationId, path) {
+    return fetch(`/api/evolve/agent/conversations/${encodeURIComponent(conversationId)}/file?path=${encodeURIComponent(path)}`)
+      .then(r => r.json())
+      .then(d => (d && d.ok ? String(d.content || '') : null))
+      .catch(() => null);
+  }
+
+  // A previewed page is shown with srcdoc, which has NO project base URL: a
+  // relative <script src="renderer.js"> resolves against the Thomas server and
+  // 404s, so a multi-file build would preview as the page minus everything it
+  // depends on. Thomas had just split a game's chase-camera renderer into its
+  // own file, which would have rendered here as a game with no renderer.
+  //
+  // The referenced local files are pulled through the SAME validated read as the
+  // page itself and inlined, so nothing new is exposed and no new route exists.
+  // Remote URLs are left alone -- the sandbox has no same-origin and the CSP
+  // still applies to them.
+  async function inlineLocalAssets(conversationId, html, pagePath) {
+    const dir = String(pagePath || '').includes('/') ? String(pagePath).replace(/\/[^/]*$/, '/') : '';
+    const isLocal = ref => ref && !/^(?:[a-z]+:)?\/\//i.test(ref) && !ref.startsWith('data:') && !ref.startsWith('#');
+    const resolve = ref => (ref.startsWith('/') ? ref.slice(1) : dir + ref).split('?')[0].split('#')[0];
+    let out = html;
+
+    const scripts = [...html.matchAll(/<script\b([^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*)>\s*<\/script\s*>/gi)];
+    for (const m of scripts) {
+      if (!isLocal(m[2])) continue;
+      const body = await readProjectFile(conversationId, resolve(m[2]));
+      if (body === null) continue;
+      out = out.replace(m[0], `<script>\n/* inlined from ${m[2]} for preview */\n${body}\n</script>`);
+    }
+    const links = [...html.matchAll(/<link\b[^>]*\bhref\s*=\s*["']([^"']+\.css)["'][^>]*>/gi)];
+    for (const m of links) {
+      if (!isLocal(m[1])) continue;
+      const body = await readProjectFile(conversationId, resolve(m[1]));
+      if (body === null) continue;
+      out = out.replace(m[0], `<style>\n/* inlined from ${m[1]} for preview */\n${body}\n</style>`);
+    }
+    return out;
+  }
+
   async function loadFile(path) {
     const token = lifecycle().contextToken(state);
     if (!token.id) return false;
@@ -1107,7 +1147,14 @@
     const data = await response.json();
     if (!lifecycle().contextMatches(state, token)) return false;
     if (!response.ok || !data.ok) pushLiveEvent({ type: 'error', text: data.error || 'File preview failed.' });
-    else state.filePreview = data;
+    else {
+      if (/\.x?html?$/i.test(String(path))) {
+        try { data.content = await inlineLocalAssets(token.id, String(data.content || ''), String(path)); }
+        catch (e) { /* preview the page as-is rather than not at all */ }
+        if (!lifecycle().contextMatches(state, token)) return false;
+      }
+      state.filePreview = data;
+    }
     render();
     return response.ok && data.ok;
   }
