@@ -120,7 +120,24 @@ async def handle_session_delete(request: web.Request) -> web.Response:
         except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as exc:
             memory_purge = {"completed": False, "forgotten": False, "error": type(exc).__name__}
     await _evict_session_llm(request.app, sid)
-    return web.json_response({"deleted": deleted, "session_id": sid, "memory_purge": memory_purge})
+    # The background-task records too. Deleting a chat reported a clean sweep
+    # including a memory purge, and left these behind -- task summaries, progress
+    # text and produced-file paths, still served at the same address. 17
+    # conversations on this machine were already in that state: chat gone, data
+    # not. Best effort: failing to sweep them must not fail the delete.
+    tasks_removed = 0
+    try:
+        tasks_removed = await asyncio.to_thread(task_bot_runtime.delete_session_executions, sid)
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        log.warning("could not remove task records for deleted session %s: %s", sid, exc)
+    return web.json_response(
+        {
+            "deleted": deleted,
+            "session_id": sid,
+            "memory_purge": memory_purge,
+            "task_records_removed": tasks_removed,
+        }
+    )
 
 
 # The step timeline is USER-FACING. Backend transition summaries carry internal

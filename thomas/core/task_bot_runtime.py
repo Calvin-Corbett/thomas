@@ -840,6 +840,45 @@ def request_cancel(
     )
 
 
+def delete_session_executions(
+    session_id: str,
+    *,
+    repo_root: str | Path | None = None,
+) -> int:
+    """Remove every execution record belonging to one conversation.
+
+    Deleting a chat cleared the conversation and purged memory, and reported a
+    clean sweep -- but never touched these records, which keep the task's
+    request text, its progress lines and the paths of what it produced, and
+    stay served at the same address. The chat was gone; the data behind it was
+    not. Returns the number of records removed.
+    """
+    sid = str(session_id or "").strip()
+    if not sid:
+        return 0
+    removed = 0
+    directory = runtime_dir(repo_root)
+    if not directory.is_dir():
+        return 0
+    for path in list(directory.glob("exec-*.json")):
+        record = _read_json(path, None)
+        if not isinstance(record, dict):
+            continue
+        if str(record.get("conversation_id") or "") != sid and str(record.get("thread_id") or "") != sid:
+            continue
+        try:
+            path.unlink()
+            removed += 1
+        except OSError:  # pragma: no cover - a locked file must not fail the delete
+            log_path = path
+            with suppress(Exception):
+                log_path.write_text("", encoding="utf-8")
+    if removed:
+        with suppress(Exception):
+            list_executions(repo_root, refresh=True)
+    return removed
+
+
 def cancel_execution(
     execution_id: str,
     *,
