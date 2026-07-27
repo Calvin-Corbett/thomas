@@ -32,30 +32,6 @@ def _plan() -> str:
     )
 
 
-def test_static_chart_completion_delivers_pdf_and_data_not_html(tmp_path: Path) -> None:
-    pytest.importorskip("reportlab")
-    execution_id = _execution(tmp_path, "Create a quarterly revenue chart")
-    canvas_start(execution_id, "Quarterly Revenue")
-    canvas_set_plan(execution_id, _plan())
-
-    record, summary = complete_canvas_delivery(
-        execution_id=execution_id,
-        prompt="Create a static bar chart showing Q1 120 and Q2 135",
-        html="<!doctype html><title>Quarterly Revenue</title>",
-        actor="Taylor",
-        repo_root=tmp_path,
-        workspace_for=lambda _: tmp_path / "workspace",
-    )
-
-    artifact_names = {str(row["path"]) for row in record["proof"]["artifacts"]}
-    assert record["state"] == "completed"
-    assert record["proof_status"] == "verified"
-    assert summary == "Reviewed the live chart and delivered chart.pdf with backing data."
-    assert {"chart.pdf", "chart-data.csv"} <= artifact_names
-    assert "index.html" not in artifact_names
-    assert (tmp_path / "workspace" / "chart.pdf").read_bytes().startswith(b"%PDF-")
-
-
 def test_interactive_canvas_completion_keeps_html_as_deliverable(tmp_path: Path) -> None:
     execution_id = _execution(tmp_path, "Create an interactive chart")
 

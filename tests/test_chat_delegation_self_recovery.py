@@ -100,7 +100,12 @@ class TestSelfRecovery(unittest.IsolatedAsyncioTestCase):
     async def test_l4_retries_then_succeeds(self):
         scripts = [
             [{"type": "error", "error": "missing tool foo"}],  # attempt 1 fails
-            [{"type": "text", "text": "made it"}, {"type": "done"}],  # attempt 2 succeeds
+            # Attempt 2 answers AND shows it did something. Text alone no longer
+            # confirms a run: a worker replying "Created game.html" having written
+            # nothing and run no tool used to terminate as a green VERIFIED card
+            # with zero artifacts.
+            [{"type": "tool_output", "name": "read_file", "ok": True},
+             {"type": "text", "text": "made it"}, {"type": "done"}],
         ]
         emitter, state = await self._run(scripts, autonomy_level=4)
         self.assertEqual(state["calls"], 2)  # retried exactly once
@@ -127,17 +132,22 @@ class TestSelfRecovery(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cd._self_recovery_attempts(3), 1)
         self.assertEqual(cd._self_recovery_attempts(0), 1)
 
-    async def test_l4_retries_when_claimed_file_not_created(self):
-        # M2: attempt claims it created a file but the workspace is empty + no tools
-        # -> treat as a retryable failure (don't report a completion that didn't happen).
+    async def test_a_claimed_file_that_was_never_written_is_not_a_completion(self):
+        """Attempt 1 says it created a file, wrote nothing and ran no tool.
+
+        This used to be caught by reading the worker's WORDING for a file claim
+        and comparing it against the workspace -- a prose classifier, removed
+        with the rest of them. The protection is now structural and stronger: a
+        run that produced no files and succeeded at no tool is not confirmed, no
+        matter how confidently it is phrased. So this never reaches the user as
+        a green completion.
+        """
         scripts = [
             [{"type": "text", "text": "Created game.html with the snake game."}, {"type": "done"}],
-            [{"type": "text", "text": "Done — wrote the answer in chat."}, {"type": "done"}],
+            [{"type": "text", "text": "Created game.html with the snake game."}, {"type": "done"}],
         ]
         emitter, state = await self._run(scripts, autonomy_level=4)
-        self.assertEqual(state["calls"], 2)  # retried because attempt 1 produced no file
-        self.assertEqual(emitter.completed_text, "Done — wrote the answer in chat.")
-        self.assertIsNone(emitter.failed_text)
+        self.assertIsNone(emitter.completed_text, "an unbacked claim must not complete")
 
     async def test_no_retry_when_only_thinking_mentions_a_file(self):
         # M2/M3-B: a worker that merely DISCUSSES creating a file in its chain-of-thought
@@ -150,9 +160,13 @@ class TestSelfRecovery(unittest.IsolatedAsyncioTestCase):
             ]
         ]
         emitter, state = await self._run(scripts, autonomy_level=4)
-        self.assertEqual(state["calls"], 1)  # no retry — the LAST line claims no file
-        self.assertEqual(emitter.completed_text, "The answer is 42.")
-        self.assertIsNone(emitter.failed_text)
+        self.assertEqual(state["calls"], 1)  # no retry — nothing here claims a file
+        # It also does not COMPLETE. This run wrote no file and succeeded at no
+        # tool, so there is nothing to verify, and text alone no longer confirms
+        # a run -- that is the guard against a green VERIFIED card carrying zero
+        # artifacts. It ends honestly rather than silently, which is the point.
+        self.assertIsNone(emitter.completed_text)
+        self.assertIsNotNone(emitter.failed_text)
 
     async def test_non_retryable_error_fails_immediately(self):
         # MR5: a deterministic terminal state (retryable=False) is not replayed at L4.

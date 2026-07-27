@@ -611,7 +611,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                     "bot_id": "nova",
                 },
             ),
-            patch("thomas.server.chat_delegation.task_bot_runtime.cancel_execution") as cancel_execution,
+            patch("thomas.server.chat_delegation.task_bot_runtime.fail_execution") as fail_execution,
             patch("thomas.server.chat_delegation.asyncio.create_task", side_effect=_create_task),
         ):
             record = await chat_delegation._start_agent_worker_delegation(
@@ -674,7 +674,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 return_value={"execution_id": "exec-read-only-artifact"},
             ),
             patch("thomas.server.chat_delegation.task_bot_runtime.update_execution") as update_execution,
-            patch("thomas.server.chat_delegation.task_bot_runtime.cancel_execution") as cancel_execution,
+            patch("thomas.server.chat_delegation.task_bot_runtime.fail_execution") as fail_execution,
             patch("thomas.server.chat_delegation.task_bot_runtime.get_execution", return_value=payload),
             patch(
                 "thomas.server.chat_delegation._ensure_task_workspace",
@@ -722,7 +722,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 return_value={"execution_id": "exec-native"},
             ),
             patch("thomas.server.chat_delegation.task_bot_runtime.update_execution"),
-            patch("thomas.server.chat_delegation.task_bot_runtime.cancel_execution") as cancel_execution,
+            patch("thomas.server.chat_delegation.task_bot_runtime.fail_execution") as fail_execution,
             patch("thomas.server.chat_delegation.task_bot_runtime.get_execution", return_value=payload),
             patch("thomas.server.chat_delegation.asyncio.create_task") as create_task,
         ):
@@ -777,7 +777,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                     "bot_id": "nova",
                 },
             ),
-            patch("thomas.server.chat_delegation.task_bot_runtime.cancel_execution") as cancel_execution,
+            patch("thomas.server.chat_delegation.task_bot_runtime.fail_execution") as fail_execution,
             patch("thomas.server.chat_delegation._run_agent_worker_supervised", new=_supervisor),
             patch("thomas.server.chat_delegation.asyncio.create_task", side_effect=_create_task),
         ):
@@ -886,7 +886,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
         with (
             patch("thomas.server.chat_delegation._WORKER_FIRST_EVENT_TIMEOUT_S", 0.005),
             patch("thomas.server.chat_delegation.task_bot_runtime.get_execution", return_value=stale_record),
-            patch("thomas.server.chat_delegation.task_bot_runtime.cancel_execution") as cancel_execution,
+            patch("thomas.server.chat_delegation.task_bot_runtime.fail_execution") as fail_execution,
         ):
             await chat_delegation._run_agent_worker_supervised(
                 _runner,
@@ -1565,7 +1565,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 new=lambda *args, **kwargs: _events(),  # noqa: ARG005
             ),
             patch("thomas.server.chat_delegation._WORKER_FIRST_EVENT_TIMEOUT_S", 0.005),
-            patch("thomas.server.chat_delegation.task_bot_runtime.cancel_execution") as cancel_execution,
+            patch("thomas.server.chat_delegation.task_bot_runtime.fail_execution") as fail_execution,
             patch(
                 "thomas.server.chat_delegation.task_bot_runtime.get_execution",
                 return_value={
@@ -1609,7 +1609,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 "thomas.server.chat_delegation.run_agent_worker_events",
                 new=lambda *args, **kwargs: _events(),  # noqa: ARG005
             ),
-            patch("thomas.server.chat_delegation.task_bot_runtime.cancel_execution") as cancel_execution,
+            patch("thomas.server.chat_delegation.task_bot_runtime.fail_execution") as fail_execution,
             patch(
                 "thomas.server.chat_delegation.task_bot_runtime.get_execution",
                 return_value={"execution_id": "exec-c", "bot_id": "nova"},

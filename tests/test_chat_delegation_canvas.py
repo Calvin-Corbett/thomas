@@ -286,6 +286,14 @@ class TestCanvasWorker(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(totals_a.session_tokens, 8)
         self.assertEqual(totals_b.session_tokens, 8)
 
+    @unittest.skip(
+        "Drove the review loop by putting Q1=12..Q4=24 in the PROMPT and expecting the "
+        "reviewer to reject a render that did not match those words. That comparison -- "
+        "tokenize the prompt, pull label=value pairs from the user's sentence, diff them "
+        "against the rendered text -- was a prose classifier and was removed with the rest. "
+        "review_canvas_html now opens with `del prompt` and judges structure only. Re-covering "
+        "the repair loop needs a structurally broken render, which is a new fixture."
+    )
     async def test_run_canvas_worker_repairs_a_failed_semantic_review_before_presenting(self) -> None:
         llm = _FakeStreamLLM([_FAKE_PLAN, _REPAIRED_QUARTER_PLAN])
         prompt = (
@@ -310,6 +318,11 @@ class TestCanvasWorker(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(live["status"], "done")
         self.assertEqual(live["review_status"], "passed")
 
+    @unittest.skip(
+        "Routing to the canvas worker is no longer inferred from prompt wording; the model "
+        "declares surface=canvas in its structured send_task call. Equivalent coverage lives "
+        "in tests/test_chat_delegation.py."
+    )
     async def test_visual_delegation_starts_canvas_worker_instead_of_agent_fallback(self) -> None:
         emit_event = AsyncMock()
         created_background = []
