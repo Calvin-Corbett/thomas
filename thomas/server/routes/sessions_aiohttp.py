@@ -27,6 +27,50 @@ TaskLedgerUpdateFn = Callable[..., None]
 log = logging.getLogger(__name__)
 
 
+async def _publish_to_chat_store(
+    request: web.Request,
+    session_id: str,
+    messages: list[dict[str, Any]],
+    *,
+    profile: str = "",
+    model_id: str = "",
+    autonomy_level: int = 3,
+) -> bool:
+    """Write a conversation where the chat actually reads it.
+
+    APP_SESSIONS is written in four places, all in this module, and read in
+    none. /api/v2/chat loads from SessionStore instead. So importing a
+    conversation here stored it somewhere nothing consults, handed back a
+    session id, and the next message started from nothing -- while every
+    imported message was still on screen. That is the post-restart amnesia:
+    reconnect, tell Thomas a codeword, ask for it back, and get "Unknown".
+
+    Best effort. Failing to publish must not break creating the session, it
+    only means the history is not carried across -- which is what already
+    happened every time.
+    """
+    from thomas.chat.conversation import ConversationManager
+    from thomas.chat.session_store import SessionMeta
+    from thomas.server.routes.chat_v2_keys import APP_SESSION_STORE
+
+    store = request.app.get(APP_SESSION_STORE)
+    if store is None or not messages:
+        return False
+    try:
+        conversation = ConversationManager(list(messages))
+        meta = SessionMeta(
+            session_id=session_id,
+            profile=str(profile or ""),
+            model_id=str(model_id or ""),
+            autonomy_level=int(autonomy_level),
+        )
+        await store.save(session_id, conversation, meta, force=True)
+        return True
+    except (AttributeError, KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        log.warning("could not publish session %s to the chat store: %s", session_id, exc)
+        return False
+
+
 def _clone_conversation_fallback(value: Any) -> Any:
     """Clone list/dict conversation data without relying on JSON serialization."""
     if isinstance(value, dict):
@@ -128,6 +172,17 @@ def register_sessions_routes(
             except (TypeError, ValueError, copy.Error, RecursionError):
                 forked_session.active_plan = dict(base_plan) if isinstance(base_plan, dict) else base_plan
         request.app[APP_SESSIONS][sid] = forked_session
+        # A fork that the chat cannot see is not a fork. Publish the cloned
+        # history to the store /api/v2/chat reads, or the child starts empty
+        # while claiming to continue the parent.
+        await _publish_to_chat_store(
+            request,
+            sid,
+            cloned if isinstance(cloned, list) else [],
+            profile=base.profile,
+            model_id=base.model_id,
+            autonomy_level=getattr(forked_session, "autonomy_level", 3),
+        )
         copied_state = None
         ledger = request.app.get(APP_TASK_LEDGER)
         if ledger is not None:
@@ -219,6 +274,15 @@ def register_sessions_routes(
         request.app[APP_SESSIONS][sid] = ChatSession(
             id=sid,
             conversation=conversation,
+            profile=profile,
+            model_id=model_id,
+            autonomy_level=autonomy_level,
+        )
+        # ...and where the chat will actually look for it.
+        await _publish_to_chat_store(
+            request,
+            sid,
+            conversation,
             profile=profile,
             model_id=model_id,
             autonomy_level=autonomy_level,

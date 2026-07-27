@@ -98,8 +98,13 @@ def test_root_chat_restores_only_verified_artifacts_for_the_selected_history_ses
     assert "selectionToken !== chatSelectionToken || state.activeChat !== chatId" in text
     assert "String(row.session_id || '') === sid && _completionVerified(row)" in text
     assert "_mergeArtifacts(activity, row);" in text
-    assert "restoreVerifiedChatArtifacts(id, c.sessionId, selectionToken);" in text
-    restore_body = text.split("async function restoreVerifiedChatArtifacts", 1)[1].split("function selectChat", 1)[0]
+    assert "restoreVerifiedChatArtifacts(id, c.sessionId, selectionToken)" in text
+    # Slice to THIS function only. dev 24ffc614 inserted restoreRunningDelegations
+    # between it and selectChat, and that function legitimately reads
+    # row.last_progress -- so the old wider slice failed on a neighbour.
+    restore_body = text.split("async function restoreVerifiedChatArtifacts", 1)[1]
+    for boundary in ("async function restoreRunningDelegations", "function selectChat"):
+        restore_body = restore_body.split(boundary, 1)[0]
     assert "announceCompletion(" not in restore_body
     assert "canvasLiveHTML(" not in restore_body
     assert "canvasRender(" not in restore_body
@@ -128,7 +133,12 @@ def test_root_chat_restores_reviewed_canvas_only_on_explicit_open() -> None:
     assert "closeCanvas()" in canvas_binding
     assert "openWorkspace(" not in canvas_binding
     assert "state.restoredCanvas = null;" in text
-    restore_body = text.split("async function restoreVerifiedChatArtifacts", 1)[1].split("function selectChat", 1)[0]
+    # Slice to THIS function only. dev 24ffc614 inserted restoreRunningDelegations
+    # between it and selectChat, and that function legitimately reads
+    # row.last_progress -- so the old wider slice failed on a neighbour.
+    restore_body = text.split("async function restoreVerifiedChatArtifacts", 1)[1]
+    for boundary in ("async function restoreRunningDelegations", "function selectChat"):
+        restore_body = restore_body.split(boundary, 1)[0]
     assert "openCanvas(" not in restore_body
     assert "openConversationCanvas(" not in restore_body
 
@@ -148,8 +158,13 @@ def test_root_chat_grouped_restored_activity_uses_clean_aggregate_summary() -> N
     text = CHAT_HTML.read_text(encoding="utf-8")
 
     assert "const grouped = groupSize > 1;" in text
-    assert "`${groupSize} workers completed`" in text
+    assert "`Done — ${groupSize} results`" in text
     assert "const verifiedLabel = verifiedNames.length === 1" in text
-    restore_body = text.split("async function restoreVerifiedChatArtifacts", 1)[1].split("function selectChat", 1)[0]
+    # Slice to THIS function only. dev 24ffc614 inserted restoreRunningDelegations
+    # between it and selectChat, and that function legitimately reads
+    # row.last_progress -- so the old wider slice failed on a neighbour.
+    restore_body = text.split("async function restoreVerifiedChatArtifacts", 1)[1]
+    for boundary in ("async function restoreRunningDelegations", "function selectChat"):
+        restore_body = restore_body.split(boundary, 1)[0]
     assert "row.last_progress" not in restore_body
     assert "row.summary" not in restore_body
