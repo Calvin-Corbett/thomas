@@ -1061,6 +1061,24 @@
     // as smaller lines, reasoning at the bottom). Steps update in place — never
     // duplicate bubbles.
     function _handoffStep(a, id) { return a.steps.find(s => s.kind === 'handoff' && s.id === id); }
+    // Tick the running clocks in place rather than re-rendering: a re-render
+    // while the user is typing a steer note would wipe what they had typed, and
+    // the poll only repaints when the card is expanded — so a collapsed card
+    // would have sat frozen, which is the problem this is meant to solve.
+    setInterval(() => {
+      document.querySelectorAll('[data-act-elapsed]').forEach(el => {
+        const started = Number(el.getAttribute('data-started') || 0);
+        if (started) el.textContent = elapsedLabel(Date.now() - started);
+      });
+    }, 1000);
+    // "12s", "3m 48s", "1h 04m" — short, and always moving.
+    function elapsedLabel(ms) {
+      const total = Math.max(0, Math.round(Number(ms || 0) / 1000));
+      if (total < 60) return total + 's';
+      const m = Math.floor(total / 60), s = total % 60;
+      if (m < 60) return m + 'm ' + String(s).padStart(2, '0') + 's';
+      return Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm';
+    }
     function activityHTML(m) {
       const a = m.activity; if (!a) return '';
       const streaming = m.streaming, hasReply = !!(m.text && m.text.trim());
@@ -1091,6 +1109,14 @@
         ? (completedWorkers === groupSize ? `Done — ${groupSize} results` : anyRunning ? `Working on ${groupSize} things` : `${completedWorkers} of ${groupSize} done`)
         : (anyRunning ? 'On it — working on this' : anyFailed ? 'Ran into a problem' : anyCancelled ? 'Stopped' : 'Done');
       const latest = steps[steps.length - 1];
+      // How long this has been going. A real run can sit on one status line for
+      // minutes -- one chart here spent 3m 48s on "Planning the design…" while
+      // emitting 1,926 events nobody surfaced -- and a frozen sentence with no
+      // clock is indistinguishable from a hang. The owner reasonably gave up on
+      // work that then finished. The elapsed figure is the cheapest honest
+      // signal available: it always moves, even when nothing else does.
+      if (anyRunning && !a.startedAt) a.startedAt = Date.now();
+      const elapsed = (anyRunning && a.startedAt) ? elapsedLabel(Date.now() - a.startedAt) : '';
       const current = grouped
         ? (anyRunning ? `${completedWorkers + failedWorkers} of ${groupSize} finished` : (failedWorkers ? `${completedWorkers} completed, ${failedWorkers} failed` : ''))
         : ((latest && latest.label) || (primary && primary.label) || '');
@@ -1100,7 +1126,7 @@
         <div data-act-toggle style="display:flex;align-items:center;gap:10px;padding:9px 11px;cursor:pointer;">
           <span style="width:28px;height:28px;border-radius:8px;background:var(--c-accent);color:var(--c-accent-ink);display:grid;place-items:center;flex:0 0 auto;"><i class="ph ph-arrow-bend-down-right" style="font-size:15px;"></i></span>
           <span style="min-width:0;display:flex;flex-direction:column;gap:1px;">
-            <span style="font-size:13px;font-weight:700;white-space:nowrap;">${title}</span>
+            <span style="font-size:13px;font-weight:700;white-space:nowrap;">${title}${elapsed ? `<span data-act-elapsed data-started="${a.startedAt}" style="font-weight:600;color:var(--c-muted);font-size:11.5px;margin-left:7px;font-variant-numeric:tabular-nums;">${elapsed}</span>` : ''}</span>
             ${current ? `<span style="font-size:11px;color:var(--c-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px;">${esc(deMd(current))}</span>` : ''}
           </span>
           <span style="flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:${overallColor};margin-left:6px;">${anyRunning ? '<i class="ph ph-circle-notch" style="animation:tc-spin 1s linear infinite;font-size:14px;color:var(--c-dim);"></i>' : overall}</span>
