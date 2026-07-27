@@ -402,11 +402,26 @@
     badge.textContent = labels[state.runStatus] || 'Ready';
   }
 
+  // While a run is writing, re-read whatever page is being previewed so it
+  // updates in front of you. Throttled, and only for a rendered page that is
+  // already open -- this never opens a preview on its own.
+  let _previewRefreshAt = 0;
+  function refreshOpenPagePreview() {
+    const open = state.filePreview;
+    if (!open || state.filePreviewRendered === false) return;
+    if (!/\.x?html?$/i.test(String(open.path || ''))) return;
+    const now = Date.now();
+    if (now - _previewRefreshAt < 1500) return;
+    _previewRefreshAt = now;
+    void loadFile(open.path).catch(() => {});
+  }
+
   function pushLiveEvent(event) {
     annotateTerminalEvent(event, {
       get name() { return state.terminalTool; },
       set name(value) { state.terminalTool = value; },
     });
+    if (state.running) refreshOpenPagePreview();
     const previous = state.liveEvents[state.liveEvents.length - 1];
     if (event.kind === 'say' && event.delta && previous && previous.kind === 'say' && previous.delta) {
       previous.text = `${previous.text || ''}${event.text || ''}`;
@@ -597,7 +612,20 @@
     });
     const artifactRows = artifacts.map(artifactHtml).join('');
     const hasResults = Boolean(state.pendingApproval || visibleChanges.length || artifacts.length || state.filePreview);
-    const preview = state.filePreview ? `<section class="tc-code-file-preview"><header><strong>${esc(state.filePreview.path)}</strong><button data-code-file-close aria-label="Close file preview"><i class="ph ph-x"></i></button></header><pre>${esc(state.filePreview.content)}</pre></section>` : '';
+    // Watch it build. A generated page is far more useful rendered than as
+    // source, and during a run this refreshes, so you see the thing take shape
+    // instead of reading a diff and hoping. Sandboxed WITHOUT allow-same-origin:
+    // srcdoc inherits this page's origin, and a generated app must never be
+    // able to reach into Thomas. Scripts run, so games and animations work;
+    // localStorage does not, which a small number of generated apps rely on.
+    const previewIsPage = state.filePreview && /\.x?html?$/i.test(String(state.filePreview.path || ''));
+    const previewBody = (previewIsPage && state.filePreviewRendered !== false)
+      ? `<iframe title="Preview of ${esc(state.filePreview.path)}" sandbox="allow-scripts" srcdoc="${esc(String(state.filePreview.content || ''))}" style="width:100%;height:320px;border:0;border-radius:8px;background:#fff;"></iframe>`
+      : (state.filePreview ? `<pre>${esc(state.filePreview.content)}</pre>` : '');
+    const previewToggle = previewIsPage
+      ? `<button data-code-preview-toggle style="margin-right:6px;">${state.filePreviewRendered === false ? 'Show page' : 'Show code'}</button>`
+      : '';
+    const preview = state.filePreview ? `<section class="tc-code-file-preview"><header><strong>${esc(state.filePreview.path)}</strong>${previewToggle}<button data-code-file-close aria-label="Close file preview"><i class="ph ph-x"></i></button></header>${previewBody}</section>` : '';
     const approval = state.pendingApproval ? `<section class="tc-code-approval" role="alert"><strong>Approval required</strong><p>${esc(state.pendingApproval.summary)}</p><div><button data-code-approve ${state.approvalBusy ? 'disabled' : ''}>${state.approvalBusy ? 'Approving...' : 'Approve once'}</button><button data-code-approval-cancel ${state.approvalBusy ? 'disabled' : ''}>Cancel</button></div></section>` : '';
     // The history question. Same shape as the approval prompt above, because it
     // is the same kind of moment: Thomas needs an answer before it can act, and
@@ -650,6 +678,7 @@
     root.querySelectorAll('[data-code-tree-dir]').forEach(button => button.addEventListener('click', () => { void safely(() => loadTree(button.dataset.codeTreeDir), 'Could not open that folder.'); }));
     root.querySelectorAll('[data-code-tree-file]').forEach(button => button.addEventListener('click', () => { void safely(() => loadFile(button.dataset.codeTreeFile), 'Could not preview that file.'); }));
     root.querySelector('[data-code-file-close]')?.addEventListener('click', () => { state.filePreview = null; render(); });
+    root.querySelector('[data-code-preview-toggle]')?.addEventListener('click', () => { state.filePreviewRendered = state.filePreviewRendered === false; render(); });
     root.querySelector('[data-code-approve]')?.addEventListener('click', () => { void safely(approvePending, 'Approval could not be completed.'); });
     root.querySelector('[data-code-approval-cancel]')?.addEventListener('click', () => { state.pendingApproval = null; state.pendingRequest = null; state.runStatus = 'stopped'; pushLiveEvent({ type: 'stopped', text: 'Approval cancelled. No Code action was run.' }); render(); });
     const answerHistory = (choice) => {
