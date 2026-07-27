@@ -223,6 +223,12 @@ def build_active_task_digest(
     limit: int = 3,
 ) -> str:
     rows = session_active_delegations(session_id, repo_root=repo_root)
+    # session_active_delegations returns EVERY execution for the session despite
+    # its name, and this header tells the model these are things it can stop. A
+    # finished task in the list is therefore a standing instruction to lie: one
+    # session here holds 28 tasks, all completed, and every turn was told three
+    # were running and cancellable.
+    rows = [row for row in rows if str(row.get("state") or "").strip().lower() not in _TERMINAL_TASK_STATES]
     if not rows:
         return ""
     lines = ["Background work in this chat: to change or stop a RUNNING one, call update_task with its [task <ref>]:"]

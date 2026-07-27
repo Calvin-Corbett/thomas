@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+# A task in one of these states is over. Nothing can be steered or stopped, and
+# nothing further will happen to it.
+_FINISHED_TASK_STATES = frozenset(
+    {"completed", "verified", "failed", "abandoned", "cancelled", "canceled", "done"}
+)
+
 
 def build_active_task_digest_from_rows(
     rows: list[dict[str, Any]],
@@ -11,8 +17,22 @@ def build_active_task_digest_from_rows(
     limit: int = 3,
     default_backend: str,
 ) -> str:
-    """Format active execution records for the chat model's task-control context."""
+    """Format still-running execution records for the chat model's task context.
 
+    Finished work is filtered out here because the rows arrive unfiltered:
+    session_active_delegations returns EVERY execution for the session despite
+    its name. The header tells the model these are things it can stop, so a
+    completed task in the list is a standing instruction to lie -- one of this
+    user's sessions holds 28 tasks, all finished, and every single turn was told
+    three of them were running and could be cancelled. That is the mechanism
+    behind "your task is still running" answers about work that finished days
+    ago, and behind steer and cancel commands landing on a corpse. It also spent
+    roughly 700 tokens a turn saying so.
+    """
+
+    if not rows:
+        return ""
+    rows = [row for row in rows if str(row.get("state") or "").strip().lower() not in _FINISHED_TASK_STATES]
     if not rows:
         return ""
     lines = ["Background work in this chat: to change or stop a RUNNING one, call update_task with its [task <ref>]:"]
