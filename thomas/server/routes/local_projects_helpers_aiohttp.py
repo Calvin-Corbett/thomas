@@ -710,17 +710,17 @@ def _build_project_dossier(
 
 
 def _refresh_projects(app: web.Application) -> list[dict[str, Any]]:
+    # An invisible folder is an unplugged drive, not a deleted project, and
+    # callers write this back over the registry. Mark, never drop.
     projects = _read_registry(app)
-    missing_roots = []
-    for project in projects:
-        root_path = _safe_text(project.get("root_path"))
-        if not root_path or not Path(root_path).exists():
-            missing_roots.append(project.get("id"))
-    projects = [p for p in projects if p.get("id") not in missing_roots]
     for index, project in enumerate(projects):
+        root_path = _safe_text(project.get("root_path"))
+        project["offline"] = not (root_path and Path(root_path).exists())
+        if project["offline"]:
+            continue
         try:
-            root = Path(project.get("root_path"))
-            updated = _build_project_dossier(root, existing=project, touch=False, index=index)
+            updated = _build_project_dossier(Path(root_path), existing=project, touch=False, index=index)
+            updated["offline"] = False
             projects[index] = updated
         # RecursionError is deliberate: a dossier parses JSON inside the project,
         # and a deeply nested file raises that, not ValueError. It would abort the
