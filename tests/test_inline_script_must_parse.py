@@ -52,7 +52,9 @@ def test_a_broken_standalone_script_is_still_caught(tmp_path: Path) -> None:
 
     failures = _artifact_preflight_failures(tmp_path, ["app.js"])
 
-    assert failures and "does not parse" in failures[0]
+    # A lone unreferenced script is BOTH unparseable and orphaned, and both are
+    # worth saying, so do not depend on which is reported first.
+    assert any("does not parse" in f for f in failures), failures
 
 
 def test_modern_syntax_is_not_mistaken_for_an_error(tmp_path: Path) -> None:

@@ -203,6 +203,67 @@ def _javascript_syntax_error(source: str) -> str:
     return "JavaScript could not be parsed"
 
 
+_ORPHAN_CHECK_SUFFIXES = {".js", ".mjs", ".cjs", ".css"}
+_ORPHAN_SCAN_SUFFIXES = {".html", ".htm", ".js", ".mjs", ".cjs", ".ts", ".jsx", ".tsx", ".json", ".css"}
+_ORPHAN_SCAN_MAX_FILES = 2000
+_ORPHAN_SCAN_MAX_BYTES = 2 * 1024 * 1024
+
+
+def _orphaned_web_assets(cwd: str | Path, files: list[str]) -> list[str]:
+    """Find a web asset this run wrote that nothing in the project loads.
+
+    Thomas was asked to give a game a third-person camera. It wrote
+    trey-depth-renderer.js -- 8.5KB of genuine perspective projection, horizon,
+    depth sorting and zombie sprites -- and never added a script tag for it. The
+    page still had exactly one inline script and looked identical. Every check
+    passed, because every check asks "does this parse", and dead code parses
+    perfectly.
+
+    Deliberately conservative: a file counts as reachable if its NAME appears
+    anywhere in any project source -- a script tag, an import, a dynamic
+    import(), a Worker, a manifest entry, a bundler config. Only a file nothing
+    mentions at all is reported, so a build step or an unusual loader is not
+    called a mistake.
+    """
+    root = Path(cwd).resolve()
+    candidates = [
+        path
+        for path in ((root / name).resolve() for name in files)
+        if path.suffix.lower() in _ORPHAN_CHECK_SUFFIXES and path.is_file() and path.is_relative_to(root)
+    ]
+    if not candidates:
+        return []
+
+    haystack: list[str] = []
+    scanned = 0
+    for path in root.rglob("*"):
+        if scanned >= _ORPHAN_SCAN_MAX_FILES:
+            break
+        if not path.is_file() or path.suffix.lower() not in _ORPHAN_SCAN_SUFFIXES:
+            continue
+        if any(part in {".git", "node_modules", ".thomas"} for part in path.parts):
+            continue
+        if path.resolve() in {c for c in candidates}:
+            continue  # a file mentioning only itself is still an orphan
+        try:
+            if path.stat().st_size > _ORPHAN_SCAN_MAX_BYTES:
+                continue
+            haystack.append(path.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        scanned += 1
+    blob = "\n".join(haystack)
+
+    failures: list[str] = []
+    for path in candidates:
+        if path.name not in blob:
+            failures.append(
+                f"{path.name} was written but nothing loads it -- no script tag, import or reference "
+                f"anywhere in the project, so none of it runs"
+            )
+    return failures
+
+
 def _artifact_preflight_failures(cwd: str | Path, files: list[str]) -> list[str]:
     """Find safe, deterministic web boot failures before the verifier subprocess.
 
@@ -212,7 +273,7 @@ def _artifact_preflight_failures(cwd: str | Path, files: list[str]) -> list[str]
     real verifier subprocess exits nonzero and the streamed returncode is honest.
     """
     root = Path(cwd).resolve()
-    failures: list[str] = []
+    failures: list[str] = _orphaned_web_assets(root, files)
     checked: set[Path] = set()
 
     def inspect_script(path: Path, label: str) -> None:
