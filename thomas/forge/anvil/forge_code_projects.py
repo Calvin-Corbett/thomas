@@ -15,11 +15,66 @@ class ForgeCodeProjectError(ValueError):
     """Raised when a requested Forge Code project is not a usable repository."""
 
 
-def validate_project_root(value: str | Path | None, *, fallback: str | Path) -> Path:
+def _git(args: list[str], *, cwd: Path | str, timeout: int = 15) -> subprocess.CompletedProcess[str]:
+    """Run git against a folder the user explicitly chose.
+
+    ``safe.directory`` is set for that one invocation, and only that one. Git
+    refuses to read a repository whose directory is owned by a different OS
+    account -- "detected dubious ownership" -- which protects you from a hostile
+    repo dropped on a shared machine. On this user's box the whole F:\\DevHub
+    tree carries a SID from a previous Windows install, so every project on that
+    drive was unreadable: the folder could not be inspected, could not be
+    initialised, and could not be opened. Two of their real projects live there.
+
+    Naming the exact path scopes the trust to the folder the user just picked,
+    and touches no global git config. It is not a blanket `safe.directory=*`,
+    and it never runs against a path the user did not choose.
+    """
+    root = str(cwd)
+    return subprocess.run(
+        ["git", "-c", f"safe.directory={root}", *args],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+
+class ForgeCodeHistoryRequired(ForgeCodeProjectError):
+    """The folder is usable, but it has no version history and nobody has said
+    whether that is acceptable.
+
+    Distinct from ForgeCodeProjectError so a caller can offer the choice instead
+    of reporting a dead end. ``project_path`` is the resolved directory, so the
+    caller can name it and act on it without re-resolving.
+    """
+
+    def __init__(self, message: str, *, project_path: Path) -> None:
+        super().__init__(message)
+        self.project_path = project_path
+
+
+def validate_project_root(
+    value: str | Path | None,
+    *,
+    fallback: str | Path,
+    allow_without_history: bool = False,
+) -> Path:
     """Resolve ``value`` to its containing git repository root.
 
-    Forge change attribution and revert are git-backed, so non-repositories are
-    rejected instead of silently running with misleading review controls.
+    Change attribution and Revert are git-backed, so a folder with no history
+    cannot offer them. That is a reason to SAY SO, not a reason to refuse: 117 of
+    the 121 projects in this user's library had no .git, and every one of them was
+    unopenable. The error even promised that Thomas "asks first" for your own
+    folders -- nothing anywhere asked. It was a wall with a sign describing a door
+    that did not exist.
+
+    So a folder without history now raises ForgeCodeHistoryRequired, which the
+    caller turns into a choice. Pass ``allow_without_history=True`` once someone
+    has actually chosen to work without undo, and the directory itself is
+    returned. Every existing caller keeps the old refusing behaviour by default.
     """
 
     raw = Path(value).expanduser() if value else Path(fallback)
@@ -32,18 +87,18 @@ def validate_project_root(value: str | Path | None, *, fallback: str | Path) -> 
     if not candidate.is_dir():
         raise ForgeCodeProjectError("project_root must be a directory")
     try:
-        proc = subprocess.run(
-            ["git", "-C", str(candidate), "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            encoding="utf-8",
-            errors="replace",
-        )
+        proc = _git(["rev-parse", "--show-toplevel"], cwd=candidate)
     except (OSError, subprocess.SubprocessError) as exc:
         raise ForgeCodeProjectError("project_root could not be inspected") from exc
     if proc.returncode != 0 or not proc.stdout.strip():
-        raise ForgeCodeProjectError("project_root must be inside a git repository")
+        if allow_without_history:
+            # Chosen deliberately: work here with no undo. The directory itself
+            # is the root -- there is no repository to take a toplevel from.
+            return candidate
+        raise ForgeCodeHistoryRequired(
+            "project_root must be inside a git repository",
+            project_path=candidate,
+        )
     try:
         root = Path(proc.stdout.strip()).resolve(strict=True)
     except OSError as exc:
@@ -150,6 +205,51 @@ def ensure_git_repo(path: str | Path) -> bool:
     return True
 
 
+def initialize_history(path: str | Path) -> Path:
+    """Give a folder version history because someone asked for it.
+
+    ``ensure_git_repo`` deliberately refuses anything outside ~/.thomas: putting
+    a .git in someone's own folder unasked is not a tool's decision. This is the
+    other half -- the same operation, reached only after an explicit choice. It
+    is why the caller can now offer that choice instead of reporting a dead end.
+
+    Thomas's own source checkout is refused outright and no consent unlocks it:
+    a "make me a game" run must never be able to edit the product tree, where
+    Revert would sweep up unrelated work.
+    """
+    candidate = Path(path).expanduser()
+    if not candidate.is_absolute():
+        raise ForgeCodeProjectError("project_root must be an absolute path")
+    try:
+        candidate = candidate.resolve(strict=True)
+    except OSError as exc:
+        raise ForgeCodeProjectError("project_root does not exist") from exc
+    if not candidate.is_dir():
+        raise ForgeCodeProjectError("project_root must be a directory")
+
+    source_root = thomas_source_repo_root()
+    if source_root is not None:
+        try:
+            candidate.relative_to(source_root)
+        except ValueError:
+            pass
+        else:
+            raise ForgeCodeProjectError("project_root must not be inside Thomas's own source tree")
+
+    if (candidate / ".git").exists():
+        return candidate
+    try:
+        proc = _git(["init", "--initial-branch=main"], cwd=candidate)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ForgeCodeProjectError("project folder could not be prepared for editing") from exc
+    if proc.returncode != 0:
+        raise ForgeCodeProjectError(
+            f"project folder could not be prepared for editing: {proc.stderr.strip()[:200]}"
+        )
+    _seal_initial_commit(candidate)
+    return candidate
+
+
 def _seal_initial_commit(root: Path) -> None:
     """Record what was already there, so the first edit can be undone.
 
@@ -170,40 +270,20 @@ def _seal_initial_commit(root: Path) -> None:
         "commit.gpgsign=false",
     ]
     try:
-        head = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "--verify", "HEAD"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            encoding="utf-8",
-            errors="replace",
-        )
+        head = _git(["rev-parse", "--verify", "HEAD"], cwd=root)
         if head.returncode == 0:
             return  # already has history
-        subprocess.run(
-            ["git", "-C", str(root), *identity, "add", "-A"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            encoding="utf-8",
-            errors="replace",
-        )
-        subprocess.run(
+        _git([*identity, "add", "-A"], cwd=root, timeout=30)
+        _git(
             [
-                "git",
-                "-C",
-                str(root),
                 *identity,
                 "commit",
                 "--allow-empty",
                 "-m",
                 "Baseline: contents before Thomas opened this project",
             ],
-            capture_output=True,
-            text=True,
+            cwd=root,
             timeout=30,
-            encoding="utf-8",
-            errors="replace",
         )
     except (OSError, subprocess.SubprocessError) as exc:  # pragma: no cover - defensive
         log.warning("could not seal a baseline commit in %s: %s", root, exc)
@@ -282,13 +362,23 @@ def bind_conversation(
     project_root: str | Path,
     *,
     settings: dict[str, Any] | None = None,
+    allow_without_history: bool = False,
 ) -> dict[str, Any]:
-    """Persist the selected repository and settings for one Code conversation."""
+    """Persist the selected repository and settings for one Code conversation.
+
+    ``allow_without_history`` has to be threaded through: the caller has already
+    resolved the root and, for a folder opened deliberately without undo, this
+    second validation would otherwise reject what was just accepted.
+    """
 
     cid = str(conversation_id or "").strip()
     if not cid:
         raise ForgeCodeProjectError("conversation_id is required")
-    root = validate_project_root(project_root, fallback=catalog_root)
+    root = validate_project_root(
+        project_root,
+        fallback=catalog_root,
+        allow_without_history=allow_without_history,
+    )
     registry = _load_registry(catalog_root)
     row = {"project_root": str(root), "settings": dict(settings or {})}
     registry[cid] = row

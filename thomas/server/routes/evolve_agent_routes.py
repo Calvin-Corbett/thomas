@@ -379,6 +379,11 @@ def build_evolve_agent_handlers(
         source_evolve_item = source_evolve_item if isinstance(source_evolve_item, dict) else None
 
         requested_project = body.get("project_root")
+        # "setup" | "without" | "" -- the answer to the history question, absent
+        # until the person has actually been asked one.
+        history_choice = str(body.get("history_choice") or "").strip().lower()
+        if history_choice not in ("setup", "without"):
+            history_choice = ""
         try:
             if conversation_id:
                 project_root, conv = _load_conversation(conversation_id)
@@ -407,7 +412,13 @@ def build_evolve_agent_handlers(
                 _fallback = (
                     catalog_root if requested_project else forge_code_projects.default_scratch_project(catalog_root)
                 )
-                project_root = forge_code_projects.validate_project_root(requested_project, fallback=_fallback)
+                project_root = forge_code_projects.validate_project_root(
+                    requested_project,
+                    fallback=_fallback,
+                    allow_without_history=(history_choice == "without"),
+                )
+                if history_choice == "setup":
+                    project_root = forge_code_projects.initialize_history(project_root)
                 # HARD SAFETY NET: a stale client localStorage (or catalog root)
                 # can still resolve to Thomas's own source repo, which Code must
                 # never edit. If it does, silently substitute a scratch project.
@@ -415,6 +426,29 @@ def build_evolve_agent_handlers(
                 if _repo is not None and project_root == _repo:
                     project_root = forge_code_projects.default_scratch_project(catalog_root)
                 conv = None
+        except forge_code_projects.ForgeCodeHistoryRequired as exc:
+            # Not a dead end -- a question. The old message promised Thomas
+            # "asks first" for your own folders and then never asked, so 117 of
+            # this user's 121 projects were simply unopenable.
+            name = Path(str(exc.project_path)).name or "That folder"
+            return web.json_response(
+                {
+                    "ok": False,
+                    "code": "history_choice_required",
+                    "needs_history_choice": True,
+                    "project_root": str(exc.project_path),
+                    "project_name": name,
+                    "error": (
+                        f'"{name}" has no version history, so Thomas cannot undo its own edits there. '
+                        "Set up history so changes can be reverted, or work without undo."
+                    ),
+                    "choices": [
+                        {"id": "setup", "label": "Set up history", "recommended": True},
+                        {"id": "without", "label": "Work without undo"},
+                    ],
+                },
+                status=409,
+            )
         except forge_code_projects.ForgeCodeProjectError as exc:
             return web.json_response({"ok": False, "error": str(exc), "code": "invalid_project_root"}, status=400)
 
@@ -829,6 +863,11 @@ def build_evolve_agent_handlers(
         if not isinstance(source, dict):
             source = None
         requested_root = (body or {}).get("project_root")
+        # "setup" | "without" | "" -- the answer to the history question, absent
+        # until the person has actually been asked.
+        history_choice = str((body or {}).get("history_choice") or "").strip().lower()
+        if history_choice not in ("setup", "without"):
+            history_choice = ""
         try:
             # Everything Thomas builds lands in ~/.thomas/workspaces/<exec-id>,
             # which is never a git repo -- so every app Thomas made for the user
@@ -837,13 +876,42 @@ def build_evolve_agent_handlers(
             loop = asyncio.get_running_loop()
             if requested_root:
                 await loop.run_in_executor(None, forge_code_projects.ensure_git_repo, requested_root)
-                project_root = forge_code_projects.validate_project_root(requested_root, fallback=_root())
+                if history_choice == "setup":
+                    await loop.run_in_executor(None, forge_code_projects.initialize_history, requested_root)
+                project_root = forge_code_projects.validate_project_root(
+                    requested_root,
+                    fallback=_root(),
+                    allow_without_history=(history_choice == "without"),
+                )
             else:
                 # Resolved only when nothing was chosen, so a request that names
                 # its project never pays for creating a scratch repo it will not
                 # use. Both calls shell out to git, so they run off the loop.
                 project_root = await loop.run_in_executor(None, _unspecified_project_root, _root())
             settings = ForgeCodeSettings.from_payload(body if isinstance(body, dict) else {})
+        except forge_code_projects.ForgeCodeHistoryRequired as exc:
+            # A question, not a dead end. The previous message promised Thomas
+            # "asks first" for your own folders and then never asked, which left
+            # 117 of this user's 121 projects unopenable.
+            name = Path(str(exc.project_path)).name or "That folder"
+            return web.json_response(
+                {
+                    "ok": False,
+                    "code": "history_choice_required",
+                    "needs_history_choice": True,
+                    "project_root": str(exc.project_path),
+                    "project_name": name,
+                    "error": (
+                        f'"{name}" has no version history, so Thomas cannot undo its own edits there. '
+                        "Set up history so changes can be reverted, or work without undo."
+                    ),
+                    "choices": [
+                        {"id": "setup", "label": "Set up history", "recommended": True},
+                        {"id": "without", "label": "Work without undo"},
+                    ],
+                },
+                status=409,
+            )
         except (forge_code_projects.ForgeCodeProjectError, ForgeCodeSettingsError) as exc:
             return web.json_response(
                 {
@@ -860,7 +928,13 @@ def build_evolve_agent_handlers(
             source_evolve_item=source or None,
         )
         report = settings.capability_report()
-        forge_code_projects.bind_conversation(_root(), conv["id"], project_root, settings=report)
+        forge_code_projects.bind_conversation(
+            _root(),
+            conv["id"],
+            project_root,
+            settings=report,
+            allow_without_history=(history_choice == "without"),
+        )
         enriched = dict(conv)
         enriched["project_root"] = str(project_root)
         enriched["settings"] = report

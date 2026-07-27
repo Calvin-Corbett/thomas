@@ -13,6 +13,7 @@
     conversations: [], activeId: '', conversation: null, liveEvents: [], changes: [], tree: [], treePath: '', artifacts: [], filePreview: null,
     pendingApproval: null, pendingRequest: null, lastContext: {}, running: false, runStartedAt: 0, runStatus: 'ready', source: null,
     finishing: null, approvalBusy: false, steeringBusy: false, projectRoot: '', terminalTool: '', contextEpoch: 0, runProof: null,
+    pendingHistoryChoice: null, historyChoiceBusy: false,
     runId: '', eventCursor: 0, retryRequest: null, drawerOpen: false, drawerWidth: 360,
   };
   let adapterActive = false;
@@ -598,11 +599,15 @@
     const hasResults = Boolean(state.pendingApproval || visibleChanges.length || artifacts.length || state.filePreview);
     const preview = state.filePreview ? `<section class="tc-code-file-preview"><header><strong>${esc(state.filePreview.path)}</strong><button data-code-file-close aria-label="Close file preview"><i class="ph ph-x"></i></button></header><pre>${esc(state.filePreview.content)}</pre></section>` : '';
     const approval = state.pendingApproval ? `<section class="tc-code-approval" role="alert"><strong>Approval required</strong><p>${esc(state.pendingApproval.summary)}</p><div><button data-code-approve ${state.approvalBusy ? 'disabled' : ''}>${state.approvalBusy ? 'Approving...' : 'Approve once'}</button><button data-code-approval-cancel ${state.approvalBusy ? 'disabled' : ''}>Cancel</button></div></section>` : '';
+    // The history question. Same shape as the approval prompt above, because it
+    // is the same kind of moment: Thomas needs an answer before it can act, and
+    // the answer belongs on screen rather than in a log file.
+    const historyAsk = state.pendingHistoryChoice ? `<section class="tc-code-approval" role="alert"><strong>${esc(state.pendingHistoryChoice.projectName || 'This folder')} has no version history</strong><p>${esc(state.pendingHistoryChoice.message)}</p><div><button data-code-history-setup ${state.historyChoiceBusy ? 'disabled' : ''}>${state.historyChoiceBusy ? 'Working...' : 'Set up history'}</button><button data-code-history-without ${state.historyChoiceBusy ? 'disabled' : ''}>Work without undo</button><button data-code-history-cancel ${state.historyChoiceBusy ? 'disabled' : ''}>Cancel</button></div></section>` : '';
     const projectLabel = state.projectRoot ? projectDisplayLabel() : 'Choose a project';
     root.innerHTML = `<div class="tc-code-panel${state.drawerOpen ? ' is-drawer-open' : ''}" style="--tc-code-drawer-width:${clampDrawerWidth(state.drawerWidth)}px">
       <header class="tc-code-context"><button data-code-results-jump type="button" aria-expanded="${state.drawerOpen ? 'true' : 'false'}"><i class="ph ph-sidebar-simple"></i> Activity <small>${statusLabels[state.runStatus] || 'Ready'}</small>${hasResults ? '<span class="tc-code-activity-count" aria-hidden="true"></span>' : ''}</button></header>
       <div class="tc-code-layout">
-        <section class="tc-code-transcript" aria-label="Code conversation"><div id="tc-code-turns">${turns.map(turnHtml).join('') || '<div class="tc-code-empty"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>What should we make?</strong><span>Describe the outcome in the composer below. Keep using this same conversation for changes, tests, and review.</span></div>'}</div>${liveTurn}</section>
+        <section class="tc-code-transcript" aria-label="Code conversation">${historyAsk}<div id="tc-code-turns">${turns.map(turnHtml).join('') || '<div class="tc-code-empty"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>What should we make?</strong><span>Describe the outcome in the composer below. Keep using this same conversation for changes, tests, and review.</span></div>'}</div>${liveTurn}</section>
         <aside class="tc-code-actions" aria-label="Code activity" aria-hidden="${state.drawerOpen ? 'false' : 'true'}"${state.drawerOpen ? '' : ' inert'}><section class="tc-code-rail-section"><div class="tc-code-section-title">Outputs</div>${approval}${preview}${artifactRows}${changeRows || (!preview && !artifactRows ? '<p class="tc-code-rail-empty">Previews, changed files, and proof will appear here without interrupting the conversation.</p>' : '')}${changeRows && !state.running ? `<button id="tc-code-checkpoint" class="tc-code-checkpoint" title="Commit these changes on a thomas-code/ branch">Checkpoint — commit these changes</button>` : ''}</section><section class="tc-code-rail-section tc-code-tree"><div class="tc-code-tree-head"><div class="tc-code-section-title">Files · ${esc(state.treePath || '/')}</div>${state.treePath ? '<button id="tc-code-tree-up">Up</button>' : ''}</div><ul>${treeRows || '<li class="tc-code-muted">Choose a project beside Tools to browse its files.</li>'}</ul></section><form id="tc-code-steer-form" class="tc-code-steer" ${state.running ? '' : 'hidden'}><label for="tc-code-steer">Steer Thomas</label><input id="tc-code-steer" name="message" required placeholder="Change direction…" ${state.steeringBusy ? 'disabled' : ''}><button ${state.steeringBusy ? 'disabled' : ''}>${state.steeringBusy ? 'Confirming…' : 'Apply'}</button><button type="button" id="tc-code-stop" title="Stop this run" ${state.steeringBusy ? 'disabled' : ''}>Stop</button></form></aside>
       </div></div>`;
     const activityDrawer = root.querySelector('.tc-code-actions');
@@ -647,6 +652,24 @@
     root.querySelector('[data-code-file-close]')?.addEventListener('click', () => { state.filePreview = null; render(); });
     root.querySelector('[data-code-approve]')?.addEventListener('click', () => { void safely(approvePending, 'Approval could not be completed.'); });
     root.querySelector('[data-code-approval-cancel]')?.addEventListener('click', () => { state.pendingApproval = null; state.pendingRequest = null; state.runStatus = 'stopped'; pushLiveEvent({ type: 'stopped', text: 'Approval cancelled. No Code action was run.' }); render(); });
+    const answerHistory = (choice) => {
+      const ask = state.pendingHistoryChoice;
+      if (!ask || state.historyChoiceBusy) return;
+      state.historyChoiceBusy = true;
+      render();
+      void safely(async () => {
+        try {
+          const ok = await newConversation(ask.projectRoot, ask.projectLabel, { historyChoice: choice });
+          if (ok) pushLiveEvent({ type: 'planning', text: choice === 'setup' ? `Version history set up in ${ask.projectName}. Thomas can undo its edits here.` : `Opened ${ask.projectName} without undo. Thomas cannot revert its own edits in this folder.` });
+        } finally {
+          state.historyChoiceBusy = false;
+          render();
+        }
+      }, 'That folder could not be opened.');
+    };
+    root.querySelector('[data-code-history-setup]')?.addEventListener('click', () => answerHistory('setup'));
+    root.querySelector('[data-code-history-without]')?.addEventListener('click', () => answerHistory('without'));
+    root.querySelector('[data-code-history-cancel]')?.addEventListener('click', () => { state.pendingHistoryChoice = null; state.historyChoiceBusy = false; render(); });
     root.querySelector('#tc-code-steer-form')?.addEventListener('submit', event => { event.preventDefault(); void safely(() => steer(new FormData(event.currentTarget).get('message')), 'Could not steer the Code task.'); });
     root.querySelector('#tc-code-stop')?.addEventListener('click', () => { void safely(() => stopRun(), 'Could not stop the Code run.'); });
     root.querySelector('#tc-code-checkpoint')?.addEventListener('click', () => { void safely(() => checkpointChanges(), 'Could not checkpoint the changes.'); });
@@ -743,15 +766,31 @@
     return true;
   }
 
-  async function newConversation(projectRoot, projectLabel) {
+  async function newConversation(projectRoot, projectLabel, options) {
     if (!canSwitchContext()) return false;
     const epoch = state.contextEpoch + 1;
     state.contextEpoch = epoch;
     const context = host().getContext ? host().getContext() : {};
     const requestedRoot = String(projectRoot == null ? state.projectRoot : projectRoot).trim();
-    const response = await fetch('/api/evolve/agent/conversations/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_root: requestedRoot || undefined, ...lifecycle().requestSettings(context) }) });
+    const historyChoice = String((options && options.historyChoice) || '').trim();
+    const response = await fetch('/api/evolve/agent/conversations/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_root: requestedRoot || undefined, history_choice: historyChoice || undefined, ...lifecycle().requestSettings(context) }) });
     const data = await response.json();
+    // A folder with no version history is a QUESTION, not a failure. Throwing
+    // here is what made 117 of this user's 121 projects unopenable: the menu
+    // closed, the chip never changed, and the only explanation went to a log.
+    if (response.status === 409 && data && data.needs_history_choice) {
+      state.pendingHistoryChoice = {
+        projectRoot: String(data.project_root || requestedRoot),
+        projectName: String(data.project_name || ''),
+        message: String(data.error || ''),
+        projectLabel: String(projectLabel || ''),
+      };
+      state.historyChoiceBusy = false;
+      render();
+      return false;
+    }
     if (!response.ok || !data.ok) throw new Error(data.error || 'Could not create Code task.');
+    state.pendingHistoryChoice = null;
     if (epoch !== state.contextEpoch) return false;
     clearContextState();
     state.activeId = data.conversation.id;
