@@ -345,6 +345,29 @@
     return `<section class="tc-code-artifact is-link"><header>${title}</header><span>${esc(artifact.kind || 'artifact')} result</span></section>`;
   }
 
+  // What Thomas just made, named and openable, inside the reply itself.
+  // The turn already carries artifacts -- [{file:'trey-badlands.html',kind:'html'}]
+  // -- and all the reply said was "1 result ready". A count is not a delivery:
+  // the owner had to follow a build by typing "where is it" and then "what's the
+  // full directory name". Handing back a thing you cannot open is the same as
+  // not handing it back.
+  function artifactCardsHtml(turn) {
+    const items = (turn.artifacts || []).filter(a => a && a.file && !isInternalResultPath(a.file));
+    if (!items.length) return '';
+    const rows = items.map(a => {
+      const file = String(a.file);
+      const playable = /\.x?html?$/i.test(file);
+      const icon = playable ? 'ph-play-circle' : 'ph-file';
+      const verb = playable ? 'Open it' : 'View';
+      return `<button class="tc-code-artifact-open" data-code-open-artifact="${esc(file)}" type="button">
+        <i class="ph ${icon}" aria-hidden="true"></i>
+        <span class="tc-code-artifact-name">${esc(file)}</span>
+        <span class="tc-code-artifact-verb">${verb}</span>
+      </button>`;
+    }).join('');
+    return `<div class="tc-code-artifacts"><div class="tc-code-artifacts-head">${items.length === 1 ? 'Thomas made this' : `Thomas made ${items.length} things`}</div>${rows}</div>`;
+  }
+
   function turnHtml(turn) {
     if (turn.role === 'user') return `<article class="tc-code-turn is-user"><div>${esc(turn.text)}</div></article>`;
     const changedCount = (turn.changed_files || []).filter(file => !isInternalResultPath(file)).length;
@@ -359,7 +382,7 @@
     const narrative = narrativeActivityHtml(activityEvents, true);
     const technicalEvents = activityEvents.filter(isTechnicalEvent);
     const resultCount = (turn.artifacts || []).filter(artifact => !isInternalResultPath(artifact.file)).length;
-    return `<article class="tc-code-turn is-agent"><div class="tc-code-message-head"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>Thomas</strong><small>${esc(turn.model || 'Code')}</small><button class="tc-code-copy" data-code-copy-reply type="button" aria-label="Copy Thomas reply"><i class="ph ph-copy"></i></button></div><div class="tc-code-turn-body">${narrative}${technicalActivityHtml(technicalEvents, true)}<div class="tc-code-reply${turn.ok ? '' : ' is-error'}">${esc(reply)}</div>${runReportHtml(turn.report)}${changedCount || resultCount ? `<div class="tc-code-result-note">${changedCount ? `<span><i class="ph ph-files"></i>${changedCount} file${changedCount === 1 ? '' : 's'} changed</span>` : ''}${resultCount ? `<span><i class="ph ph-browser"></i>${resultCount} result${resultCount === 1 ? '' : 's'} ready</span>` : ''}</div>` : ''}</div></article>`;
+    return `<article class="tc-code-turn is-agent"><div class="tc-code-message-head"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>Thomas</strong><small>${esc(turn.model || 'Code')}</small><button class="tc-code-copy" data-code-copy-reply type="button" aria-label="Copy Thomas reply"><i class="ph ph-copy"></i></button></div><div class="tc-code-turn-body">${narrative}${technicalActivityHtml(technicalEvents, true)}<div class="tc-code-reply${turn.ok ? '' : ' is-error'}">${esc(reply)}</div>${artifactCardsHtml(turn)}${runReportHtml(turn.report)}${changedCount ? `<div class="tc-code-result-note"><span><i class="ph ph-files"></i>${changedCount} file${changedCount === 1 ? '' : 's'} changed</span></div>` : ''}</div></article>`;
   }
 
   function transcriptScroller(root) {
@@ -679,6 +702,11 @@
     root.querySelectorAll('[data-code-tree-file]').forEach(button => button.addEventListener('click', () => { void safely(() => loadFile(button.dataset.codeTreeFile), 'Could not preview that file.'); }));
     root.querySelector('[data-code-file-close]')?.addEventListener('click', () => { state.filePreview = null; render(); });
     root.querySelector('[data-code-preview-toggle]')?.addEventListener('click', () => { state.filePreviewRendered = state.filePreviewRendered === false; render(); });
+    root.querySelectorAll('[data-code-open-artifact]').forEach(button => button.addEventListener('click', () => {
+      state.filePreviewRendered = true;   // a page opens PLAYABLE, not as source
+      state.drawerOpen = true;            // and the panel it lands in is open
+      void safely(() => loadFile(button.dataset.codeOpenArtifact), 'That result could not be opened.');
+    }));
     root.querySelector('[data-code-approve]')?.addEventListener('click', () => { void safely(approvePending, 'Approval could not be completed.'); });
     root.querySelector('[data-code-approval-cancel]')?.addEventListener('click', () => { state.pendingApproval = null; state.pendingRequest = null; state.runStatus = 'stopped'; pushLiveEvent({ type: 'stopped', text: 'Approval cancelled. No Code action was run.' }); render(); });
     const answerHistory = (choice) => {
@@ -955,6 +983,23 @@
   }
 
   function finishBusy() { state.running = false; host().setBusy && host().setBusy(false); updateProjectButton(); }
+
+  // Open what the last completed turn produced. Prefers a page, because a page
+  // is the thing you can actually look at; falls back to whatever else it made.
+  async function presentNewestResult() {
+    const turns = (state.conversation && state.conversation.turns) || [];
+    for (let i = turns.length - 1; i >= 0; i -= 1) {
+      const turn = turns[i];
+      if (!turn || turn.role !== 'agent' || !turn.ok) continue;
+      const made = (turn.artifacts || []).filter(a => a && a.file && !isInternalResultPath(a.file));
+      if (!made.length) return false;
+      const pick = made.find(a => /\.x?html?$/i.test(String(a.file))) || made[0];
+      state.filePreviewRendered = true;
+      state.drawerOpen = true;
+      try { return await loadFile(String(pick.file)); } catch (e) { return false; }
+    }
+    return false;
+  }
   async function finishRun() {
     if (state.finishing) return state.finishing;
     const runId = state.runId;
@@ -969,6 +1014,11 @@
         state.liveEvents = [];
         state.artifacts = [];
         state.runProof = null;
+        // Put the thing Thomas just made in front of the person who asked for
+        // it. Finishing a build and leaving the result to be discovered is how
+        // "where is it" and "what's the full directory name" became the two
+        // messages after a successful game build.
+        void presentNewestResult();
       } else if (sameRun && results[0].status === 'fulfilled' && results[0].value === true) {
         state.runStatus = 'disconnected';
         pushLiveEvent({ type: 'error', text: 'Thomas stopped, but the just-finished Code turn is not yet present in durable history. Live evidence was preserved.' });
