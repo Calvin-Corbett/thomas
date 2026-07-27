@@ -11,7 +11,11 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
+import tempfile
 from collections.abc import Callable
+from contextlib import suppress
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
@@ -151,6 +155,54 @@ def _has_obvious_top_level_throw(source: str) -> bool:
     return False
 
 
+def _javascript_syntax_error(source: str) -> str:
+    """Return a one-line parse error for JavaScript that cannot even be read.
+
+    A syntax error is the loudest possible failure and the easiest to miss from
+    the outside: the browser refuses the whole script, nothing runs, and the page
+    is simply blank. Thomas shipped a 29KB game whose entire body was one script
+    with `const a={},b={},...,wave:1,...}` -- object-literal syntax spliced into a
+    const declaration list. It reported success. Nothing had ever tried to parse
+    what it wrote.
+
+    ``node --check`` parses WITHOUT executing, so this keeps the module's rule
+    that no generated JavaScript runs in Thomas's process. If node is missing the
+    check is skipped rather than guessed at -- a wrong "your game is broken" is
+    worse than no opinion.
+    """
+    if not str(source or "").strip():
+        return ""
+    node = shutil.which("node")
+    if not node:
+        return ""
+    tmp = None
+    try:
+        with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as handle:
+            handle.write(source)
+            tmp = Path(handle.name)
+        proc = subprocess.run(
+            [node, "--check", str(tmp)],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    finally:
+        if tmp is not None:
+            with suppress(OSError):
+                tmp.unlink()
+    if proc.returncode == 0:
+        return ""
+    for line in (proc.stderr or "").splitlines():
+        stripped = line.strip()
+        if "Error:" in stripped:
+            return stripped[:200]
+    return "JavaScript could not be parsed"
+
+
 def _artifact_preflight_failures(cwd: str | Path, files: list[str]) -> list[str]:
     """Find safe, deterministic web boot failures before the verifier subprocess.
 
@@ -174,6 +226,9 @@ def _artifact_preflight_failures(cwd: str | Path, files: list[str]) -> list[str]
             return
         if _has_obvious_top_level_throw(source):
             failures.append(f"obvious JavaScript boot failure in {label}: top-level throw")
+        parse_error = _javascript_syntax_error(source)
+        if parse_error:
+            failures.append(f"{label} does not parse, so nothing on the page runs: {parse_error}")
 
     for name in files:
         path = (root / name).resolve()
@@ -194,8 +249,17 @@ def _artifact_preflight_failures(cwd: str | Path, files: list[str]) -> list[str]
                 if src and "://" not in src and not src.startswith("//"):
                     linked = (root / src.lstrip("/")) if src.startswith("/") else (path.parent / src)
                     inspect_script(linked, f"{name} -> {src}")
-            elif _has_obvious_top_level_throw(match.group("body") or ""):
-                failures.append(f"obvious JavaScript boot failure in {name} inline script {number}: top-level throw")
+            else:
+                body = match.group("body") or ""
+                if _has_obvious_top_level_throw(body):
+                    failures.append(
+                        f"obvious JavaScript boot failure in {name} inline script {number}: top-level throw"
+                    )
+                parse_error = _javascript_syntax_error(body)
+                if parse_error:
+                    failures.append(
+                        f"{name} inline script {number} does not parse, so the page is blank: {parse_error}"
+                    )
     return failures
 
 
