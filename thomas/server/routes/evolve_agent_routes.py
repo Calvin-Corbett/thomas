@@ -874,6 +874,15 @@ def build_evolve_agent_handlers(
             # was unopenable until now. Prepare Thomas's own folders on demand.
             # Folders outside ~/.thomas belong to the user and are left alone.
             loop = asyncio.get_running_loop()
+            new_project_name = str((body or {}).get("new_project_name") or "").strip()
+            if new_project_name and not requested_root:
+                # A NEW project gets its own folder. Sending nothing used to mean
+                # "share the one scratch repo", which is how the user's pacman,
+                # star-catcher and museum all ended up in Thomas's working
+                # directory together, overwriting one another's index.html.
+                requested_root = str(
+                    await loop.run_in_executor(None, forge_code_projects.create_named_project, new_project_name)
+                )
             if requested_root:
                 await loop.run_in_executor(None, forge_code_projects.ensure_git_repo, requested_root)
                 if history_choice == "setup":

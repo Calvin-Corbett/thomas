@@ -289,6 +289,52 @@ def _seal_initial_commit(root: Path) -> None:
         log.warning("could not seal a baseline commit in %s: %s", root, exc)
 
 
+_PROJECT_NAME_SAFE = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -_"
+
+
+def create_named_project(name: str) -> Path:
+    """Make a NEW, ISOLATED project folder under ~/.thomas/projects.
+
+    "New project" previously sent no project_root at all, so the server fell
+    back to a single shared scratch repo. Every new project landed in the same
+    directory: 26 entries deep with pacman.html, star-catcher.html, museum.html
+    and one index.html that each new build overwrote. The user noticed Thomas
+    reading games they had made months earlier -- correctly, because those files
+    were sitting in its working directory.
+
+    Names are sanitised to a flat folder name. A path separator, a drive letter
+    or a .. would otherwise let a project name choose where the project lives.
+    """
+    raw = " ".join(str(name or "").split()).strip()
+    cleaned = "".join(ch for ch in raw if ch in _PROJECT_NAME_SAFE).strip(" -_.")
+    slug = cleaned[:64] or "New project"
+
+    base = thomas_owned_root() / "projects"
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise ForgeCodeProjectError("project folder could not be created") from exc
+
+    target = base / slug
+    if target.exists():
+        for suffix in range(2, 500):
+            candidate = base / f"{slug} {suffix}"
+            if not candidate.exists():
+                target = candidate
+                break
+        else:
+            raise ForgeCodeProjectError("project folder could not be created")
+    try:
+        target.mkdir(parents=True, exist_ok=False)
+    except OSError as exc:
+        raise ForgeCodeProjectError("project folder could not be created") from exc
+
+    # Inside ~/.thomas, so this is Thomas's own tree and initialising is ours to
+    # do without asking -- the consent question is only for the user's folders.
+    ensure_git_repo(target)
+    return target.resolve()
+
+
 def default_scratch_project(catalog_root: str | Path) -> Path:
     """Default project for a NEW Code conversation when the user picked none.
 

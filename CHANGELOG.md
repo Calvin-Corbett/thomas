@@ -23,6 +23,11 @@ Versioning: Semantic Versioning.
 - Natural-language semantic routing is now owned exclusively by Thomas's GPT-5.6 frontier-model turn. Regex/keyword classifiers no longer decide reply versus dispatch, Canvas versus task, specialist, fanout, project workspace, task update, UI control, Discord action, web prelaunch, workflow, model switching, or skill selection. Post-model prompt/prose classifiers no longer reinterpret or auto-reject the structured choice, and local suspicious-word matching no longer blocks a turn before the frontier model sees it. The dispatcher remains available through structured `send_task` calls, Code exposes capabilities without prompt-word filtering, and structured `skills.list` / `skills.use` let the model choose trusted skills organically. Source contracts prevent deterministic prose routing from being reintroduced.
 - Concurrent Code runs are no longer hard-capped at 3: the ceiling is now live-configurable via `THOMAS_MAX_CONCURRENT_CODE_RUNS` (default 8, safety ceiling 64) so you can run many different Code projects at once. Same-project (same-conversation) runs are still serialized to protect that project's state; only distinct projects run in parallel. The "all N slots are busy" message now tells you how to raise the limit.
 
+### Fixed (A new project gets its own folder)
+
+- **"New project" used to put every project in the same folder.** The button sent no project at all, which the server reads as "nothing chosen" and answers with a single shared scratch directory — 26 files deep, holding your pacman, star-catcher, museum, blocktown and freedom-transit builds, plus one `index.html` that each new build overwrote. This is why Thomas was reading games you made months ago: they were sitting in its working directory.
+- New project now asks for a name and creates its own folder with its own history. Two projects with the same name get separate folders rather than merging. A name containing a slash, a drive letter or `..` cannot decide where the project is created.
+
 ### Fixed (You can open your own code — 4 of 122 projects → 122 of 122)
 
 - **Picking one of your own project folders in Code mode used to do nothing.** The menu closed, the selected-project chip never changed, and the only explanation went to a log file. The reason was a hard rule that a project must already have version history — and the refusal even said that for your own folders "Thomas asks first". Nothing anywhere asked; that prompt had never been built. **117 of 121 projects in the library were unopenable.**
@@ -3975,3 +3980,4 @@ Security and reliability patch release for runtime protection, gate architecture
 ### Added
 
 - Initial Thomas CLI, REPL, tool calling, and memory engine bundle.
+

@@ -2770,7 +2770,14 @@
         const kind = action.getAttribute('data-lib-action');
         closeLibraryMenu();
         if (kind === 'browse' && window.ThomasUnifiedModes) window.ThomasUnifiedModes.pickProject();
-        if (kind === 'new' && window.ThomasUnifiedModes) window.ThomasUnifiedModes.newConversation('', '');
+        if (kind === 'new' && window.ThomasUnifiedModes) {
+          // A new project needs a name and its OWN folder. Sending nothing put
+          // every "new" project into one shared scratch directory, which is how
+          // pacman, star-catcher and museum ended up in the same folder.
+          const suggested = 'Project ' + new Date().toISOString().slice(0, 10);
+          const name = window.prompt('Name your new project', suggested);
+          if (name !== null) window.ThomasUnifiedModes.newConversation('', name.trim() || suggested, { newProjectName: name.trim() || suggested });
+        }
         return;
       }
       const card = e.target.closest('[data-lib-card]');

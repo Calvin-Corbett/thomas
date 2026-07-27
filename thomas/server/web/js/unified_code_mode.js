@@ -773,7 +773,8 @@
     const context = host().getContext ? host().getContext() : {};
     const requestedRoot = String(projectRoot == null ? state.projectRoot : projectRoot).trim();
     const historyChoice = String((options && options.historyChoice) || '').trim();
-    const response = await fetch('/api/evolve/agent/conversations/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_root: requestedRoot || undefined, history_choice: historyChoice || undefined, ...lifecycle().requestSettings(context) }) });
+    const newProjectName = String((options && options.newProjectName) || '').trim();
+    const response = await fetch('/api/evolve/agent/conversations/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_root: requestedRoot || undefined, history_choice: historyChoice || undefined, new_project_name: newProjectName || undefined, ...lifecycle().requestSettings(context) }) });
     const data = await response.json();
     // A folder with no version history is a QUESTION, not a failure. Throwing
     // here is what made 117 of this user's 121 projects unopenable: the menu

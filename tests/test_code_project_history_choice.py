@@ -137,3 +137,28 @@ def test_git_runs_are_scoped_to_the_folder_the_user_picked(monkeypatch: pytest.M
     assert cmd[2] == f"safe.directory={tmp_path}"
     assert "safe.directory=*" not in cmd
     assert seen["cwd"] == str(tmp_path)
+
+
+def test_a_new_project_gets_its_own_folder(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """"New project" used to send no project at all, so the server fell back to
+    one shared scratch repo -- 26 entries deep, with the user's pacman,
+    star-catcher and museum in it, and a single index.html each new build
+    overwrote. It is also why Thomas was caught reading games made months
+    earlier: they were in its working directory."""
+    monkeypatch.setattr(fcp, "thomas_owned_root", lambda: tmp_path)
+
+    first = fcp.create_named_project("Snake Game")
+    second = fcp.create_named_project("Snake Game")
+
+    assert first != second, "two projects with the same name must not share a folder"
+    assert first.parent == second.parent == (tmp_path / "projects").resolve()
+    assert (first / ".git").is_dir(), "a Thomas-owned project is initialised so edits can be undone"
+
+
+def test_a_project_name_cannot_choose_where_the_project_lives(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(fcp, "thomas_owned_root", lambda: tmp_path)
+    base = (tmp_path / "projects").resolve()
+
+    for hostile in ("../../escape", r"..\..\escape", "C:/Windows/System32", "a/b/c", "..", "."):
+        made = fcp.create_named_project(hostile)
+        assert made.parent == base, f"{hostile!r} escaped to {made}"
