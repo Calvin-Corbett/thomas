@@ -17,11 +17,9 @@ from thomas.server.chat_delegation_deliverable import (
 from thomas.server.chat_delegation_emitter import _DelegationEmitter
 from thomas.server.chat_delegation_exhaustive_observer import _ExhaustiveRunObserver
 from thomas.server.chat_delegation_live_repo import (
-    _live_repo_changes_are_docs_only,
     _live_repo_files_changed_since,
     _live_repo_result_summary,
     _live_repo_workspace_mtimes,
-    _prompt_allows_docs_only_completion,
 )
 from thomas.server.chat_delegation_result_policy import worker_text_is_confirmed_answer
 from thomas.server.chat_delegation_session import _execution_is_terminal, _normalize_record
@@ -90,6 +88,8 @@ async def _run_exhaustive_worker(
             guardrails=guardrails,
             guardrail_modes=guardrail_modes,
             job_type="self_development" if requires_live_repo_change else None,
+            tools_enabled=True,
+            tool_evidence_required=requires_live_repo_change,
             memory_enabled=memory_enabled,
             runtime_policy=runtime_policy,
             work_context_id=execution_work_context_id(execution_id, repo_root),
@@ -115,15 +115,6 @@ async def _run_exhaustive_worker(
         )
         if requires_live_repo_change and not created:
             raise RuntimeError("exhaustive self-development changed no live repo files")
-        if (
-            requires_live_repo_change
-            and _live_repo_changes_are_docs_only(created)
-            and not _prompt_allows_docs_only_completion(prompt)
-        ):
-            raise RuntimeError(
-                "exhaustive self-development changed only documentation files; live code or test files must change"
-            )
-
         answer_text = str(ctx.result or "").strip()
         task_rubric = getattr(ctx, "rubric", {})
         tools_required = bool(task_rubric.get("tools_required")) if isinstance(task_rubric, dict) else True

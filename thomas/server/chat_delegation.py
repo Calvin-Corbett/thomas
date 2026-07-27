@@ -1,38 +1,28 @@
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import logging
 import platform as _platform
-import re
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
 from thomas.agent.chat_dispatcher import dispatch_async
-from thomas.agent.dispatch import should_dispatch
 from thomas.agent.instruction_contract import apply_root_instructions
 from thomas.core import task_bot_runtime
-from thomas.core.file_access import READ_ONLY, clamp_file_access_level
+from thomas.core.file_access import PROJECT, READ_ONLY, clamp_file_access_level
 from thomas.core.task_titling import derive_task_title
 from thomas.marketplace.orchestrator.bot_roster import pick_bot_for_specialist
 from thomas.server import chat_delegation_live_repo as _live_repo_module
 from thomas.server import chat_delegation_runner as _runner_module
-from thomas.server.app_keys import APP_CONFIG, APP_TOOLS
 from thomas.server.chat_delegation_canvas import (
     canvas_finish,
     canvas_start,
-    is_canvas_task,
     run_canvas_worker,
 )
 from thomas.server.chat_delegation_canvas_completion import complete_canvas_delivery
-from thomas.server.chat_delegation_canvas_worker import _CanvasCancelled
 from thomas.server.chat_delegation_deliverable import (  # noqa: F401
-    _FAILURE_LANGUAGE_RE,
     _build_result_summary,
-    _claimed_filenames,
-    _claims_action_success,
-    _claims_file_creation,
     _files_changed_since,
     _handoff_block,
     _resolve_created,
@@ -42,7 +32,6 @@ from thomas.server.chat_delegation_deliverable import (  # noqa: F401
     _WorkerRetry,
     _workspace_mtimes,
     executability_warning,
-    prompt_needs_handoff,
     quality_tier_clause,
     render_report_pdfs,
     runtime_executability_warning,
@@ -51,7 +40,6 @@ from thomas.server.chat_delegation_emitter import _DelegationEmitter
 from thomas.server.chat_delegation_live_repo import (  # noqa: F401
     _live_repo_files_changed_since,
     _live_repo_workspace_mtimes,
-    _prompt_targets_live_thomas_repo,
     _with_live_repo_change_requirement,
 )
 from thomas.server.chat_delegation_runner import (  # noqa: F401
@@ -74,21 +62,14 @@ from thomas.server.chat_delegation_worker_config import (  # noqa: F401
     _WORKER_IDLE_EVENT_TIMEOUT_S,
     PROVIDER_NATIVE_BACKEND,
     TASK_MANAGER_BACKEND,
-    _agent_worker_permission_block,
     _agent_worker_runtime_profile,
-    _helper_prompt,
-    _infer_specialist,
     _replan_prompt,
-    _requested_delegate_count,
-    _requested_delegate_items,
     _self_recovery_attempts,
 )
 from thomas.server.chat_delegation_workspace import ensure_task_workspace as _ensure_task_workspace
-from thomas.server.chat_delegation_workspace import prompt_allows_workspace_seed
-from thomas.server.chat_delegation_workspace import seed_workspace_from_previous as _seed_workspace_from_previous
 from thomas.server.issue_ledger import record_issue
 from thomas.server.model_runtime_receipt import validate_model_runtime_receipt
-from thomas.server.worker_runtime import _explicit_browser_preflight, run_agent_worker_events
+from thomas.server.worker_runtime import run_agent_worker_events
 
 log = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parents[2]
@@ -178,109 +159,29 @@ async def start_background_delegation(
     guardrail_modes: dict[str, str] | None = None,
     session_llm: Any = None,
     surface: str | None = None,
+    specialist_id: str = "reasoning",
+    workspace: str = "isolated",
     work_context_id: str = "",
     memory_enabled: bool = True,
     runtime_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
-    normalized_mode = str(mode or "").strip().lower()
-    forced = bool(force)
-    if normalized_mode != "max" and not forced:
-        return None
-
-    current = session_active_delegations(session_id, repo_root=repo_root)
-    decision = should_dispatch(
-        prompt,
-        recent_messages=recent_messages,
-        active_tasks=current,
-        mode=normalized_mode,
-    )
-    if decision.action != "dispatch" and not forced:
-        return None
-
-    specialist_id = _infer_specialist(prompt)
+    # This function is an executor, not an intent classifier. It is reached by
+    # an explicit structured model call (or a structured API caller) and trusts
+    # only validated enum-like fields, never prompt wording.
+    _ = mode
+    _ = force
+    specialist_id = str(specialist_id or "reasoning").strip().lower()
+    if specialist_id not in {"reasoning", "coding", "research", "tools", "writing", "data"}:
+        specialist_id = "reasoning"
+    workspace = str(workspace or "isolated").strip().lower()
+    if workspace not in {"isolated", "project"}:
+        workspace = "isolated"
     emitter = _DelegationEmitter(emit_event)
-    delegate_items = _requested_delegate_items(prompt)
-    delegate_count = len(delegate_items) or (_requested_delegate_count(prompt) if forced else 1)
-
-    if delegate_count > 1:
-        exclude: set[str] = set()
-        records: list[dict[str, Any]] = []
-        for index in range(delegate_count):
-            assigned_item = delegate_items[index] if delegate_items else ""
-            item_specialist_id = _infer_specialist(assigned_item) if assigned_item else specialist_id
-            bot = pick_bot_for_specialist(item_specialist_id, exclude=set(exclude))
-            exclude.add(bot.id)
-            helper_prompt = _helper_prompt(
-                prompt,
-                helper_index=index + 1,
-                helper_count=delegate_count,
-                bot_name=bot.name,
-                assigned_item=assigned_item,
-            )
-            try:
-                # Each explicit deliverable gets its own provider-native worker and
-                # workspace.  The task-manager queue needs a separate poller and can
-                # otherwise sit forever in a standalone local server, which made the
-                # UI claim a handoff without ever producing the requested files.
-                record = await _start_agent_worker_delegation(
-                    app,
-                    session_id=session_id,
-                    prompt=helper_prompt,
-                    specialist_id=item_specialist_id,
-                    bot=bot,
-                    emitter=emitter,
-                    repo_root=repo_root,
-                    autonomy_level=autonomy_level,
-                    file_access=file_access,
-                    recent_messages=recent_messages,
-                    profile=profile,
-                    model_id=model_id,
-                    reasoning_effort=reasoning_effort,
-                    effort=effort,
-                    guardrails=guardrails,
-                    guardrail_modes=guardrail_modes,
-                    display_title=assigned_item,
-                    group_expected_count=delegate_count,
-                    work_context_id=work_context_id,
-                    memory_enabled=memory_enabled,
-                    runtime_policy=runtime_policy,
-                )
-            except (RuntimeError, OSError, ValueError, TypeError) as exc:
-                log.warning("Parallel agent worker failed: %s", exc, exc_info=True)
-                record = (
-                    None
-                    if (work_context_id or runtime_policy)
-                    else await _start_task_manager_delegation(
-                        session_id=session_id,
-                        prompt=helper_prompt,
-                        specialist_id=item_specialist_id,
-                        bot=bot,
-                        emitter=emitter,
-                        repo_root=repo_root,
-                        group_expected_count=delegate_count,
-                        memory_enabled=memory_enabled,
-                        fallback_reason="The primary worker could not start. Thomas switched this item to Task Manager.",
-                    )
-                )
-            if record:
-                records.append(record)
-        return records or None
-
     bot = pick_bot_for_specialist(specialist_id)
-
-    _declared = str(surface or "").strip().lower()
-    if _declared == "canvas":
-        _want_canvas = _wants_canvas_delegation(prompt)
-    elif _declared == "task":
-        _want_canvas = False
-    else:
-        _want_canvas = _wants_canvas_delegation(prompt)
-    effective_file_access = clamp_file_access_level(file_access if file_access is not None else 1)
-    if _want_canvas and _agent_worker_permission_block(
-        prompt, targets_live_repo=False, file_access=effective_file_access
-    ):
-        _want_canvas = False
-    if _want_canvas:
+    declared_surface = str(surface or "task").strip().lower()
+    if declared_surface not in {"canvas", "task"}:
+        declared_surface = "task"
+    if declared_surface == "canvas":
         try:
             return await _start_canvas_worker_delegation(
                 session_id=session_id,
@@ -321,6 +222,7 @@ async def start_background_delegation(
             work_context_id=work_context_id,
             memory_enabled=memory_enabled,
             runtime_policy=runtime_policy,
+            workspace=workspace,
         )
     except (RuntimeError, OSError, ValueError, TypeError) as exc:
         log.warning("Agent worker delegation failed: %s", exc, exc_info=True)
@@ -394,47 +296,8 @@ async def _start_task_manager_delegation(
     return record
 
 
-_CANVAS_FOLLOWUP_RE = re.compile(
-    r"\b(re-?run|re-?do|re-?generate|re-?make|re-?create|regenerate|again|"
-    r"same\s+(?:chart|graph|plot|data|thing|one)|"
-    r"add\s+(?:a\s+|another\s+)?(?:row|column|bar|series|point|month|entry|value|slice|wedge)|"
-    r"update\s+(?:the\s+|that\s+|this\s+)?(?:chart|graph|plot)|"
-    r"(?:that|this|the)\s+(?:chart|graph|plot))\b",
-    re.I,
-)
-
-
-# Route chart RE-runs ("rerun the chart", "redo the graph", "chart again") to the
-# canvas specialist, not the generic agent worker. Requires a rerun verb AND a
-# chart word so a non-chart "run it again" is never misrouted.
-_CANVAS_RERUN_RE = re.compile(
-    r"\b(?:re-?run|re-?do|re-?generate|re-?make|re-?create|regenerate|redraw|remake|update)\b"
-    r"[^.?!]{0,30}\b(?:chart|graph|plot|bar|pie|line|donut|scatter)\b"
-    r"|\b(?:chart|graph|plot)\b[^.?!]{0,20}\bagain\b",
-    re.I,
-)
-
-
-def _wants_canvas_delegation(prompt: str) -> bool:
-    """A fresh chart request OR a referential chart re-run belongs on the canvas."""
-    return is_canvas_task(prompt) or bool(_CANVAS_RERUN_RE.search(str(prompt or "")))
-
-
 def _canvas_worker_prompt(prompt: str, recent_messages: list[dict[str, Any]] | None) -> str:
-    """Prepend recent-conversation handoff to a referential canvas follow-up.
-
-    A follow-up like "rerun the chart" / "add a row" carries no data of its own;
-    without the prior turns the worker gets an empty workspace and asks the user
-    to re-paste the numbers. Reuses the curation (_handoff_block) proven on the
-    agent-worker path. Charts have no "wrong build" bleed risk (they simply
-    re-plot data), so the referential gate is broader than the conservative
-    agent-worker one — it also catches chart-specific edits like "rerun the
-    chart" and "add a row".
-    """
-    text = str(prompt or "")
-    referential = prompt_needs_handoff(prompt) or bool(_CANVAS_FOLLOWUP_RE.search(text))
-    if not referential:
-        return prompt
+    """Give the model-selected Canvas worker bounded transcript evidence."""
     handoff = _handoff_block(recent_messages)
     return f"{prompt}\n\n{handoff}" if handoff else prompt
 
@@ -548,24 +411,6 @@ async def _start_canvas_worker_delegation(
                 record_runtime=_record_runtime,
                 runtime_policy=runtime_policy,
             )
-        except _CanvasCancelled:
-            # Stopping because the user asked is not a failure, and must not be
-            # reported as one. Before this the flag was never read at all: the
-            # run continued, the record stayed in `executing` indefinitely, and
-            # the chat could only repeat its last status while the user asked
-            # again and again what was happening.
-            summary = "Cancelled by user."
-            canvas_finish(execution_id, "failed")
-            task_bot_runtime.fail_execution(
-                execution_id,
-                actor=bot.name,
-                summary=summary,
-                blocker="cancelled",
-                repo_root=root,
-            )
-            rec = _normalize_record(task_bot_runtime.get_execution(execution_id, root))
-            await emitter.failed(rec, specialist_id=specialist_id, bot=bot, text=summary)
-            return
         except Exception as exc:  # noqa: BLE001 - surface as a failed card, don't crash anything
             log.exception("Canvas worker failed for %s (%s)", execution_id, type(exc).__name__)
             canvas_finish(execution_id, "failed")
@@ -666,9 +511,10 @@ async def _start_agent_worker_delegation(
     work_context_id: str = "",
     memory_enabled: bool = True,
     runtime_policy: dict[str, Any] | None = None,
+    workspace: str = "isolated",
 ) -> dict[str, Any]:
     root = _resolve_repo_root(repo_root)
-    targets_live_repo = _prompt_targets_live_thomas_repo(prompt)
+    targets_live_repo = str(workspace or "isolated").strip().lower() == "project"
     effective_file_access = clamp_file_access_level(file_access if file_access is not None else 1)
     runtime_profile = _agent_worker_runtime_profile(
         autonomy_level=autonomy_level,
@@ -700,11 +546,9 @@ async def _start_agent_worker_delegation(
     )
     execution_id = str(execution.get("execution_id") or "")
 
-    permission_block = _agent_worker_permission_block(
-        prompt, targets_live_repo=targets_live_repo, file_access=effective_file_access
-    )
-    if permission_block is not None:
-        blocker, summary = permission_block
+    if targets_live_repo and effective_file_access < PROJECT:
+        blocker = "project_file_access_required"
+        summary = "This task targets the project workspace, but project file access is not enabled."
         task_bot_runtime.fail_execution(
             execution_id,
             actor=bot.name,
@@ -749,25 +593,6 @@ async def _start_agent_worker_delegation(
     # Normal deliverables run in a clean per-task workspace; self-development uses the
     # live checkout directly and is gated later on actual source-file changes.
     work_dir = root if targets_live_repo else _ensure_task_workspace(execution_id)
-    if not targets_live_repo and prompt_allows_workspace_seed(prompt):
-        # Follow-ups reference the previous deliverable ("add a 6th row to it")
-        # — the new worker must SEE that file, not ask the user to upload it.
-        _seeded = _seed_workspace_from_previous(work_dir, session_id, exclude_execution_id=execution_id, repo_root=root)
-        if _seeded:
-            # Copying is permissive; INSTRUCTING is not. "Modify those files in
-            # place" is a directive, and aiming it at a request that only might
-            # be a follow-up is how a worker ends up editing a chart when it was
-            # asked for something new. So the strict follow-up gate still
-            # decides whether the files are an order or merely available.
-            names = ", ".join(_seeded[:8])
-            prompt = (
-                f"{prompt}\n\n[The workspace already contains the earlier deliverable(s): "
-                f"{names}. Modify those files in place.]"
-                if prompt_needs_handoff(prompt)
-                else f"{prompt}\n\n[Earlier files from this conversation are already in the workspace: "
-                f"{names}. Use or edit them only if this request refers to them.]"
-            )
-
     _os_name = _platform.system() or "this"
     _shell_hint = (
         "Windows (shell commands run in cmd.exe / PowerShell — do NOT use Unix-only "
@@ -852,10 +677,9 @@ async def _start_agent_worker_delegation(
             + quality_tier_clause(effort, autonomy_level)
         )
 
-    # Forward a curated slice of chat only when the task leans on prior dialogue
-    # ("make it blue"). Self-contained requests get no handoff — feeding earlier turns
-    # made the worker build the wrong thing (a Pong request produced a starfield).
-    handoff = _handoff_block(recent_messages) if prompt_needs_handoff(prompt) else ""
+    # A bounded transcript is evidence for the model-authored task contract. No
+    # prose classifier decides whether previous context matters.
+    handoff = _handoff_block(recent_messages)
     if handoff:
         instructions = f"{instructions}\n\n{handoff}"
 
@@ -864,51 +688,12 @@ async def _start_agent_worker_delegation(
     # fold them into its system prompt. Empty workspaces degrade cleanly (no-op).
     instructions = apply_root_instructions(instructions, cwd=work_dir)
 
-    preflight_events: list[dict[str, Any]] = []
-    preflight_evidence = ""
-    preflight_baseline: dict[str, tuple[int, int]] | None = None
-    explicit_recipe = all(
-        name in prompt.casefold() for name in ("browser.open", "browser.extract", "fs.write_file", "fs.read_file")
-    )
-    app_config = app.get(APP_CONFIG) if hasattr(app, "get") else None
-    from thomas.server.chat_runtime_policy import PolicyToolRegistryView, tool_policy_from_payload
-
-    worker_tool_policy = tool_policy_from_payload((runtime_policy or {}).get("tools"))
-    if explicit_recipe and app_config is not None and not targets_live_repo:
-        from thomas.server.app_helpers import _build_tools
-
-        preflight_baseline = _workspace_mtimes(work_dir)
-        scoped_config = dataclasses.replace(
-            app_config,
-            tools=dataclasses.replace(
-                app_config.tools,
-                sandbox_root=str(work_dir),
-                allow_shell=True,
-                file_access=effective_file_access,
-            ),
-        )
-        preflight_tools = _build_tools(scoped_config)
-        if worker_tool_policy is not None:
-            preflight_tools = PolicyToolRegistryView(preflight_tools, worker_tool_policy, base_root=work_dir or root)
-        preflight_events, preflight_evidence = await _explicit_browser_preflight(prompt, preflight_tools)
-    elif not explicit_recipe:
-        app_tools = app.get(APP_TOOLS) if hasattr(app, "get") else None
-        if app_tools is not None and not targets_live_repo:
-            if worker_tool_policy is not None:
-                app_tools = PolicyToolRegistryView(app_tools, worker_tool_policy, base_root=work_dir or root)
-            preflight_events, preflight_evidence = await _explicit_browser_preflight(prompt, app_tools)
-    worker_prompt = prompt
-    if preflight_evidence:
-        worker_prompt += (
-            "\n\n[Verified explicit browser results - use these exact values in later steps]\n" + preflight_evidence
-        )
-
     from thomas.server.exhaustive_runtime import is_exhaustive
 
     runner = _run_exhaustive_worker if is_exhaustive(effort) else _run_agent_worker
     worker_kwargs: dict[str, Any] = {
         "execution_id": execution_id,
-        "prompt": worker_prompt,
+        "prompt": prompt,
         "specialist_id": specialist_id,
         "bot": bot,
         "instructions": instructions,
@@ -926,9 +711,6 @@ async def _start_agent_worker_delegation(
         "memory_enabled": memory_enabled,
         "runtime_policy": dict(runtime_policy or {}),
     }
-    if runner is _run_agent_worker:
-        worker_kwargs["preflight_events"] = preflight_events
-        worker_kwargs["preflight_baseline"] = preflight_baseline
     asyncio.create_task(
         _run_agent_worker_supervised(
             runner,

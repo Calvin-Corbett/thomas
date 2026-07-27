@@ -80,21 +80,14 @@ async function loadSessionFromHistory(sid) {
             welcomeScreen.classList.add('hidden');
             chatScrollArea.classList.remove('hidden');
             let lastAssistantMessage = '';
-            let lastUserMessage = '';
             chatHistory.forEach((msg) => {
                 renderMessage(msg);
-                if (safeString(msg?.role) === 'user') {
-                    lastUserMessage = safeString(msg?.content);
-                }
                 if (safeString(msg?.role) === 'assistant') {
                     lastAssistantMessage = safeString(msg?.content);
                 }
             });
             if (lastAssistantMessage) {
-                maybeShowAssistantFollowups({
-                    assistantText: lastAssistantMessage,
-                    userText: lastUserMessage,
-                });
+                maybeShowAssistantFollowups();
             } else {
                 showStarterSuggestionRail({ force: true });
             }

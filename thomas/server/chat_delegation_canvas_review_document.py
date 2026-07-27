@@ -191,19 +191,6 @@ def parse_canvas_document(source: str) -> CanvasDocument:
     )
 
 
-def element_has_prompt_evidence(element: dict[str, Any], prompt_tokens: set[str]) -> bool:
-    if element.get("__hidden__") or element.get("__tag__") in NON_CONTENT_TAGS:
-        return False
-    element_text = " ".join(str(part) for part in element.get("__text_parts__", []))
-    element_tokens = tokenize_text(f"{element_text} {element.get('data-count', '')}")
-    numeric = {token for token in prompt_tokens if any(character.isdigit() for character in token)}
-    if numeric & element_tokens:
-        return True
-    semantic = prompt_tokens - numeric
-    required = min(2, max(1, (len(semantic) + 2) // 3))
-    return bool(semantic and len(semantic & element_tokens) >= required)
-
-
 def targeted_elements(document: CanvasDocument, method: str, selector: str) -> list[dict[str, Any]]:
     target = str(selector or "").strip()
     if not target:

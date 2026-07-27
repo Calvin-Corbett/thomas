@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from thomas.agent.runtime_skill_tools import register_runtime_skill_tools
 from thomas.core.config import AppConfig, load_config
 from thomas.server.app_keys import APP_CONFIG
 from thomas.server.tool_extensions import register_all_optional_tools
@@ -151,6 +152,7 @@ def _build_tools(config: AppConfig) -> ToolRegistry:
     # worker runtimes instead of leaving the existing implementation orphaned.
     registry.register(get_resilient_web_search_tool())
     registry.register(get_web_fetch_tool())
+    register_runtime_skill_tools(registry, config, Path(sandbox))
 
     # Register all optional domain module tools
     register_all_optional_tools(registry)

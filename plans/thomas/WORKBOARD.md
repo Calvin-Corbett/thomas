@@ -8,12 +8,12 @@ Last updated: 2026-03-01
 ## Problem Traceability
 
 ## Agent Claims
-- agent=claude; name=organic-routing-landing; role=solo; parent=none; scope=plans/thomas/WORKBOARD.md,thomas/agent,thomas/server/routes,thomas/server/chat_delegation_canvas_intent.py,thomas/server/chat_delegation_deliverable.py,thomas/marketplace/orchestrator,thomas/marketplace/specialists,thomas/forge/anvil,thomas/tools,thomas/skills,thomas/cli,tests,docs,ARCHITECTURE.md,CONTRIBUTING_AI.md,CHANGELOG.md; task=THOMAS-ORGANIC-ROUTING-20260722 land model-owned routing branch removing deterministic prompt classifiers
+- agent=claude; name=organic-routing-landing; role=solo; parent=none; scope=plans/thomas,scripts,thomas,docs,ARCHITECTURE.md,CONTRIBUTING_AI.md,CHANGELOG.md,tests; task=THOMAS-ORGANIC-ROUTING-20260722 land model-owned routing branch removing deterministic prompt classifiers
 
 
 
 ## Active Tasks
-- task_id=THOMAS-ORGANIC-ROUTING-20260722 land model-owned routing branch removing deterministic prompt classifiers; agent=claude; scope=plans/thomas/WORKBOARD.md,thomas/agent,thomas/server/routes,thomas/server/chat_delegation_canvas_intent.py,thomas/server/chat_delegation_deliverable.py,thomas/marketplace/orchestrator,thomas/marketplace/specialists,thomas/forge/anvil,thomas/tools,thomas/skills,thomas/cli,tests,docs,ARCHITECTURE.md,CONTRIBUTING_AI.md,CHANGELOG.md; summary=THOMAS-ORGANIC-ROUTING-20260722 land model-owned routing branch removing deterministic prompt classifiers; status=active
+- task_id=THOMAS-ORGANIC-ROUTING-20260722 land model-owned routing branch removing deterministic prompt classifiers; agent=claude; scope=plans/thomas,scripts,thomas,docs,ARCHITECTURE.md,CONTRIBUTING_AI.md,CHANGELOG.md,tests; summary=THOMAS-ORGANIC-ROUTING-20260722 land model-owned routing branch removing deterministic prompt classifiers; status=active
 ## Up For Grabs
 
 

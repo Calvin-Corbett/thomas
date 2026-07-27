@@ -185,23 +185,6 @@ function chatTaskCheckpointText(textRaw) {
     return clean.length > 180 ? `${clean.slice(0, 177)}...` : clean;
 }
 
-function chatPromptLooksTaskLike(promptRaw) {
-    const prompt = safeString(promptRaw);
-    if (!prompt || prompt.startsWith('/') || prompt.startsWith('@')) return false;
-    const lower = prompt.toLowerCase();
-    const hasAction = /\b(build|create|fix|implement|write|make|ship|verify|edit|refactor|investigate|diagnose|generate|design)\b/i.test(lower);
-    const hasDeliverable = /\b(file|page|app|game|plan|task|prototype|ui|repo|project|output|html|css|js|md|report)\b/i.test(lower);
-    return hasAction && (hasDeliverable || (typeof OFFICE_TASK_KEYWORDS !== 'undefined' && OFFICE_TASK_KEYWORDS.test(prompt)));
-}
-
-function chatShouldSeedTaskUi(promptRaw) {
-    const autonomy = Number(activeAutonomyLevel || 0);
-    const economy = safeString(activeTokenEconomy).toLowerCase();
-    const reasoning = normalizeReasoningEffort(activeReasoningEffort);
-    const highAutonomy = autonomy >= 4 || economy === 'maximum' || reasoning === 'xhigh';
-    return highAutonomy && chatPromptLooksTaskLike(promptRaw);
-}
-
 function _ensureArtifactStyles() {
     if (document.getElementById('thomasArtifactStyles')) return;
     const style = document.createElement('style');

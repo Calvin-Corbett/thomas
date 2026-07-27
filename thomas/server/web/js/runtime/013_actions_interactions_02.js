@@ -259,22 +259,8 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                 });
             }
         }
-        const _promptTaskSeed = chatShouldSeedTaskUi(safeString(payload?.message || userContext));
-        if (_promptTaskSeed) {
-            const promptSummary = officeTaskTitle(safeString(payload?.message || userContext));
-            _ensureTaskUi(promptSummary);
-            updateMessageTaskStrip(bubbleId, {
-                sessionId: _taskUiSessionId,
-                status: 'defining',
-                summary: promptSummary,
-                checkpoint: 'Task received. Defining what a good result looks like.',
-            });
-        }
-
         function _syncDelegationWorkerVisual(evt, status, taskText) {
-            void evt;
-            void status;
-            void taskText;
+            officeSyncStructuredDelegationTask(evt, status, taskText);
         }
 
         function _delegationActivityId(evt) {
@@ -888,10 +874,7 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             showStarterSuggestionRail({ force: true });
             pushDebugEvent('chat', 'Completed chat request with empty response');
         } else {
-            maybeShowAssistantFollowups({
-                assistantText: fullText,
-                userText: userContext,
-            });
+            maybeShowAssistantFollowups();
             pushDebugEvent('chat', `Completed chat request (${fullText.length} chars)`);
         }
         chatHistory.push({

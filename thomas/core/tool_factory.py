@@ -1,20 +1,16 @@
 """
 thomas/core/tool_factory.py
 ───────────────────────────
-Reusable Tool Factory — after every completed task, Thomas can extract a
-reusable tool from what it just did and register it for future one-call reuse.
+Reusable Tool Factory for explicitly supplied structured tool definitions.
 
 Two layers:
   1. GeneratedTool — stores name, description, JSON schema, Python implementation.
-  2. ToolFactory    — manages extraction, the on-disk JSON registry, and registers
+  2. ToolFactory    — manages the on-disk JSON registry and registers
                       live Tool instances into the existing ToolRegistry.
 
-Usage (from loop.py, post-task):
+Usage:
     from thomas.core.tool_factory import get_tool_factory
     factory = get_tool_factory()
-    factory.extract_from_turn(task_description, tool_calls, result_summary)
-
-Or register manually:
     factory.register_tool(GeneratedTool(
         name="git.stash_and_pull",
         description="Stash current changes, pull latest, then unstash.",
@@ -28,7 +24,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-import textwrap
 import threading
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -46,7 +41,7 @@ _REGISTRY_FILE = Path("thomas_tool_registry.json")
 
 @dataclass
 class GeneratedTool:
-    """A tool extracted from a completed task and serialised for reuse."""
+    """An explicitly authored tool definition serialised for reuse."""
 
     name: str
     description: str
@@ -92,23 +87,24 @@ class GeneratedTool:
 
 class ToolFactory:
     """
-    Extracts, stores, and registers reusable tools.
+    Stores and registers explicitly authored reusable tools.
 
     Flow:
-      extract_from_turn()  →  GeneratedTool  →  save_registry()  →  register_live()
-                                                 (JSON on disk)       (ToolRegistry)
+      GeneratedTool  →  save_registry()
+                        (JSON on disk)
 
     The JSON registry at thomas_tool_registry.json survives restarts.
-    Live registration into ToolRegistry makes the tool callable this session.
     """
 
     def __init__(
         self,
         registry_file: Path | None = None,
-        live_registry: Any = None,  # thomas.tools.registry.ToolRegistry | None
+        live_registry: Any = None,
     ) -> None:
+        # Retained for call compatibility. Core no longer imports or adapts
+        # runtime tools; a tools-layer caller owns executable registration.
+        del live_registry
         self.registry_file = Path(registry_file or _REGISTRY_FILE)
-        self._live_registry = live_registry
         self._lock = threading.Lock()
         self._tools: dict[str, GeneratedTool] = {}
 
@@ -126,7 +122,7 @@ class ToolFactory:
                 self._tools = {name: GeneratedTool.from_dict(spec) for name, spec in raw.get("tools", {}).items()}
             log.info("ToolFactory: loaded %d tools from %s", len(self._tools), self.registry_file)
             return len(self._tools)
-        except Exception as e:
+        except (OSError, TypeError, ValueError, KeyError) as e:
             log.warning("ToolFactory: failed to load registry: %s", e)
             return 0
 
@@ -143,7 +139,7 @@ class ToolFactory:
                 encoding="utf-8",
             )
             return True
-        except Exception as e:
+        except (OSError, TypeError, ValueError) as e:
             log.error("ToolFactory: save failed: %s", e)
             return False
 
@@ -152,10 +148,7 @@ class ToolFactory:
     # ------------------------------------------------------------------
 
     def register_tool(self, tool: GeneratedTool, overwrite: bool = False) -> bool:
-        """
-        Add a GeneratedTool to the factory registry, save to disk, and
-        optionally register it live in the attached ToolRegistry.
-        """
+        """Add an explicit GeneratedTool definition and persist the registry."""
         safe_name = _safe_tool_name(tool.name)
         with self._lock:
             if safe_name in self._tools and not overwrite:
@@ -164,7 +157,6 @@ class ToolFactory:
             tool.name = safe_name
             self._tools[safe_name] = tool
         self.save_registry()
-        self._maybe_register_live(tool)
         log.info("ToolFactory: registered tool %r (%s).", safe_name, tool.category)
         return True
 
@@ -190,70 +182,6 @@ class ToolFactory:
                 t.last_used = datetime.now(timezone.utc).isoformat()
         self.save_registry()
 
-    # ------------------------------------------------------------------
-    # Extraction — derive a GeneratedTool from a completed task turn
-    # ------------------------------------------------------------------
-
-    def extract_from_turn(
-        self,
-        task_description: str,
-        tool_calls: list[dict[str, Any]],
-        result_summary: str,
-        category: str = "generated",
-    ) -> GeneratedTool | None:
-        """
-        Attempt to auto-extract a reusable tool from a completed conversation turn.
-
-        Heuristic: worth capturing if ≥2 tool calls were made OR the task
-        description contains actionable keywords (install, create, deploy, etc.).
-        Returns the GeneratedTool if one was created, else None.
-        """
-        if not tool_calls or not task_description.strip():
-            return None
-        if len(tool_calls) < 2 and not _looks_reusable(task_description):
-            return None
-
-        name = _derive_tool_name(task_description)
-        params = _infer_parameters(task_description, tool_calls)
-        impl = _build_implementation(name, task_description, tool_calls, result_summary)
-        description = _derive_description(task_description, result_summary)
-
-        tool = GeneratedTool(
-            name=name,
-            description=description,
-            parameters=params,
-            implementation=impl,
-            category=category,
-            created_from=task_description[:200],
-        )
-        self.register_tool(tool, overwrite=False)
-        return tool
-
-    # ------------------------------------------------------------------
-    # Live ToolRegistry integration
-    # ------------------------------------------------------------------
-
-    def attach_live_registry(self, registry: Any) -> None:
-        """Attach a ToolRegistry so generated tools are callable this session."""
-        self._live_registry = registry
-        with self._lock:
-            tools = list(self._tools.values())
-        for t in tools:
-            self._maybe_register_live(t)
-
-    def _maybe_register_live(self, tool: GeneratedTool) -> None:
-        if self._live_registry is None:
-            return
-        try:
-            live_tool = _make_live_tool(tool)
-            self._live_registry.register(live_tool)
-        except Exception as e:
-            log.warning("ToolFactory: failed to register live tool %r: %s", tool.name, e)
-
-    # ------------------------------------------------------------------
-    # Summary
-    # ------------------------------------------------------------------
-
     def summary_text(self) -> str:
         with self._lock:
             tools = list(self._tools.values())
@@ -268,241 +196,14 @@ class ToolFactory:
 
 
 # ---------------------------------------------------------------------------
-# Heuristics for auto-extraction
-# ---------------------------------------------------------------------------
-
-_REUSABLE_KEYWORDS = re.compile(
-    r"\b(install|create|deploy|build|migrate|setup|configure|update|generate|"
-    r"fetch|scrape|parse|process|export|import|sync|backup|restore|test|lint|"
-    r"format|compile|bundle|run|execute|check|validate|convert|transform)\b",
-    re.IGNORECASE,
-)
-
-
-def _looks_reusable(description: str) -> bool:
-    return bool(_REUSABLE_KEYWORDS.search(description))
-
-
-def _safe_tool_name(name: str) -> str:
-    """Normalise to snake_case dot-separated tool name."""
-    name = re.sub(r"[^a-z0-9.]+", "_", name.strip().lower())
-    return name.strip("_.")[:64]
-
-
-def _derive_tool_name(task: str) -> str:
-    """Produce a tool name from a task description."""
-    words = re.findall(r"[a-z]+", task.lower())
-    stopwords = {
-        "the",
-        "a",
-        "an",
-        "and",
-        "or",
-        "to",
-        "of",
-        "in",
-        "for",
-        "with",
-        "on",
-        "at",
-        "by",
-        "that",
-        "this",
-        "it",
-        "is",
-    }
-    keywords = [w for w in words if w not in stopwords][:4]
-    return "generated." + "_".join(keywords) if keywords else "generated.tool"
-
-
-def _derive_description(task: str, result: str) -> str:
-    base = task.strip()[:120]
-    if result.strip():
-        base += f" (result: {result.strip()[:60]})"
-    return base
-
-
-def _infer_parameters(task: str, tool_calls: list[dict[str, Any]]) -> dict[str, Any]:
-    """
-    Build a minimal JSON-Schema parameters block from the tool calls that were made.
-    Collects unique arg names seen and infers their type from the values.
-    """
-    props: dict[str, Any] = {}
-    for call in tool_calls:
-        args = call.get("args", call.get("arguments", call.get("input", {})))
-        if isinstance(args, str):
-            try:
-                args = json.loads(args)
-            except Exception:
-                args = {}
-        if isinstance(args, dict):
-            for k, v in args.items():
-                if k not in props:
-                    typ = (
-                        "boolean"
-                        if isinstance(v, bool)
-                        else "integer"
-                        if isinstance(v, int)
-                        else "number"
-                        if isinstance(v, float)
-                        else "array"
-                        if isinstance(v, list)
-                        else "object"
-                        if isinstance(v, dict)
-                        else "string"
-                    )
-                    props[k] = {"type": typ, "description": f"Argument '{k}'"}
-    return {"type": "object", "properties": props, "required": []}
-
-
-def _build_implementation(name: str, task: str, tool_calls: list[dict[str, Any]], result: str) -> str:
-    """Build a Python implementation that invokes tools via the registry.
-
-    Generates a function that:
-    - Looks up stored tool_calls from the original sequence
-    - Invokes each tool via the registry
-    - Supports dry_run parameter for testing
-    - Handles errors gracefully
-    """
-    fn_name = name.replace(".", "_").replace("-", "_")
-
-    # Build a summary of tool calls for the docstring
-    tool_names = []
-    for c in tool_calls[:5]:
-        name_val = c.get("name") or c.get("function", {}).get("name")
-        if name_val:
-            tool_names.append(name_val)
-    tool_summary = "; ".join(tool_names) if tool_names else "tool sequence"
-
-    # Safely represent tool_calls
-    tool_calls_repr = repr(tool_calls)
-
-    # Build the implementation string without using f-string to avoid brace escaping issues
-    code_body = textwrap.dedent("""
-        async def FNNAME(dry_run: bool = False, **kwargs):
-            '''
-            Auto-generated reusable tool from: TASK_DESC
-
-            Invokes the original sequence of tool calls:
-            TOOL_SUMMARY
-
-            Result: RESULT_DESC
-            '''
-            # Original tool sequence stored
-            _tool_calls = TOOL_CALLS_REPR
-
-            # Get the tool registry to execute tools
-            try:
-                from thomas.tools.registry import ToolRegistry
-            except ImportError:
-                return {"ok": False, "error": "ToolRegistry not available"}
-
-            # For now, use the global registry if available
-            # In production, this would be passed as a parameter
-            registry = None
-            try:
-                # Try to access a global/singleton registry
-                import thomas.core.tool_factory as tf_module
-                factory = getattr(tf_module, "_factory", None)
-                if factory:
-                    registry = getattr(factory, "_live_registry", None)
-            except Exception:
-                pass
-
-            if not registry:
-                return {"ok": False, "error": "No tool registry available. Tools cannot be executed."}
-
-            results = []
-            final_result = None
-
-            for i, tool_call in enumerate(_tool_calls):
-                tool_name = tool_call.get("name") or tool_call.get("function", {}).get("name")
-                tool_args = tool_call.get("arguments") or tool_call.get("args", {})
-
-                if not tool_name:
-                    return {"ok": False, "error": f"Tool call {i} has no name"}
-
-                if dry_run:
-                    results.append({
-                        "step": i + 1,
-                        "tool": tool_name,
-                        "args": tool_args,
-                        "status": "would_execute"
-                    })
-                    continue
-
-                try:
-                    result = await registry.execute(tool_name, tool_args)
-                    final_result = result.data if hasattr(result, 'data') else result
-                    results.append({
-                        "step": i + 1,
-                        "tool": tool_name,
-                        "ok": result.ok if hasattr(result, 'ok') else bool(result),
-                        "result": final_result
-                    })
-
-                    # Stop on first error
-                    if hasattr(result, 'ok') and not result.ok:
-                        return {
-                            "ok": False,
-                            "error": f"Tool {tool_name} failed: {result.error}",
-                            "steps_completed": results
-                        }
-                except Exception as e:
-                    return {
-                        "ok": False,
-                        "error": f"Failed to execute tool {tool_name}: {type(e).__name__}: {str(e)}",
-                        "steps_completed": results
-                    }
-
-            return {
-                "ok": True,
-                "final_result": final_result,
-                "steps": results,
-                "dry_run": dry_run
-            }
-    """)
-
-    # Replace placeholders
-    code_body = code_body.replace("FNNAME", fn_name)
-    code_body = code_body.replace("TASK_DESC", task.strip()[:120])
-    code_body = code_body.replace("TOOL_SUMMARY", tool_summary)
-    code_body = code_body.replace("RESULT_DESC", result.strip()[:80])
-    code_body = code_body.replace("TOOL_CALLS_REPR", tool_calls_repr)
-
-    return code_body.strip()
-
-
-# ---------------------------------------------------------------------------
 # Live Tool wrapper — wraps a GeneratedTool as a callable Tool instance
 # ---------------------------------------------------------------------------
 
 
-def _make_live_tool(gt: GeneratedTool) -> Any:
-    """Return a Tool subclass instance wrapping a GeneratedTool."""
-    from thomas.tools.base import Tool, ToolResult
-
-    _gt = gt  # capture for closure
-
-    class _DynamicTool(Tool):
-        name = _gt.name
-        category = _gt.category
-        description = _gt.description
-        parameters = _gt.parameters
-
-        async def execute(self, args: dict[str, Any]) -> ToolResult:
-            return ToolResult(
-                ok=True,
-                data={
-                    "tool": _gt.name,
-                    "description": _gt.description,
-                    "implementation": _gt.implementation,
-                    "args_received": args,
-                    "note": "Generated stub — Thomas will execute using standard tools.",
-                },
-            )
-
-    return _DynamicTool()
+def _safe_tool_name(name: str) -> str:
+    """Normalize an explicitly supplied structured tool name."""
+    normalized = re.sub(r"[^a-z0-9.]+", "_", str(name or "").strip().lower())
+    return normalized.strip("_.")[:64]
 
 
 # ---------------------------------------------------------------------------
@@ -521,6 +222,6 @@ def get_tool_factory(live_registry: Any = None) -> ToolFactory:
             if _factory is None:
                 _factory = ToolFactory(live_registry=live_registry)
                 _factory.load()
-    elif live_registry is not None and _factory._live_registry is None:
-        _factory.attach_live_registry(live_registry)
+    elif live_registry is not None:
+        log.debug("ToolFactory ignores live_registry; executable registration belongs to thomas.tools.")
     return _factory

@@ -71,6 +71,20 @@ RETIRED_DOC_RUNNER_CHECKS: Sequence[RetiredDocRunnerCheck] = (
         replacement="the active docs runner path contract in tests/test_doc_runner_contract.py",
         reason="the retired gate test was deleted with its gate.",
     ),
+    RetiredDocRunnerCheck(
+        kind="test",
+        label="Natural-language chat control parser tests",
+        path="tests/test_chat_controls.py",
+        replacement="structured-control and no-prose-interception coverage in tests/test_server_chat_controls.py",
+        reason="free-form chat text no longer acts as a deterministic control plane.",
+    ),
+    RetiredDocRunnerCheck(
+        kind="test",
+        label="Natural-language model switching tests",
+        path="tests/test_model_switching.py",
+        replacement="explicit model and mode payload coverage in the active server control tests",
+        reason="model selection is now an explicit UI/API field or a model-owned structured capability.",
+    ),
 )
 
 GATE_COMMANDS: Sequence[tuple[str, Sequence[str]]] = (
@@ -94,9 +108,10 @@ CRITICAL_TEST_FILES: Sequence[str] = (
     "tests/test_llm_openai_tool_compat.py",
     "tests/test_agent_loop_tool_policy.py",
     "tests/test_tool_registry_resolution.py",
-    "tests/test_chat_controls.py",
     "tests/test_server_chat_controls.py",
-    "tests/test_model_switching.py",
+    "tests/test_server_batch_mode.py",
+    "tests/test_server_session_locking.py",
+    "tests/test_semantic_intent_ownership.py",
     "tests/test_agent_loop_autonomy.py",
     "tests/test_server_access_mode.py",
     "tests/test_intent_routing.py",

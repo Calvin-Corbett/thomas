@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sqlite3
 import threading
 from collections.abc import Iterable
@@ -25,40 +24,6 @@ _MAX_ACTIVE_GOAL_LEN = 320
 _MAX_PROGRESS_LEN = 1200
 _MAX_MISSING_INPUTS = 10
 _MAX_MISSING_ITEM_LEN = 180
-_ACK_ONLY_INPUTS = {
-    "k",
-    "ok",
-    "okay",
-    "y",
-    "yes",
-    "continue",
-    "go",
-    "proceed",
-    "do it",
-    "sounds good",
-}
-_MISSING_INPUT_TRIGGER_RE = re.compile(
-    r"\b("
-    r"missing|need|needs|required|requires|provide|supply|share|enter|set|"
-    r"grant|permission|access|blocked|cannot proceed|can't proceed|waiting for"
-    r")\b",
-    flags=re.IGNORECASE,
-)
-_CANONICAL_HINTS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"\b(github\s+token|gh\s+token)\b", flags=re.IGNORECASE), "GitHub token"),
-    (re.compile(r"\b(api\s+token)\b", flags=re.IGNORECASE), "API token"),
-    (re.compile(r"\b(api\s+key)\b", flags=re.IGNORECASE), "API key"),
-    (re.compile(r"\b(access\s+token)\b", flags=re.IGNORECASE), "access token"),
-    (re.compile(r"\b(secret|webhook secret)\b", flags=re.IGNORECASE), "secret"),
-    (re.compile(r"\b(password|passphrase)\b", flags=re.IGNORECASE), "password"),
-    (re.compile(r"\b(username|user name|account)\b", flags=re.IGNORECASE), "username/account"),
-    (re.compile(r"\b(repo|repository)\b", flags=re.IGNORECASE), "repository"),
-    (re.compile(r"\b(branch)\b", flags=re.IGNORECASE), "branch"),
-    (re.compile(r"\b(url|endpoint)\b", flags=re.IGNORECASE), "URL/endpoint"),
-    (re.compile(r"\b(path|directory|folder|file)\b", flags=re.IGNORECASE), "path/file"),
-    (re.compile(r"\b(id|identifier)\b", flags=re.IGNORECASE), "ID"),
-    (re.compile(r"\b(credential|credentials)\b", flags=re.IGNORECASE), "credentials"),
-)
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS task_ledger (
   session_id TEXT PRIMARY KEY,
@@ -181,13 +146,9 @@ def derive_active_goal(
     if not text:
         return _normalize_goal(current_goal)
 
-    lower = text.lower()
-    if lower in _ACK_ONLY_INPUTS and current_goal:
-        return _normalize_goal(current_goal)
-
-    # Short history-augmented follow-ups should keep the prior goal.
-    if route_input_source == "history_augmented" and len(lower) <= 32 and current_goal:
-        return _normalize_goal(current_goal)
+    # Retained for compatibility only. Prompt wording never decides whether a
+    # turn is an acknowledgement or a follow-up.
+    _ = route_input_source
 
     # Title the task with a real, human-readable name instead of the raw user
     # text ("hey thomas can you please build me a pac-man game" -> "Build a
@@ -196,72 +157,6 @@ def derive_active_goal(
     from thomas.core.task_titling import derive_task_title
 
     return _normalize_goal(derive_task_title(user_text)) or text
-
-
-def extract_missing_inputs(text: Any, *, limit: int = 6) -> list[str]:
-    normalized = _compact_ws(text)
-    if not normalized:
-        return []
-
-    parts = re.split(r"(?:[\r\n]+|(?<=[\.\?!])\s+)", normalized)
-    candidates: list[str] = []
-    for raw_part in parts:
-        part = _compact_ws(raw_part)
-        if not part:
-            continue
-        if "?" in part or _MISSING_INPUT_TRIGGER_RE.search(part):
-            candidates.append(part)
-    if not candidates and _MISSING_INPUT_TRIGGER_RE.search(normalized):
-        candidates = [normalized]
-
-    out: list[str] = []
-    seen: set[str] = set()
-    for candidate in candidates:
-        matched_any = False
-        for pattern, canonical in _CANONICAL_HINTS:
-            if pattern.search(candidate):
-                matched_any = True
-                key = canonical.lower()
-                if key in seen:
-                    continue
-                seen.add(key)
-                out.append(canonical)
-                if len(out) >= max(1, int(limit)):
-                    break
-        if len(out) >= max(1, int(limit)):
-            break
-        if not matched_any:
-            label = candidate[:_MAX_MISSING_ITEM_LEN]
-            key = label.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append(label)
-            if len(out) >= max(1, int(limit)):
-                break
-
-    return _normalize_missing_inputs(out)
-
-
-def classify_completion_state(
-    *,
-    assistant_text: Any,
-    token_report: dict[str, Any] | None = None,
-) -> tuple[str, list[str], str]:
-    progress = _normalize_progress(assistant_text)
-    missing_inputs = extract_missing_inputs(assistant_text)
-    rules = {}
-    if isinstance(token_report, dict):
-        maybe_rules = token_report.get("rules_of_road")
-        if isinstance(maybe_rules, dict):
-            rules = maybe_rules
-    passed = bool(rules.get("passed", True))
-
-    if missing_inputs:
-        return "blocked", missing_inputs, progress
-    if passed:
-        return "complete", [], progress
-    return "in_progress", [], progress
 
 
 def _snapshot_from_row(row: sqlite3.Row) -> TaskLedgerSnapshot:

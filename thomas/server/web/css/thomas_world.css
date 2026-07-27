@@ -88,6 +88,30 @@ body.tcw-on .message-row.is-assistant .message-content,
 body.tcw-on .message-row.is-assistant .assistant-bubble { background: transparent !important; border: 0 !important; border-left: 0 !important; color: var(--c-text) !important; border-radius: 0 !important; backdrop-filter: none !important; }
 body.tcw-on .message-row.is-user .message-content,
 body.tcw-on .message-row.is-user .user-bubble { background: var(--c-user-bg) !important; color: var(--c-user-text) !important; border: 1px solid var(--c-border) !important; border-right: 0 !important; border-radius: 16px 16px 4px 16px !important; }
+/*
+ * Living-world art sits behind the application, but translucent message
+ * surfaces can still let a small high-contrast flyby read as if it were on top
+ * of the prose.  Give every real chat bubble an opaque, theme-owned backplate
+ * inside its existing isolated stacking context.  The backplate is visual only
+ * and cannot intercept selection, links, or message actions.
+ */
+body.tcw-on .message-row .message-content {
+  isolation: isolate;
+}
+body.tcw-on .message-row .message-content::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--c-bg);
+  pointer-events: none;
+}
+body.tcw-on .message-row.is-user .message-content::after {
+  background:
+    linear-gradient(var(--c-user-bg), var(--c-user-bg)),
+    var(--c-bg);
+}
 body.tcw-on .message-author { color: var(--c-text) !important; }
 body.tcw-on .message-model-label, body.tcw-on .message-provider, body.tcw-on .message-timestamp { color: var(--c-muted) !important; }
 body.tcw-on .message-actions button { color: var(--c-muted) !important; background: transparent !important; }

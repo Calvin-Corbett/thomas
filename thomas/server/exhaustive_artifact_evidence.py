@@ -2,36 +2,43 @@
 
 from __future__ import annotations
 
-import re
-from pathlib import Path
-
-_NAMED_OUTPUT_RE = re.compile(r"(?<![\w./\\-])([A-Za-z0-9][A-Za-z0-9_.-]{0,120}\.(?:csv|html|md|pdf|py|xlsx))\b", re.I)
+from collections.abc import Sequence
+from pathlib import Path, PurePosixPath
 
 
-def _artifact_evidence(prompt: str, work_dir: str) -> tuple[bool, list[str], list[str]]:
-    """Read back nonempty workspace artifacts and enforce named/type expectations."""
+def _expected_paths(values: Sequence[object] | None) -> tuple[list[str], int]:
+    expected: list[str] = []
+    invalid_count = 0
+    for value in values or ():
+        raw = str(value or "").strip().replace("\\", "/")
+        path = PurePosixPath(raw)
+        if not raw or path.is_absolute() or Path(raw).is_absolute() or ".." in path.parts:
+            invalid_count += 1
+            continue
+        normalized = path.as_posix().removeprefix("./").casefold()
+        if normalized and normalized not in expected:
+            expected.append(normalized)
+    return expected, invalid_count
 
+
+def _artifact_evidence(
+    expected_artifacts: Sequence[object] | None,
+    work_dir: str,
+) -> tuple[bool, list[str], list[str]]:
+    """Read back nonempty artifacts named by a structured task contract."""
+
+    expected, invalid_count = _expected_paths(expected_artifacts)
     root = Path(work_dir)
     if not root.is_dir():
         return False, [], ["workspace_missing"]
     rows = [path for path in root.rglob("*") if path.is_file() and not any(part.startswith(".") for part in path.parts)]
     relative = {path.relative_to(root).as_posix().casefold(): path for path in rows}
     evidence = sorted(relative)
-    issues: list[str] = []
-    expected = {name.casefold() for name in _NAMED_OUTPUT_RE.findall(str(prompt or ""))}
-    for name in sorted(expected):
+    issues: list[str] = ["invalid_expected_path"] * invalid_count
+
+    for name in expected:
         if name not in relative and not any(path.endswith("/" + name) for path in relative):
             issues.append(f"missing:{name}")
-    lower = str(prompt or "").casefold()
-    suffix_expectations = {
-        ".pdf": "pdf",
-        ".csv": "csv",
-        ".xlsx": "spreadsheet",
-        ".html": "website|game|html",
-    }
-    for suffix, token_pattern in suffix_expectations.items():
-        if re.search(rf"\b(?:{token_pattern})\b", lower) and not any(name.endswith(suffix) for name in relative):
-            issues.append(f"missing_type:{suffix}")
     for name, path in relative.items():
         try:
             if path.stat().st_size <= 0:

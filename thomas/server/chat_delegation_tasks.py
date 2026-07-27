@@ -38,33 +38,21 @@ def resolve_active_task_ref_from_rows(
     *,
     terminal_states: frozenset[str] | set[str],
 ) -> str | None:
-    """Resolve a digest reference, ordinal, or subject fragment to an execution id."""
+    """Resolve only an exact execution id or the digest's ``[task <id>]`` form."""
 
-    ref = str(task_ref or "").strip().lower().replace("[", "").replace("]", "")
-    for token in ("task", "ref", "#", ":"):
-        ref = ref.replace(token, "")
-    ref = ref.strip()
+    ref = str(task_ref or "").strip()
+    if ref.startswith("[") and ref.endswith("]"):
+        ref = ref[1:-1].strip()
+    if ref.lower().startswith("task "):
+        ref = ref[5:].strip()
     if not ref:
         return None
-    matches: list[tuple[str, bool]] = []
+    normalized = ref.casefold()
     for row in rows:
-        eid = str(row.get("execution_id") or "").lower()
+        eid = str(row.get("execution_id") or "").strip()
         if not eid:
             continue
-        terminal = str(row.get("state") or "").lower() in terminal_states
-        if eid == ref or eid.endswith(ref) or ref.endswith(eid) or (len(ref) >= 4 and ref in eid):
-            matches.append((str(row.get("execution_id") or ""), terminal))
-    for eid, terminal in matches:
-        if not terminal:
+        if eid.casefold() == normalized:
             return eid
-    if matches:
-        return matches[0][0]
-    digits = "".join(ch for ch in ref if ch.isdigit())
-    if digits and digits == ref and 1 <= int(digits) <= len(rows):
-        return str(rows[int(digits) - 1].get("execution_id") or "") or None
-    ref_words = [word for word in ref.replace("-", " ").replace("_", " ").split() if len(word) >= 3]
-    for row in rows:
-        subject = str(row.get("summary") or row.get("title") or "").lower()
-        if subject and any(word in subject for word in ref_words):
-            return str(row.get("execution_id") or "") or None
+    _ = terminal_states  # terminal handling belongs to the structured update operation
     return None

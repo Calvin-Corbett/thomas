@@ -30,9 +30,9 @@ SEND_TASK_TOOL: dict = {
             "work. Decide naturally from the conversation; there is no keyword that "
             "triggers it. After you call it, a real card appears, so it is honest to "
             "tell the user it's been handed off. "
-            "You do NOT scope, plan, design, or define the work — the task manager "
-            "and its worker bots read the user's real request and handle the details. "
-            "Your only job is to recognize it's a task and pass it through."
+            "You own the semantic decision. Supply a complete resolved brief and choose "
+            "the surface, specialist, and workspace in this structured call. Runtime "
+            "code validates those values but does not reinterpret the user's prose."
         ),
         "parameters": {
             "type": "object",
@@ -48,10 +48,10 @@ SEND_TASK_TOOL: dict = {
                 "instructions": {
                     "type": "string",
                     "description": (
-                        "What the user actually asked for, in their OWN words — pass the "
-                        "real request straight through. Do NOT redefine it, narrow it, add "
-                        "'I can't'/'visual content' caveats, or substitute your own plan. "
-                        "The task manager interprets the real ask itself."
+                        "A complete, context-resolved brief for this task. Preserve the user's "
+                        "requirements and use earlier conversation turns to resolve follow-ups "
+                        "such as 'you pick' or 'make that a graph'. Never pass only a detached "
+                        "follow-up fragment, narrow the request, or invent a different artifact."
                     ),
                 },
                 "surface": {
@@ -66,8 +66,24 @@ SEND_TASK_TOOL: dict = {
                         "code, files, or anything multi-step. When unsure, choose 'task'."
                     ),
                 },
+                "specialist": {
+                    "type": "string",
+                    "enum": ["reasoning", "coding", "research", "tools", "writing", "data"],
+                    "description": (
+                        "Which worker capability should execute the brief. Choose from the "
+                        "meaning of the full conversation; no keyword router will override you."
+                    ),
+                },
+                "workspace": {
+                    "type": "string",
+                    "enum": ["isolated", "project"],
+                    "description": (
+                        "Use 'isolated' for new artifacts and general work. Use 'project' only "
+                        "when the user explicitly wants the currently selected project changed."
+                    ),
+                },
             },
-            "required": ["title", "instructions"],
+            "required": ["title", "instructions", "surface", "specialist", "workspace"],
         },
     },
 }

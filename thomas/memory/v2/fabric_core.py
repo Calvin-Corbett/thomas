@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sqlite3
 from typing import Any
 
 from .contradiction_review import (
@@ -172,7 +173,6 @@ class MemoryFabricV2(MemoryFabricV2Retrieval):
         base_salience: float = 1.0,
         decay_half_life_hours: float = 48.0,
         source: str = "chat",
-        also_extract_profile: bool = False,
     ) -> dict[str, Any]:
         event_ts = int(ts_ms if ts_ms is not None else _now_ms())
         created_at_ms = _now_ms()
@@ -709,7 +709,7 @@ class MemoryFabricV2(MemoryFabricV2Retrieval):
                     self.compact(thread_id=thread_id)
                     self._update_maintenance_state(thread_id, compact_ms=now)
                     log.info("Auto-compacted thread %s", thread_id)
-                except Exception as e:
+                except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as e:
                     log.warning("Auto-compact failed for %s: %s", thread_id, e)
 
         if settings.auto_optimize_enabled:
@@ -731,5 +731,5 @@ class MemoryFabricV2(MemoryFabricV2Retrieval):
                     )
                     self._update_maintenance_state(thread_id, optimize_ms=now)
                     log.info("Auto-optimized packs for thread %s", thread_id)
-                except Exception as e:
+                except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as e:
                     log.warning("Auto-optimize failed for %s: %s", thread_id, e)

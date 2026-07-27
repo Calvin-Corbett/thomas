@@ -74,7 +74,13 @@
   function recordError(error, fallback) {
     pushLiveEvent({ type: 'error', text: errorText(error, fallback) });
     // Every user-visible Code failure also lands in the issue ledger report.
-    try { fetch('/api/issues', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ surface: 'code-ui', kind: 'action_error', message: errorText(error, fallback).slice(0, 300), context: { runId: state.runId || '' } }) }); } catch (e) {}
+    try {
+      void fetch('/api/issues', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ surface: 'code-ui', kind: 'action_error', message: errorText(error, fallback).slice(0, 300), context: { runId: state.runId || '' } }),
+      }).catch(() => {});
+    } catch (e) {}
     render();
   }
 
@@ -465,7 +471,13 @@
   function canSwitchContext() {
     if (!state.approvalBusy && !state.steeringBusy && !state.finishing) {
       // A live run no longer blocks switching — it parks and keeps running.
-      if (state.running) parkActiveRun();
+      if (state.running) {
+        if (!state.runId) {
+          recordError(null, 'Wait for this Code task to start before switching.');
+          return false;
+        }
+        parkActiveRun();
+      }
       return true;
     }
     recordError(null, 'Finish the pending Code approval or steering update before switching.');

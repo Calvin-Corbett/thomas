@@ -1,6 +1,17 @@
 // Extracted from part-003.js
 // From capped
 
+function setAssistantSuggestions({ title = 'Suggestions', options = [], context = 'general', dismissible = true } = {}) {
+    if (!assistantSuggestionRail || !assistantSuggestionBubbles) return;
+    if (isGenerating) return;
+
+    const validOptions = (Array.isArray(options) ? options : []).filter((option) => {
+        return Boolean(safeString(option?.label) || safeString(option?.value));
+    });
+    if (validOptions.length === 0) {
+        hideAssistantSuggestions({ force: true });
+        return;
+    }
 
     // Cap at 6 suggestions max
     const capped = validOptions.slice(0, 6);
@@ -85,8 +96,3 @@
 
     assistantSuggestionBubbles.appendChild(track);
 }
-
-function withSuggestionContext(prompt, { userText = '', assistantText = '' } = {}) {
-    const base = safeString(prompt);
-    const user = safeString(userText).slice(0, 260);
-    const assistant = safeString(assistantText).slice(0, 260);

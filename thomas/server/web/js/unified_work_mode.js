@@ -5,6 +5,7 @@
     apps: [], accounts: [], connectors: [], activeApp: null, jobs: [], activeJob: null,
     messages: [], bindings: [], skills: [], automations: [], activity: [], workflows: [], activeWorkflowId: '',
     stage: 'home', onboardingPhase: 'goal_discovery', onboardingWorkflowId: '', onboardingSelectionUserTurn: 0, running: false, actionBusy: false, formDirty: false, editing: false, editingAutomationId: '', creatingJobInApp: false, sessionId: '', error: '', dashTab: '',
+    structuredOnboardingState: { phase: 'goal_discovery', confirmed_goal: '', workflows: [], selected_workflow_id: '', selected_workflow_configured: false },
   };
   let reconcileTimer = null;
   let activeStreamController = null;
@@ -16,6 +17,10 @@
   const surface = () => document.getElementById('tc-mode-surface');
   const appUrl = suffix => `/api/work/apps/${encodeURIComponent(state.activeApp.id)}${suffix || ''}`;
   const jobUrl = suffix => `${appUrl(`/jobs/${encodeURIComponent(state.activeJob.id)}`)}${suffix || ''}`;
+
+  function resetStructuredOnboardingState() {
+    state.structuredOnboardingState = { phase: 'goal_discovery', confirmed_goal: '', workflows: [], selected_workflow_id: '', selected_workflow_configured: false };
+  }
 
   async function request(url, options) {
     const response = await fetch(url, options);
@@ -176,6 +181,7 @@
     state.onboardingPhase = 'goal_discovery';
     state.onboardingWorkflowId = '';
     state.onboardingSelectionUserTurn = 0;
+    resetStructuredOnboardingState();
     state.stage = 'home';
     state.error = '';
     render();
@@ -198,6 +204,7 @@
     root.querySelectorAll('[data-work-card-status]').forEach(button => button.addEventListener('click', () => { void safely(() => setCardJobStatus(button.dataset.workAppId, button.dataset.workJobId, button.dataset.workCardStatus)); }));
     root.querySelectorAll('[data-work-card-run]').forEach(button => button.addEventListener('click', () => { void safely(() => runCardWorkflow(button.dataset.workAppId, button.dataset.workJobId, button.dataset.workWorkflowId)); }));
     root.querySelector('[data-work-finish]')?.addEventListener('click', () => { void safely(finishOnboarding); });
+    root.querySelectorAll('[data-work-select-workflow]').forEach(button => button.addEventListener('click', () => { void safely(() => selectOnboardingWorkflow(button.dataset.workSelectWorkflow)); }));
     root.querySelector('[data-work-status]')?.addEventListener('click', event => { void safely(() => setJobStatus(event.currentTarget.dataset.workStatus)); });
     root.querySelector('[data-work-edit]')?.addEventListener('click', () => { state.editing = true; render(); });
     root.querySelector('[data-work-edit-cancel]')?.addEventListener('click', () => { state.editing = false; state.formDirty = false; render(); });
@@ -293,7 +300,7 @@
       : null;
     if (!adapterActive || generation !== selectionGeneration) return;
     state.activeApp = data.app; state.jobs = jobsData.jobs || [];
-    state.activeJob = null; state.messages = []; state.workflows = []; state.activeWorkflowId = ''; state.onboardingWorkflowId = ''; state.onboardingSelectionUserTurn = 0; state.creatingJobInApp = false;
+    state.activeJob = null; state.messages = []; state.workflows = []; state.activeWorkflowId = ''; state.onboardingWorkflowId = ''; state.onboardingSelectionUserTurn = 0; state.creatingJobInApp = false; resetStructuredOnboardingState();
     if (draftSessionId) {
       const row = (draftChats.chats || []).find(chat => String(chat.session_id || chat.sessionId || '') === draftSessionId);
       state.stage = 'onboarding';
@@ -351,12 +358,12 @@
 
   function newConversation() {
     if (activeStreamController) activeStreamController.abort();
-    selectionGeneration += 1; clearTimeout(reconcileTimer); reconcileTimer = null; state.activeApp = null; state.activeJob = null; state.messages = []; state.workflows = []; state.activeWorkflowId = ''; state.onboardingWorkflowId = ''; state.onboardingSelectionUserTurn = 0; state.sessionId = ''; state.creatingJobInApp = false; state.onboardingPhase = 'goal_discovery'; state.stage = 'onboarding'; state.error = ''; render();
+    selectionGeneration += 1; clearTimeout(reconcileTimer); reconcileTimer = null; state.activeApp = null; state.activeJob = null; state.messages = []; state.workflows = []; state.activeWorkflowId = ''; state.onboardingWorkflowId = ''; state.onboardingSelectionUserTurn = 0; state.sessionId = ''; state.creatingJobInApp = false; state.onboardingPhase = 'goal_discovery'; resetStructuredOnboardingState(); state.stage = 'onboarding'; state.error = ''; render();
   }
 
   function newJobInApp() {
     if (activeStreamController) activeStreamController.abort();
-    selectionGeneration += 1; clearTimeout(reconcileTimer); reconcileTimer = null; state.activeJob = null; state.messages = []; state.workflows = []; state.activeWorkflowId = ''; state.onboardingWorkflowId = ''; state.onboardingSelectionUserTurn = 0; state.sessionId = ''; state.creatingJobInApp = true; state.onboardingPhase = 'goal_discovery'; state.stage = 'onboarding'; state.error = ''; render();
+    selectionGeneration += 1; clearTimeout(reconcileTimer); reconcileTimer = null; state.activeJob = null; state.messages = []; state.workflows = []; state.activeWorkflowId = ''; state.onboardingWorkflowId = ''; state.onboardingSelectionUserTurn = 0; state.sessionId = ''; state.creatingJobInApp = true; state.onboardingPhase = 'goal_discovery'; resetStructuredOnboardingState(); state.stage = 'onboarding'; state.error = ''; render();
   }
 
   // Every onboarding flow gets ITS OWN chat session, namespaced per flow —
@@ -378,6 +385,7 @@
           phase: state.onboardingPhase,
           selected_workflow: '',
           selected_workflow_id: '',
+          workflow_drafts: [],
         });
       }
       return true;
@@ -407,19 +415,33 @@
     await request(appUrl('/onboarding/messages'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: role === 'assistant' ? 'thomas' : role, text }) });
   }
 
+  async function selectOnboardingWorkflow(workflowId) {
+    const candidates = onboardingWorkflowCandidates();
+    const selected = candidates.find(row => String(row.id || '') === String(workflowId || ''));
+    if (!selected) throw new Error('That workflow is no longer available.');
+    state.onboardingWorkflowId = String(selected.id);
+    state.onboardingSelectionUserTurn = state.messages.filter(row => row.role === 'user').length;
+    state.structuredOnboardingState = {
+      ...state.structuredOnboardingState,
+      phase: 'workflow_configuration',
+      selected_workflow_id: state.onboardingWorkflowId,
+      selected_workflow_configured: false,
+    };
+    await advanceOnboardingPhase();
+  }
+
   async function advanceOnboardingPhase() {
+    const structured = state.structuredOnboardingState || {};
     const candidates = onboardingWorkflowCandidates();
     const selected = selectedOnboardingWorkflow(candidates);
     const confirmedGoal = confirmedOnboardingGoal();
-    const nextPhase = state.onboardingPhase === 'workflow_configuration'
-      ? 'workflow_configuration'
-      : selected && state.onboardingPhase === 'workflow_mapping'
-        ? 'workflow_configuration'
-        : candidates.length >= 3 ? 'workflow_mapping' : 'goal_discovery';
+    const nextPhase = String(structured.phase || 'goal_discovery');
     const phaseFields = {
       session_id: state.sessionId,
+      phase: nextPhase,
       confirmed_goal: confirmedGoal,
       workflow_count: candidates.length,
+      workflow_drafts: candidates,
       selected_workflow: selected ? selected.name : '',
       selected_workflow_id: selected ? state.onboardingWorkflowId : '',
       selected_workflow_user_turn: selected ? state.onboardingSelectionUserTurn : 0,
@@ -427,15 +449,14 @@
     };
     if (state.creatingJobInApp) await persistJobDraft({ phase: nextPhase, ...phaseFields });
     else {
-      const update = { fields: phaseFields };
-      if (nextPhase !== state.onboardingPhase) update.phase = nextPhase;
+      const update = { phase: nextPhase, fields: phaseFields };
       await jsonRequest(appUrl('/onboarding'), 'PATCH', update);
     }
     state.onboardingPhase = nextPhase;
   }
 
   async function readChatStream(message, options) {
-    const response = await fetch('/api/v2/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: options.signal, body: JSON.stringify({ message, display_prompt: options.displayPrompt || undefined, session_id: state.sessionId || undefined, surface_mode: 'work', context_id: options.contextId, ...contextSettings() }) });
+    const response = await fetch('/api/v2/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: options.signal, body: JSON.stringify({ message, display_prompt: options.displayPrompt || undefined, session_id: state.sessionId || undefined, surface_mode: 'work', context_id: options.contextId, work_onboarding_state: options.workOnboardingState || undefined, ...contextSettings() }) });
     if (!response.ok || !response.body) {
       const problemText = await response.text();
       let problem = {};
@@ -460,6 +481,7 @@
           answer += String(event.text || event.delta || event.content || '');
           if (options.onDelta) options.onDelta(answer);
         }
+        else if (type === 'work_onboarding_state' && event.state && typeof event.state === 'object') { if (options.onWorkOnboardingState) options.onWorkOnboardingState(event.state); }
         else if (type === 'done') { state.sessionId = String(event.session_id || state.sessionId); if (!answer) answer = String(event.final || event.output_text || event.text || ''); }
         else if (type === 'error') throw new Error(event.error || 'Thomas reported an error');
       }
@@ -487,7 +509,7 @@
         // every past conversation in the app and bleeds it into new jobs.
         const contextId = `${state.activeApp.id}:onboarding:${state.sessionId}`;
         const pending = { role: 'assistant', text: '' }; state.messages.push(pending); render();
-        const answer = await readChatStream(instruction, { contextId, displayPrompt: text, signal: controller.signal, onDelta: value => { if (generation === selectionGeneration) { pending.text = value; if (adapterActive) render(); } } });
+        const answer = await readChatStream(instruction, { contextId, displayPrompt: text, workOnboardingState: state.structuredOnboardingState, signal: controller.signal, onWorkOnboardingState: value => { if (generation === selectionGeneration) { state.structuredOnboardingState = value; state.onboardingPhase = String(value.phase || state.onboardingPhase); state.onboardingWorkflowId = String(value.selected_workflow_id || ''); if (adapterActive) render(); } }, onDelta: value => { if (generation === selectionGeneration) { pending.text = value; if (adapterActive) render(); } } });
         if (generation !== selectionGeneration) return;
         pending.text = answer; await appendOnboarding('assistant', answer);
         await advanceOnboardingPhase();

@@ -650,7 +650,9 @@ class WorkflowRunner:
         if not goal:
             raise WorkflowExecutionError("orchestrator_worker requires payload.goal")
 
-        worker_count = _as_int(payload.get("worker_count"), default=3, minimum=1, maximum=8)
+        # An explicit orchestrator workflow may fan out, but an omitted count is
+        # the neutral one-worker default rather than an invented crew size.
+        worker_count = _as_int(payload.get("worker_count"), default=1, minimum=1, maximum=8)
         orchestration_cap = _text(payload.get("orchestrator_capability"), default="chat")
         orchestration_profile = self._select_profile(
             capability=orchestration_cap,
@@ -680,6 +682,7 @@ class WorkflowRunner:
             workers_payload,
             default_capability=_text(payload.get("worker_capability"), default="chat"),
         )
+        workers = workers[:worker_count]
         if not workers:
             workers = [_StepSpec(name="worker-1", prompt=goal, capability="chat", profile="")]
 

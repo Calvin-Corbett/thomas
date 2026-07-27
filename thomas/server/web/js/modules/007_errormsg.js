@@ -339,36 +339,6 @@ async function applyOnboardingCompletion({ skippedInterview = false } = {}) {
     });
 }
 
-function includesAny(text, terms = []) {
-    return (terms || []).some((term) => text.includes(term));
-}
-
-function isSecurityTrustConcern(textRaw) {
-    const text = safeString(textRaw).toLowerCase();
-    if (!text) return false;
-    return includesAny(text, [
-        'security',
-        'secure',
-        'unsafe',
-        'cyber',
-        'risk',
-        'risky',
-        'trust',
-        'dependency',
-        'dependencies',
-        'dependency tree',
-        'dependency trees',
-        'install',
-        'installer',
-        'download',
-        'permission',
-        'permissions',
-        'malware',
-        'virus',
-        'supply chain',
-    ]);
-}
-
 function buildSetupSafetyMessage() {
     return [
         'Fair concern. Setup is designed to be explicit and user-controlled:',

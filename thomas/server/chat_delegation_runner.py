@@ -9,19 +9,10 @@ from typing import Any
 
 from thomas.core import task_bot_runtime
 from thomas.marketplace.specialists.reasoning_task_briefs import brief_scope as _brief_scope
-from thomas.server.chat_delegation_artifact_verification import (
-    _hidden_completion_review_passes,
-    _reconcile_missing_marker_literals,
-    _reconcile_requested_artifact_from_evidence,
-    _requested_artifact_issues,
-    _sanitize_terminal_summary,
-)
+from thomas.server.chat_delegation_artifact_verification import _hidden_completion_review_passes
 from thomas.server.chat_delegation_deliverable import (
-    _FAILURE_LANGUAGE_RE,
     _artifacts_from_created,
     _build_result_summary,
-    _claims_action_success,
-    _claims_file_creation,
     _resolve_created,
     _snapshot_workspace_files,
     _worker_summary_line,
@@ -36,15 +27,10 @@ from thomas.server.chat_delegation_emitter import _DelegationEmitter, _Threadsaf
 from thomas.server.chat_delegation_exhaustive_runner import _run_exhaustive_worker
 from thomas.server.chat_delegation_live_repo import (
     _LIVE_REPO_WRITE_TOOLS,
-    _live_repo_changes_are_docs_only,
     _live_repo_files_changed_since,
     _live_repo_result_summary,
     _live_repo_workspace_mtimes,
-    _prompt_allows_docs_only_completion,
     _with_live_repo_change_requirement,
-)
-from thomas.server.chat_delegation_result_policy import (
-    should_finalize_exact_artifact_tool_result as _should_finalize_exact_artifact_tool_result,
 )
 from thomas.server.chat_delegation_result_policy import (
     worker_text_is_confirmed_answer as _worker_text_is_confirmed_answer,
@@ -295,11 +281,7 @@ async def _finalize_worker_completion(
     # failed every multi-task run ("missing" files that were never this job).
     scope_prompt = _brief_scope(prompt)
     created = _resolve_created(work_dir, attempt_baseline, result_text_parts, tools_used)
-    created = _reconcile_requested_artifact_from_evidence(scope_prompt, work_dir, created, tool_outputs)
-    created = _reconcile_missing_marker_literals(scope_prompt, work_dir, created)
-    artifact_issues = _requested_artifact_issues(scope_prompt, work_dir, created, tool_outputs)
-    if artifact_issues:
-        raise _WorkerRetry("requested artifact verification failed: " + "; ".join(artifact_issues))
+    del tool_outputs
     _report_pdfs = await asyncio.to_thread(render_report_pdfs, work_dir, created)
     if _report_pdfs:
         created = list(created) + [p for p in _report_pdfs if p not in created]
@@ -311,7 +293,6 @@ async def _finalize_worker_completion(
         failed_tools=failed_tools,
         prompt=scope_prompt,
     )
-    result_summary = _sanitize_terminal_summary(result_summary, created)
     _exec_warnings = executability_warning(work_dir, created)
     _exec_warnings += await asyncio.to_thread(runtime_executability_warning, work_dir, created)
     result_summary += _exec_warnings
@@ -327,9 +308,6 @@ async def _finalize_worker_completion(
     # no executability warning fired). A leftover failure-flavored hedge from
     # the worker's prose then reads as a contradiction next to the "verified"
     # banner — the engine's verdict is authoritative, so it owns the summary.
-    if created and verified_success and not _exec_warnings and _FAILURE_LANGUAGE_RE.search(result_summary):
-        _names = ", ".join(Path(p).name for p in created[:5])
-        result_summary = f"Created {_names} — verified by the engine's artifact checks."
     if artifacts and verified_success:
         try:
             task_bot_runtime.attach_proof(
@@ -401,10 +379,6 @@ async def _finalize_live_repo_completion(
         raise _WorkerRetry(
             "self-development task changed no live repo files; write tools used did not change counted files: "
             + ", ".join(write_tools_used[:3])
-        )
-    if _live_repo_changes_are_docs_only(changed) and not _prompt_allows_docs_only_completion(prompt):
-        raise _WorkerRetry(
-            "self-development task changed only documentation files; live code or test files must change"
         )
     result_summary = _live_repo_result_summary(result_text_parts, changed)
     if not _hidden_completion_review_passes(
@@ -656,31 +630,6 @@ async def _run_agent_worker(
                     )
                     record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
                     await emitter.progress(record, specialist_id=specialist_id, bot=bot, text=progress)
-                    if not requires_live_repo_change and _should_finalize_exact_artifact_tool_result(
-                        prompt,
-                        last_tool=last_tool,
-                        succeeded_tools=succeeded_tools,
-                        failed_tools=failed_tools,
-                    ):
-                        if not worker_runtime_received:
-                            raise _WorkerRetry("provider-native worker model runtime receipt missing")
-                        log.info("worker %s verifying exact artifact after file tool success", execution_id)
-                        await _finalize_worker_completion(
-                            emitter,
-                            execution_id,
-                            work_dir,
-                            prompt,
-                            attempt_baseline,
-                            result_text_parts,
-                            tools_used,
-                            succeeded_tools,
-                            failed_tools,
-                            tool_outputs,
-                            bot,
-                            specialist_id,
-                            repo_root,
-                        )
-                        return
                 elif event_type == "error":
                     # Deterministic terminal states are non-retryable upstream.
                     if event.get("retryable") is False:

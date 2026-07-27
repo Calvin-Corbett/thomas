@@ -34,7 +34,6 @@ const MISSION_JOBS_LIMIT = 180;
 const MISSION_TIMELINE_RECENT_MS = 1000 * 60 * 60 * 36;
 const MISSION_RECURRING_SCHEDULE_TYPES = new Set(['interval', 'daily', 'weekly']);
 const CONTENT_HUB_STALE_MS = 45_000;
-const OFFICE_TASK_KEYWORDS = /\b(build|create|design|fix|update|refactor|research|compare|analy(?:z|s)e|write|draft|plan|test|deploy|ship|record|edit|summarize|review|debug|optimi(?:s|z)e|benchmark|publish|support|investigate|script|automation|website|landing|video|content)\b/i;
 const OFFICE_STATIC_ROOMS = [
     { id: 'room-planning', label: 'Strategy Room', meta: 'Planning + roadmaps', x: 4, y: 7, w: 13, h: 11, kind: 'work', theme: 'planning', doorX: 17, doorY: 24, hallId: 'hall-north-west' },
     { id: 'room-engineering', label: 'Software Lab', meta: 'Code + automation', x: 20, y: 8, w: 30, h: 16, kind: 'work', theme: 'engineering', doorX: 35, doorY: 24, hallId: 'hall-north-mid' },
@@ -138,16 +137,24 @@ const OFFICE_DYNAMIC_ROOM_SLOTS = [
     { x: 66, y: 95, w: 9, h: 5 },
     { x: 76, y: 95, w: 9, h: 5 },
 ];
-const OFFICE_TASK_ROOM_RULES = [
-    { pattern: /\b(code|coding|bug|fix|refactor|script|api|backend|frontend|test|suite|engineer(?:ing)?)\b/i, roomId: 'room-engineering' },
-    { pattern: /\b(content|video|youtube|social|post|edit|thumbnail|brand|marketing)\b/i, roomId: 'room-content' },
-    { pattern: /\b(research|compare|competitor|benchmark|analysis|document|docs|investigate)\b/i, roomId: 'room-research' },
-    { pattern: /\b(deploy|infra|infrastructure|ops|monitor|reliability|performance|server|hosting)\b/i, roomId: 'room-ops' },
-    { pattern: /\b(plan|roadmap|strategy|scope|milestone|timeline)\b/i, roomId: 'room-planning' },
-    { pattern: /\b(support|ticket|customer|feedback|help)\b/i, roomId: 'room-support' },
-    { pattern: /\b(design|ui|ux|landing|website|visual|brand)\b/i, roomId: 'room-design' },
-    { pattern: /\b(focus|deep work|pod|quiet)\b/i, roomId: 'room-pods' },
-];
+const OFFICE_EXPLICIT_ROOM_IDS = Object.freeze({
+    planning: 'room-planning',
+    engineering: 'room-engineering',
+    content: 'room-content',
+    research: 'room-research',
+    support: 'room-support',
+    design: 'room-design',
+    ops: 'room-ops',
+    pods: 'room-pods',
+});
+const OFFICE_SPECIALIST_ROOM_IDS = Object.freeze({
+    coding: 'room-engineering',
+    research: 'room-research',
+    tools: 'room-ops',
+    writing: 'room-content',
+    data: 'room-research',
+    reasoning: 'room-planning',
+});
 const OFFICE_AGENT_SEEDS = [
     { name: 'Brandon', color: '#9ad8ff', costume: 'visor', tint: 'blue', specialty: 'Software builds', personality: 'Practical, fast, and precise with code tasks.' },
     { name: 'Trey', color: '#9becc9', costume: 'headset', tint: 'green', specialty: 'Research', personality: 'Patient, source-focused, and careful with claims.' },

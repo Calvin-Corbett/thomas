@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-import re
 import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -40,7 +39,6 @@ from thomas.models.worker_overrides import resolve_override
 from thomas.server.app_keys import APP_CONFIG, APP_MEMORY, APP_SECRETS
 from thomas.server.chat_budget_ledger import ChatBudgetError, ChatBudgetExceeded, budget_context, get_chat_budget_ledger
 from thomas.server.chat_budget_scope import scope_from_runtime_policy
-from thomas.server.chat_delegation_artifact_verification import _requested_names
 from thomas.server.chat_runtime_policy import (
     ModelRuntimePolicy,
     PolicyToolRegistryView,
@@ -166,179 +164,6 @@ def _apply_tool_deny(tools: Any, deny: frozenset[str]) -> None:
                 tools.unregister(name)
             except Exception:  # pragma: no cover - best-effort pruning
                 pass
-
-
-def _apply_explicit_tool_contract(prompt: str, tools: Any) -> frozenset[str]:
-    """Narrow a worker registry when the task explicitly mandates named tools.
-
-    Small local models can stop emitting function calls when many unrelated tool
-    schemas are present. A literal instruction such as ``use fs.write_file and
-    fs.read_file`` is an allowlist contract, not a fuzzy relevance hint. Registry
-    construction is per worker, so pruning here cannot affect another request.
-    """
-    registered = getattr(tools, "_tools", None)
-    if not isinstance(registered, dict) or not registered:
-        return frozenset()
-    text = str(prompt or "")
-    if not re.search(r"\b(?:call|invoke|run|use|using)\b", text, re.IGNORECASE):
-        return frozenset()
-    mentioned = {
-        name for name in registered if re.search(rf"(?<![\w.]){re.escape(str(name))}(?![\w.])", text, re.IGNORECASE)
-    }
-    if not mentioned:
-        return frozenset()
-    for name in list(registered):
-        if name not in mentioned:
-            tools.unregister(name)
-    return frozenset(mentioned)
-
-
-_FENCED_ARTIFACT_RE = re.compile(r"```[^\r\n]*\r?\n(.*?)```", re.DOTALL)
-
-
-def _fenced_artifact_contents(prompt: str, output: str) -> dict[str, str]:
-    """Map model-emitted fenced content to exact artifact names from the task."""
-    requested = [Path(name).name for name in _requested_names(prompt)]
-    if not requested:
-        return {}
-    text = str(output or "")
-    lowered = text.casefold()
-    mentions = [
-        (match.start(), name) for name in requested for match in re.finditer(re.escape(name.casefold()), lowered)
-    ]
-    recovered: dict[str, str] = {}
-    for block in _FENCED_ARTIFACT_RE.finditer(text):
-        owners = [(position, name) for position, name in mentions if position < block.start()]
-        if not owners:
-            continue
-        _position, name = max(owners, key=lambda item: item[0])
-        content = block.group(1).strip("\r\n")
-        if name not in recovered and content:
-            recovered[name] = content + "\n"
-    return recovered
-
-
-async def _recover_fenced_artifact_calls(
-    prompt: str,
-    output: str,
-    tools: Any,
-    *,
-    skip_names: frozenset[str] = frozenset(),
-    read_back: bool = True,
-) -> tuple[list[dict[str, Any]], list[str]]:
-    """Execute explicit file calls represented as fenced prose by a weak model."""
-    events: list[dict[str, Any]] = []
-    recovered: list[str] = []
-    for name, content in _fenced_artifact_contents(prompt, output).items():
-        if name.casefold() in skip_names:
-            continue
-        calls = [("fs.write_file", {"path": name, "content": content})]
-        if read_back:
-            calls.append(("fs.read_file", {"path": name}))
-        artifact_ok = True
-        for tool_name, args in calls:
-            events.append({"type": "tool_start", "name": tool_name})
-            result = await tools.execute(tool_name, args)
-            result_text = result.to_content(max_len=8000)
-            events.append(
-                {
-                    "type": "tool_output",
-                    "name": tool_name,
-                    "ok": bool(result.ok),
-                    "error": str(result.error or ""),
-                    "result_text": result_text,
-                }
-            )
-            if not result.ok:
-                artifact_ok = False
-                break
-        if artifact_ok:
-            recovered.append(name)
-    return events, recovered
-
-
-async def _explicit_browser_preflight(prompt: str, tools: Any) -> tuple[list[dict[str, Any]], str]:
-    """Execute an explicitly ordered open/extract pair before model generation.
-
-    This applies only when the user literally names both read-only browser tools
-    and supplies their concrete URL/selector. It makes deterministic instructions
-    reliable on small local models while leaving all inferred browsing to AgentLoop.
-    """
-    text = str(prompt or "")
-    if "browser.open" not in text.casefold() or "browser.extract" not in text.casefold():
-        return [], ""
-    open_match = re.search(r"browser\.open[^\r\n]{0,240}?(https?://[^\s,;]+)", text, re.IGNORECASE)
-    extract_match = re.search(
-        r"browser\.extract[^\r\n]{0,240}?selector\s+[`'\"]?([^`'\"\s,;.]+)",
-        text,
-        re.IGNORECASE,
-    )
-    if not open_match or not extract_match:
-        return [], ""
-    session_match = re.search(r"session(?:_id)?\s+[`'\"]?([A-Za-z0-9_-]+)", text, re.IGNORECASE)
-    session = session_match.group(1) if session_match else "default"
-    calls: list[tuple[str, dict[str, Any]]] = [
-        ("browser.open", {"url": open_match.group(1).rstrip("."), "session": session}),
-        ("browser.extract", {"selector": extract_match.group(1), "session": session}),
-    ]
-    events: list[dict[str, Any]] = []
-    evidence: list[str] = []
-    extract_value = ""
-    for name, args in calls:
-        events.append({"type": "tool_start", "name": name})
-        result = await tools.execute(name, args)
-        result_text = result.to_content(max_len=8000)
-        events.append(
-            {
-                "type": "tool_output",
-                "name": name,
-                "ok": bool(result.ok),
-                "error": str(result.error or ""),
-                "result_text": result_text,
-            }
-        )
-        evidence.append(f"{name}: {result_text}")
-        if not result.ok:
-            break
-        if name == "browser.extract" and isinstance(result.data, list) and result.data:
-            extract_value = str(result.data[0]).strip()
-
-    file_match = re.search(
-        r"fs\.write_file[^\r\n]{0,240}?([A-Za-z0-9][A-Za-z0-9_.-]{0,120}\."
-        r"(?:md|txt|json|csv|tsv|html|htm))\b",
-        text,
-        re.IGNORECASE,
-    )
-    wants_readback = "fs.read_file" in text.casefold()
-    if extract_value and file_match and wants_readback and all(event.get("ok") is not False for event in events):
-        path = file_match.group(1)
-        url = open_match.group(1).rstrip(".")
-        content = (
-            f"Source URL: {url}\n"
-            f"Extracted Heading: {extract_value}\n"
-            f'This page is a documentation example headed "{extract_value}".\n'
-        )
-        file_calls = [
-            ("fs.write_file", {"path": path, "content": content}),
-            ("fs.read_file", {"path": path}),
-        ]
-        for name, args in file_calls:
-            events.append({"type": "tool_start", "name": name})
-            result = await tools.execute(name, args)
-            result_text = result.to_content(max_len=8000)
-            events.append(
-                {
-                    "type": "tool_output",
-                    "name": name,
-                    "ok": bool(result.ok),
-                    "error": str(result.error or ""),
-                    "result_text": result_text,
-                }
-            )
-            evidence.append(f"{name}: {result_text}")
-            if not result.ok:
-                break
-    return events, "\n".join(evidence)
 
 
 async def run_agent_worker_events(
@@ -471,9 +296,6 @@ async def run_agent_worker_events(
     from thomas.server.app_helpers import _build_tools  # lazy: avoid any app-bootstrap import cycle
 
     tools = _build_tools(run_cfg) if tools_enabled else ToolRegistry()
-    explicit_tools = _apply_explicit_tool_contract(prompt, tools) if tools_enabled else frozenset()
-    if explicit_tools:
-        log.info("worker: honoring explicit tool contract: %s", ", ".join(sorted(explicit_tools)))
     _apply_tool_deny(tools, override.tool_deny)
 
     # Guardrails: resolve the effective policy (payload modes -> preset -> saved),
@@ -658,9 +480,6 @@ async def run_agent_worker_events(
         )
 
     streamed_text = False
-    buffered_text: list[str] = []
-    buffer_explicit_artifacts = "fs.write_file" in explicit_tools
-    written_names: set[str] = set()
 
     def _successful_runtime_receipt() -> dict[str, Any] | None:
         runtime = model_runtime_receipt(
@@ -684,11 +503,8 @@ async def run_agent_worker_events(
             if etype == EventType.TEXT_DELTA:
                 text = str(event.data.get("text") or "")
                 if text:
-                    if buffer_explicit_artifacts:
-                        buffered_text.append(text)
-                    else:
-                        streamed_text = True
-                        yield {"type": "text", "text": text}
+                    streamed_text = True
+                    yield {"type": "text", "text": text}
             elif etype == EventType.TOOL_CALL_START:
                 name = str(event.data.get("tool_name") or event.data.get("name") or "tool")
                 yield {"type": "tool_start", "name": name}
@@ -713,11 +529,6 @@ async def run_agent_worker_events(
                 # layer needs it too so a placeholder artifact cannot be certified
                 # when a browser/read tool returned the real value.
                 result_text = str(event.data.get("result_text") or event.data.get("result") or "")
-                if ok and name in {"fs.write_file", "fs_write_file"}:
-                    for requested_name in _requested_names(prompt):
-                        basename = Path(requested_name).name
-                        if basename.casefold() in result_text.casefold():
-                            written_names.add(basename.casefold())
                 yield {
                     "type": "tool_output",
                     "name": name,
@@ -746,21 +557,6 @@ async def run_agent_worker_events(
                 return
             elif etype == EventType.AGENT_DONE:
                 final = str(event.data.get("text") or "").strip()
-                if buffer_explicit_artifacts:
-                    source_text = final or "".join(buffered_text).strip()
-                    recovery_events, recovered_names = await _recover_fenced_artifact_calls(
-                        prompt,
-                        source_text,
-                        tools,
-                        skip_names=frozenset(written_names),
-                        read_back="fs.read_file" in explicit_tools,
-                    )
-                    for recovery_event in recovery_events:
-                        yield recovery_event
-                    if recovered_names:
-                        final = "Created and verified " + ", ".join(recovered_names) + "."
-                    elif not final:
-                        final = source_text
                 # Some providers only deliver the answer in AGENT_DONE (no deltas).
                 # Surface it as a text chunk so the result summary is real.
                 if final and not streamed_text:

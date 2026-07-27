@@ -43,18 +43,6 @@ def is_exhaustive(effort: Any, autonomy_level: int = 4) -> bool:
 
 
 _REVIEW_LENSES = ("correctness", "completeness", "robustness")
-_TOOL_TASK_RE = re.compile(
-    r"\b(?:create|build|make|generate|implement|edit|modify|fix|debug|run|execute|send|email|schedule|book|"
-    r"browse|search|fetch|download)\b.*\b(?:file|document|report|pdf|csv|spreadsheet|deck|slides?|app|game|"
-    r"code|script|website|dashboard|chart|email|message|meeting|reservation|url|web)\b",
-    re.IGNORECASE | re.DOTALL,
-)
-_ARTIFACT_INTENT_RE = re.compile(
-    r"\b(?:create|build|make|generate|produce|prepare|provide|deliver|give|need|want|like)\b[^\n.!?]{0,100}"
-    r"\b(?:file|document|report|pdf|csv|spreadsheet|deck|slides?|app|playable\s+(?:web\s+)?game|"
-    r"code|script|website|dashboard|chart)\b",
-    re.IGNORECASE,
-)
 
 
 def _reviewer_runtime_policy(runtime_policy: dict[str, Any] | None) -> dict[str, Any]:
@@ -74,23 +62,6 @@ def _reviewer_runtime_policy(runtime_policy: dict[str, Any] | None) -> dict[str,
     )
     reviewer_policy["tools"] = tool_policy
     return reviewer_policy
-
-
-def _task_needs_tools(prompt: str, *, job_type: str | None = None) -> bool:
-    """Keep answer-only Max crews tool-free while preserving explicit action tasks."""
-
-    text = str(prompt or "")
-    return bool(
-        job_type == "self_development"
-        or _TOOL_TASK_RE.search(text)
-        or _ARTIFACT_INTENT_RE.search(text)
-        or re.search(r"\b(?:fs|browser|web|email|calendar|connector)\.[a-z_]+\b", text, re.IGNORECASE)
-        or re.search(r"\b(?:attached|attachment|uploaded)\b", text, re.IGNORECASE)
-    )
-
-
-def _task_needs_artifacts(prompt: str) -> bool:
-    return bool(_ARTIFACT_INTENT_RE.search(str(prompt or "")))
 
 
 class ExhaustiveQualityGateFailure(RuntimeError):
@@ -176,6 +147,12 @@ async def run_exhaustive_pipeline(
     work_context_id: str = "",
     memory_enabled: bool = True,
     runtime_policy: dict[str, Any] | None = None,
+    task_type: str | None = None,
+    crew_specialties: list[str] | tuple[str, ...] | None = None,
+    task_analysis: dict[str, Any] | None = None,
+    tools_enabled: bool = True,
+    tool_evidence_required: bool = False,
+    expected_artifacts: list[str] | tuple[str, ...] | None = None,
     emit_stage: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     on_tool: Callable[[str], Awaitable[None]] | None = None,
     on_model_runtime: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
@@ -185,7 +162,10 @@ async def run_exhaustive_pipeline(
     """Run the Exhaustive pipeline with live stage executors; returns the context."""
     work_dir_str = str(work_dir)
     pass_sequence = 0
-    task_tools_enabled = _task_needs_tools(prompt, job_type=job_type)
+    task_tools_enabled = bool(tools_enabled)
+    expected_artifact_paths = [
+        str(value).strip() for value in (expected_artifacts or ()) if isinstance(value, str) and str(value).strip()
+    ]
     reviewer_runtime_policy = _reviewer_runtime_policy(runtime_policy)
 
     async def _model_pass(
@@ -308,15 +288,16 @@ async def run_exhaustive_pipeline(
         return {
             "dimensions": ["correctness", "completeness", "robustness"],
             "task_type": ctx.task_type,
-            "tools_required": task_tools_enabled,
+            "tools_available": task_tools_enabled,
+            "tools_required": bool(tool_evidence_required),
         }
 
     async def _verify(ctx: PipelineContext) -> bool:
         result = verification.verify_deliverable(ctx.task_type, work_dir_str, ctx.work_result)
         checks = tuple(str(check).strip().lower() for check in result.checks)
         passed = bool(result.passed) and not any(check in {"skipped", "error"} for check in checks)
-        if _task_needs_artifacts(prompt):
-            artifact_ok, artifacts, artifact_issues = _artifact_evidence(prompt, work_dir_str)
+        if expected_artifact_paths:
+            artifact_ok, artifacts, artifact_issues = _artifact_evidence(expected_artifact_paths, work_dir_str)
             ctx.rubric["artifact_evidence"] = {
                 "passed": artifact_ok,
                 "artifacts": artifacts,
@@ -394,7 +375,15 @@ async def run_exhaustive_pipeline(
         # Intent review auto-confirms in the background (no interactive user); the
         # stage still emits so the chat shows the check happened.
     )
-    ctx = await pipeline.run(prompt, effort=effort, autonomy_level=autonomy_level)
+    ctx = await pipeline.run(
+        prompt,
+        effort=effort,
+        autonomy_level=autonomy_level,
+        task_type=task_type,
+        lead_specialty=specialist_id,
+        crew_specialties=crew_specialties,
+        task_analysis=task_analysis,
+    )
     if not ctx.aborted and not (ctx.verified and ctx.review_passed):
         raise ExhaustiveQualityGateFailure("exhaustive quality gates failed after bounded remediation")
     return ctx

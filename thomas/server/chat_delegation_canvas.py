@@ -27,7 +27,6 @@ from thomas.server.chat_delegation_canvas_client import (
 )
 from thomas.server.chat_delegation_canvas_client import canvas_diag as _diag
 from thomas.server.chat_delegation_canvas_client import evict_canvas_llm as _evict_canvas_llm
-from thomas.server.chat_delegation_canvas_intent import is_canvas_task
 from thomas.server.chat_delegation_canvas_review import review_canvas_html
 
 # Per-execution streaming store (process-local; the poll handler reads it).

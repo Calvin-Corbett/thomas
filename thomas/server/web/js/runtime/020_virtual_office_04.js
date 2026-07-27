@@ -631,36 +631,26 @@ function officeCreateDynamicRoom(taskText) {
     return room;
 }
 
-function officeResolveRoomForTask(taskText) {
-    const normalized = safeString(taskText).toLowerCase();
-    const featureExpansionHint = /\b(feature|module|capability|integration|initiative|new room|new area|new workspace)\b/i.test(normalized);
-    const slug = officeTaskTitle(taskText)
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .slice(0, 42);
-    if (slug && officeState?.dynamicRoomBySlug?.has(slug)) {
-        return officeRoomById(officeState.dynamicRoomBySlug.get(slug));
-    }
-    if (!featureExpansionHint) {
-        const matchedRule = OFFICE_TASK_ROOM_RULES.find((rule) => rule.pattern.test(normalized));
-        if (matchedRule) {
-            return officeRoomById(matchedRule.roomId) || officeState?.rooms?.[0];
-        }
-    }
-    const dynamicRoom = officeCreateDynamicRoom(taskText);
-    if (slug && dynamicRoom) {
-        officeState.dynamicRoomBySlug.set(slug, dynamicRoom.id);
-        officePersistLayoutState();
-    }
-    return dynamicRoom || officeRoomById('room-planning') || officeState?.rooms?.[0];
+function officeResolveExplicitRoom(roomRefRaw) {
+    const roomRef = safeString(roomRefRaw).trim().toLowerCase();
+    if (!roomRef) return null;
+    const explicitId = OFFICE_EXPLICIT_ROOM_IDS[roomRef] || roomRef;
+    return officeRoomById(explicitId)
+        || officeState?.rooms?.find((room) => safeString(room?.label).trim().toLowerCase() === roomRef)
+        || null;
 }
 
-function officeQueueTask(taskText, { source = 'office-chat', announce = false, preferredAgentId = '' } = {}) {
+function officeQueueTask(taskText, {
+    source = 'office-chat',
+    announce = false,
+    preferredAgentId = '',
+    roomId = 'room-planning',
+    priority = 0,
+} = {}) {
     if (!officeState) return null;
     const clean = safeString(taskText).replace(/\s+/g, ' ');
     if (!clean) return null;
-    const room = officeResolveRoomForTask(clean);
+    const room = officeResolveExplicitRoom(roomId) || officeRoomById('room-planning') || officeState?.rooms?.[0];
     if (!room) return null;
 
     const task = {
@@ -668,6 +658,7 @@ function officeQueueTask(taskText, { source = 'office-chat', announce = false, p
         title: officeTaskTitle(clean),
         rawText: clean,
         source: safeString(source) || 'office-chat',
+        priority: officeClamp(Number(priority) || 0, 0, 4),
         roomId: room.id,
         roomLabel: room.label,
         status: 'queued',
@@ -706,13 +697,43 @@ function officeQueueTask(taskText, { source = 'office-chat', announce = false, p
     return task;
 }
 
-function officeMaybeQueueTaskFromPrompt(taskText, source = 'chat') {
-    if (!officeState) return null;
-    const clean = safeString(taskText);
-    if (!clean || clean.startsWith('/') || clean.startsWith('@')) return null;
-    if (!OFFICE_TASK_KEYWORDS.test(clean)) return null;
-    return officeQueueTask(clean, { source, announce: false });
+function officeSyncStructuredDelegationTask(evt, statusRaw, taskTextRaw) {
+    if (!officeState || !evt || typeof evt !== 'object') return null;
+    const executionId = safeString(evt.execution_id || evt.task_id).trim();
+    const sessionId = safeString(evt.session_id || officeChatPreviewSessionKey()).trim() || 'chat';
+    if (!executionId) return null;
+    const source = `chat-delegation:${sessionId}:${executionId}`;
+    const normalizedStatus = safeString(statusRaw || evt.state).trim().toLowerCase();
+    let task = officeState.tasks.find((candidate) => safeString(candidate?.source) === source) || null;
+    if (!task) {
+        const specialistId = safeString(evt.specialist_id).trim().toLowerCase();
+        const structuredRoomId = safeString(evt.room_id || evt.roomId).trim()
+            || OFFICE_SPECIALIST_ROOM_IDS[specialistId]
+            || 'room-planning';
+        const identity = officeResolveAgentIdentity(evt.bot_name || evt.bot_id, executionId);
+        task = officeQueueTask(taskTextRaw || evt.summary || 'Background task', {
+            source,
+            announce: false,
+            preferredAgentId: identity.id,
+            roomId: structuredRoomId,
+            priority: evt.priority,
+        });
+    }
+    if (!task) return null;
+    if (['completed', 'failed', 'abandoned', 'cancelled'].includes(normalizedStatus)) {
+        task.status = 'done';
+        task.completedAt = Date.now();
+        const assignedAgent = officeGetAgentById(task.assignedAgentId);
+        if (assignedAgent && assignedAgent.taskId === task.id) {
+            assignedAgent.taskId = '';
+            assignedAgent.state = 'idle';
+            assignedAgent.intent = 'wander';
+        }
+        officeState.tasksDirty = true;
+    }
+    return task;
 }
+
 
 function officeFindAgentByHandle(handleRaw) {
     if (!officeState) return null;
@@ -766,7 +787,6 @@ function officeParseMentionCommand(messageRaw) {
 function officeHandleMention(agent, messageRaw) {
     if (!officeState || !agent) return '';
     const message = safeString(messageRaw);
-    const lower = message.toLowerCase();
     const parsed = officeParseMentionCommand(message);
     let reply = '';
 
@@ -799,17 +819,15 @@ function officeHandleMention(agent, messageRaw) {
         });
         reply = 'On my way to Main Lobby.';
     } else if (parsed.command === 'focus') {
-        const target = safeString(parsed.args).toLowerCase();
-        const matched = OFFICE_TASK_ROOM_RULES.find((rule) => rule.pattern.test(target));
-        const roomId = matched?.roomId || 'room-pods';
+        const roomId = officeResolveExplicitRoom(parsed.args)?.id || 'room-pods';
         const room = officeRoomById(roomId);
         officeRouteAgentToRoom(agent, roomId, {
             intent: 'wander',
             speed: officeRandomRange(3.1, 4.1),
         });
         reply = `Switching to focus in ${room?.label || 'Focus Pods'}.`;
-    } else if (parsed.command === 'task' || OFFICE_TASK_KEYWORDS.test(message) || lower.includes('build') || lower.includes('ship')) {
-        const taskText = parsed.command === 'task' ? (parsed.args || 'new task') : message;
+    } else if (parsed.command === 'task') {
+        const taskText = parsed.args || 'new task';
         const task = officeQueueTask(taskText, {
             source: `mention:${agent.id}`,
             announce: false,
@@ -908,9 +926,12 @@ function officeHandleChatSend() {
             return;
         }
         if (command === 'focus') {
-            const mapped = OFFICE_TASK_ROOM_RULES.find((rule) => rule.pattern.test(args));
-            const roomId = mapped?.roomId || 'room-pods';
+            const roomId = officeResolveExplicitRoom(args)?.id || 'room-pods';
             officeRunQuickAction(`focus:${roomId}`);
+            return;
+        }
+        if (command === 'task') {
+            officeQueueTask(args || 'new task', { source: 'office-chat', announce: true });
             return;
         }
     }

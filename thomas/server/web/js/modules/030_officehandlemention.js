@@ -13,7 +13,6 @@
 function officeHandleMention(agent, messageRaw) {
     if (!officeState || !agent) return;
     const message = safeString(messageRaw);
-    const lower = message.toLowerCase();
     const parsed = officeParseMentionCommand(message);
     let reply = '';
 
@@ -46,17 +45,15 @@ function officeHandleMention(agent, messageRaw) {
         });
         reply = 'On my way to Main Lobby.';
     } else if (parsed.command === 'focus') {
-        const target = safeString(parsed.args).toLowerCase();
-        const matched = OFFICE_TASK_ROOM_RULES.find((rule) => rule.pattern.test(target));
-        const roomId = matched?.roomId || 'room-pods';
+        const roomId = officeResolveExplicitRoom(parsed.args)?.id || 'room-pods';
         const room = officeRoomById(roomId);
         officeRouteAgentToRoom(agent, roomId, {
             intent: 'wander',
             speed: officeRandomRange(3.1, 4.1),
         });
         reply = `Switching to focus in ${room?.label || 'Focus Pods'}.`;
-    } else if (parsed.command === 'task' || OFFICE_TASK_KEYWORDS.test(message) || lower.includes('build') || lower.includes('ship')) {
-        const taskText = parsed.command === 'task' ? (parsed.args || 'new task') : message;
+    } else if (parsed.command === 'task') {
+        const taskText = parsed.args || 'new task';
         const task = officeQueueTask(taskText, {
             source: `mention:${agent.id}`,
             announce: false,

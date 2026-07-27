@@ -83,23 +83,6 @@ except (ImportError, ModuleNotFoundError, AttributeError, RuntimeError):  # prag
         return False
 
 
-try:
-    from thomas.models.chat_controls import resolve_ui_control_request
-except (ImportError, ModuleNotFoundError, AttributeError, RuntimeError):  # pragma: no cover
-
-    def resolve_ui_control_request(*_args, **_kwargs):
-        return None
-
-
-try:
-    from thomas.server.chat_control_mode import handle_ui_control_chat
-except (ImportError, ModuleNotFoundError, AttributeError, RuntimeError):  # pragma: no cover
-    from aiohttp import web
-
-    async def handle_ui_control_chat(request: web.Request, **_kwargs):
-        raise web.HTTPInternalServerError(text="ui control handler unavailable")
-
-
 def _require_api_access(request: Any) -> None:
     """Default access check used by audit/realtime routes.
 
@@ -144,8 +127,8 @@ def create_app(config: AppConfig | None = None):
             config.default_model = resolved_profile
             if resolved_model_id:
                 config.models[resolved_profile].model = resolved_model_id
-    except Exception:
-        pass
+    except (AttributeError, ImportError, KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        log.debug("Persisted default-model resolution unavailable: %s", exc)
 
     # Validate configuration before use
     validation_errors = config.validate()
@@ -417,7 +400,8 @@ def create_app(config: AppConfig | None = None):
                 str(PreferencesStore(get_db_path()).get().advanced.security.enforcement_mode or "").strip().lower()
                 == "protected"
             )
-        except Exception:
+        except (AttributeError, ImportError, KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+            log.debug("Protected-mode preference unavailable: %s", exc)
             protected_mode = False
 
         # A credential that dies AFTER boot was invisible here: health reported
@@ -456,18 +440,20 @@ def create_app(config: AppConfig | None = None):
         configured = app.get(APP_BOOT_DOCTOR_ROOT)
         try:
             return Path(configured).resolve() if configured else Path(__file__).resolve().parents[2]
-        except Exception:
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            log.debug("Configured boot-doctor root is invalid: %s", exc)
             return Path(__file__).resolve().parents[2]
 
     def _bootdoctor_current_port(request: web.Request) -> int:
         try:
             if request.url.port:
                 return int(request.url.port)
-        except Exception:
-            pass
+        except (AttributeError, TypeError, ValueError) as exc:
+            log.debug("Request URL did not expose a usable port: %s", exc)
         try:
             return int(getattr(config.server, "port", 8899) or 8899)
-        except Exception:
+        except (AttributeError, TypeError, ValueError) as exc:
+            log.debug("Configured server port is invalid: %s", exc)
             return 8899
 
     def _bootdoctor_default_actions(severity_raw: str, *, report_available: bool) -> list[str]:
@@ -619,7 +605,8 @@ def create_app(config: AppConfig | None = None):
 
         try:
             payload = await request.json()
-        except Exception:
+        except (UnicodeDecodeError, TypeError, ValueError) as exc:
+            log.debug("Boot-doctor action body is not valid JSON: %s", exc)
             payload = {}
         action = str((payload or {}).get("action") or "").strip().lower()
         if action not in {"retry_repair", "restart", "open_rescue", "dismiss_notice"}:

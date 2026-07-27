@@ -37,20 +37,15 @@ async function maybeRenderSessionIntro() {
     showStarterSuggestionRail({ force: true, title: 'Recovered' });
 }
 
-function maybeShowAssistantFollowups({ assistantText = '', userText = '' } = {}) {
+function maybeShowAssistantFollowups() {
     if (!isOnboardingComplete()) return;
     if (easySetupState.interviewStarted) return;
     if (safeString(suggestionContext) === 'onboarding') return;
-    const context = {
-        userText: safeString(userText),
-        assistantText: safeString(assistantText),
-    };
-    const intent = classifySuggestionIntent(context);
     setAssistantSuggestions({
         title: 'Suggestions',
-        context: `followup_${intent}`,
+        context: 'followup',
         dismissible: true,
-        options: buildIntentSuggestionOptions(intent, context),
+        options: buildUniversalFollowupSuggestionOptions(),
     });
 }
 

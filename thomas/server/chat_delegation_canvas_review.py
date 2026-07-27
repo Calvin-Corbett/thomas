@@ -3,51 +3,16 @@
 from __future__ import annotations
 
 import hashlib
-import re
 from dataclasses import dataclass, field
 from typing import Any
 
 from thomas.server.chat_delegation_canvas_review_document import parse_canvas_document
-from thomas.server.chat_delegation_canvas_review_rules import (
-    GENERIC_PLACEHOLDER_RE,
-    chart_prompt_pairs,
-    is_chart_request,
-    tokenize_prompt,
-)
 from thomas.server.chat_delegation_canvas_review_scripts import (
     disappearing_animations,
     suspicious_script_mutations,
 )
 
-REVIEW_VERSION = "canvas-semantic-v2"
-
-
-def _chart_pair_mismatches(prompt: str, stable_evidence: tuple[str, ...]) -> list[dict[str, Any]]:
-    pairs = chart_prompt_pairs(prompt)
-    if not pairs:
-        return []
-    tokens = [
-        token.casefold() for chunk in stable_evidence for token in re.findall(r"\b[\w.-]+\b", str(chunk), re.UNICODE)
-    ]
-    labels = {label for label, _value in pairs}
-    mismatches: list[dict[str, Any]] = []
-    for label, expected in pairs:
-        positions = [index for index, token in enumerate(tokens) if token == label]
-        matched = False
-        observed: set[str] = set()
-        for position in positions:
-            boundary = min(
-                (index for index in range(position + 1, len(tokens)) if tokens[index] in labels),
-                default=min(len(tokens), position + 8),
-            )
-            segment = tokens[position + 1 : boundary]
-            observed.update(token for token in segment if any(character.isdigit() for character in token))
-            if expected in segment:
-                matched = True
-                break
-        if not matched:
-            mismatches.append({"label": label, "expected": expected, "observed": sorted(observed)[:6]})
-    return mismatches
+REVIEW_VERSION = "canvas-structural-v3"
 
 
 @dataclass(frozen=True)
@@ -109,7 +74,12 @@ def conforms_to_contract(html: str) -> bool:
 
 
 def review_canvas_html(prompt: str, html: str) -> CanvasReviewEvidence:
-    """Review final Canvas HTML and return durable evidence for presentation gates."""
+    """Validate actual Canvas structure without interpreting request semantics."""
+
+    # Compatibility-only.  The frontier model owns what the request means and
+    # emits the Canvas content.  This gate validates the resulting document; it
+    # does not compare prompt words with output words or choose a visual type.
+    del prompt
 
     source = str(html or "").strip()
     source_hash = hashlib.sha256(source.encode("utf-8", errors="replace")).hexdigest()
@@ -150,94 +120,29 @@ def review_canvas_html(prompt: str, html: str) -> CanvasReviewEvidence:
     if not enough_content:
         issues.append(CanvasReviewIssue("visible_content_missing", "render has too little visible content"))
 
-    generic = bool(GENERIC_PLACEHOLDER_RE.search(document.visible_text))
-    checks.append(CanvasReviewCheck("generic_placeholder", not generic))
-    if generic:
-        issues.append(CanvasReviewIssue("generic_placeholder", "render is a generic task placeholder"))
-
-    prompt_tokens = tokenize_prompt(prompt)
     visible_tokens = document.visible_tokens
     stable_tokens = document.stable_tokens
-    mutations = suspicious_script_mutations(source, document, prompt_tokens)
-    checks.append(CanvasReviewCheck("requested_content_mutation", not mutations, {"findings": mutations[:8]}))
+    mutations = suspicious_script_mutations(source, document)
+    checks.append(CanvasReviewCheck("content_mutation", not mutations, {"findings": mutations[:8]}))
     if mutations:
         issues.append(
             CanvasReviewIssue(
-                "requested_content_mutation",
-                "render can hide or remove requested content after review",
+                "content_mutation",
+                "render can hide or remove stable content after review",
                 {"findings": mutations[:8]},
             )
         )
 
-    disappearing = disappearing_animations(source, document, prompt_tokens)
-    checks.append(CanvasReviewCheck("requested_content_animation", not disappearing, {"findings": disappearing[:8]}))
+    disappearing = disappearing_animations(source, document)
+    checks.append(CanvasReviewCheck("content_animation", not disappearing, {"findings": disappearing[:8]}))
     if disappearing:
         issues.append(
             CanvasReviewIssue(
-                "requested_content_disappears",
-                "render animation finishes with requested content hidden",
+                "content_disappears",
+                "render animation finishes with stable content hidden",
                 {"findings": disappearing[:8]},
             )
         )
-
-    numeric_tokens = {token for token in prompt_tokens if any(character.isdigit() for character in token)}
-    missing_numeric = sorted(numeric_tokens - stable_tokens)
-    checks.append(
-        CanvasReviewCheck(
-            "requested_values",
-            not missing_numeric,
-            {"requested": sorted(numeric_tokens), "missing": missing_numeric[:12]},
-        )
-    )
-    if missing_numeric:
-        issues.append(
-            CanvasReviewIssue(
-                "requested_values_missing",
-                "render is missing requested data labels: " + ", ".join(missing_numeric[:6]),
-                {"missing": missing_numeric[:12]},
-            )
-        )
-
-    visible_numbers = sorted(token for token in stable_tokens if any(character.isdigit() for character in token))
-    # Require stable values when the user supplied values to preserve. A generic
-    # request such as "draw a bar chart" may legitimately be satisfied by a
-    # graphical plan whose geometry is the data; inventing labels in the review
-    # gate would make valid deterministic previews fail closed for the wrong reason.
-    chart_values_ok = not is_chart_request(prompt) or not numeric_tokens or bool(visible_numbers)
-    checks.append(CanvasReviewCheck("chart_values", chart_values_ok, {"visible_values": visible_numbers[:20]}))
-    if not chart_values_ok:
-        issues.append(CanvasReviewIssue("chart_values_missing", "chart has no stable visible values or labels"))
-
-    pair_mismatches = _chart_pair_mismatches(prompt, document.stable_evidence) if is_chart_request(prompt) else []
-    checks.append(
-        CanvasReviewCheck(
-            "chart_label_value_semantics",
-            not pair_mismatches,
-            {"mismatches": pair_mismatches},
-        )
-    )
-    if pair_mismatches:
-        issues.append(
-            CanvasReviewIssue(
-                "chart_label_value_mismatch",
-                "chart labels are not associated with their requested values",
-                {"mismatches": pair_mismatches},
-            )
-        )
-
-    semantic_tokens = prompt_tokens - numeric_tokens
-    matched = semantic_tokens & stable_tokens
-    required = min(2, max(1, (len(semantic_tokens) + 2) // 3)) if semantic_tokens else 0
-    subject_ok = not semantic_tokens or len(matched) >= required
-    checks.append(
-        CanvasReviewCheck(
-            "requested_subject",
-            subject_ok,
-            {"matched": sorted(matched), "required_match_count": required},
-        )
-    )
-    if not subject_ok:
-        issues.append(CanvasReviewIssue("subject_mismatch", "render does not match the requested subject"))
 
     return CanvasReviewEvidence(
         status="passed" if not issues else "failed",

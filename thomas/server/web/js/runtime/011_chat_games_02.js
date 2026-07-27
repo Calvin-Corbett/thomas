@@ -871,10 +871,6 @@ async function runChatSendJob(sendJob) {
     if (safeString(suggestionContext) !== 'onboarding') {
         hideAssistantSuggestions({ force: true });
     }
-    if (safeString(text)) {
-        officeMaybeQueueTaskFromPrompt(text, 'chat');
-    }
-
     if (welcomeScreen && !welcomeScreen.classList.contains('hidden')) {
         welcomeScreen.classList.add('hidden');
         chatScrollArea.classList.remove('hidden');
@@ -1011,18 +1007,10 @@ async function handleSend() {
         if (safeString(text)) {
             renderMessage({ role: 'user', content: text });
         }
-        if (isSecurityTrustConcern(text)) {
-            renderMessage({
-                role: 'assistant',
-                content: `${buildSetupSafetyMessage()}\n\nFinish Easy Setup first, then I can run normal chat tasks.`,
-            });
-            showSetupSafetySuggestions();
-        } else {
-            renderMessage({
-                role: 'assistant',
-                content: withAgentName('Finish Easy Setup first. {{agent}} requires setup before chat can run.'),
-            });
-        }
+        renderMessage({
+            role: 'assistant',
+            content: withAgentName('Finish Easy Setup first. {{agent}} requires setup before chat can run.'),
+        });
         openEasySetup({ source: 'mandatory', force: false, restart: false });
         return;
     }

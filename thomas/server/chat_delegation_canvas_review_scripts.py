@@ -7,7 +7,6 @@ from typing import Any
 
 from thomas.server.chat_delegation_canvas_review_document import (
     CanvasDocument,
-    element_has_prompt_evidence,
     hidden_css_selectors,
     targeted_elements,
 )
@@ -68,11 +67,12 @@ _BROAD_DOCUMENT_REMOVAL_RE = re.compile(
 )
 
 
-def _reviewed_target(element: dict[str, Any], prompt_tokens: set[str]) -> bool:
+def _reviewed_target(element: dict[str, Any]) -> bool:
     return bool(
         not is_transient(element)
         and not is_interactive(element)
-        and element_has_prompt_evidence(element, prompt_tokens)
+        and not element.get("__hidden__")
+        and bool(" ".join(str(part) for part in element.get("__text_parts__", [])).strip())
     )
 
 
@@ -124,15 +124,14 @@ def _reference_mutation(
 def suspicious_script_mutations(
     source: str,
     document: CanvasDocument,
-    prompt_tokens: set[str],
 ) -> list[dict[str, str]]:
-    """Return requested-content mutations, excluding transient UI and game objects."""
+    """Return stable-content mutations, excluding transient UI and game objects."""
 
     findings: list[dict[str, str]] = []
     hidden_selectors = hidden_css_selectors(source)
 
     def _record(element: dict[str, Any], target: str, operation: str) -> None:
-        if not _reviewed_target(element, prompt_tokens):
+        if not _reviewed_target(element):
             return
         finding = {"target": target[:160], "operation": operation[:160]}
         if finding not in findings:
@@ -140,7 +139,7 @@ def suspicious_script_mutations(
 
     for script in SCRIPT_BLOCK_RE.findall(str(source or "")):
         if broad := _BROAD_DOCUMENT_REMOVAL_RE.search(script):
-            if any(_reviewed_target(element, prompt_tokens) for element in document.elements):
+            if any(_reviewed_target(element) for element in document.elements):
                 findings.append(
                     {
                         "target": f"document.{broad.group('target')}",
@@ -202,7 +201,6 @@ def suspicious_script_mutations(
 def disappearing_animations(
     source: str,
     document: CanvasDocument,
-    prompt_tokens: set[str],
 ) -> list[dict[str, str]]:
     findings: list[dict[str, str]] = []
     for style in STYLE_BLOCK_RE.findall(str(source or "")):
@@ -232,7 +230,7 @@ def disappearing_animations(
                     if (
                         isinstance(ancestors, list)
                         and matches_selector(selector, element, ancestors)
-                        and _reviewed_target(element, prompt_tokens)
+                        and _reviewed_target(element)
                     ):
                         finding = {"selector": selector[:160], "keyframe": names[0]}
                         if finding not in findings:

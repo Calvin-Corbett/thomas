@@ -1,34 +1,11 @@
 from __future__ import annotations
 
 import hashlib
-import re
 from pathlib import Path
 from typing import Any
 
 from thomas.server.chat_delegation_deliverable import _worker_summary_line, _workspace_mtimes
 
-_LIVE_THOMAS_REPO_RE = re.compile(
-    r"\b("
-    r"modify (?:yourself|thomas|the live repo)|"
-    r"change (?:yourself|thomas|the live repo)|"
-    r"fix (?:yourself|thomas|the live repo)|"
-    r"work in the live thomas repo|"
-    r"live thomas repo|"
-    r"thomas'?s code|"
-    r"your own code|"
-    r"self[- ]development|"
-    r"make thomas|"
-    r"have thomas develop|"
-    # Self-referential UI/product changes: "change YOUR sidebar", "update your
-    # own UI", "make your chat bubbles bigger" — the owner asking Thomas to
-    # change himself. A sandbox worker cannot touch the live product; these
-    # must run in the live repo lane.
-    r"(?:change|update|edit|fix|adjust|restyle|redesign|improve|tweak)\s+"
-    r"(?:your(?:self)?|your own|thomas'?s?)\s+(?:\w+\s+){0,3}?"
-    r"(?:ui|interface|sidebar|chat|composer|dashboard|button|layout|theme|colors?|styles?|page|tab|screen|font)"
-    r")\b",
-    re.I,
-)
 _LIVE_REPO_IGNORE_PREFIXES = (
     "library/",
     "runtime/",
@@ -41,37 +18,6 @@ _LIVE_REPO_IGNORE_PARTS: frozenset[str] = frozenset(
 _LIVE_REPO_IGNORE_SUFFIXES = ("_test_results.jsonl",)
 _LIVE_REPO_WRITE_TOOLS = {"fs.write_file", "fs.write_protected_file"}
 
-_DOC_ONLY_EXTENSIONS = (".md", ".mdx", ".rst", ".adoc")
-_DOC_ONLY_PREFIXES = ("docs/", "documentation/")
-_IMPLEMENTATION_PROMPT_HINTS = (
-    "api",
-    "bug",
-    "code",
-    "endpoint",
-    "endpoints",
-    "fix",
-    "implementation",
-    "install",
-    "route",
-    "routes",
-    "test",
-    "tests",
-    "ui",
-)
-_DOCUMENTATION_PROMPT_HINTS = ("doc", "docs", "documentation", "markdown", "readme")
-
-
-def _prompt_targets_live_thomas_repo(prompt: str) -> bool:
-    text = " ".join(str(prompt or "").lower().split())
-    if not text:
-        return False
-    if _LIVE_THOMAS_REPO_RE.search(text):
-        return True
-    return (
-        "token economy" in text
-        or "my stuff" in text
-        or ("marketplace" in text and ("uninstall" in text or "module" in text))
-    )
 
 
 def _live_repo_change_ignored(path: str) -> bool:
@@ -133,30 +79,6 @@ def _live_repo_result_summary(result_text_parts: list[str], changed_files: list[
     if worker_line and not all(name in worker_line for name in shown):
         return f"{base} {worker_line}"[:400]
     return base
-
-
-def _prompt_has_hint(prompt_lower: str, hints: tuple[str, ...]) -> bool:
-    return any(re.search(rf"\b{re.escape(hint)}\b", prompt_lower) for hint in hints)
-
-
-def _live_repo_changes_are_docs_only(changed_files: list[str]) -> bool:
-    if not changed_files:
-        return False
-    for rel in changed_files:
-        normalized = rel.replace("\\", "/").lower()
-        if normalized.startswith(_DOC_ONLY_PREFIXES):
-            continue
-        if normalized.endswith(_DOC_ONLY_EXTENSIONS):
-            continue
-        return False
-    return True
-
-
-def _prompt_allows_docs_only_completion(prompt: str) -> bool:
-    lower = str(prompt or "").lower()
-    if _prompt_has_hint(lower, _IMPLEMENTATION_PROMPT_HINTS):
-        return False
-    return _prompt_has_hint(lower, _DOCUMENTATION_PROMPT_HINTS)
 
 
 def _live_repo_change_requirement() -> str:

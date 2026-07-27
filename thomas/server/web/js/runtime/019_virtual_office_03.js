@@ -298,11 +298,9 @@ function officeTaskPriorityScore(task) {
     const now = Date.now();
     const ageMs = Math.max(0, now - (Number(task.createdAt) || now));
     const ageScore = Math.min(3.6, ageMs / 22_000);
-    const urgencyFromWords = /\b(urgent|asap|priority|critical|now)\b/i.test(safeString(task.rawText))
-        ? 2.2
-        : 0;
+    const structuredPriority = officeClamp(Number(task.priority) || 0, 0, 4);
     const roomBoost = safeString(task.roomId) === 'room-support' ? 0.5 : 0;
-    return ageScore + urgencyFromWords + roomBoost;
+    return ageScore + structuredPriority + roomBoost;
 }
 
 function officeAgentTaskFitScore(agent, task) {
@@ -632,23 +630,7 @@ function officeMissionEntryText(entry) {
 
 function officeMissionRoomToOfficeRoomId(roomRaw, entry = {}) {
     const missionRoom = safeString(roomRaw || entry?.room || entry?.room_id).toLowerCase();
-    const taskText = officeMissionEntryText(entry);
-    const matchedRule = OFFICE_TASK_ROOM_RULES.find((rule) => rule.pattern.test(taskText));
-    if (missionRoom === 'tools') {
-        return matchedRule?.roomId || 'room-engineering';
-    }
-    if (missionRoom === 'review') {
-        if (/\b(design|ui|ux|visual|landing|brand)\b/i.test(taskText)) return 'room-design';
-        return 'room-support';
-    }
-    if (missionRoom === 'done') return 'room-lobby';
-    if (missionRoom === 'files') return 'room-engineering';
-    if (missionRoom === 'planning') return matchedRule?.roomId || 'room-planning';
-    if (missionRoom === 'inbox') return matchedRule?.roomId || 'room-planning';
-    if (OFFICE_MISSION_ROOM_TO_OFFICE_ROOM[missionRoom]) {
-        return OFFICE_MISSION_ROOM_TO_OFFICE_ROOM[missionRoom];
-    }
-    return matchedRule?.roomId || 'room-lobby';
+    return OFFICE_MISSION_ROOM_TO_OFFICE_ROOM[missionRoom] || 'room-lobby';
 }
 
 function officeMissionAgentName(entry) {

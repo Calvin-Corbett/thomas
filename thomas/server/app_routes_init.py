@@ -158,7 +158,6 @@ def _setup_routes_and_handlers(
     _task_ledger_update = locals_dict.get("_task_ledger_update")
     _model_cfg_with_secrets = locals_dict.get("_model_cfg_with_secrets")
     _failover_cfgs_with_secrets = locals_dict.get("_failover_cfgs_with_secrets")
-    _resolve_natural_model_switch_request = locals_dict.get("_resolve_natural_model_switch_request")
     _chat_file_for = locals_dict.get("_chat_file_for")
     _read_chat_from_disk = locals_dict.get("_read_chat_from_disk")
     _build_tools = locals_dict.get("_build_tools")
@@ -180,6 +179,8 @@ def _setup_routes_and_handlers(
         session_id = str(request.query.get("session_id", "")).strip()
         snapshot_obj = ledger.get_current(session_id) if session_id else ledger.get_latest()
         snapshot = snapshot_obj.to_dict() if snapshot_obj and hasattr(snapshot_obj, "to_dict") else None
+        if isinstance(snapshot, dict):
+            snapshot.setdefault("missing_inputs", [])
         resolved_session_id = str(
             session_id or getattr(snapshot_obj, "session_id", "") or (snapshot or {}).get("session_id") or ""
         ).strip()
@@ -199,37 +200,6 @@ def _setup_routes_and_handlers(
             if isinstance(session_obj, ChatSession)
             else "idle"
         )
-        if isinstance(snapshot, dict):
-            fallback_user_text = (
-                str(getattr(session_obj, "last_user_message", "") or "") if isinstance(session_obj, ChatSession) else ""
-            )
-            fallback_assistant_text = (
-                str(getattr(session_obj, "last_assistant_message", "") or "")
-                if isinstance(session_obj, ChatSession)
-                else ""
-            )
-            if isinstance(session_obj, ChatSession) and isinstance(session_obj.conversation, list):
-                for message in reversed(session_obj.conversation):
-                    if not fallback_assistant_text and str(message.get("role") or "") == "assistant":
-                        fallback_assistant_text = str(message.get("content") or "")
-                    if not fallback_user_text and str(message.get("role") or "") == "user":
-                        fallback_user_text = str(message.get("content") or "")
-                    if fallback_user_text and fallback_assistant_text:
-                        break
-            try:
-                from thomas.marketplace.observability.task_ledger import derive_active_goal, extract_missing_inputs
-
-                if not str(snapshot.get("active_goal") or "").strip() and fallback_user_text:
-                    snapshot["active_goal"] = derive_active_goal(fallback_user_text, current_goal="")
-                progress_text = str(snapshot.get("last_progress") or fallback_assistant_text or "").strip()
-                inferred_missing = extract_missing_inputs(progress_text)
-                if inferred_missing and not list(snapshot.get("missing_inputs") or []):
-                    snapshot["status"] = "blocked"
-                    snapshot["missing_inputs"] = inferred_missing
-                    if not str(snapshot.get("last_progress") or "").strip():
-                        snapshot["last_progress"] = progress_text
-            except Exception:
-                pass
         return web.json_response(
             {
                 "ok": True,

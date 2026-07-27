@@ -1,39 +1,40 @@
-"""Enforce the conversation-driven UI control protocol.
+"""Enforce Thomas's structured chat-control protocol.
 
-This guard ensures chat-controlled settings stay generic (not one-off hacks):
-- resolver exists and is wired in server chat flow
-- server emits `ui_state_patch`
-- web chat handles `ui_state_patch` and persists settings patches
-- required protocol tests/docs exist
+Ordinary message text belongs to the frontier model. Runtime settings may change
+only through typed UI/API fields or a structured model capability; the server must
+not infer a control action from prompt wording.
 """
 
 from __future__ import annotations
 
 import argparse
-import sys
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
-
 ROOT = Path(__file__).resolve().parents[3]
-CHAT_CONTROLS = ROOT / "thomas" / "models" / "chat_controls.py"
-# Server-side wiring was split across modules during the rename arc:
-# - resolve_ui_control_request lives in app_core.py
-# - "type": "ui_state_patch" is emitted from chat_control_mode.py
-SERVER_APP_CORE = ROOT / "thomas" / "server" / "app_core.py"
-SERVER_CHAT_CONTROL_MODE = ROOT / "thomas" / "server" / "chat_control_mode.py"
-# Frontend was consolidated into a single primary runtime module:
-WEB_RUNTIME_PRIMARY = ROOT / "thomas" / "server" / "web" / "js" / "app_runtime_primary.mjs"
+CHAT_REQUEST_SETUP = ROOT / "thomas" / "server" / "routes" / "chat_request_setup.py"
+CHAT_V2 = ROOT / "thomas" / "server" / "routes" / "chat_v2.py"
+CHAT_AIOHTTP = ROOT / "thomas" / "server" / "routes" / "chat_aiohttp.py"
+CHAT_HANDLERS = ROOT / "thomas" / "server" / "routes" / "chat_aiohttp_handlers.py"
+CHAT_V2_UI_CONTROL = ROOT / "thomas" / "server" / "routes" / "chat_v2_ui_control.py"
+APP_CORE = ROOT / "thomas" / "server" / "app_core.py"
+APP_MIDDLEWARE_HANDLERS = ROOT / "thomas" / "server" / "app_middleware_handlers.py"
+WEB_INDEX = ROOT / "thomas" / "server" / "web" / "index.html"
+WEB_LOADER = ROOT / "thomas" / "server" / "web" / "js" / "app_runtime_loader.js"
+WEB_CHAT_REQUESTS = ROOT / "thomas" / "server" / "web" / "js" / "runtime" / "008_easy_setup_onboarding_06.js"
+
+RETIRED_PROMPT_CLASSIFIERS: Sequence[Path] = (
+    ROOT / "thomas" / "models" / "chat_controls.py",
+    ROOT / "thomas" / "models" / "switching.py",
+    ROOT / "thomas" / "server" / "chat_control_mode.py",
+)
 
 REQUIRED_FILES: Sequence[Path] = (
     ROOT / "docs" / "CHAT_CONTROL_PROTOCOL.md",
-    ROOT / "tests" / "test_chat_controls.py",
     ROOT / "tests" / "test_server_chat_controls.py",
-    ROOT / "tests" / "test_model_switching.py",
-    ROOT / "tests" / "test_agent_loop_autonomy.py",
+    ROOT / "tests" / "test_server_batch_mode.py",
+    ROOT / "tests" / "test_server_session_locking.py",
+    ROOT / "tests" / "test_semantic_intent_ownership.py",
 )
 
 
@@ -45,62 +46,130 @@ def _require_substrings(path: Path, needles: Iterable[str]) -> list[str]:
     if not path.exists():
         return [f"{path}: missing file"]
     text = _read(path)
-    missing: list[str] = []
-    for needle in needles:
-        if needle not in text:
-            missing.append(f"{path}: missing `{needle}`")
-    return missing
+    return [f"{path}: missing `{needle}`" for needle in needles if needle not in text]
+
+
+def _forbid_substrings(path: Path, needles: Iterable[str]) -> list[str]:
+    if not path.exists():
+        return [f"{path}: missing file"]
+    text = _read(path)
+    return [f"{path}: forbidden `{needle}`" for needle in needles if needle in text]
 
 
 def run(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Check chat control protocol wiring.")
+    parser = argparse.ArgumentParser(description="Check structured chat-control wiring.")
     _ = parser.parse_args(argv)
 
     errors: list[str] = []
-
     errors.extend(
         _require_substrings(
-            CHAT_CONTROLS,
+            CHAT_REQUEST_SETUP,
             (
-                "class UiControlResolution",
-                "def resolve_ui_control_request(",
-                "_BOOLEAN_SETTING_SPECS",
+                'payload.get("model")',
+                'payload.get("model_id")',
+                '"autonomy_level" in payload',
+                'payload.get("mode")',
             ),
         )
     )
     errors.extend(
         _require_substrings(
-            SERVER_APP_CORE,
-            ("resolve_ui_control_request",),
-        )
-    )
-    errors.extend(
-        _require_substrings(
-            SERVER_CHAT_CONTROL_MODE,
-            ('"type": "ui_state_patch"',),
-        )
-    )
-    errors.extend(
-        _require_substrings(
-            WEB_RUNTIME_PRIMARY,
+            CHAT_V2,
             (
-                "ui_state_patch",
-                "autonomyLevel",
+                "_LEGACY_MODE_MIGRATIONS",
+                'payload.get("mode")',
+                'payload.get("message"',
+            ),
+        )
+    )
+    errors.extend(
+        _forbid_substrings(
+            CHAT_HANDLERS,
+            (
+                "resolve_ui_control_request",
+                "handle_ui_control_chat",
+                "control_req",
+            ),
+        )
+    )
+    errors.extend(
+        _forbid_substrings(
+            CHAT_AIOHTTP,
+            (
+                "control_req",
+                "handle_ui_control_chat",
+            ),
+        )
+    )
+    errors.extend(
+        _forbid_substrings(
+            APP_CORE,
+            (
+                "resolve_ui_control_request",
+                "handle_ui_control_chat",
+            ),
+        )
+    )
+    errors.extend(
+        _forbid_substrings(
+            CHAT_V2_UI_CONTROL,
+            (
+                "handle_ui_control_turn",
+                "control_parser",
+                '"type": "ui_state_patch"',
+            ),
+        )
+    )
+    errors.extend(
+        _forbid_substrings(
+            APP_MIDDLEWARE_HANDLERS,
+            (
+                "thomas.models.switching",
+                "_resolve_natural_model_switch_request",
+            ),
+        )
+    )
+    errors.extend(
+        _require_substrings(
+            WEB_INDEX,
+            ('src="/static/js/app_runtime_loader.js',),
+        )
+    )
+    errors.extend(
+        _require_substrings(
+            WEB_LOADER,
+            (
+                "RUNTIME_SCRIPTS",
+                "'008_easy_setup_onboarding_06.js'",
+            ),
+        )
+    )
+    errors.extend(
+        _require_substrings(
+            WEB_CHAT_REQUESTS,
+            (
+                "function buildChatRequestPayload(",
+                "model_id:",
+                "autonomy_level:",
             ),
         )
     )
 
-    for req in REQUIRED_FILES:
-        if not req.exists():
-            errors.append(f"{req}: missing required protocol artifact")
+    for classifier in RETIRED_PROMPT_CLASSIFIERS:
+        if classifier.exists():
+            errors.append(f"{classifier}: retired prompt classifier must stay deleted")
+
+    for required in REQUIRED_FILES:
+        if not required.exists():
+            errors.append(f"{required}: missing required protocol artifact")
 
     if errors:
-        print("Chat control protocol check failed:")
+        print("Structured chat-control protocol check failed:")
         for line in errors:
             print(f"  - {line}")
         return 1
 
-    print("Chat control protocol check: OK")
+    print("Structured chat-control protocol check: OK")
     return 0
 
 

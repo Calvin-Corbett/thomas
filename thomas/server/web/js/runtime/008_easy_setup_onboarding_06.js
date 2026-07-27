@@ -114,36 +114,6 @@ async function applyOnboardingCompletion({ skippedInterview = false } = {}) {
     });
 }
 
-function includesAny(text, terms = []) {
-    return (terms || []).some((term) => text.includes(term));
-}
-
-function isSecurityTrustConcern(textRaw) {
-    const text = safeString(textRaw).toLowerCase();
-    if (!text) return false;
-    return includesAny(text, [
-        'security',
-        'secure',
-        'unsafe',
-        'cyber',
-        'risk',
-        'risky',
-        'trust',
-        'dependency',
-        'dependencies',
-        'dependency tree',
-        'dependency trees',
-        'install',
-        'installer',
-        'download',
-        'permission',
-        'permissions',
-        'malware',
-        'virus',
-        'supply chain',
-    ]);
-}
-
 function buildSetupSafetyMessage() {
     return [
         'Fair concern. Setup is designed to be explicit and user-controlled:',
@@ -187,91 +157,7 @@ function showSetupSafetySuggestions() {
     });
 }
 
-function resolveOnboardingOptionLabel(question, value) {
-    const options = Array.isArray(question?.options) ? question.options : [];
-    const found = options.find((option) => safeString(option?.value) === safeString(value));
-    return safeString(found?.label) || safeString(value);
-}
-
-function formatOnboardingQuestionOptionList(question) {
-    const options = Array.isArray(question?.options) ? question.options : [];
-    return options.map((option) => `"${safeString(option?.label)}"`).filter(Boolean).join(', ');
-}
-
-function parseOnboardingQuestionAnswer(question, textRaw) {
-    const text = safeString(textRaw).toLowerCase();
-    if (!text) return '';
-    if (text === 'skip' || includesAny(text, ['skip interview', 'skip questions', 'skip setup', 'skip this'])) {
-        return '__skip_interview__';
-    }
-
-    const options = Array.isArray(question?.options) ? question.options : [];
-    for (const option of options) {
-        const valueToken = safeString(option?.value).toLowerCase().replace(/_/g, ' ');
-        const labelToken = safeString(option?.label).toLowerCase();
-        if ((valueToken && text.includes(valueToken)) || (labelToken && text.includes(labelToken))) {
-            return safeString(option?.value);
-        }
-    }
-
-    const questionId = safeString(question?.id);
-    if (questionId === 'experience') {
-        if (includesAny(text, ['new', 'beginner', 'novice', 'first time', 'first-time', 'non technical', 'non-technical', 'just starting'])) return 'new';
-        if (includesAny(text, ['expert', 'advanced', 'senior', 'professional', 'pro'])) return 'expert';
-        if (includesAny(text, ['builder', 'intermediate', 'some experience', 'comfortable'])) return 'builder';
-    }
-    if (questionId === 'personality') {
-        if (includesAny(text, ['direct', 'technical', 'blunt', 'straight', 'no fluff', 'concise'])) return 'direct_technical';
-        if (includesAny(text, ['calm', 'friendly', 'gentle', 'coach', 'guide', 'supportive'])) return 'calm_guide';
-        if (includesAny(text, ['balanced', 'normal', 'neutral', 'mix'])) return 'balanced';
-    }
-    if (questionId === 'autonomy') {
-        if (includesAny(text, ['guided', 'careful', 'safe', 'step by step', 'step-by-step', 'confirm', 'approval', 'ask first'])) return 'guided';
-        if (includesAny(text, ['aggressive', 'autonomous', 'fully auto', 'take over', 'run with it', 'do it all', 'max autonomy'])) return 'aggressive';
-        if (includesAny(text, ['balanced', 'normal', 'middle'])) return 'balanced';
-    }
-    if (questionId === 'cost_quality') {
-        if (includesAny(text, ['low cost', 'cheap', 'budget', 'save money', 'cost first', 'economy'])) return 'low_cost';
-        if (includesAny(text, ['max quality', 'highest quality', 'best quality', 'quality first', 'accuracy', 'premium'])) return 'max_quality';
-        if (includesAny(text, ['balanced', 'middle'])) return 'balanced';
-    }
-    if (questionId === 'memory') {
-        if (includesAny(text, ['disable memory', 'no memory', 'dont remember', 'do not remember', 'forget', 'private'])) return 'disabled';
-        if (includesAny(text, ['session only', 'this session', 'temporary', 'temp memory'])) return 'session_only';
-        if (includesAny(text, ['remember', 'across sessions', 'persistent', 'save context'])) return 'remember';
-    }
-    if (questionId === 'workflow') {
-        if (includesAny(text, ['build', 'ship', 'feature', 'features', 'product', 'app', 'coding', 'code'])) return 'build_features';
-        if (includesAny(text, ['research', 'investigate', 'analyze', 'compare', 'study'])) return 'research';
-        if (includesAny(text, ['ops', 'reliability', 'incident', 'monitoring', 'infra', 'infrastructure', 'production', 'stability'])) return 'ops_reliability';
-    }
-    if (questionId === 'default_toggles') {
-        if (includesAny(text, ['safe', 'conservative', 'cautious', 'guardrails', 'approval'])) return 'safe_defaults';
-        if (includesAny(text, ['power', 'advanced', 'fast', 'max control', 'pro mode'])) return 'power_mode';
-        if (includesAny(text, ['quiet', 'minimal', 'silent', 'fewer notifications', 'no notifications'])) return 'quiet_mode';
-    }
-
-    return '';
-}
-
-function parseOnboardingSkipConfirmAction(textRaw) {
-    const text = safeString(textRaw).toLowerCase();
-    if (!text) return '';
-    if (includesAny(text, ['finish', 'defaults', 'default settings', 'skip it', 'yes'])) return 'finish_defaults';
-    if (includesAny(text, ['resume', 'continue', 'questions', 'go back', 'no'])) return 'resume';
-    return '';
-}
-
-function parseOnboardingReviewAction(textRaw) {
-    const text = safeString(textRaw).toLowerCase();
-    if (!text) return '';
-    if (includesAny(text, ['open settings', 'settings', 'tweak settings'])) return 'settings';
-    if (includesAny(text, ['defaults', 'skip interview', 'finish with defaults', 'use defaults'])) return 'skip';
-    if (includesAny(text, ['finish', 'apply', 'done', 'complete', 'looks good', 'yes'])) return 'apply';
-    return '';
-}
-
-async function submitOnboardingInterviewAnswer(question, value, { source = 'bubble' } = {}) {
+async function submitOnboardingInterviewAnswer(question, value) {
     const index = Number(easySetupState.interviewIndex);
     easySetupState.interviewAnswers[question.id] = value;
     easySetupState.interviewIndex = index + 1;
@@ -283,15 +169,8 @@ async function submitOnboardingInterviewAnswer(question, value, { source = 'bubb
     emitOnboardingTelemetry('interview.answer', {
         question_id: question.id,
         value,
-        source: safeString(source) || 'bubble',
+        source: 'explicit_button',
     });
-    if (safeString(source) === 'text') {
-        const answerLabel = resolveOnboardingOptionLabel(question, value);
-        renderMessage({
-            role: 'assistant',
-            content: `Got it. **${answerLabel}** works for that.`,
-        });
-    }
     promptOnboardingQuestion();
 }
 
@@ -395,133 +274,22 @@ function promptOnboardingQuestion() {
                 await promptInterviewSkipConfirm();
                 return;
             }
-            await submitOnboardingInterviewAnswer(question, value, { source: 'bubble' });
+            await submitOnboardingInterviewAnswer(question, value);
         }
     );
 }
 
-async function handleOnboardingChatInput(textRaw, { docsCount = 0, imagesCount = 0 } = {}) {
-    const text = safeString(textRaw);
+async function handleOnboardingChatInput(_textRaw, { docsCount = 0, imagesCount = 0 } = {}) {
     if (docsCount > 0 || imagesCount > 0) {
         renderMessage({
             role: 'assistant',
-            content: 'For onboarding, plain text replies work best. I ignored attachments for this step.',
+            content: 'Attachments do not change onboarding choices, so I ignored them for this step.',
         });
     }
-    if (!text) {
-        renderMessage({
-            role: 'assistant',
-            content: 'Reply with your preference in plain language, or use a suggestion bubble.',
-        });
-        return;
-    }
-
-    const stage = safeString(easySetupState.interviewStage) || 'question';
-    if (stage === 'skip_confirm') {
-        const action = parseOnboardingSkipConfirmAction(text);
-        if (!action) {
-            if (isSecurityTrustConcern(text)) {
-                renderMessage({
-                    role: 'assistant',
-                    content: `${buildSetupSafetyMessage()}\n\nWhen ready, say "finish with defaults" or "resume questions".`,
-                });
-                return;
-            }
-            renderMessage({
-                role: 'assistant',
-                content: 'Say "finish with defaults" or "resume questions".',
-            });
-            return;
-        }
-        if (action === 'finish_defaults') {
-            try {
-                await applyOnboardingCompletion({ skippedInterview: true });
-                renderMessage({
-                    role: 'assistant',
-                    content: withAgentName('Setup complete. {{agent}} is ready with safe defaults.'),
-                });
-            } catch (err) {
-                renderMessage({
-                    role: 'assistant',
-                    content: `Could not finalize setup: ${safeString(err?.message) || 'unknown error'}`,
-                });
-            }
-            return;
-        }
-        easySetupState.interviewSkipChosen = false;
-        promptOnboardingQuestion();
-        return;
-    }
-
-    if (stage === 'review') {
-        const action = parseOnboardingReviewAction(text);
-        if (!action) {
-            if (isSecurityTrustConcern(text)) {
-                renderMessage({
-                    role: 'assistant',
-                    content: `${buildSetupSafetyMessage()}\n\nWhen ready, say "finish setup", "use defaults", or "open settings".`,
-                });
-                return;
-            }
-            renderMessage({
-                role: 'assistant',
-                content: 'Say "finish setup", "use defaults", or "open settings".',
-            });
-            return;
-        }
-        if (action === 'settings') {
-            openSettingsModal();
-            renderMessage({
-                role: 'assistant',
-                content: 'Settings opened. Return when you want me to finish onboarding.',
-            });
-            return;
-        }
-        try {
-            await applyOnboardingCompletion({ skippedInterview: action === 'skip' });
-            renderMessage({
-                role: 'assistant',
-                content: withAgentName('Onboarding complete. {{agent}} is connected and ready.'),
-            });
-        } catch (err) {
-            renderMessage({
-                role: 'assistant',
-                content: `Could not finalize setup: ${safeString(err?.message) || 'unknown error'}`,
-            });
-        }
-        return;
-    }
-
-    const question = onboardingInterviewQuestions[Number(easySetupState.interviewIndex)];
-    if (!question) {
-        promptOnboardingQuestion();
-        return;
-    }
-
-    const parsedValue = parseOnboardingQuestionAnswer(question, text);
-    if (parsedValue === '__skip_interview__') {
-        easySetupState.interviewSkipChosen = true;
-        await promptInterviewSkipConfirm();
-        return;
-    }
-    if (!parsedValue) {
-        if (isSecurityTrustConcern(text)) {
-            const optionHints = formatOnboardingQuestionOptionList(question);
-            renderMessage({
-                role: 'assistant',
-                content: `${buildSetupSafetyMessage()}\n\nWhen you are ready, answer this step: ${withAgentName(question.prompt)}\nI can map replies like: ${optionHints}.`,
-            });
-            return;
-        }
-        const optionHints = formatOnboardingQuestionOptionList(question);
-        renderMessage({
-            role: 'assistant',
-            content: `I can map that, but I am not fully sure yet. Try phrasing it closer to one of: ${optionHints}.`,
-        });
-        return;
-    }
-
-    await submitOnboardingInterviewAnswer(question, parsedValue, { source: 'text' });
+    renderMessage({
+        role: 'assistant',
+        content: 'Onboarding answers only change when you choose one of the visible buttons. Your message did not change any setup setting.',
+    });
 }
 
 async function beginOnboardingInterview() {
@@ -532,7 +300,7 @@ async function beginOnboardingInterview() {
     await persistOnboardingPrefs({ current_step: 'interview', dismissed_at: null });
     renderMessage({
         role: 'assistant',
-        content: 'Brain handshake complete. I am caffeinated and morally obligated to make this easy. Tell me your preferences in plain English and I will translate them into setup defaults.',
+        content: 'Brain handshake complete. Choose the visible options below so every setup preference is explicit.',
     });
     promptOnboardingQuestion();
     emitOnboardingTelemetry('interview.started', {

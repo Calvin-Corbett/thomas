@@ -23,7 +23,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scripts.persona_validation_sweep import PERSONAS  # noqa: E402
-from thomas.agent.task_definition import derive_task_definition  # noqa: E402
 from thomas.core.task_titling import derive_task_title  # noqa: E402
 from thomas.marketplace.observability.task_ledger import derive_active_goal  # noqa: E402
 
@@ -36,13 +35,20 @@ _FILLER_PREFIX = ("help me", "i'm ", "i am ", "can you", "could you", "please ",
 
 
 def _stream_chat(task: str, sid: str) -> dict:
-    payload = json.dumps({
-        "session_id": sid, "profile": "local", "autonomy_level": 3,
-        "mode": "auto", "message": task,
-    }).encode("utf-8")
+    payload = json.dumps(
+        {
+            "session_id": sid,
+            "profile": "local",
+            "autonomy_level": 3,
+            "mode": "auto",
+            "message": task,
+        }
+    ).encode("utf-8")
     req = urllib.request.Request(
-        f"http://127.0.0.1:{PORT}/api/v2/chat", data=payload,
-        headers={"Content-Type": "application/json"}, method="POST",
+        f"http://127.0.0.1:{PORT}/api/v2/chat",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
     )
     t0 = time.monotonic()
     first_text_at = None
@@ -85,28 +91,37 @@ def main() -> None:
             res = _stream_chat(task, sid)
             # card titles from the real titlers (all three surfaces)
             chat_title = derive_active_goal(task, current_goal="")
-            office_title = derive_task_definition(task).task_summary
+            office_title = derive_task_title(task)
             reply = res.get("reply", "")
             low = reply.lower().strip()
             row = {
-                "n": n, "persona": persona, "task": task[:70],
-                "chat_card_title": chat_title, "office_card_title": office_title,
+                "n": n,
+                "persona": persona,
+                "task": task[:70],
+                "chat_card_title": chat_title,
+                "office_card_title": office_title,
                 "first_text_latency_s": res.get("first_text_latency_s"),
-                "elapsed_s": res.get("elapsed_s"), "dispatched": res.get("dispatched"),
-                "reply_len": len(reply), "error": res.get("error"),
+                "elapsed_s": res.get("elapsed_s"),
+                "dispatched": res.get("dispatched"),
+                "reply_len": len(reply),
+                "error": res.get("error"),
                 # rubric checks
                 "FAIL_canned": any(c in low for c in _CANNED),
                 "FAIL_instant": (res.get("first_text_latency_s") is not None and res["first_text_latency_s"] < 0.5),
                 "FAIL_empty": (not reply and not res.get("error")),
-                "FAIL_title_filler": chat_title.lower().startswith(_FILLER_PREFIX) or office_title.lower().startswith(_FILLER_PREFIX),
+                "FAIL_title_filler": chat_title.lower().startswith(_FILLER_PREFIX)
+                or office_title.lower().startswith(_FILLER_PREFIX),
                 "reply_preview": reply[:120],
             }
             rows.append(row)
             flags = [k for k in ("FAIL_canned", "FAIL_instant", "FAIL_empty", "FAIL_title_filler") if row[k]]
-            print(f"[{n:3}/{LIMIT*len(PERSONAS)}] {persona:16} {res.get('elapsed_s')}s "
-                  f"lat={res.get('first_text_latency_s')} disp={res.get('dispatched')} "
-                  f"{'ERR:'+res['error'] if res.get('error') else ('FAIL:'+','.join(flags) if flags else 'ok')} "
-                  f"| card={chat_title[:40]!r}", flush=True)
+            print(
+                f"[{n:3}/{LIMIT * len(PERSONAS)}] {persona:16} {res.get('elapsed_s')}s "
+                f"lat={res.get('first_text_latency_s')} disp={res.get('dispatched')} "
+                f"{'ERR:' + res['error'] if res.get('error') else ('FAIL:' + ','.join(flags) if flags else 'ok')} "
+                f"| card={chat_title[:40]!r}",
+                flush=True,
+            )
     summary = {
         "total": len(rows),
         "errors": sum(1 for r in rows if r["error"]),
@@ -114,7 +129,7 @@ def main() -> None:
         "FAIL_instant": sum(1 for r in rows if r["FAIL_instant"]),
         "FAIL_empty": sum(1 for r in rows if r["FAIL_empty"]),
         "FAIL_title_filler": sum(1 for r in rows if r["FAIL_title_filler"]),
-        "median_elapsed_s": sorted(r["elapsed_s"] for r in rows if r["elapsed_s"])[len(rows)//2] if rows else 0,
+        "median_elapsed_s": sorted(r["elapsed_s"] for r in rows if r["elapsed_s"])[len(rows) // 2] if rows else 0,
     }
     out = ROOT / "persona_e2e_results.json"
     out.write_text(json.dumps({"summary": summary, "rows": rows}, indent=2), encoding="utf-8")

@@ -289,7 +289,6 @@ function officeSpeechRevealMsForText(textRaw) {
 function officeBanterForAgent(agent, contextRaw = 'ambient', detail = {}) {
     const context = safeString(contextRaw).toLowerCase();
     const roomTheme = safeString(detail?.roomTheme).toLowerCase();
-    const taskTitle = safeString(detail?.taskTitle).toLowerCase();
 
     if (context === 'collision') {
         return officePickPersonaLine(agent, 'collision', officePick(OFFICE_DIALOGUE.collision));
@@ -322,18 +321,6 @@ function officeBanterForAgent(agent, contextRaw = 'ambient', detail = {}) {
         return officePickPersonaLine(agent, 'working', officePick(OFFICE_DIALOGUE.pickup));
     }
     if (context === 'task_done') {
-        if (taskTitle.includes('benchmark')) {
-            return officePick([
-                'Benchmarks wrapped and readable.',
-                'Performance pass complete.',
-            ]);
-        }
-        if (taskTitle.includes('deploy')) {
-            return officePick([
-                'Deploy lane complete.',
-                'Release task wrapped.',
-            ]);
-        }
         return officePick(OFFICE_DIALOGUE.complete);
     }
     if (context === 'social_lead') {

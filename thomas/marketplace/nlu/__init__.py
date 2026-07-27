@@ -2,7 +2,7 @@
 Natural Language Understanding (NLU) module.
 
 Provides comprehensive NLP/NLU functionality including tokenization, POS tagging,
-named entity recognition, dependency parsing, intent classification, sentiment analysis,
+named entity recognition, dependency parsing, sentiment analysis,
 slot filling, coreference resolution, and semantic role labeling.
 """
 
@@ -33,7 +33,6 @@ from thomas.marketplace.nlu._types import (
     Token,
 )
 from thomas.marketplace.nlu.coreference import CoreferenceResolver
-from thomas.marketplace.nlu.intent import IntentClassifier
 from thomas.marketplace.nlu.ner import GazetteerMatcher, NERTagger
 from thomas.marketplace.nlu.parser import DependencyParser
 from thomas.marketplace.nlu.pos_tagger import POSTagger
@@ -71,7 +70,6 @@ __all__ = [
     "NERTagger",
     "GazetteerMatcher",
     "DependencyParser",
-    "IntentClassifier",
     "SentimentAnalyzer",
     "SlotFiller",
     "CoreferenceResolver",

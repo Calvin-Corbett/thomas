@@ -5,52 +5,6 @@ from __future__ import annotations
 import ast
 import re
 
-GENERIC_PLACEHOLDER_RE = re.compile(
-    r"tasks?\s*[-\u2013\u2014]+\s*separated individually|separate individual item|"
-    r"(?:^|\s)task\s+1(?:\s|$).*?(?:^|\s)task\s+2(?:\s|$)",
-    re.IGNORECASE | re.DOTALL,
-)
-PROMPT_STOPWORDS = {
-    "a",
-    "an",
-    "and",
-    "area",
-    "bar",
-    "canvas",
-    "chart",
-    "create",
-    "design",
-    "display",
-    "donut",
-    "draw",
-    "for",
-    "from",
-    "graph",
-    "in",
-    "it",
-    "line",
-    "make",
-    "of",
-    "on",
-    "pie",
-    "please",
-    "plot",
-    "polished",
-    "render",
-    "scatter",
-    "show",
-    "showing",
-    "static",
-    "the",
-    "titled",
-    "to",
-    "visual",
-    "with",
-    "backing",
-    "deliver",
-    "live",
-    "plus",
-}
 GRAPHICAL_TAGS = {"canvas", "circle", "ellipse", "img", "line", "path", "polygon", "polyline", "rect", "svg"}
 NON_CONTENT_TAGS = {"script", "style", "template"}
 VOID_TAGS = {
@@ -139,10 +93,6 @@ CONTENT_VISIBILITY_HIDDEN_RE = re.compile(r"(?:^|;)\s*content-visibility\s*:\s*h
 CUSTOM_PROPERTY_RE = re.compile(r"(?:^|;)\s*(--[\w-]+)\s*:\s*([^;]+)", re.IGNORECASE)
 OPACITY_VALUE_RE = re.compile(r"(?:^|;)\s*opacity\s*:\s*([^;]+)", re.IGNORECASE)
 CSS_VAR_RE = re.compile(r"var\(\s*(--[\w-]+)\s*(?:,\s*([^()]*))?\)", re.IGNORECASE)
-CHART_PAIR_RE = re.compile(
-    r"(?<![\w.])([A-Za-z][A-Za-z0-9_.-]{0,31})\s*(?::|=|-)?\s*\$?(-?\d+(?:\.\d+)?)\s*%?",
-    re.IGNORECASE,
-)
 
 
 def _normalized_color(value: str) -> str:
@@ -278,35 +228,8 @@ def style_hides_content(style: str, variables: dict[str, str] | None = None) -> 
     )
 
 
-def tokenize_prompt(prompt: str) -> set[str]:
-    return {
-        token.casefold()
-        for token in re.findall(r"\b[\w.-]+\b", str(prompt or ""), re.UNICODE)
-        if len(token) >= 2
-        and token.casefold() not in PROMPT_STOPWORDS
-        and not token.casefold().endswith((".csv", ".html", ".pdf", ".xlsx"))
-    }
-
-
 def tokenize_text(text: str) -> set[str]:
     return {token.casefold() for token in re.findall(r"\b[\w.-]+\b", str(text or ""), re.UNICODE)}
-
-
-def chart_prompt_pairs(prompt: str) -> list[tuple[str, str]]:
-    """Extract explicit ``label value`` pairs whose association must survive rendering."""
-
-    blocked = PROMPT_STOPWORDS | {"dashboard", "data", "metric", "number", "value"}
-    pairs: list[tuple[str, str]] = []
-    for match in CHART_PAIR_RE.finditer(str(prompt or "")):
-        label = match.group(1).casefold()
-        label_parts = {part for part in re.split(r"[-_.]+", label) if part}
-        if label in blocked or "marker" in label_parts:
-            continue
-        value = f"{float(match.group(2)):g}"
-        pair = (label, value)
-        if pair not in pairs:
-            pairs.append(pair)
-    return pairs[:20]
 
 
 def element_hints(attributes: dict[str, object]) -> set[str]:
@@ -324,7 +247,3 @@ def is_interactive(attributes: dict[str, object]) -> bool:
         or "onclick" in attributes
         or element_hints(attributes) & INTERACTIVE_HINTS
     )
-
-
-def is_chart_request(prompt: str) -> bool:
-    return bool(re.search(r"\b(?:bar|line|pie|donut|scatter|area)?\s*(?:chart|graph|plot)\b", str(prompt or ""), re.I))

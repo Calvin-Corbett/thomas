@@ -280,31 +280,11 @@ function moduleGameStudioSetCurrentProject(wb, projectIdRaw) {
     wb.activeProjectByEngine[engineId] = projectId;
 }
 
-function moduleGameStudioAssistantReply(wb, promptRaw) {
-    const prompt = safeString(promptRaw).trim();
+function moduleGameStudioAssistantReply(wb) {
     const engine = moduleGameStudioEngineById(wb?.selectedEngine);
     const project = moduleGameStudioCurrentProject(wb);
-    const lower = prompt.toLowerCase();
     const projectName = safeString(project?.name) || 'current project';
-    if (lower.includes('plan') || lower.includes('roadmap')) {
-        return [
-            `Plan locked for ${projectName} (${engine.label}).`,
-            '1) graybox core loop',
-            '2) playable objective',
-            '3) test pass + tuning',
-            '4) content expansion',
-        ].join('\n');
-    }
-    if (lower.includes('launch') || lower.includes('open')) {
-        return `Ready to launch ${projectName}. Use Launch in the project card, then I can iterate from logs and playtest feedback.`;
-    }
-    if (lower.includes('build') || lower.includes('ship')) {
-        return `Build path for ${projectName}: run automated checks, package the build, then produce patch notes. Use Build in project actions to trigger command handoff.`;
-    }
-    if (lower.includes('learn') || lower.includes('research')) {
-        return `Learning track for ${projectName}: capture 3 references, define one mechanic benchmark, then run a proof scene by end of day.`;
-    }
-    return `Working in ${engine.label} on ${projectName}. I can plan features, generate tasks, launch tooling, and run build/playtest loops from this tab.`;
+    return `Working in ${engine.label} on ${projectName}. Free-form requests are handled by Thomas in Code mode; project actions here stay explicit: Launch, Build, and Playtest.`;
 }
 
 function moduleGameStudioOpenCommand(engineIdRaw, projectPathRaw, wb) {
@@ -972,7 +952,7 @@ function moduleRenderWorkbenchGameStudioDirector(container, wb) {
         const prompt = safeString(wb.chatDraft).trim();
         if (!prompt) return;
         pushChat('user', prompt);
-        const reply = moduleGameStudioAssistantReply(wb, prompt);
+        const reply = moduleGameStudioAssistantReply(wb);
         pushChat('assistant', reply);
         wb.chatDraft = '';
         render();

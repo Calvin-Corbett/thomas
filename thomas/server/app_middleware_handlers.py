@@ -11,6 +11,7 @@ import json
 import logging
 import math
 import os
+import sqlite3
 import time
 from collections import deque
 from pathlib import Path
@@ -496,7 +497,7 @@ def setup_middleware_and_handlers(
                 return
             if hasattr(ledger, "update_session_goal"):
                 ledger.update_session_goal(session_id, goal or "", status or "in_progress")
-        except Exception as e:
+        except (AttributeError, KeyError, OSError, RuntimeError, sqlite3.Error, TypeError, ValueError) as e:
             log.debug("Task ledger update failed: %s", e)
 
     def _join_url(base: str, path: str) -> str:
@@ -531,7 +532,7 @@ def setup_middleware_and_handlers(
                 cfg_copy._openai_codex_token_ready = bool(
                     access_token or has_openai_codex_token(secret_store, str(profile or cfg_copy.name or "chatgpt"))
                 )
-            except Exception as e:
+            except (AttributeError, ImportError, KeyError, OSError, RuntimeError, TypeError, ValueError) as e:
                 log.debug("Failed to resolve ChatGPT OAuth token for %s: %s", profile, e)
         return cfg_copy
 
@@ -569,33 +570,10 @@ def setup_middleware_and_handlers(
                     fcfg_copy._openai_codex_token_ready = bool(
                         access_token or has_openai_codex_token(secret_store, profile_name)
                     )
-                except Exception as e:
+                except (AttributeError, ImportError, KeyError, OSError, RuntimeError, TypeError, ValueError) as e:
                     log.debug("Failed to resolve ChatGPT OAuth failover token for %s: %s", fcfg_copy.name, e)
             result.append(fcfg_copy)
         return result
-
-    from thomas.models.switching import infer_profile_candidates, resolve_model_switch_request
-
-    async def _resolve_natural_model_switch_request(
-        text: str,
-        user_id: str = "default",
-        session_id: str = "",
-    ) -> str | None:
-        """Resolve a natural-language model switch request."""
-        try:
-            candidates = infer_profile_candidates(text, config.models)
-            if not candidates:
-                return None
-            resolved = await resolve_model_switch_request(
-                candidates=candidates,
-                config=config,
-                user_id=user_id,
-                session_id=session_id,
-            )
-            return resolved
-        except Exception as e:
-            log.debug("Model switch resolution failed: %s", e)
-            return None
 
     def _safe_int(value: Any, default: int) -> int:
         try:
@@ -825,7 +803,6 @@ def setup_middleware_and_handlers(
             "_task_ledger_update": _task_ledger_update,
             "_model_cfg_with_secrets": _model_cfg_with_secrets,
             "_failover_cfgs_with_secrets": _failover_cfgs_with_secrets,
-            "_resolve_natural_model_switch_request": _resolve_natural_model_switch_request,
             "_chat_file_for": _chat_file_for,
             "_read_chat_from_disk": _read_chat_from_disk,
             "_build_tools": __import__("thomas.server.app_helpers", fromlist=["_build_tools"])._build_tools,

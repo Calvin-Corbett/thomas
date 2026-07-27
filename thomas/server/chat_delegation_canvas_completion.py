@@ -8,12 +8,6 @@ from typing import Any
 
 from thomas.core import task_bot_runtime
 from thomas.core.file_access import WORKSPACE, authorize_write
-from thomas.server.chat_delegation_canvas import canvas_get
-from thomas.server.chat_delegation_canvas_export import (
-    ChartExportUnavailable,
-    export_static_chart,
-    is_static_chart_request,
-)
 from thomas.server.chat_delegation_deliverable import _artifacts_from_created
 from thomas.server.chat_delegation_session import _normalize_record
 from thomas.server.chat_tool_policy import ToolRuntimePolicy, policy_allows_path
@@ -64,25 +58,10 @@ def complete_canvas_delivery(
 
     created = ["index.html"]
     summary = "Reviewed and rendered index.html on the canvas."
-    if is_static_chart_request(prompt):
-        canvas_record = canvas_get(execution_id) or {}
-        try:
-            created = export_static_chart(
-                work_dir,
-                prompt=prompt,
-                plan=str(canvas_record.get("plan") or ""),
-            )
-        except ChartExportUnavailable:
-            # The plan drew the chart without stating its values, so there is
-            # nothing honest to put in a data file. The rendered chart is still
-            # correct and worth delivering -- what must not happen is shipping
-            # a spreadsheet of invented numbers beside it, which is how
-            # "Series 1..8, all 24" reached a user under a verified badge.
-            created = ["index.html"]
-            summary = "Reviewed and rendered the chart on the canvas (no separate data file)."
-        else:
-            primary = created[0] if created else "chart.pdf"
-            summary = f"Reviewed the live chart and delivered {primary} with backing data."
+    # ``surface=canvas`` is a structured model decision.  Completion records the
+    # rendered Canvas artifact exactly as produced; it never reclassifies the
+    # natural-language prompt into a chart subtype or export format.
+    _ = prompt
 
     task_bot_runtime.attach_proof(
         execution_id,

@@ -304,7 +304,6 @@ class UIWorkflowEngine:
             intent=intent,
             changed_paths=changed_paths,
             strict=strict,
-            inferred_intent=self._infer_recent_intent(),
         )
 
     def _loop(self) -> None:
@@ -632,20 +631,6 @@ class UIWorkflowEngine:
                 }
             )
         return out
-
-    def _infer_recent_intent(self) -> str:
-        try:
-            from thomas.core.persistence import get_persistence
-
-            turns = list(get_persistence().recent_turns(n=8) or [])
-            for turn in reversed(turns):
-                text = str(getattr(turn, "user_msg", "") or "").strip()
-                if text:
-                    return text
-        except (ImportError, RuntimeError, OSError, ValueError, TypeError, AttributeError) as exc:
-            log.debug("_infer_recent_intent failed: %s", exc)
-            return ""
-        return ""
 
     def _read_text(self, path: Path) -> str:
         try:

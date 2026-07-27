@@ -12,118 +12,51 @@
     }
 
     function onboardingWorkflowCandidates() {
-      const candidates = new Map();
-      state.messages.filter(row => row.role === 'assistant' || row.role === 'thomas').forEach(row => {
-        const messageCandidates = [];
-        String(row.text || row.content || '').split(/\r?\n/).forEach(line => {
-          const match = line.match(/^\s*(?:(?:[-*]|\d+[.)])\s*)?Workflow:\s*([^|]{3,80})\|\s*Purpose:\s*([^|]{8,280})\|\s*Type:\s*(manual|scheduled|event)(?:\s*\|\s*Connectors:\s*(.*))?$/i);
-          if (!match) return;
-          const name = match[1].replace(/\*\*/g, '').trim();
-          const key = name.toLowerCase();
-          const connectorText = String(match[4] || '').toLowerCase();
-          const connectorSuggestions = state.connectors
-            .filter(connector => [connector.id, connector.name]
-              .map(value => String(value || '').trim().toLowerCase())
-              .filter(Boolean)
-              .some(alias => connectorText.includes(alias)))
-            .map(connector => connector.id);
-          messageCandidates.push([key, { name, purpose: match[2].replace(/\*\*/g, '').trim(), type: match[3].toLowerCase(), connector_suggestions: connectorSuggestions }]);
-        });
-        if (messageCandidates.length >= 3) candidates.clear();
-        messageCandidates.forEach(([key, candidate]) => candidates.set(key, candidate));
-      });
-      return [...candidates.values()];
+      const structured = state.structuredOnboardingState || {};
+      return Array.isArray(structured.workflows) ? structured.workflows.slice(0, 6) : [];
     }
 
     function selectedOnboardingWorkflow(candidates) {
-      const lastUserMessage = [...state.messages].reverse().find(row => row.role === 'user');
-      const selectionText = String(lastUserMessage && lastUserMessage.text || '').toLowerCase();
-      const userTurn = state.messages.filter(row => row.role === 'user').length;
       const drafts = onboardingWorkflowDrafts(candidates);
-      if (/\b(?:none|neither|not\s+(?:one|any)|don['’]?t\s+want)\b/.test(selectionText)) {
-        state.onboardingWorkflowId = '';
-        return null;
-      }
-      const namedMatches = candidates.filter(workflow => selectionText.includes(String(workflow.name || '').toLowerCase()));
-      if (namedMatches.length) {
-        const explicitSwitch = namedMatches.length === 1 || /\b(?:switch|change|move|use|pick|choose|select)\b/.test(selectionText);
-        if (explicitSwitch) {
-          const selected = namedMatches.reduce((latest, workflow) => selectionText.lastIndexOf(String(workflow.name || '').toLowerCase()) > selectionText.lastIndexOf(String(latest.name || '').toLowerCase()) ? workflow : latest);
-          const selectedId = drafts[candidates.indexOf(selected)].id;
-          if (selectedId !== state.onboardingWorkflowId) state.onboardingSelectionUserTurn = userTurn;
-          state.onboardingWorkflowId = selectedId;
-          return selected;
-        }
-      }
-      const ordinals = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth'];
-      const position = ordinals.findIndex((ordinal, index) => selectionText.includes(ordinal) || new RegExp(`\\b${index + 1}(?:st|nd|rd|th)?\\b`).test(selectionText));
-      if (position >= 0 && position < candidates.length) {
-        if (drafts[position].id !== state.onboardingWorkflowId) state.onboardingSelectionUserTurn = userTurn;
-        state.onboardingWorkflowId = drafts[position].id;
-        return candidates[position];
-      }
       const persistedIndex = drafts.findIndex(draft => draft.id === state.onboardingWorkflowId);
       if (persistedIndex >= 0) return candidates[persistedIndex];
-      state.onboardingWorkflowId = '';
       return null;
     }
 
     function onboardingWorkflowDrafts(candidates) {
-      return candidates.map((candidate, index) => {
-        const slug = candidate.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 52) || 'workflow';
-        return { ...candidate, id: `flow-${index + 1}-${slug}` };
-      });
+      return candidates.map(candidate => ({ ...candidate, id: String(candidate.id || '') }));
     }
 
     function restoreOnboardingWorkflow(fields) {
-      const candidates = onboardingWorkflowCandidates();
-      const drafts = onboardingWorkflowDrafts(candidates);
+      const persistedWorkflows = Array.isArray(fields.workflow_drafts) ? fields.workflow_drafts : [];
+      state.structuredOnboardingState = {
+        phase: String(fields.phase || state.onboardingPhase || 'goal_discovery'),
+        confirmed_goal: String(fields.confirmed_goal || ''),
+        workflows: persistedWorkflows,
+        selected_workflow_id: String(fields.selected_workflow_id || ''),
+        selected_workflow_configured: fields.selected_workflow_configured === true,
+      };
+      const drafts = onboardingWorkflowDrafts(persistedWorkflows);
       const savedWorkflowId = String(fields.selected_workflow_id || '');
-      const savedWorkflowName = String(fields.selected_workflow || '').toLowerCase();
-      const savedIndex = drafts.findIndex((draft, index) => draft.id === savedWorkflowId || String(candidates[index].name || '').toLowerCase() === savedWorkflowName);
+      const savedIndex = drafts.findIndex(draft => draft.id === savedWorkflowId);
       state.onboardingWorkflowId = savedIndex >= 0 ? drafts[savedIndex].id : '';
       state.onboardingSelectionUserTurn = Math.max(0, Number(fields.selected_workflow_user_turn || 0));
     }
 
     function onboardingConfigurationReady(candidates, selected = selectedOnboardingWorkflow(candidates)) {
-      if (!selected || !state.onboardingSelectionUserTurn) return false;
-      const userTurns = state.messages.filter(row => row.role === 'user').length;
-      return userTurns > state.onboardingSelectionUserTurn;
+      return Boolean(selected && state.structuredOnboardingState?.selected_workflow_configured === true);
     }
 
     function confirmedOnboardingGoal() {
-      for (const row of [...state.messages].reverse()) {
-        if (row.role !== 'assistant' && row.role !== 'thomas') continue;
-        const match = String(row.text || row.content || '').match(/^Goal confirmed:\s*(.{12,500})$/im);
-        if (match) return match[1].trim();
-      }
-      return '';
+      return String(state.structuredOnboardingState?.confirmed_goal || '').trim();
     }
 
     function visibleOnboardingText(value) {
-      return String(value || '').replace(/^Goal confirmed:\s*.*(?:\r?\n|$)/gim, '').trim();
+      return String(value || '').trim();
     }
 
     function onboardingInstruction(jobName, turn) {
-      const candidates = onboardingWorkflowCandidates();
-      if (!confirmedOnboardingGoal()) {
-        return `Stay in goal discovery for the job "${jobName}". Decide whether the outcome, owner, success measure, and important boundaries are genuinely clear from answer ${turn}. If not, ask exactly one specific goal question and do not discuss tools, connectors, cadence, or execution. If the goal is now clear, add a separate line "Goal confirmed: <one concise confirmed goal>", map it into 3-6 workflows using exactly one line per flow as "Workflow: <name> | Purpose: <purpose> | Type: manual|scheduled|event | Connectors: <installed connector names or none>", and ask which single workflow to configure first.`;
-      }
-      if (candidates.length < 3) {
-        return `The confirmed goal for "${jobName}" is established. Map it into 3-6 distinct workflows without configuring them yet. Use exactly one line per flow as "Workflow: <name> | Purpose: <purpose> | Type: manual|scheduled|event | Connectors: <installed connector names or none>", then ask which single workflow to configure first.`;
-      }
-      if (candidates.length > 6) {
-        return `The workflow map for "${jobName}" has too many flows. Replace it with one complete map of 3-6 distinct workflows using the required Workflow line format, then ask which single workflow to configure first.`;
-      }
-      const selected = selectedOnboardingWorkflow(candidates);
-      if (!selected) return `The workflow map is established. Ask the user to explicitly choose one named or numbered workflow. Do not silently choose for them and do not configure any workflow yet.`;
-      // Cap configuration questioning: a great assistant proposes defaults
-      // instead of interrogating. After 2 configure answers, offer to fill the
-      // rest and point at the visible "Create job & continue this flow" button.
-      if (turn >= 6) {
-        return `Focus only on the selected workflow "${selected.name}". You have enough to work with. Do NOT ask another question. In two short sentences: state the sensible defaults you'll use for anything still open, and tell the user they can hit "Create job & continue this flow" (the button above) right now — you'll refine as they use it.`;
-      }
-      return `Focus only on the selected workflow "${selected.name}". Ask exactly one specific question about its inputs, decision points, trigger, approval boundary, connector identity, or finished deliverable. If you already have the essentials, instead propose sensible defaults and remind the user they can hit "Create job & continue this flow" whenever they're ready. Do not configure the other workflows yet.`;
+      return `Continue Work onboarding for "${jobName}" at follow-up ${turn}. Use the structured Work onboarding state supplied by the browser, call work_onboarding_update once with your current semantic decisions, then ask at most one useful question or explain the next explicit choice. Never encode state in prose or infer a workflow selection from the user's wording.`;
     }
 
     function composerHtml(placeholder) {
@@ -166,7 +99,8 @@
       const ready = state.activeApp && state.onboardingPhase === 'workflow_configuration' && candidates.length >= 3 && candidates.length <= 6 && selected && onboardingConfigurationReady(candidates, selected) && userTurns >= 4 && thomasTurns >= userTurns && !state.running;
       const phases = ['goal_discovery', 'workflow_mapping', 'workflow_configuration'];
       const phaseIndex = Math.max(0, phases.indexOf(state.onboardingPhase));
-      return `<div class="tc-mode-panel tc-work-panel"><div class="tc-mode-hero tc-work-compact"><div><button class="tc-work-back" data-work-cancel-onboarding><i class="ph ph-arrow-left"></i> All Work</button><div class="tc-mode-kicker">Work onboarding · ${esc(state.activeApp ? state.activeApp.name : 'new job')}</div><h1 class="tc-mode-title">Define the job before the machinery.</h1><p class="tc-mode-subtitle">Thomas starts with the outcome, maps the job into separate workflows, then configures only the flow you choose.</p></div>${ready ? '<button class="tc-work-primary" data-work-finish>Create job & continue this flow</button>' : ''}</div><section class="tc-work-onboarding"><div class="tc-work-progress"><span class="${phaseIndex >= 0 ? 'is-done' : ''}">1 · Goal</span><span class="${phaseIndex >= 1 ? 'is-done' : ''}">2 · Workflow map</span><span class="${phaseIndex >= 2 ? 'is-done' : ''}">3 · Configure one</span></div><div class="tc-work-transcript" role="log" aria-live="polite" aria-relevant="additions text" aria-busy="${state.running ? 'true' : 'false'}">${messageRows()}${state.running ? '<div class="tc-work-thinking" role="status">Thomas is thinking about the next useful question…</div>' : ''}</div>${composerHtml(state.messages.length ? 'Reply to Thomas…' : 'Describe the job you want Thomas to own…')}${candidates.length ? `<div class="tc-work-onboarding-map" role="status"><strong>${selected ? `Selected: ${esc(selected.name)}` : 'Choose one workflow explicitly'}</strong><span>${candidates.map(row => esc(row.name)).join(' · ')}</span></div>` : ''}</section></div>`;
+      const workflowChoices = candidates.map(row => `<button type="button" data-work-select-workflow="${esc(row.id)}" class="${selected && selected.id === row.id ? 'is-selected' : ''}"><strong>${esc(row.name)}</strong><span>${esc(row.purpose)}</span></button>`).join('');
+      return `<div class="tc-mode-panel tc-work-panel"><div class="tc-mode-hero tc-work-compact"><div><button class="tc-work-back" data-work-cancel-onboarding><i class="ph ph-arrow-left"></i> All Work</button><div class="tc-mode-kicker">Work onboarding · ${esc(state.activeApp ? state.activeApp.name : 'new job')}</div><h1 class="tc-mode-title">Define the job before the machinery.</h1><p class="tc-mode-subtitle">Thomas starts with the outcome, maps the job into separate workflows, then configures only the flow you choose.</p></div>${ready ? '<button class="tc-work-primary" data-work-finish>Create job & continue this flow</button>' : ''}</div><section class="tc-work-onboarding"><div class="tc-work-progress"><span class="${phaseIndex >= 0 ? 'is-done' : ''}">1 · Goal</span><span class="${phaseIndex >= 1 ? 'is-done' : ''}">2 · Workflow map</span><span class="${phaseIndex >= 2 ? 'is-done' : ''}">3 · Configure one</span></div><div class="tc-work-transcript" role="log" aria-live="polite" aria-relevant="additions text" aria-busy="${state.running ? 'true' : 'false'}">${messageRows()}${state.running ? '<div class="tc-work-thinking" role="status">Thomas is thinking about the next useful question…</div>' : ''}</div>${composerHtml(state.messages.length ? 'Reply to Thomas…' : 'Describe the job you want Thomas to own…')}${candidates.length ? `<div class="tc-work-onboarding-map" role="group" aria-label="Choose one workflow"><strong>${selected ? `Selected: ${esc(selected.name)}` : 'Choose one workflow'}</strong><div>${workflowChoices}</div></div>` : ''}</section></div>`;
     }
 
     function connectorHtml() {
