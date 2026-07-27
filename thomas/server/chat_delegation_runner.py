@@ -210,22 +210,27 @@ async def _run_agent_worker_supervised(
         if str((record or {}).get("state") or "").strip().lower() in _TERMINAL_TASK_STATES:
             return
         if task_bot_runtime.is_cancel_requested(execution_id, repo_root=repo_root):
-            summary = "Cancelled by user."
-            task_bot_runtime.fail_execution(
+            summary = "Stopped by you."
+            # Interrupt FIRST, then record. Recording first left a window in
+            # which the worker was still running and still writing files while
+            # the record already said the run had ended -- and if it reached its
+            # own completion it flipped the record from cancelled back to
+            # completed, so the user saw "Cancelled by user." followed seconds
+            # later by "Created deliverable.txt".
+            if not thread_task.done():
+                thread_task.cancel()
+            task_bot_runtime.cancel_execution(
                 execution_id,
                 actor=bot.name,
                 summary=summary,
-                blocker="cancelled",
                 salvaged_artifacts=_salvage(),
                 repo_root=repo_root,
             )
-            failed = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
+            stopped = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
             try:
-                await emitter.failed(failed, specialist_id=specialist_id, bot=bot, text=summary)
+                await emitter.failed(stopped, specialist_id=specialist_id, bot=bot, text=summary)
             except (RuntimeError, OSError, ValueError, TypeError):
                 log.debug("provider-native cancellation emit failed for %s", execution_id, exc_info=True)
-            if not thread_task.done():
-                thread_task.cancel()
             return
         has_progress = _worker_has_started_progress(record)
         worker_timeout_s = _supervisor_worker_timeout_s(worker_kwargs, has_progress=has_progress)
@@ -538,11 +543,10 @@ async def _run_agent_worker(
                     return
                 # In-flight cancellation: honour user stop between steps.
                 if task_bot_runtime.is_cancel_requested(execution_id, repo_root=repo_root):
-                    task_bot_runtime.fail_execution(
+                    task_bot_runtime.cancel_execution(
                         execution_id,
                         actor=bot.name,
-                        summary="Cancelled by user.",
-                        blocker="cancelled",
+                        summary="Stopped by you.",
                         repo_root=repo_root,
                     )
                     record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))

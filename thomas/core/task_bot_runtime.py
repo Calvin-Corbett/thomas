@@ -15,7 +15,10 @@ ROOT = Path(__file__).resolve().parents[2]
 STATE_DIRNAME = "task_bots"
 SUMMARY_FILENAME = "executions-summary.json"
 DEFAULT_STALE_MINUTES = 5.0
-TERMINAL_STATES = {"failed", "completed", "abandoned"}
+# "cancelled" is its own ending. Stopping a run on purpose is not a failure,
+# and filing it as one made every deliberate Stop look identical to a crash
+# in the task list -- with a failed proof beside it.
+TERMINAL_STATES = {"failed", "completed", "abandoned", "cancelled"}
 VALID_STATES = {
     "requested",
     "classified",
@@ -28,19 +31,21 @@ VALID_STATES = {
     "failed",
     "completed",
     "abandoned",
+    "cancelled",
 }
 ALLOWED_TRANSITIONS: dict[str, set[str]] = {
-    "requested": {"classified", "queued", "failed", "abandoned"},
-    "classified": {"queued", "failed", "abandoned"},
-    "queued": {"claimed", "blocked", "failed", "abandoned"},
-    "claimed": {"executing", "blocked", "failed", "abandoned"},
-    "executing": {"blocked", "awaiting_proof", "failed", "abandoned"},
-    "blocked": {"queued", "claimed", "executing", "failed", "abandoned"},
-    "awaiting_proof": {"verified", "failed", "blocked", "abandoned"},
-    "verified": {"completed", "failed", "abandoned"},
+    "requested": {"classified", "queued", "failed", "abandoned", "cancelled"},
+    "classified": {"queued", "failed", "abandoned", "cancelled"},
+    "queued": {"claimed", "blocked", "failed", "abandoned", "cancelled"},
+    "claimed": {"executing", "blocked", "failed", "abandoned", "cancelled"},
+    "executing": {"blocked", "awaiting_proof", "failed", "abandoned", "cancelled"},
+    "blocked": {"queued", "claimed", "executing", "failed", "abandoned", "cancelled"},
+    "awaiting_proof": {"verified", "failed", "blocked", "abandoned", "cancelled"},
+    "verified": {"completed", "failed", "abandoned", "cancelled"},
     "failed": set(),
     "completed": set(),
     "abandoned": set(),
+    "cancelled": set(),
 }
 
 
@@ -683,6 +688,14 @@ def complete_execution(
     payload = get_execution(execution_id, repo_root)
     if payload is None:
         raise FileNotFoundError(f"execution `{execution_id}` not found")
+    # A run the user ended stays ended. Completion writes with force=True, which
+    # bypasses the transition table, so a worker that kept going and reached its
+    # own finish line used to overwrite the stop: the screen showed "Stopped by
+    # you." and then, seconds later, "Created deliverable.txt". Whatever the
+    # worker managed to produce is still on the record via salvaged artifacts --
+    # this only refuses to relabel the ending.
+    if _normalize_state(str(payload.get("state") or "")) in {"cancelled", "abandoned"}:
+        return payload
     proof = payload.get("proof") or {}
     has_artifacts = bool(proof.get("artifacts"))
     if not (has_artifacts or verified_success):
@@ -821,6 +834,37 @@ def request_cancel(
         execution_id,
         progress_summary="Cancellation requested by user.",
         heartbeat=True,
+        actor=actor or "user",
+        repo_root=repo_root,
+        force=True,
+    )
+
+
+def cancel_execution(
+    execution_id: str,
+    *,
+    actor: str = "",
+    summary: str = "",
+    salvaged_artifacts: list[str] | None = None,
+    repo_root: str | Path | None = None,
+) -> dict[str, Any]:
+    """End a run because the user stopped it. Not a failure.
+
+    Every Stop used to be recorded with fail_execution(blocker="cancelled"),
+    which put the run in `failed` with a failed proof -- so a deliberate stop was
+    indistinguishable from a crash in the task list, and 75 of 238 stored Code
+    turns read as failed builds.
+
+    Work the run had already finished is kept, because stopping something
+    halfway through does not make the files it wrote disappear.
+    """
+    return update_execution(
+        execution_id,
+        state="cancelled",
+        progress_summary=summary or "Stopped by you.",
+        blocker="cancelled",
+        proof_status="cancelled",
+        salvaged_artifacts=salvaged_artifacts,
         actor=actor or "user",
         repo_root=repo_root,
         force=True,

@@ -611,7 +611,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                     "bot_id": "nova",
                 },
             ),
-            patch("thomas.server.chat_delegation.task_bot_runtime.fail_execution") as fail_execution,
+            patch("thomas.server.chat_delegation.task_bot_runtime.cancel_execution") as cancel_execution,
             patch("thomas.server.chat_delegation.asyncio.create_task", side_effect=_create_task),
         ):
             record = await chat_delegation._start_agent_worker_delegation(
@@ -674,7 +674,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 return_value={"execution_id": "exec-read-only-artifact"},
             ),
             patch("thomas.server.chat_delegation.task_bot_runtime.update_execution") as update_execution,
-            patch("thomas.server.chat_delegation.task_bot_runtime.fail_execution") as fail_execution,
+            patch("thomas.server.chat_delegation.task_bot_runtime.cancel_execution") as cancel_execution,
             patch("thomas.server.chat_delegation.task_bot_runtime.get_execution", return_value=payload),
             patch(
                 "thomas.server.chat_delegation._ensure_task_workspace",
@@ -722,7 +722,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 return_value={"execution_id": "exec-native"},
             ),
             patch("thomas.server.chat_delegation.task_bot_runtime.update_execution"),
-            patch("thomas.server.chat_delegation.task_bot_runtime.fail_execution") as fail_execution,
+            patch("thomas.server.chat_delegation.task_bot_runtime.cancel_execution") as cancel_execution,
             patch("thomas.server.chat_delegation.task_bot_runtime.get_execution", return_value=payload),
             patch("thomas.server.chat_delegation.asyncio.create_task") as create_task,
         ):
@@ -777,7 +777,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                     "bot_id": "nova",
                 },
             ),
-            patch("thomas.server.chat_delegation.task_bot_runtime.fail_execution") as fail_execution,
+            patch("thomas.server.chat_delegation.task_bot_runtime.cancel_execution") as cancel_execution,
             patch("thomas.server.chat_delegation._run_agent_worker_supervised", new=_supervisor),
             patch("thomas.server.chat_delegation.asyncio.create_task", side_effect=_create_task),
         ):
@@ -886,7 +886,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
         with (
             patch("thomas.server.chat_delegation._WORKER_FIRST_EVENT_TIMEOUT_S", 0.005),
             patch("thomas.server.chat_delegation.task_bot_runtime.get_execution", return_value=stale_record),
-            patch("thomas.server.chat_delegation.task_bot_runtime.fail_execution") as fail_execution,
+            patch("thomas.server.chat_delegation.task_bot_runtime.cancel_execution") as cancel_execution,
         ):
             await chat_delegation._run_agent_worker_supervised(
                 _runner,
@@ -921,7 +921,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
         with (
             patch("thomas.server.chat_delegation.task_bot_runtime.get_execution", return_value=running_record),
             patch("thomas.server.chat_delegation.task_bot_runtime.is_cancel_requested", return_value=True),
-            patch("thomas.server.chat_delegation.task_bot_runtime.fail_execution") as fail_execution,
+            patch("thomas.server.chat_delegation.task_bot_runtime.cancel_execution") as cancel_execution,
         ):
             await chat_delegation._run_agent_worker_supervised(
                 _runner,
@@ -934,10 +934,12 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 worker_kwargs={"effort": "max"},
             )
 
-        fail_execution.assert_called_once()
-        self.assertEqual(fail_execution.call_args.kwargs["blocker"], "cancelled")
+        # A stop is recorded as cancelled, NOT as a failure: filing it with
+        # fail_execution made every deliberate Stop look like a crash in the
+        # task list, with a failed proof beside it.
+        cancel_execution.assert_called_once()
         emitter.failed.assert_awaited_once()
-        self.assertEqual(emitter.failed.await_args.kwargs["text"], "Cancelled by user.")
+        self.assertEqual(emitter.failed.await_args.kwargs["text"], "Stopped by you.")
 
     async def test_run_agent_worker_reports_progress_and_completion(self):
         emitter = SimpleNamespace(progress=AsyncMock(), completed=AsyncMock(), failed=AsyncMock())
@@ -1563,7 +1565,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 new=lambda *args, **kwargs: _events(),  # noqa: ARG005
             ),
             patch("thomas.server.chat_delegation._WORKER_FIRST_EVENT_TIMEOUT_S", 0.005),
-            patch("thomas.server.chat_delegation.task_bot_runtime.fail_execution") as fail_execution,
+            patch("thomas.server.chat_delegation.task_bot_runtime.cancel_execution") as cancel_execution,
             patch(
                 "thomas.server.chat_delegation.task_bot_runtime.get_execution",
                 return_value={
@@ -1607,7 +1609,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 "thomas.server.chat_delegation.run_agent_worker_events",
                 new=lambda *args, **kwargs: _events(),  # noqa: ARG005
             ),
-            patch("thomas.server.chat_delegation.task_bot_runtime.fail_execution") as fail_execution,
+            patch("thomas.server.chat_delegation.task_bot_runtime.cancel_execution") as cancel_execution,
             patch(
                 "thomas.server.chat_delegation.task_bot_runtime.get_execution",
                 return_value={"execution_id": "exec-c", "bot_id": "nova"},
