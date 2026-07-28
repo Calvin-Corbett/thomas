@@ -13,9 +13,18 @@ from thomas.server.routes.chat_surface_namespace import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CHAT_HTML = REPO_ROOT / "thomas" / "server" / "web" / "chat.html"
+# chat.html's one inline <style> was lifted here when the page passed its own
+# 3000-line ceiling. Rules asserted below live in the stylesheet, not the page.
+CHAT_SHELL_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "chat_shell.css"
 WORK_JS = REPO_ROOT / "thomas" / "server" / "web" / "js" / "unified_work_mode.js"
 CODE_JS = REPO_ROOT / "thomas" / "server" / "web" / "js" / "unified_code_mode.js"
 CODE_LIFECYCLE_JS = REPO_ROOT / "thomas" / "server" / "web" / "js" / "unified_code_lifecycle.js"
+# Siblings chat.html loads ahead of unified_code_mode.js. The node harnesses
+# below have to load them in the same order the browser does, or the adapter
+# hands its collaborators to a module that is not there yet.
+CODE_RESULTS_JS = REPO_ROOT / "thomas" / "server" / "web" / "js" / "unified_code_results.js"
+CODE_PROJECTS_JS = REPO_ROOT / "thomas" / "server" / "web" / "js" / "unified_code_projects.js"
+CODE_SIBLING_JS = (CODE_RESULTS_JS, CODE_PROJECTS_JS)
 CODE_LIFECYCLE_HARNESS = REPO_ROOT / "tests" / "web_node" / "unified_code_mode_lifecycle.mjs"
 WORK_SUPPORT_HARNESS = REPO_ROOT / "tests" / "web_node" / "unified_work_support_lifecycle.mjs"
 CHAT_MARKDOWN_HARNESS = REPO_ROOT / "tests" / "web_node" / "chat_markdown_renderer.mjs"
@@ -40,6 +49,8 @@ def test_primary_chat_loads_real_mode_adapters_not_classic_iframes() -> None:
 
     assert "/static/js/unified_mode_shell.js" in text
     assert "/static/js/unified_code_lifecycle.js" in text
+    assert "/static/js/unified_code_results.js" in text
+    assert "/static/js/unified_code_projects.js" in text
     assert "/static/js/unified_code_mode.js" in text
     assert "/static/js/unified_work_mode.js" in text
     # The shared shell stylesheet is REQUIRED: it owns the
@@ -56,7 +67,11 @@ def test_primary_chat_loads_real_mode_adapters_not_classic_iframes() -> None:
     assert 'id="tc-mode-surface"' in text
     assert "fetch('/api/chats?mode=chat')" in text
     assert "surface_mode: 'chat'" in text
-    assert text.index("/static/js/unified_code_lifecycle.js") < text.index("/static/js/unified_code_mode.js")
+    # unified_code_mode.js hands its state, escaper and render to the siblings at
+    # load time, so every one of them must already be on the page. Ordering is
+    # the whole contract between these four files.
+    for sibling in ("unified_code_lifecycle.js", "unified_code_results.js", "unified_code_projects.js"):
+        assert text.index(f"/static/js/{sibling}") < text.index("/static/js/unified_code_mode.js")
 
 
 def test_chat_busy_transitions_refresh_shared_mode_chrome() -> None:
@@ -113,7 +128,9 @@ def test_primary_chat_renders_safe_structured_markdown_for_assistant_only() -> N
 
     assert "let html = isUser ? esc(m.text) : mdToHtml(m.text);" in text
     assert "tc-bubble${isUser ? '' : ' tc-markdown'}" in text
-    assert ".tc-markdown h1, .tc-markdown h2, .tc-markdown h3" in text
+    # The markdown rules moved with the rest of the shell's inline CSS into
+    # chat_shell.css; the class the renderer emits still has to be styled.
+    assert ".tc-markdown h1, .tc-markdown h2, .tc-markdown h3" in CHAT_SHELL_CSS.read_text(encoding="utf-8")
     assert "html += '<pre><code>' + esc(code.join('\\n')) + '</code></pre>'" in text
     assert 'target="_blank" rel="noopener noreferrer"' in text
 
@@ -253,6 +270,7 @@ def test_work_adapter_contains_async_ui_failures_and_clears_stale_error() -> Non
 
 def test_code_adapter_uses_real_forge_runtime_and_change_controls() -> None:
     text = CODE_JS.read_text(encoding="utf-8") + CODE_LIFECYCLE_JS.read_text(encoding="utf-8")
+    text += "".join(path.read_text(encoding="utf-8") for path in CODE_SIBLING_JS)
 
     assert "'/api/evolve/agent/send'" in text
     assert "/api/evolve/agent/stream" in text
@@ -355,7 +373,7 @@ global.fetch = async () => ({
     { id: 'empty', title: 'Untitled build', project_root: 'C:/Repos/Empty', turn_count: 0 },
   ] }),
 });
-eval(fs.readFileSync(process.argv[1], 'utf8'));
+for (const modulePath of process.argv.slice(1)) eval(fs.readFileSync(modulePath, 'utf8'));
 (async () => {
   await adapter.refresh();
   const root = { innerHTML: '', children: [], appendChild(node) { this.children.push(node); } };
@@ -374,7 +392,9 @@ eval(fs.readFileSync(process.argv[1], 'utf8'));
 """
 
     result = subprocess.run(
-        ["node", "-e", harness, str(CODE_JS)],
+        # Siblings first, exactly as chat.html orders the script tags. These are
+        # this repository's own checked-in files, not input.
+        ["node", "-e", harness, *[str(path) for path in CODE_SIBLING_JS], str(CODE_JS)],
         capture_output=True,
         check=False,
         text=True,
@@ -425,8 +445,13 @@ def test_code_surface_uses_chat_conversation_with_collapsible_activity_drawer() 
     assert "projectActionsHtml" not in text
     mobile_css = css[css.index("@media (max-width: 720px)") : css.index("@media (prefers-reduced-motion: reduce)")]
     assert ".tc-code-actions { width: min(420px, 94vw); }" in mobile_css
-    assert ".ph-caret-right::before" in html
-    assert ".ph-file-code::before" in html
+    # The file tree's own icons must still have a local fallback, so Code reads
+    # correctly with no icon font. The fallbacks moved to chat_shell.css with the
+    # rest of the shell's inline CSS; the page still has to load it.
+    assert "/static/css/chat_shell.css" in html
+    shell_css = CHAT_SHELL_CSS.read_text(encoding="utf-8")
+    assert ".ph-caret-right::before" in shell_css
+    assert ".ph-file-code::before" in shell_css
 
 
 def test_chat_completion_announcement_retries_until_durably_reported() -> None:
@@ -495,7 +520,7 @@ global.document = { getElementById: () => null };
 global.localStorage = { getItem: () => '' };
 global.fetch = async () => { throw new Error('offline test'); };
 process.on('unhandledRejection', error => { unhandled = error; });
-eval(fs.readFileSync(process.argv[1], 'utf8'));
+for (const modulePath of process.argv.slice(1)) eval(fs.readFileSync(modulePath, 'utf8'));
 (async () => {
   await adapter.newConversation();
   await adapter.send('test rejected send', {});
@@ -508,7 +533,9 @@ eval(fs.readFileSync(process.argv[1], 'utf8'));
 """
 
     result = subprocess.run(
-        ["node", "-e", harness, str(CODE_JS)],
+        # Siblings first, exactly as chat.html orders the script tags. These are
+        # this repository's own checked-in files, not input.
+        ["node", "-e", harness, *[str(path) for path in CODE_SIBLING_JS], str(CODE_JS)],
         capture_output=True,
         check=False,
         text=True,
@@ -520,7 +547,13 @@ eval(fs.readFileSync(process.argv[1], 'utf8'));
 
 def test_code_adapter_lifecycle_behavior_in_node() -> None:
     result = subprocess.run(
-        ["node", str(CODE_LIFECYCLE_HARNESS), str(CODE_JS), str(CODE_LIFECYCLE_JS)],
+        [
+            "node",
+            str(CODE_LIFECYCLE_HARNESS),
+            str(CODE_JS),
+            str(CODE_LIFECYCLE_JS),
+            *[str(path) for path in CODE_SIBLING_JS],
+        ],
         capture_output=True,
         check=False,
         text=True,

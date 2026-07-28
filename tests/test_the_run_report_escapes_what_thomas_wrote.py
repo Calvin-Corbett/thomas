@@ -18,15 +18,25 @@ from __future__ import annotations
 
 from pathlib import Path
 
-CODE_JS = Path(__file__).resolve().parents[1] / "thomas" / "server" / "web" / "js" / "unified_code_mode.js"
+WEB_JS = Path(__file__).resolve().parents[1] / "thomas" / "server" / "web" / "js"
+# The report and the artifact cards moved to a sibling module when
+# unified_code_mode.js was split. The escaper did NOT move and was not copied:
+# it is declared once and injected, which the first test below pins by counting
+# declarations across both files. Two escapers is how one of them stops
+# escaping.
+CODE_JS = WEB_JS / "unified_code_mode.js"
+CODE_RESULTS_JS = WEB_JS / "unified_code_results.js"
 
 
 def _js() -> str:
-    return CODE_JS.read_text(encoding="utf-8")
+    return CODE_JS.read_text(encoding="utf-8") + "\n" + CODE_RESULTS_JS.read_text(encoding="utf-8")
 
 
 def test_the_escaper_covers_every_dangerous_character() -> None:
-    line = next(line for line in _js().splitlines() if line.strip().startswith("const esc ="))
+    declarations = [line for line in _js().splitlines() if line.strip().startswith("const esc =")]
+
+    assert len(declarations) == 1, "one escaper, shared by injection -- a second copy is one that can drift"
+    line = declarations[0]
 
     for char in ("&", "<", ">", '"', "'"):
         assert char in line, f"{char!r} is not escaped"
@@ -58,7 +68,7 @@ def test_every_filename_reaching_the_dom_is_escaped() -> None:
 
     Audited then: the only bare `${file}` builds a JavaScript key, not markup.
     Every path into the document escapes."""
-    body = _js().split("function artifactCardsHtml", 1)[1].split("\n  function", 1)[0]
+    body = _js().split("function artifactCardsHtml", 1)[1].split("\n  }\n", 1)[0]
 
     for attribute in ("data-code-open-artifact", "data-code-save-artifact", "data-code-artifact-slot"):
         assert f'{attribute}="${{esc(' in body, f"{attribute} interpolates a filename unescaped"

@@ -2,6 +2,9 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 const sourcePath = process.argv[2];
 const lifecyclePath = process.argv[3];
+// unified_code_mode.js was split; these load in the order chat.html loads them,
+// before the adapter itself, because the adapter configures them at load time.
+const siblingPaths = process.argv.slice(4);
 let adapter = null;
 let busy = false;
 let fetchHandler = async () => { throw new Error('unexpected fetch'); };
@@ -90,6 +93,9 @@ globalThis.EventSource = class {
   close() { this.closed = true; }
 };
 vm.runInThisContext(fs.readFileSync(lifecyclePath, 'utf8'), { filename: lifecyclePath });
+for (const siblingPath of siblingPaths) {
+  vm.runInThisContext(fs.readFileSync(siblingPath, 'utf8'), { filename: siblingPath });
+}
 const source = fs.readFileSync(sourcePath, 'utf8');
 const instrumented = source.replace(
   /\n\}\)\(\);\s*$/,

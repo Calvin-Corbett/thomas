@@ -10,11 +10,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-CODE_JS = Path(__file__).resolve().parent.parent / "thomas" / "server" / "web" / "js" / "unified_code_mode.js"
+WEB_JS = Path(__file__).resolve().parent.parent / "thomas" / "server" / "web" / "js"
+CODE_JS = WEB_JS / "unified_code_mode.js"
+# ensureArtifactDoc and the preview documents moved to the sibling module the
+# browser loads immediately before unified_code_mode.js; the conversation-switch
+# and end-of-run resets that must drop the origin stayed with the state machine.
+# Both halves of the guarantee are read as one text.
+CODE_RESULTS_JS = WEB_JS / "unified_code_results.js"
 
 
 def _js() -> str:
-    return CODE_JS.read_text(encoding="utf-8")
+    return CODE_JS.read_text(encoding="utf-8") + "\n" + CODE_RESULTS_JS.read_text(encoding="utf-8")
 
 
 def _ensure() -> str:

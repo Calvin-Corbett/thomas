@@ -21,6 +21,11 @@
   const clampDrawerWidth = value => Math.max(280, Math.min(520, value));
   const modes = () => window.ThomasUnifiedModes;
   const lifecycle = () => window.ThomasCodeLifecycle;
+  // Siblings loaded ahead of this file by chat.html. Reached through accessors
+  // rather than captured once, the same way lifecycle() is, so load order stays
+  // the only ordering rule there is.
+  const codeResults = () => window.ThomasCodeResults;
+  const codeProjects = () => window.ThomasCodeProjects;
   const host = () => modes().host() || {};
   const surface = () => document.getElementById('tc-mode-surface');
 
@@ -32,6 +37,12 @@
     const path = String(value || '').replace(/\\/g, '/').replace(/^\.\/+/, '').toLowerCase();
     return path === '.thomas' || path.startsWith('.thomas/') || path.includes('/.thomas/evolve/agent/');
   }
+
+  // Hand the siblings the collaborators this file owns. One state object, one
+  // escaper, one render -- injected rather than re-declared, so a split can
+  // never become two copies that drift (the failure AGENTS.md calls out).
+  codeResults().configure({ state, esc, isInternalResultPath, lifecycle, render });
+  codeProjects().configure({ state });
 
   async function copyReplyText(text, button) {
     const value = String(text || '');
@@ -299,96 +310,6 @@
     return 'The Code task stopped before it finished.';
   }
 
-  function reportRow(ok, heading, label) {
-    return `<div class="tc-code-technical${ok ? '' : ' is-error'}"><i class="ph ph-${ok ? 'check-circle' : 'warning'}"></i><div><strong>${esc(heading)}</strong><code>${esc(label)}</code></div></div>`;
-  }
-
-  function reportSection(title, rows) {
-    if (!rows.length) return '';
-    return `<details class="tc-code-progress-history"><summary>${esc(title)} (${rows.length})</summary><div>${rows.join('')}</div></details>`;
-  }
-
-  // CAP-141: structured post-run report (attempts / validations / open risks /
-  // attention pointers / rubric mapping), rendered as collapsible sections with
-  // the existing technical-log styling. Defensive: an absent or malformed
-  // report renders nothing — older turns have no report field.
-  function runReportHtml(report) {
-    if (!report || typeof report !== 'object') return '';
-    const list = value => Array.isArray(value) ? value : [];
-    const attempts = list(report.attempts).map(item => reportRow(!/fail/i.test(String(item.outcome || '')), `Pass ${item.pass || '?'} · ${String(item.outcome || 'unknown')}`, `${String(item.goal || '')} → ${String(item.exit_state || '')}`));
-    const validations = list(report.validations).map(item => reportRow(item.passed === true, item.passed === true ? 'Check passed' : 'Check failed', `${String(item.command || item.kind || 'check')} — ${String(item.evidence || '')}`));
-    const risks = list(report.open_risks).map(item => reportRow(false, String(item.risk || 'open risk'), String(item.detail || '')));
-    const pointers = list(report.attention_pointers).map(item => reportRow(true, `#${item.rank || '?'} ${String(item.target || '')}`, String(item.why || '')));
-    const rubric = list(report.rubric_mapping).map(item => reportRow(item.status === 'met', `${String(item.status || 'unverified')} · ${String(item.criterion || '')}`, String(item.evidence || '')));
-    const sections = [
-      reportSection('Attempts', attempts),
-      reportSection('Validations', validations),
-      reportSection('Open risks', risks),
-      reportSection('Where to look first', pointers),
-      reportSection('Rubric mapping', rubric),
-    ].join('');
-    if (!sections) return '';
-    const riskCount = risks.length;
-    const summary = `Run report · ${attempts.length} pass${attempts.length === 1 ? '' : 'es'} · ${validations.length} check${validations.length === 1 ? '' : 's'} · ${riskCount} open risk${riskCount === 1 ? '' : 's'}`;
-    return `<details class="tc-code-saved-activity tc-code-run-report${riskCount ? ' has-issues' : ''}" data-saved="true"><summary><span class="tc-code-activity-summary"><i class="ph ph-${riskCount ? 'warning' : 'clipboard-text'}"></i>${esc(summary)}</span><span>Show details</span></summary><div class="tc-code-technical-log">${sections}</div></details>`;
-  }
-
-  function artifactHtml(artifact) {
-    const file = String(artifact.file || '');
-    const url = `/api/evolve/agent/artifact/${encodeURIComponent(state.activeId)}/${file.split('/').map(encodeURIComponent).join('/')}`;
-    const title = `<strong>${esc(file)}</strong><a href="${url}" target="_blank" rel="noopener">Open</a>`;
-    if (artifact.kind === 'html') return `<section class="tc-code-artifact"><header>${title}</header><iframe src="${url}" sandbox="allow-scripts allow-forms allow-same-origin" title="Preview ${esc(file)}"></iframe></section>`;
-    if (artifact.kind === 'image') return `<section class="tc-code-artifact"><header>${title}</header><img src="${url}" alt="Generated artifact ${esc(file)}"></section>`;
-    // PDF/schematic artifacts preview inline too (parity with chat), not just a link.
-    if (artifact.kind === 'pdf' || /\.pdf(?:$|[?#])/i.test(file)) return `<section class="tc-code-artifact"><header>${title}</header><iframe src="${url}#toolbar=0&navpanes=0&view=FitH" title="Preview ${esc(file)}"></iframe></section>`;
-    if (/\.svg(?:$|[?#])/i.test(file)) return `<section class="tc-code-artifact"><header>${title}</header><img src="${url}" alt="Generated artifact ${esc(file)}"></section>`;
-    return `<section class="tc-code-artifact is-link"><header>${title}</header><span>${esc(artifact.kind || 'artifact')} result</span></section>`;
-  }
-
-  // What Thomas just made, named and openable, inside the reply itself.
-  // The turn already carries artifacts -- [{file:'trey-badlands.html',kind:'html'}]
-  // -- and all the reply said was "1 result ready". A count is not a delivery:
-  // the owner had to follow a build by typing "where is it" and then "what's the
-  // full directory name". Handing back a thing you cannot open is the same as
-  // not handing it back.
-  function artifactCardsHtml(turn, turnKey) {
-    const items = (turn.artifacts || []).filter(a => a && a.file && !isInternalResultPath(a.file));
-    if (!items.length) return '';
-    const rows = items.map(a => {
-      const file = String(a.file);
-      const playable = /\.x?html?$/i.test(file);
-      const doc = state.artifactDocs && state.artifactDocs[file];
-      // Keyed per turn: the same file is listed by every turn that touched it,
-      // so keying by name alone opened six copies of the game at once.
-      const slot = `${turnKey}::${file}`;
-      const open = !!(state.artifactOpen && state.artifactOpen[slot]);
-      // A live thumbnail of the real thing, exactly as Chat shows a deliverable:
-      // you can see what it is before you commit to opening it.
-      const thumb = (playable && doc)
-        ? `<span class="tc-code-artifact-thumb"><iframe tabindex="-1" aria-hidden="true" scrolling="no" sandbox="allow-scripts allow-same-origin" src="${esc(doc)}"></iframe></span>`
-        : `<span class="tc-code-artifact-thumb is-icon"><i class="ph ${playable ? 'ph-play-circle' : 'ph-file'}"></i></span>`;
-      const hint = playable ? (open ? 'Showing it below' : 'Click to open it here') : 'Click to view';
-      const expanded = (open && playable && doc)
-        ? `<div class="tc-code-artifact-stage"><iframe title="${esc(file)}" sandbox="allow-scripts allow-same-origin allow-forms" src="${esc(doc)}"></iframe></div>`
-        : '';
-      // Chat's deliverable card carries a download beside it; a result you can
-      // only look at inside Thomas is not really yours yet.
-      const save = `<button class="tc-code-artifact-save" data-code-save-artifact="${esc(file)}" type="button" title="Download ${esc(file)}" aria-label="Download ${esc(file)}"><i class="ph ph-download-simple" aria-hidden="true"></i></button>`;
-      return `<div class="tc-code-artifact">
-        <div class="tc-code-artifact-row">
-          <button class="tc-code-artifact-open" data-code-open-artifact="${esc(file)}" data-code-artifact-slot="${esc(slot)}" type="button" aria-expanded="${open ? 'true' : 'false'}">
-            ${thumb}
-            <span class="tc-code-artifact-meta">
-              <span class="tc-code-artifact-name">${esc(file)}</span>
-              <span class="tc-code-artifact-verb">${hint}</span>
-            </span>
-          </button>${save}
-        </div>${expanded}
-      </div>`;
-    }).join('');
-    return `<div class="tc-code-artifacts"><div class="tc-code-artifacts-head">${items.length === 1 ? 'Thomas made this' : `Thomas made ${items.length} things`}</div>${rows}</div>`;
-  }
-
   function turnHtml(turn) {
     if (turn.role === 'user') return `<article class="tc-code-turn is-user"><div>${esc(turn.text)}</div></article>`;
     const changedCount = (turn.changed_files || []).filter(file => !isInternalResultPath(file)).length;
@@ -403,7 +324,7 @@
     const narrative = narrativeActivityHtml(activityEvents, true);
     const technicalEvents = activityEvents.filter(isTechnicalEvent);
     const resultCount = (turn.artifacts || []).filter(artifact => !isInternalResultPath(artifact.file)).length;
-    return `<article class="tc-code-turn is-agent"><div class="tc-code-message-head"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>Thomas</strong><small>${esc(turn.model || 'Code')}</small><button class="tc-code-copy" data-code-copy-reply type="button" aria-label="Copy Thomas reply"><i class="ph ph-copy"></i></button></div><div class="tc-code-turn-body">${narrative}${technicalActivityHtml(technicalEvents, true)}<div class="tc-code-reply${turn.ok ? '' : ' is-error'}">${esc(reply)}</div>${artifactCardsHtml(turn, turn.run_id || turn.ts || '0')}${runReportHtml(turn.report)}${changedCount ? `<div class="tc-code-result-note"><span><i class="ph ph-files"></i>${changedCount} file${changedCount === 1 ? '' : 's'} changed</span></div>` : ''}</div></article>`;
+    return `<article class="tc-code-turn is-agent"><div class="tc-code-message-head"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>Thomas</strong><small>${esc(turn.model || 'Code')}</small><button class="tc-code-copy" data-code-copy-reply type="button" aria-label="Copy Thomas reply"><i class="ph ph-copy"></i></button></div><div class="tc-code-turn-body">${narrative}${technicalActivityHtml(technicalEvents, true)}<div class="tc-code-reply${turn.ok ? '' : ' is-error'}">${esc(reply)}</div>${codeResults().artifactCardsHtml(turn, turn.run_id || turn.ts || '0')}${codeResults().runReportHtml(turn.report)}${changedCount ? `<div class="tc-code-result-note"><span><i class="ph ph-files"></i>${changedCount} file${changedCount === 1 ? '' : 's'} changed</span></div>` : ''}</div></article>`;
   }
 
   function transcriptScroller(root) {
@@ -661,7 +582,7 @@
       const key = `${artifact.file || ''}\u0000${artifact.kind || ''}`;
       if (!artifactKeys.has(key)) { artifactKeys.add(key); artifacts.push(artifact); }
     });
-    const artifactRows = artifacts.map(artifactHtml).join('');
+    const artifactRows = artifacts.map(codeResults().artifactHtml).join('');
     const hasResults = Boolean(state.pendingApproval || visibleChanges.length || artifacts.length || state.filePreview);
     // Watch it build. A generated page is far more useful rendered than as
     // source, and during a run this refreshes, so you see the thing take shape
@@ -682,7 +603,7 @@
     // is the same kind of moment: Thomas needs an answer before it can act, and
     // the answer belongs on screen rather than in a log file.
     const historyAsk = state.pendingHistoryChoice ? `<section class="tc-code-approval" role="alert"><strong>${esc(state.pendingHistoryChoice.projectName || 'This folder')} has no version history</strong><p>${esc(state.pendingHistoryChoice.message)}</p><div><button data-code-history-setup ${state.historyChoiceBusy ? 'disabled' : ''}>${state.historyChoiceBusy ? 'Working...' : 'Set up history'}</button><button data-code-history-without ${state.historyChoiceBusy ? 'disabled' : ''}>Work without undo</button><button data-code-history-cancel ${state.historyChoiceBusy ? 'disabled' : ''}>Cancel</button></div></section>` : '';
-    const projectLabel = state.projectRoot ? projectDisplayLabel() : 'Choose a project';
+    const projectLabel = state.projectRoot ? codeProjects().projectDisplayLabel() : 'Choose a project';
     root.innerHTML = `<div class="tc-code-panel${state.drawerOpen ? ' is-drawer-open' : ''}" style="--tc-code-drawer-width:${clampDrawerWidth(state.drawerWidth)}px">
       <header class="tc-code-context" data-ui-id="code.context" data-ui-label="Code activity bar" data-ui-policy="move"><button data-code-results-jump type="button" aria-expanded="${state.drawerOpen ? 'true' : 'false'}"><i class="ph ph-sidebar-simple"></i> Activity <small>${statusLabels[state.runStatus] || 'Ready'}</small>${hasResults ? '<span class="tc-code-activity-count" aria-hidden="true"></span>' : ''}</button></header>
       <div class="tc-code-layout">
@@ -739,7 +660,7 @@
       state.artifactOpen = state.artifactOpen || {};
       state.artifactOpen[slot] = !state.artifactOpen[slot];
       render();
-      if (state.artifactOpen[slot]) void safely(() => ensureArtifactDoc(file), 'That result could not be opened.');
+      if (state.artifactOpen[slot]) void safely(() => codeResults().ensureArtifactDoc(file), 'That result could not be opened.');
     }));
     root.querySelectorAll('[data-code-save-artifact]').forEach(button => button.addEventListener('click', () => {
       // Saved from the file Thomas actually wrote, read through the same
@@ -749,7 +670,7 @@
       void safely(async () => {
         const token = lifecycle().contextToken(state);
         if (!token.id) return false;
-        const content = await readProjectFile(token.id, file);
+        const content = await codeResults().readProjectFile(token.id, file);
         if (content === null) throw new Error('could not read ' + file);
         const url = URL.createObjectURL(new Blob([content], { type: 'application/octet-stream' }));
         const a = document.createElement('a');
@@ -789,7 +710,7 @@
     root.querySelectorAll('[data-code-keep]').forEach(button => button.addEventListener('click', () => { void safely(() => changeAction('keep', button.dataset.codeKeep), 'Could not keep that change.'); }));
     root.querySelectorAll('[data-code-revert]').forEach(button => button.addEventListener('click', () => { void safely(() => changeAction('revert', button.dataset.codeRevert), 'Could not revert that change.'); }));
     restoreRenderState(root, savedRenderState);
-    updateProjectButton();
+    codeProjects().updateProjectButton();
   }
 
   async function refresh(options) {
@@ -840,12 +761,12 @@
     // click caught 4 of 36 conversations still showing the pre-load repaint
     // from clearContextState -- "A new folder for this task" over a task whose
     // folder was already resolved and sitting in state.
-    updateProjectButton();
+    codeProjects().updateProjectButton();
     const token = lifecycle().contextToken(state);
     await Promise.all([loadChanges({ token, deferRender: true }), loadTree('', { token, deferRender: true })]);
     if (!(options && options.deferRender)) render();
     // Results become visible on arrival rather than after a click.
-    void hydrateArtifactThumbnails().catch(() => {});
+    void codeResults().hydrateArtifactThumbnails().catch(() => {});
     host().renderHistory && host().renderHistory();
     if (!internal) {
       await reattachRunFor(id);
@@ -915,11 +836,11 @@
     state.activeId = data.conversation.id;
     state.conversation = data.conversation;
     state.projectRoot = data.conversation.project_root || requestedRoot;
-    rememberProjectName(state.projectRoot, projectLabel);
-    updateProjectButton();
+    codeProjects().rememberProjectName(state.projectRoot, projectLabel);
+    codeProjects().updateProjectButton();
     try {
       localStorage.setItem('thomas_code_project_root', state.projectRoot);
-      localStorage.setItem('thomas_code_project_label', knownProjectName(state.projectRoot));
+      localStorage.setItem('thomas_code_project_label', codeProjects().knownProjectName(state.projectRoot));
     } catch (error) { recordError(error, 'Project selection could not be saved for the next session.'); }
     const token = lifecycle().contextToken(state);
     await Promise.all([refresh(), loadTree('', { token, deferRender: true })]);
@@ -1048,96 +969,8 @@
     return true;
   }
 
-  function finishBusy() { state.running = false; host().setBusy && host().setBusy(false); updateProjectButton(); }
+  function finishBusy() { state.running = false; host().setBusy && host().setBusy(false); codeProjects().updateProjectButton(); }
 
-  // Open what the last completed turn produced. Prefers a page, because a page
-  // is the thing you can actually look at; falls back to whatever else it made.
-  // Fetch a result's document once and keep it, so the card can show a live
-  // thumbnail and expand in place without re-reading on every render.
-  // `quiet` skips the redraw. render() rewrites the thread's innerHTML, which
-  // DESTROYS every preview iframe and restarts its navigation from scratch.
-  // Resolving four thumbnails one at a time therefore reloaded all of them four
-  // times, and a frame recreated before it finished never painted -- the game
-  // sat on about:blank showing a broken-document icon while the server was
-  // serving it perfectly. Resolve the batch, then draw once.
-  async function ensureArtifactDoc(path, quiet) {
-    const file = String(path || '');
-    if (!file) return false;
-    state.artifactDocs = state.artifactDocs || {};
-    if (state.artifactDocs[file] !== undefined) return true;
-    const token = lifecycle().contextToken(state);
-    if (!token.id) return false;
-    // A real loopback origin, the same service Chat previews deliverables
-    // through. srcdoc has no origin and no base URL, so anything the page loads
-    // at RUNTIME fails: Thomas moved a game's renderer to a dynamic loader and
-    // the preview 404'd it 51 times and silently fell back to the old canvas.
-    //
-    // One origin serves the WHOLE project, so ask for it once and address the
-    // other files within it. Asking per file re-minted the grant and tore down
-    // the previous one, which blanked a card that was already showing a page:
-    // opening the game killed the thumbnail of the shell page beside it.
-    let url = null;
-    const base = state.previewBase && state.previewBase.cid === token.id ? state.previewBase.url : '';
-    if (base) url = `${base}/${file.split('/').map(encodeURIComponent).join('/')}`;
-    else {
-      try {
-        const r = await fetch(`/api/evolve/agent/conversations/${encodeURIComponent(token.id)}/preview?path=${encodeURIComponent(file)}`);
-        const d = await r.json();
-        if (r.ok && d && d.ok && d.url) url = String(d.url);
-      } catch (e) { url = null; }
-    }
-    if (!lifecycle().contextMatches(state, token)) return false;
-    if (!url) return false;
-    if (!base) {
-      // Everything up to the capability; the tail is per file.
-      const cut = url.lastIndexOf('/');
-      if (cut > 0) state.previewBase = { cid: token.id, url: url.slice(0, cut) };
-    }
-    state.artifactDocs[file] = url;
-    if (!quiet) render();
-    return true;
-
-  }
-
-  // Pull the documents for what a conversation produced so the results are
-  // VISIBLE on arrival rather than after a click. Capped, newest turns first.
-  const _ARTIFACT_THUMB_BUDGET = 4;
-  async function hydrateArtifactThumbnails() {
-    const turns = (state.conversation && state.conversation.turns) || [];
-    const wanted = [];
-    for (let i = turns.length - 1; i >= 0 && wanted.length < _ARTIFACT_THUMB_BUDGET; i -= 1) {
-      const turn = turns[i];
-      if (!turn || turn.role !== 'agent') continue;
-      for (const a of turn.artifacts || []) {
-        const file = a && a.file ? String(a.file) : '';
-        if (!file || isInternalResultPath(file) || !/\.x?html?$/i.test(file)) continue;
-        if (wanted.includes(file)) continue;
-        wanted.push(file);
-        if (wanted.length >= _ARTIFACT_THUMB_BUDGET) break;
-      }
-    }
-    let resolved = false;
-    for (const file of wanted) {
-      try { resolved = (await ensureArtifactDoc(file, true)) || resolved; } catch (e) { /* one bad result must not stop the rest */ }
-    }
-    if (resolved) render();
-  }
-
-  async function presentNewestResult() {
-    const turns = (state.conversation && state.conversation.turns) || [];
-    for (let i = turns.length - 1; i >= 0; i -= 1) {
-      const turn = turns[i];
-      if (!turn || turn.role !== 'agent' || !turn.ok) continue;
-      const made = (turn.artifacts || []).filter(a => a && a.file && !isInternalResultPath(a.file));
-      if (!made.length) return false;
-      const pick = made.find(a => /\.x?html?$/i.test(String(a.file))) || made[0];
-      const file = String(pick.file);
-      state.artifactOpen = state.artifactOpen || {};
-      state.artifactOpen[`${turn.run_id || turn.ts || '0'}::${file}`] = true;   // in the conversation
-      try { return await ensureArtifactDoc(file); } catch (e) { return false; }
-    }
-    return false;
-  }
   async function finishRun() {
     if (state.finishing) return state.finishing;
     const runId = state.runId;
@@ -1156,7 +989,7 @@
         // it. Finishing a build and leaving the result to be discovered is how
         // "where is it" and "what's the full directory name" became the two
         // messages after a successful game build.
-        void presentNewestResult();
+        void codeResults().presentNewestResult();
       } else if (sameRun && results[0].status === 'fulfilled' && results[0].value === true) {
         state.runStatus = 'disconnected';
         pushLiveEvent({ type: 'error', text: 'Thomas stopped, but the just-finished Code turn is not yet present in durable history. Live evidence was preserved.' });
@@ -1238,46 +1071,6 @@
     if (!(options && options.deferRender)) render();
     return true;
   }
-  function readProjectFile(conversationId, path) {
-    return fetch(`/api/evolve/agent/conversations/${encodeURIComponent(conversationId)}/file?path=${encodeURIComponent(path)}`)
-      .then(r => r.json())
-      .then(d => (d && d.ok ? String(d.content || '') : null))
-      .catch(() => null);
-  }
-
-  // A previewed page is shown with srcdoc, which has NO project base URL: a
-  // relative <script src="renderer.js"> resolves against the Thomas server and
-  // 404s, so a multi-file build would preview as the page minus everything it
-  // depends on. Thomas had just split a game's chase-camera renderer into its
-  // own file, which would have rendered here as a game with no renderer.
-  //
-  // The referenced local files are pulled through the SAME validated read as the
-  // page itself and inlined, so nothing new is exposed and no new route exists.
-  // Remote URLs are left alone -- the sandbox has no same-origin and the CSP
-  // still applies to them.
-  async function inlineLocalAssets(conversationId, html, pagePath) {
-    const dir = String(pagePath || '').includes('/') ? String(pagePath).replace(/\/[^/]*$/, '/') : '';
-    const isLocal = ref => ref && !/^(?:[a-z]+:)?\/\//i.test(ref) && !ref.startsWith('data:') && !ref.startsWith('#');
-    const resolve = ref => (ref.startsWith('/') ? ref.slice(1) : dir + ref).split('?')[0].split('#')[0];
-    let out = html;
-
-    const scripts = [...html.matchAll(/<script\b([^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*)>\s*<\/script\s*>/gi)];
-    for (const m of scripts) {
-      if (!isLocal(m[2])) continue;
-      const body = await readProjectFile(conversationId, resolve(m[2]));
-      if (body === null) continue;
-      out = out.replace(m[0], `<script>\n/* inlined from ${m[2]} for preview */\n${body}\n</script>`);
-    }
-    const links = [...html.matchAll(/<link\b[^>]*\bhref\s*=\s*["']([^"']+\.css)["'][^>]*>/gi)];
-    for (const m of links) {
-      if (!isLocal(m[1])) continue;
-      const body = await readProjectFile(conversationId, resolve(m[1]));
-      if (body === null) continue;
-      out = out.replace(m[0], `<style>\n/* inlined from ${m[1]} for preview */\n${body}\n</style>`);
-    }
-    return out;
-  }
-
   async function loadFile(path) {
     const token = lifecycle().contextToken(state);
     if (!token.id) return false;
@@ -1287,7 +1080,7 @@
     if (!response.ok || !data.ok) pushLiveEvent({ type: 'error', text: data.error || 'File preview failed.' });
     else {
       if (/\.x?html?$/i.test(String(path))) {
-        try { data.content = await inlineLocalAssets(token.id, String(data.content || ''), String(path)); }
+        try { data.content = await codeResults().inlineLocalAssets(token.id, String(data.content || ''), String(path)); }
         catch (e) { /* preview the page as-is rather than not at all */ }
         if (!lifecycle().contextMatches(state, token)) return false;
       }
@@ -1448,123 +1241,13 @@
     // project it belonged to and was then printed over every conversation opened
     // afterwards (measured: the chip read one project's name while its own
     // tooltip showed a different project's path).
-    rememberProjectName(state.projectRoot, localStorage.getItem('thomas_code_project_label') || '');
+    codeProjects().rememberProjectName(state.projectRoot, localStorage.getItem('thomas_code_project_label') || '');
   }
   catch (error) { recordError(error, 'The saved Code project could not be loaded.'); }
   try {
     const savedDrawerWidth = Number(localStorage.getItem('thomas_code_drawer_width'));
     if (Number.isFinite(savedDrawerWidth)) state.drawerWidth = clampDrawerWidth(savedDrawerWidth);
   } catch (error) { recordPreferenceWarning(error, 'The saved activity drawer width could not be loaded.'); }
-
-  // The one shared drawer, ~/.thomas/code_scratch. Held here as a path test
-  // rather than a basename test because the server's rule is a path rule:
-  // `is_shared_scratch` in forge_code_projects.py matches the drawer AND
-  // anything beneath it, so a basename check would miss code_scratch/game.
-  function isSharedScratchRoot(path) {
-    return /[\\/]\.thomas[\\/]code_scratch(?:[\\/]|$)/i.test(String(path || ''));
-  }
-
-  // Project names are filed under the folder they name. Windows hands the same
-  // folder back as C:\x and c:/x/ depending on who wrote the path, so a raw
-  // string key would file one project under two names and answer for neither.
-  function projectNameKey(path) {
-    return String(path || '').replace(/[\\/]+$/, '').replace(/\\/g, '/').toLowerCase();
-  }
-
-  function rememberProjectName(root, name) {
-    const key = projectNameKey(root);
-    const value = String(name || '').trim();
-    if (!key || !value) return;
-    state.projectNames[key] = value;
-  }
-
-  function knownProjectName(root) {
-    const key = projectNameKey(root);
-    return key ? (state.projectNames[key] || '') : '';
-  }
-
-  // The names shown on the project picker's cards, so the chip and the picker
-  // call the same folder the same thing. Without it, a project Thomas built is
-  // "exec-25fb7d1499a6" on disk and the chip has nothing better to read: the
-  // request that produced it ("Make a small snake game...") lives only in this
-  // catalogue. Failure is silent on purpose -- every name here has a folder
-  // basename behind it, so an unreachable catalogue costs specificity, not
-  // correctness.
-  async function loadProjectNames() {
-    let projects;
-    try {
-      const response = await fetch('/api/local/projects');
-      if (!response.ok) return false;
-      const data = await response.json();
-      projects = Array.isArray(data && data.projects) ? data.projects : null;
-    } catch (error) { return false; }
-    if (!projects) return false;
-    projects.forEach(project => rememberProjectName(project.root_path, project.request_title || project.name));
-    updateProjectButton();
-    return true;
-  }
-
-  function projectDisplayLabel() {
-    // A folder basename is a poor name for a thing Thomas built: every app it
-    // generates lives in ~/.thomas/workspaces/exec-<hash>, so the chip read
-    // "exec-065aad17f4f8". When the picker knows what the project actually is
-    // (the request that produced it), that wins.
-    //
-    // Before that, though: a task with no conversation behind it yet is not
-    // going wherever the chip was last pointed. The client keeps the last root
-    // in localStorage and sends it along, but the server drops it when it is
-    // the shared drawer (`_chosen_project` in evolve_agent_routes.py) and gives
-    // the task a folder of its own -- so naming the drawer here names a place
-    // the work provably will not go. This mirrors that server rule exactly:
-    // same condition (unbound task + shared drawer), same outcome.
-    //
-    // The guard is checked FIRST because the server drops the drawer no matter
-    // what the UI decided to call the place.
-    //
-    // Two earlier passes hunted this label inside this function and were
-    // reverted. Neither cause was here. Clicking 16 sidebar tasks in the live
-    // UI and recording the chip after each: 14 of the 16 opens answered HTTP
-    // 404, so no load ever happened -- the chip kept describing whatever was
-    // open before (twice the unbound phrase above, twelve times some OTHER
-    // conversation's project). The 404 was the server resolving a conversation
-    // through the project registry while the sidebar had found it by walking
-    // the folders; see _load_conversation in evolve_agent_routes.py. The chip
-    // was reporting the state honestly the whole time.
-    //
-    // The second cause was here: a single state.projectLabel, set when a
-    // project was picked and never cleared, printed that one name over every
-    // conversation opened afterwards. Proven by seeding the stored label with a
-    // marker string: two conversations in two different projects both showed
-    // the marker while their own tooltips showed their real, differing paths.
-    // Names are now filed per folder (knownProjectName), so a name can only
-    // ever appear over the folder it belongs to.
-    if (!state.activeId && isSharedScratchRoot(state.projectRoot)) return 'A new folder for this task';
-    // An OPEN conversation whose folder is the drawer is a different statement:
-    // its work is already there, shared with 94 others on this machine. Naming
-    // it "code_scratch" says nothing and "A new folder for this task" is a
-    // promise about a folder that will never be made. Say where it is.
-    if (isSharedScratchRoot(state.projectRoot)) return 'Shared scratch folder';
-    const named = knownProjectName(state.projectRoot);
-    if (named) return named;
-    const base = String(state.projectRoot || '').split(/[\\/]/).filter(Boolean).pop() || '';
-    if (!base) return 'Thomas library';
-    if (/^exec-[0-9a-f]{6,}$/i.test(base)) return 'Untitled app';
-    return base;
-  }
-
-  function updateProjectButton() {
-    const button = document.getElementById('tc-code-project-btn');
-    if (!button) return;
-    const span = document.getElementById('tc-code-project-label');
-    if (span) span.textContent = projectDisplayLabel();
-    // The tooltip is the same claim as the label, spelled out as a path, so it
-    // cannot be allowed to keep naming the shared drawer after the label has
-    // stopped. There is no path to show here yet -- the server picks one when
-    // the task starts -- so it goes back to the invitation.
-    const unbound = !state.activeId && isSharedScratchRoot(state.projectRoot);
-    button.title = (!unbound && state.projectRoot) || 'Choose what Thomas works on';
-    button.disabled = state.running || state.approvalBusy || state.steeringBusy;
-  }
 
   async function pickProject() {
     if (!canSwitchContext()) return false;
@@ -1590,7 +1273,7 @@
 
   async function leave() {
     adapterActive = false;
-    updateProjectButton();
+    codeProjects().updateProjectButton();
   }
 
   // Reload-resume (Codex parity): a Code run in progress must survive a page
@@ -1621,7 +1304,7 @@
   }
 
   modes().registerAdapter('code', {
-    enter: async () => { adapterActive = true; updateProjectButton(); render(); void loadProjectNames(); await refresh(); await adoptOrphanRun(); },
+    enter: async () => { adapterActive = true; codeProjects().updateProjectButton(); render(); void codeProjects().loadProjectNames(); await refresh(); await adoptOrphanRun(); },
     leave,
     refresh,
     renderHistory,

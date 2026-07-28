@@ -5,15 +5,20 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-CODE_JS = Path(__file__).resolve().parent.parent / "thomas" / "server" / "web" / "js" / "unified_code_mode.js"
+WEB_JS = Path(__file__).resolve().parent.parent / "thomas" / "server" / "web" / "js"
+CODE_JS = WEB_JS / "unified_code_mode.js"
+# The inliner and the file read it uses moved to the sibling module the browser
+# loads immediately before unified_code_mode.js; loadFile, which decides a page
+# gets inlined at all, stayed. Read as one text.
+CODE_RESULTS_JS = WEB_JS / "unified_code_results.js"
 
 
 def _js() -> str:
-    return CODE_JS.read_text(encoding="utf-8")
+    return CODE_JS.read_text(encoding="utf-8") + "\n" + CODE_RESULTS_JS.read_text(encoding="utf-8")
 
 
 def _inliner() -> str:
-    return _js().split("async function inlineLocalAssets", 1)[1].split("\n  async function", 1)[0]
+    return _js().split("async function inlineLocalAssets", 1)[1].split("\n  }\n", 1)[0]
 
 
 def test_a_referenced_local_script_is_carried_into_the_preview() -> None:

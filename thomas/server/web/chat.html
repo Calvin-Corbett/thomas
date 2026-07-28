@@ -28,157 +28,7 @@
   <link rel="stylesheet" href="/static/css/unified_work_details.css?v=__THOMAS_WEB_BUILD__">
   <link rel="stylesheet" href="/static/css/ui_edit_mode.css?v=__THOMAS_WEB_BUILD__">
   <link rel="stylesheet" href="/static/css/workspace_chat_drawer.css?v=__THOMAS_WEB_BUILD__">
-  <style>
-    /* Local, deterministic icon fallback: the chat shell must boot offline. */
-    .ph { display: inline-grid; place-items: center; width: 1.1em; font-style: normal; font-weight: 700; }
-    .ph::before { content: "\2022"; }
-    .ph-pencil-simple-line::before { content: "\270E"; }
-    .ph-magnifying-glass::before { content: "\2315"; }
-    .ph-plus::before { content: "+"; }
-    .ph-gear-six::before { content: "\2699"; }
-    .ph-sidebar-simple::before { content: "\25EB"; }
-    .ph-caret-down::before { content: "\2304"; }
-    .ph-caret-right::before { content: "\203A"; }
-    .ph-file::before { content: "\25A1"; }
-    .ph-file-code::before { content: "\226A\226B"; font-size: .72em; letter-spacing: -.12em; }
-    .ph-chalkboard-simple::before, .ph-desktop::before { content: "\25A3"; }
-    .ph-sliders-horizontal::before { content: "\2261"; }
-    .ph-microphone::before { content: "\25C9"; }
-    .ph-arrow-up::before { content: "\2191"; }
-    .ph-arrow-right::before { content: "\2192"; }
-    .ph-arrow-clockwise::before { content: "\21BB"; }
-    .ph-arrow-square-out::before { content: "\2197"; }
-    .ph-download-simple::before { content: "\2193"; }
-    .ph-check::before { content: "\2713"; }
-    .ph-x::before, .ph-stop::before { content: "\00D7"; }
-    .ph-hammer::before { content: "\2692"; }
-    .ph-crosshair-simple::before { content: "\2295"; }
-    .ph-buildings::before { content: "\25A6"; }
-    .ph-pencil-ruler::before { content: "\270E"; }
-    .ph-cards::before, .ph-grid-four::before { content: "\25A6"; }
-    .ph-broadcast::before { content: "\224B"; }
-    .ph-coins::before { content: "\25C9"; }
-    .ph-storefront::before { content: "\25A3"; }
-    .ph-users-three::before { content: "\25C9"; }
-    .ph-chart-line-up::before, .ph-chart-bar::before { content: "\2197"; }
-    .ph-scribble-loop::before { content: "\223F"; }
-    .ph-file-text::before { content: "\25A4"; }
-    .ph-code::before { content: "<>"; font-size: .72em; }
-    .ph-copy::before { content: "\25A3"; }
-    .ph-thumbs-up::before { content: "+"; }
-    html, body { margin: 0; padding: 0; height: 100%; }
-    *, *::before, *::after { box-sizing: border-box; }
-    .tc-scroll { scrollbar-width: thin; scrollbar-color: var(--c-border-2) transparent; }
-    .tc-scroll::-webkit-scrollbar { width: 9px; height: 9px; }
-    .tc-scroll::-webkit-scrollbar-thumb { background: var(--c-border-2); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
-    .tc-scroll::-webkit-scrollbar-thumb:hover { background: var(--c-muted); background-clip: padding-box; }
-    /* UI */
-    @keyframes tc-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes tc-blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
-    @keyframes tc-dot { 0%, 80%, 100% { transform: translateY(0); opacity: 0.4; } 40% { transform: translateY(-4px); opacity: 1; } }
-    @keyframes tc-hover { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
-    @keyframes tc-pop { from { transform: scale(0.97) translateY(6px); } to { transform: scale(1) translateY(0); } }
-    /* Nebula */
-    @keyframes tc-twinkle { 0%, 100% { opacity: 0.9; } 50% { opacity: 0.45; } }
-    @keyframes tc-neb-drift { 0% { transform: translate3d(0,0,0) scale(1); } 100% { transform: translate3d(-3%,-2%,0) scale(1.08); } }
-    @keyframes tc-neb-hue { 0% { filter: blur(10px) hue-rotate(0deg); } 100% { filter: blur(10px) hue-rotate(26deg); } }
-    @keyframes tc-stars { 0% { transform: translateY(0); } 100% { transform: translateY(-360px); } }
-    @keyframes tc-planet-drift { 0% { transform: translate(0,0); } 50% { transform: translate(-26px,-16px); } 100% { transform: translate(0,0); } }
-    @keyframes tc-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    @keyframes tc-fly-right { from { transform: translateX(-16vw); } to { transform: translateX(116vw); } }
-    @keyframes tc-fly-left { from { transform: translateX(116vw); } to { transform: translateX(-16vw); } }
-    @keyframes tc-bob { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-16px) rotate(3deg); } }
-    /* Aurora */
-    @keyframes tc-aurora { 0% { transform: translateX(-6%) skewX(-8deg) scaleY(1); } 50% { transform: translateX(6%) skewX(6deg) scaleY(1.16); } 100% { transform: translateX(-4%) skewX(-6deg) scaleY(1); } }
-    @keyframes tc-snow { 0% { background-position: 0 0, 0 0, 0 0; } 100% { background-position: 0 700px, 0 500px, 0 900px; } }
-    /* Sandstone */
-    @keyframes tc-sun { 0%, 100% { transform: translateY(0) scale(1); opacity: 0.9; } 50% { transform: translateY(-8px) scale(1.03); opacity: 1; } }
-    @keyframes tc-sled { from { transform: translateX(-20vw); } to { transform: translateX(120vw); } }
-    /* Dark */
-    @keyframes tc-scan { 0% { transform: translateY(-10%); opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { transform: translateY(110vh); opacity: 0; } }
-    @keyframes tc-node { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(10px,-12px); } }
-    /* Light */
-    @keyframes tc-cloud { from { transform: translateX(-10vw); } to { transform: translateX(110vw); } }
-    @keyframes tc-spark { 0%, 100% { opacity: 0.2; transform: scale(0.8); } 50% { opacity: 0.9; transform: scale(1.1); } }
-    /* Canvas */
-    @keyframes tc-slide-in { from { transform: translateX(40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-    @keyframes tc-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
-    @keyframes tc-fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes tc-shimmer { 0% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
-    @keyframes tc-bar { from { transform: scaleY(0); } to { transform: scaleY(1); } }
-    /* Bot mascot */
-    @keyframes bot-flame { 0% { transform: scaleY(1) scaleX(1); } 33% { transform: scaleY(1.3) scaleX(0.82); } 66% { transform: scaleY(0.8) scaleX(1.12); } 100% { transform: scaleY(1) scaleX(1); } }
-    @keyframes bot-blink { 0%, 90%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
-
-    /* Living-world visibility is driven by [data-theme] on the shell. */
-    .tc-world { display: none; }
-    .tc-shell[data-theme="nebula"]    .tc-world.is-nebula    { display: block; }
-    .tc-shell[data-theme="aurora"]    .tc-world.is-aurora    { display: block; }
-    .tc-shell[data-theme="sandstone"] .tc-world.is-sandstone { display: block; }
-    .tc-shell[data-theme="dark"]      .tc-world.is-dark      { display: block; }
-    .tc-shell[data-theme="light"]     .tc-world.is-light     { display: block; }
-
-    /* Hover utilities (the design used a DC-only style-hover attribute). */
-    .hv-icon:hover   { background: var(--c-hover) !important; color: var(--c-text) !important; border-color: var(--c-border-2) !important; }
-    .hv-soft:hover   { background: var(--c-hover) !important; color: var(--c-text) !important; }
-    .hv-pill:hover   { border-color: var(--c-border-2) !important; background: var(--c-surface-2) !important; }
-    .hv-surface:hover{ background: var(--c-surface-2) !important; }
-    .hv-newchat:hover{ background: var(--c-accent-soft) !important; border-color: var(--c-accent-line) !important; }
-    .hv-card:hover   { border-color: var(--c-accent-line) !important; background: var(--c-surface-2) !important; transform: translateY(-2px); }
-
-    /* Assistant answers keep the open Chat layout, but read like finished work. */
-    .tc-markdown { white-space: normal !important; }
-    .tc-markdown > *:first-child { margin-top: 0 !important; }
-    .tc-markdown > *:last-child { margin-bottom: 0 !important; }
-    .tc-markdown h1, .tc-markdown h2, .tc-markdown h3 { color: var(--c-text); font-family: var(--font-head); letter-spacing: -0.018em; }
-    .tc-markdown h1 { margin: 0 0 14px; font-size: 23px; line-height: 1.25; }
-    .tc-markdown h2 { margin: 24px 0 9px; font-size: 19px; line-height: 1.3; }
-    .tc-markdown h3 { margin: 21px 0 8px; font-size: 16px; line-height: 1.35; }
-    .tc-markdown p { margin: 0 0 11px; }
-    .tc-markdown ul, .tc-markdown ol { margin: 5px 0 13px; padding-left: 22px; }
-    .tc-markdown li { margin: 4px 0; padding-left: 2px; }
-    .tc-markdown strong { color: var(--c-text); font-weight: 750; }
-    .tc-markdown code { border: 1px solid var(--c-border); border-radius: 5px; background: var(--c-surface-2); padding: 1px 5px; font-family: var(--font-mono); font-size: .88em; }
-    .tc-markdown pre { margin: 12px 0 15px; overflow-x: auto; border: 1px solid var(--c-border); border-radius: 11px; background: rgba(3,5,13,.62); padding: 13px 15px; color: var(--c-text); font: 13px/1.6 var(--font-mono); white-space: pre; }
-    .tc-markdown pre code { border: 0; background: transparent; padding: 0; font: inherit; }
-    .tc-markdown hr { margin: 19px 0; border: 0; border-top: 1px solid var(--c-border); }
-    .tc-markdown a { color: var(--c-accent); text-underline-offset: 3px; }
-
-    /* Chat content "rail": its left edge is anchored to a VIEWPORT-relative
-       position (not the column's width), so when the Canvas opens and the chat
-       column shrinks from the right, the composer/thread DON'T slide — they only
-       narrow. 524 = 140 (half sidebar) + 384 (half of the 768 content width). */
-    .tc-rail { margin-left: max(16px, calc(50vw - 524px)) !important; margin-right: auto !important; }
-    @media (max-width: 1080px) {
-      /* Small screens: space "demands it" — re-center content and let the Canvas
-         overlay the chat instead of squeezing it. */
-      .tc-rail { margin-left: auto !important; }
-      #tc-canvas { position: absolute !important; top: 0; right: 0; bottom: 0; z-index: 40; width: min(94vw, 540px) !important; box-shadow: var(--c-shadow); }
-    }
-    @media (max-width: 760px) {
-      .tc-sidebar { position: absolute !important; inset: 0 auto 0 0; z-index: 80 !important; margin-left: -280px !important; box-shadow: var(--c-shadow); }
-      .tc-shell.is-mobile-sidebar-open .tc-sidebar { margin-left: 0 !important; }
-      #tc-canvas { width: 100vw !important; }
-    }
-    @keyframes tc-shimmer-loop { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
-    @keyframes tc-indeterminate { 0% { transform: translateX(-130%); } 100% { transform: translateX(380%); } }
-    /* Canvas live document — Thomas's streamed content rendered as a real page,
-       growing as he writes (the Claude-design "watch it build" effect). */
-    .tc-doc-page { flex: 0 0 auto; align-self: stretch; background: #fff; color: #1d2330; border-radius: 10px; padding: 30px 32px; box-shadow: 0 12px 34px rgba(0,0,0,0.28); font-family: var(--font-serif, Georgia, 'Times New Roman', serif); line-height: 1.7; font-size: 15px; }
-    .tc-doc-page > *:first-child { margin-top: 0; }
-    .tc-doc-page h1 { font-size: 25px; line-height: 1.25; margin: 0 0 12px; font-weight: 700; }
-    .tc-doc-page h2 { font-size: 19px; margin: 22px 0 8px; font-weight: 700; }
-    .tc-doc-page h3 { font-size: 16px; margin: 18px 0 6px; font-weight: 700; }
-    .tc-doc-page p { margin: 0 0 12px; }
-    .tc-doc-page ul, .tc-doc-page ol { margin: 0 0 12px; padding-left: 24px; }
-    .tc-doc-page li { margin: 3px 0; }
-    .tc-doc-page code { background: #eef1f7; border-radius: 4px; padding: 1px 5px; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.9em; }
-    .tc-doc-page strong { font-weight: 700; } .tc-doc-page em { font-style: italic; }
-    .tc-doc-page hr { border: 0; border-top: 1px solid #e4e7ef; margin: 18px 0; }
-    .tc-doc-page a { color: #2f6bff; }
-    .tc-doc-cursor { display: inline-block; width: 6px; height: 1.02em; background: #2f6bff; margin-left: 1px; vertical-align: text-bottom; border-radius: 1px; animation: tc-blink 1s step-end infinite; }
-    @keyframes tc-blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
-  </style>
+  <link rel="stylesheet" href="/static/css/chat_shell.css?v=__THOMAS_WEB_BUILD__">
 </head>
 <body data-ui-workspace="chat">
   <!-- Shell. Default vars below = Nebula Core (mirrors the design's inline root). -->
@@ -471,6 +321,8 @@
   <script src="/static/js/ui_edit_mode.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/unified_mode_shell.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/unified_code_lifecycle.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/unified_code_results.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/unified_code_projects.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/unified_code_mode.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/unified_work_support.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/unified_work_mode.js?v=__THOMAS_WEB_BUILD__"></script>

@@ -7,11 +7,16 @@ from pathlib import Path
 
 WEB = Path(__file__).resolve().parent.parent / "thomas" / "server" / "web"
 CODE_JS = WEB / "js" / "unified_code_mode.js"
+# The artifact cards, their preview documents and the run report live in the
+# sibling module the browser loads immediately before unified_code_mode.js.
+# Read as one text because the guarantees below are about the Code client as the
+# browser assembles it, not about which of its two files a line sits in.
+CODE_RESULTS_JS = WEB / "js" / "unified_code_results.js"
 CODE_CSS = WEB / "css" / "unified_code_activity.css"
 
 
 def _js() -> str:
-    return CODE_JS.read_text(encoding="utf-8")
+    return CODE_JS.read_text(encoding="utf-8") + "\n" + CODE_RESULTS_JS.read_text(encoding="utf-8")
 
 
 def test_a_finished_build_names_what_it_produced() -> None:
@@ -65,7 +70,7 @@ def test_a_result_shows_a_live_thumbnail() -> None:
     the parts missing, which looks exactly like the parts being broken.
     """
     text = _js()
-    body = text.split("function artifactCardsHtml", 1)[1].split("\n  function", 1)[0]
+    body = text.split("function artifactCardsHtml", 1)[1].split("\n  }\n", 1)[0]
 
     assert "tc-code-artifact-thumb" in body
     assert "srcdoc=" not in body, "srcdoc cannot load what the page references"
