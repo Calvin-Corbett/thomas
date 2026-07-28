@@ -24,10 +24,27 @@ Know what this gate does NOT cover before trusting it:
 Do not close that gap by importing the Forge checks here. ``_architecture.py``
 declares ``marketplace`` may depend on core/tools/plugins/server, and NOT on
 ``forge`` — the import gate will reject it, and CLAUDE.md asks that existing
-cross-layer imports be inverted rather than joined by new ones. The real fix is
-to hoist the deterministic web preflight (script parse, orphaned assets,
-duplicate includes) into a layer both paths already depend on, and have both
-call it. That is a refactor, not a wiring change.
+cross-layer imports be inverted rather than joined by new ones.
+
+The fix is to hoist the deterministic web preflight into ``tools``, which both
+layers already depend on, and have both call it. Measured 2026-07-28 so the
+next attempt starts from fact rather than from my first guess, which was that
+this would be a hard refactor:
+
+- The functions involved — ``_mask_js_strings_and_comments``,
+  ``_has_obvious_top_level_throw``, ``_javascript_syntax_error``,
+  ``_orphaned_web_assets``, ``_duplicate_script_includes``,
+  ``_owners_by_mention``, ``_artifact_preflight_failures`` — total roughly 395
+  lines in ``forge/anvil/build_verify.py``.
+- They import **only the standard library**. Not one project module between
+  them, so moving them creates no coupling anywhere and cannot introduce a
+  cycle. The ``bridge_config`` / ``bridge_prompts`` imports in that file belong
+  to other code in it.
+- ``build_verify.py`` is 769 lines, so the move leaves both files comfortably
+  under the monolith cap.
+- The real work is mechanical, not architectural: about ten test modules import
+  these names from ``build_verify``, so it should keep importing them from the
+  new home to avoid a pointless churn of test edits.
 """
 
 from __future__ import annotations
