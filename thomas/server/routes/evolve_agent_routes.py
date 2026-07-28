@@ -140,6 +140,14 @@ def _friendly_project_error(exc: Exception, requested_root: Any = None) -> str:
         return f"{where} looks like a broken project folder. Try picking it again, or choose a different one."
     return f"Thomas can't open {where} right now."
 
+# What a page may pull in while it runs. Keeping the preview to web assets
+# means previewing a page cannot serve source or secrets from the project.
+_PREVIEWABLE_SUFFIXES = {
+    ".html", ".htm", ".js", ".mjs", ".cjs", ".css", ".json", ".map",
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico",
+    ".woff", ".woff2", ".ttf", ".otf", ".mp3", ".ogg", ".wav", ".webm", ".mp4",
+}
+
 APP_EVOLVE_AGENT_TASK = "evolve_agent_task"
 APP_EVOLVE_AGENT_DRAIN = "evolve_agent_drain"
 APP_EVOLVE_AGENT_SESSION = "evolve_agent_session"
@@ -1009,6 +1017,56 @@ def build_evolve_agent_handlers(
             return web.json_response({"ok": False, "error": str(exc), "code": "invalid_file_path"}, status=400)
         return web.json_response({"ok": True, **result})
 
+    async def conversation_preview(request: web.Request) -> web.Response:
+        """An isolated loopback origin that can actually SERVE the project.
+
+        A generated page was previewed with srcdoc, which has no origin and no
+        base URL, so anything the page fetches at runtime fails. Static script
+        tags could be inlined, but Thomas moved a game's renderer to a dynamic
+        loader and the preview 404'd 51 times and silently fell back to the old
+        canvas -- a broken game that looked like the renderer not working.
+
+        This is the same service Chat previews deliverables through: a real
+        origin, so relative paths, dynamic imports and fetches behave exactly as
+        they will for the user. The allowlist keeps it to web assets, so
+        previewing a page cannot serve source or secrets sitting in the project.
+        """
+        require_api_access(request)
+        cid = request.match_info.get("cid", "")
+        tail = str(request.query.get("path") or "").strip().replace("\\", "/").lstrip("/")
+        if not tail or ".." in tail.split("/"):
+            return web.json_response({"ok": False, "error": "invalid path"}, status=400)
+        service = request.app.get(APP_DELIVERABLE_PREVIEW_SERVICE)
+        if service is None:
+            return web.json_response({"ok": False, "error": "preview service unavailable"}, status=503)
+        try:
+            project_root, conv = _load_conversation(cid)
+        except forge_code_projects.ForgeCodeProjectError as exc:
+            return web.json_response({"ok": False, "error": str(exc)}, status=400)
+        if conv is None:
+            return web.json_response({"ok": False, "error": "not found"}, status=404)
+        root = Path(project_root)
+        target = (root / tail).resolve()
+        if not target.is_relative_to(root.resolve()) or not target.is_file():
+            return web.json_response({"ok": False, "error": "file not found"}, status=404)
+        allowed = {
+            str(path.relative_to(root)).replace("\\", "/")
+            for path in root.rglob("*")
+            if path.is_file()
+            and path.suffix.lower() in _PREVIEWABLE_SUFFIXES
+            and not any(part in {".git", "node_modules", ".thomas"} for part in path.parts)
+        }
+        try:
+            url = await service.preview_directory_url(
+                subject_id=f"code:{cid}",
+                workspace=root,
+                tail=tail,
+                allowed_files=allowed or {tail},
+            )
+        except (FileNotFoundError, RuntimeError, OSError, ValueError) as exc:
+            return web.json_response({"ok": False, "error": str(exc)}, status=503)
+        return web.json_response({"ok": True, "url": url, "path": tail})
+
     async def changes(request: web.Request) -> web.Response:
         require_api_access(request)
         # SCOPE to the active conversation's OWN build output, not the whole dirty
@@ -1240,6 +1298,7 @@ def build_evolve_agent_handlers(
         "conversation_delete": conversation_delete,
         "conversation_tree": conversation_tree,
         "conversation_file": conversation_file,
+        "conversation_preview": conversation_preview,
         "changes": changes,
         "revert": revert,
         "keep": keep,

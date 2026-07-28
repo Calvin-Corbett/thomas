@@ -365,15 +365,15 @@
       // A live thumbnail of the real thing, exactly as Chat shows a deliverable:
       // you can see what it is before you commit to opening it.
       const thumb = (playable && doc)
-        ? `<span class="tc-code-artifact-thumb"><iframe tabindex="-1" aria-hidden="true" scrolling="no" sandbox="allow-scripts" srcdoc="${esc(doc)}"></iframe></span>`
+        ? `<span class="tc-code-artifact-thumb"><iframe tabindex="-1" aria-hidden="true" scrolling="no" sandbox="allow-scripts allow-same-origin" src="${esc(doc)}"></iframe></span>`
         : `<span class="tc-code-artifact-thumb is-icon"><i class="ph ${playable ? 'ph-play-circle' : 'ph-file'}"></i></span>`;
       const hint = playable ? (open ? 'Showing it below' : 'Click to open it here') : 'Click to view';
       const expanded = (open && playable && doc)
-        ? `<div class="tc-code-artifact-stage"><iframe title="${esc(file)}" sandbox="allow-scripts" srcdoc="${esc(doc)}"></iframe></div>`
+        ? `<div class="tc-code-artifact-stage"><iframe title="${esc(file)}" sandbox="allow-scripts allow-same-origin allow-forms" src="${esc(doc)}"></iframe></div>`
         : '';
       // Chat's deliverable card carries a download beside it; a result you can
       // only look at inside Thomas is not really yours yet.
-      const save = `<button class="tc-code-artifact-save" data-code-save-artifact="${esc(file)}" type="button" title="Download ${esc(file)}"><i class="ph ph-download-simple" aria-hidden="true"></i><span class="sr-only">Download ${esc(file)}</span></button>`;
+      const save = `<button class="tc-code-artifact-save" data-code-save-artifact="${esc(file)}" type="button" title="Download ${esc(file)}" aria-label="Download ${esc(file)}"><i class="ph ph-download-simple" aria-hidden="true"></i></button>`;
       return `<div class="tc-code-artifact">
         <div class="tc-code-artifact-row">
           <button class="tc-code-artifact-open" data-code-open-artifact="${esc(file)}" data-code-artifact-slot="${esc(slot)}" type="button" aria-expanded="${open ? 'true' : 'false'}">
@@ -1044,15 +1044,22 @@
     if (state.artifactDocs[file] !== undefined) return true;
     const token = lifecycle().contextToken(state);
     if (!token.id) return false;
-    let content = await readProjectFile(token.id, file);
-    if (content === null) return false;
-    if (/\.x?html?$/i.test(file)) {
-      try { content = await inlineLocalAssets(token.id, content, file); } catch (e) { /* as-is beats nothing */ }
-    }
+    // A real loopback origin, the same service Chat previews deliverables
+    // through. srcdoc has no origin and no base URL, so anything the page loads
+    // at RUNTIME fails: Thomas moved a game's renderer to a dynamic loader and
+    // the preview 404'd it 51 times and silently fell back to the old canvas.
+    let url = null;
+    try {
+      const r = await fetch(`/api/evolve/agent/conversations/${encodeURIComponent(token.id)}/preview?path=${encodeURIComponent(file)}`);
+      const d = await r.json();
+      if (r.ok && d && d.ok && d.url) url = String(d.url);
+    } catch (e) { url = null; }
     if (!lifecycle().contextMatches(state, token)) return false;
-    state.artifactDocs[file] = content;
+    if (!url) return false;
+    state.artifactDocs[file] = url;
     render();
     return true;
+
   }
 
   // Pull the documents for what a conversation produced so the results are
