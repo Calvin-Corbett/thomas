@@ -66,6 +66,11 @@ Versioning: Semantic Versioning.
 - This was not hypothetical. Thomas had split his game's renderer into its own file and loaded it dynamically — **every later edit to that renderer shipped unverified.** It now correctly resolves to the game page, including when the page loads a module that loads the renderer, rather than naming it directly.
 - The wider search only runs for files no page was found to reference, so a file with a real owner stays matched precisely and a page that merely mentions it in a comment is not dragged in.
 
+### Added (A check that did not run no longer reads like a check that passed)
+
+- **The run report could say "0 open risks" about a page nobody had ever opened.** Every other risk it lists describes something that went wrong; nothing described something that never *happened*. If the browser check was skipped — Chrome not installed, or nothing found to own a changed file — the report simply omitted it, and a green run could hand back a page no one, human or machine, had ever seen.
+- A changed page with no passing browser check is now listed as an open risk, by name, saying whether the check was skipped or never ran at all. Scoped to changed pages so it stays a fact rather than a guess: a project's build scripts are not pages, and flagging those would teach people to ignore the line.
+
 ### Added (Build identity — which Thomas am I looking at)
 
 - **A small chip in the bottom-right corner of the chat now names the port, the version and the commit** the running server was built from — `:8899 · v0.19.23 · 54507302`. This repository routinely has more than a dozen worktrees checked out at once, several reporting the same version string, and the launcher only printed the version to a console that is closed by the time anyone is looking at the browser. The commit is the part that actually tells two instances apart.

@@ -213,7 +213,50 @@ def _build_open_risks(
             risks.append({"risk": "error surfaced during the run", "detail": _snippet(event.get("text"))})
     if outcome == "noop" and not changed_files:
         risks.append({"risk": "run made no changes", "detail": "exit 0 but git shows no project delta"})
+    risks.extend(_unopened_page_risks(events, validations, changed_files))
     return risks[:_MAX_RISKS]
+
+
+def _unopened_page_risks(
+    events: list[dict[str, Any]],
+    validations: list[dict[str, Any]],
+    changed_files: list[str],
+) -> list[dict[str, Any]]:
+    """Flag a changed page that was never actually opened in a browser.
+
+    A check that does not run reads exactly like a check that passed: the report
+    said "0 open risks" while the strongest evidence available -- loading the
+    page in a real browser -- had been skipped, because Chrome was missing or
+    because nothing was found to own a changed asset. Every other risk here
+    describes something that went wrong; this one describes something that never
+    happened, which is the harder kind to notice and the reason a run can look
+    green and still hand back a page nobody has seen.
+
+    Scoped to changed HTML so it stays a fact rather than a guess. A project's
+    Node scripts are not pages, and flagging them would train people to ignore
+    this line, which is worse than not printing it.
+    """
+
+    pages = [name for name in changed_files if str(name).lower().endswith((".html", ".htm"))]
+    if not pages:
+        return []
+    evidence = " ".join(
+        [*(str(item.get("evidence") or "") for item in validations), *(str(item.get("text") or "") for item in events)]
+    )
+    if "BROWSER_SMOKE_OK" in evidence:
+        return []
+    shown = ", ".join(pages[:3]) + (f" (+{len(pages) - 3} more)" if len(pages) > 3 else "")
+    skipped = "BROWSER_SMOKE_SKIPPED" in evidence
+    return [
+        {
+            "risk": "a changed page was never opened in a browser",
+            "detail": (
+                f"{shown} — the browser check was skipped, so nothing here shows the page loads or draws"
+                if skipped
+                else f"{shown} — no browser check ran for this change"
+            ),
+        }
+    ]
 
 
 def _build_attention_pointers(
