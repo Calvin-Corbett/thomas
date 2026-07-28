@@ -1049,19 +1049,30 @@ def build_evolve_agent_handlers(
         target = (root / tail).resolve()
         if not target.is_relative_to(root.resolve()) or not target.is_file():
             return web.json_response({"ok": False, "error": "file not found"}, status=404)
-        allowed = {
-            str(path.relative_to(root)).replace("\\", "/")
-            for path in root.rglob("*")
-            if path.is_file()
-            and path.suffix.lower() in _PREVIEWABLE_SUFFIXES
-            and not any(part in {".git", "node_modules", ".thomas"} for part in path.parts)
-        }
+        allowed = set()
+        for path in root.rglob("*"):
+            if not path.is_file() or path.suffix.lower() not in _PREVIEWABLE_SUFFIXES:
+                continue
+            rel = path.relative_to(root)
+            # RELATIVE parts, not the absolute path's. Projects live under
+            # ~/.thomas/projects/<name>, so testing the absolute parts matched
+            # ".thomas" on every file in every project and left the allowlist
+            # empty -- which the caller then papered over with a one-file
+            # fallback. That served the entry page and nothing it referenced,
+            # and, because the allowlist then differed per file, each file
+            # minted its own origin and tore down the one before it. Opening
+            # the game blanked the thumbnail still showing the shell page.
+            if any(part in {".git", "node_modules", ".thomas"} for part in rel.parts):
+                continue
+            allowed.add(rel.as_posix())
+        if not allowed:
+            return web.json_response({"ok": False, "error": "nothing to preview"}, status=404)
         try:
             url = await service.preview_directory_url(
                 subject_id=f"code:{cid}",
                 workspace=root,
                 tail=tail,
-                allowed_files=allowed or {tail},
+                allowed_files=allowed,
             )
         except (FileNotFoundError, RuntimeError, OSError, ValueError) as exc:
             return web.json_response({"ok": False, "error": str(exc)}, status=503)

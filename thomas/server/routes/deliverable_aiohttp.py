@@ -357,7 +357,17 @@ class DeliverablePreviewService:
             await self._drop_expired(now)
             capability = self._subject_capabilities.get(subject_key, "")
             grant = self._grants.get(capability)
-            if grant is None or grant.expires_at <= now or grant.workspace != root or grant.allowed_files != allowed:
+            if grant is not None and grant.expires_at > now and grant.workspace == root:
+                # Same project, so keep the origin and refresh what it may serve.
+                # Replacing the grant here tore down a runner that open frames
+                # were still using: a build finishing, or the conversation being
+                # refetched, silently killed the port the game was loaded from
+                # and every preview on screen collapsed to a network error. The
+                # request handlers read these fields per request, so updating
+                # them in place takes effect immediately.
+                grant.allowed_files = allowed
+                grant.entry = entry
+            elif grant is None or grant.expires_at <= now or grant.workspace != root:
                 if grant is not None:
                     await self._remove_grant(grant)
                 while len(self._grants) >= self._max_grants:
@@ -534,7 +544,15 @@ class DeliverablePreviewService:
         return web.FileResponse(target)
 
     def _apply_headers(self, response: web.StreamResponse) -> None:
-        frame_ancestors = self._main_origin or "'none'"
+        # 'self' as well as the UI, because a generated app is allowed to frame
+        # its OWN pages: a shell index.html embedding the game it built is an
+        # ancestor chain of [preview origin, UI], and frame-ancestors is checked
+        # against every entry in that chain, not just the immediate parent.
+        # Naming only the UI meant the shell loaded and the game inside it was
+        # refused -- indistinguishable from the game being broken. Each grant
+        # listens on its own ephemeral port, so 'self' is one app's own origin;
+        # it grants nothing to another preview or to a remote page.
+        frame_ancestors = f"{self._main_origin} 'self'" if self._main_origin else "'none'"
         response.headers["Content-Security-Policy"] = (
             "sandbox allow-scripts allow-forms allow-same-origin; "
             "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' blob:; "

@@ -57,12 +57,19 @@ def test_each_turn_opens_its_own_copy() -> None:
 
 
 def test_a_result_shows_a_live_thumbnail() -> None:
-    """You can see what it is before deciding to open it, the way Chat does."""
+    """You can see what it is before deciding to open it, the way Chat does.
+
+    The thumbnail is loaded from a real preview origin rather than srcdoc.
+    srcdoc has no origin and no base URL, so a page that loads anything at
+    runtime -- a renderer module, a sprite sheet -- previewed as that page with
+    the parts missing, which looks exactly like the parts being broken.
+    """
     text = _js()
     body = text.split("function artifactCardsHtml", 1)[1].split("\n  function", 1)[0]
 
     assert "tc-code-artifact-thumb" in body
-    assert "srcdoc=" in body
+    assert "srcdoc=" not in body, "srcdoc cannot load what the page references"
+    assert "src=" in body
 
 
 def test_thumbnails_are_loaded_without_being_asked_and_are_capped() -> None:

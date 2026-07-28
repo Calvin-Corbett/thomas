@@ -555,6 +555,7 @@
     state.treePath = '';
     state.artifacts = [];
     state.artifactDocs = {};
+    state.previewBase = null;
     state.artifactOpen = {};
     state.filePreview = null;
     state.pendingApproval = null;
@@ -969,6 +970,10 @@
       if (payload.type === 'done') {
         const stopWasPending = state.runStatus === 'stopping';
         state.artifacts = Array.isArray(payload.artifacts) ? payload.artifacts : [];
+        // A finished run may have written files the current preview origin was
+        // not told about, so stop deriving URLs from it and ask again.
+        state.previewBase = null;
+        state.artifactDocs = {};
         state.source = null;
         source.close();
         if (stopWasPending) {
@@ -1037,7 +1042,13 @@
   // is the thing you can actually look at; falls back to whatever else it made.
   // Fetch a result's document once and keep it, so the card can show a live
   // thumbnail and expand in place without re-reading on every render.
-  async function ensureArtifactDoc(path) {
+  // `quiet` skips the redraw. render() rewrites the thread's innerHTML, which
+  // DESTROYS every preview iframe and restarts its navigation from scratch.
+  // Resolving four thumbnails one at a time therefore reloaded all of them four
+  // times, and a frame recreated before it finished never painted -- the game
+  // sat on about:blank showing a broken-document icon while the server was
+  // serving it perfectly. Resolve the batch, then draw once.
+  async function ensureArtifactDoc(path, quiet) {
     const file = String(path || '');
     if (!file) return false;
     state.artifactDocs = state.artifactDocs || {};
@@ -1048,16 +1059,30 @@
     // through. srcdoc has no origin and no base URL, so anything the page loads
     // at RUNTIME fails: Thomas moved a game's renderer to a dynamic loader and
     // the preview 404'd it 51 times and silently fell back to the old canvas.
+    //
+    // One origin serves the WHOLE project, so ask for it once and address the
+    // other files within it. Asking per file re-minted the grant and tore down
+    // the previous one, which blanked a card that was already showing a page:
+    // opening the game killed the thumbnail of the shell page beside it.
     let url = null;
-    try {
-      const r = await fetch(`/api/evolve/agent/conversations/${encodeURIComponent(token.id)}/preview?path=${encodeURIComponent(file)}`);
-      const d = await r.json();
-      if (r.ok && d && d.ok && d.url) url = String(d.url);
-    } catch (e) { url = null; }
+    const base = state.previewBase && state.previewBase.cid === token.id ? state.previewBase.url : '';
+    if (base) url = `${base}/${file.split('/').map(encodeURIComponent).join('/')}`;
+    else {
+      try {
+        const r = await fetch(`/api/evolve/agent/conversations/${encodeURIComponent(token.id)}/preview?path=${encodeURIComponent(file)}`);
+        const d = await r.json();
+        if (r.ok && d && d.ok && d.url) url = String(d.url);
+      } catch (e) { url = null; }
+    }
     if (!lifecycle().contextMatches(state, token)) return false;
     if (!url) return false;
+    if (!base) {
+      // Everything up to the capability; the tail is per file.
+      const cut = url.lastIndexOf('/');
+      if (cut > 0) state.previewBase = { cid: token.id, url: url.slice(0, cut) };
+    }
     state.artifactDocs[file] = url;
-    render();
+    if (!quiet) render();
     return true;
 
   }
@@ -1079,9 +1104,11 @@
         if (wanted.length >= _ARTIFACT_THUMB_BUDGET) break;
       }
     }
+    let resolved = false;
     for (const file of wanted) {
-      try { await ensureArtifactDoc(file); } catch (e) { /* one bad result must not stop the rest */ }
+      try { resolved = (await ensureArtifactDoc(file, true)) || resolved; } catch (e) { /* one bad result must not stop the rest */ }
     }
+    if (resolved) render();
   }
 
   async function presentNewestResult() {
