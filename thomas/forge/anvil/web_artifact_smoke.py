@@ -286,7 +286,8 @@ def _run_one(
     # this harness could actually serve, and the reader should know what it
     # could not reach rather than infer full coverage from a clean line.
     offline = f"; {len(blocked)} external resource(s) not fetched offline" if blocked else ""
-    return True, f"{name}: browser boot clean; {interactions}{offline}", receipt
+    notes = "; ".join(str(value) for value in receipt.get("notes") or [])
+    return True, f"{name}: browser boot clean; {interactions}{offline}{'; ' + notes if notes else ''}", receipt
 
 
 def _is_external_reference(value: str) -> bool:

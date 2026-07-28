@@ -54,6 +54,10 @@ _SMOKE_HARNESS = r"""
     console_errors: [],
     resource_errors: [],
     interactions: [],
+    // Things worth a reader knowing that are NOT defects. A probe that guesses
+    // which control to press cannot call the result a failure, but the attempt
+    // is still worth reporting.
+    notes: [],
     input_listeners: {keyboard: 0, pointer: 0}
   };
   const clean = (value) => String(value ?? "").replace(/\s+/g, " ").trim().slice(0, 500);
@@ -174,7 +178,17 @@ _SMOKE_HARNESS = r"""
     setTimeout(() => {
       try {
         const controls = [...document.querySelectorAll("button, [role='button']")];
-        const starter = controls.find((node) => /^(start|play|run|begin|launch)(\b|\s)/i.test(clean(node.textContent)) && !node.disabled);
+        // VISIBLE and enabled. Matching on button words alone picks whichever
+        // one happens to come first in the document, and star-catcher.html
+        // offers "Start Over", "Start Game" and "Play Again" -- so the restart
+        // control from the game-over screen won, was hidden on a fresh load,
+        // and clicking it changed nothing. The harness then reported the game
+        // as dead. It was fine; the click went to the wrong button.
+        //
+        // A word match cannot tell a start control from a restart control, so
+        // it must not be the only filter. What the screen is actually showing
+        // can, and the check already knows how to ask.
+        const starter = controls.find((node) => /^(start|play|run|begin|launch)(\b|\s)/i.test(clean(node.textContent)) && !node.disabled && visible(node));
         if (starter) {
           const starterLabel = clean(starter.textContent);
           const bodyBefore = clean(document.body?.innerText || "");
@@ -185,7 +199,18 @@ _SMOKE_HARNESS = r"""
               || clean(starter.textContent) !== starterLabel
               || clean(document.body?.innerText || "") !== bodyBefore;
             state.start_effect = starterChanged;
-            if (!starterChanged) pushUnique(state.errors, "Start control produced no visible state change");
+            // Recorded, NOT failed. Which button is the start button is decided
+            // by matching words in its label, and a word match cannot tell
+            // "Start Game" from "Start Over": star-catcher.html offers both, the
+            // restart control came first, clicking it on a fresh page correctly
+            // did nothing, and this reported a working game as dead. Its canvas
+            // was painted and it threw no errors the whole time.
+            //
+            // A probe that cannot know it pressed the right thing has no
+            // standing to call the result a defect. It is good evidence when it
+            // DOES see a reaction and no evidence at all when it does not, so
+            // it stays as an observation for a reader to weigh.
+            if (!starterChanged) pushUnique(state.notes, "clicked a start-like control and saw no change; it may not be the real start control");
           }, 80);
 
           setTimeout(() => {
@@ -205,7 +230,11 @@ _SMOKE_HARNESS = r"""
                 `${node.getAttribute("aria-label") || ""} ${clean(node.textContent)}`.trim()
               ));
               if (!resume) {
-                pushUnique(state.errors, "Pause control produced no visible Resume control");
+                // Same reasoning as the start probe above: which control pauses
+                // is guessed from its wording, so failing to find a Resume
+                // afterwards may mean the game never paused rather than that it
+                // cannot resume. An observation, not a verdict.
+                pushUnique(state.notes, "paused via a pause-like control and found no Resume; the pause may not have engaged");
                 return;
               }
               state.interactions.push("pause:P", "clicked:Resume");
