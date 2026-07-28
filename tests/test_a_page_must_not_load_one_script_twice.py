@@ -102,6 +102,20 @@ def test_two_different_local_scripts_are_fine(tmp_path) -> None:
     assert _duplicate_script_includes(root, ["starfield.html"]) == []
 
 
+def test_a_parse_error_quotes_the_offending_source(tmp_path) -> None:
+    """A line number alone is not actionable. For an inline script it counts
+    from the start of the extracted block, so it matches no line of the HTML
+    the reader opens -- and a parser blames where it gave up, not where the
+    mistake is. The quoted source is greppable however it is numbered."""
+    from thomas.forge.anvil.build_verify import _javascript_syntax_error
+
+    error = _javascript_syntax_error("const ok = 1;\nfunction ( { broken\n")
+
+    assert "Error" in error
+    assert "parser stopped at:" in error
+    assert "the mistake may be earlier" in error
+
+
 def test_editing_only_the_script_still_checks_the_page_that_owns_it(tmp_path) -> None:
     """The realistic case. The page is written once and thereafter only the
     script is touched, so a duplicate include sits in a file no later run

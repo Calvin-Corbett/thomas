@@ -196,11 +196,29 @@ def _javascript_syntax_error(source: str) -> str:
                 tmp.unlink()
     if proc.returncode == 0:
         return ""
-    for line in (proc.stderr or "").splitlines():
-        stripped = line.strip()
-        if "Error:" in stripped:
-            return stripped[:200]
-    return "JavaScript could not be parsed"
+    # Carry the offending SOURCE back, not just the message. node reports a line
+    # number, and for an inline script that number counts from the start of the
+    # extracted block -- so it does not match any line of the HTML file the
+    # reader will open. Worse, a parser blames where it gave up rather than
+    # where the mistake is: blocktown-84.html is blamed at line 539, a template
+    # literal that parses perfectly on its own, while the real fault sits
+    # earlier. A repair attempt sent to a coordinate that points nowhere edits
+    # correct code and never converges, which is how the duplicate-script bug
+    # burned 25 passes.
+    #
+    # The quoted line is greppable and unambiguous no matter how it is numbered.
+    stderr_lines = (proc.stderr or "").splitlines()
+    message = next((ln.strip() for ln in stderr_lines if "Error:" in ln), "JavaScript could not be parsed")
+    source_line = ""
+    for index, line in enumerate(stderr_lines):
+        # The frame node prints is: path:lineno / the source / a caret row.
+        if re.match(r"^.*:\d+$", line.strip()) and index + 2 < len(stderr_lines):
+            if "^" in stderr_lines[index + 2]:
+                source_line = stderr_lines[index + 1].strip()
+                break
+    if source_line:
+        return f"{message[:160]} -- parser stopped at: {source_line[:120]} (the mistake may be earlier)"
+    return message[:200]
 
 
 _ORPHAN_CHECK_SUFFIXES = {".js", ".mjs", ".cjs", ".css"}
