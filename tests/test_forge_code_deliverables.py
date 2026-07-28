@@ -11,6 +11,7 @@ from thomas.forge.anvil import forge_code_store
 from thomas.forge.anvil.forge_code_deliverables import (
     deliverables_path,
     list_deliverables,
+    list_deliverables_across,
     register_from_run,
 )
 
@@ -150,3 +151,62 @@ def test_empty_conversation_id_registers_nothing(tmp_path):
         is None
     )
     assert list_deliverables(tmp_path) == []
+
+
+def test_deliverables_are_found_in_the_projects_they_were_built_in(tmp_path):
+    """My Stuff must look where the builds are, not only at the catalog root.
+
+    ``register_from_run`` writes ``deliverables.json`` into the PROJECT the run
+    worked in. Since every Code task now gets its own folder, that is almost
+    never the catalog root -- and the endpoint read the catalog root alone, so
+    it answered with an empty list and the Library showed nothing.
+
+    Measured on a live workspace before this change: 16 deliverables existed
+    across 4 project roots and ``/api/evolve/agent/deliverables`` returned 0,
+    including two apps built minutes earlier that both open and work.
+
+    An empty list is exactly what "you have not built anything" looks like, so
+    nothing anywhere reported a problem.
+    """
+
+    catalog = tmp_path / "catalog"
+    catalog.mkdir()
+    project_a = tmp_path / "project-a"
+    project_a.mkdir()
+    project_b = tmp_path / "project-b"
+    project_b.mkdir()
+    for project, cid, title in (
+        (project_a, "fc_a", "Countdown timer"),
+        (project_b, "fc_b", "Tip calculator"),
+    ):
+        (project / "index.html").write_text("<!doctype html><title>x</title>", encoding="utf-8")
+        assert register_from_run(project, conversation_id=cid, changed_files=["index.html"], title=title)
+
+    # Nothing was ever written to the catalog root -- that is the whole point.
+    assert not deliverables_path(catalog).exists()
+
+    found = list_deliverables_across(catalog, [project_a, project_b])
+    titles = {entry["title"] for entry in found}
+    assert titles == {"Countdown timer", "Tip calculator"}
+    # Availability must be judged against the project each entry came from,
+    # or every entry greys out as a dangling artifact.
+    assert all(entry["available"] is True for entry in found)
+
+
+def test_the_same_deliverable_in_two_roots_is_listed_once(tmp_path):
+    """Roots overlap in practice, so a merge must not double-count.
+
+    ``conversation_roots`` returns the catalog, the shared drawer and every
+    registered project; a build recorded in a root reachable two ways would
+    otherwise appear twice in the Library.
+    """
+
+    catalog = tmp_path / "catalog"
+    catalog.mkdir()
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "index.html").write_text("<!doctype html><title>x</title>", encoding="utf-8")
+    register_from_run(project, conversation_id="fc_dup", changed_files=["index.html"], title="Only once")
+
+    found = list_deliverables_across(catalog, [project, project, catalog])
+    assert [entry["title"] for entry in found] == ["Only once"]

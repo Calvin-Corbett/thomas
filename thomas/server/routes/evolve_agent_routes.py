@@ -939,9 +939,25 @@ def build_evolve_agent_handlers(
         return web.json_response(receipt, status=status_code)
 
     async def deliverables_list(request: web.Request) -> web.Response:
-        """List real, openable Forge Code build outputs for the My Stuff surface."""
+        """List real, openable Forge Code build outputs for the My Stuff surface.
+
+        Walks the same roots ``conversations_list`` walks, for the same reason:
+        a run records its deliverable in the PROJECT it worked in, and every
+        task now gets its own folder. Reading the catalog root alone returned an
+        empty list -- measured live, 0 returned while 16 sat across 4 project
+        roots -- and an empty list reads as "nothing has been built".
+        """
         require_api_access(request)
-        return web.json_response({"ok": True, "deliverables": forge_code_deliverables.list_deliverables(_root())})
+        catalog_root = _root()
+        return web.json_response(
+            {
+                "ok": True,
+                "deliverables": forge_code_deliverables.list_deliverables_across(
+                    catalog_root,
+                    forge_code_projects.conversation_roots(catalog_root),
+                ),
+            }
+        )
 
     async def conversations_list(request: web.Request) -> web.Response:
         require_api_access(request)

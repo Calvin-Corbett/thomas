@@ -30,6 +30,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
@@ -142,6 +143,26 @@ def register_from_run(
             "conversation_id": cid,
             # Deep-link back to the originating Code conversation (consumed by the
             # Forge Code surface to re-open + resume that transcript).
+            #
+            # NOT FIXED, MEASURED 2026-07-28: this link currently goes nowhere.
+            # Its only consumer is `maybeOpenForgeCodeDeepLink` in
+            # web/js/runtime/039_module_rendering_dispatch_02.js, which is
+            # loaded by `app_runtime_loader.js` -- and `/` now serves the
+            # unified chat shell, whose 13 script tags do not include that
+            # loader. Loading `/?forge_code=<cid>` live: the param is still in
+            # the URL afterwards (that consumer strips it first thing, so it
+            # never ran), `forgeShowSide` and `forgeCodeOpenConversation` are
+            # both `undefined`, `data-surface-mode` stays `chat`, and no Code
+            # turn renders. The consumer also targets the retired Evolution
+            # shell (`setSidebarNavMode('evolution')`), not the Chat/Code/Work
+            # mode switcher that replaced it.
+            #
+            # Left as-is deliberately rather than half-rewired: the honest fix
+            # is for the unified shell to read this param and drive the `code`
+            # mode adapter, which is a change to shell boot order, and a
+            # guessed version would be a new kind of wrong. The field is still
+            # recorded because the id in it is correct -- only the consumer is
+            # missing.
             "deep_link": f"/?forge_code={quote(cid, safe='')}",
             "open_url": open_url,
             # An image is its own thumbnail; other kinds fall back to a kind glyph
@@ -205,3 +226,34 @@ def list_deliverables(root: str | Path) -> list[dict]:
         e["available"] = _artifact_exists(root, e.get("file") or "")
     entries.sort(key=lambda e: str(e.get("updated_at") or ""), reverse=True)
     return entries
+
+
+def list_deliverables_across(catalog_root: str | Path, roots: Iterable[str | Path]) -> list[dict]:
+    """Every registered deliverable across the project roots builds live in.
+
+    ``register_from_run`` writes ``deliverables.json`` into the PROJECT a run
+    worked in. Since every Code task now gets a folder of its own, that is
+    almost never the catalog root -- so reading the catalog root alone answered
+    with an empty list, and My Stuff showed nothing at all. Measured on a live
+    workspace: 16 deliverables across 4 project roots, endpoint returned 0,
+    including two apps built minutes before that both open and work. An empty
+    list is indistinguishable from "you have not built anything", which is why
+    nothing ever reported it.
+
+    ``available`` is resolved per entry against the root it was READ from, not
+    against the catalog -- judging a project's file from the catalog root would
+    mark every live artifact dangling and grey out the whole Library.
+
+    Deduplicated by id because the roots genuinely overlap: the catalog, the
+    shared drawer and every registered project can name the same folder twice.
+    The catalog root is included so a deliverable recorded there before tasks
+    got their own folders is still listed.
+    """
+
+    merged: dict[str, dict] = {}
+    for candidate in [catalog_root, *roots]:
+        for entry in list_deliverables(candidate):
+            key = str(entry.get("id") or "")
+            if key and key not in merged:
+                merged[key] = entry
+    return sorted(merged.values(), key=lambda e: str(e.get("updated_at") or ""), reverse=True)
