@@ -138,7 +138,12 @@ def _generic_checker(work_dir: str, result_text: str) -> VerificationResult:
 
     if files:
         shown = ", ".join(files[:_GENERIC_EVIDENCE_FILES])
-        more = f" (+{len(files) - _GENERIC_EVIDENCE_FILES} more)" if len(files) > _GENERIC_EVIDENCE_FILES else ""
+        # "and more", not a number. The scan stops one past the display limit,
+        # so a subtraction here reports "+1 more" for a workspace of six files
+        # and for one of six hundred alike -- a precise-looking figure that was
+        # never counted. Same failure as everything else fixed today, just very
+        # small: stating a measurement that was not taken.
+        more = " and more" if len(files) > _GENERIC_EVIDENCE_FILES else ""
         return VerificationResult(True, "general", f"workspace holds {shown}{more}", ("files_present",))
     if result_text:
         return VerificationResult(True, "general", "answer text only; no workspace files inspected", ("text_only",))
