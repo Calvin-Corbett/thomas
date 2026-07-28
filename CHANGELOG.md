@@ -95,6 +95,13 @@ Versioning: Semantic Versioning.
 - A page loading the same local script more than once is now reported before the build finishes, and the message names the page to fix rather than the script that reported the error. Remote sources are ignored — a CDN listed twice may be a deliberate fallback and is not Thomas's to correct.
 - Checked against 14 real pages in the working project: one flagged, and it was the broken one.
 
+### Fixed (Thomas was told nothing loads anything — so he loaded it twice)
+
+- **The check that finds unreferenced files reported that nothing loads anything, in every project, for everyone.** The filter skipping `.git`, `node_modules` and `.thomas` was applied to each file's full path — and Thomas keeps every project he makes under `~/.thomas/`, so `.thomas` matched as a parent folder of every file. Every file was skipped, so nothing could ever be found referencing anything.
+- **This is what caused the duplicate-script bug above.** Told his script was unreferenced, Thomas added a script tag. Told again, he added a second one. The page then ran the file twice, died on `Identifier 'canvas' has already been declared`, and he spent 25 passes on it before giving up. The duplicate-include check catches the wreckage; this is the thing that was causing it.
+- Both directions verified against the real project: a referenced file is no longer called an orphan, a genuinely unreferenced file still is, and a mention inside the project's own transcripts doesn't count as a page loading it.
+- Same mistake, same day, as the preview allowlist — a hidden-folder filter applied to the full path instead of the path within the project. **Three more instances of it are still in the code** (`visual_edit.py`, `design_system.py`, `exhaustive_artifact_evidence.py`) and are not fixed here.
+
 ### Added (Build identity — which Thomas am I looking at)
 
 - **A small chip in the bottom-right corner of the chat now names the port, the version and the commit** the running server was built from — `:8899 · v0.19.23 · 54507302`. This repository routinely has more than a dozen worktrees checked out at once, several reporting the same version string, and the launcher only printed the version to a console that is closed by the time anyone is looking at the browser. The commit is the part that actually tells two instances apart.

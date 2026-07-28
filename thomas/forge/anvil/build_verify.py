@@ -241,7 +241,18 @@ def _orphaned_web_assets(cwd: str | Path, files: list[str]) -> list[str]:
             break
         if not path.is_file() or path.suffix.lower() not in _ORPHAN_SCAN_SUFFIXES:
             continue
-        if any(part in {".git", "node_modules", ".thomas"} for part in path.parts):
+        # RELATIVE parts. Testing the absolute path meant that for any project
+        # living under ~/.thomas -- which is where Thomas keeps every project he
+        # makes -- ".thomas" matched as an ANCESTOR of every file, so the whole
+        # haystack was skipped and this check reported that nothing loads
+        # anything. Always, for everyone.
+        #
+        # That is not a quiet failure. Told his script was unreferenced, Thomas
+        # added a script tag; told again, he added a second one; the page then
+        # ran the file twice and died on "Identifier 'canvas' has already been
+        # declared", and he burned 25 passes on it. The duplicate-include check
+        # added alongside this catches that wreckage -- this is the cause of it.
+        if any(part in {".git", "node_modules", ".thomas"} for part in path.relative_to(root).parts):
             continue
         if path.resolve() in {c for c in candidates}:
             continue  # a file mentioning only itself is still an orphan
