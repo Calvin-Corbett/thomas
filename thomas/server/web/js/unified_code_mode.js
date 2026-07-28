@@ -1445,6 +1445,19 @@
     // generates lives in ~/.thomas/workspaces/exec-<hash>, so the chip read
     // "exec-065aad17f4f8". When the picker knows what the project actually is
     // (the request that produced it), that wins.
+    // KNOWN WRONG, not yet fixed: for a task that has not started, this shows
+    // whichever project was last open -- almost always the shared scratch
+    // drawer. That was true while every task landed there; it stopped being
+    // true when a new task began getting its own folder, so the chip now names
+    // a place the work will not go.
+    //
+    // The obvious guard (`!state.activeId && base === 'code_scratch'`) was
+    // tried and reverted: it fixed the fresh-task case and broke the other one,
+    // leaving an OPENED conversation also claiming a new folder. A real task
+    // misnaming its own project is worse than a fresh one showing a stale name,
+    // so the wrong-but-old behaviour stays until someone can verify both
+    // directions. Whatever the fix is, it has to be checked against BOTH a new
+    // task and an opened one.
     if (state.projectLabel) return state.projectLabel;
     const base = String(state.projectRoot || '').split(/[\\/]/).filter(Boolean).pop() || '';
     if (!base) return 'Thomas library';
