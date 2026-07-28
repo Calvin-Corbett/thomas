@@ -50,6 +50,22 @@ def test_the_section_title_is_escaped_too() -> None:
     assert "esc(title)" in body
 
 
+def test_every_filename_reaching_the_dom_is_escaped() -> None:
+    """Artifact cards carry names Thomas chose, into attributes and text. The
+    card markup was rewritten heavily on 2026-07-28 — thumbnails, an inline
+    stage, a download control, edit-mode identities — and each rewrite is a
+    chance to interpolate a name raw.
+
+    Audited then: the only bare `${file}` builds a JavaScript key, not markup.
+    Every path into the document escapes."""
+    body = _js().split("function artifactCardsHtml", 1)[1].split("\n  function", 1)[0]
+
+    for attribute in ("data-code-open-artifact", "data-code-save-artifact", "data-code-artifact-slot"):
+        assert f'{attribute}="${{esc(' in body, f"{attribute} interpolates a filename unescaped"
+    assert 'title="Download ${esc(file)}"' in body
+    assert 'src="${esc(doc)}"' in body, "a preview URL is interpolated raw into an attribute"
+
+
 def test_open_risks_reach_the_page_through_that_row() -> None:
     """Pins the path the new provenance risk travels, so a future report
     section cannot render risk details by some other unescaped route."""
