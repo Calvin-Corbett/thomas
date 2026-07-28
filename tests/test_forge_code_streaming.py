@@ -19,17 +19,29 @@ agent rather than in ~400ms quantized blocks:
 import json
 
 
-def test_claude_cmd_requests_partial_messages():
-    """The live claude invocation must opt into token-progressive partial messages."""
+def test_claude_cmd_requests_partial_messages(tmp_path):
+    """The live claude invocation must opt into token-progressive partial messages.
+
+    Needs a REAL repository to dispatch into. This used to pass ``cwd="/repo"``,
+    a path that exists nowhere, and a later guard began refusing to dispatch
+    into a workspace ``git status`` cannot inspect -- so the run was refused
+    before the injected runner was ever reached and the test failed with a bare
+    ``KeyError: 'cmd'``, which says nothing about why. The guard is right; the
+    fixture had simply never been updated to satisfy it.
+    """
+    import subprocess
+
     from thomas.forge.anvil.evolve_claude_bridge import dispatch_via_claude_cli
 
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True, capture_output=True)
     captured = {}
 
     def runner(cmd, cwd, to):
         captured["cmd"] = cmd
         return 0, ""
 
-    dispatch_via_claude_cli("do x", cwd="/repo", dry_run=False, runner=runner, claude_bin="claude")
+    dispatch_via_claude_cli("do x", cwd=str(tmp_path), dry_run=False, runner=runner, claude_bin="claude")
+    assert "cmd" in captured, "the runner was never reached; dispatch refused before invoking claude"
     cmd = captured["cmd"]
     assert "--include-partial-messages" in cmd
     # It only makes sense alongside the structured stream-json + verbose flags.
