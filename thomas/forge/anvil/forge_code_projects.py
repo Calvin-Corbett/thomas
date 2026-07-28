@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -86,6 +87,17 @@ def validate_project_root(
         raise ForgeCodeProjectError("project_root does not exist") from exc
     if not candidate.is_dir():
         raise ForgeCodeProjectError("project_root must be a directory")
+    if (candidate / ".git").exists():
+        # A directory that holds .git IS its own toplevel -- that is precisely
+        # what `rev-parse --show-toplevel` would answer, so asking costs a
+        # process spawn to learn what the filesystem already said. It is not a
+        # micro-optimisation: this function is called once per known project
+        # every time the Code history is listed, each call spawns git, and each
+        # spawn measured 0.3-0.7s on this machine. Once every task owns a
+        # folder that is seconds of stall per project, growing forever.
+        # git is still asked whenever there is no .git here, which is the only
+        # case where the answer can be a PARENT repository.
+        return candidate
     try:
         proc = _git(["rev-parse", "--show-toplevel"], cwd=candidate)
     except (OSError, subprocess.SubprocessError) as exc:
@@ -291,6 +303,70 @@ def _seal_initial_commit(root: Path) -> None:
 
 _PROJECT_NAME_SAFE = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -_"
 
+# Windows refuses these as a path component no matter what you do with them.
+# A folder called CON can be created and then cannot be used: `git init` inside
+# it fails with ".git: Invalid argument", and handing it to a subprocess as a
+# working directory raises "The directory name is invalid" (both measured here).
+# That never mattered while folder names came from a name box; it matters now
+# that the name comes from whatever the person typed as their task.
+_WINDOWS_RESERVED_NAMES = frozenset(
+    {"CON", "PRN", "AUX", "NUL"}
+    | {f"COM{digit}" for digit in "0123456789"}
+    | {f"LPT{digit}" for digit in "0123456789"}
+)
+
+# Long enough to recognise the task, short enough to stay a folder name.
+_TASK_NAME_MAX_CHARS = 48
+
+
+def _safe_project_slug(name: str) -> str:
+    """Flatten any string into one folder name that lives where we put it.
+
+    A path separator, a drive letter or a .. would otherwise let the name choose
+    where the project is created, so every character outside the safe set is
+    dropped rather than escaped -- there is nothing here to escape into.
+    """
+    raw = " ".join(str(name or "").split()).strip()
+    cleaned = "".join(ch for ch in raw if ch in _PROJECT_NAME_SAFE).strip(" -_.")
+    slug = cleaned[:64].strip(" -_.") or "New project"
+    if slug.upper() in _WINDOWS_RESERVED_NAMES:
+        slug = f"{slug} project"
+    return slug
+
+
+def project_name_for_task(task: str) -> str:
+    """Name a project after the thing that was asked for.
+
+    The folder is how someone finds this work again months later. "exec-065aad"
+    and "code_scratch" tell them nothing; the sentence they typed does.
+    """
+    first_line = next((line for line in str(task or "").splitlines() if line.strip()), "")
+    cleaned = "".join(ch for ch in " ".join(first_line.split()) if ch in _PROJECT_NAME_SAFE).strip(" -_.")
+    if len(cleaned) > _TASK_NAME_MAX_CHARS:
+        head = cleaned[: _TASK_NAME_MAX_CHARS + 1]
+        boundary = head.rfind(" ")
+        # Cut on a word boundary unless that would leave a stub too short to
+        # recognise, in which case a hard cut still beats a one-word folder.
+        cleaned = (head[:boundary] if boundary >= 12 else cleaned[:_TASK_NAME_MAX_CHARS]).strip(" -_.")
+    return cleaned or f"Code task {datetime.now().strftime('%Y-%m-%d %H%M')}"
+
+
+def project_for_new_task(task: str) -> Path:
+    """Give a NEW Code task its OWN folder, named after the task.
+
+    Every task that arrived without a chosen project used to be pointed at one
+    shared ~/.thomas/code_scratch. Measured on this user's machine: 106 tasks
+    bound to that single folder, with index.html written by FIVE different ones,
+    each silently replacing the last. Four of their builds are simply gone -- the
+    only surviving trace was haunted-arcade.css, an orphaned stylesheet whose
+    page no longer exists.
+
+    Nothing here migrates or moves an existing conversation: a task that is
+    already bound keeps the folder it was bound to. This decides where a NEW one
+    starts.
+    """
+    return create_named_project(project_name_for_task(task))
+
 
 def create_named_project(name: str) -> Path:
     """Make a NEW, ISOLATED project folder under ~/.thomas/projects.
@@ -305,9 +381,7 @@ def create_named_project(name: str) -> Path:
     Names are sanitised to a flat folder name. A path separator, a drive letter
     or a .. would otherwise let a project name choose where the project lives.
     """
-    raw = " ".join(str(name or "").split()).strip()
-    cleaned = "".join(ch for ch in raw if ch in _PROJECT_NAME_SAFE).strip(" -_.")
-    slug = cleaned[:64] or "New project"
+    slug = _safe_project_slug(name)
 
     base = thomas_owned_root() / "projects"
     try:
@@ -315,24 +389,54 @@ def create_named_project(name: str) -> Path:
     except OSError as exc:
         raise ForgeCodeProjectError("project folder could not be created") from exc
 
-    target = base / slug
-    if target.exists():
-        for suffix in range(2, 500):
-            candidate = base / f"{slug} {suffix}"
-            if not candidate.exists():
-                target = candidate
-                break
-        else:
-            raise ForgeCodeProjectError("project folder could not be created")
-    try:
-        target.mkdir(parents=True, exist_ok=False)
-    except OSError as exc:
-        raise ForgeCodeProjectError("project folder could not be created") from exc
+    # The mkdir IS the claim. Looking with exists() and creating afterwards
+    # leaves a gap where two tasks starting at the same moment both see the name
+    # free -- and Thomas runs Code tasks in parallel, so two tasks named alike is
+    # the ordinary case, not the exotic one. Losing the race here means taking
+    # the next number, never sharing the folder.
+    target: Path | None = None
+    for suffix in range(1, 500):
+        candidate = base / (slug if suffix == 1 else f"{slug} {suffix}")
+        try:
+            candidate.mkdir(exist_ok=False)
+        except FileExistsError:
+            continue
+        except OSError as exc:
+            raise ForgeCodeProjectError("project folder could not be created") from exc
+        target = candidate
+        break
+    if target is None:
+        raise ForgeCodeProjectError("project folder could not be created")
 
     # Inside ~/.thomas, so this is Thomas's own tree and initialising is ours to
     # do without asking -- the consent question is only for the user's folders.
     ensure_git_repo(target)
     return target.resolve()
+
+
+def shared_scratch_root() -> Path:
+    """Where the one shared drawer lives, without creating it."""
+    return (Path.home() / ".thomas" / "code_scratch").expanduser()
+
+
+def is_shared_scratch(path: str | Path | None) -> bool:
+    """True when a path is the shared drawer rather than a project.
+
+    Needed because the drawer now arrives dressed as a choice. The Code UI saves
+    whichever root it was handed and sends it back as ``project_root`` on the
+    next new task -- and until now the answer was always this folder, so it is
+    sitting in browsers today (observed in the live UI: the project chip read
+    "code_scratch"). Nothing in the product can actually have chosen it: the
+    picker offered 123 projects and the drawer was not one of them.
+    """
+    if not path:
+        return False
+    try:
+        candidate = Path(path).expanduser().resolve()
+        scratch = shared_scratch_root().resolve()
+    except (OSError, ValueError):
+        return False
+    return candidate == scratch or scratch in candidate.parents
 
 
 def default_scratch_project(catalog_root: str | Path) -> Path:

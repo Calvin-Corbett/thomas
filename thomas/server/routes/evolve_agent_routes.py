@@ -104,6 +104,57 @@ def _unspecified_project_root(root: Path) -> Path:
     return forge_code_projects.default_scratch_project(root)
 
 
+def _new_task_project_root(root: Path, task: str) -> Path:
+    """Where a NEW Code task goes when nobody picked a project: its own folder.
+
+    This is ``_unspecified_project_root`` with the shared drawer taken out of it.
+    That drawer was one ~/.thomas/code_scratch for everybody, and it is where a
+    task landed whenever the catalog root was Thomas's own source (every dev
+    install) or was not a repository at all (every packaged install) -- which is
+    to say, always. Measured on this workspace: 106 tasks bound to that single
+    directory, index.html written by five different tasks each silently replacing
+    the last, four of the owner's builds gone and the only surviving trace an
+    orphaned stylesheet whose page no longer exists. Making the overwrite visible
+    was not enough; the tasks have to stop landing on top of each other.
+
+    A catalog root that IS a separate repository is still honoured, unchanged:
+    that is somebody deliberately pointing Thomas at a project, not the absence
+    of a choice.
+
+    Only NEW tasks reach here. A conversation that is already bound is loaded
+    from the registry first, so nothing existing moves.
+
+    Falling back to the shared scratch when a folder cannot be made is
+    deliberate: a task that cannot start at all is worse than one that shares.
+    """
+    if not _is_thomas_source(root):
+        try:
+            return forge_code_projects.validate_project_root(root, fallback=root)
+        except forge_code_projects.ForgeCodeProjectError:
+            pass
+    try:
+        return forge_code_projects.project_for_new_task(task)
+    except forge_code_projects.ForgeCodeProjectError:
+        log.warning("a per-task Code project could not be created; using shared scratch", exc_info=True)
+        return forge_code_projects.default_scratch_project(root)
+
+
+def _chosen_project(requested: Any) -> Any:
+    """Drop a "choice" that is only the shared drawer handed back to us.
+
+    The Code UI saves whatever root it was given and sends it as ``project_root``
+    on the next NEW task. Until now that root was always ~/.thomas/code_scratch,
+    so the value is already sitting in browsers -- and arriving as an explicit
+    project_root it is indistinguishable from a deliberate pick. It cannot be
+    one: the picker offers real projects and the drawer is not among them, so
+    there is no click that produces it.
+
+    Only new tasks pass through here. A conversation already bound to the drawer
+    is resolved from the registry and still opens it.
+    """
+    return None if requested and forge_code_projects.is_shared_scratch(requested) else requested
+
+
 def _friendly_project_error(exc: Exception, requested_root: Any = None) -> str:
     """Turn an internal validator message into something a person can act on.
 
@@ -392,17 +443,24 @@ def build_evolve_agent_handlers(
         history_choice = str(body.get("history_choice") or "").strip().lower()
         if history_choice not in ("setup", "without"):
             history_choice = ""
+        loop = asyncio.get_running_loop()
         try:
             if conversation_id:
                 project_root, conv = _load_conversation(conversation_id)
                 if conv is None:
-                    project_root = forge_code_projects.validate_project_root(
-                        requested_project,
-                        fallback=catalog_root,
+                    # An id with nothing behind it is still a NEW task, so it
+                    # gets its own folder rather than the shared drawer.
+                    chosen = _chosen_project(requested_project)
+                    project_root = (
+                        forge_code_projects.validate_project_root(chosen, fallback=catalog_root)
+                        if chosen
+                        else await loop.run_in_executor(None, _new_task_project_root, catalog_root, message)
                     )
                     _repo = forge_code_projects.thomas_source_repo_root()
                     if _repo is not None and project_root == _repo:
-                        project_root = forge_code_projects.default_scratch_project(catalog_root)
+                        project_root = await loop.run_in_executor(
+                            None, _new_task_project_root, catalog_root, message
+                        )
                 elif requested_project:
                     selected = forge_code_projects.validate_project_root(requested_project, fallback=catalog_root)
                     if selected != project_root:
@@ -415,13 +473,17 @@ def build_evolve_agent_handlers(
                             status=409,
                         )
             else:
-                # New conversation, no explicit project -> scratch repo, never
-                # Thomas's own source tree (the catalog root).
-                _fallback = (
-                    catalog_root if requested_project else forge_code_projects.default_scratch_project(catalog_root)
+                # New conversation, no explicit project -> a folder of ITS OWN,
+                # named after the task. Never the one shared scratch drawer, and
+                # never Thomas's own source tree (the catalog root).
+                chosen = _chosen_project(requested_project)
+                _fallback: Path = (
+                    catalog_root
+                    if chosen
+                    else await loop.run_in_executor(None, _new_task_project_root, catalog_root, message)
                 )
                 project_root = forge_code_projects.validate_project_root(
-                    requested_project,
+                    chosen,
                     fallback=_fallback,
                     allow_without_history=(history_choice == "without"),
                 )
@@ -429,10 +491,10 @@ def build_evolve_agent_handlers(
                     project_root = forge_code_projects.initialize_history(project_root)
                 # HARD SAFETY NET: a stale client localStorage (or catalog root)
                 # can still resolve to Thomas's own source repo, which Code must
-                # never edit. If it does, silently substitute a scratch project.
+                # never edit. If it does, substitute this task's own project.
                 _repo = forge_code_projects.thomas_source_repo_root()
                 if _repo is not None and project_root == _repo:
-                    project_root = forge_code_projects.default_scratch_project(catalog_root)
+                    project_root = await loop.run_in_executor(None, _new_task_project_root, catalog_root, message)
                 conv = None
         except forge_code_projects.ForgeCodeHistoryRequired as exc:
             # Not a dead end -- a question. The old message promised Thomas
@@ -870,7 +932,7 @@ def build_evolve_agent_handlers(
         source = (body or {}).get("source_evolve_item")
         if not isinstance(source, dict):
             source = None
-        requested_root = (body or {}).get("project_root")
+        requested_root = _chosen_project((body or {}).get("project_root"))
         # "setup" | "without" | "" -- the answer to the history question, absent
         # until the person has actually been asked.
         history_choice = str((body or {}).get("history_choice") or "").strip().lower()
@@ -901,10 +963,11 @@ def build_evolve_agent_handlers(
                     allow_without_history=(history_choice == "without"),
                 )
             else:
-                # Resolved only when nothing was chosen, so a request that names
-                # its project never pays for creating a scratch repo it will not
-                # use. Both calls shell out to git, so they run off the loop.
-                project_root = await loop.run_in_executor(None, _unspecified_project_root, _root())
+                # Nothing was chosen, so this task gets its OWN folder instead of
+                # the shared drawer. Resolved only in this branch, so a request
+                # that names its project never pays for creating one it will not
+                # use. It shells out to git, so it runs off the loop.
+                project_root = await loop.run_in_executor(None, _new_task_project_root, _root(), title)
             settings = ForgeCodeSettings.from_payload(body if isinstance(body, dict) else {})
         except forge_code_projects.ForgeCodeHistoryRequired as exc:
             # A question, not a dead end. The previous message promised Thomas
