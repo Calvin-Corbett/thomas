@@ -380,8 +380,6 @@ class OrchestratorBrain:
         is_first_message: bool = False,
         active_task_digest: str = "",
         active_tasks: list[dict[str, Any]] | None = None,
-        dispatch_actionable: bool = True,
-        background_ack_only: bool = False,
         send_task: Any = None,
         update_task: Any = None,
         operate: Any = None,
@@ -390,36 +388,29 @@ class OrchestratorBrain:
     ) -> ConversationManager:
         """Process one model-owned user turn.
 
-        Compatibility arguments from the former dispatch-first path remain in
-        the signature while callers migrate, but none may select a semantic
-        route. Thomas's reasoning model sees the conversation and structured
-        task context, then chooses whether to answer or call a capability.
+        Thomas's reasoning model sees the conversation and structured task
+        context, then chooses whether to answer or call a capability. No
+        argument here selects a semantic route -- see CONTRIBUTING_AI.md,
+        "Semantic Intent Ownership".
         """
-        # Accepted and DISCARDED. These are the remains of the prompt-word
-        # routing that was deleted: the logic went, the parameters stayed, so
-        # the signature still offers control it does not provide. Passing
-        # dispatch_actionable=False does not prevent a dispatch. No caller in
-        # thomas/ passes any of the three -- only tests do, which is how
-        # test_background_status_reply_uses_active_task_state_directly has been
-        # failing on dev: it sets dispatch_actionable=False and then asserts
-        # nothing was dispatched.
+        # is_first_message is caller state, not a control: it reports whether
+        # this turn opens the thread and promises nothing about routing. The
+        # brain does not need it (the same fact is readable off `conversation`),
+        # but thomas/server/routes/chat_v2.py still passes it, so it stays
+        # accepted until that caller drops it. Removing it here alone would
+        # raise TypeError on every live chat turn.
         #
-        # Deliberately not resolved here, because the two options point opposite
-        # ways and the tests do not agree with each other either -- one asserts
-        # the background reply is "model generated not canned", while its
-        # sibling asserts the reply contains the canned sentence "Background
-        # work has completed in this thread."
-        #
-        #   honour them  -> implement behaviour for an API nothing calls, and
-        #                   hand a caller back the power to force a route, which
-        #                   is what moving routing to the model removed.
-        #   remove them  -> delete the parameters and the tests that rely on
-        #                   them, which means deleting a check on whether
-        #                   background replies are canned.
-        #
-        # Either is a product call. What must not continue is the third thing:
-        # a parameter that reads as a control and silently is not one.
-        _ = (is_first_message, dispatch_actionable, background_ack_only)
+        # The two route-forcing arguments that used to sit beside it --
+        # dispatch_actionable and background_ack_only -- are gone. They were
+        # remains of the deleted prompt-word routing: the logic went, the
+        # parameters stayed, so the signature advertised control it did not
+        # provide (dispatch_actionable=False never prevented a dispatch).
+        # Honouring them was not an open product choice. Both select a semantic
+        # route before the model is consulted, which "Semantic Intent Ownership"
+        # forbids, and no caller in thomas/ passed either -- the chat_v2 route
+        # is pinned to never pass them by
+        # test_auto_mode_low_autonomy_keeps_actionable_request_inline.
+        _ = is_first_message
         turn_start = time.monotonic()
 
         # Private/project context may enrich the model prompt, but history must

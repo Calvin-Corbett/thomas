@@ -105,7 +105,6 @@ class TestCompletionReport(unittest.IsolatedAsyncioTestCase):
                 dispatcher=dispatcher,
                 mode="auto",
                 active_tasks=[dict(_COMPLETED_TASK)],
-                dispatch_actionable=False,
             )
 
         ctx = captured.get("memory_ctx")
@@ -136,7 +135,6 @@ class TestCompletionReport(unittest.IsolatedAsyncioTestCase):
                 dispatcher=_FakeDispatcher(),
                 mode="auto",
                 active_tasks=[dict(_COMPLETED_TASK)],
-                dispatch_actionable=False,
             )
             second = await brain.process_message(
                 session_id="sess-live",
@@ -145,7 +143,6 @@ class TestCompletionReport(unittest.IsolatedAsyncioTestCase):
                 dispatcher=_FakeDispatcher(),
                 mode="auto",
                 active_tasks=[dict(_COMPLETED_TASK)],
-                dispatch_actionable=False,
             )
 
         self.assertEqual(first.last_assistant_message(), "REPORTED")
@@ -173,7 +170,6 @@ class TestCompletionReport(unittest.IsolatedAsyncioTestCase):
                 dispatcher=dispatcher,
                 mode="max",
                 active_tasks=[dict(_COMPLETED_TASK)],
-                dispatch_actionable=True,
             )
 
         self.assertIn("Background work just finished", captured["memory_ctx"].working)
@@ -207,7 +203,6 @@ class TestDurableDedup(unittest.IsolatedAsyncioTestCase):
                 dispatcher=_FakeDispatcher(),
                 mode="auto",
                 active_tasks=[task],
-                dispatch_actionable=False,
             )
 
         ctx = captured.get("memory_ctx")
@@ -230,7 +225,6 @@ class TestDurableDedup(unittest.IsolatedAsyncioTestCase):
                 dispatcher=_FakeDispatcher(),
                 mode="auto",
                 active_tasks=[dict(_COMPLETED_TASK)],
-                dispatch_actionable=False,
             )
 
         mark.assert_called_once_with("exec-live")
@@ -314,7 +308,6 @@ class TestModelOwnedCompletionMark(unittest.IsolatedAsyncioTestCase):
                 dispatcher=_FakeDispatcher(),
                 mode="auto",
                 active_tasks=reported + fresh,
-                dispatch_actionable=False,
             )
 
         self.assertIn("fresh one", captured["memory_ctx"].working)

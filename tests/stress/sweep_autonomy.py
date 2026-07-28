@@ -78,7 +78,6 @@ async def _capture_for_level(level: int) -> dict:
             dispatcher=FakeDispatcher(),
             mode="max",
             autonomy_level=level,
-            dispatch_actionable=True,
             send_task=lambda **kw: None,
         )
     return sink[0] if sink else {}
