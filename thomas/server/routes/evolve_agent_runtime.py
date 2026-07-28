@@ -602,19 +602,25 @@ async def _drain_and_record(
         # failing on dev, and its sibling at :308 shows a conversation from a
         # SUCCESSFUL earlier request gone entirely after a later retry failed.
         #
-        # The consequence is not a wrong field. unified_code_mode.js reads it in
-        # three places, and at :612 it decides `durable` -- which at :614 and
-        # again at :1140 clears state.liveEvents and state.artifacts, on the
-        # belief the work is safely stored. So a false confirmation wipes the
-        # run's evidence from the screen as well, leaving no copy anywhere while
-        # the run reports success.
+        # Scope of the damage, stated carefully because my first version of this
+        # comment overstated it. unified_code_mode.js reads the flag in three
+        # places. At :612 it is one conjunct of `durable`, ANDed with a
+        # conversation reload and `runIsDurable`, and that last one genuinely
+        # reads the store -- it requires the RELOADED conversation to contain an
+        # agent turn carrying this run's id. So the destructive clear at :614
+        # does not fire on a false flag alone; it is guarded. Same at :1140,
+        # which does not consult this flag at all.
+        #
+        # What the flag does decide by itself is status: :70 and :606 map it
+        # straight to completed-versus-failed. So a run that saved nothing can
+        # still be presented as completed. That is the defect -- a wrong verdict
+        # shown to the owner, not silent destruction of their evidence.
         #
         # The fix is to confirm by reading the store rather than by arriving
         # here, and it needs care in BOTH directions: too strict and good runs
-        # start reporting failure, too loose and evidence keeps being cleared
-        # when nothing was saved. Not attempted at the end of a long session.
-        # See also `_await_recording`, which is awaited before this and is
-        # supposed to mean persistence has settled.
+        # report failure. Not attempted at the end of a long session. See also
+        # `_await_recording`, awaited before this and meant to mean persistence
+        # has settled -- the failing tests suggest it does not always.
         result = {
             "persistence_confirmed": True,
             "returncode": rc,
