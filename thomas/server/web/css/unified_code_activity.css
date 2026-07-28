@@ -66,8 +66,14 @@
 .tc-code-artifacts { margin-top: 11px; display: flex; flex-direction: column; gap: 8px; }
 .tc-code-artifacts-head { font: 600 10.5px/1.2 var(--font-label, inherit); letter-spacing: .06em; text-transform: uppercase; color: var(--c-muted); }
 .tc-code-artifact { display: flex; flex-direction: column; gap: 8px; }
+.tc-code-artifact-row { display: flex; align-items: stretch; gap: 7px; max-width: 420px; }
+.tc-code-artifact-save { display: grid; place-items: center; width: 42px; flex: 0 0 auto; cursor: pointer;
+  border: 1px solid var(--c-border-2); border-radius: 12px; background: var(--c-surface); color: var(--c-accent); }
+.tc-code-artifact-save:hover, .tc-code-artifact-save:focus-visible { border-color: var(--c-accent); }
+.tc-code-artifact-save:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.tc-code-artifact-save i { font-size: 17px; }
 .tc-code-artifact-open {
-  display: flex; align-items: stretch; gap: 0; width: 100%; max-width: 420px; padding: 0;
+  display: flex; align-items: stretch; gap: 0; flex: 1; min-width: 0; padding: 0;
   text-align: left; cursor: pointer; overflow: hidden;
   border: 1px solid var(--c-border-2); border-radius: 12px; background: var(--c-surface);
   color: var(--c-text); font: 13px/1.2 var(--font-sans, inherit);

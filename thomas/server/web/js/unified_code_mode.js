@@ -371,14 +371,19 @@
       const expanded = (open && playable && doc)
         ? `<div class="tc-code-artifact-stage"><iframe title="${esc(file)}" sandbox="allow-scripts" srcdoc="${esc(doc)}"></iframe></div>`
         : '';
+      // Chat's deliverable card carries a download beside it; a result you can
+      // only look at inside Thomas is not really yours yet.
+      const save = `<button class="tc-code-artifact-save" data-code-save-artifact="${esc(file)}" type="button" title="Download ${esc(file)}"><i class="ph ph-download-simple" aria-hidden="true"></i><span class="sr-only">Download ${esc(file)}</span></button>`;
       return `<div class="tc-code-artifact">
-        <button class="tc-code-artifact-open" data-code-open-artifact="${esc(file)}" data-code-artifact-slot="${esc(slot)}" type="button" aria-expanded="${open ? 'true' : 'false'}">
-          ${thumb}
-          <span class="tc-code-artifact-meta">
-            <span class="tc-code-artifact-name">${esc(file)}</span>
-            <span class="tc-code-artifact-verb">${hint}</span>
-          </span>
-        </button>${expanded}
+        <div class="tc-code-artifact-row">
+          <button class="tc-code-artifact-open" data-code-open-artifact="${esc(file)}" data-code-artifact-slot="${esc(slot)}" type="button" aria-expanded="${open ? 'true' : 'false'}">
+            ${thumb}
+            <span class="tc-code-artifact-meta">
+              <span class="tc-code-artifact-name">${esc(file)}</span>
+              <span class="tc-code-artifact-verb">${hint}</span>
+            </span>
+          </button>${save}
+        </div>${expanded}
       </div>`;
     }).join('');
     return `<div class="tc-code-artifacts"><div class="tc-code-artifacts-head">${items.length === 1 ? 'Thomas made this' : `Thomas made ${items.length} things`}</div>${rows}</div>`;
@@ -730,6 +735,24 @@
       state.artifactOpen[slot] = !state.artifactOpen[slot];
       render();
       if (state.artifactOpen[slot]) void safely(() => ensureArtifactDoc(file), 'That result could not be opened.');
+    }));
+    root.querySelectorAll('[data-code-save-artifact]').forEach(button => button.addEventListener('click', () => {
+      // Saved from the file Thomas actually wrote, read through the same
+      // validated endpoint. Not the inlined preview copy, which carries
+      // dependencies folded in for display only.
+      const file = button.dataset.codeSaveArtifact;
+      void safely(async () => {
+        const token = lifecycle().contextToken(state);
+        if (!token.id) return false;
+        const content = await readProjectFile(token.id, file);
+        if (content === null) throw new Error('could not read ' + file);
+        const url = URL.createObjectURL(new Blob([content], { type: 'application/octet-stream' }));
+        const a = document.createElement('a');
+        a.href = url; a.download = file.split('/').pop();
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+        return true;
+      }, 'That result could not be downloaded.');
     }));
     root.querySelector('[data-code-approve]')?.addEventListener('click', () => { void safely(approvePending, 'Approval could not be completed.'); });
     root.querySelector('[data-code-approval-cancel]')?.addEventListener('click', () => { state.pendingApproval = null; state.pendingRequest = null; state.runStatus = 'stopped'; pushLiveEvent({ type: 'stopped', text: 'Approval cancelled. No Code action was run.' }); render(); });
