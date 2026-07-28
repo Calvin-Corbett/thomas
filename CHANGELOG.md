@@ -71,6 +71,12 @@ Versioning: Semantic Versioning.
 - **The run report could say "0 open risks" about a page nobody had ever opened.** Every other risk it lists describes something that went wrong; nothing described something that never *happened*. If the browser check was skipped — Chrome not installed, or nothing found to own a changed file — the report simply omitted it, and a green run could hand back a page no one, human or machine, had ever seen.
 - A changed page with no passing browser check is now listed as an open risk, by name, saying whether the check was skipped or never ran at all. Scoped to changed pages so it stays a fact rather than a guess: a project's build scripts are not pages, and flagging those would teach people to ignore the line.
 
+### Fixed (A tool that could never be called)
+
+- **`diff.preview_patch` failed every single time it was used, for anyone.** Whether a tool writes to disk was decided by looking for words in its *name* — "write", "create", "patch" — and previewing a patch contains one. So a read-only preview was treated as a write and rejected for not supplying a file path. It has no file path: its only argument is the diff text, and the paths live inside that. Every attempt cost a turn and printed a technical failure into the run.
+- A tool's declared parameters now decide what it accepts. A name is a label; the schema is the contract. Tools that publish no schema are still required to supply a path, so the guard stays closed by default.
+- Found by watching Thomas build a page and print `Invalid file path argument for write tool diff.preview_patch` into his own activity feed — the last of the name-matching classifiers, still deciding something it had no business deciding.
+
 ### Added (Build identity — which Thomas am I looking at)
 
 - **A small chip in the bottom-right corner of the chat now names the port, the version and the commit** the running server was built from — `:8899 · v0.19.23 · 54507302`. This repository routinely has more than a dozen worktrees checked out at once, several reporting the same version string, and the launcher only printed the version to a console that is closed by the time anyone is looking at the browser. The commit is the part that actually tells two instances apart.

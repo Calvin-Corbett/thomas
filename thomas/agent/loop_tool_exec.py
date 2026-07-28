@@ -70,6 +70,38 @@ _SELF_DEVELOPMENT_INSPECTION_TOOL_PREFIXES = (
 )
 
 
+def _declares_a_path_parameter(registry: Any, name: str) -> bool:
+    """Does this tool's own schema accept a path at all?
+
+    Whether a tool writes was decided by looking for words in its name, and
+    "patch" is one of them -- so `diff.preview_patch`, whose entire purpose is
+    to preview a patch WITHOUT applying it, was classified as a write and then
+    rejected for not supplying a path argument. It does not have one: its only
+    parameter is the diff text, and the paths live inside that. The tool could
+    therefore never be called successfully by anyone, and every attempt cost the
+    model a turn and printed a technical failure into the run.
+
+    The tool's declared parameters are the authority on what it accepts. A name
+    is a label; the schema is the contract. When a tool publishes no schema we
+    fall back to requiring the path, which keeps the guard closed by default.
+    """
+
+    tool = None
+    getter = getattr(registry, "get", None)
+    if callable(getter):
+        try:
+            tool = getter(name)
+        except (KeyError, TypeError, ValueError):
+            tool = None
+    schema = getattr(tool, "parameters", None)
+    if not isinstance(schema, dict):
+        return True
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return True
+    return any(key in properties for key in _WRITE_TOOL_PATH_KEYS)
+
+
 def _is_write_tool(name: str, file_audit_module: Any) -> bool:
     name_lower = str(name or "").lower()
     if file_audit_module is not None:
@@ -379,7 +411,8 @@ async def execute_tools(
                 )
             validated_path, path_error = _sanitize_write_tool_path(
                 args,
-                require_path=is_write_tool_call,
+                require_path=is_write_tool_call
+                and _declares_a_path_parameter(getattr(loop, "tools", None), name),
                 sandbox_root=sandbox_root,
                 benchmark_root=benchmark_root if is_write_tool_call else None,
             )
