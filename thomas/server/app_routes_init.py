@@ -1001,7 +1001,27 @@ def _setup_routes_and_handlers(
                 require_api_access=_require_api_access,
             )
         except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
-            log.warning("Chat V2 routes unavailable: %s", e)
+            # UNRESOLVED, and worth knowing before trusting this line. V2 owns
+            # POST /api/chat. Nothing else registers it: `register_chat_routes`
+            # in chat_aiohttp_handlers is exported by a shim but called from
+            # nowhere in the server, and its own docstring says production
+            # passes register_primary_chat=False so that `/api/chat` "cannot
+            # execute this parallel engine".
+            #
+            # So when this except fires, the server keeps booting with NO chat
+            # endpoint at all, and the only trace is this warning in a console
+            # that is closed by the time anyone is looking at the browser.
+            #
+            # Two tests (test_server_swarm_mode_telemetry,
+            # test_server_swarm_event_contract) force this failure with
+            # RuntimeError("legacy-chat-required") and then expect legacy chat
+            # to answer. It cannot. They fail with 404, and have been failing.
+            # Either that fallback was deliberately removed and those tests are
+            # obsolete, or it is wanted and was never wired -- the code says the
+            # first, the tests say the second, and guessing wrong either
+            # resurrects a parallel chat engine or deletes a real safety net.
+            # Left for a decision rather than settled quietly here.
+            log.warning("Chat V2 routes unavailable, so POST /api/chat is NOT registered: %s", e)
 
     def _register_evolve_loop_routes(app_ref: web.Application) -> None:
         """Register the self-recursive evolve loop dashboard API."""

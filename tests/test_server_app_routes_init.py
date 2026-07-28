@@ -990,4 +990,8 @@ def test_route_registration_logs_module_failures(tmp_path: Path, monkeypatch: py
     assert "Marketplace routes unavailable:" in text
     assert "Mission routes unavailable:" in text
     assert "Observability routes unavailable:" in text
-    assert "Chat V2 routes unavailable:" in text
+    # Chat V2 owns POST /api/chat and nothing else registers it, so this failure
+    # leaves the server running with no chat endpoint at all. The line says so
+    # now, because "unavailable" alone reads like a degraded feature rather than
+    # the primary surface being gone.
+    assert "Chat V2 routes unavailable, so POST /api/chat is NOT registered:" in text
