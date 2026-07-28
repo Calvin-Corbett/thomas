@@ -94,6 +94,7 @@ Versioning: Semantic Versioning.
 - **Both files were individually perfect**, which is why nothing caught it: a parse check passes each one, because neither is wrong — only the pair is. The browser did catch it, but the message names the *script* while the fault is in the *HTML*, so Thomas spent his entire repair budget rewriting the JavaScript. Sixty-one checks, six issues, no convergence, all in the wrong file.
 - A page loading the same local script more than once is now reported before the build finishes, and the message names the page to fix rather than the script that reported the error. Remote sources are ignored — a CDN listed twice may be a deliberate fallback and is not Thomas's to correct.
 - Checked against 14 real pages in the working project: one flagged, and it was the broken one.
+- The check also covers the page that **owns** a changed script, not only pages the run edited. That is the realistic shape: a page is written once and thereafter only its script is touched, so the duplicate sits in a file no later run changes and a check looking only at changed pages would never see it again.
 
 ### Fixed (Thomas was told nothing loads anything — so he loaded it twice)
 

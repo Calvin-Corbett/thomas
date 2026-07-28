@@ -350,7 +350,11 @@ def _artifact_preflight_failures(cwd: str | Path, files: list[str]) -> list[str]
     """
     root = Path(cwd).resolve()
     failures: list[str] = _orphaned_web_assets(root, files)
-    failures.extend(_duplicate_script_includes(root, files))
+    # Include the pages that OWN a changed asset, not only changed pages. A run
+    # that edits just the renderer leaves a duplicate include in the page it
+    # belongs to unreported, which is the shape the original failure took: the
+    # page was written once and then only the script was touched afterwards.
+    failures.extend(_duplicate_script_includes(root, sorted({*files, *_browser_smoke_files(root, files)})))
     checked: set[Path] = set()
 
     def inspect_script(path: Path, label: str) -> None:

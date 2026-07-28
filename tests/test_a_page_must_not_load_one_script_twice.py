@@ -102,6 +102,17 @@ def test_two_different_local_scripts_are_fine(tmp_path) -> None:
     assert _duplicate_script_includes(root, ["starfield.html"]) == []
 
 
+def test_editing_only_the_script_still_checks_the_page_that_owns_it(tmp_path) -> None:
+    """The realistic case. The page is written once and thereafter only the
+    script is touched, so a duplicate include sits in a file no later run
+    changes -- and a check that looks only at changed pages never sees it."""
+    root = _project(tmp_path, _TWICE)
+
+    failures = _artifact_preflight_failures(root, ["starfield.js"])
+
+    assert any("loads starfield.js 2 times" in item for item in failures)
+
+
 def test_it_runs_as_part_of_preflight(tmp_path) -> None:
     """Wired in, not merely written: preflight is what fails the build."""
     root = _project(tmp_path, _TWICE)
