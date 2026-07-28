@@ -395,6 +395,30 @@ class OrchestratorBrain:
         route. Thomas's reasoning model sees the conversation and structured
         task context, then chooses whether to answer or call a capability.
         """
+        # Accepted and DISCARDED. These are the remains of the prompt-word
+        # routing that was deleted: the logic went, the parameters stayed, so
+        # the signature still offers control it does not provide. Passing
+        # dispatch_actionable=False does not prevent a dispatch. No caller in
+        # thomas/ passes any of the three -- only tests do, which is how
+        # test_background_status_reply_uses_active_task_state_directly has been
+        # failing on dev: it sets dispatch_actionable=False and then asserts
+        # nothing was dispatched.
+        #
+        # Deliberately not resolved here, because the two options point opposite
+        # ways and the tests do not agree with each other either -- one asserts
+        # the background reply is "model generated not canned", while its
+        # sibling asserts the reply contains the canned sentence "Background
+        # work has completed in this thread."
+        #
+        #   honour them  -> implement behaviour for an API nothing calls, and
+        #                   hand a caller back the power to force a route, which
+        #                   is what moving routing to the model removed.
+        #   remove them  -> delete the parameters and the tests that rely on
+        #                   them, which means deleting a check on whether
+        #                   background replies are canned.
+        #
+        # Either is a product call. What must not continue is the third thing:
+        # a parameter that reads as a control and silently is not one.
         _ = (is_first_message, dispatch_actionable, background_ack_only)
         turn_start = time.monotonic()
 
