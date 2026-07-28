@@ -103,6 +103,12 @@ Versioning: Semantic Versioning.
 - Same mistake, same day, as the preview allowlist — a hidden-folder filter applied to the full path instead of the path within the project.
 - **The other three instances are now fixed too.** The visual editor and the design-system scanner would both have found no files at all in a project stored under `~/.thomas`, and the artifact-evidence reader would have returned an empty list — meaning a run that produced real files could not prove it. A single test now covers all four sites, and it was checked against the old code to confirm it actually fails when the mistake comes back, rather than being a test that can only pass.
 
+### Fixed (A run that delivered nothing had its story graded instead)
+
+- **Exhaustive's adversarial graders were reading the worker's account instead of the work — every time.** Each grader's prompt is built from the artifacts found in the workspace; when that list was empty they were told "this is answer-only, do not call tools." Every Exhaustive workspace lives under `~/.thomas/`, and the path bug above emptied that list for exactly those folders. So the panel whose own instructions say *grade the deliverables, not the worker narrative* was doing the opposite, always.
+- Underneath that sat a second fault, which the path fix alone would not have closed: an empty list meant two opposite things — "this task produces no files" and "this task was required to produce files and produced none" — and both got the same answer-only instruction. Missing work is the most damning evidence there is, and it was reaching the grader as silence.
+- A grader is now told plainly when required deliverables are absent, and which ones: *"this task was required to produce X and the workspace contains none of it — grade what was delivered, which is nothing, however convincing the account of it reads."* Tasks that genuinely produce no files are still graded answer-only.
+
 ### Added (Build identity — which Thomas am I looking at)
 
 - **A small chip in the bottom-right corner of the chat now names the port, the version and the commit** the running server was built from — `:8899 · v0.19.23 · 54507302`. This repository routinely has more than a dozen worktrees checked out at once, several reporting the same version string, and the launcher only printed the version to a console that is closed by the time anyone is looking at the browser. The commit is the part that actually tells two instances apart.

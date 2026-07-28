@@ -314,6 +314,14 @@ async def run_exhaustive_pipeline(
         vetoes: list[bool] = []
         reviews: list[dict[str, Any]] = []
         artifact_rows = (ctx.rubric.get("artifact_evidence") or {}).get("artifacts", [])
+        # "This task produces no files" and "this task was supposed to produce
+        # files and produced none" are opposite findings, and an empty list said
+        # both. The graders were then told answer-only, do not call tools -- so
+        # a run that delivered nothing got its NARRATIVE graded, by the very
+        # panel whose instructions say to grade the deliverables and not the
+        # narrative. Missing work is the most damning evidence there is; it must
+        # reach the grader as a finding rather than as silence.
+        artifacts_missing = bool(expected_artifact_paths) and not artifact_rows
         for lens in _REVIEW_LENSES:
             review_prompt = (
                 f"Original user task:\n{prompt}\n\n"
@@ -325,7 +333,13 @@ async def run_exhaustive_pipeline(
                     "Use fs.list_dir and fs.read_file to inspect the named artifacts and their supporting data. "
                     "Work read-only and grade the deliverables themselves, not the worker narrative. "
                     if artifact_rows
-                    else "This is answer-only; do not call tools. "
+                    else (
+                        "This task was required to produce "
+                        f"{', '.join(expected_artifact_paths[:5])} and the workspace contains none of it. "
+                        "Grade what was delivered, which is nothing, however convincing the account of it reads. "
+                        if artifacts_missing
+                        else "This is answer-only; do not call tools. "
+                    )
                 )
                 + "Return exactly one compact JSON object: "
                 '{"score": 0-10, "veto": true|false, "reason": "evidence in 12 words or fewer"}. '
