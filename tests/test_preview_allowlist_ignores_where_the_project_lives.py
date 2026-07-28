@@ -70,6 +70,31 @@ def test_an_empty_allowlist_is_an_error_not_a_one_file_fallback() -> None:
     assert "nothing to preview" in body
 
 
+def test_the_route_requires_api_access() -> None:
+    """It mints a real origin over the owner's project directory. Anything that
+    can call it can start a server on their files."""
+    body = _preview_body()
+
+    assert "require_api_access(request)" in body
+    # Before the route touches any request input, not merely somewhere in it.
+    assert body.index("require_api_access(request)") < body.index("request.match_info")
+    assert body.index("require_api_access(request)") < body.index("request.query")
+
+
+def test_a_traversal_in_the_requested_path_is_refused() -> None:
+    body = _preview_body()
+
+    assert '".." in tail.split("/")' in body
+
+
+def test_the_resolved_target_must_stay_inside_the_project() -> None:
+    """The `..` check alone is not enough — a symlink or an absolute path would
+    pass it. The resolved path is compared against the project root."""
+    body = _preview_body()
+
+    assert "is_relative_to(root.resolve())" in body
+
+
 def test_the_allowlist_does_not_depend_on_which_file_was_requested() -> None:
     """Two files of one project must produce the same allowlist, or the service
     treats them as different apps and gives each its own short-lived origin."""
