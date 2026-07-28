@@ -264,6 +264,71 @@ def _orphaned_web_assets(cwd: str | Path, files: list[str]) -> list[str]:
     return failures
 
 
+def _duplicate_script_includes(cwd: str | Path, files: list[str]) -> list[str]:
+    """Find a page that loads the same local script more than once.
+
+    Thomas was asked for a starfield and wrote a clean one, then included
+    `starfield.js` twice -- once with `defer` in the head and once at the end of
+    the body. The file ran twice, so its first `const` was declared twice, and
+    the page died on `Identifier 'canvas' has already been declared`.
+
+    Both files were individually perfect. `node --check` passes each of them,
+    because neither is wrong; only the pair is. The browser found it, but the
+    message names the SCRIPT while the fault is in the HTML, and Thomas spent
+    its whole repair budget rewriting the JavaScript -- 61 checks, six issues,
+    no convergence -- because the error pointed at the wrong file.
+
+    A page loading the same local script twice is never intentional, so this is
+    reported without hedging, and the message names the page and the duplicate
+    so a repair attempt starts in the right file. Remote sources are ignored: a
+    CDN listed twice is someone else's problem and may be a deliberate fallback.
+    """
+
+    root = Path(cwd).resolve()
+    pages = [
+        path
+        for path in ((root / name).resolve() for name in files)
+        if path.suffix.lower() in {".html", ".htm"} and path.is_file() and path.is_relative_to(root)
+    ]
+    failures: list[str] = []
+    for page in pages:
+        try:
+            if page.stat().st_size > _SMOKE_DISCOVERY_MAX_BYTES:
+                continue
+            source = page.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        parser = _LocalAssetReferenceParser()
+        try:
+            parser.feed(source)
+        except (ValueError, TypeError):
+            continue
+        seen: dict[str, int] = {}
+        for raw_reference in parser.references:
+            parsed = urlsplit(raw_reference)
+            if parsed.scheme or parsed.netloc or raw_reference.startswith("//"):
+                continue
+            reference = unquote(parsed.path).replace("\\", "/")
+            if not reference or Path(reference).suffix.lower() not in {".js", ".mjs", ".cjs"}:
+                continue
+            target = (root / reference.lstrip("/")) if reference.startswith("/") else (page.parent / reference)
+            try:
+                resolved = str(target.resolve())
+            except OSError:
+                continue
+            seen[resolved] = seen.get(resolved, 0) + 1
+        label = str(page.relative_to(root)).replace("\\", "/")
+        for resolved, count in seen.items():
+            if count < 2:
+                continue
+            name = Path(resolved).name
+            failures.append(
+                f"{label} loads {name} {count} times, so it runs {count} times "
+                f"and its first top-level const or let is declared twice; remove the duplicate script tag in {label}"
+            )
+    return failures
+
+
 def _artifact_preflight_failures(cwd: str | Path, files: list[str]) -> list[str]:
     """Find safe, deterministic web boot failures before the verifier subprocess.
 
@@ -274,6 +339,7 @@ def _artifact_preflight_failures(cwd: str | Path, files: list[str]) -> list[str]
     """
     root = Path(cwd).resolve()
     failures: list[str] = _orphaned_web_assets(root, files)
+    failures.extend(_duplicate_script_includes(root, files))
     checked: set[Path] = set()
 
     def inspect_script(path: Path, label: str) -> None:

@@ -88,6 +88,13 @@ Versioning: Semantic Versioning.
 
 - Thomas broadcast his internal theme and UI-edit messages to **every** frame on the page. That was invisible while Code results had no origin of their own; now that each generated app gets an isolated one, every broadcast was refused by the browser and logged — once per preview, per message. The refusal was correct, so Thomas now skips those frames rather than widening who he shouts at: a page he generated is untrusted content and has no business receiving his internal state.
 
+### Fixed (A page that loads one script twice runs it twice)
+
+- **Thomas built a working starfield and then included its script twice** — once with `defer` in the head, once at the end of the body. The file ran twice, so its first `const` was declared twice, and the page died on `Identifier 'canvas' has already been declared`.
+- **Both files were individually perfect**, which is why nothing caught it: a parse check passes each one, because neither is wrong — only the pair is. The browser did catch it, but the message names the *script* while the fault is in the *HTML*, so Thomas spent his entire repair budget rewriting the JavaScript. Sixty-one checks, six issues, no convergence, all in the wrong file.
+- A page loading the same local script more than once is now reported before the build finishes, and the message names the page to fix rather than the script that reported the error. Remote sources are ignored — a CDN listed twice may be a deliberate fallback and is not Thomas's to correct.
+- Checked against 14 real pages in the working project: one flagged, and it was the broken one.
+
 ### Added (Build identity — which Thomas am I looking at)
 
 - **A small chip in the bottom-right corner of the chat now names the port, the version and the commit** the running server was built from — `:8899 · v0.19.23 · 54507302`. This repository routinely has more than a dozen worktrees checked out at once, several reporting the same version string, and the launcher only printed the version to a console that is closed by the time anyone is looking at the browser. The commit is the part that actually tells two instances apart.
