@@ -174,6 +174,7 @@ def _build_open_risks(
     ok: bool,
     outcome: str,
     reason: str,
+    foreign_writes: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     risks: list[dict[str, Any]] = []
     if not events:
@@ -214,6 +215,14 @@ def _build_open_risks(
     if outcome == "noop" and not changed_files:
         risks.append({"risk": "run made no changes", "detail": "exit 0 but git shows no project delta"})
     risks.extend(_unopened_page_risks(events, validations, changed_files))
+    if foreign_writes:
+        shown = ", ".join(foreign_writes[:3]) + (f" (+{len(foreign_writes) - 3} more)" if len(foreign_writes) > 3 else "")
+        risks.append(
+            {
+                "risk": "this run replaced work from another code task",
+                "detail": f"{shown} — created by a different task in this shared project, and overwritten here",
+            }
+        )
     return risks[:_MAX_RISKS]
 
 
@@ -349,6 +358,7 @@ def build_run_report(
     ok: bool = False,
     outcome: str = "",
     reason: str = "",
+    foreign_writes: list[str] | None = None,
 ) -> dict[str, Any]:
     """Build the structured post-run report from a run's recorded data.
 
@@ -369,6 +379,7 @@ def build_run_report(
             ok=ok,
             outcome=outcome,
             reason=reason,
+            foreign_writes=list(foreign_writes or []),
         ),
         "attention_pointers": _build_attention_pointers(parsed, validations, changed),
         "rubric_mapping": _build_rubric_mapping(goal, definition, validations, ok=ok, outcome=outcome, reason=reason),

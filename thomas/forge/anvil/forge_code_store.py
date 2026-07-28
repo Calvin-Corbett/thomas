@@ -108,6 +108,45 @@ def _conversation_path(root: str | Path, cid: str) -> Path:
     return conversations_dir(root) / f"{cid}.json"
 
 
+def files_written_by_another_task(root: str | Path, cid: str, changed_files: list[str] | None) -> list[str]:
+    """Of the files this run changed, which did a DIFFERENT code task create?
+
+    Projects are shared. Measured on the owner's own workspace: 106 separate
+    code tasks bound to one folder, and `index.html` written by five of them --
+    each silently replacing the last, four builds gone with no record anywhere.
+    The only surviving trace was an orphaned stylesheet whose page no longer
+    existed.
+
+    This does not prevent the write or decide where projects should live. It
+    answers one question the run report could not previously ask, so that
+    replacing someone else's work is at least visible after the fact.
+
+    Conservative by construction: a file this task has touched before is not
+    reported, because overwriting your own earlier output is the normal way a
+    build iterates. Only a file first written under a different conversation id
+    counts.
+    """
+
+    wanted = {str(name).replace("\\", "/").lstrip("/") for name in (changed_files or []) if str(name).strip()}
+    if not wanted or not str(cid or "").strip():
+        return []
+    directory = conversations_dir(root)
+    foreign: set[str] = set()
+    mine: set[str] = set()
+    for path in sorted(directory.glob("fc_*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        written = {
+            str(name).replace("\\", "/").lstrip("/")
+            for turn in (data.get("turns") or [])
+            for name in (turn.get("changed_files") or [])
+        }
+        (mine if path.stem == str(cid) else foreign).update(written & wanted)
+    return sorted(foreign - mine)
+
+
 def derive_title(message: str) -> str:
     """Derive a human title from the first non-empty line of a message.
 

@@ -558,6 +558,9 @@ async def _drain_and_record(
             ok=ok,
             outcome=outcome,
             reason=reason,
+            # Projects are shared, so a build can silently replace another
+            # task's work. This does not prevent the write; it makes it visible.
+            foreign_writes=forge_code_store.files_written_by_another_task(root, cid, changed),
         )
         persisted = forge_code_store.append_agent_turn(
             root,

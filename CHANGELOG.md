@@ -121,6 +121,12 @@ Versioning: Semantic Versioning.
 - **Two comments were promising safety that does not exist**, and have been corrected: one said production injects richer checkers such as pytest — nothing in the codebase passes `checkers=` at all — and another said the live wiring also runs tests. No tests are run there. A note asserting a guarantee that isn't there is worse than no note, because the next reader stops looking. I believed both of them myself an hour before checking.
 - The module now states plainly what it does not cover, and points at the Forge/Code path, which is where web output actually gets parsed, checked for unreferenced and duplicated assets, and booted in a real browser.
 
+### Added (You are told when a build replaced someone else's work)
+
+- **Measured on the real workspace: 106 separate code tasks all write into one folder, and `index.html` was written by five of them.** Each silently replaced the last. Four builds are gone with no record anywhere — the only surviving trace was a 6KB stylesheet whose page no longer existed, and nothing reported even that, because the check that finds unreferenced files was broken until today.
+- A run that overwrites a file created by a **different** code task now says so, by name, in the run report. It does not block the write, and it does not change where projects live — that decision is still open. It answers a question the report simply could not ask before.
+- Deliberately quiet about your own work: a file this task has written before is never flagged, because iterating on your own output is how building works. Checked against the real project — the roguelite task also wrote `index.html`, so it stays silent there, while a *new* task writing `index.html` is told the file belongs to someone else. That is the exact case that destroyed four builds.
+
 ### Added (Build identity — which Thomas am I looking at)
 
 - **A small chip in the bottom-right corner of the chat now names the port, the version and the commit** the running server was built from — `:8899 · v0.19.23 · 54507302`. This repository routinely has more than a dozen worktrees checked out at once, several reporting the same version string, and the launcher only printed the version to a console that is closed by the time anyone is looking at the browser. The commit is the part that actually tells two instances apart.
