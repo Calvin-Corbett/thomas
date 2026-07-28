@@ -487,14 +487,47 @@ def build_evolve_agent_handlers(
                         project_root = await loop.run_in_executor(
                             None, _new_task_project_root, catalog_root, message
                         )
-                elif requested_project:
-                    selected = forge_code_projects.validate_project_root(requested_project, fallback=catalog_root)
-                    if selected != project_root:
+                else:
+                    if requested_project:
+                        selected = forge_code_projects.validate_project_root(
+                            requested_project, fallback=catalog_root
+                        )
+                        if selected != project_root:
+                            return web.json_response(
+                                {
+                                    "ok": False,
+                                    "error": "project_root cannot change inside an existing Code conversation",
+                                    "code": "project_change_requires_new_conversation",
+                                },
+                                status=409,
+                            )
+                    # THE SAME HARD SAFETY NET AS THE OTHER TWO BRANCHES. This one
+                    # takes its root from the stored conversation, so it was the
+                    # only way into Thomas's own source tree -- and it is the
+                    # branch every "continue this task" goes through. Measured on
+                    # this workspace: 20 conversations resolve to the checkout,
+                    # three with real turns, and one of them put `notes.txt` in
+                    # the repository root. Revert is `git checkout -- <file>`,
+                    # which for an untracked file is a delete, so those tasks
+                    # could also remove files from the product source.
+                    #
+                    # Refused rather than redirected, unlike the new-task
+                    # branches. They are choosing a folder and may be handed a
+                    # different one; this conversation already HAS a folder, and
+                    # the check directly above exists to stop it moving. Silently
+                    # moving it here would break that rule while enforcing this
+                    # one. A new task is one click away and lands somewhere safe.
+                    _repo = forge_code_projects.thomas_source_repo_root()
+                    if _repo is not None and project_root == _repo:
                         return web.json_response(
                             {
                                 "ok": False,
-                                "error": "project_root cannot change inside an existing Code conversation",
-                                "code": "project_change_requires_new_conversation",
+                                "error": (
+                                    "This task is pointed at Thomas's own source folder, which Code "
+                                    "will not edit. Start a new task and it will get its own folder."
+                                ),
+                                "code": "project_is_thomas_source",
+                                "project_root": str(project_root),
                             },
                             status=409,
                         )
