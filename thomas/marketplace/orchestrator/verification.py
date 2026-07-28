@@ -14,6 +14,7 @@ import shutil
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 from thomas.core.task_types import task_family
 
@@ -56,9 +57,50 @@ def run_ruff_check(work_dir: str, result_text: str = "") -> VerificationResult:
     return VerificationResult(ok, "code", evidence, ("ruff",))
 
 
+_GENERIC_EVIDENCE_FILES = 5
+
+
 def _generic_checker(work_dir: str, result_text: str) -> VerificationResult:
-    _ = work_dir
-    return VerificationResult(bool(result_text), "general", "deliverable present", ("present",))
+    """The lighter structural check this module's docstring promises.
+
+    It used to be `_ = work_dir` followed by `bool(result_text)`: for every
+    family except code, a task passed verification because the worker had said
+    something. The workspace was discarded on the first line, and the result was
+    reported as "deliverable present" with a check named "present" -- wording
+    that reads like a file was found when nothing had been looked at.
+
+    `run_ruff_check` directly above already does this honestly, marking itself
+    "skipped" when it cannot run. This now follows that pattern: it names what
+    it actually found, and when it has inspected nothing it says so instead of
+    borrowing the language of evidence.
+
+    Answer-only work still passes on its text -- for a question answered in
+    prose the text IS the deliverable, and failing those would be wrong. The
+    difference is that the check is now called what it is, so a reader and a
+    grader can tell the two apart. A task that was required to produce files and
+    did not is caught by the artifact-evidence gate, which is a separate stage.
+    """
+
+    files: list[str] = []
+    if work_dir:
+        root = Path(work_dir)
+        if root.is_dir():
+            for path in sorted(root.rglob("*")):
+                # Relative parts: an absolute path carries the workspace's own
+                # location, and Thomas keeps every workspace under ~/.thomas.
+                if not path.is_file() or any(p.startswith(".") for p in path.relative_to(root).parts):
+                    continue
+                files.append(path.relative_to(root).as_posix())
+                if len(files) > _GENERIC_EVIDENCE_FILES:
+                    break
+
+    if files:
+        shown = ", ".join(files[:_GENERIC_EVIDENCE_FILES])
+        more = f" (+{len(files) - _GENERIC_EVIDENCE_FILES} more)" if len(files) > _GENERIC_EVIDENCE_FILES else ""
+        return VerificationResult(True, "general", f"workspace holds {shown}{more}", ("files_present",))
+    if result_text:
+        return VerificationResult(True, "general", "answer text only; no workspace files inspected", ("text_only",))
+    return VerificationResult(False, "general", "no workspace files and no answer text", ("empty",))
 
 
 # Default real checkers by family. Production injects richer ones (e.g. pytest).
