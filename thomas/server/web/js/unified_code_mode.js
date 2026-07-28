@@ -546,9 +546,13 @@
 
   function clearContextState() {
     closeSource();
-    finishBusy();
+    // Cleared BEFORE finishBusy, which repaints the project chip: leaving the
+    // outgoing conversation's id in place made that repaint describe a task
+    // that is already gone. At this point nothing is bound, and the chip has to
+    // be allowed to say so.
     state.activeId = '';
     state.conversation = null;
+    finishBusy();
     state.liveEvents = [];
     state.changes = [];
     state.tree = [];
@@ -1440,24 +1444,45 @@
     if (Number.isFinite(savedDrawerWidth)) state.drawerWidth = clampDrawerWidth(savedDrawerWidth);
   } catch (error) { recordPreferenceWarning(error, 'The saved activity drawer width could not be loaded.'); }
 
+  // The one shared drawer, ~/.thomas/code_scratch. Held here as a path test
+  // rather than a basename test because the server's rule is a path rule:
+  // `is_shared_scratch` in forge_code_projects.py matches the drawer AND
+  // anything beneath it, so a basename check would miss code_scratch/game.
+  function isSharedScratchRoot(path) {
+    return /[\\/]\.thomas[\\/]code_scratch(?:[\\/]|$)/i.test(String(path || ''));
+  }
+
   function projectDisplayLabel() {
     // A folder basename is a poor name for a thing Thomas built: every app it
     // generates lives in ~/.thomas/workspaces/exec-<hash>, so the chip read
     // "exec-065aad17f4f8". When the picker knows what the project actually is
     // (the request that produced it), that wins.
-    // KNOWN WRONG, not yet fixed: for a task that has not started, this shows
-    // whichever project was last open -- almost always the shared scratch
-    // drawer. That was true while every task landed there; it stopped being
-    // true when a new task began getting its own folder, so the chip now names
-    // a place the work will not go.
     //
-    // The obvious guard (`!state.activeId && base === 'code_scratch'`) was
-    // tried and reverted: it fixed the fresh-task case and broke the other one,
-    // leaving an OPENED conversation also claiming a new folder. A real task
-    // misnaming its own project is worse than a fresh one showing a stale name,
-    // so the wrong-but-old behaviour stays until someone can verify both
-    // directions. Whatever the fix is, it has to be checked against BOTH a new
-    // task and an opened one.
+    // Before that, though: a task with no conversation behind it yet is not
+    // going wherever the chip was last pointed. The client keeps the last root
+    // in localStorage and sends it along, but the server drops it when it is
+    // the shared drawer (`_chosen_project` in evolve_agent_routes.py) and gives
+    // the task a folder of its own -- so naming the drawer here names a place
+    // the work provably will not go. This mirrors that server rule exactly:
+    // same condition (unbound task + shared drawer), same outcome.
+    //
+    // The guard is checked BEFORE state.projectLabel because the server drops
+    // the drawer no matter what the UI decided to call it.
+    //
+    // An earlier attempt at this was reverted as "fixes the new task, breaks
+    // the opened one". Measured in the live UI instead of assumed, the two
+    // suspects were both wrong: after clicking a task in the sidebar,
+    // state.activeId IS set and updateProjectButton() DOES re-run. What a
+    // MutationObserver on the chip actually recorded for one sidebar click was
+    // three writes -- the seeded value, then "code_scratch", then the real
+    // project name. The middle one is clearContextState(), which calls
+    // finishBusy() -> updateProjectButton() while activeId is momentarily
+    // empty; it is a transient that the following render() overwrites. Read
+    // during that gap, or on a load whose render never arrives, the chip shows
+    // the unbound label for a conversation that has one. So clearContextState
+    // now clears activeId BEFORE finishBusy repaints, which makes the transient
+    // agree with the state it is drawn from instead of contradicting it.
+    if (!state.activeId && isSharedScratchRoot(state.projectRoot)) return 'A new folder for this task';
     if (state.projectLabel) return state.projectLabel;
     const base = String(state.projectRoot || '').split(/[\\/]/).filter(Boolean).pop() || '';
     if (!base) return 'Thomas library';
@@ -1470,7 +1495,12 @@
     if (!button) return;
     const span = document.getElementById('tc-code-project-label');
     if (span) span.textContent = projectDisplayLabel();
-    button.title = state.projectRoot || 'Choose what Thomas works on';
+    // The tooltip is the same claim as the label, spelled out as a path, so it
+    // cannot be allowed to keep naming the shared drawer after the label has
+    // stopped. There is no path to show here yet -- the server picks one when
+    // the task starts -- so it goes back to the invitation.
+    const unbound = !state.activeId && isSharedScratchRoot(state.projectRoot);
+    button.title = (!unbound && state.projectRoot) || 'Choose what Thomas works on';
     button.disabled = state.running || state.approvalBusy || state.steeringBusy;
   }
 
