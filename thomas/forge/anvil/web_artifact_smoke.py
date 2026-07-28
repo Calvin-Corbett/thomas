@@ -247,10 +247,20 @@ def _run_one(
     receipt = _receipt_from_dom(str(getattr(completed, "stdout", "") or ""))
     if receipt is None:
         return False, f"{name}: browser did not publish a smoke receipt", None
+    # A resource this harness REFUSED to fetch is not a defect of the page. The
+    # browser runs with external name resolution mapped away on purpose, so a
+    # page that loads three.js from a CDN could never pass -- and blocktown-84
+    # does exactly that. Failing it would say "your game is broken" about a game
+    # that works, which is the same error as passing a broken one, pointed the
+    # other way. Local resource failures still fail: those are ours, and a
+    # missing local script is precisely the breakage this exists to catch.
+    blocked, local_failures = [], []
+    for value in receipt.get("resource_errors") or []:
+        (blocked if _is_external_reference(str(value)) else local_failures).append(str(value))
     problems = [
         *[str(value) for value in receipt.get("errors") or []],
         *[str(value) for value in receipt.get("console_errors") or []],
-        *[str(value) for value in receipt.get("resource_errors") or []],
+        *local_failures,
     ]
     # A <canvas> in the DOM is not a drawing. A game that renders nothing has
     # the same markup as a game that renders perfectly, so accepting the element
@@ -272,7 +282,20 @@ def _run_one(
     if problems:
         return False, f"{name}: " + "; ".join(problems[:5]), receipt
     interactions = ", ".join(str(value) for value in receipt.get("interactions") or []) or "boot only"
-    return True, f"{name}: browser boot clean; {interactions}", receipt
+    # Surfaced, not silently dropped: the page booted clean against everything
+    # this harness could actually serve, and the reader should know what it
+    # could not reach rather than infer full coverage from a clean line.
+    offline = f"; {len(blocked)} external resource(s) not fetched offline" if blocked else ""
+    return True, f"{name}: browser boot clean; {interactions}{offline}", receipt
+
+
+def _is_external_reference(value: str) -> bool:
+    """Does this resource-error line name a host the harness deliberately blocks?"""
+    match = re.search(r"https?://([^/\s]+)", value)
+    if not match:
+        return False
+    host = match.group(1).split(":")[0].lower()
+    return host not in {"127.0.0.1", "localhost", "[::1]", _SMOKE_HOST.lower()}
 
 
 def smoke_html_artifacts(
