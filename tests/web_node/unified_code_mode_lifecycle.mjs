@@ -325,7 +325,15 @@ async function proveEvidenceAndRefresh() {
     artifacts: [{ file: '.thomas/evolve/agent/conversations/run.json', kind: 'data' }, { file: 'game.html', kind: 'html' }],
     transcript: '{"fc":"final","text":"Finished."}',
   });
-  if (!filteredReceipt.includes('1 file changed') || !filteredReceipt.includes('1 result ready') || filteredReceipt.includes('2 files changed') || filteredReceipt.includes('2 results ready')) throw new Error('internal Thomas bookkeeping inflated the saved turn receipt');
+  // The point of this case is that Thomas's OWN bookkeeping file, written into
+  // .thomas/evolve/..., must not be counted as work the owner did or delivered.
+  // It used to be checked by asserting the reply said "1 result ready"; that
+  // wording is gone on purpose -- a count is not a delivery, and results are now
+  // named cards you can open. So the same guarantee is asserted against what the
+  // receipt actually says now: the real file is named, the internal one is not.
+  if (!filteredReceipt.includes('1 file changed') || filteredReceipt.includes('2 files changed')) throw new Error('internal Thomas bookkeeping inflated the changed-file count');
+  if (!filteredReceipt.includes('game.html')) throw new Error('the delivered result was not named in the saved turn receipt');
+  if (filteredReceipt.includes('run.json') || filteredReceipt.includes('.thomas/evolve')) throw new Error('internal Thomas bookkeeping was offered to the owner as a result');
   for (let index = 0; index < 140; index += 1) api.pushLiveEvent({ type: 'output', text: `raw-${index}` });
   if (state.liveEvents.length !== 120) throw new Error('live evidence was not capped');
 
