@@ -35,12 +35,41 @@ def test_the_bare_result_count_is_gone() -> None:
     assert "results ready" not in text
 
 
-def test_a_page_opens_playable_rather_than_as_source() -> None:
+def test_a_result_opens_in_the_conversation_not_a_side_panel() -> None:
+    """Sending the result to a side panel is still telling someone where to go
+    and look. Chat puts a deliverable in the thread; Code is meant to be Chat
+    that builds rather than dispatches."""
     text = _js()
     handler = text.split("data-code-open-artifact]").pop().split("});", 1)[0]
 
-    assert "filePreviewRendered = true" in handler, "a page must open rendered"
-    assert "loadFile" in handler
+    assert "artifactOpen" in handler, "opening must expand in the thread"
+    assert "drawerOpen" not in handler, "a result must not be pushed to the side panel"
+    assert "ensureArtifactDoc" in handler
+
+
+def test_each_turn_opens_its_own_copy() -> None:
+    """The same file is listed by every turn that touched it, so keying the open
+    state by name alone opened six copies of the game from one click."""
+    text = _js()
+
+    assert "data-code-artifact-slot" in text
+    assert "${turnKey}::${file}" in text
+
+
+def test_a_result_shows_a_live_thumbnail() -> None:
+    """You can see what it is before deciding to open it, the way Chat does."""
+    text = _js()
+    body = text.split("function artifactCardsHtml", 1)[1].split("\n  function", 1)[0]
+
+    assert "tc-code-artifact-thumb" in body
+    assert "srcdoc=" in body
+
+
+def test_thumbnails_are_loaded_without_being_asked_and_are_capped() -> None:
+    text = _js()
+
+    assert "hydrateArtifactThumbnails" in text
+    assert "_ARTIFACT_THUMB_BUDGET" in text
 
 
 def test_a_finished_run_presents_its_result_without_being_asked() -> None:

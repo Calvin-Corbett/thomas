@@ -351,19 +351,35 @@
   // the owner had to follow a build by typing "where is it" and then "what's the
   // full directory name". Handing back a thing you cannot open is the same as
   // not handing it back.
-  function artifactCardsHtml(turn) {
+  function artifactCardsHtml(turn, turnKey) {
     const items = (turn.artifacts || []).filter(a => a && a.file && !isInternalResultPath(a.file));
     if (!items.length) return '';
     const rows = items.map(a => {
       const file = String(a.file);
       const playable = /\.x?html?$/i.test(file);
-      const icon = playable ? 'ph-play-circle' : 'ph-file';
-      const verb = playable ? 'Open it' : 'View';
-      return `<button class="tc-code-artifact-open" data-code-open-artifact="${esc(file)}" type="button">
-        <i class="ph ${icon}" aria-hidden="true"></i>
-        <span class="tc-code-artifact-name">${esc(file)}</span>
-        <span class="tc-code-artifact-verb">${verb}</span>
-      </button>`;
+      const doc = state.artifactDocs && state.artifactDocs[file];
+      // Keyed per turn: the same file is listed by every turn that touched it,
+      // so keying by name alone opened six copies of the game at once.
+      const slot = `${turnKey}::${file}`;
+      const open = !!(state.artifactOpen && state.artifactOpen[slot]);
+      // A live thumbnail of the real thing, exactly as Chat shows a deliverable:
+      // you can see what it is before you commit to opening it.
+      const thumb = (playable && doc)
+        ? `<span class="tc-code-artifact-thumb"><iframe tabindex="-1" aria-hidden="true" scrolling="no" sandbox="allow-scripts" srcdoc="${esc(doc)}"></iframe></span>`
+        : `<span class="tc-code-artifact-thumb is-icon"><i class="ph ${playable ? 'ph-play-circle' : 'ph-file'}"></i></span>`;
+      const hint = playable ? (open ? 'Showing it below' : 'Click to open it here') : 'Click to view';
+      const expanded = (open && playable && doc)
+        ? `<div class="tc-code-artifact-stage"><iframe title="${esc(file)}" sandbox="allow-scripts" srcdoc="${esc(doc)}"></iframe></div>`
+        : '';
+      return `<div class="tc-code-artifact">
+        <button class="tc-code-artifact-open" data-code-open-artifact="${esc(file)}" data-code-artifact-slot="${esc(slot)}" type="button" aria-expanded="${open ? 'true' : 'false'}">
+          ${thumb}
+          <span class="tc-code-artifact-meta">
+            <span class="tc-code-artifact-name">${esc(file)}</span>
+            <span class="tc-code-artifact-verb">${hint}</span>
+          </span>
+        </button>${expanded}
+      </div>`;
     }).join('');
     return `<div class="tc-code-artifacts"><div class="tc-code-artifacts-head">${items.length === 1 ? 'Thomas made this' : `Thomas made ${items.length} things`}</div>${rows}</div>`;
   }
@@ -382,7 +398,7 @@
     const narrative = narrativeActivityHtml(activityEvents, true);
     const technicalEvents = activityEvents.filter(isTechnicalEvent);
     const resultCount = (turn.artifacts || []).filter(artifact => !isInternalResultPath(artifact.file)).length;
-    return `<article class="tc-code-turn is-agent"><div class="tc-code-message-head"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>Thomas</strong><small>${esc(turn.model || 'Code')}</small><button class="tc-code-copy" data-code-copy-reply type="button" aria-label="Copy Thomas reply"><i class="ph ph-copy"></i></button></div><div class="tc-code-turn-body">${narrative}${technicalActivityHtml(technicalEvents, true)}<div class="tc-code-reply${turn.ok ? '' : ' is-error'}">${esc(reply)}</div>${artifactCardsHtml(turn)}${runReportHtml(turn.report)}${changedCount ? `<div class="tc-code-result-note"><span><i class="ph ph-files"></i>${changedCount} file${changedCount === 1 ? '' : 's'} changed</span></div>` : ''}</div></article>`;
+    return `<article class="tc-code-turn is-agent"><div class="tc-code-message-head"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>Thomas</strong><small>${esc(turn.model || 'Code')}</small><button class="tc-code-copy" data-code-copy-reply type="button" aria-label="Copy Thomas reply"><i class="ph ph-copy"></i></button></div><div class="tc-code-turn-body">${narrative}${technicalActivityHtml(technicalEvents, true)}<div class="tc-code-reply${turn.ok ? '' : ' is-error'}">${esc(reply)}</div>${artifactCardsHtml(turn, turn.run_id || turn.ts || '0')}${runReportHtml(turn.report)}${changedCount ? `<div class="tc-code-result-note"><span><i class="ph ph-files"></i>${changedCount} file${changedCount === 1 ? '' : 's'} changed</span></div>` : ''}</div></article>`;
   }
 
   function transcriptScroller(root) {
@@ -533,6 +549,8 @@
     state.tree = [];
     state.treePath = '';
     state.artifacts = [];
+    state.artifactDocs = {};
+    state.artifactOpen = {};
     state.filePreview = null;
     state.pendingApproval = null;
     state.pendingRequest = null;
@@ -703,9 +721,15 @@
     root.querySelector('[data-code-file-close]')?.addEventListener('click', () => { state.filePreview = null; render(); });
     root.querySelector('[data-code-preview-toggle]')?.addEventListener('click', () => { state.filePreviewRendered = state.filePreviewRendered === false; render(); });
     root.querySelectorAll('[data-code-open-artifact]').forEach(button => button.addEventListener('click', () => {
-      state.filePreviewRendered = true;   // a page opens PLAYABLE, not as source
-      state.drawerOpen = true;            // and the panel it lands in is open
-      void safely(() => loadFile(button.dataset.codeOpenArtifact), 'That result could not be opened.');
+      // Opens IN THE CONVERSATION. Sending the result to a side panel is still
+      // telling someone where to go and look; Chat puts a deliverable in the
+      // thread and Code is meant to be Chat that builds rather than dispatches.
+      const file = button.dataset.codeOpenArtifact;
+      const slot = button.dataset.codeArtifactSlot || file;
+      state.artifactOpen = state.artifactOpen || {};
+      state.artifactOpen[slot] = !state.artifactOpen[slot];
+      render();
+      if (state.artifactOpen[slot]) void safely(() => ensureArtifactDoc(file), 'That result could not be opened.');
     }));
     root.querySelector('[data-code-approve]')?.addEventListener('click', () => { void safely(approvePending, 'Approval could not be completed.'); });
     root.querySelector('[data-code-approval-cancel]')?.addEventListener('click', () => { state.pendingApproval = null; state.pendingRequest = null; state.runStatus = 'stopped'; pushLiveEvent({ type: 'stopped', text: 'Approval cancelled. No Code action was run.' }); render(); });
@@ -785,6 +809,8 @@
     const token = lifecycle().contextToken(state);
     await Promise.all([loadChanges({ token, deferRender: true }), loadTree('', { token, deferRender: true })]);
     if (!(options && options.deferRender)) render();
+    // Results become visible on arrival rather than after a click.
+    void hydrateArtifactThumbnails().catch(() => {});
     host().renderHistory && host().renderHistory();
     if (!internal) {
       await reattachRunFor(id);
@@ -986,6 +1012,48 @@
 
   // Open what the last completed turn produced. Prefers a page, because a page
   // is the thing you can actually look at; falls back to whatever else it made.
+  // Fetch a result's document once and keep it, so the card can show a live
+  // thumbnail and expand in place without re-reading on every render.
+  async function ensureArtifactDoc(path) {
+    const file = String(path || '');
+    if (!file) return false;
+    state.artifactDocs = state.artifactDocs || {};
+    if (state.artifactDocs[file] !== undefined) return true;
+    const token = lifecycle().contextToken(state);
+    if (!token.id) return false;
+    let content = await readProjectFile(token.id, file);
+    if (content === null) return false;
+    if (/\.x?html?$/i.test(file)) {
+      try { content = await inlineLocalAssets(token.id, content, file); } catch (e) { /* as-is beats nothing */ }
+    }
+    if (!lifecycle().contextMatches(state, token)) return false;
+    state.artifactDocs[file] = content;
+    render();
+    return true;
+  }
+
+  // Pull the documents for what a conversation produced so the results are
+  // VISIBLE on arrival rather than after a click. Capped, newest turns first.
+  const _ARTIFACT_THUMB_BUDGET = 4;
+  async function hydrateArtifactThumbnails() {
+    const turns = (state.conversation && state.conversation.turns) || [];
+    const wanted = [];
+    for (let i = turns.length - 1; i >= 0 && wanted.length < _ARTIFACT_THUMB_BUDGET; i -= 1) {
+      const turn = turns[i];
+      if (!turn || turn.role !== 'agent') continue;
+      for (const a of turn.artifacts || []) {
+        const file = a && a.file ? String(a.file) : '';
+        if (!file || isInternalResultPath(file) || !/\.x?html?$/i.test(file)) continue;
+        if (wanted.includes(file)) continue;
+        wanted.push(file);
+        if (wanted.length >= _ARTIFACT_THUMB_BUDGET) break;
+      }
+    }
+    for (const file of wanted) {
+      try { await ensureArtifactDoc(file); } catch (e) { /* one bad result must not stop the rest */ }
+    }
+  }
+
   async function presentNewestResult() {
     const turns = (state.conversation && state.conversation.turns) || [];
     for (let i = turns.length - 1; i >= 0; i -= 1) {
@@ -994,9 +1062,10 @@
       const made = (turn.artifacts || []).filter(a => a && a.file && !isInternalResultPath(a.file));
       if (!made.length) return false;
       const pick = made.find(a => /\.x?html?$/i.test(String(a.file))) || made[0];
-      state.filePreviewRendered = true;
-      state.drawerOpen = true;
-      try { return await loadFile(String(pick.file)); } catch (e) { return false; }
+      const file = String(pick.file);
+      state.artifactOpen = state.artifactOpen || {};
+      state.artifactOpen[`${turn.run_id || turn.ts || '0'}::${file}`] = true;   // in the conversation
+      try { return await ensureArtifactDoc(file); } catch (e) { return false; }
     }
     return false;
   }
