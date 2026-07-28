@@ -39,7 +39,11 @@ def test_text_with_no_files_is_named_text_only(tmp_path) -> None:
 
     assert result.passed
     assert result.checks == ("text_only",)
-    assert "no workspace files inspected" in result.evidence
+    # "holds no files", not "inspected none": it looked and found nothing, which
+    # is the opposite of the old behaviour where the workspace was discarded
+    # unread. Describing it as uninspected would credit the fix to the bug.
+    assert "the workspace holds no files" in result.evidence
+    assert "inspected" not in result.evidence
     assert "present" not in result.evidence
 
 

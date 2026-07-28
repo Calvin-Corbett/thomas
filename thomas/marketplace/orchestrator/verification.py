@@ -146,7 +146,11 @@ def _generic_checker(work_dir: str, result_text: str) -> VerificationResult:
         more = " and more" if len(files) > _GENERIC_EVIDENCE_FILES else ""
         return VerificationResult(True, "general", f"workspace holds {shown}{more}", ("files_present",))
     if result_text:
-        return VerificationResult(True, "general", "answer text only; no workspace files inspected", ("text_only",))
+        # "found none", not "inspected none". It DID look -- that was the whole
+        # point of replacing `_ = work_dir` -- and saying otherwise describes
+        # the old behaviour, where nothing was examined and the pass came from
+        # the reply being non-empty. The distinction is the fix.
+        return VerificationResult(True, "general", "answer text only; the workspace holds no files", ("text_only",))
     return VerificationResult(False, "general", "no workspace files and no answer text", ("empty",))
 
 
