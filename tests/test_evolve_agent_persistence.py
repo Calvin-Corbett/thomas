@@ -639,3 +639,92 @@ def test_recorder_store_failure_is_reported_by_status_stop_and_sse(
         assert done["ok"] is False
 
     _drive(repo, _body, configure=_configure)
+
+
+def test_a_store_that_claims_a_write_it_did_not_make_is_not_confirmed(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    """`persistence_confirmed` must come from the store, not from the writer's word.
+
+    The flag used to be assigned ``True`` because execution reached the line.
+    ``91442cea`` replaced that with a real store read, but nothing pinned it:
+    measured by reverting line 612 of ``evolve_agent_runtime.py`` back to
+    ``persistence_confirmed = True``, all 52 tests across the four
+    evolve-agent modules still passed. A correct fix that no test protects is
+    one careless edit from being undone silently.
+
+    So this reproduces the only shape that separates the two implementations:
+    ``append_agent_turn`` RETURNS a conversation -- reporting success, so the
+    ``persisted is None`` branch never fires -- while nothing reaches disk. The
+    self-certifying version calls that a confirmed save. A store read cannot.
+    """
+
+    repo = _new_repo(tmp_path)
+    conversation = forge_code_store.new_conversation(repo)
+    transcript = repo / "phantom-write.txt"
+    transcript.write_text("runner output\n", encoding="utf-8")
+
+    real_append = forge_code_store.append_agent_turn
+
+    def _claims_success_without_writing(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        # Shaped exactly like a real return value, including the identity
+        # `_agent_turn_is_in_store` matches on -- so the only thing that can
+        # tell it apart from a genuine write is going back to the disk.
+        return {
+            "id": conversation["id"],
+            "turns": [
+                {
+                    "role": "agent",
+                    "ts": "2026-07-28T23:59:59.123456+00:00",
+                    "run_id": kwargs.get("run_id") or "run-phantom",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(forge_code_store, "append_agent_turn", _claims_success_without_writing)
+
+    class _EmptyStdout:
+        async def readline(self) -> bytes:
+            return b""
+
+    class _FinishedProcess:
+        returncode = 0
+        stdout = _EmptyStdout()
+
+        async def wait(self) -> int:
+            return 0
+
+    async def _run() -> None:
+        result = await evolve_agent_runtime._drain_and_record(
+            _FinishedProcess(),
+            transcript,
+            repo,
+            conversation["id"],
+            "test-model",
+            forge_code_git.snapshot(repo),
+            web.Application(),
+            run_id="run-phantom",
+        )
+        assert result["persistence_confirmed"] is False, (
+            "a turn that never reached the store was reported as saved"
+        )
+        # And the run is reported as failed rather than quietly succeeding.
+        assert result["ok"] is False
+
+        # The other direction, through the same code path: a REAL write is
+        # still confirmed, so the check cannot pass by refusing everything.
+        monkeypatch.setattr(forge_code_store, "append_agent_turn", real_append)
+        genuine = await evolve_agent_runtime._drain_and_record(
+            _FinishedProcess(),
+            transcript,
+            repo,
+            conversation["id"],
+            "test-model",
+            forge_code_git.snapshot(repo),
+            web.Application(),
+            run_id="run-genuine",
+        )
+        assert genuine["persistence_confirmed"] is True
+
+    asyncio.run(_run())

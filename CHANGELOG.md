@@ -7,6 +7,13 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Added (The store-read behind `persistence_confirmed` is now pinned by a test)
+
+- **`91442cea` replaced a self-certifying flag with a real store read, and nothing protected it.** Measured rather than assumed: reverting line 612 of `thomas/server/routes/evolve_agent_runtime.py` back to `persistence_confirmed = True` left **all 52 tests across the four evolve-agent modules passing**. The fix was correct and one careless edit from being undone in silence — which is the same failure this flag exists to prevent, relocated into the test suite.
+- The nearest existing test (`test_recorder_store_failure_is_reported_by_status_stop_and_sse`) makes `append_agent_turn` return `None`, so it exercises the `persisted is None` branch and never reaches the confirmation at all. No test covered the shape that actually distinguishes the two implementations.
+- `test_a_store_that_claims_a_write_it_did_not_make_is_not_confirmed` reproduces it: `append_agent_turn` **returns a well-formed conversation** — reporting success, carrying the exact `role`/`ts`/`run_id` identity the confirmation matches on — while nothing reaches disk. Only going back to the disk can tell the two apart. The self-certifying version calls it saved; the store read does not, and the run is reported `ok: False`. The same test then restores the real `append_agent_turn` and asserts a genuine write **is** confirmed through the identical code path, so the check cannot pass by refusing everything.
+- Verified in both directions before landing: passes against current code, and fails with `AssertionError: a turn that never reached the store was reported as saved` against the reverted line. No production code changed.
+
 ### Fixed (My Stuff showed none of the things Thomas built)
 
 - **`/api/evolve/agent/deliverables` returned an empty list on a workspace holding 16 real builds.** `register_from_run` writes `deliverables.json` into the **project** a run worked in, and since every Code task now gets a folder of its own, that is almost never the catalog root. `deliverables_list` read the catalog root alone. Measured live before the change: endpoint `0`, disk `16` across 4 project roots — `~/.thomas/code_scratch` (13), `code_scratch_b` (1), and two projects built minutes earlier whose pages both open and work.
