@@ -61,6 +61,26 @@ def test_an_unconfigured_service_frames_nowhere() -> None:
     assert _frame_ancestors("") == "frame-ancestors 'none'"
 
 
+def test_one_generated_app_cannot_reach_another() -> None:
+    """The isolation here rests on `connect-src`, and the reason is not obvious.
+
+    Each preview gets its own port, but cookies do not respect ports: a browser
+    with two previews open sends BOTH capability cookies to BOTH origins, and
+    each server would accept its own. So the cookie is not what keeps one
+    generated app out of another's files — `connect-src 'self'` is, because it
+    stops app A issuing the request at all.
+
+    Asserted explicitly because a future edit widening this directive to make
+    some app's fetch work would look harmless and would quietly join every
+    preview together.
+    """
+    csp = _csp("http://127.0.0.1:8899")
+
+    assert "connect-src 'self'" in csp
+    assert "connect-src *" not in csp
+    assert "default-src 'self' data: blob:" in csp, "no remote origin may be a default source"
+
+
 def test_the_generated_code_is_still_sandboxed() -> None:
     """Being framable by itself must not relax what the code inside can do."""
     csp = _csp("http://127.0.0.1:8899")
