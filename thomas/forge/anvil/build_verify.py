@@ -352,8 +352,16 @@ def _duplicate_script_includes(cwd: str | Path, files: list[str]) -> list[str]:
                 continue
             name = Path(resolved).name
             failures.append(
-                f"{label} loads {name} {count} times, so it runs {count} times "
-                f"and its first top-level const or let is declared twice; remove the duplicate script tag in {label}"
+                # States what is certainly true (it runs twice) and what follows
+                # only IF the file declares one (a SyntaxError). The first
+                # version asserted the error outright, which happened to hold
+                # for starfield.js and would not for a file of function
+                # declarations or an IIFE -- claiming a consequence more
+                # specific than the evidence supports, in a message whose whole
+                # job is to send a repair to the right place.
+                f"{label} loads {name} {count} times, so it runs {count} times: its side effects repeat, "
+                f"and any top-level const, let or class in it is declared twice, which is a SyntaxError. "
+                f"Remove the duplicate script tag in {label}"
             )
     return failures
 

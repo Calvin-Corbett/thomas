@@ -56,7 +56,21 @@ def test_the_message_names_the_page_to_fix_not_the_script(tmp_path) -> None:
     message = _duplicate_script_includes(root, ["starfield.html"])[0]
 
     assert "starfield.html" in message
-    assert "remove the duplicate script tag in starfield.html" in message
+    assert "duplicate script tag in starfield.html" in message.lower()
+
+
+def test_the_message_does_not_overclaim_the_consequence(tmp_path) -> None:
+    """Running twice is certain. The SyntaxError follows only if the file
+    declares something at top level -- a file of function declarations or an
+    IIFE runs twice without erroring. Asserting the error outright happened to
+    be true for starfield.js and would send the next reader hunting for an
+    error that is not there."""
+    root = _project(tmp_path, _TWICE)
+
+    message = _duplicate_script_includes(root, ["starfield.html"])[0]
+
+    assert "runs 2 times" in message
+    assert "any top-level const, let or class" in message
 
 
 def test_a_page_that_loads_it_once_is_fine(tmp_path) -> None:
