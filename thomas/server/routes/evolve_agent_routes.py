@@ -254,12 +254,38 @@ def build_evolve_agent_handlers(
     def _root() -> Path:
         return Path(root_resolver())
 
-    def _project_for_conversation(cid: str) -> Path:
-        return forge_code_projects.conversation_project(_root(), cid)
-
     def _load_conversation(cid: str) -> tuple[Path, dict[str, Any] | None]:
-        project = _project_for_conversation(cid)
-        return project, forge_code_store.load_conversation(project, cid)
+        """Find a conversation and the project it actually lives in.
+
+        The registry is not the only truth about where a conversation is. It is
+        written by whoever created the conversation, and plenty never wrote a
+        row: measured on this workspace, 65 of the 108 tasks the sidebar shows
+        have no registry entry at all -- they were written straight into the
+        shared drawer. Resolving by registry alone sent every one of those to
+        the catalog root, where the file is not, so opening them returned 404,
+        renaming and deleting them touched nothing, and continuing one started
+        a fresh project that could not see its own history.
+
+        The LIST endpoint never had that problem, because it does not ask the
+        registry where anything is -- it walks the known roots and reads what is
+        there. This looks where the list looked, so the two can no longer
+        disagree about a conversation both can see.
+        """
+        catalog = _root()
+        bound = forge_code_projects.conversation_project(catalog, cid)
+        conv = forge_code_store.load_conversation(bound, cid)
+        if conv is not None:
+            return bound, conv
+        for root in forge_code_projects.conversation_roots(catalog):
+            if root == bound:
+                continue
+            found = forge_code_store.load_conversation(root, cid)
+            if found is not None:
+                return root, found
+        return bound, None
+
+    def _project_for_conversation(cid: str) -> Path:
+        return _load_conversation(cid)[0]
 
     def _running() -> bool:
         proc = app.get(APP_EVOLVE_AGENT_TASK)

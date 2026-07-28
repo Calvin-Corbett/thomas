@@ -26,7 +26,7 @@ from typing import Any
 from aiohttp import CookieJar, web
 from aiohttp.test_utils import TestClient, TestServer
 
-from thomas.forge.anvil import forge_code_git, forge_code_store
+from thomas.forge.anvil import forge_code_git, forge_code_projects, forge_code_store
 from thomas.forge.anvil.forge_code_git import _run_git
 from thomas.server.app_keys import APP_SECRETS
 from thomas.server.routes import evolve_agent_http_support, evolve_agent_routes, evolve_agent_runtime
@@ -157,6 +157,55 @@ def test_conversation_new_list_get_and_missing_404(tmp_path: Path) -> None:
         missing = await resp.json()
         assert missing["ok"] is False
         assert missing["error"] == "not found"
+
+    _drive(repo, _body)
+
+
+def test_unregistered_conversation_opens_from_the_project_the_list_found_it_in(tmp_path: Path) -> None:
+    """A conversation with no registry row still opens, in its own project.
+
+    The registry only knows conversations whose creator wrote a row. Plenty do
+    not: measured on a live workspace, 65 of the 108 tasks the Code sidebar
+    displayed had no row at all. Listing found them anyway -- it walks the known
+    roots and reads what is there -- while every other endpoint resolved through
+    the registry and fell back to the catalog root, where those files are not.
+    So the sidebar offered 65 tasks that answered 404 when clicked, could not be
+    renamed or deleted, and left the project chip naming whatever was open
+    before. This pins list and open to the same answer.
+    """
+
+    repo = _new_repo(tmp_path)
+    project = tmp_path / "own-project"
+    project.mkdir()
+    _init_repo(project)
+
+    # One bound conversation is what puts `project` on the map of known roots;
+    # the conversation under test is written beside it with no row of its own.
+    forge_code_projects.bind_conversation(repo, "conv-bound", project)
+    orphan = forge_code_store.new_conversation(project, title="Written straight into the project")
+    cid = orphan["id"]
+    assert forge_code_projects.conversation_metadata(repo, cid) is None
+
+    async def _body(client: TestClient) -> None:
+        listing = await (await client.get("/api/evolve/agent/conversations")).json()
+        row = next(c for c in listing["conversations"] if c["id"] == cid)
+        assert row["project_root"] == str(project)
+
+        # Opening it agrees with the listing instead of 404ing.
+        resp = await client.get(f"/api/evolve/agent/conversations/{cid}")
+        assert resp.status == 200
+        fetched = await resp.json()
+        assert fetched["conversation"]["project_root"] == str(project)
+
+        # And so does every other id-addressed operation, which used to act on
+        # the catalog root and therefore on nothing.
+        resp = await client.post(f"/api/evolve/agent/conversations/{cid}/rename", json={"title": "Renamed"})
+        assert resp.status == 200
+        assert forge_code_store.load_conversation(project, cid)["title"] == "Renamed"
+
+        resp = await client.delete(f"/api/evolve/agent/conversations/{cid}")
+        assert resp.status == 200
+        assert forge_code_store.load_conversation(project, cid) is None
 
     _drive(repo, _body)
 

@@ -12,7 +12,7 @@
   const state = {
     conversations: [], activeId: '', conversation: null, liveEvents: [], changes: [], tree: [], treePath: '', artifacts: [], filePreview: null,
     pendingApproval: null, pendingRequest: null, lastContext: {}, running: false, runStartedAt: 0, runStatus: 'ready', source: null,
-    finishing: null, approvalBusy: false, steeringBusy: false, projectRoot: '', terminalTool: '', contextEpoch: 0, runProof: null,
+    finishing: null, approvalBusy: false, steeringBusy: false, projectRoot: '', projectNames: {}, terminalTool: '', contextEpoch: 0, runProof: null,
     pendingHistoryChoice: null, historyChoiceBusy: false,
     runId: '', eventCursor: 0, retryRequest: null, drawerOpen: false, drawerWidth: 360,
   };
@@ -834,6 +834,13 @@
     state.activeId = id;
     state.conversation = data.conversation;
     state.projectRoot = data.conversation.project_root || state.projectRoot;
+    // Repaint the chip HERE, not at the render() below. Everything it needs is
+    // already known; the render is behind the changes and file-tree fetches,
+    // which on a large project take seconds. Sampling the chip 900ms after a
+    // click caught 4 of 36 conversations still showing the pre-load repaint
+    // from clearContextState -- "A new folder for this task" over a task whose
+    // folder was already resolved and sitting in state.
+    updateProjectButton();
     const token = lifecycle().contextToken(state);
     await Promise.all([loadChanges({ token, deferRender: true }), loadTree('', { token, deferRender: true })]);
     if (!(options && options.deferRender)) render();
@@ -908,10 +915,11 @@
     state.activeId = data.conversation.id;
     state.conversation = data.conversation;
     state.projectRoot = data.conversation.project_root || requestedRoot;
-    state.projectLabel = String(projectLabel || '').trim();
+    rememberProjectName(state.projectRoot, projectLabel);
+    updateProjectButton();
     try {
       localStorage.setItem('thomas_code_project_root', state.projectRoot);
-      localStorage.setItem('thomas_code_project_label', state.projectLabel);
+      localStorage.setItem('thomas_code_project_label', knownProjectName(state.projectRoot));
     } catch (error) { recordError(error, 'Project selection could not be saved for the next session.'); }
     const token = lifecycle().contextToken(state);
     await Promise.all([refresh(), loadTree('', { token, deferRender: true })]);
@@ -1435,8 +1443,12 @@
     state.projectRoot = /[\\/](thomas|thomas-dev)[\\/]?$/i.test(_storedRoot) ? '' : _storedRoot;
     if (!state.projectRoot && _storedRoot) { try { localStorage.removeItem('thomas_code_project_root'); } catch (e) {} }
     // Restore the human name alongside the path, or a returning user is back to
-    // reading "exec-25fb7d1499a6" off the chip.
-    state.projectLabel = state.projectRoot ? (localStorage.getItem('thomas_code_project_label') || '') : '';
+    // reading "exec-25fb7d1499a6" off the chip. Filed against the PATH it names,
+    // never held as "the current label": as a single loose value it outlived the
+    // project it belonged to and was then printed over every conversation opened
+    // afterwards (measured: the chip read one project's name while its own
+    // tooltip showed a different project's path).
+    rememberProjectName(state.projectRoot, localStorage.getItem('thomas_code_project_label') || '');
   }
   catch (error) { recordError(error, 'The saved Code project could not be loaded.'); }
   try {
@@ -1450,6 +1462,46 @@
   // anything beneath it, so a basename check would miss code_scratch/game.
   function isSharedScratchRoot(path) {
     return /[\\/]\.thomas[\\/]code_scratch(?:[\\/]|$)/i.test(String(path || ''));
+  }
+
+  // Project names are filed under the folder they name. Windows hands the same
+  // folder back as C:\x and c:/x/ depending on who wrote the path, so a raw
+  // string key would file one project under two names and answer for neither.
+  function projectNameKey(path) {
+    return String(path || '').replace(/[\\/]+$/, '').replace(/\\/g, '/').toLowerCase();
+  }
+
+  function rememberProjectName(root, name) {
+    const key = projectNameKey(root);
+    const value = String(name || '').trim();
+    if (!key || !value) return;
+    state.projectNames[key] = value;
+  }
+
+  function knownProjectName(root) {
+    const key = projectNameKey(root);
+    return key ? (state.projectNames[key] || '') : '';
+  }
+
+  // The names shown on the project picker's cards, so the chip and the picker
+  // call the same folder the same thing. Without it, a project Thomas built is
+  // "exec-25fb7d1499a6" on disk and the chip has nothing better to read: the
+  // request that produced it ("Make a small snake game...") lives only in this
+  // catalogue. Failure is silent on purpose -- every name here has a folder
+  // basename behind it, so an unreachable catalogue costs specificity, not
+  // correctness.
+  async function loadProjectNames() {
+    let projects;
+    try {
+      const response = await fetch('/api/local/projects');
+      if (!response.ok) return false;
+      const data = await response.json();
+      projects = Array.isArray(data && data.projects) ? data.projects : null;
+    } catch (error) { return false; }
+    if (!projects) return false;
+    projects.forEach(project => rememberProjectName(project.root_path, project.request_title || project.name));
+    updateProjectButton();
+    return true;
   }
 
   function projectDisplayLabel() {
@@ -1466,24 +1518,34 @@
     // the work provably will not go. This mirrors that server rule exactly:
     // same condition (unbound task + shared drawer), same outcome.
     //
-    // The guard is checked BEFORE state.projectLabel because the server drops
-    // the drawer no matter what the UI decided to call it.
+    // The guard is checked FIRST because the server drops the drawer no matter
+    // what the UI decided to call the place.
     //
-    // An earlier attempt at this was reverted as "fixes the new task, breaks
-    // the opened one". Measured in the live UI instead of assumed, the two
-    // suspects were both wrong: after clicking a task in the sidebar,
-    // state.activeId IS set and updateProjectButton() DOES re-run. What a
-    // MutationObserver on the chip actually recorded for one sidebar click was
-    // three writes -- the seeded value, then "code_scratch", then the real
-    // project name. The middle one is clearContextState(), which calls
-    // finishBusy() -> updateProjectButton() while activeId is momentarily
-    // empty; it is a transient that the following render() overwrites. Read
-    // during that gap, or on a load whose render never arrives, the chip shows
-    // the unbound label for a conversation that has one. So clearContextState
-    // now clears activeId BEFORE finishBusy repaints, which makes the transient
-    // agree with the state it is drawn from instead of contradicting it.
+    // Two earlier passes hunted this label inside this function and were
+    // reverted. Neither cause was here. Clicking 16 sidebar tasks in the live
+    // UI and recording the chip after each: 14 of the 16 opens answered HTTP
+    // 404, so no load ever happened -- the chip kept describing whatever was
+    // open before (twice the unbound phrase above, twelve times some OTHER
+    // conversation's project). The 404 was the server resolving a conversation
+    // through the project registry while the sidebar had found it by walking
+    // the folders; see _load_conversation in evolve_agent_routes.py. The chip
+    // was reporting the state honestly the whole time.
+    //
+    // The second cause was here: a single state.projectLabel, set when a
+    // project was picked and never cleared, printed that one name over every
+    // conversation opened afterwards. Proven by seeding the stored label with a
+    // marker string: two conversations in two different projects both showed
+    // the marker while their own tooltips showed their real, differing paths.
+    // Names are now filed per folder (knownProjectName), so a name can only
+    // ever appear over the folder it belongs to.
     if (!state.activeId && isSharedScratchRoot(state.projectRoot)) return 'A new folder for this task';
-    if (state.projectLabel) return state.projectLabel;
+    // An OPEN conversation whose folder is the drawer is a different statement:
+    // its work is already there, shared with 94 others on this machine. Naming
+    // it "code_scratch" says nothing and "A new folder for this task" is a
+    // promise about a folder that will never be made. Say where it is.
+    if (isSharedScratchRoot(state.projectRoot)) return 'Shared scratch folder';
+    const named = knownProjectName(state.projectRoot);
+    if (named) return named;
     const base = String(state.projectRoot || '').split(/[\\/]/).filter(Boolean).pop() || '';
     if (!base) return 'Thomas library';
     if (/^exec-[0-9a-f]{6,}$/i.test(base)) return 'Untitled app';
@@ -1559,7 +1621,7 @@
   }
 
   modes().registerAdapter('code', {
-    enter: async () => { adapterActive = true; updateProjectButton(); render(); await refresh(); await adoptOrphanRun(); },
+    enter: async () => { adapterActive = true; updateProjectButton(); render(); void loadProjectNames(); await refresh(); await adoptOrphanRun(); },
     leave,
     refresh,
     renderHistory,
