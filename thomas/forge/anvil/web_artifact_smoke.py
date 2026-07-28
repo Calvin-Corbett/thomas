@@ -252,10 +252,22 @@ def _run_one(
         *[str(value) for value in receipt.get("console_errors") or []],
         *[str(value) for value in receipt.get("resource_errors") or []],
     ]
-    meaningful = int(receipt.get("body_text_chars") or 0) > 0 or bool(receipt.get("canvas"))
+    # A <canvas> in the DOM is not a drawing. A game that renders nothing has
+    # the same markup as a game that renders perfectly, so accepting the element
+    # as proof of rendering passed exactly the builds this check exists to
+    # catch. Only a canvas whose pixels were READ and found to differ from an
+    # untouched one of the same size counts.
+    canvas = receipt.get("canvas") or {}
+    paint = str(canvas.get("paint") or "") if canvas else ""
     if not receipt.get("dom_ready"):
         problems.append("DOMContentLoaded did not complete")
-    if not meaningful:
+    if paint == "blank":
+        # Named separately from "no canvas", and reported even when the page has
+        # text: for a canvas app the canvas IS the page, so surrounding chrome
+        # proves nothing about it, and "no text or canvas" would send whoever
+        # reads this looking for a missing element that is right there.
+        problems.append("the canvas was never drawn to")
+    elif not (int(receipt.get("body_text_chars") or 0) > 0 or bool(canvas)):
         problems.append("page rendered no text or canvas")
     if problems:
         return False, f"{name}: " + "; ".join(problems[:5]), receipt

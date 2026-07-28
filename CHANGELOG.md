@@ -53,6 +53,13 @@ Versioning: Semantic Versioning.
 - **Four results loading at once reloaded each other.** Each finished thumbnail redrew the whole conversation, which recreated every preview frame and restarted its loading from the beginning. With several results in a turn none of them ever finished. They now load as a batch and the conversation is drawn once.
 - **The result of all of this:** Thomas's roguelite now plays inside the conversation that built it, and the browser console on the Code surface is clean — down from 108 errors.
 
+### Fixed (A canvas in the page is not a drawing on the canvas)
+
+- **Thomas checked whether a generated game had rendered by looking for a `<canvas>` tag.** A game that draws nothing has exactly the same markup as a game that draws perfectly, so the check passed the builds it exists to catch. It is the same shape as calling a task done because a file exists.
+- The verifier now **reads the pixels back** and compares them against an untouched canvas of the same size. A canvas that was drawn through and came back empty fails the build, and says so by name — "the canvas was never drawn to" — instead of the old, misleading "page rendered no text or canvas" about an element that is plainly right there.
+- **Two cases are deliberately allowed through, because rejecting working work is the same mistake pointed the other way.** A WebGL canvas reads back empty even while it draws every frame, unless the app asked to preserve its buffer. And a canvas nobody ever requested a drawing context on is leftover markup, not the app's surface — Thomas's own shell page carries one at the default 300×150 while working perfectly by framing the game elsewhere. Both are recorded in the run's evidence rather than silently ignored. A script that crashes before it can draw is still caught, because that raises an error and errors already fail this check.
+- Checked against Thomas's real output before landing: the roguelite and the pacman build pass with their canvases confirmed painted, the museum page passes on text, and the shell page passes as leftover markup.
+
 ### Added (Build identity — which Thomas am I looking at)
 
 - **A small chip in the bottom-right corner of the chat now names the port, the version and the commit** the running server was built from — `:8899 · v0.19.23 · 54507302`. This repository routinely has more than a dozen worktrees checked out at once, several reporting the same version string, and the launcher only printed the version to a console that is closed by the time anyone is looking at the browser. The commit is the part that actually tells two instances apart.

@@ -69,6 +69,57 @@ _SMOKE_HARNESS = r"""
     if (/^(?:pointer|mouse|touch)/i.test(String(type))) state.input_listeners.pointer += 1;
     return originalAddEventListener.call(this, type, listener, options);
   };
+  // Which context a canvas is drawn through decides whether its pixels can be
+  // read back at all. Recorded here, before application scripts run, because
+  // afterwards there is no way to ask a canvas what kind of context it handed
+  // out.
+  const originalGetContext = HTMLCanvasElement.prototype.getContext;
+  HTMLCanvasElement.prototype.getContext = function(kind, ...rest) {
+    const context = originalGetContext.call(this, kind, ...rest);
+    if (context) this.dataset.thomasSmokeContext = String(kind || "");
+    return context;
+  };
+  // "There is a canvas" is not "the page drew something". A game that renders
+  // nothing has the same DOM as a game that renders perfectly, so the element
+  // alone can never tell them apart -- read the pixels instead.
+  //
+  // Returns "painted", "blank", or "unverifiable". Unverifiable is deliberate
+  // and must not fail a build: a WebGL canvas without preserveDrawingBuffer
+  // reads back empty even when it is drawing every frame, and a canvas tainted
+  // by a cross-origin image throws. Claiming those are blank would reject
+  // working work, which is worse than the gap it closes.
+  const paintState = (canvas) => {
+    if (!canvas) return "unverifiable";
+    const width = Number(canvas.width || 0);
+    const height = Number(canvas.height || 0);
+    if (width <= 0 || height <= 0) return "unverifiable";
+    const kind = String(canvas.dataset.thomasSmokeContext || "").toLowerCase();
+    // Nobody ever asked this canvas for a drawing context, so it is leftover
+    // markup rather than the application's surface -- Thomas's own shell page
+    // carries one, at the default 300x150, while working perfectly by framing
+    // the game. Calling that a failed render would block a good delivery, which
+    // is the same mistake as passing a bad one, pointed the other way. A script
+    // that crashes before reaching getContext is still caught: that throws, and
+    // uncaught errors already fail this check.
+    if (!kind) return "unverifiable";
+    if (kind !== "2d") return "unverifiable";
+    try {
+      const blank = document.createElement("canvas");
+      blank.width = width;
+      blank.height = height;
+      return canvas.toDataURL() === blank.toDataURL() ? "blank" : "painted";
+    } catch (_error) {
+      return "unverifiable";
+    }
+  };
+  // Sticky: a game that draws a menu and then clears the canvas for its first
+  // frame has still proved it can draw.
+  const notePaint = (canvas) => {
+    if (state.canvas_paint === "painted") return state.canvas_paint;
+    const observed = paintState(canvas);
+    if (observed === "painted" || !state.canvas_paint) state.canvas_paint = observed;
+    return state.canvas_paint;
+  };
   const observableSignature = (canvas) => {
     const controls = [...document.querySelectorAll("button, [role='button'], input, select, textarea")]
       .map((node) => `${clean(node.textContent)}:${visible(node)}:${Boolean(node.disabled)}`).join("|");
@@ -111,7 +162,9 @@ _SMOKE_HARNESS = r"""
       width: Number(canvas.width || 0),
       height: Number(canvas.height || 0),
       client_width: Number(canvas.clientWidth || 0),
-      client_height: Number(canvas.clientHeight || 0)
+      client_height: Number(canvas.clientHeight || 0),
+      context: String(canvas.dataset.thomasSmokeContext || ""),
+      paint: notePaint(canvas)
     } : null;
     const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(state))));
     document.documentElement.setAttribute("data-thomas-smoke", encoded);
@@ -168,6 +221,7 @@ _SMOKE_HARNESS = r"""
           }, 120);
         }
         const canvas = document.querySelector("canvas");
+        notePaint(canvas);  // sample before input, so a title screen counts
         const keyTarget = canvas || document.body || document;
         if (canvas && Number(canvas.clientWidth || canvas.width) > 0 && Number(canvas.clientHeight || canvas.height) > 0) {
           const keyboardBefore = observableSignature(canvas);
