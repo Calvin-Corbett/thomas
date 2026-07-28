@@ -613,8 +613,18 @@ async def _drain_and_record(
         #
         # What the flag does decide by itself is status: :70 and :606 map it
         # straight to completed-versus-failed. So a run that saved nothing can
-        # still be presented as completed. That is the defect -- a wrong verdict
-        # shown to the owner, not silent destruction of their evidence.
+        # be presented as completed -- a wrong verdict shown to the owner, not
+        # silent destruction of their evidence.
+        #
+        # Scope, stated narrowly on purpose. Both failing tests exercise
+        # CANCELLATION: one cancels the request mid-drain, the other fails a
+        # receipt save mid-retry. That the flag can be True against an empty
+        # store is demonstrated THERE. It is not demonstrated on an ordinary
+        # successful run, and I did not show that it happens. The unconditional
+        # assignment is a defect either way -- a self-certifying flag is wrong
+        # whatever triggers it -- but approach this as "cancellation leaves the
+        # confirmation lying" rather than "confirmation is broken everywhere",
+        # or the fix will be aimed too wide.
         #
         # And the confirmation is CIRCULAR, which is why waiting longer does not
         # help. `_await_recording` awaits the recorder task and then calls
