@@ -3,9 +3,21 @@
 The Exhaustive pipeline's verify stage calls ``verify_deliverable``, which
 dispatches on the task's family (code / research / data / ui / docs / general) to a
 checker. The point is *executable* proof rather than LLM judgment: code is verified
-by actually running the workspace's linter (and, in the live wiring, its tests);
-other families get lighter structural checks. Checkers are injectable so the
-dispatch is unit-testable without spawning subprocesses.
+by actually running the workspace's linter; other families get a structural check
+of the workspace. Checkers are injectable so the dispatch is unit-testable without
+spawning subprocesses.
+
+Know what this gate does NOT cover before trusting it:
+
+- Only ``code`` has a real checker, and that checker is ruff, so it verifies
+  Python and nothing else. A workspace of HTML and JavaScript is reported as
+  ``ruff_not_applicable`` rather than clean.
+- No tests are run here. An earlier version of this docstring said the live
+  wiring also runs tests. It does not.
+- Web output is verified in the Forge/Code path (``forge/anvil/build_verify.py``),
+  which parses scripts, finds unreferenced and duplicated assets, and boots the
+  page in a headless browser to confirm the canvas was drawn to. None of that
+  runs from here.
 """
 
 from __future__ import annotations
@@ -32,10 +44,22 @@ Checker = Callable[[str, str], "VerificationResult"]
 
 
 def run_ruff_check(work_dir: str, result_text: str = "") -> VerificationResult:
-    """Real code verification: run ruff over the workspace. Executable proof.
+    """Code verification for PYTHON workspaces: run ruff. Executable proof.
 
-    Defensive: if there is no workspace or ruff is unavailable, it does not fail the
-    task — it reports that the check could not run (the live wiring also runs tests).
+    Defensive: with no workspace, or no ruff, it does not fail the task — it
+    reports that the check could not run.
+
+    It also reports when it does not APPLY, which is the common case for what
+    Thomas actually builds. `ruff check` over a folder of HTML and JavaScript
+    prints "No Python files found", says "All checks passed!" and exits 0, so a
+    web project came back `passed=True` with the evidence "ruff clean" — a
+    Python linter certifying a game it is structurally incapable of reading. A
+    deliberately broken JavaScript file passes this check.
+
+    Nothing here verifies web output. The Forge/Code path has real checks for it
+    (parse, orphaned assets, duplicate includes, and a headless browser that
+    confirms the canvas was actually drawn to); this marketplace path has none
+    of them, and saying so is better than a green tick that means nothing.
     """
     _ = result_text
     if not work_dir:
@@ -53,7 +77,15 @@ def run_ruff_check(work_dir: str, result_text: str = "") -> VerificationResult:
     except Exception as exc:  # pragma: no cover - environment dependent
         return VerificationResult(True, "code", f"lint runner error: {exc}", ("error",))
     ok = proc.returncode == 0
-    evidence = (proc.stdout or proc.stderr or "").strip()[:1000] or "ruff clean"
+    output = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+    if ok and "no python files found" in output.lower():
+        return VerificationResult(
+            True,
+            "code",
+            "no Python files in this workspace, so ruff verified nothing; web output is unchecked here",
+            ("ruff_not_applicable",),
+        )
+    evidence = output[:1000] or "ruff clean"
     return VerificationResult(ok, "code", evidence, ("ruff",))
 
 
@@ -103,7 +135,13 @@ def _generic_checker(work_dir: str, result_text: str) -> VerificationResult:
     return VerificationResult(False, "general", "no workspace files and no answer text", ("empty",))
 
 
-# Default real checkers by family. Production injects richer ones (e.g. pytest).
+# Checkers by family. `checkers=` exists so this dispatch is unit-testable, and
+# NOTHING in thomas/ passes it -- so this dict is what actually runs, and any
+# family absent from it gets the generic structural check. The comment here used
+# to say production injects richer ones such as pytest. It does not, and never
+# did; grep for `checkers=` outside tests and there are no hits. A note claiming
+# a safety property that is not there is worse than no note, because the next
+# reader stops looking.
 DEFAULT_CHECKERS: dict[str, Checker] = {
     "code": run_ruff_check,
 }
