@@ -616,11 +616,20 @@ async def _drain_and_record(
         # still be presented as completed. That is the defect -- a wrong verdict
         # shown to the owner, not silent destruction of their evidence.
         #
-        # The fix is to confirm by reading the store rather than by arriving
-        # here, and it needs care in BOTH directions: too strict and good runs
-        # report failure. Not attempted at the end of a long session. See also
-        # `_await_recording`, awaited before this and meant to mean persistence
-        # has settled -- the failing tests suggest it does not always.
+        # And the confirmation is CIRCULAR, which is why waiting longer does not
+        # help. `_await_recording` awaits the recorder task and then calls
+        # `_recording_status`, which decides by reading `persistence_confirmed`
+        # off this very dict -- the one set True here before anything looked.
+        # The status check asks the result whether it saved, and on this path
+        # the result always says yes. Its other branches are honest: missing,
+        # recording and cancelled each return False with a persistence_state.
+        # Only the success path certifies itself.
+        #
+        # So tightening `_recording_status` cannot fix this; it only ever
+        # inspects the same dict. The truth has to enter HERE, from a store
+        # read. It needs care in BOTH directions -- too strict and good runs
+        # report failure -- which is why it was not attempted at the end of a
+        # long session rather than left half-done.
         result = {
             "persistence_confirmed": True,
             "returncode": rc,
