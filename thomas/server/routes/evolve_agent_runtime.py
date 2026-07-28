@@ -495,6 +495,33 @@ async def _drain(proc: Any, transcript: Path) -> bool:
     return transcript_confirmed and proc.returncode is not None
 
 
+def _agent_turn_is_in_store(root: Path, cid: str, turn: dict[str, Any]) -> bool:
+    """Confirm from the STORE that one recorded agent turn is really on disk.
+
+    This is a read, not a claim: the conversation file is re-parsed and the
+    turn is matched on the identity its writer stamped onto it -- the
+    microsecond timestamp plus this run's id. Matching one turn rather than
+    comparing whole conversations is deliberate: a legitimate concurrent write
+    (a rename, a later turn) must not read as a lost write, or every good run
+    starts reporting failure, which is worse than the bug this closes.
+    """
+
+    stamp = str(turn.get("ts") or "")
+    if not stamp:
+        return False
+    run_id = str(turn.get("run_id") or "")
+    saved = forge_code_store.load_conversation(root, cid)
+    if not isinstance(saved, dict):
+        return False
+    return any(
+        isinstance(candidate, dict)
+        and candidate.get("role") == "agent"
+        and str(candidate.get("ts") or "") == stamp
+        and str(candidate.get("run_id") or "") == run_id
+        for candidate in saved.get("turns") or []
+    )
+
+
 async def _drain_and_record(
     proc: Any,
     transcript: Path,
@@ -577,6 +604,12 @@ async def _drain_and_record(
         )
         if persisted is None:
             raise RuntimeError("agent turn store returned no persisted conversation")
+        # The confirmation is taken HERE, from a store read, and as close to the
+        # write as it can be taken. `append_agent_turn` hands back the
+        # conversation it wrote; its last turn is the one this run added, and
+        # `_agent_turn_is_in_store` goes back to disk to find it again.
+        recorded_turn = (persisted.get("turns") or [{}])[-1]
+        persistence_confirmed = _agent_turn_is_in_store(root, cid, recorded_turn)
         # Close the loop into "My Stuff": a SUCCESSFUL run that produced a coherent
         # deliverable (the detector decides -- a built page/doc/image/data file, not
         # a code-only edit) becomes a durable, openable entry pointing back at this
@@ -591,57 +624,30 @@ async def _drain_and_record(
                 title=str(conv.get("title") or ""),
                 model=model,
             )
-        # UNRESOLVED, and worth reading before trusting this line. This flag is
-        # set because execution REACHED here, not because anything read the
-        # store back. Every other branch above returns it False with a
-        # persistence_state; only the success path asserts rather than checks.
+        # This flag used to be set True because execution REACHED this line,
+        # while every other branch returned it False with a persistence_state.
+        # That made the confirmation CIRCULAR: `_await_recording` awaits the
+        # recorder and then calls `_recording_status`, which decides by reading
+        # `persistence_confirmed` off this very dict. The status check asked the
+        # result whether it saved, and on this path the result always said yes,
+        # so no amount of tightening `_recording_status` or waiting longer could
+        # ever catch a lost write. The truth now enters above, from a store read.
         #
-        # It can be true when nothing was written. tests/
-        # test_evolve_agent_persistence.py:277 proves it: persistence_confirmed
-        # is True while list_conversations() returns []. That test has been
-        # failing on dev, and its sibling at :308 shows a conversation from a
-        # SUCCESSFUL earlier request gone entirely after a later retry failed.
-        #
-        # Scope of the damage, stated carefully because my first version of this
-        # comment overstated it. unified_code_mode.js reads the flag in three
-        # places. At :612 it is one conjunct of `durable`, ANDed with a
-        # conversation reload and `runIsDurable`, and that last one genuinely
-        # reads the store -- it requires the RELOADED conversation to contain an
-        # agent turn carrying this run's id. So the destructive clear at :614
-        # does not fire on a false flag alone; it is guarded. Same at :1140,
-        # which does not consult this flag at all.
-        #
-        # What the flag does decide by itself is status: :70 and :606 map it
-        # straight to completed-versus-failed. So a run that saved nothing can
-        # be presented as completed -- a wrong verdict shown to the owner, not
-        # silent destruction of their evidence.
-        #
-        # Scope, stated narrowly on purpose. Both failing tests exercise
-        # CANCELLATION: one cancels the request mid-drain, the other fails a
-        # receipt save mid-retry. That the flag can be True against an empty
-        # store is demonstrated THERE. It is not demonstrated on an ordinary
-        # successful run, and I did not show that it happens. The unconditional
-        # assignment is a defect either way -- a self-certifying flag is wrong
-        # whatever triggers it -- but approach this as "cancellation leaves the
-        # confirmation lying" rather than "confirmation is broken everywhere",
-        # or the fix will be aimed too wide.
-        #
-        # And the confirmation is CIRCULAR, which is why waiting longer does not
-        # help. `_await_recording` awaits the recorder task and then calls
-        # `_recording_status`, which decides by reading `persistence_confirmed`
-        # off this very dict -- the one set True here before anything looked.
-        # The status check asks the result whether it saved, and on this path
-        # the result always says yes. Its other branches are honest: missing,
-        # recording and cancelled each return False with a persistence_state.
-        # Only the success path certifies itself.
-        #
-        # So tightening `_recording_status` cannot fix this; it only ever
-        # inspects the same dict. The truth has to enter HERE, from a store
-        # read. It needs care in BOTH directions -- too strict and good runs
-        # report failure -- which is why it was not attempted at the end of a
-        # long session rather than left half-done.
+        # A correction to the note that used to stand here, because it named
+        # evidence that does not hold. It cited
+        # tests/test_evolve_agent_persistence.py:277 -- persistence_confirmed
+        # True while list_conversations() returned [] -- as proof the flag can be
+        # true against an empty store. Measured: it is not. That request sends no
+        # project_root, so the run is recorded into the scratch project
+        # (~/.thomas/code_scratch), while the assertion reads the CATALOG root.
+        # The turn was written; the test looked in the wrong place. So no case of
+        # this flag lying has actually been demonstrated -- not under
+        # cancellation, not on an ordinary run. The self-certifying assignment
+        # was still wrong, and is now gone, but it is a closed hole rather than a
+        # reproduced failure, and the next reader should not go hunting for a
+        # data-loss bug that this evidence never showed.
         result = {
-            "persistence_confirmed": True,
+            "persistence_confirmed": persistence_confirmed,
             "returncode": rc,
             "changed_files": changed,
             "artifacts": forge_code_store.detect_artifacts(changed),
@@ -650,6 +656,19 @@ async def _drain_and_record(
             "outcome": outcome,
             "report": report,
         }
+        if not persistence_confirmed:
+            # A run whose turn cannot be found in the store did not finish,
+            # whatever the process exit code says. Report it exactly as the
+            # store-failure branch below does, so status, stop and the SSE done
+            # frame all agree.
+            result.update(
+                {
+                    "persistence_error": "recorded agent turn was not found in the store",
+                    "ok": False,
+                    "noop": False,
+                    "outcome": "persistence_failed",
+                }
+            )
     except (AttributeError, KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
         log.warning("evolve agent: recording run outcome failed", exc_info=True)
         result = {

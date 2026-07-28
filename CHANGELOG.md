@@ -7,6 +7,12 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A Code run no longer certifies its own saving)
+
+- **`persistence_confirmed` was set because execution reached the line, not because anything read the store back.** In `thomas/server/routes/evolve_agent_runtime.py`, the success path of `_drain_and_record` assigned the flag `True` unconditionally while every other branch returned it `False` with a `persistence_state`. The confirmation was circular: `_await_recording` awaits the recorder and then asks `_recording_status`, which decides by reading `persistence_confirmed` off that same result dict — so the check asked the result whether it had saved, and on the success path the result always said yes. No amount of tightening the status check or waiting longer could ever have caught a lost write.
+- The flag is now **observed**: `_agent_turn_is_in_store` re-reads the conversation from disk and looks for the exact agent turn that was just written, matched on the microsecond timestamp and this run's id. A run whose turn cannot be found reports `persistence_confirmed: false`, `outcome: persistence_failed` and `ok: false`, exactly like the existing store-failure branch, so status, stop and the SSE done frame agree. Matching one turn rather than comparing whole conversations keeps a legitimate concurrent write (a rename, a later turn) from reading as a lost write — too strict here would make good runs report failure, which is worse than the bug.
+- Correction to the note that stood at that line: it cited `tests/test_evolve_agent_persistence.py` as proof the flag could be true against an empty store. Measured, it is not. That request sent no `project_root`, so the run was recorded into the scratch project while the assertion read the catalog root — the turn was written, the test looked elsewhere. No case of this flag lying has actually been reproduced; the self-certifying assignment was wrong on its own terms and is now gone.
+
 ### Changed
 
 - Chat can no longer infer autopilot or preflight behavior from prompt wording; those actions require structured runtime state.
