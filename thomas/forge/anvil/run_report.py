@@ -334,7 +334,8 @@ def _build_rubric_mapping(
             "evidence": evidence,
         }
     ]
-    for criterion in _extract_criteria(goal, definition):
+    criteria = _extract_criteria(goal, definition)
+    for criterion in criteria:
         # Sub-criteria are never individually re-verified by the engine, so they
         # are honestly reported as unverified rather than inferred as met.
         mapping.append(
@@ -342,6 +343,40 @@ def _build_rubric_mapping(
                 "criterion": criterion,
                 "status": "unverified",
                 "evidence": "not individually verified by an engine check; see overall outcome",
+            }
+        )
+    if not criteria:
+        # _extract_criteria only matches BULLET lines. A goal typed as prose --
+        # which is how people actually type them -- produced no sub-criteria at
+        # all, so the whole rubric was the single "met" above, and its criterion
+        # text is the goal restated in full. Read by a person, "complete the
+        # requested goal: ... Start, Pause and Reset buttons that all work =>
+        # met" says those buttons were checked. Nothing checked them.
+        #
+        # The failure is reachability, not wording: with no bullets the
+        # "unverified" status could not be produced AT ALL, so a rubric with
+        # nothing unverified was guaranteed rather than earned. That is the
+        # same shape as an empty result being read as a clean one.
+        #
+        # No requirement is invented from the prose -- splitting a sentence into
+        # criteria would put words in the goal's mouth and be wrong in a new
+        # way. This states only what is true: nothing here was checked one by
+        # one, and finishing is not the same as satisfying.
+        mapping.append(
+            {
+                "criterion": "the specific requirements stated in this goal",
+                "status": "unverified",
+                # Says nothing about WHICH way the line above went. An earlier
+                # wording asserted that it "reports the run finished and its
+                # engine checks passed", which is a canned claim rather than a
+                # reading of this run -- on a failed run (seen live: a rejected
+                # model id, exit 1, not_met above it) the sentence was simply
+                # false. A fix for overclaiming must not ship its own.
+                "evidence": (
+                    "the goal was not written as a checklist, so no individual requirement was "
+                    "extracted or checked on its own; the outcome above is about the run as a "
+                    "whole, not about each requirement in it"
+                ),
             }
         )
     return mapping

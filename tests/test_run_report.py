@@ -125,6 +125,88 @@ def test_rubric_mapping_maps_outcome_onto_goal_and_acceptance_bullets() -> None:
     }
 
 
+def test_a_prose_goal_still_reports_its_requirements_as_unverified() -> None:
+    """A goal nobody wrote as a checklist must not come back entirely met.
+
+    ``_extract_criteria`` only matches bullet lines, so a goal typed as prose
+    yields no sub-criteria and the rubric was a single "met" whose criterion
+    text restated every requirement in the goal. Read by a person, that says
+    each one was checked. Nothing checked any of them.
+
+    Observed on a real run: this exact goal produced one rubric line, status
+    ``met``, evidence ``1 file(s) changed; engine checks: 2 passed, 0 failed``
+    -- while the browser smoke check inside those two had recorded "the pause
+    may not have engaged". The verdict outran what any check examined.
+
+    The point of the assertion is reachability: for a prose goal the
+    ``unverified`` status was not merely absent, it was IMPOSSIBLE, so a clean
+    rubric was guaranteed rather than earned.
+    """
+
+    report = build_run_report(
+        goal=(
+            "Build a single-page countdown timer in index.html. It counts down from 60 "
+            "seconds, shows the remaining time in large text, and has Start, Pause and "
+            "Reset buttons that all work."
+        ),
+        transcript=_FULL_RUN_TRANSCRIPT,
+        changed_files=["index.html"],
+        returncode=0,
+        ok=True,
+        outcome="completed",
+        reason="1 file(s) changed",
+    )
+    rubric = report["rubric_mapping"]
+    assert rubric[0]["status"] == "met"  # the RUN completed; that part is true
+    statuses = [entry["status"] for entry in rubric]
+    assert "unverified" in statuses, (
+        f"a prose goal reported no unverified requirement: {rubric}"
+    )
+    unverified = next(entry for entry in rubric if entry["status"] == "unverified")
+    # It must say WHY, not just carry the word.
+    assert "not" in unverified["evidence"].lower()
+
+
+def test_the_prose_catch_all_does_not_claim_the_run_passed() -> None:
+    """The honest line must stay honest on a run that failed.
+
+    Caught live rather than in review: a run rejected for an unsupported model
+    id exited 1 and mapped ``not_met``, and the catch-all underneath it still
+    read "the run finished and its engine checks passed". It was a canned
+    sentence about the success case, not a reading of this run -- the same
+    overclaiming this whole entry exists to prevent.
+    """
+
+    report = build_run_report(
+        goal="Build a tip calculator that updates the total as you type.",
+        transcript='{"fc":"error","text":"agent loop exited 1"}',
+        changed_files=[],
+        returncode=1,
+        ok=False,
+        outcome="failed",
+        reason="exited 1",
+    )
+    rubric = report["rubric_mapping"]
+    assert rubric[0]["status"] == "not_met"
+    catch_all = next(entry for entry in rubric if entry["status"] == "unverified")
+    lowered = catch_all["evidence"].lower()
+    assert "passed" not in lowered, f"claims a pass on a failed run: {catch_all['evidence']}"
+    assert "finished" not in lowered, f"claims completion on a failed run: {catch_all['evidence']}"
+
+
+def test_a_goal_with_bullets_does_not_also_get_the_prose_catch_all() -> None:
+    """The other direction: when requirements WERE extracted, say nothing extra.
+
+    The catch-all exists because no requirement could be named. A bulleted goal
+    names them, and each already reports its own ``unverified`` line -- adding a
+    second, vaguer one would be noise that makes the honest lines easier to skip.
+    """
+
+    rubric = _full_run_report()["rubric_mapping"]
+    criteria = [entry["criterion"] for entry in rubric]
+    assert criteria[1:] == ["render the widget header", "persist widget state"]
+
+
 def test_failed_run_reports_honest_risks_and_not_met_rubric() -> None:
     transcript = "\n".join(
         [
