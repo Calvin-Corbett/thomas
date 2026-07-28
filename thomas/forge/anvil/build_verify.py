@@ -286,9 +286,13 @@ def _orphaned_web_assets(cwd: str | Path, files: list[str]) -> list[str]:
     failures: list[str] = []
     for path in candidates:
         if path.name not in blob:
+            # "takes effect", because this checks stylesheets too and a
+            # stylesheet does not run. A message that misdescribes the file it
+            # is about invites the reader to decide it does not really apply --
+            # and an orphaned CSS file is just as dead as an orphaned script.
             failures.append(
-                f"{path.name} was written but nothing loads it -- no script tag, import or reference "
-                f"anywhere in the project, so none of it runs"
+                f"{path.name} was written but nothing loads it -- no script tag, link, import or "
+                f"reference anywhere in the project, so none of it takes effect"
             )
     return failures
 
