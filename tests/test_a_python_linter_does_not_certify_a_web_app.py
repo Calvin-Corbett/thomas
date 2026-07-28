@@ -80,8 +80,13 @@ def test_a_missing_workspace_is_still_reported_as_skipped(tmp_path) -> None:
 def test_nothing_in_the_codebase_injects_richer_checkers() -> None:
     """The dispatch table is what actually runs. The old comment claimed
     production injected pytest; it never did, and a note asserting a safety
-    property that is absent stops the next reader from looking."""
-    assert set(DEFAULT_CHECKERS) == {"code"}
+    property that is absent stops the next reader from looking.
+
+    `ui` joined `code` on 2026-07-28, when the deterministic web preflight was
+    hoisted into `thomas.tools.web_preflight` so this layer could call it. The
+    point of the assertion is unchanged: whatever is in this dict is the whole
+    truth about what runs, because nothing anywhere passes `checkers=`."""
+    assert set(DEFAULT_CHECKERS) == {"code", "ui"}
 
 
 def test_a_non_code_family_gets_the_structural_check(tmp_path) -> None:

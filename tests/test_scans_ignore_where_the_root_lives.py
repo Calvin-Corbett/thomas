@@ -23,7 +23,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # Every site that filters directory names while walking a tree.
 SITES = [
-    ("thomas/forge/anvil/build_verify.py", "_orphaned_web_assets"),
+    # Moved out of thomas/forge/anvil/build_verify.py on 2026-07-28 so the
+    # marketplace verifier could call it too. The path has to follow the code:
+    # left pointing at build_verify this check would find no filtering lines
+    # there and pass by having nothing to look at.
+    ("thomas/tools/web_preflight.py", "orphaned_web_assets"),
     ("thomas/tools/visual_edit.py", "_iter_files"),
     ("thomas/tools/design_system.py", "_iter_files"),
     ("thomas/server/exhaustive_artifact_evidence.py", "rglob"),
