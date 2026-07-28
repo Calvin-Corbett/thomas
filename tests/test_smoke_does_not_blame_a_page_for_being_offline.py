@@ -36,6 +36,19 @@ def test_a_port_does_not_confuse_the_host_check() -> None:
     assert _is_external_reference("SCRIPT: https://example.com:8443/lib.js")
 
 
+def test_a_protocol_relative_cdn_arrives_already_resolved() -> None:
+    """`<script src="//cdn.example.com/lib.js">` has no scheme in the markup, so
+    a scheme-matching test looks like it would miss it. It does not: the harness
+    records `target.src`, and that DOM property returns the RESOLVED absolute
+    URL rather than the raw attribute, so the scheme is present by the time this
+    sees it. Pinned because the reasoning is not visible at the call site, and
+    the obvious "fix" -- adding a bare `//` branch -- would classify a
+    protocol-relative LOCAL path as external and wave through a real failure.
+    """
+    assert _is_external_reference("SCRIPT: https://cdn.example.com/lib.js")
+    assert not _is_external_reference("SCRIPT: //cdn.example.com/lib.js")
+
+
 def test_an_unparseable_line_is_treated_as_local() -> None:
     """Unknown means it still counts against the build: a resource failure we
     cannot attribute is not something to wave through."""
