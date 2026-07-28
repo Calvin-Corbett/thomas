@@ -1,136 +1,76 @@
-import json
-import tempfile
+"""RETIRED 2026-07-28: pins that the legacy V1 chat engine stays unwired.
+
+What used to be here: one test that sabotaged Chat V2 registration with
+``RuntimeError("legacy-chat-required")`` and asserted the run_id/seq/usage
+contract of the ndjson stream a legacy V1 ``/api/chat`` would have produced. It
+had been failing with 404, because no such route is ever registered.
+
+The removal of that fallback was deliberate, and this file now proves it rather
+than contradicting it. ``register_chat_routes`` still exists for isolated
+compatibility apps, but nothing in ``thomas/`` calls it, and the production
+server documents that it passes ``register_primary_chat=False``. If someone
+wires it back into the live app, ``/api/chat`` would gain a second, shadowed
+handler running a parallel agent engine -- these assertions fail first.
+
+See ``tests/test_server_chat_endpoint_registration.py`` for what the live
+endpoint actually guarantees, in both the healthy and the failed direction.
+"""
+
+from __future__ import annotations
+
 import unittest
-from unittest.mock import patch
+from pathlib import Path
 
-from aiohttp.test_utils import AioHTTPTestCase
-
-from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
-from thomas.core.events import AgentEvent, EventType
-from thomas.server.app import create_app
+_THOMAS_ROOT = Path(__file__).resolve().parents[1] / "thomas"
 
 
-def _parse_ndjson(blob: str):
-    out = []
-    for raw in str(blob or "").splitlines():
-        line = raw.strip()
-        if not line:
-            continue
-        out.append(json.loads(line))
-    return out
+def _python_sources() -> list[Path]:
+    return sorted(p for p in _THOMAS_ROOT.rglob("*.py") if p.is_file())
 
 
-class _FakeAgentLoopContract:
-    def __init__(self, run_cfg, llm, tools, **kwargs):  # noqa: ANN001
-        _ = run_cfg
-        _ = llm
-        _ = tools
-        _ = kwargs
-
-    async def run(self, prompt, *, mode="auto", tools_policy="auto", token_economy="optimal", **kwargs):  # noqa: ANN001
-        _ = prompt
-        _ = kwargs
-        yield AgentEvent(
-            type=EventType.AGENT_START,
-            data={
-                "route": {"path": "swarm", "confidence": 1.0},
-                "mode": str(mode),
-                "tools_policy": str(tools_policy),
-                "autonomy_level": 3,
-                "autonomy_name": "Auto",
-            },
-        )
-        yield AgentEvent.agent_done(
-            text="SWARM_CONTRACT_OK",
-            iterations=1,
-            tool_calls=0,
-            token_report={
-                "rules_of_road": {
-                    "signals": {"writes_detected": True},
-                }
-            },
+class TestLegacyPrimaryChatStaysRetired(unittest.TestCase):
+    def test_nothing_in_thomas_calls_register_chat_routes(self):
+        callers: list[str] = []
+        for path in _python_sources():
+            text = path.read_text(encoding="utf-8", errors="replace")
+            if "register_chat_routes(" not in text:
+                continue
+            for line in text.splitlines():
+                stripped = line.strip()
+                if "register_chat_routes(" not in stripped:
+                    continue
+                # The definition itself and the shim's re-export are expected.
+                if stripped.startswith(("def ", "from ", "import ")):
+                    continue
+                callers.append(f"{path.relative_to(_THOMAS_ROOT.parent)}: {stripped}")
+        self.assertEqual(
+            callers,
+            [],
+            "the legacy V1 chat engine must stay unwired; Chat V2 owns POST /api/chat",
         )
 
-
-class TestServerSwarmEventContract(AioHTTPTestCase):
-    def setUp(self) -> None:
-        super().setUp()
-        self._tmpdir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
-
-    def tearDown(self) -> None:
-        try:
-            self._tmpdir.cleanup()
-        finally:
-            super().tearDown()
-
-    async def get_application(self):
-        cfg = AppConfig(
-            models={
-                "local": ModelConfig(
-                    name="local",
-                    provider="openai_compat",
-                    base_url="http://127.0.0.1:11434/v1",
-                    model="dummy",
-                )
-            },
-            default_model="local",
-            memory=MemoryConfig(root=self._tmpdir.name),
-            server=ServerConfig(access_mode="local"),
+    def test_chat_v2_registration_is_the_only_live_api_chat_registrar(self):
+        registrars: list[str] = []
+        for path in _python_sources():
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for line in text.splitlines():
+                stripped = line.strip()
+                if 'add_post("/api/chat"' not in stripped and "add_post('/api/chat'" not in stripped:
+                    continue
+                registrars.append(str(path.relative_to(_THOMAS_ROOT.parent)).replace("\\", "/"))
+        # chat_v2_registration.py registers it for real. chat_aiohttp_handlers.py
+        # has the guarded legacy line that no caller reaches, chat_aiohttp.py
+        # carries it inside a documentation string literal, and
+        # app_routes_init.py claims it with the 503 sentinel when V2 fails.
+        self.assertEqual(
+            sorted(set(registrars)),
+            [
+                "thomas/server/app_routes_init.py",
+                "thomas/server/routes/chat_aiohttp.py",
+                "thomas/server/routes/chat_aiohttp_handlers.py",
+                "thomas/server/routes/chat_v2_registration.py",
+            ],
         )
-        with patch(
-            "thomas.server.routes.chat_v2.register_chat_v2_routes",
-            side_effect=RuntimeError("legacy-chat-required"),
-        ):
-            return create_app(cfg)
-
-    async def test_swarm_stream_events_have_run_id_and_usage_contract(self):
-        sess_resp = await self.client.post("/api/session/new")
-        self.assertEqual(sess_resp.status, 200)
-        sid = str((await sess_resp.json()).get("session_id") or "")
-        self.assertTrue(sid)
-
-        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopContract):
-            resp = await self.client.post(
-                "/api/chat",
-                json={
-                    "session_id": sid,
-                    "profile": "local",
-                    "mode": "swarm",
-                    "token_economy": "max",
-                    "text": "run swarm now",
-                },
-            )
-
-        self.assertEqual(resp.status, 200)
-        self.assertIn("application/x-ndjson", str(resp.headers.get("Content-Type") or ""))
-
-        events = _parse_ndjson(await resp.text())
-        self.assertTrue(events)
-
-        run_ids = set()
-        for event in events:
-            self.assertIsInstance(event.get("type"), str)
-            rid = str(event.get("run_id") or "").strip()
-            self.assertTrue(rid)
-            run_ids.add(rid)
-        self.assertEqual(len(run_ids), 1)
-
-        done_events = [e for e in events if e.get("type") == "done"]
-        self.assertEqual(len(done_events), 1)
-        done = done_events[0]
-        self.assertEqual(done.get("text"), "SWARM_CONTRACT_OK")
-        expected_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-        self.assertEqual(done.get("usage"), expected_usage)
-        self.assertEqual(done.get("run_usage"), expected_usage)
-        self.assertEqual(done.get("session_usage"), expected_usage)
-        self.assertIn("rules_of_road", done)
-        token_report = done.get("token_report") or {}
-        self.assertIn("rules_of_road", token_report)
-        self.assertEqual((done.get("token_economy") or {}).get("applied"), "max")
-        self.assertEqual((token_report.get("token_economy") or {}).get("applied"), "max")
-        self.assertTrue(bool(done.get("rules_of_road", {}).get("signals", {}).get("writes_detected")))
-        seqs = [int(e.get("seq")) for e in events]
-        self.assertEqual(seqs, sorted(seqs))
 
 
 if __name__ == "__main__":

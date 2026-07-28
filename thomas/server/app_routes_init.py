@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from thomas.core.config import AppConfig
 from thomas.server.app_keys import (
+    APP_DIAGNOSTICS,
     APP_ENGINE_MANAGER,
     APP_MEMORY,
     APP_MUTATING_ROUTE_POLICY_SNAPSHOT,
@@ -983,10 +984,79 @@ def _setup_routes_and_handlers(
 
     _register_deliverable_routes(app)
 
+    def _register_chat_unavailable_sentinel(app_ref: web.Application, detail: str) -> None:
+        """Answer the chat endpoints with a deterministic 503 instead of nothing.
+
+        Chat V2 is the ONLY registrar of POST /api/chat, so a registration
+        failure used to leave the route unclaimed: the browser got a bare 404
+        that reads like a client bug, and the sole trace was one log line in a
+        console nobody had open. The sentinel makes the failure self-reporting
+        at the exact place the caller notices it.
+        """
+
+        async def api_chat_unavailable(request: web.Request) -> web.Response:
+            if callable(_require_api_access):
+                _require_api_access(request)
+            log.error("POST %s rejected: Chat V2 never registered (%s)", request.path, detail)
+            return web.json_response(
+                {
+                    "error": (
+                        "Chat is unavailable: the Chat V2 route bundle failed to register at "
+                        "startup, and no other module serves /api/chat."
+                    ),
+                    "code": "chat_v2_registration_failed",
+                    "detail": detail,
+                },
+                status=503,
+            )
+
+        app_ref.router.add_post("/api/chat", api_chat_unavailable)
+        app_ref.router.add_post("/api/v2/chat", api_chat_unavailable)
+
+    def _chat_registration_failed(app_ref: web.Application, detail: str) -> None:
+        """Make a missing chat endpoint loud on every surface that reports health."""
+        log.error(
+            "Chat V2 route registration FAILED (%s). POST /api/chat and /api/v2/chat now answer "
+            "503 chat_v2_registration_failed, and /api/health reports chat as degraded.",
+            detail,
+        )
+        diagnostics = app_ref.get(APP_DIAGNOSTICS)
+        if isinstance(diagnostics, dict):
+            diagnostics["chat"] = False
+        _register_chat_unavailable_sentinel(app_ref, detail)
+        try:
+            from thomas.server.issue_ledger import record_issue
+
+            record_issue(
+                surface="server",
+                kind="chat_endpoint_missing",
+                message="Chat V2 routes failed to register; POST /api/chat answers 503",
+                context={"detail": detail},
+            )
+        except (ImportError, ModuleNotFoundError, OSError, TypeError, ValueError) as ledger_exc:
+            log.debug("Issue ledger unavailable for the chat registration failure: %s", ledger_exc)
+
     def _register_chat_v2_routes(app_ref: web.Application, cfg_ref: AppConfig) -> None:
-        """Register the unified V2 chat routes when the supporting modules are available."""
+        """Register the unified V2 chat routes, or fail loudly when they cannot load.
+
+        DECIDED 2026-07-28. V2 owns POST /api/chat and nothing else registers
+        it: `register_chat_routes` in chat_aiohttp_handlers is exported by a
+        shim but called from nowhere, and its own docstring says production
+        passes register_primary_chat=False so `/api/chat` "cannot execute this
+        parallel engine". That removal was deliberate, so no legacy fallback is
+        wired here -- doing so would resurrect a second chat engine, and could
+        not work anyway: the legacy swarm bridge imports
+        thomas.server.routes.chat_swarm, which does not exist. The swarm tests
+        that forced this failure to reach legacy chat were retired in the same
+        commit; Chat V2 already treats "swarm" as an alias of token economy
+        "max" (_LEGACY_MODE_MIGRATIONS in chat_v2.py).
+
+        What IS fixed here is the silence: a failure now degrades health, files
+        an issue-ledger entry, and serves 503 rather than leaving the endpoint
+        unclaimed.
+        """
         if not callable(_require_api_access):
-            log.warning("Chat V2 routes unavailable: missing API access guard")
+            _chat_registration_failed(app_ref, "missing API access guard")
             return
         try:
             from thomas.server.routes.chat_v2 import register_chat_v2_routes
@@ -1001,27 +1071,11 @@ def _setup_routes_and_handlers(
                 require_api_access=_require_api_access,
             )
         except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
-            # UNRESOLVED, and worth knowing before trusting this line. V2 owns
-            # POST /api/chat. Nothing else registers it: `register_chat_routes`
-            # in chat_aiohttp_handlers is exported by a shim but called from
-            # nowhere in the server, and its own docstring says production
-            # passes register_primary_chat=False so that `/api/chat` "cannot
-            # execute this parallel engine".
-            #
-            # So when this except fires, the server keeps booting with NO chat
-            # endpoint at all, and the only trace is this warning in a console
-            # that is closed by the time anyone is looking at the browser.
-            #
-            # Two tests (test_server_swarm_mode_telemetry,
-            # test_server_swarm_event_contract) force this failure with
-            # RuntimeError("legacy-chat-required") and then expect legacy chat
-            # to answer. It cannot. They fail with 404, and have been failing.
-            # Either that fallback was deliberately removed and those tests are
-            # obsolete, or it is wanted and was never wired -- the code says the
-            # first, the tests say the second, and guessing wrong either
-            # resurrects a parallel chat engine or deletes a real safety net.
-            # Left for a decision rather than settled quietly here.
-            log.warning("Chat V2 routes unavailable, so POST /api/chat is NOT registered: %s", e)
+            _chat_registration_failed(app_ref, f"{type(e).__name__}: {e}")
+        else:
+            diagnostics = app_ref.get(APP_DIAGNOSTICS)
+            if isinstance(diagnostics, dict):
+                diagnostics["chat"] = True
 
     def _register_evolve_loop_routes(app_ref: web.Application) -> None:
         """Register the self-recursive evolve loop dashboard API."""

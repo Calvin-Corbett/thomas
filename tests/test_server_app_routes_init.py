@@ -991,7 +991,14 @@ def test_route_registration_logs_module_failures(tmp_path: Path, monkeypatch: py
     assert "Mission routes unavailable:" in text
     assert "Observability routes unavailable:" in text
     # Chat V2 owns POST /api/chat and nothing else registers it, so this failure
-    # leaves the server running with no chat endpoint at all. The line says so
-    # now, because "unavailable" alone reads like a degraded feature rather than
-    # the primary surface being gone.
-    assert "Chat V2 routes unavailable, so POST /api/chat is NOT registered:" in text
+    # used to leave the server running with no chat endpoint at all -- a bare 404
+    # and one log line. It is now an ERROR, and the route is claimed by a 503
+    # sentinel so the failure reports itself where the caller meets it.
+    assert "Chat V2 route registration FAILED" in text
+    assert "503 chat_v2_registration_failed" in text
+    chat_routes = [
+        resource
+        for resource in app.router.resources()
+        if str(resource.canonical or "") in {"/api/chat", "/api/v2/chat"}
+    ]
+    assert len(chat_routes) == 2, "the chat endpoints must stay claimed when Chat V2 cannot register"

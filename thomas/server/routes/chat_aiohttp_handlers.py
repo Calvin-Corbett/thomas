@@ -44,6 +44,18 @@ def register_chat_routes(
 
     The production server passes ``register_primary_chat=False`` so `/api/chat`
     is owned by the V2 route bundle and cannot execute this parallel engine.
+
+    Settled 2026-07-28: nothing in ``thomas/`` calls this function at all, so
+    the V1 primary-chat path is retired rather than merely disabled, and
+    ``app_routes_init`` deliberately does NOT fall back to it when Chat V2
+    fails to register. Two things make a fallback impossible as well as
+    unwanted: the explicit-mode bridge in ``chat_modes.maybe_handle_swarm_mode``
+    imports ``thomas.server.routes.chat_swarm``, a module that does not exist,
+    so "swarm" cannot execute here either way; and Chat V2 has already folded
+    the legacy mode names into token-economy aliases
+    (``_LEGACY_MODE_MIGRATIONS`` in ``chat_v2.py`` maps swarm/batch -> "max").
+    A Chat V2 failure now serves a 503 sentinel and degrades ``/api/health``
+    instead of resurrecting this engine.
     """
 
     async def api_chat(request: web.Request) -> web.StreamResponse:
