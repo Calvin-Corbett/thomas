@@ -1063,6 +1063,11 @@ async def test_session_export_and_delete_return_verifiable_receipts() -> None:
     )
     delete_response = await mod.handle_session_delete(delete_request)
     delete_payload = json.loads(delete_response.text)
+    # Exact equality on purpose. A deletion receipt is a claim about what was
+    # destroyed, so an unexpected field means the claim changed shape and should
+    # be read before it is accepted -- which is exactly how this caught up with
+    # `task_records_removed` being added when deleting a chat began deleting the
+    # task records behind it too. Zero here because this session ran no tasks.
     assert delete_payload == {
         "deleted": True,
         "session_id": "sess-private",
@@ -1072,6 +1077,7 @@ async def test_session_export_and_delete_return_verifiable_receipts() -> None:
             "thread_id": "sess-private",
             "deleted_rows": 3,
         },
+        "task_records_removed": 0,
     }
     assert store.deleted == ["sess-private"]
     assert memory.forgotten == ["sess-private"]
