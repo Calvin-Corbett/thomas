@@ -591,6 +591,30 @@ async def _drain_and_record(
                 title=str(conv.get("title") or ""),
                 model=model,
             )
+        # UNRESOLVED, and worth reading before trusting this line. This flag is
+        # set because execution REACHED here, not because anything read the
+        # store back. Every other branch above returns it False with a
+        # persistence_state; only the success path asserts rather than checks.
+        #
+        # It can be true when nothing was written. tests/
+        # test_evolve_agent_persistence.py:277 proves it: persistence_confirmed
+        # is True while list_conversations() returns []. That test has been
+        # failing on dev, and its sibling at :308 shows a conversation from a
+        # SUCCESSFUL earlier request gone entirely after a later retry failed.
+        #
+        # The consequence is not a wrong field. unified_code_mode.js reads it in
+        # three places, and at :612 it decides `durable` -- which at :614 and
+        # again at :1140 clears state.liveEvents and state.artifacts, on the
+        # belief the work is safely stored. So a false confirmation wipes the
+        # run's evidence from the screen as well, leaving no copy anywhere while
+        # the run reports success.
+        #
+        # The fix is to confirm by reading the store rather than by arriving
+        # here, and it needs care in BOTH directions: too strict and good runs
+        # start reporting failure, too loose and evidence keeps being cleared
+        # when nothing was saved. Not attempted at the end of a long session.
+        # See also `_await_recording`, which is awaited before this and is
+        # supposed to mean persistence has settled.
         result = {
             "persistence_confirmed": True,
             "returncode": rc,
