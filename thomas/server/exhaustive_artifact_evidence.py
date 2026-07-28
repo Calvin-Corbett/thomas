@@ -31,7 +31,15 @@ def _artifact_evidence(
     root = Path(work_dir)
     if not root.is_dir():
         return False, [], ["workspace_missing"]
-    rows = [path for path in root.rglob("*") if path.is_file() and not any(part.startswith(".") for part in path.parts)]
+    # Hidden-file test against the path WITHIN the workspace. Against the
+    # absolute path any dotted ancestor disqualified everything below it -- and
+    # Thomas keeps his workspaces under ~/.thomas -- so the evidence list came
+    # back empty and a run that produced real artifacts could not prove it.
+    rows = [
+        path
+        for path in root.rglob("*")
+        if path.is_file() and not any(part.startswith(".") for part in path.relative_to(root).parts)
+    ]
     relative = {path.relative_to(root).as_posix().casefold(): path for path in rows}
     evidence = sorted(relative)
     issues: list[str] = ["invalid_expected_path"] * invalid_count

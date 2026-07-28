@@ -322,7 +322,11 @@ class ProjectElementIndex:
         for path in self._root.rglob("*"):
             if not path.is_file():
                 continue
-            if any(part in _SKIP_DIRS for part in path.parts):
+            # Relative to the root being scanned, not the absolute path. A
+            # project under ~/.thomas or a checkout inside a .venv would
+            # otherwise match on an ancestor and skip every file it contains,
+            # leaving nothing to edit and no error to explain why.
+            if any(part in _SKIP_DIRS for part in path.relative_to(self._root).parts):
                 continue
             if path.suffix.lower() in _CSS_EXTS or path.suffix.lower() in _MARKUP_EXTS:
                 yield path

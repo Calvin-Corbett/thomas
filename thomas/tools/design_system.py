@@ -485,7 +485,14 @@ class DesignSystemScanner:
     def _iter_files(self):
         if not self.root.is_dir():
             return
-        all_paths = [p for p in self.root.rglob("*") if p.is_file() and not any(part in _SKIP_DIRS for part in p.parts)]
+        # Relative parts: an absolute path carries the root's own location, so a
+        # project stored under ~/.thomas or inside a .venv would match on an
+        # ancestor and yield nothing at all.
+        all_paths = [
+            p
+            for p in self.root.rglob("*")
+            if p.is_file() and not any(part in _SKIP_DIRS for part in p.relative_to(self.root).parts)
+        ]
         all_paths.sort(key=lambda p: str(p).replace("\\", "/"))
         yield from all_paths[: self.max_files]
 
