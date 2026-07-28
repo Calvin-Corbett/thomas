@@ -18,6 +18,16 @@ Know what this gate does NOT cover before trusting it:
   which parses scripts, finds unreferenced and duplicated assets, and boots the
   page in a headless browser to confirm the canvas was drawn to. None of that
   runs from here.
+- ``design-ui`` maps to family ``ui``, which has no checker at all, so the task
+  type whose whole purpose is building a UI gets only the structural check.
+
+Do not close that gap by importing the Forge checks here. ``_architecture.py``
+declares ``marketplace`` may depend on core/tools/plugins/server, and NOT on
+``forge`` — the import gate will reject it, and CLAUDE.md asks that existing
+cross-layer imports be inverted rather than joined by new ones. The real fix is
+to hoist the deterministic web preflight (script parse, orphaned assets,
+duplicate includes) into a layer both paths already depend on, and have both
+call it. That is a refactor, not a wiring change.
 """
 
 from __future__ import annotations
