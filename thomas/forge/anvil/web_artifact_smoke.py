@@ -276,7 +276,11 @@ def _run_one(
         # text: for a canvas app the canvas IS the page, so surrounding chrome
         # proves nothing about it, and "no text or canvas" would send whoever
         # reads this looking for a missing element that is right there.
-        problems.append("the canvas was never drawn to")
+        # Plain first, precise second. The owner reads these lines too, and
+        # "the canvas was never drawn to" means nothing to someone who does not
+        # write web code -- while the repair loop still needs to know it is the
+        # canvas specifically.
+        problems.append("the page shows a blank picture area: nothing was ever drawn to the canvas")
     elif not (int(receipt.get("body_text_chars") or 0) > 0 or bool(canvas)):
         problems.append("page rendered no text or canvas")
     if problems:

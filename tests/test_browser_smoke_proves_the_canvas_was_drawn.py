@@ -50,7 +50,10 @@ class TestCanvasPaintIsProved(unittest.TestCase):
 
         self.assertTrue(result.attempted)
         self.assertFalse(result.ok, "an untouched canvas must not be called rendered")
-        self.assertIn("canvas was never drawn to", result.summary)
+        # Plain language first: the owner reads these lines, and "the canvas was
+        # never drawn to" means nothing to someone who does not write web code.
+        self.assertIn("blank picture area", result.summary)
+        self.assertIn("nothing was ever drawn to the canvas", result.summary)
 
     def test_a_canvas_nobody_ever_drew_through_is_not_a_failure(self) -> None:
         """Thomas's own shell page carries a leftover canvas at the default

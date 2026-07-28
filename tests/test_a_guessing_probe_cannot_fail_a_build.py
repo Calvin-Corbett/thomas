@@ -63,10 +63,22 @@ def test_a_note_reaches_the_summary_rather_than_being_dropped() -> None:
 
 def test_real_page_defects_still_fail() -> None:
     """The checks that READ the artifact are the ones that found true defects,
-    and none of them are softened here."""
-    text = SMOKE.read_text(encoding="utf-8")
+    and none of them are softened here.
 
-    assert 'receipt.get("errors")' in text, "uncaught JS errors must still fail"
-    assert 'receipt.get("console_errors")' in text
-    assert "local_failures" in text, "a missing LOCAL asset must still fail"
-    assert "the canvas was never drawn to" in text
+    Comments are stripped before searching. An earlier version of this test
+    matched the blank-canvas message anywhere in the file, and when that message
+    was reworded the old phrasing survived inside a comment explaining the
+    change -- so the guard kept passing while nothing produced the string. A
+    test satisfied by a comment is the exact rubber stamp it exists to prevent,
+    which is worth remembering: even a check written against this failure mode
+    fell into it.
+    """
+    code_only = "\n".join(
+        line for line in SMOKE.read_text(encoding="utf-8").splitlines() if not line.strip().startswith("#")
+    )
+
+    assert 'receipt.get("errors")' in code_only, "uncaught JS errors must still fail"
+    assert 'receipt.get("console_errors")' in code_only
+    assert "local_failures" in code_only, "a missing LOCAL asset must still fail"
+    assert "problems.append(" in code_only, "a blank canvas must still be recorded as a problem"
+    assert "nothing was ever drawn to the canvas" in code_only
