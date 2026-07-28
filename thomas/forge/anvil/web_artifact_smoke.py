@@ -286,7 +286,11 @@ def _run_one(
     # this harness could actually serve, and the reader should know what it
     # could not reach rather than infer full coverage from a clean line.
     offline = f"; {len(blocked)} external resource(s) not fetched offline" if blocked else ""
-    notes = "; ".join(str(value) for value in receipt.get("notes") or [])
+    # Prefixed, because joined with the interactions a note reads as another
+    # thing that happened: "clicked:Start Over; clicked a start-like control and
+    # saw no change" gives a reader no way to tell the observation from the
+    # action. A note is a caveat about the check, not a result of it.
+    notes = "; ".join(f"note: {value}" for value in receipt.get("notes") or [])
     return True, f"{name}: browser boot clean; {interactions}{offline}{'; ' + notes if notes else ''}", receipt
 
 
