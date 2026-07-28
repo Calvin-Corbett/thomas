@@ -60,6 +60,12 @@ Versioning: Semantic Versioning.
 - **Two cases are deliberately allowed through, because rejecting working work is the same mistake pointed the other way.** A WebGL canvas reads back empty even while it draws every frame, unless the app asked to preserve its buffer. And a canvas nobody ever requested a drawing context on is leftover markup, not the app's surface — Thomas's own shell page carries one at the default 300×150 while working perfectly by framing the game elsewhere. Both are recorded in the run's evidence rather than silently ignored. A script that crashes before it can draw is still caught, because that raises an error and errors already fail this check.
 - Checked against Thomas's real output before landing: the roguelite and the pacman build pass with their canvases confirmed painted, the museum page passes on text, and the shell page passes as leftover markup.
 
+### Fixed (Code that loads itself at runtime was verified by nothing)
+
+- **A change to a file the page loads dynamically ran no browser check at all.** Thomas only browser-tests HTML a change touched, plus HTML found to reference a changed file — and that search read the markup. Anything assembled while the page runs (`createElement('script')`, a computed path, a dynamic `import()`) is invisible to a tag reader, so "no page uses this" and "no page *says* it uses this" looked identical, and the second silently meant no verification.
+- This was not hypothetical. Thomas had split his game's renderer into its own file and loaded it dynamically — **every later edit to that renderer shipped unverified.** It now correctly resolves to the game page, including when the page loads a module that loads the renderer, rather than naming it directly.
+- The wider search only runs for files no page was found to reference, so a file with a real owner stays matched precisely and a page that merely mentions it in a comment is not dragged in.
+
 ### Added (Build identity — which Thomas am I looking at)
 
 - **A small chip in the bottom-right corner of the chat now names the port, the version and the commit** the running server was built from — `:8899 · v0.19.23 · 54507302`. This repository routinely has more than a dozen worktrees checked out at once, several reporting the same version string, and the launcher only printed the version to a console that is closed by the time anyone is looking at the browser. The commit is the part that actually tells two instances apart.

@@ -339,6 +339,7 @@ def _browser_smoke_files(cwd: str | Path, changed_files: list[str]) -> list[str]
         for path in changed_paths
         if path.suffix.lower() in _SMOKE_LINKED_ASSET_SUFFIXES and path.is_file() and path.is_relative_to(root)
     ]
+    claimed: set[Path] = set()
     if assets:
         candidates = sorted({*root.rglob("*.html"), *root.rglob("*.htm")})
         for candidate in candidates[:_SMOKE_DISCOVERY_MAX_HTML]:
@@ -370,7 +371,57 @@ def _browser_smoke_files(cwd: str | Path, changed_files: list[str]) -> list[str]
                     linked.add(resolved)
             if any(asset in linked for asset in assets):
                 html_paths.add(candidate.resolve())
+                claimed |= {asset for asset in assets if asset in linked}
+        # Only widen the search for assets no page was found to reference. An
+        # asset with a real owner is already covered precisely, and searching
+        # for its name as text would drag in any page that merely mentions it.
+        html_paths |= _owners_by_mention(root, [a for a in assets if a not in claimed], html_paths)
     return sorted(str(path.relative_to(root)).replace("\\", "/") for path in html_paths)
+
+
+def _owners_by_mention(root: Path, assets: list[Path], already: set[Path]) -> set[Path]:
+    """Find pages that load a changed asset in a way no tag parser can see.
+
+    The parser above reads markup, so it only finds assets referenced by a
+    literal `<script src>` or `<link href>`. Anything built at runtime --
+    `createElement('script')`, a computed path, a dynamic `import()` -- is
+    invisible to it, and "no owner found" is indistinguishable from "this asset
+    has no owner": the change ships with no browser check at all. Thomas hit
+    exactly this. He split a game's renderer into its own file and loaded it
+    dynamically, so every later edit to that renderer was verified by nothing.
+
+    A plain substring search for the filename finds those, and the bias is
+    deliberately asymmetric: matching a page that merely names the file in a
+    comment costs one extra browser run, while missing one costs a false green.
+    One hop through JavaScript is included, because a page usually loads a
+    module that loads the renderer rather than reaching it directly.
+
+    Callers pass only the assets no page was found to reference. Text matching
+    is the last resort, not a supplement -- an asset with a real owner is
+    already covered precisely, and widening there would pull in every page that
+    happens to name it in a comment.
+    """
+
+    wanted = set(assets)
+    if not wanted:
+        return set()
+    names = {path.name for path in wanted}
+    scripts = sorted(p for p in root.rglob("*.js") if p.is_file() and p.resolve() not in wanted)
+    pages = sorted({*root.rglob("*.html"), *root.rglob("*.htm")})
+
+    def mentions(path: Path, needles: set[str]) -> bool:
+        try:
+            if path.stat().st_size > _SMOKE_DISCOVERY_MAX_BYTES:
+                return False
+            source = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            return False
+        return any(name in source for name in needles)
+
+    # A script that names the asset is treated as carrying it, so the page that
+    # loads THAT script is the one worth running.
+    names |= {p.name for p in scripts[:_SMOKE_DISCOVERY_MAX_HTML] if mentions(p, names)}
+    return {p.resolve() for p in pages[:_SMOKE_DISCOVERY_MAX_HTML] if mentions(p, names)} - already
 
 
 def _is_test_file(path: str) -> bool:
