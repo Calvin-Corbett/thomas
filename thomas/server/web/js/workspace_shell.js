@@ -38,14 +38,32 @@
     const path = location.pathname.replace(/^\/+|\/+$/g, "").replace(/[^a-z0-9_-]+/gi, "-");
     return path || "chat";
   }
+  // Thomas's own frames share this origin. A Code result does NOT: a generated
+  // page is previewed from its own isolated loopback origin, so posting to it
+  // with our origin as the target is refused and logs a warning for every frame
+  // on every relay -- and it should be refused. Thomas's theme and UI-edit
+  // traffic is internal, and an app he generated is untrusted content that has
+  // no business receiving it. A srcdoc or about:blank frame reports an empty
+  // src and inherits this origin, so it still counts as ours.
+  function isOurFrame(frame) {
+    const src = frame && frame.getAttribute ? String(frame.getAttribute("src") || "") : "";
+    if (!src || src.startsWith("about:")) return true;
+    try {
+      return new URL(src, location.href).origin === location.origin;
+    } catch (_) {
+      return false;
+    }
+  }
   function sendTheme(frame, theme, vars) {
-    if (!frame || !frame.contentWindow) return false;
+    if (!frame || !frame.contentWindow || !isOurFrame(frame)) return false;
     frame.contentWindow.postMessage({ type: "thomas:theme", theme: safeTheme(theme), vars: vars || null }, location.origin);
     return true;
   }
   function relayFrames(message, skipWindow) {
     document.querySelectorAll("iframe").forEach((frame) => {
-      if (frame.contentWindow && frame.contentWindow !== skipWindow) frame.contentWindow.postMessage(message, location.origin);
+      if (frame.contentWindow && frame.contentWindow !== skipWindow && isOurFrame(frame)) {
+        frame.contentWindow.postMessage(message, location.origin);
+      }
     });
   }
   function hasVisibleWorkspaceFrame() {

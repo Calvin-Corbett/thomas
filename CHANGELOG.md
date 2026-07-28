@@ -77,6 +77,17 @@ Versioning: Semantic Versioning.
 - A tool's declared parameters now decide what it accepts. A name is a label; the schema is the contract. Tools that publish no schema are still required to supply a path, so the guard stays closed by default.
 - Found by watching Thomas build a page and print `Invalid file path argument for write tool diff.preview_patch` into his own activity feed — the last of the name-matching classifiers, still deciding something it had no business deciding.
 
+### Added (Edit UI now works in Code, like everywhere else)
+
+- **Code mode was the one surface that never joined UI Edit Mode.** Settings registers 62 editable regions, Chat 19, Library 27 — Code registered **zero**. Pressing `Ctrl+Shift` over Code gave you an editor with nothing in it to edit, and the container Code draws into had no identity either, so you could move the box holding Code but nothing inside it.
+- Code's conversation, activity drawer, Outputs, project files and steering form are now live editable regions with owner-readable names and declared minimum sizes. **Stop, Checkpoint and Approve are marked protected** — a control that kills a running build or commits your work should not be a drag target.
+- **"AI edit this region" no longer throws you out of Code.** It always switched to Chat and typed the prompt there, so asking Code to change part of itself lost your place and handed the request to the dispatcher instead of to the surface that actually builds. In Code it now stays in Code.
+- Verified in the browser rather than by counting attributes: the region picker lists Code's regions by name, the conversation region selects and moves by keyboard, and **the layout survives Code rebuilding its entire surface**, which it does on every redraw.
+
+### Fixed (Thomas stopped talking to pages he generated)
+
+- Thomas broadcast his internal theme and UI-edit messages to **every** frame on the page. That was invisible while Code results had no origin of their own; now that each generated app gets an isolated one, every broadcast was refused by the browser and logged — once per preview, per message. The refusal was correct, so Thomas now skips those frames rather than widening who he shouts at: a page he generated is untrusted content and has no business receiving his internal state.
+
 ### Added (Build identity — which Thomas am I looking at)
 
 - **A small chip in the bottom-right corner of the chat now names the port, the version and the commit** the running server was built from — `:8899 · v0.19.23 · 54507302`. This repository routinely has more than a dozen worktrees checked out at once, several reporting the same version string, and the launcher only printed the version to a console that is closed by the time anyone is looking at the browser. The commit is the part that actually tells two instances apart.
