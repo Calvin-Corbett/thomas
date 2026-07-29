@@ -125,3 +125,73 @@ def test_a_folder_name_cannot_act_as_a_git_option(
     assert (hostile / ".git").is_dir()
     returncode, _stdout, _stderr = _run_git(hostile, ["rev-parse", "--verify", "HEAD"])
     assert returncode == 0
+
+
+def test_resolve_conversation_root_finds_a_conversation_with_no_registry_row(tmp_path):
+    """An unbound conversation resolves to the project it is really in.
+
+    ``conversation_project`` falls back to the catalog root when there is no
+    registry row, so every read through it comes back empty -- and an empty read
+    is indistinguishable from "this conversation has nothing in it". Measured on
+    a live workspace, that is how the CLI's multi-turn history returned 0 turns
+    for 110 of the 113 conversations that have real turns.
+    """
+
+    from thomas.forge.anvil import forge_code_store
+
+    catalog = _repo(tmp_path / "catalog")
+    project = _repo(tmp_path / "project")
+
+    # `project` becomes a known root because a DIFFERENT conversation is bound
+    # there; the one under test is written beside it with no row of its own.
+    forge_code_projects.bind_conversation(catalog, "fc_bound", project)
+    orphan = forge_code_store.new_conversation(project, title="No registry row")
+    cid = orphan["id"]
+    assert forge_code_projects.conversation_metadata(catalog, cid) is None
+
+    # The registry-only answer is the catalog, where the file is not.
+    assert forge_code_projects.conversation_project(catalog, cid) == catalog.resolve()
+    assert forge_code_store.load_conversation(catalog, cid) is None
+
+    resolved = forge_code_projects.resolve_conversation_root(catalog, cid)
+    assert resolved == project.resolve()
+    assert forge_code_store.load_conversation(resolved, cid) is not None
+
+
+def test_resolve_conversation_root_keeps_the_binding_when_it_is_right(tmp_path):
+    """The other direction: a bound conversation is not sent wandering.
+
+    The walk must only engage when the bound root does not hold the file, or a
+    conversation could be answered by whichever root happened to be scanned
+    first. An unknown id must also come back as the binding, so the caller's own
+    not-found handling still runs instead of a silent substitution.
+    """
+
+    from thomas.forge.anvil import forge_code_store
+
+    catalog = _repo(tmp_path / "catalog")
+    project = _repo(tmp_path / "project")
+
+    conversation = forge_code_store.new_conversation(project, title="Bound and present")
+    cid = conversation["id"]
+    forge_code_projects.bind_conversation(catalog, cid, project)
+
+    assert forge_code_projects.resolve_conversation_root(catalog, cid) == project.resolve()
+    # An id nothing holds falls back to the binding rather than inventing a root.
+    assert forge_code_projects.resolve_conversation_root(catalog, "fc_nothing_holds_this") == catalog.resolve()
+
+
+def test_the_conversation_path_helper_matches_the_store_layout(tmp_path):
+    """Pin the private path join against the store's own resolver.
+
+    ``forge_code_projects`` sits under ``forge_code_store`` in the import order,
+    so it joins the path itself rather than reaching upward for it. That is only
+    safe while the two agree, and nothing else would notice if the store moved
+    its files -- the resolver would simply stop finding anything, which reads as
+    "no conversations" rather than as a break.
+    """
+
+    from thomas.forge.anvil import forge_code_store
+
+    expected = forge_code_store._conversation_path(tmp_path, "fc_layout")
+    assert forge_code_projects._conversation_file(tmp_path, "fc_layout") == expected

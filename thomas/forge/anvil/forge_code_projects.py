@@ -581,6 +581,53 @@ def conversation_roots(catalog_root: str | Path) -> list[Path]:
     return roots
 
 
+def resolve_conversation_root(catalog_root: str | Path, conversation_id: str) -> Path:
+    """The root a conversation's file is ACTUALLY in, not the one it is filed under.
+
+    ``conversation_project`` answers from the registry, and falls back to the
+    catalog root when a conversation has no row. Plenty have none -- they were
+    written straight into a project by a path that never called
+    ``bind_conversation`` -- so that fallback names a folder the file is not in,
+    and every read through it comes back empty.
+
+    An empty read is the dangerous part: it is indistinguishable from "this
+    conversation has nothing in it", so callers treat it as a fact rather than a
+    miss. Measured on this workspace, the CLI's multi-turn history did exactly
+    that -- ``history_turns(repo_root, cid)`` returned 0 turns for **110 of 113**
+    conversations that have real turns, and the caller's own comment described
+    the empty result as the normal no-history case.
+
+    So this checks the binding first and then walks the same roots the Code
+    history endpoint walks. The conversation id itself is the check: a root that
+    does not hold the file is skipped, and if none does, the binding is returned
+    unchanged so the caller's own not-found handling still runs.
+    """
+
+    catalog = Path(catalog_root)
+    bound = conversation_project(catalog, conversation_id)
+    if not conversation_id:
+        return bound
+    if _conversation_file(bound, conversation_id).is_file():
+        return bound
+    for root in conversation_roots(catalog):
+        if root != bound and _conversation_file(root, conversation_id).is_file():
+            return root
+    return bound
+
+
+def _conversation_file(root: Path, conversation_id: str) -> Path:
+    """Where a conversation's JSON lives under ``root``.
+
+    Kept beside the resolver rather than imported from ``forge_code_store``:
+    this module sits UNDER the store in the import order, and reaching upward
+    for one path join would invert that for no benefit. The layout is asserted
+    against the store's own resolver in
+    ``tests/test_forge_code_projects.py`` so the two cannot drift apart.
+    """
+
+    return Path(root) / ".thomas" / "evolve" / "agent" / "conversations" / f"{conversation_id}.json"
+
+
 def forget_conversation(catalog_root: str | Path, conversation_id: str) -> None:
     registry = _load_registry(catalog_root)
     if registry.pop(str(conversation_id or ""), None) is not None:

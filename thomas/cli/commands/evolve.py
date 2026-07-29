@@ -523,9 +523,19 @@ def evolve_dispatch_command(
     history: list[dict] = []
     if conversation_id:
         try:
-            from thomas.forge.anvil import forge_code_store
+            from thomas.forge.anvil import forge_code_projects, forge_code_store
 
-            history = forge_code_store.history_turns(root, conversation_id)
+            # Resolve WHERE the conversation is before reading it. `root` is the
+            # repo/catalog root, and a conversation's turns live in the project
+            # its run worked in -- which, now that every task gets its own
+            # folder, is almost never the same place. Reading from `root`
+            # returned nothing for 110 of the 113 conversations on this
+            # workspace that have real turns, and the handler below treats an
+            # empty history as the ordinary no-history case, so a follow-up like
+            # "explain what you just did" was dispatched with no prior turns and
+            # nothing said so.
+            history_root = forge_code_projects.resolve_conversation_root(root, conversation_id)
+            history = forge_code_store.history_turns(history_root, conversation_id)
         except (ImportError, ModuleNotFoundError, OSError, RuntimeError, TypeError, ValueError, KeyError) as exc:
             # History is additive; never block a dispatch because prior turns
             # could not be read.
