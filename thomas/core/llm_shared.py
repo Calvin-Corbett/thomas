@@ -6,6 +6,10 @@ import inspect
 from dataclasses import dataclass, field
 from typing import Any
 
+# HTTP statuses every provider transport treats as worth another attempt.
+# Shared so a change to the retry policy reaches all providers at once.
+RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
 
 def callable_accepts_keyword(func: Any, keyword: str) -> bool:
     """Return whether a callable explicitly or variadically accepts a keyword."""

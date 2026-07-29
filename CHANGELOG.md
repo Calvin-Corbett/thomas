@@ -7,6 +7,10 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (Housekeeping in the code that talks to the AI providers — nothing changes for you)
+
+- The Claude/Anthropic half of Thomas's model-streaming code was moved into its own file, away from the OpenAI and ChatGPT halves it never shared anything with. Replies still stream the same way from every provider; this is purely tidying, and there is nothing to notice or do differently.
+
 ### Fixed (The report said nobody opened a page, directly beneath the browser check that had just opened it)
 
 - **A check that FAILED is the opposite of a check that never happened.** `_unopened_page_risks` matched the evidence against `BROWSER_SMOKE_OK` and `BROWSER_SMOKE_SKIPPED`. A failing run says neither — it says `BROWSER_SMOKE_FAILED` — so it fell through to the silence branch and printed `report.html — no browser check ran for this change` next to the failing browser check that had just examined that exact page. Seen on a real run whose smoke reported `Could not load sales.csv (HTTP 404)`.
