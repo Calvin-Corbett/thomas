@@ -66,7 +66,15 @@
 .tc-code-artifacts { margin-top: 11px; display: flex; flex-direction: column; gap: 8px; }
 .tc-code-artifacts-head { font: 600 10.5px/1.2 var(--font-label, inherit); letter-spacing: .06em; text-transform: uppercase; color: var(--c-muted); }
 .tc-code-artifact { display: flex; flex-direction: column; gap: 8px; }
-.tc-code-artifact-row { display: flex; align-items: stretch; gap: 7px; max-width: 420px; }
+/* Was capped at 420px inside a column twice that wide, so the card sat in the
+   left half with dead space beside it. It is the result of the whole run --
+   let it use the room. */
+.tc-code-artifact-row { display: flex; align-items: stretch; gap: 7px; max-width: 680px; }
+.tc-code-artifact-pop { display: grid; place-items: center; width: 42px; flex: 0 0 auto; cursor: pointer;
+  border: 1px solid var(--c-border); border-radius: 12px; background: var(--c-surface); color: var(--c-dim); text-decoration: none; transition: all .14s; }
+.tc-code-artifact-pop:hover, .tc-code-artifact-pop:focus-visible { border-color: var(--c-accent); color: var(--c-text); }
+.tc-code-artifact-pop:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.tc-code-artifact-pop i { font-size: 16px; }
 .tc-code-artifact-save { display: grid; place-items: center; width: 42px; flex: 0 0 auto; cursor: pointer;
   border: 1px solid var(--c-border-2); border-radius: 12px; background: var(--c-surface); color: var(--c-accent); }
 .tc-code-artifact-save:hover, .tc-code-artifact-save:focus-visible { border-color: var(--c-accent); }
@@ -81,8 +89,20 @@
 }
 .tc-code-artifact-open:hover, .tc-code-artifact-open:focus-visible { border-color: var(--c-accent); }
 .tc-code-artifact-open:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
-.tc-code-artifact-thumb { position: relative; width: 86px; height: 96px; flex: 0 0 auto; background: #fff; overflow: hidden; border-right: 1px solid var(--c-border); }
-.tc-code-artifact-thumb iframe { position: absolute; top: 0; left: 0; width: 245px; height: 274px; border: 0; transform: scale(.351); transform-origin: top left; pointer-events: none; }
+/* A DESKTOP-shaped window onto the page, scaled down whole. It used to render
+   the page into a 245x274 portrait viewport and shrink that, so a layout built
+   for ~1200px wide was shown through a narrow keyhole -- the calculator came
+   out as an unreadable vertical sliver, which read as "the thing it made looks
+   squashed". Same idea as a browser tab preview: show the real proportions. */
+.tc-code-artifact-thumb { position: relative; width: 168px; height: 105px; flex: 0 0 auto; background: #fff; overflow: hidden; border-right: 1px solid var(--c-border); }
+/* Scoped through .tc-code-artifacts on purpose. `.tc-code-artifact iframe` in
+   unified_code_results.css -- the rule for the big INLINE preview -- forces
+   `width: 100%; height: 230px`, and it ties this selector on specificity and
+   wins on source order. So the thumbnail was never a scaled page at all: it was
+   a 167x230 portrait strip of a layout built for ~1200px, which is exactly why
+   what Thomas made looked squashed in its own card. Measured, not guessed --
+   the iframe computed to 167.429 x 230 while this rule asked for 1280 x 800. */
+.tc-code-artifacts .tc-code-artifact-thumb iframe { position: absolute; top: 0; left: 0; width: 1280px; height: 800px; border: 0; transform: scale(.13125); transform-origin: top left; pointer-events: none; }
 .tc-code-artifact-thumb.is-icon { display: grid; place-items: center; background: var(--c-accent-soft); }
 .tc-code-artifact-thumb.is-icon i { font-size: 26px; color: var(--c-accent); }
 .tc-code-artifact-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 0 13px; }

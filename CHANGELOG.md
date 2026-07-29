@@ -7,6 +7,18 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (Code mode: pick any model, see what Thomas built, open it in a tab)
+
+Four things the owner named while using Code, each measured on a 1920×1080 screen rather than a narrow pane.
+
+- **You could only reach one model.** The picker was one flat row per model across every profile — 19 rows, 15 of them unusable — so the four OpenAI models that *do* work were buried and the menu read as "you have one model". It is now grouped by **family** (OpenAI, Anthropic, Google, xAI, Meta Llama, Mistral, On this PC, Other providers), each collapsed with a `4 ready` / `needs key` count, expanding as an accordion so opening one closes the rest and the menu keeps its height. The family holding the current model is opened once, when the menu is first drawn.
+  - Families are matched on the profile **name**, never on `provider`: `openai_compat` is a wire protocol, not a vendor, and Gemini, Mistral, Groq and xAI all speak it — matching the provider filed every one of them under "OpenAI". Caught by reading the rendered list rather than the code.
+  - The auto-open rule had to be seeded **once**, not per render. Re-applying it every draw meant the accordion closed the other families and this immediately reopened the selected one, leaving two expanded. Verified by driving the real menu: on open only OpenAI is expanded; clicking Anthropic collapses OpenAI; clicking `GPT-5.6 Terra` closes the menu and the button reads **GPT-5.6 Terra**.
+- **The project chip was twice the size of the button beside it.** Measured: 44×173 against Tools' 36×80, because a stacked `SELECTED PROJECT` caption forced a second line, and a generated project is named after the whole request. It is now a single 36px line matching Tools, with a folder icon, a tighter 200px cap with ellipsis, and the caption moved to screen-reader text where it costs no space.
+- **The preview of what Thomas built was a squashed sliver, and that was not a scaling choice.** `.tc-code-artifact iframe` — the rule for the big *inline* preview — forces `width: 100%; height: 230px`, ties `.tc-code-artifact-thumb iframe` on specificity and wins on source order, so the thumbnail rendered a ~1200px-wide layout into a 167×230 portrait strip. Measured: the iframe computed to `167.429 × 230` while the thumbnail rule asked for `1280 × 800`. Scoping the rule through `.tc-code-artifacts` wins the tie, and the card now shows the real page in desktop proportions (168×105).
+- **A result you can only open inside the transcript is awkward to actually use.** Expanding in place drops a tall frame into the middle of the conversation, which is what made the page long to scroll. The card gains an **open-in-new-tab** action beside Download, built from the conversation's own artifact URL because a turn's artifact entry carries only `{file, kind, ext}`. Verified by clicking it: a second tab opens on `Nova — A calculator for ideas`.
+- The row's `max-width` goes 420px → 680px; it was sitting in the left half of a column twice its width.
+
 ### Fixed (Thomas verified a page, then served it under rules that broke it)
 
 - **The owner asked for a calculator. Thomas built one, verification returned `completed`, and `12 + 8` showed `Error` on screen.** Neither the maths nor the markup was wrong. `Function('return (12+8)')()` — the ordinary way a calculator evaluates a typed expression — threw `EvalError: Evaluating a string as JavaScript violates the following Content Security Policy directive`, and the page's own `catch` turned that into `Error`.

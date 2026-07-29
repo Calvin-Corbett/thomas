@@ -105,6 +105,20 @@
       // Chat's deliverable card carries a download beside it; a result you can
       // only look at inside Thomas is not really yours yet.
       const save = `<button class="tc-code-artifact-save" data-code-save-artifact="${esc(file)}" type="button" title="Download ${esc(file)}" aria-label="Download ${esc(file)}"><i class="ph ph-download-simple" aria-hidden="true"></i></button>`;
+      // Open the real thing in a real tab. Expanding in place is fine for a
+      // glance, but it drops a tall frame into the middle of the transcript and
+      // the page it made is then something you scroll past rather than use --
+      // a full-screen app does not fit in a card. Chat gives a deliverable this
+      // escape hatch and Code did not, so the only way out was Download.
+      // Built the same way `artifactHtml` builds it, from the conversation this
+      // turn belongs to. A turn's artifact entry is only {file, kind, ext} --
+      // it carries no URL of its own.
+      const openUrl = state.activeId
+        ? `/api/evolve/agent/artifact/${encodeURIComponent(state.activeId)}/${file.split('/').map(encodeURIComponent).join('/')}`
+        : '';
+      const openTab = (playable && openUrl)
+        ? `<a class="tc-code-artifact-pop" href="${esc(openUrl)}" target="_blank" rel="noopener noreferrer" title="Open ${esc(file)} in a new tab" aria-label="Open ${esc(file)} in a new tab"><i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>`
+        : '';
       return `<div class="tc-code-artifact">
         <div class="tc-code-artifact-row">
           <button class="tc-code-artifact-open" data-code-open-artifact="${esc(file)}" data-code-artifact-slot="${esc(slot)}" type="button" aria-expanded="${open ? 'true' : 'false'}">
@@ -113,7 +127,7 @@
               <span class="tc-code-artifact-name">${esc(file)}</span>
               <span class="tc-code-artifact-verb">${hint}</span>
             </span>
-          </button>${save}
+          </button>${openTab}${save}
         </div>${expanded}
       </div>`;
     }).join('');

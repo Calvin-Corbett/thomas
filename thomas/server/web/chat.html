@@ -241,13 +241,19 @@
                     <div id="tc-tools-menu" style="display: none; position: absolute; bottom: calc(100% + 10px); left: 0; z-index: 60; width: 312px; padding: 12px; border-radius: 14px; background: var(--c-menu-bg, var(--c-surface)); border: 1px solid var(--c-border-2); box-shadow: var(--c-shadow);" class="tc-scroll"></div>
                   </div>
                   <div id="tc-code-project-wrap" style="position: relative; display: none;" data-code-library-wrap="1">
-                    <button id="tc-code-project-btn" class="hv-icon" title="Choose what Thomas works on" aria-haspopup="dialog" aria-expanded="false" aria-controls="tc-code-library-menu" style="display: flex; align-items: center; gap: 9px; max-width: 260px; height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--c-border); background: transparent; color: var(--c-dim); font-family: inherit; cursor: pointer; transition: all .15s; text-align: left;">
-                      <i class="ph ph-squares-four" style="font-size: 17px; flex: 0 0 auto;"></i>
-                      <span style="display: flex; flex-direction: column; min-width: 0; gap: 1px;">
-                        <span style="font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--c-muted); line-height: 1;">Selected project</span>
-                        <span id="tc-code-project-label" style="font-size: 13px; font-weight: 700; color: var(--c-text); line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Thomas library</span>
-                      </span>
-                      <i class="ph ph-caret-up" style="font-size: 12px; flex: 0 0 auto; opacity: .7;"></i>
+                    <!-- One line, and the same 36px height as Tools beside it.
+                         The stacked "SELECTED PROJECT" caption made this 44px
+                         tall and 173px wide against Tools' 36x80, so the
+                         composer read as one big button and one small one. The
+                         caption said nothing the folder icon and the tooltip do
+                         not, and it was the half forcing the second line. A
+                         generated project is named after the whole request, so
+                         the name is capped tighter and ellipsised. -->
+                    <button id="tc-code-project-btn" class="hv-icon" title="Choose what Thomas works on" aria-haspopup="dialog" aria-expanded="false" aria-controls="tc-code-library-menu" style="display: flex; align-items: center; gap: 7px; max-width: 200px; height: 36px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--c-border); background: transparent; color: var(--c-dim); font-family: inherit; cursor: pointer; transition: all .15s; text-align: left;">
+                      <i class="ph ph-folder-simple" style="font-size: 15px; flex: 0 0 auto;"></i>
+                      <span class="sr-only" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;">Selected project</span>
+                      <span id="tc-code-project-label" style="font-size: 13px; font-weight: 650; color: var(--c-text); line-height: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Thomas library</span>
+                      <i class="ph ph-caret-up" style="font-size: 11px; flex: 0 0 auto; opacity: .6;"></i>
                     </button>
                     <div id="tc-code-library-menu" role="dialog" aria-modal="false" aria-label="Choose what Thomas works on" style="display: none; position: absolute; bottom: calc(100% + 10px); left: 0; z-index: 60; width: min(760px, calc(100vw - 48px)); max-height: min(64vh, 540px); padding: 0; border-radius: 14px; background: var(--c-menu-bg, var(--c-surface)); border: 1px solid var(--c-border-2); box-shadow: var(--c-shadow); overflow: hidden; flex-direction: column;"></div>
                   </div>
@@ -367,6 +373,10 @@
     let chatList = [];
     let profilesData = [];        // model profiles from GET /api/models
     state.modelMenuOpen = false;
+    // Which model families are expanded in the picker. Survives re-renders of
+    // the menu so clicking a family header does not collapse it again.
+    state.modelFamilyOpen = {};
+    state.modelFamilySeeded = false;
     // AI settings ("Tools"), attachments ("+"), and voice ("mic") state
     // Autonomy defaults to Agent (3): a fresh chat must be able to EXECUTE an
     // ask, not tell the owner to raise a dial and resend. Guardrails stay
@@ -539,22 +549,87 @@
       if (state.modelMenuOpen) renderModelMenu();
     }
     function closeModelMenu() { state.modelMenuOpen = false; document.getElementById('tc-model-menu').style.display = 'none'; }
+    // Which vendor a profile belongs to. Grouped by FAMILY rather than listed
+    // flat because the flat list was one row per model across every profile,
+    // and with only one provider holding a key the four models that actually
+    // work were buried among fifteen that cannot run — so the picker read as
+    // "you have one model" when it has four.
+    const MODEL_FAMILIES = [
+      // Matched on the profile NAME, never on `provider`: `openai_compat` is a
+      // wire protocol, not a vendor, and almost every profile here speaks it —
+      // Gemini, Mistral, Groq and xAI included. Matching the provider put all
+      // of them under "OpenAI".
+      { id: 'openai',    label: 'OpenAI',      match: p => /^(openai|openai_codex|litellm)$/.test(p.name) },
+      { id: 'anthropic', label: 'Anthropic',   match: p => p.name === 'anthropic' || String(p.provider) === 'anthropic' },
+      { id: 'google',    label: 'Google',      match: p => p.name === 'gemini' },
+      { id: 'xai',       label: 'xAI',         match: p => p.name === 'xai' },
+      { id: 'meta',      label: 'Meta Llama',  match: p => /^(groq|together|deepinfra|fireworks|cerebras)$/.test(p.name) },
+      { id: 'mistral',   label: 'Mistral',     match: p => p.name === 'mistral' },
+      { id: 'local',     label: 'On this PC',  match: p => p.name === 'local' },
+    ];
+    function modelFamilyOf(p) {
+      const hit = MODEL_FAMILIES.find(f => { try { return f.match(p); } catch (e) { return false; } });
+      return hit || { id: 'other', label: 'Other providers' };
+    }
+    function profileIsUsable(p) { return !!p.has_api_key || p.provider === 'openai_codex' || p.name === 'local'; }
     function renderModelMenu() {
       const wrap = document.getElementById('tc-model-options'); if (!wrap) return;
       wrap.innerHTML = '';
+      // Build family -> [{profile, model}] in the declared order, so the list
+      // does not reshuffle when a key is added.
+      const groups = new Map();
       profilesData.forEach(p => {
-        const usableProfile = !!p.has_api_key || p.provider === 'openai_codex' || p.name === 'local';
-        profileModelOptions(p).forEach(m => {
+        const fam = modelFamilyOf(p);
+        if (!groups.has(fam.id)) groups.set(fam.id, { label: fam.label, entries: [] });
+        profileModelOptions(p).forEach(m => groups.get(fam.id).entries.push({ p, m }));
+      });
+      const ordered = [...MODEL_FAMILIES, { id: 'other', label: 'Other providers' }]
+        .map(f => [f.id, groups.get(f.id)]).filter(([, g]) => g && g.entries.length);
+
+      // Seed ONCE, not per render. Opening the family that holds the current
+      // selection is right the first time the menu is drawn and wrong every
+      // time after: the accordion closes the others, this rule immediately
+      // reopened the selected one, and two families ended up expanded.
+      if (!state.modelFamilySeeded) {
+        const owning = ordered.find(([, g]) => g.entries.some(e => e.p.name === state.profile && String(e.m.id || '') === String(state.modelId || '')));
+        if (owning) state.modelFamilyOpen[owning[0]] = true;
+        state.modelFamilySeeded = true;
+      }
+
+      ordered.forEach(([famId, group]) => {
+        const ready = group.entries.filter(e => profileIsUsable(e.p) && e.m.available !== false).length;
+        const holdsSelection = group.entries.some(e => e.p.name === state.profile && String(e.m.id || '') === String(state.modelId || ''));
+        const isOpen = !!state.modelFamilyOpen[famId];
+
+        const head = document.createElement('button');
+        head.type = 'button'; head.className = 'hv-soft';
+        head.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        head.style.cssText = `width: 100%; display: flex; align-items: center; gap: 9px; padding: 9px 9px; margin-bottom: 2px; border-radius: 10px; border: 1px solid ${holdsSelection ? 'var(--c-accent-line)' : 'transparent'}; background: ${isOpen ? 'var(--c-surface-2)' : 'transparent'}; color: var(--c-text); font-family: inherit; cursor: pointer; text-align: left; transition: all .14s;`;
+        head.innerHTML = `<i class="ph ph-caret-right" style="font-size: 12px; color: var(--c-muted); transform: rotate(${isOpen ? '90deg' : '0deg'}); transition: transform .14s;"></i>
+          <span style="flex: 1; min-width: 0; font-size: 13px; font-weight: 700;">${esc(group.label)}</span>
+          <span style="font-size: 10.5px; color: ${ready ? 'var(--c-accent)' : 'var(--c-muted)'};">${ready ? `${ready} ready` : 'needs key'}</span>`;
+        head.addEventListener('click', () => {
+          // Accordion: opening one closes the rest, so a long list never
+          // stacks up and the menu keeps its height.
+          const wasOpen = !!state.modelFamilyOpen[famId];
+          state.modelFamilyOpen = {};
+          state.modelFamilyOpen[famId] = !wasOpen;
+          renderModelMenu();
+        });
+        wrap.appendChild(head);
+        if (!isOpen) return;
+
+        group.entries.forEach(({ p, m }) => {
           const sel = p.name === state.profile && String(m.id || '') === String(state.modelId || '');
-          const usable = usableProfile && m.available !== false;
+          const usable = profileIsUsable(p) && m.available !== false;
           const b = document.createElement('button');
           b.type = 'button'; b.className = 'hv-soft'; b.disabled = !usable;
           if (m.unavailable_reason) b.title = String(m.unavailable_reason);
-          b.style.cssText = `width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 9px; border-radius: 10px; border: 1px solid ${sel ? 'var(--c-accent-line)' : 'transparent'}; background: ${sel ? 'var(--c-accent-soft)' : 'transparent'}; color: var(--c-text); font-family: inherit; cursor: ${usable ? 'pointer' : 'not-allowed'}; text-align: left; transition: all .14s; margin-bottom: 2px; opacity: ${usable ? '1' : '0.5'};`;
-          const status = !usableProfile ? ' · needs key' : (m.available === false ? ' · unavailable on this connection' : '');
+          b.style.cssText = `width: 100%; display: flex; align-items: center; gap: 10px; padding: 7px 9px 7px 26px; border-radius: 10px; border: 1px solid ${sel ? 'var(--c-accent-line)' : 'transparent'}; background: ${sel ? 'var(--c-accent-soft)' : 'transparent'}; color: var(--c-text); font-family: inherit; cursor: ${usable ? 'pointer' : 'not-allowed'}; text-align: left; transition: all .14s; margin-bottom: 2px; opacity: ${usable ? '1' : '0.45'};`;
+          const status = !profileIsUsable(p) ? 'needs key' : (m.available === false ? 'unavailable on this connection' : esc(p.name));
           b.innerHTML = `<span style="flex: 1; min-width: 0;">
-              <span style="display: block; font-size: 13px; font-weight: 700;">${esc(String(m.display_name || m.id || p.name).split('/').pop())}</span>
-              <span style="display: block; font-size: 11px; color: var(--c-muted);">${esc(p.name)}${status}</span>
+              <span style="display: block; font-size: 13px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${esc(String(m.display_name || m.id || p.name).split('/').pop())}</span>
+              <span style="display: block; font-size: 10.5px; color: var(--c-muted);">${status}</span>
             </span>
             <i class="ph ph-check" style="font-size: 15px; color: var(--c-accent); opacity: ${sel ? '1' : '0'};"></i>`;
           if (usable) b.addEventListener('click', () => { setProfile(p, m); closeModelMenu(); });
