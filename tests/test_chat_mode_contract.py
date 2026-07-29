@@ -575,6 +575,7 @@ def test_code_adapter_lifecycle_behavior_in_node() -> None:
         "drawer": True,
         "pointercancel": True,
         "picker": True,
+        "failureReason": True,
     }
 
 

@@ -547,6 +547,47 @@ async function proveAccessibleDrawerAndPickerErrors() {
   if (!pickerError.includes('unreadable folder-picker response (200)')) throw new Error('successful non-JSON picker response failed silently');
 }
 
+async function proveTheRealReasonSurvivesTheExitWrapper() {
+  // Errors arrive oldest-first and the last is almost always `agent loop
+  // exited 1`, a wrapper that says nothing. The summary took `.at(-1)` and only
+  // then asked whether it was usable, so it always inspected the wrapper,
+  // rejected it, and fell back to "Thomas hit a technical problem ... open the
+  // technical details for the raw error" -- while the plain-language cause sat
+  // one entry earlier, already in hand.
+  //
+  // Taken from a real failed run: the owner asked for a calculator app, the
+  // provider was overloaded, and Thomas told him to go dig for the reason.
+  resetState();
+  const overloaded = api.failureSummary({ ok: false }, [
+    { type: 'error', text: 'Our servers are currently overloaded. Please try again later.' },
+    { type: 'error', text: 'agent loop exited 1' },
+  ]);
+  if (/technical problem/i.test(overloaded)) throw new Error('the real reason was discarded in favour of the generic message');
+  if (!/busy|again in a moment/i.test(overloaded)) throw new Error('an overloaded provider was not named as such');
+  // "Our servers" reads as THOMAS's servers unless the message says whose.
+  if (!/provider/i.test(overloaded)) throw new Error('the message did not say whose servers were busy');
+
+  // A useful error that is NOT an overload must still be shown verbatim
+  // instead of being swallowed by the trailing wrapper.
+  const readOnly = api.failureSummary({ ok: false }, [
+    { type: 'error', text: 'The project folder is read-only, so no files could be written.' },
+    { type: 'error', text: 'agent loop exited 1' },
+  ]);
+  if (!readOnly.includes('read-only')) throw new Error('a usable earlier error was lost behind the exit wrapper');
+
+  // And when every recorded error IS a wrapper there is genuinely nothing
+  // worth showing, so the generic message is the honest answer.
+  const wrappersOnly = api.failureSummary({ ok: false }, [
+    { type: 'error', text: 'agent loop exited 1' },
+    { type: 'error', text: 'exited 1' },
+  ]);
+  if (!/technical problem/i.test(wrappersOnly)) throw new Error('unusable errors should still fall back to the generic message');
+
+  // No errors at all is a third, distinct case and must not borrow either.
+  const silent = api.failureSummary({ ok: false }, []);
+  if (/technical problem/i.test(silent)) throw new Error('a silent failure was reported as a surfaced error');
+}
+
 await proveApprovalRetry();
 await proveScopedSwitch();
 await proveSteeringConfirmation();
@@ -558,5 +599,6 @@ await proveCompletedReplayDurability();
 await proveFinishingQueuesRapidResend();
 await proveLostSendRetryAndCursor();
 await proveAccessibleDrawerAndPickerErrors();
+await proveTheRealReasonSurvivesTheExitWrapper();
 console.warn = originalWarn;
-process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true }));
+process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true, failureReason: true }));

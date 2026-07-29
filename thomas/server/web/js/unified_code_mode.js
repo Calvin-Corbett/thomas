@@ -299,14 +299,33 @@
     if (labels.some(label => /remoteprotocolerror|stream disconnected|incomplete chunked|connection.*closed/i.test(label))) {
       return 'The model connection ended before Thomas could finish. Retry this task.';
     }
-    const structured = events.filter(event => eventType(event) === 'error').map(eventLabel).filter(Boolean).at(-1);
-    if (
-      structured
-      && structured.length <= 240
-      && !/[{}\r\n]|traceback|http\s*\d{3}|remoteprotocolerror/i.test(structured)
-      && !/^agent loop exited|^exited \d+/i.test(structured)
-    ) return structured;
-    if (structured) return 'Thomas hit a technical problem and stopped before finishing. Open the technical details for the raw error.';
+    // Named, because it is not a fault in the project and the owner should not
+    // go looking for one. Observed live: "Our servers are currently overloaded.
+    // Please try again later." -- which reads as THOMAS's servers unless it
+    // says whose, and the only useful action is to send it again.
+    if (labels.some(label => /\boverloaded\b|\brate.?limit(?:ed)?\b|too many requests|\bover capacity\b|\b429\b/i.test(label))) {
+      return 'The model provider is busy right now — this is not a problem with your project or your request. Send it again in a moment.';
+    }
+    // Filter FIRST, then take the last survivor. Errors arrive oldest-first and
+    // the final one is almost always a wrapper: `agent loop exited 1` follows
+    // whatever actually went wrong. Taking `.at(-1)` before filtering therefore
+    // picked the wrapper every time, the guard below correctly rejected it as
+    // unhelpful, and the real cause -- sitting one entry earlier -- was thrown
+    // away. Measured on a real run whose recorded errors were exactly
+    // ["Our servers are currently overloaded. Please try again later.",
+    //  "agent loop exited 1"]: the owner was shown "Thomas hit a technical
+    // problem" and told to go open the raw error, while the plain-language
+    // reason was already in hand.
+    const errorLabels = events.filter(event => eventType(event) === 'error').map(eventLabel).filter(Boolean);
+    const structured = errorLabels.filter(label => (
+      label.length <= 240
+      && !/[{}\r\n]|traceback|http\s*\d{3}|remoteprotocolerror/i.test(label)
+      && !/^agent loop exited|^exited \d+/i.test(label)
+    )).at(-1);
+    if (structured) return structured;
+    // Errors existed but none of them were fit to show, which is a different
+    // situation from no errors at all -- keep the two messages distinct.
+    if (errorLabels.length) return 'Thomas hit a technical problem and stopped before finishing. Open the technical details for the raw error.';
     return 'The Code task stopped before it finished.';
   }
 
