@@ -14,6 +14,11 @@ from pathlib import Path
 from typing import Any
 
 from thomas.agent.hook_events import HookEvent, bridge_guardrails_event, emit_hook
+from thomas.agent.loop_tool_paths import (
+    _WRITE_TOOL_PATH_KEYS,
+    _declares_a_path_parameter,
+    _sanitize_write_tool_path,
+)
 from thomas.benchmarks.benchmark_lane import audit_benchmark_event, get_benchmark_context
 from thomas.core.events import AgentEvent, EventType
 
@@ -45,19 +50,6 @@ _WRITE_TOOL_KEYWORDS = (
     "fs.rename",
 )
 
-_WRITE_TOOL_PATH_KEYS = (
-    "path",
-    "file",
-    "filename",
-    "filepath",
-    "file_path",
-    "source_path",
-    "destination_path",
-    "payload_path",
-    "auth_path",
-    "auth_payload_path",
-)
-
 _SELF_DEVELOPMENT_WRITE_TOOLS = {"diff.create", "fs.write_file", "fs.write_protected_file"}
 _SELF_DEVELOPMENT_INSPECTION_TOOL_PREFIXES = (
     "fs.read",
@@ -68,38 +60,6 @@ _SELF_DEVELOPMENT_INSPECTION_TOOL_PREFIXES = (
     "git.status",
     "shell.exec",
 )
-
-
-def _declares_a_path_parameter(registry: Any, name: str) -> bool:
-    """Does this tool's own schema accept a path at all?
-
-    Whether a tool writes was decided by looking for words in its name, and
-    "patch" is one of them -- so `diff.preview_patch`, whose entire purpose is
-    to preview a patch WITHOUT applying it, was classified as a write and then
-    rejected for not supplying a path argument. It does not have one: its only
-    parameter is the diff text, and the paths live inside that. The tool could
-    therefore never be called successfully by anyone, and every attempt cost the
-    model a turn and printed a technical failure into the run.
-
-    The tool's declared parameters are the authority on what it accepts. A name
-    is a label; the schema is the contract. When a tool publishes no schema we
-    fall back to requiring the path, which keeps the guard closed by default.
-    """
-
-    tool = None
-    getter = getattr(registry, "get", None)
-    if callable(getter):
-        try:
-            tool = getter(name)
-        except (KeyError, TypeError, ValueError):
-            tool = None
-    schema = getattr(tool, "parameters", None)
-    if not isinstance(schema, dict):
-        return True
-    properties = schema.get("properties")
-    if not isinstance(properties, dict):
-        return True
-    return any(key in properties for key in _WRITE_TOOL_PATH_KEYS)
 
 
 def _is_write_tool(name: str, file_audit_module: Any) -> bool:
@@ -165,120 +125,6 @@ def _self_development_write_guard_event(
         },
         iteration=iteration,
     )
-
-
-def _validate_filesystem_path(
-    path_value: Any,
-    *,
-    sandbox_root: Path | None = None,
-    benchmark_root: Path | None = None,
-) -> tuple[str | None, str | None]:
-    if path_value is None:
-        return None, "missing path value"
-
-    try:
-        path_text = os.fspath(path_value)
-    except TypeError:
-        return None, "path must be a string or path-like value"
-
-    if not isinstance(path_text, str):
-        return None, "path must be a string or path-like value"
-
-    path_text = str(path_text).strip()
-
-    if path_text == "":
-        return None, "path cannot be empty"
-
-    if "\x00" in path_text:
-        return None, "path cannot contain null bytes"
-
-    if any(ord(ch) < 32 or ord(ch) == 127 for ch in path_text):
-        return None, "path cannot contain control characters"
-
-    if os.path.isabs(path_text) or path_text.startswith(("/", "\\")):
-        if benchmark_root is None:
-            return None, "absolute paths are not allowed"
-        try:
-            resolved = Path(path_text).expanduser().resolve()
-        except OSError as exc:
-            return None, f"absolute path could not be resolved: {exc}"
-        try:
-            common = Path(os.path.commonpath([str(benchmark_root.resolve()), str(resolved)]))
-        except ValueError:
-            return None, "absolute path is outside the benchmark root"
-        if common.resolve() != benchmark_root.resolve():
-            return None, "absolute path is outside the benchmark root"
-        return str(resolved), None
-
-    if re.match(r"^[A-Za-z]:", path_text) or re.match(r"^[/\\]{2,}", path_text):
-        return None, "disallowed root/path prefix in file path"
-
-    if "://" in path_text:
-        return None, "path cannot contain URI-like prefixes"
-
-    parts = re.split(r"[\\/]", path_text)
-    if ".." in parts:
-        return None, "path traversal via '..' segment is not allowed"
-
-    if any(part == "" for part in parts):
-        return None, "path segments cannot be empty"
-
-    # Reject any attempts to normalise into an ancestor path
-    if ".." in Path(path_text).parts:
-        return None, "path traversal via parent directory reference is not allowed"
-
-    if benchmark_root is not None:
-        if sandbox_root is None:
-            return None, "sandbox root is required for benchmark path validation"
-        try:
-            candidate = (sandbox_root.resolve() / path_text).resolve()
-        except OSError as exc:
-            return None, f"path could not be resolved: {exc}"
-        try:
-            common = Path(os.path.commonpath([str(benchmark_root.resolve()), str(candidate)]))
-        except ValueError:
-            return None, "path is outside the benchmark root"
-        if common.resolve() != benchmark_root.resolve():
-            return None, "path is outside the benchmark root"
-
-    return path_text, None
-
-
-def _sanitize_write_tool_path(
-    args: dict[str, Any],
-    *,
-    require_path: bool = True,
-    sandbox_root: Path | None = None,
-    benchmark_root: Path | None = None,
-) -> tuple[str | None, str | None]:
-    if not isinstance(args, dict):
-        return None, "tool arguments must be an object"
-
-    validated_path: str | None = None
-    saw_path_key = False
-
-    for key in _WRITE_TOOL_PATH_KEYS:
-        if key not in args:
-            continue
-        saw_path_key = True
-        path_value = args.get(key)
-        if not isinstance(path_value, (str, os.PathLike)):
-            return None, f"{key} must be a string or path-like value"
-        checked_path, error = _validate_filesystem_path(
-            path_value,
-            sandbox_root=sandbox_root,
-            benchmark_root=benchmark_root,
-        )
-        if error is not None:
-            return None, f"invalid {key}: {error}"
-        args[key] = checked_path
-        if validated_path is None:
-            validated_path = checked_path
-
-    if not saw_path_key and require_path:
-        return None, "missing path argument (expected path, file, or filename)"
-
-    return validated_path, None
 
 
 def parse_tool_args(raw_args: Any) -> tuple[dict[str, Any] | None, str | None]:

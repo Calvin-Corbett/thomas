@@ -7,6 +7,13 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (Housekeeping in the code that runs Thomas's tools — nothing changes for you)
+
+- **Nothing you can see is different.** Thomas runs its tools exactly as before: the same steps, the same safety checks on files it is about to write, the same wording when it turns a tool call down. One internal file had grown two lines past the size limit the project holds itself to, so part of it moved to a file of its own. There is nothing to notice and nothing to do.
+- `thomas/agent/loop_tool_exec.py` was 802 lines against the 800-line limit checked by `tests/test_architecture.py::test_debt_trending`. The file-path half moved out to `thomas/agent/loop_tool_paths.py` (184 lines): which arguments name a file, whether a tool accepts a file path at all, and whether a given path is safe to write to. What stayed behind is the running of the tool calls themselves — 648 lines.
+- **Nothing was deleted, shortened or reworded.** Every line moved verbatim and each comment and docstring travelled with the code it explains, including the long note on `diff.preview_patch` recording the bug where a preview-only tool was mistaken for a write and became impossible to call by anyone.
+- Everything that imported the old file still imports it unchanged — the moved names are re-imported there — so no caller and no test needed editing. `tests/test_agent_loop_tool_exec.py`, `tests/test_a_tools_schema_decides_what_it_accepts.py`, `tests/test_hook_event_surface.py`, `tests/test_plugin_hooks_wired.py`, `tests/test_agent_loop_monolith_contract.py` and `tests/test_evolve_supervisor.py` pass untouched (77 tests), as do `tests/test_architecture.py` (13) and `tests/test_smoke_integration.py` (39).
+
 ### Changed (Housekeeping in the code that talks to the AI providers — nothing changes for you)
 
 - The Claude/Anthropic half of Thomas's model-streaming code was moved into its own file, away from the OpenAI and ChatGPT halves it never shared anything with. Replies still stream the same way from every provider; this is purely tidying, and there is nothing to notice or do differently.
