@@ -78,3 +78,65 @@ def test_a_change_with_no_pages_is_not_flagged() -> None:
     events = _validation("exit 0")
 
     assert not any("never opened in a browser" in risk for risk in _risks(events, ["build.js", "tool.py"]))
+
+
+def test_a_browser_check_that_ran_and_failed_is_not_called_absent() -> None:
+    """A check that FAILED is the opposite of a check that never happened.
+
+    The evidence was matched against `BROWSER_SMOKE_OK` and
+    `BROWSER_SMOKE_SKIPPED`, and a failing run says neither -- it says
+    `BROWSER_SMOKE_FAILED`. So it fell through to the silence branch and the
+    report printed "no browser check ran for this change" directly beneath the
+    failing browser check that had just examined that exact page.
+
+    Seen on a real run: `report.html` was opened, the smoke reported
+    `BROWSER_SMOKE_FAILED ... Could not load sales.csv (HTTP 404)`, and the
+    open risks still claimed nothing had opened it.
+
+    This whole risk exists to say "nobody looked". Saying it when somebody
+    looked and reported a defect is a false statement in the report, and it
+    dilutes the real finding sitting next to it -- the repair loop reads these
+    risks, so it is told to go and open a page that was already opened instead
+    of fixing what the opening found.
+    """
+
+    events = _validation(
+        "exit 1\nBROWSER_SMOKE_FAILED: report.html: Error: Could not load sales.csv (HTTP 404)."
+    )
+
+    risks = _risks(events, ["report.html"])
+    assert not any("never opened in a browser" in risk for risk in risks), risks
+
+
+def test_a_failing_check_on_one_page_still_flags_a_different_untouched_page() -> None:
+    """Suppression must be about THIS evidence, not a blanket off-switch.
+
+    A run that changed two pages and only opened one still leaves the other
+    unseen, and that is exactly what this risk is for.
+    """
+
+    events = _validation("exit 1\nBROWSER_SMOKE_FAILED: report.html: Error: something broke")
+
+    report = build_run_report(
+        events=events,
+        transcript="",
+        changed_files=["report.html", "orphan.html"],
+        goal="g",
+        definition=None,
+        outcome="failed",
+        returncode=1,
+        ok=False,
+        reason="",
+    )
+    unopened = [
+        str(item.get("detail") or "")
+        for item in report["open_risks"]
+        if "never opened in a browser" in str(item.get("risk") or "")
+    ]
+
+    assert unopened, report["open_risks"]
+    detail = " ".join(unopened)
+    # The page nobody opened is named...
+    assert "orphan.html" in detail
+    # ...and the page the browser DID open and report on is not.
+    assert "report.html" not in detail

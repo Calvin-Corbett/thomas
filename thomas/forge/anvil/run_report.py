@@ -252,9 +252,24 @@ def _unopened_page_risks(
     evidence = " ".join(
         [*(str(item.get("evidence") or "") for item in validations), *(str(item.get("text") or "") for item in events)]
     )
-    if "BROWSER_SMOKE_OK" in evidence:
+    # A check that FAILED is the opposite of a check that never happened. Only
+    # `BROWSER_SMOKE_OK` was treated as "opened", and a failing run says
+    # `BROWSER_SMOKE_FAILED`, so it fell through to the silence branch: the
+    # report printed "no browser check ran for this change" directly beneath the
+    # failing browser check that had just examined that exact page. Observed on
+    # a real run against `report.html`.
+    #
+    # It matters beyond tidiness. This risk exists to say "nobody looked", the
+    # repair loop reads these risks, and telling it to go open a page that was
+    # already opened points it away from the defect the opening found.
+    #
+    # Per PAGE rather than per run, because the old global check let one opened
+    # page vouch for every other changed page: a run that opened `index.html`
+    # and never touched `orphan.html` reported no risk at all.
+    unopened = [name for name in pages if not _page_was_opened(evidence, name)]
+    if not unopened:
         return []
-    shown = ", ".join(pages[:3]) + (f" (+{len(pages) - 3} more)" if len(pages) > 3 else "")
+    shown = ", ".join(unopened[:3]) + (f" (+{len(unopened) - 3} more)" if len(unopened) > 3 else "")
     skipped = "BROWSER_SMOKE_SKIPPED" in evidence
     return [
         {
@@ -266,6 +281,24 @@ def _unopened_page_risks(
             ),
         }
     ]
+
+
+def _page_was_opened(evidence: str, page: str) -> bool:
+    """Did a browser check actually report on THIS page, pass or fail?
+
+    The smoke names every page it opened in its own evidence line
+    (``BROWSER_SMOKE_OK: index.html: ...``), so the page's own basename next to
+    a smoke marker is the signal. Matched on a boundary rather than as a bare
+    substring, or `game.html` would be considered opened by a line about
+    `mygame.html`.
+    """
+
+    if "BROWSER_SMOKE_OK" not in evidence and "BROWSER_SMOKE_FAILED" not in evidence:
+        return False
+    base = str(page).replace("\\", "/").rsplit("/", 1)[-1]
+    if not base:
+        return False
+    return re.search(rf"(?<![\w.-]){re.escape(base)}(?![\w-])", evidence) is not None
 
 
 def _build_attention_pointers(

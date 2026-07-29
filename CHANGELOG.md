@@ -7,6 +7,13 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (The report said nobody opened a page, directly beneath the browser check that had just opened it)
+
+- **A check that FAILED is the opposite of a check that never happened.** `_unopened_page_risks` matched the evidence against `BROWSER_SMOKE_OK` and `BROWSER_SMOKE_SKIPPED`. A failing run says neither — it says `BROWSER_SMOKE_FAILED` — so it fell through to the silence branch and printed `report.html — no browser check ran for this change` next to the failing browser check that had just examined that exact page. Seen on a real run whose smoke reported `Could not load sales.csv (HTTP 404)`.
+- **It misleads more than a reader.** The whole point of this risk is to say *nobody looked*; the repair loop reads these risks, so claiming a page was never opened points it at opening a page that was already opened, instead of at the defect the opening found.
+- **The suppression is now per page rather than per run**, which fixed a second fault in the same three lines: `if "BROWSER_SMOKE_OK" in evidence: return []` let one opened page vouch for every other changed page, so a run that opened `index.html` and never touched `orphan.html` reported no risk at all. A page counts as opened when a smoke marker names it, matched on a filename boundary so `game.html` is not covered by a line about `mygame.html`.
+- Both directions pinned in `tests/test_run_report_flags_an_unopened_page.py`, and both new tests confirmed to fail against the old condition before landing: a failing check on `report.html` no longer flags it, while a sibling `orphan.html` that nothing opened is still named. The existing skipped / passing / silent / no-pages cases are unchanged.
+
 ### Fixed (Broken web output in a `code` task passed because the Python linter politely declined)
 
 - **Honest labelling on a green tick is still a green tick.** `run_ruff_check` already refused to claim it had checked a web workspace — it returned `ruff_not_applicable` with "ruff verified nothing", which is true and well-documented. It also returned `passed=True`, so the run was recorded as verified and moved on. Confirmed against real ruff: a workspace whose only file is `function ( { syntax error` passed.
