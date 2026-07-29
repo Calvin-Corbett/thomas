@@ -7,6 +7,13 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (Housekeeping in the code that draws your charts and diagrams — nothing changes for you)
+
+- **Nothing you can see is different.** When you ask Thomas for a chart, a diagram, a drawing or a mock-up, it still draws itself on the Canvas exactly as before — the same picture, the same building-in-front-of-you animation, the same file to download at the end. One internal file had grown past the size limit the project holds itself to, so the half of it that turns a design into the finished picture moved into a file of its own. There is nothing to notice and nothing to do.
+- `thomas/server/chat_delegation_canvas.py` was 867 lines against the 800-line limit checked by `tests/test_architecture.py::test_debt_trending`. The drawing half moved out to `thomas/server/chat_delegation_canvas_render.py` (496 lines): turning the design plan into a finished self-animating page, the pie and donut wedge maths, and the empty stage that elements stream into one at a time so you can watch the picture assemble. What stayed behind is what the file is named for — holding a canvas while it streams, the instructions given to the model, and the entry point that runs the job — now 403 lines.
+- **Nothing was deleted, shortened or reworded.** Every line moved verbatim, with each comment and docstring still attached to the code it explains — including the long note recording why the finished picture must still show something when scripts are switched off, and why `transition:none` in that fallback is load-bearing rather than tidiness. Rebuilding the original file from the two new ones reproduces it exactly, line for line.
+- Everything that imported the old file still imports it unchanged — the moved names are re-imported there — so no caller and no test needed editing. All 15 canvas test files pass untouched (82 passed, 2 skipped), as do `tests/test_architecture.py` (13 passed) and every delegation test (161 passed, 3 skipped).
+
 ### Changed (Housekeeping in the code that saves your chats — nothing changes for you)
 
 - **Nothing you can see is different.** Your chats are saved, listed, reopened and deleted exactly as before, from exactly the same files on disk. One internal file had grown past the size limit the project holds itself to, so the part of it that reads and writes those chat files moved into a file of its own. There is nothing to notice and nothing to do.
