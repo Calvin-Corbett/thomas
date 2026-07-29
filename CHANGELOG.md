@@ -7,6 +7,15 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Thomas verified a page, then served it under rules that broke it)
+
+- **The owner asked for a calculator. Thomas built one, verification returned `completed`, and `12 + 8` showed `Error` on screen.** Neither the maths nor the markup was wrong. `Function('return (12+8)')()` — the ordinary way a calculator evaluates a typed expression — threw `EvalError: Evaluating a string as JavaScript violates the following Content Security Policy directive`, and the page's own `catch` turned that into `Error`.
+- **The checker and the viewer disagreed.** `web_artifact_smoke_assets.py` serves pages to the verifying browser with `script-src ... 'unsafe-eval' 'wasm-unsafe-eval'`, so the calculator genuinely worked while being certified. `deliverable_aiohttp.py` and the `/artifact/` route then served the same file **without** it. A build could pass every check and be broken the instant it was opened, and nothing anywhere was wrong to report — both halves did exactly what they were configured to do.
+- **Diagnosed by injecting an inline `<script>` into the live preview**, which CSP governs. Running the identical call from devtools reported success, because the devtools console is *not* subject to CSP — so the obvious probe confirms the page works and hides the defect. That false reassurance is why this survived.
+- Both viewers now grant `'unsafe-eval' 'wasm-unsafe-eval'`, matching the policy the page was verified under. **It concedes nothing:** both already allow `'unsafe-inline'`, so a hostile page can run any JavaScript it likes by writing it out directly — refusing to evaluate a *string* removes no capability it does not already have, and only breaks honest pages. The directives that actually contain a generated page are untouched: `connect-src 'self'` in the preview and `connect-src 'none'` on the artifact route, plus `object-src 'none'`, `base-uri 'none'`, `form-action`, and the sandbox.
+- Verified end to end after relaunching from the owner's desktop shortcut: `12 + 8 = 20`, `9 × 7 = 63`, `100 ÷ 8 = 12.5`, `45 − 17 = 28`, `2.5 × 4 = 10`, `1234 × 9 = 11,106`, and `7 ÷ 0` correctly reports `Error` because the result is not finite.
+- `tests/test_preview_does_not_break_what_verification_passed.py` states the invariant rather than the constant: **the serving policy may not be stricter than the verifying policy.** It also pins the premise (the smoke really does allow eval) and asserts the containment directives are still refused, so widening one directive cannot quietly widen the rest. Both viewer tests were confirmed failing before the change.
+
 ### Fixed (Thomas knew why a run failed and told you to go find out yourself)
 
 - **The owner asked for a calculator app and was shown "Thomas hit a technical problem and stopped before finishing. Open the technical details for the raw error."** The actual reason was already recorded, in plain English: *"Our servers are currently overloaded. Please try again later."* It was thrown away before it reached the screen.

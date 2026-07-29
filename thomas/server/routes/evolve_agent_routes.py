@@ -1356,8 +1356,21 @@ def build_evolve_agent_handlers(
     def _artifact_file_response(cid: str, tail: str) -> web.FileResponse:
         _root_resolved, target, _allowed = _artifact_scope(cid, tail)
         response = web.FileResponse(target)
+        # 'unsafe-eval' for the same reason the deliverable preview grants it:
+        # the browser smoke that CERTIFIES these pages already allows it, so
+        # without it this route is stricter than the check the page passed, and
+        # a verified build breaks the instant the owner opens it. A calculator
+        # evaluating a typed expression is the ordinary case, and it failed here
+        # with `EvalError` while verification reported `completed`.
+        #
+        # 'unsafe-inline' is already granted, so a page can run any JavaScript
+        # it likes by writing it out; refusing to evaluate a STRING removes no
+        # capability. What actually contains the page is untouched and is
+        # stricter here than in the preview: default-src 'none', connect-src
+        # 'none' (no network at all), form-action 'none', base-uri 'none'.
         response.headers["Content-Security-Policy"] = (
-            "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-inline'; "
+            "sandbox allow-scripts; default-src 'none'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; "
             "style-src 'self' 'unsafe-inline' data:; img-src 'self' data:; font-src 'self' data:; "
             "media-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'"
         )

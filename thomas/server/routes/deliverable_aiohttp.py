@@ -553,9 +553,32 @@ class DeliverablePreviewService:
         # listens on its own ephemeral port, so 'self' is one app's own origin;
         # it grants nothing to another preview or to a remote page.
         frame_ancestors = f"{self._main_origin} 'self'" if self._main_origin else "'none'"
+        # 'unsafe-eval' matches what the browser smoke already allows when it
+        # CERTIFIES these pages. Without it the viewer was stricter than the
+        # checker, so a page could pass every verification and still be broken
+        # the moment the owner opened it -- with nothing to report, because both
+        # halves did exactly what they were configured to do.
+        #
+        # Measured, not theorised: the owner asked for a calculator, Thomas
+        # built one, verification returned `completed`, and `12 + 8` produced
+        # `Error` on screen. `Function('return (12+8)')()` -- the ordinary way a
+        # calculator evaluates a typed expression -- threw `EvalError:
+        # Evaluating a string as JavaScript violates the following Content
+        # Security Policy directive`, and the page's own catch turned that into
+        # `Error`. Proven by injecting an inline <script> into the live preview,
+        # which CSP governs; evaluating the same call from devtools reported
+        # success, because the devtools console is not subject to CSP.
+        #
+        # It costs nothing to allow. 'unsafe-inline' is already granted here, so
+        # a hostile page can run whatever JavaScript it likes by writing it out
+        # directly; refusing to evaluate a STRING removes no capability it does
+        # not already have. The directives that actually contain a generated
+        # page -- connect-src 'self', object-src 'none', base-uri 'none',
+        # form-action 'self', and the sandbox -- are untouched.
         response.headers["Content-Security-Policy"] = (
             "sandbox allow-scripts allow-forms allow-same-origin; "
-            "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' blob:; "
+            "default-src 'self' data: blob:; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; "
             "style-src 'self' 'unsafe-inline' data:; img-src 'self' data: blob:; "
             "font-src 'self' data:; media-src 'self' data: blob:; connect-src 'self'; "
             "worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; "
