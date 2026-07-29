@@ -88,10 +88,30 @@ def run_ruff_check(work_dir: str, result_text: str = "") -> VerificationResult:
     ok = proc.returncode == 0
     output = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
     if ok and "no python files found" in output.lower():
+        # Saying "I did not check this" was honest, and it was still a green
+        # tick: the run was recorded as verified and moved on, so a workspace of
+        # deliberately broken JavaScript passed. Honest labelling is not the
+        # same as checking.
+        #
+        # This is reachable for most of what Thomas builds. `build-feature`,
+        # `fix-bug` and `quick-fix` all map to family `code` in
+        # `thomas/core/task_types.py`, so "build me a web app" only meets the
+        # web checks when it happens to be classified `design-ui`; every other
+        # route handed a web deliverable to a Python linter. The checks were
+        # never missing -- `run_web_preflight` is right below and this module
+        # already calls it for `ui`. They were simply not reached from here.
+        #
+        # Reported under `code`, because the family belongs to the TASK; only
+        # the checker changed. A workspace with neither Python nor web files
+        # falls through unchanged: there is genuinely nothing to run, and
+        # failing a config file or a shell script would be a new false negative
+        # in place of the old false positive.
+        if workspace_web_files(work_dir):
+            return replace(run_web_preflight(work_dir, result_text), family="code")
         return VerificationResult(
             True,
             "code",
-            "no Python files in this workspace, so ruff verified nothing; web output is unchecked here",
+            "no Python files in this workspace, so ruff verified nothing, and there is no web output to check",
             ("ruff_not_applicable",),
         )
     evidence = output[:1000] or "ruff clean"

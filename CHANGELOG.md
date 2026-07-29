@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Broken web output in a `code` task passed because the Python linter politely declined)
+
+- **Honest labelling on a green tick is still a green tick.** `run_ruff_check` already refused to claim it had checked a web workspace — it returned `ruff_not_applicable` with "ruff verified nothing", which is true and well-documented. It also returned `passed=True`, so the run was recorded as verified and moved on. Confirmed against real ruff: a workspace whose only file is `function ( { syntax error` passed.
+- **Reachable for most of what Thomas builds.** `build-feature`, `fix-bug`, `quick-fix`, `refactor-code` and `code-review` all map to family `code` in `thomas/core/task_types.py`. Only `design-ui` maps to `ui`, so a web deliverable met the real web checks only if it happened to be classified as a design task; every other route handed it to a Python linter.
+- `run_ruff_check` now hands a workspace with no Python but with web files to `run_web_preflight` — which lives directly below it in the same module and was already wired for the `ui` family. The checks were never missing; they were simply never reached from here. The result keeps `family="code"`, because the family belongs to the task and only the checker changed.
+- **The no-Python-no-web case is unchanged and still passes**, with its wording corrected to say there is no web output either. A `code` task can legitimately deliver a config file or a shell script, and failing those would be a new false negative in place of the old false positive.
+- Two existing tests asserted the old wording (`ruff_not_applicable`) over a pass. Their intent — "a Python linter must not certify a web app" — is unchanged, so they now assert the stronger property that satisfies it: the broken-JavaScript workspace **fails**, with evidence naming the real defect (`broken.js does not parse, so nothing on the page runs: SyntaxError: Function statements require a function name`) rather than the absence of Python. A second fixture also fails on `game.js was written but nothing loads it` — something ruff is structurally incapable of noticing.
+
 ### Fixed (The browser smoke failed a correct page, then passed a broken one)
 
 Both faults surfaced from one organic Code task — *"read sales.csv and draw a bar chart of revenue per region"* — run three times against the live server.
