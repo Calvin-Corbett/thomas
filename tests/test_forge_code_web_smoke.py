@@ -176,3 +176,162 @@ def test_real_browser_smoke_proxy_cannot_reach_another_localhost_service(
     assert result.attempted is True
     assert result.ok is False
     assert victim_hits == []
+
+
+def test_a_page_may_load_the_data_file_it_ships_with(tmp_path) -> None:
+    """A self-contained page that reads its own CSV is not reaching the network.
+
+    The smoke server's allowlist carried `.json` but no other data format, so a
+    page that `fetch`ed a `sales.csv` sitting beside it got a 404 from the
+    harness -- and then correctly reported itself blank, because nothing had
+    any data to draw.
+
+    Measured on a real Code run: the goal was a canvas revenue chart reading
+    `sales.csv`. Thomas wrote both files, the page is correct -- served where
+    the CSV is reachable it prints the grand total `$623,001.25`, which matches
+    the CSV summed independently, and paints 80,236 non-transparent pixels --
+    and verification still returned `BROWSER_SMOKE_FAILED ... Could not load
+    sales.csv (HTTP 404) ... nothing was ever drawn to the canvas`. The run then
+    burned its whole ten-pass fix budget trying to repair a page that was
+    already right, and finished `failed`.
+
+    A false failure is the same defect as a false pass wearing the other face:
+    the verdict was decided by something that never examined the page.
+    """
+
+    (tmp_path / "sales.csv").write_text("region,revenue\nNorth,1\n", encoding="utf-8")
+    (tmp_path / "data.tsv").write_text("region\trevenue\nNorth\t1\n", encoding="utf-8")
+    (tmp_path / "feed.xml").write_text("<rows><row/></rows>", encoding="utf-8")
+    (tmp_path / "notes.txt").write_text("plain text", encoding="utf-8")
+
+    assert smoke._safe_web_path(tmp_path, "/sales.csv") == tmp_path / "sales.csv"
+    assert smoke._safe_web_path(tmp_path, "/data.tsv") == tmp_path / "data.tsv"
+    assert smoke._safe_web_path(tmp_path, "/feed.xml") == tmp_path / "feed.xml"
+    assert smoke._safe_web_path(tmp_path, "/notes.txt") == tmp_path / "notes.txt"
+
+
+def test_widening_the_data_formats_did_not_open_the_source_boundary(tmp_path) -> None:
+    """The other direction: the allowlist is still a boundary, not a formality.
+
+    Data files are inert -- the browser parses them as text, never executes
+    them -- which is why `.json` was always served. Source, secrets and
+    dotfiles must stay refused, or verification becomes a way to read the
+    project's private files out of a page it just generated.
+    """
+
+    for name, body in (
+        (".env", "SECRET=value"),
+        ("server.py", "TOKEN = 'value'"),
+        ("id_rsa", "-----BEGIN PRIVATE KEY-----"),
+        ("db.sqlite3", "SQLite format 3"),
+        ("notes.yaml", "token: value"),
+    ):
+        (tmp_path / name).write_text(body, encoding="utf-8")
+        assert smoke._safe_web_path(tmp_path, f"/{name}") is None, f"{name} must not be served"
+
+
+@pytest.mark.skipif(smoke._browser_executable() is None, reason="Chrome or Edge is not installed")
+def test_real_browser_smoke_passes_a_page_that_charts_its_own_csv(tmp_path) -> None:
+    """End to end, in a real browser: the shape that used to fail wrongly."""
+
+    (tmp_path / "sales.csv").write_text(
+        "region,revenue\nNorth,100\nSouth,50\nNorth,25\n", encoding="utf-8"
+    )
+    (tmp_path / "report.html").write_text(
+        "<!doctype html><html><head><title>Revenue</title></head><body>"
+        "<p id='total'>loading</p><canvas id='chart' width='200' height='100'></canvas>"
+        "<script>"
+        "fetch('sales.csv').then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.text();})"
+        # String.fromCharCode(10) rather than a newline escape: this JS lives
+        # inside a Python string inside a test, and an escape here has to
+        # survive both layers intact. It did not -- one backslash was lost in
+        # transit, Python turned the survivor into a real newline, and the page
+        # under test failed with "Uncaught SyntaxError: Invalid or unexpected
+        # token" while the allowlist it was written to check was already fixed.
+        ".then(t=>{const rows=t.trim().split(String.fromCharCode(10)).slice(1).map(l=>l.split(','));"
+        "let sum=0; rows.forEach(r=>sum+=Number(r[1]));"
+        "document.getElementById('total').textContent='TOTAL '+sum;"
+        "const ctx=document.getElementById('chart').getContext('2d');"
+        "ctx.fillStyle='#2a6'; rows.forEach((r,i)=>ctx.fillRect(i*40+5,10,30,Number(r[1])/2));});"
+        "</script></body></html>",
+        encoding="utf-8",
+    )
+
+    result = smoke.smoke_html_artifacts(tmp_path, ["report.html"], timeout=30)
+
+    assert result.attempted is True
+    assert result.ok is True, result.summary
+    # The failure this test exists for named the fetch and then the blank canvas.
+    assert "404" not in result.summary
+    assert "blank picture area" not in result.summary
+
+
+@pytest.mark.skipif(smoke._browser_executable() is None, reason="Chrome or Edge is not installed")
+def test_a_page_asking_for_a_file_that_is_not_there_does_not_pass(tmp_path) -> None:
+    """A deliverable missing its own data file must not verify clean.
+
+    Caught on a real Code run, and it is the exact failure this whole harness
+    exists to prevent. Thomas was asked for a canvas chart reading `sales.csv`,
+    wrote `report.html` and **did not write the CSV**. Opened, the page reads
+    "GRAND TOTAL Unavailable -- Could not load sales.csv (HTTP 404)" and its
+    canvas has zero non-transparent pixels. Verification returned
+    `BROWSER_SMOKE_OK: browser boot clean; boot only`, outcome `completed`,
+    rubric `met`.
+
+    Three separate checks each had a good reason to say nothing:
+
+    * `fetch` 404 is an ordinary response, not an `error` event, so
+      `resource_errors` never sees it -- that list only catches `<script src>`
+      and `<img>` style failures.
+    * the page CAUGHT its own failure and displayed a tidy message, so there was
+      no uncaught error either.
+    * `paintState` returns `unverifiable` unless the page called `getContext`,
+      deliberately, so a decorative canvas on a working page is not called a
+      failed render. This page never reached `getContext` -- it failed earlier --
+      so a canvas that was genuinely never drawn looked exactly like decoration.
+
+    The reliable signal is not in the DOM at all: the harness's own server
+    returned that 404 and can simply say so. That is a fact about the
+    deliverable, not a guess about intent.
+    """
+
+    (tmp_path / "report.html").write_text(
+        "<!doctype html><html><head><title>Revenue</title></head><body>"
+        "<p id='total'>loading</p><canvas id='chart' width='300' height='150'></canvas>"
+        "<script>"
+        "fetch('sales.csv').then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.text();})"
+        ".then(t=>{document.getElementById('total').textContent='ok';})"
+        ".catch(e=>{document.getElementById('total').textContent='Unavailable: '+e.message;});"
+        "</script></body></html>",
+        encoding="utf-8",
+    )
+
+    result = smoke.smoke_html_artifacts(tmp_path, ["report.html"], timeout=30)
+
+    assert result.ok is False, f"a page missing its own data file passed: {result.summary}"
+    assert "sales.csv" in result.summary, result.summary
+
+
+@pytest.mark.skipif(smoke._browser_executable() is None, reason="Chrome or Edge is not installed")
+def test_the_missing_asset_check_ignores_the_browser_s_own_favicon_request(tmp_path) -> None:
+    """The other direction, and the one that would have broken everything.
+
+    Chromium requests `/favicon.ico` on its own for every page. Counting that as
+    a missing asset would fail every deliverable that does not ship an icon --
+    a new false negative in place of the false pass, which is the trade this
+    change must not make. Verified by observing the actual request log during a
+    smoke run: the browser asked for `/p.html`, `/sales.csv` and `/favicon.ico`,
+    and only the middle one was authored by the page.
+    """
+
+    (tmp_path / "index.html").write_text(
+        "<!doctype html><html><head><title>Plain</title></head><body>"
+        "<p>Nothing fetched here, and no icon shipped.</p>"
+        "</body></html>",
+        encoding="utf-8",
+    )
+
+    result = smoke.smoke_html_artifacts(tmp_path, ["index.html"], timeout=30)
+
+    assert result.ok is True, result.summary
+    assert "favicon" not in result.summary.lower()

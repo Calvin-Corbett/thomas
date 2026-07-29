@@ -4,9 +4,32 @@ from __future__ import annotations
 
 import re
 
+# What the smoke server will hand to a page it is checking. This is a security
+# boundary -- generated code runs against it -- so it stays an allowlist of
+# formats a browser PARSES rather than executes, plus the scripts and styles the
+# page legitimately ships.
+#
+# The data formats below were missing, and `.json` alone was not enough. A page
+# that `fetch`ed a `sales.csv` sitting beside it got a 404 from this harness and
+# then honestly reported itself blank, because it had no data to draw. Measured
+# on a real Code run: Thomas was asked for a canvas revenue chart reading
+# `sales.csv`, wrote both files correctly -- served where the CSV is reachable
+# the page prints the grand total `$623,001.25`, matching the CSV summed
+# independently, and paints 80,236 non-transparent pixels -- and verification
+# still returned `BROWSER_SMOKE_FAILED ... Could not load sales.csv (HTTP 404)
+# ... nothing was ever drawn to the canvas`. The run then spent its entire
+# ten-pass fix budget repairing a page that was already right, and finished
+# `failed`.
+#
+# These are inert: the browser hands them to the page as text and never runs
+# them, which is exactly why `.json` was always safe to serve. Source, secrets,
+# dotfiles and databases stay refused -- widening this to "anything in the
+# folder" would turn verification into a way to read a project's private files
+# out of a page Thomas just generated.
 _WEB_ASSET_SUFFIXES = {
     ".avif",
     ".css",
+    ".csv",
     ".gif",
     ".html",
     ".htm",
@@ -15,13 +38,17 @@ _WEB_ASSET_SUFFIXES = {
     ".jpg",
     ".js",
     ".json",
+    ".md",
     ".mjs",
     ".png",
     ".svg",
+    ".tsv",
+    ".txt",
     ".wasm",
     ".webp",
     ".woff",
     ".woff2",
+    ".xml",
 }
 _MAX_ASSET_BYTES = 16 * 1024 * 1024
 _RECEIPT_RE = re.compile(r"\bdata-thomas-smoke=(?:\"([^\"]+)\"|'([^']+)')", re.IGNORECASE)

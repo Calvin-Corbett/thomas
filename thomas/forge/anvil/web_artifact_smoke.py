@@ -137,8 +137,37 @@ def _allowed_proxy_path(raw_target: str, host_header: str = "") -> str | None:
     return unquote(parsed.path or "/")
 
 
-def _handler_for(root: Path, page_path: str, instrumented: bytes) -> type[BaseHTTPRequestHandler]:
+# Requests the BROWSER makes on its own, which the page never asked for. Counting
+# these as missing assets would fail every deliverable that ships no icon, which
+# is the same mistake as passing a broken page, pointed the other way. Confirmed
+# by logging the real request stream during a smoke run: for a one-page artifact
+# Chromium asked for the page, the page's own fetch, and this.
+_BROWSER_INITIATED_PATHS = {"favicon.ico", "apple-touch-icon.png", "apple-touch-icon-precomposed.png"}
+
+
+def _handler_for(
+    root: Path,
+    page_path: str,
+    instrumented: bytes,
+    missing: list[str] | None = None,
+) -> type[BaseHTTPRequestHandler]:
     class ArtifactHandler(BaseHTTPRequestHandler):
+        def _note_missing(self, request_path: str) -> None:
+            """Record a file the PAGE asked for that is not in the folder.
+
+            A `fetch` that 404s is an ordinary response, not an `error` event,
+            so nothing in the receipt sees it: `resource_errors` only catches
+            `<script src>`/`<img>`-style failures, and a page that handles its
+            own failure tidily raises nothing at all. The server, on the other
+            hand, simply knows. This is a fact about the deliverable rather than
+            an inference about it.
+            """
+
+            if missing is None or request_path in _BROWSER_INITIATED_PATHS:
+                return
+            if request_path not in missing:
+                missing.append(request_path)
+
         def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler contract
             allowed_path = _allowed_proxy_path(self.path, self.headers.get("Host", ""))
             if allowed_path is None:
@@ -151,11 +180,13 @@ def _handler_for(root: Path, page_path: str, instrumented: bytes) -> type[BaseHT
             else:
                 target = _safe_web_path(root, allowed_path)
                 if target is None:
+                    self._note_missing(request_path)
                     self.send_error(404)
                     return
                 try:
                     body = target.read_bytes()
                 except OSError:
+                    self._note_missing(request_path)
                     self.send_error(404)
                     return
                 content_type = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
@@ -192,7 +223,10 @@ def _run_one(
         return False, f"{name}: could not read HTML for browser smoke ({exc})", None
 
     page_path = str(path.relative_to(root)).replace("\\", "/")
-    server = ThreadingHTTPServer(("127.0.0.1", 0), _handler_for(root, page_path, _instrument_html(source).encode()))
+    missing: list[str] = []
+    server = ThreadingHTTPServer(
+        ("127.0.0.1", 0), _handler_for(root, page_path, _instrument_html(source).encode(), missing)
+    )
     server.daemon_threads = True
     thread = threading.Thread(target=server.serve_forever, name="thomas-web-smoke", daemon=True)
     thread.start()
@@ -262,6 +296,20 @@ def _run_one(
         *[str(value) for value in receipt.get("console_errors") or []],
         *local_failures,
     ]
+    # Files the page asked this server for that are not in the folder. Observed
+    # on a real run: Thomas was asked for a chart reading `sales.csv`, wrote the
+    # page and not the CSV, and the page reported "Could not load sales.csv"
+    # over an empty canvas -- while this check returned "browser boot clean".
+    # Every DOM-side signal had an honest reason to stay quiet: a 404 from
+    # `fetch` is a normal response rather than an `error` event, the page caught
+    # its own failure so nothing was uncaught, and `paintState` calls a canvas
+    # `unverifiable` until someone asks it for a context, which this page never
+    # got far enough to do. Asking the server closes all three at once, and it
+    # is a fact rather than a heuristic: the file was requested, and it is not
+    # there.
+    if missing:
+        listed = ", ".join(sorted(missing)[:5])
+        problems.append(f"the page asked for {listed}, which is not in the project folder")
     # A <canvas> in the DOM is not a drawing. A game that renders nothing has
     # the same markup as a game that renders perfectly, so accepting the element
     # as proof of rendering passed exactly the builds this check exists to
