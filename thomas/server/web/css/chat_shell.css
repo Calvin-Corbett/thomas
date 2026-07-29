@@ -28,6 +28,15 @@
 .ph-arrow-right::before { content: "\2192"; }
 .ph-arrow-clockwise::before { content: "\21BB"; }
 .ph-arrow-square-out::before { content: "\2197"; }
+/* Expand / shrink for the result viewer. Without an entry here a name falls
+   through to the `\2022` bullet at the top of this file, so the button renders
+   as an unlabelled dot -- which is what the viewer's expand control did until
+   this was measured in the live UI (`ph-corners-in` computed to content "•").
+   A name missing from this map is invisible rather than broken, so it has to
+   be checked by looking. */
+.ph-corners-out::before { content: "\26F6"; }
+.ph-corners-in::before { content: "\2921"; }
+.ph-browser::before { content: "\25A3"; }
 .ph-download-simple::before { content: "\2193"; }
 .ph-check::before { content: "\2713"; }
 .ph-x::before, .ph-stop::before { content: "\00D7"; }

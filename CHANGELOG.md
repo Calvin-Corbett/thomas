@@ -7,6 +7,13 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (What Thomas built opens beside the conversation, not inside it)
+
+- **The result used to expand in place**, dropping a tall frame into the middle of the transcript. That turned the thing Thomas made into something you scroll past on a very long page rather than something you use, and a full-screen app never fits in a card slot anyway.
+- **The card is now the snapshot and the viewer is the thing.** Clicking the card slides a panel in from the right — `min(760px, 62vw)`, full height of the surface — with the page live inside it. From its header: **⛶ expand** to fill Thomas edge to edge, **↗ open in a new browser tab**, **× close**. The inline stage is gone.
+- **One control was invisible and only looking found it.** Thomas's icons are a curated glyph map in `chat_shell.css`, not the Phosphor font, and a name that is not in that map silently falls through to the `\2022` bullet at the top of the file. `ph-corners-in` / `ph-corners-out` / `ph-browser` were not in it, so the expand button rendered as an unlabelled dot. Measured in the live UI — the `::before` content computed to `"•"` in Arial — and now mapped to `⛶`, `⤡` and `▣`. **A missing icon name is invisible rather than broken, so nothing but a screenshot catches it.**
+- Verified on a 1920×1080 screen at every step, not in a narrow pane: the panel opens at x=1184, 760×871; the inline stage is absent from the DOM; the frame loads the previewable document; expand fills the surface and shows the whole app at once — workspace nav, keypad, calculation context, live insight and recent calculations; all four header glyphs render with no bullets.
+
 ### Changed (Code mode: pick any model, see what Thomas built, open it in a tab)
 
 Four things the owner named while using Code, each measured on a 1920×1080 screen rather than a narrow pane.

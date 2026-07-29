@@ -98,10 +98,13 @@
       const thumb = (playable && doc)
         ? `<span class="tc-code-artifact-thumb"><iframe tabindex="-1" aria-hidden="true" scrolling="no" sandbox="allow-scripts allow-same-origin" src="${esc(doc)}"></iframe></span>`
         : `<span class="tc-code-artifact-thumb is-icon"><i class="ph ${playable ? 'ph-play-circle' : 'ph-file'}"></i></span>`;
-      const hint = playable ? (open ? 'Showing it below' : 'Click to open it here') : 'Click to view';
-      const expanded = (open && playable && doc)
-        ? `<div class="tc-code-artifact-stage"><iframe title="${esc(file)}" sandbox="allow-scripts allow-same-origin allow-forms" src="${esc(doc)}"></iframe></div>`
-        : '';
+      const hint = playable ? 'Click to open it beside the chat' : 'Click to view';
+      // No inline stage. Expanding in place dropped a tall frame into the
+      // middle of the transcript, so the result became something you scroll
+      // past rather than something you use, and a full-screen app never fits
+      // in a card anyway. It opens in the viewer panel instead — see
+      // `viewerHtml`.
+      const expanded = '';
       // Chat's deliverable card carries a download beside it; a result you can
       // only look at inside Thomas is not really yours yet.
       const save = `<button class="tc-code-artifact-save" data-code-save-artifact="${esc(file)}" type="button" title="Download ${esc(file)}" aria-label="Download ${esc(file)}"><i class="ph ph-download-simple" aria-hidden="true"></i></button>`;
@@ -263,15 +266,63 @@
     return out;
   }
 
+  // ---------- The viewer: what Thomas made, beside the conversation ----------
+  // A panel that slides in from the right, the way a result is normally handed
+  // to you. The card is the snapshot; clicking it brings the real thing over
+  // here, where it gets the height of the window instead of a slot in the
+  // transcript. From here it can go full-bleed across Thomas, or out into its
+  // own browser tab.
+  function artifactUrlFor(file) {
+    if (!state.activeId) return '';
+    return `/api/evolve/agent/artifact/${encodeURIComponent(state.activeId)}/${String(file).split('/').map(encodeURIComponent).join('/')}`;
+  }
+
+  function viewerHtml() {
+    const open = state.viewer && state.viewer.file;
+    if (!open) return '';
+    const file = String(state.viewer.file);
+    const doc = (state.artifactDocs && state.artifactDocs[file]) || artifactUrlFor(file);
+    const full = !!state.viewer.full;
+    // `allow-same-origin` is withheld on purpose: the frame only has to render.
+    return `<aside class="tc-code-viewer${full ? ' is-full' : ''}" role="dialog" aria-label="${esc(file)}">
+      <header class="tc-code-viewer-head">
+        <div class="tc-code-viewer-title"><i class="ph ph-browser" aria-hidden="true"></i><strong>${esc(file)}</strong></div>
+        <div class="tc-code-viewer-tools">
+          <button type="button" data-code-viewer-full aria-pressed="${full ? 'true' : 'false'}" title="${full ? 'Shrink back beside the chat' : 'Expand to fill Thomas'}" aria-label="${full ? 'Shrink back beside the chat' : 'Expand to fill Thomas'}"><i class="ph ph-${full ? 'corners-in' : 'corners-out'}" aria-hidden="true"></i></button>
+          <a href="${esc(artifactUrlFor(file))}" target="_blank" rel="noopener noreferrer" title="Open in a new browser tab" aria-label="Open in a new browser tab"><i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>
+          <button type="button" data-code-viewer-close title="Close" aria-label="Close"><i class="ph ph-x" aria-hidden="true"></i></button>
+        </div>
+      </header>
+      <div class="tc-code-viewer-stage"><iframe title="${esc(file)}" sandbox="allow-scripts allow-forms" src="${esc(doc)}"></iframe></div>
+    </aside>`;
+  }
+
+  function openViewer(file) {
+    state.viewer = { file: String(file), full: !!(state.viewer && state.viewer.full) };
+  }
+
+  function bindViewer(root, render) {
+    const viewer = root.querySelector('.tc-code-viewer');
+    if (!viewer) return;
+    viewer.querySelector('[data-code-viewer-close]')?.addEventListener('click', () => { state.viewer = null; render(); });
+    viewer.querySelector('[data-code-viewer-full]')?.addEventListener('click', () => {
+      state.viewer = { ...(state.viewer || {}), full: !(state.viewer && state.viewer.full) };
+      render();
+    });
+  }
+
   window.ThomasCodeResults = {
     artifactCardsHtml,
     artifactHtml,
+    bindViewer,
     configure,
     ensureArtifactDoc,
     hydrateArtifactThumbnails,
     inlineLocalAssets,
+    openViewer,
     presentNewestResult,
     readProjectFile,
     runReportHtml,
+    viewerHtml,
   };
 })();

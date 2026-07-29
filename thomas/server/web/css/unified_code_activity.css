@@ -114,3 +114,59 @@
    was meant to solve -- so it sizes to its own aspect and the thread scrolls. */
 .tc-code-artifact-stage iframe { display: block; width: 100%; aspect-ratio: 16 / 10; min-height: 320px; border: 0; }
 @media (prefers-reduced-motion: reduce) { .tc-code-artifact-open { transition: none; } }
+
+/* ---- The viewer: what Thomas made, beside the conversation ---------------
+   Slides in from the right and takes the full height of the surface, which is
+   how a result is normally handed over. It replaces the inline stage above:
+   that put a tall frame in the middle of the transcript, so the thing Thomas
+   built became something to scroll past instead of something to use. */
+.tc-code-viewer {
+  position: absolute;
+  inset: 0 0 0 auto;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  width: min(760px, 62vw);
+  border-left: 1px solid var(--c-border-2);
+  background: color-mix(in srgb, var(--c-sidebar) 97%, transparent);
+  box-shadow: -26px 0 64px color-mix(in srgb, var(--c-bg) 62%, transparent);
+  backdrop-filter: blur(22px);
+  animation: tc-code-viewer-in .2s ease;
+}
+/* Full-bleed across Thomas, for a page that wants the whole screen. */
+.tc-code-viewer.is-full { width: 100%; border-left: 0; }
+@keyframes tc-code-viewer-in { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .tc-code-viewer { animation: none; } }
+
+.tc-code-viewer-head {
+  flex: 0 0 auto;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 12px 0 16px;
+  border-bottom: 1px solid var(--c-border);
+}
+.tc-code-viewer-title { display: flex; align-items: center; gap: 9px; min-width: 0; color: var(--c-text); }
+.tc-code-viewer-title i { font-size: 16px; color: var(--c-muted); flex: 0 0 auto; }
+.tc-code-viewer-title strong { font-size: 13px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-code-viewer-tools { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.tc-code-viewer-tools > button,
+.tc-code-viewer-tools > a {
+  display: grid; place-items: center; width: 32px; height: 32px; cursor: pointer;
+  border: 1px solid var(--c-border); border-radius: 9px; background: transparent;
+  color: var(--c-dim); text-decoration: none; transition: all .14s;
+}
+.tc-code-viewer-tools > button:hover, .tc-code-viewer-tools > a:hover,
+.tc-code-viewer-tools > button:focus-visible, .tc-code-viewer-tools > a:focus-visible {
+  border-color: var(--c-accent); color: var(--c-text);
+}
+.tc-code-viewer-tools > button:focus-visible, .tc-code-viewer-tools > a:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.tc-code-viewer-tools i { font-size: 15px; }
+
+/* The page fills whatever room the panel has. White underneath, because a
+   generated page usually assumes a white canvas and a dark gap around a
+   short page reads as a rendering fault. */
+.tc-code-viewer-stage { flex: 1 1 auto; min-height: 0; background: #fff; }
+.tc-code-viewer-stage iframe { display: block; width: 100%; height: 100%; border: 0; }

@@ -628,8 +628,9 @@
       <div class="tc-code-layout">
         <section class="tc-code-transcript" aria-label="Code conversation" data-ui-id="code.transcript" data-ui-label="Code conversation" data-ui-policy="move resize" data-ui-constraints="minWidth=320;minHeight=200">${historyAsk}<div id="tc-code-turns">${turns.map(turnHtml).join('') || '<div class="tc-code-empty"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>What should we make?</strong><span>Describe the outcome in the composer below. Keep using this same conversation for changes, tests, and review.</span></div>'}</div>${liveTurn}</section>
         <aside class="tc-code-actions" aria-label="Code activity" aria-hidden="${state.drawerOpen ? 'false' : 'true'}"${state.drawerOpen ? '' : ' inert'} data-ui-id="code.activity" data-ui-label="Code activity drawer" data-ui-policy="move resize" data-ui-constraints="minWidth=280;minHeight=240;maxWidth=520"><section class="tc-code-rail-section" data-ui-id="code.outputs" data-ui-label="Outputs" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=120"><div class="tc-code-section-title">Outputs</div>${approval}${preview}${artifactRows}${changeRows || (!preview && !artifactRows ? '<p class="tc-code-rail-empty">Previews, changed files, and proof will appear here without interrupting the conversation.</p>' : '')}${changeRows && !state.running ? `<button id="tc-code-checkpoint" class="tc-code-checkpoint" data-ui-id="code.action.checkpoint" data-ui-label="Checkpoint changes" data-ui-policy="protected" title="Commit these changes on a thomas-code/ branch">Checkpoint — commit these changes</button>` : ''}</section><section class="tc-code-rail-section tc-code-tree" data-ui-id="code.files" data-ui-label="Project files" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=120"><div class="tc-code-tree-head"><div class="tc-code-section-title">Files · ${esc(state.treePath || '/')}</div>${state.treePath ? '<button id="tc-code-tree-up">Up</button>' : ''}</div><ul>${treeRows || '<li class="tc-code-muted">Choose a project beside Tools to browse its files.</li>'}</ul></section><form id="tc-code-steer-form" class="tc-code-steer" ${state.running ? '' : 'hidden'} data-ui-id="code.steer" data-ui-label="Steer Thomas" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=80"><label for="tc-code-steer">Steer Thomas</label><input id="tc-code-steer" name="message" required placeholder="Change direction…" ${state.steeringBusy ? 'disabled' : ''}><button ${state.steeringBusy ? 'disabled' : ''}>${state.steeringBusy ? 'Confirming…' : 'Apply'}</button><button type="button" id="tc-code-stop" data-ui-id="code.action.stop" data-ui-label="Stop this run" data-ui-policy="protected" title="Stop this run" ${state.steeringBusy ? 'disabled' : ''}>Stop</button></form></aside>
-      </div></div>`;
+      </div>${codeResults().viewerHtml()}</div>`;
     const activityDrawer = root.querySelector('.tc-code-actions');
+    codeResults().bindViewer(root, render);
     activityDrawer?.insertAdjacentHTML('afterbegin', `<div class="tc-code-drawer-resize" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize activity drawer" aria-valuemin="280" aria-valuemax="520" aria-valuenow="${state.drawerWidth}"></div><header class="tc-code-drawer-head"><div><strong>Activity</strong><small>${esc(projectLabel)}</small></div><button data-code-drawer-close type="button" aria-label="Close activity"><i class="ph ph-x"></i></button></header>`);
     root.querySelector('[data-code-results-jump]')?.addEventListener('click', () => { state.drawerOpen = !state.drawerOpen; render(); });
     root.querySelector('[data-code-drawer-close]')?.addEventListener('click', () => { state.drawerOpen = false; render(); });
@@ -677,9 +678,15 @@
       const file = button.dataset.codeOpenArtifact;
       const slot = button.dataset.codeArtifactSlot || file;
       state.artifactOpen = state.artifactOpen || {};
-      state.artifactOpen[slot] = !state.artifactOpen[slot];
+      state.artifactOpen[slot] = true;
+      // Opens BESIDE the conversation rather than inside it. The card stays a
+      // snapshot you can read at a glance; the real thing gets the height of
+      // the window, and from there it can fill Thomas or leave for its own tab.
+      codeResults().openViewer(file);
       render();
-      if (state.artifactOpen[slot]) void safely(() => codeResults().ensureArtifactDoc(file), 'That result could not be opened.');
+      // Fetch the previewable copy after the panel is up, then redraw so the
+      // frame swaps from the plain artifact URL to the asset-inlined document.
+      void safely(async () => { await codeResults().ensureArtifactDoc(file); render(); }, 'That result could not be opened.');
     }));
     root.querySelectorAll('[data-code-save-artifact]').forEach(button => button.addEventListener('click', () => {
       // Saved from the file Thomas actually wrote, read through the same
