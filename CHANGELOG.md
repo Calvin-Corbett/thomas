@@ -7,6 +7,12 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (Housekeeping in the code that saves your chats — nothing changes for you)
+
+- **Nothing you can see is different.** Your chats are saved, listed, reopened and deleted exactly as before, from exactly the same files on disk. One internal file had grown past the size limit the project holds itself to, so the part of it that reads and writes those chat files moved into a file of its own. There is nothing to notice and nothing to do.
+- `thomas/server/app_middleware_handlers.py` was 816 lines against the 800-line limit checked by `tests/test_architecture.py::test_debt_trending`. The chat store moved out to `thomas/server/app_chat_store.py` (207 lines): naming a chat's file, checking and trimming an incoming chat before it is written, and the save / delete / load-all steps that take the lock. What stayed behind is what the file is named for — the middleware and the security checks that run on every request — now 664 lines.
+- **Nothing was deleted, shortened or reworded.** Every line moved verbatim, with its comments and docstrings attached to the code they explain. Everything that imported the old file still imports it unchanged. `tests/test_server_chats_api.py`, `tests/test_origin_guard_localhost.py`, `tests/test_server_app_core.py`, `tests/test_server_app_routes_init.py`, `tests/test_server_access_mode.py`, `tests/test_my_stuff_modernization_contract.py`, `tests/test_semantic_intent_ownership_frontend_legacy.py`, `tests/test_chat_mode_contract.py`, `tests/test_workspace_session_history.py` and `tests/test_server_chat_v2_helpers.py` pass untouched (136 tests).
+
 ### Changed (Housekeeping in the code that runs Thomas's tools — nothing changes for you)
 
 - **Nothing you can see is different.** Thomas runs its tools exactly as before: the same steps, the same safety checks on files it is about to write, the same wording when it turns a tool call down. One internal file had grown two lines past the size limit the project holds itself to, so part of it moved to a file of its own. There is nothing to notice and nothing to do.
