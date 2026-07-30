@@ -319,6 +319,28 @@
     #tc-build-badge[data-dirty="1"] { color: #e8b45c; border-color: rgba(232,180,92,.42); opacity: .82; }
     #tc-build-badge[data-dirty="1"]:hover, #tc-build-badge[data-dirty="1"]:focus-visible { color: #f5cd85; opacity: 1; }
     @media (prefers-reduced-motion: reduce) { #tc-build-badge { transition: none; } }
+    /* NOT FIXED, MEASURED 2026-07-30. This badge overlaps the "Thomas can make
+       mistakes" line below about 1210px, and 640 is far too low to prevent it.
+       Measured by comparing the PAINTED text extents (a Range over each text
+       node, not the element boxes -- the disclaimer's box spans the whole
+       composer column while its text is centred and much narrower, which
+       reports a 168px overlap at 1280 where the picture shows a 37px gap):
+
+         1220px  clear        1200px  1px        1160px  21px
+         1120px  41px         1100px  46px       900px  133px
+
+       Left alone deliberately. The crossover moves with the badge's own text --
+       "uncommitted" adds roughly 60px, a shorter commit or port takes some
+       back -- so any fixed breakpoint is approximate, and the honest ones are
+       bad trades: 1280 hides a build identity the owner uses on the commonest
+       laptop width, and anything lower still overlaps on a clean tree. The fix
+       that would actually hold is structural -- disclaimer and badge in one
+       flex row so the layout engine keeps them apart -- and that is a footer
+       rewrite, not a number.
+
+       Severity, stated plainly so the next person can weigh it: both elements
+       are low-emphasis and the badge is 55% opaque, so this is untidy rather
+       than misleading. Nothing reads as wrong; it just looks unfinished. */
     @media (max-width: 640px) { #tc-build-badge { display: none; } }
   </style>
 
