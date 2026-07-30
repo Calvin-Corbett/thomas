@@ -581,6 +581,10 @@ def test_code_adapter_lifecycle_behavior_in_node() -> None:
         # twice, once headed UPDATE and once THOMAS. Measured on a real failed run
         # at 476 identical characters each.
         "narrativeNotRepeated": True,
+        # "What should we make?" and its four starter cards stayed on screen for
+        # the whole of a new conversation's first run -- 76 seconds, every sample --
+        # above the live turn, with the question just asked nowhere to be seen.
+        "emptyStateStandsDown": True,
     }
 
 

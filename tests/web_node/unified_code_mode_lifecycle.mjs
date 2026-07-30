@@ -633,8 +633,48 @@ async function proveNarrativeNeverRepeatsItself() {
   }
 }
 
+// "What should we make?" and its four starter cards stayed on screen for the
+// WHOLE of a new conversation's first run -- measured at 76 seconds, every
+// sample -- sitting above the live turn, while the question the user had just
+// asked was nowhere on screen. The empty state was chosen by "are there saved
+// turns", the live turn by "is a run going", and on a brand-new conversation
+// both were true at once.
+//
+// Both are now decided by the same hoisted flag, so they cannot disagree.
+async function proveTheEmptyStateStandsDownForALiveRun() {
+  resetState();
+  Object.assign(state, {
+    activeId: 'c1',
+    projectRoot: '/repo',
+    conversation: { id: 'c1', turns: [] },
+    running: true,
+    runStatus: 'working',
+    liveEvents: [{ type: 'planning', text: 'Thomas is preparing the Code run…' }],
+  });
+  snapshots.length = 0;
+  api.render();
+  const during = snapshots.at(-1) || '';
+  if (during.includes('tc-code-empty')) throw new Error('the empty state renders during a live run');
+  if (!during.includes('data-code-live-turn')) throw new Error('no live turn rendered while running');
+
+  // The control: with nothing running and nothing saved, the empty state is
+  // exactly what should be there. A fix that simply deleted it would pass the
+  // assertion above and break the surface it is meant to introduce.
+  resetState();
+  Object.assign(state, {
+    activeId: 'c1', projectRoot: '/repo', conversation: { id: 'c1', turns: [] },
+    running: false, liveEvents: [],
+  });
+  snapshots.length = 0;
+  api.render();
+  const idle = snapshots.at(-1) || '';
+  if (!idle.includes('tc-code-empty')) throw new Error('the empty state is gone when it should be shown');
+  if (!idle.includes('tc-code-starter')) throw new Error('the starter cards are gone');
+}
+
 await proveApprovalRetry();
 await proveNarrativeNeverRepeatsItself();
+await proveTheEmptyStateStandsDownForALiveRun();
 await proveScopedSwitch();
 await proveSteeringConfirmation();
 await proveEvidenceAndRefresh();
@@ -647,4 +687,4 @@ await proveLostSendRetryAndCursor();
 await proveAccessibleDrawerAndPickerErrors();
 await proveTheRealReasonSurvivesTheExitWrapper();
 console.warn = originalWarn;
-process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true, failureReason: true, narrativeNotRepeated: true }));
+process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true, failureReason: true, narrativeNotRepeated: true, emptyStateStandsDown: true }));

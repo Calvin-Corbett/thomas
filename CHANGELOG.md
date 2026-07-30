@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (The starter cards no longer sit above a running task)
+
+- **"What should we make?" and its four starter cards stayed on screen for the entire first run of every new conversation** — measured at **76 seconds, every single sample** — sitting directly above the live "Thomas · working" turn, while the question just asked was nowhere on screen. On the most common path there is: a new user's very first Code task.
+- The empty state was chosen by *"are there saved turns"* and the live turn by *"is a run going"*. On a brand-new conversation both are true at once, so both rendered. They are now decided by the same hoisted flag and cannot disagree.
+- Re-measured after: **0 seconds** with both on screen. Controls verified too — the empty state and its four cards still appear when nothing is running, and still disappear when a conversation with turns is opened. A fix that simply deleted the empty state would have passed the first check and broken the surface it exists to introduce, so the harness asserts both directions.
+- Found by watching a run stream, which I had never done: the live rendering path was one I had changed (markdown) and never looked at. It also confirmed the live path renders markdown correctly — a streaming note produced `<code>` at t+36s and the live reply rendered at t+42s.
+- **Still missing, and not fixed here:** the user's own message is not echoed during that first run (`userBubble=False` throughout). Showing it needs new state plus careful clearing to avoid a duplicate bubble once the conversation reloads — separate scope, deliberately not half-done.
+
 ### Fixed (Progress notes showed their markdown too)
 
 - The same defect as the replies, one block up the turn: **39 of 71 real progress notes carry backticks or bold**, and every one printed them raw — `then build a self-contained \`report.html\` with CSV parsing`.
