@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Thomas had no face — 17 icons in Code were drawing a dot)
+
+- **Thomas's avatar was a bullet.** `ph-robot` sits on every message he sends and in the Code empty state, and it had no glyph, so it fell through to the `\2022` catch-all at the top of `chat_shell.css`. So did `ph-check-circle`, drawn **18 times in a single transcript** — once per "Checked tool result" row in the activity log.
+- **Thomas's icons are a hand-written glyph map, not the Phosphor webfont** (deliberately — the shell must boot offline). That map opens with a catch-all, so a class the markup uses but the map never defines renders a meaningless dot. The element is there, the class is right, the layout is correct, every test passes. **A missing icon is invisible, not broken.**
+- Found by diffing every `ph-` class the Code surface references against the names the map defines: **17 unmapped**, including `ph-robot`, `ph-files` (the "N files changed" row), `ph-warning-circle`, `ph-play-circle`, `ph-folder-open`, `ph-image`, `ph-circle-notch`, `ph-caret-up`, and `ph-folder-simple` — the project-chip icon added earlier the same day, which had been shipping as a dot.
+- All 17 are mapped, plus ~30 more the shared surfaces reach for (status marks, arrows, files, shields, git). Verified live on a 1920×1080 screen with every panel and `<details>` expanded: **207 icons rendered, zero bullets.** Thomas's mark is now `✦`.
+- `tests/test_every_icon_the_ui_asks_for_is_drawn.py` pins it, and is honest about its limits: it proves no icon is a dot, not that any glyph is a *good* symbol — only looking can do that. It also pins the premise (the catch-all exists, so an unmapped name degrades to a bullet rather than to nothing) and skips classes assembled at runtime like `ph-caret-${up|down}`, whose real halves are checked wherever they appear literally. Confirmed to fail when `ph-robot` is removed.
+
 ### Changed (What Thomas built opens beside the conversation, not inside it)
 
 - **The result used to expand in place**, dropping a tall frame into the middle of the transcript. That turned the thing Thomas made into something you scroll past on a very long page rather than something you use, and a full-screen app never fits in a card slot anyway.

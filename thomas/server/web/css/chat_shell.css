@@ -55,6 +55,74 @@
 .ph-code::before { content: "<>"; font-size: .72em; }
 .ph-copy::before { content: "\25A3"; }
 .ph-thumbs-up::before { content: "+"; }
+/* Everything below was USED and never mapped, so each one drew the `\2022`
+   bullet above. Found by diffing every `ph-` class in the Code surface against
+   the names defined here: 17 of them, including `ph-robot` -- Thomas's own
+   avatar, on every message he sends and in the empty state -- and
+   `ph-folder-simple` on the project chip. Nothing failed and no test could see
+   it; the markup was correct and the screen showed dots.
+   Keep this file and the markup in step: an unmapped name is invisible. */
+.ph-robot::before { content: "\2726"; }
+.ph-brain::before { content: "\273A"; }
+.ph-briefcase::before { content: "\25A4"; }
+.ph-cards-three::before { content: "\25A6"; }
+.ph-caret-up::before { content: "\2303"; }
+.ph-chats-circle::before { content: "\2261"; }
+.ph-circle-notch::before { content: "\25D4"; }
+.ph-files::before { content: "\29C9"; }
+.ph-folder-simple::before { content: "\25B1"; }
+.ph-folder-open::before { content: "\25B0"; }
+.ph-image::before { content: "\25A7"; }
+.ph-pen-nib::before { content: "\2712"; }
+.ph-pencil-simple::before { content: "\270F"; }
+.ph-play-circle::before { content: "\25B6"; }
+.ph-plugs-connected::before { content: "\26AD"; }
+.ph-warning-circle::before, .ph-warning::before { content: "\26A0"; }
+.ph-arrow-bend-down-right::before { content: "\21B3"; }
+.ph-terminal-window::before { content: "\232B"; }
+.ph-clipboard-text::before { content: "\25A4"; }
+/* Status and common marks. `ph-check-circle` alone was drawn 18 times in a
+   single Code transcript -- every "Checked tool result" row in the activity
+   log -- as a bullet. The rest are the names the shared surfaces reach for;
+   a roughly-right symbol carries meaning and a bullet carries none. */
+.ph-check-circle::before { content: "\2705"; }
+.ph-x-circle::before { content: "\2297"; }
+.ph-circle::before { content: "\25CB"; }
+.ph-dot-outline::before { content: "\25CC"; }
+.ph-dots-three-outline::before { content: "\22EF"; }
+.ph-info::before { content: "\2139"; }
+.ph-lightning::before { content: "\26A1"; }
+.ph-spinner::before, .ph-hourglass::before { content: "\29D6"; }
+.ph-clock-countdown::before, .ph-clock-counter-clockwise::before { content: "\29D7"; }
+.ph-eye::before { content: "\25C9"; }
+.ph-eye-slash::before { content: "\2298"; }
+.ph-trash::before { content: "\2326"; }
+.ph-list::before, .ph-rows::before { content: "\2261"; }
+.ph-stack::before { content: "\2263"; }
+.ph-git-branch::before { content: "\2442"; }
+.ph-globe::before { content: "\25CD"; }
+.ph-shield::before, .ph-shield-check::before { content: "\26E8"; }
+.ph-shield-warning::before, .ph-siren::before { content: "\26A0"; }
+.ph-key::before { content: "\26BF"; }
+.ph-star::before { content: "\2605"; }
+.ph-sparkle::before { content: "\2726"; }
+.ph-package::before, .ph-cube::before { content: "\25A9"; }
+.ph-database::before, .ph-cylinder::before { content: "\233F"; }
+.ph-table::before { content: "\25A6"; }
+.ph-paperclip::before { content: "\1F4CE"; }
+.ph-paper-plane-tilt::before { content: "\27A4"; }
+.ph-squares-four::before { content: "\25A6"; }
+.ph-wrench::before { content: "\2692"; }
+.ph-bug::before { content: "\2622"; }
+.ph-gear::before { content: "\2699"; }
+.ph-minus::before { content: "\2212"; }
+.ph-arrow-left::before { content: "\2190"; }
+.ph-caret-left::before { content: "\2039"; }
+.ph-arrow-counter-clockwise::before, .ph-arrow-counterclockwise::before { content: "\21BA"; }
+.ph-arrows-clockwise::before { content: "\21C4"; }
+.ph-user-circle::before { content: "\25CE"; }
+.ph-note::before { content: "\25A4"; }
+.ph-game-controller::before { content: "\235F"; }
 html, body { margin: 0; padding: 0; height: 100%; }
 *, *::before, *::after { box-sizing: border-box; }
 .tc-scroll { scrollbar-width: thin; scrollbar-color: var(--c-border-2) transparent; }
