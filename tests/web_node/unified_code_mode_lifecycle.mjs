@@ -718,10 +718,65 @@ async function proveTheFileListNamesTheRealReasonItIsEmpty() {
   }
 }
 
+// After Stop the header read "Thomas · Code · working" directly above its own
+// note saying "Stopped -- you interrupted this run." `is-live` drives that
+// suffix and was set for as long as a live turn existed at all, which outlives
+// the run. Measured: status "Stopped", turn still carrying is-live, suffix still
+// " · working".
+//
+// Also: the stream's `done` event carries the literal string "done", so the feed
+// grew a "DONE / done" row -- transient while running, left sitting there after
+// a stop, reading as debug output.
+async function proveAStoppedRunStopsCallingItselfWorking() {
+  const renderWith = (patch) => {
+    resetState();
+    Object.assign(state, {
+      activeId: 'c1', projectRoot: '/repo', conversation: { id: 'c1', turns: [] }, ...patch,
+    });
+    snapshots.length = 0;
+    api.render();
+    return snapshots.at(-1) || '';
+  };
+
+  const running = renderWith({
+    running: true, runStatus: 'working',
+    liveEvents: [{ type: 'planning', text: 'Thomas is preparing the Code run…' }],
+  });
+  if (!running.includes('is-live')) throw new Error('a running turn is not marked live');
+
+  const stopped = renderWith({
+    running: false, runStatus: 'stopped',
+    liveEvents: [
+      { type: 'planning', text: 'Thomas is preparing the Code run…' },
+      { type: 'stopped', text: 'Stopped — you interrupted this run.' },
+    ],
+  });
+  if (!stopped.includes('data-code-live-turn')) throw new Error('the stopped turn vanished');
+  if (stopped.includes('is-live')) throw new Error('a stopped run still calls itself working');
+
+  // A row whose text only repeats its heading says nothing.
+  const noise = renderWith({
+    running: false, runStatus: 'stopped',
+    liveEvents: [{ type: 'planning', text: 'real progress' }, { type: 'done', text: 'done' }],
+  });
+  if (noise.includes('data-code-kind="done"')) throw new Error('the empty DONE row is still rendered');
+  if (!noise.includes('real progress')) throw new Error('a real note was dropped with it');
+
+  // ...but a `done` that carries real text keeps its row.
+  const useful = renderWith({
+    running: false, runStatus: 'stopped',
+    liveEvents: [{ type: 'done', text: 'wrote 3 files and reverted 1' }],
+  });
+  if (!useful.includes('wrote 3 files and reverted 1')) {
+    throw new Error('dropped a done event that actually said something');
+  }
+}
+
 await proveApprovalRetry();
 await proveNarrativeNeverRepeatsItself();
 await proveTheEmptyStateStandsDownForALiveRun();
 await proveTheFileListNamesTheRealReasonItIsEmpty();
+await proveAStoppedRunStopsCallingItselfWorking();
 await proveScopedSwitch();
 await proveSteeringConfirmation();
 await proveEvidenceAndRefresh();
@@ -734,4 +789,4 @@ await proveLostSendRetryAndCursor();
 await proveAccessibleDrawerAndPickerErrors();
 await proveTheRealReasonSurvivesTheExitWrapper();
 console.warn = originalWarn;
-process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true, failureReason: true, narrativeNotRepeated: true, emptyStateStandsDown: true, fileListNamesItsReason: true }));
+process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true, failureReason: true, narrativeNotRepeated: true, emptyStateStandsDown: true, fileListNamesItsReason: true, stoppedRunIsNotWorking: true }));

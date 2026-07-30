@@ -251,8 +251,20 @@
       if (event === finalEvent) return false;
       if (finalText && eventType(event) === 'say' && eventLabel(event) === finalText) return false;
       if (isTechnicalEvent(event)) return true;
-      const label = eventLabel(event);
-      if (!label) return true;
+      const label = String(eventLabel(event) || '').trim();
+      // A row whose text only repeats its own heading says nothing. The stream's
+      // `done` event carries the literal string "done", so every run grew a
+      // "DONE / done" line -- transient while running, but left sitting in the
+      // transcript after a Stop, where it reads as debug output beside the real
+      // "Stopped — you interrupted this run." note.
+      //
+      // Keyed on the label adding nothing to its kind, not on the kind itself,
+      // so a `done` event that ever carries real text still gets its row. Placed
+      // here rather than in narrativeActivityHtml because the LIVE feed does not
+      // go through that function -- it maps eventHtml straight off this list, so
+      // a filter over there fixed the saved transcript and left the live one
+      // untouched. This is the seam both paths share.
+      if (!label || label.toLowerCase() === String(eventKind(event) || '').trim().toLowerCase()) return false;
       if (seen.has(label)) return false;
       seen.add(label);
       return true;
@@ -713,7 +725,16 @@
     // precisely the bug this fixes.
     const hasLiveTurn = Boolean(state.running || state.liveEvents.length);
     const liveTurn = hasLiveTurn
-      ? `<article class="tc-code-turn is-agent is-live" data-code-live-turn><div class="tc-code-message-head"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>Thomas</strong><small>Code</small></div><div class="tc-code-turn-body"><div id="tc-code-live-events" aria-live="polite">${liveNarrative}</div><div id="tc-code-live-technical">${liveTechnical}</div>${liveReply}</div></article>`
+      // `is-live` only while the run actually is. The class drives
+      // `.tc-code-turn.is-live … small::after { content: ' · working' }`, and it
+      // was set for as long as a live turn existed at all -- which outlives the
+      // run. After Stop the header read "Thomas · Code · working" directly above
+      // its own note saying "Stopped — you interrupted this run." Measured:
+      // status "Stopped", turn still carrying is-live, suffix still " · working".
+      //
+      // `state.running` is the same condition the steer form already uses to hide
+      // itself on stop, so the two now agree instead of disagreeing.
+      ? `<article class="tc-code-turn is-agent${state.running ? ' is-live' : ''}" data-code-live-turn><div class="tc-code-message-head"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>Thomas</strong><small>Code</small></div><div class="tc-code-turn-body"><div id="tc-code-live-events" aria-live="polite">${liveNarrative}</div><div id="tc-code-live-technical">${liveTechnical}</div>${liveReply}</div></article>`
       : '<div id="tc-code-live-events" hidden></div><div id="tc-code-live-technical" hidden></div>';
     const visibleChanges = state.changes.filter(change => !isInternalResultPath(change.file));
     const changeRows = visibleChanges.map(change => `<article class="tc-code-change"><header><strong>${esc(change.file)}</strong><span><button data-code-keep="${esc(change.file)}">Keep</button><button data-code-revert="${esc(change.file)}">Revert</button></span></header><details><summary>View ${change.untracked ? 'new file' : 'diff'}</summary><pre>${esc(change.diff || (change.untracked ? 'New file' : 'No textual diff'))}</pre></details></article>`).join('');

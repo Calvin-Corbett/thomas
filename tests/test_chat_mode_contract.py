@@ -589,6 +589,9 @@ def test_code_adapter_lifecycle_behavior_in_node() -> None:
         # the drawer header named a project while the list beneath it told you to
         # choose one.
         "fileListNamesItsReason": True,
+        # After Stop the header read "Thomas - Code - working" directly above its
+        # own note saying "Stopped - you interrupted this run".
+        "stoppedRunIsNotWorking": True,
     }
 
 

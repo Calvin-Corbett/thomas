@@ -7,6 +7,15 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A stopped run stops calling itself "working")
+
+- After pressing Stop, the turn header read **"Thomas · Code · working"** directly above its own note saying **"Stopped — you interrupted this run."** Measured: status `Stopped`, the turn still carrying `is-live`, the `::after` suffix still `" · working"`. The class drives that suffix and was set for as long as a live turn existed at all — which outlives the run. It now follows `state.running`, the same condition the steer form already used to hide itself on stop, so the two agree instead of contradicting each other.
+- **A raw `DONE / done` row** rendered beside it: the stream's `done` event carries the literal string "done", so the feed grew a line whose text only repeated its own heading. Transient during a normal run, but left sitting in the transcript after a stop, where it reads as debug output.
+  - Dropped when the label adds nothing to the kind — **not** by removing the event kind, so a `done` that ever carries real text still gets its row. Both cases are tested.
+  - Placed in `progressEvents`, the seam both paths share. Putting it in `narrativeActivityHtml` first fixed the saved transcript and left the live feed untouched, because the live feed maps `eventHtml` straight off that list — measured, and the reason the second attempt exists.
+- Reverting either fix independently turns the harness red: `a stopped run still calls itself working`, `the empty DONE row is still rendered`.
+- **Steer and Stop both work.** Apply showed `Confirming…` with the input disabled, a `STEERING` event reached the run, and it continued to completion; Stop moved the run to `Stopped` in under 4 seconds with the composer usable again and no page errors. Neither had been pressed before this session.
+
 ### Fixed (A previewed file is a miniature, not a keyhole)
 
 - Clicking a file in the drawer's tree rendered the page **1:1 into a ~247px column**: "Sort by amount" cut to "Sort by", the table header reading `DATE DESCRIPTION AM…`, about a fifth of the page visible and every edge sliced mid-word. It reads as a broken render rather than a preview.
