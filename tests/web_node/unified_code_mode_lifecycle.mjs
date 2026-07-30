@@ -624,6 +624,19 @@ async function proveTheRealReasonSurvivesTheExitWrapper() {
   ]);
   if (!/technical problem/i.test(wrappersOnly)) throw new Error('unusable errors should still fall back to the generic message');
 
+  // A run that dies with NO error event still knows two things: how it ended,
+  // and that nothing explained why. Measured on four consecutive runs of one
+  // goal, each recording three events then exiting 1 with no error: every one
+  // said only "The Code task stopped before it finished."
+  const silentWithReason = api.failureSummary({ ok: false, reason: 'exited 1' }, []);
+  if (!silentWithReason.includes('exited 1')) throw new Error('a silent failure hides how it ended');
+  if (!/no error recorded/i.test(silentWithReason)) {
+    throw new Error('a silent failure does not distinguish itself from a withheld reason');
+  }
+  // And with nothing to say, it must not invent anything.
+  const silentNoReason = api.failureSummary({ ok: false }, []);
+  if (/exited|no error recorded/i.test(silentNoReason)) throw new Error('a reason was invented where none existed');
+
   // No errors at all is a third, distinct case and must not borrow either.
   const silent = api.failureSummary({ ok: false }, []);
   if (/technical problem/i.test(silent)) throw new Error('a silent failure was reported as a surfaced error');
@@ -956,4 +969,4 @@ await proveLostSendRetryAndCursor();
 await proveAccessibleDrawerAndPickerErrors();
 await proveTheRealReasonSurvivesTheExitWrapper();
 console.warn = originalWarn;
-process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true, failureReason: true, narrativeNotRepeated: true, emptyStateStandsDown: true, fileListNamesItsReason: true, stoppedRunIsNotWorking: true, revertRefreshesFileList: true, truncatedRunSaysSo: true, yourMessageIsOnScreen: true, toolRowsNameTheirTool: true }));
+process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true, failureReason: true, narrativeNotRepeated: true, emptyStateStandsDown: true, fileListNamesItsReason: true, stoppedRunIsNotWorking: true, revertRefreshesFileList: true, truncatedRunSaysSo: true, yourMessageIsOnScreen: true, toolRowsNameTheirTool: true, silentFailureSaysWhatIsKnown: true }));

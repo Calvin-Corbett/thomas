@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A silent failure says how it ended, and that nothing said why)
+
+- Four consecutive runs of the same goal (15:42, 15:44, 15:46, 15:48) each recorded exactly **three** events — Thomas stating its plan, the project structure, `(empty directory)` — then exited 1 with **no error event at all**. Nothing changed, zero validations, one generic risk.
+- Every one of them told the owner **"The Code task stopped before it finished."** and nothing more, four times over, while `turn.reason` held `exited 1` throughout. The exit code was known and unsaid.
+- Now reads *"The Code task stopped before it finished — exited 1, with no error recorded."* **"No error was recorded" is the part worth saying out loud**: it separates a run that failed silently from one whose reason is being withheld, which is the difference between hunting for a message and knowing there isn't one.
+- **No invented cause** — there genuinely wasn't one, and the guard asserts that too: called without a `reason`, the message must not mention an exit or an error at all. Restoring the old text turns it red.
+- Also worth recording from those four runs: each created its own project folder (`Code task 2026-07-30 1042/1046/1048`) and left it empty. So the 24 empty project folders found earlier are not only abandoned "New code task" clicks — failed runs make them too.
+
 ### Documented (A claim I tried to remove, and should not have)
 
 - Swept every user-facing string in Code mode that claims a check or a verification, after finding the word wrong in three separate places. 27 strings; 26 of them correct. The one that looked wrong was the reply fallback: **"Finished the requested changes and passed Thomas's verification"**, shown when `turn.ok` is true — and `ok` is only exit 0 with files changed, which says nothing about what was checked.

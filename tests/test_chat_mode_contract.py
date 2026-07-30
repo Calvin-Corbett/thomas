@@ -653,6 +653,11 @@ def test_code_adapter_lifecycle_behavior_in_node() -> None:
         # the event all along (25 of 27 carried it). And a `meta` event whose
         # text is "Kept index.html." announced itself as "Verified the result".
         "toolRowsNameTheirTool": True,
+        # Four consecutive runs of one goal each recorded three events then
+        # exited 1 with no error event, and every one told the owner only "The
+        # Code task stopped before it finished." -- while `reason` held
+        # "exited 1" throughout.
+        "silentFailureSaysWhatIsKnown": True,
     }
 
 

@@ -418,7 +418,23 @@
     // Errors existed but none of them were fit to show, which is a different
     // situation from no errors at all -- keep the two messages distinct.
     if (errorLabels.length) return 'Thomas hit a technical problem and stopped before finishing. Open the technical details for the raw error.';
-    return 'The Code task stopped before it finished.';
+    // Say the two things that ARE known: how it ended, and that nothing said why.
+    //
+    // Measured on four consecutive runs of the same goal (15:42, 15:44, 15:46,
+    // 15:48). Each recorded exactly three events -- Thomas stating its plan, the
+    // project structure, "(empty directory)" -- then exited 1 with no error
+    // event at all. Every one of them told the owner "The Code task stopped
+    // before it finished." and nothing else, four times over, while `reason`
+    // held "exited 1" the whole time.
+    //
+    // "no error was recorded" is worth saying out loud: it distinguishes a run
+    // that failed silently from one whose reason is being withheld, and it is
+    // the difference between looking for a message and knowing there is none.
+    // Still no invented cause -- there genuinely was not one.
+    const ending = String((turn && turn.reason) || '').trim();
+    return ending
+      ? `The Code task stopped before it finished — ${ending}, with no error recorded.`
+      : 'The Code task stopped before it finished.';
   }
 
   function turnHtml(turn) {
