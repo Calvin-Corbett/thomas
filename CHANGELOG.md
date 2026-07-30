@@ -7,6 +7,24 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (The run report recorded nothing about what Thomas did)
+
+- `attempts[].key_actions` is the report's account of the agent's own work. Across **105 agent turns it was non-empty ZERO times**, while its siblings on the same record were filled 100% (`goal`, `outcome`, `exit_state`) and 18% (`errors`).
+- Not because nothing happened: the Call of Duty run made three `fs.write_file` calls and three `diff.create` calls and still recorded `[]`.
+- Cause: `_attempt_actions` matched only `fc == "tool"` with a name other than `run`, which **cannot happen**. In the real stream every tool CALL is the engine's own `run` check; the agent's work arrives as *named* `tool_result` events. Across four real runs the correspondence is exact — unnamed results match `run` calls one-for-one — so "named" cleanly separates agent from engine:
+
+  | run | tool calls | tool_result | named | unnamed |
+  |---|---|---|---|---|
+  | to-do | 2 (all `run`) | 6 | 4 | 2 |
+  | habits | 2 (all `run`) | 6 | 4 | 2 |
+  | call of duty | 4 (all `run`) | 62 | 58 | 4 |
+  | study planner | 2 (all `run`) | 27 | 25 | 2 |
+
+- Verified by replaying the **real stored transcripts** back through `build_run_report`, not a fixture: 4, 4, 7, 8, 8, 8 actions naming `fs.write_file`, `code.project_structure`, `fs.list_dir`. Reverting the change returns every one of them to **0**.
+- The existing unit fixture emits `{"fc":"tool","name":"Edit"}` — a shape the engine never produces — and asserts `"Edit"` appears, so it passed the whole time. That is the failure mode the new guard exists to prevent: a fixture encoding what the code expects instead of what production emits. Both now pass.
+- Guard also pins the opposite error: a pass that only ran engine checks must record **no** agent actions, so the filter cannot be loosened until check output counts as work.
+- Known limitation left at the line: for `fs.read_file` the event text is the file content, so the label is an accurate but unreadable source fragment. Not fixed, because the readable alternative is a per-tool formatter that guesses which part of each payload is the subject. Nothing renders this field today.
+
 ### Fixed (Every generated Export button produced nothing)
 
 - Asked Thomas for a to-do list with an **Export CSV** button, specifically to test today's sandbox fixes on *fresh* output. It built a correct one. Through Thomas's own artifact route the button did **nothing** — no file, no error, no console message. The identical bytes on a plain local http server downloaded `tasks-2026-07-30.csv` immediately.

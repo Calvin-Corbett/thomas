@@ -88,12 +88,56 @@ def _segment_attempts(
 
 
 def _attempt_actions(segment: list[dict[str, Any]]) -> list[str]:
-    """Key agent actions in one pass — its tool calls, minus the engine's own checks."""
+    """Key agent actions in one pass — its named tool activity, minus engine checks.
+
+    Reads BOTH ``tool`` and ``tool_result``, and that is the whole point.
+
+    This previously matched only ``fc == "tool"`` with a name other than ``run``,
+    which cannot happen: measured across 105 agent turns, ``key_actions`` was
+    non-empty ZERO times, while its siblings ``goal``, ``outcome`` and
+    ``exit_state`` were populated 100% of the time. In the real stream every
+    ``tool`` CALL is the engine's own ``run`` check; the agent's work arrives as
+    NAMED ``tool_result`` events. Four runs, and the correspondence is exact::
+
+        run             tool calls    tool_result   named   unnamed
+        to-do           2 (all run)             6       4         2
+        habits          2 (all run)             6       4         2
+        call of duty    4 (all run)            62      58         4
+        study planner   2 (all run)            27      25         2
+
+    Unnamed results match ``run`` calls one-for-one every time, so "named" is a
+    clean discriminator: ``fs.write_file``, ``diff.create``, ``code.search`` are
+    the agent; the unnamed ones are check output. The Call of Duty run wrote
+    three files and created three diffs and still reported no key actions.
+
+    The unit fixture in tests/test_run_report.py emits
+    ``{"fc":"tool","name":"Edit"}`` — a shape the engine never produces — so it
+    passed throughout. Accepting either kind keeps that fixture meaningful and
+    makes real runs populate; tests/test_the_report_says_what_thomas_did.py pins
+    the real shape.
+
+    KNOWN LIMITATION, not fixed here. The label is ``name: text``, and for
+    ``fs.write_file`` that reads well (``Wrote 10807 chars to ...tasks.html``)
+    but for ``fs.read_file`` the event's text is the FILE CONTENT, so the label
+    becomes a line-numbered source fragment::
+
+        fs.read_file: 250 white-space: nowrap; 251 border: 0; 252 } 253 </style>
+
+    Accurate but not a summary. Left alone because the readable alternative is a
+    per-tool formatter that guesses which part of each payload is the subject,
+    and guessing there would trade an ugly true label for a tidy wrong one.
+    Nothing renders this field today; whoever does should format per tool name.
+    """
+
     actions: list[str] = []
     for event in segment:
-        if event.get("fc") != "tool" or str(event.get("name") or "") == "run":
+        if str(event.get("fc") or "") not in ("tool", "tool_result"):
             continue
-        label = _snippet(f"{event.get('name') or 'tool'}: {event.get('text') or ''}".rstrip(": "), 120)
+        name = str(event.get("name") or "").strip()
+        # Unnamed => engine check output. `run` => the engine check call itself.
+        if not name or name == "run":
+            continue
+        label = _snippet(f"{name}: {event.get('text') or ''}".rstrip(": "), 120)
         if not actions or actions[-1] != label:
             actions.append(label)
     if len(actions) > _MAX_ACTIONS_PER_ATTEMPT:
