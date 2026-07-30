@@ -7,6 +7,15 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Every generated Export button produced nothing)
+
+- Asked Thomas for a to-do list with an **Export CSV** button, specifically to test today's sandbox fixes on *fresh* output. It built a correct one. Through Thomas's own artifact route the button did **nothing** — no file, no error, no console message. The identical bytes on a plain local http server downloaded `tasks-2026-07-30.csv` immediately.
+- Same browser, same clicks, same page; only the sandbox differed. `allow-downloads` was not granted. **Fourth instance of one shape**, and the only one caught on output built *after* the earlier fixes shipped.
+- Both directions: token removed → Thomas **NONE**, control **OK**; restored → both **OK**.
+- The same run confirmed the modal fix holds on new output: *Clear completed* asked `"Remove 1 completed task?"` and removed 1 of 3. Persistence held too (3 → 3 across a reload).
+- Census across **442** generated files under `~/.thomas`: modals 9, pointer lock 3, downloads 3, **popups 0**. `allow-popups` stays ungranted, pinned by a test, so widening later needs a measured failure.
+- Also fixed **my own guard being brittle**: the directive outgrew one line, Python implicitly concatenates adjacent string literals, and a scan anchored on the opening quote stopped at the first closing quote — reporting `allow-pointer-lock` missing while it sat plainly on the next line. A guard that goes red on reformatting is how a real regression slips past, so both existing guards now join literals before scanning.
+
 ### Fixed (A generated first-person game could shoot but not turn)
 
 - From a game Thomas built today: `if (document.pointerLockElement !== canvas) canvas.requestPointerLock?.();` and mouse-look gated on `document.pointerLockElement === canvas`. The artifact CSP sandbox did not grant `allow-pointer-lock`, so that is **never true** — the player can shoot, but cannot look around. Nothing raises; the request is refused silently.

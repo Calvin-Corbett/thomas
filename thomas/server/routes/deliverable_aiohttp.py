@@ -619,10 +619,21 @@ class DeliverablePreviewService:
         # simply refused. Two of the owner's own deliverables call it
         # (that game.js and code_scratch/blocktown-84.html).
         #
+        # `allow-downloads` is the fourth, and the only one caught on FRESH
+        # output: Thomas was asked for a to-do list with an Export CSV button and
+        # built a correct one. Through this route the button did nothing at all;
+        # the identical bytes served from a plain local http server downloaded
+        # `tasks-2026-07-30.csv` immediately. Same browser, same clicks, only the
+        # sandbox differs -- which is what makes it Thomas's defect rather than
+        # the model's. Any generated export/save/report button was dead.
+        #
         # `allow-popups` is deliberately NOT granted: zero deliverables call
         # `window.open(`, so there is no defect to fix and no reason to widen.
+        # Census across 442 generated files: modals 9, pointer lock 3, downloads
+        # 3, popups 0.
         response.headers["Content-Security-Policy"] = (
-            "sandbox allow-scripts allow-forms allow-same-origin allow-modals allow-pointer-lock; "
+            "sandbox allow-scripts allow-forms allow-same-origin allow-modals "
+            "allow-pointer-lock allow-downloads; "
             "default-src 'self' data: blob:; "
             "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; "
             "style-src 'self' 'unsafe-inline' data:; img-src 'self' data: blob:; "

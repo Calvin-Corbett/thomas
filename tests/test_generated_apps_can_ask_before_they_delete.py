@@ -54,7 +54,12 @@ def _sandbox_directives(text: str) -> list[str]:
     without_comments = "\n".join(
         line for line in text.splitlines() if not line.lstrip().startswith("#")
     )
-    return [m.group(1) for m in re.finditer(r'"sandbox ([^";]*)', without_comments)]
+    # Join adjacent string literals first: the directive outgrew one line and
+    # Python implicitly concatenates them, so a scan anchored on the opening
+    # quote stops at the first closing quote and reports tokens missing that are
+    # plainly there.
+    joined = re.sub(r'"\s*\n\s*"', "", without_comments)
+    return [m.group(1) for m in re.finditer(r'"sandbox ([^";]*)', joined)]
 
 
 def test_the_artifact_csp_permits_modals() -> None:

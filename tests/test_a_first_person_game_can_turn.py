@@ -61,7 +61,13 @@ def _served_sandbox() -> str:
     without_comments = "\n".join(
         line for line in text.splitlines() if not line.lstrip().startswith("#")
     )
-    directives = [m.group(1) for m in re.finditer(r'"sandbox ([^";]*)', without_comments)]
+    # Join adjacent string literals before scanning. The directive outgrew one
+    # line and Python implicitly concatenates `"sandbox a b "` `"c d; "`, which
+    # made this guard fail with the token PRESENT -- it had captured only up to
+    # the first closing quote. A guard that goes red on reformatting is a guard
+    # that gets ignored, which is how a real regression slips past.
+    joined = re.sub(r'"\s*\n\s*"', "", without_comments)
+    directives = [m.group(1) for m in re.finditer(r'"sandbox ([^";]*)', joined)]
     served = [d for d in directives if "allow-same-origin" in d]
     assert served, "no artifact sandbox directive grants allow-same-origin any more"
     return served[0]
