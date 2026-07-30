@@ -7,6 +7,12 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Progress notes showed their markdown too)
+
+- The same defect as the replies, one block up the turn: **39 of 71 real progress notes carry backticks or bold**, and every one printed them raw — `then build a self-contained \`report.html\` with CSV parsing`.
+- Uses the **inline** renderer, not the block one, because these render inside a `<span>`: it emits `<code>`/`<strong>`/`<em>`/`<a>` and nothing block-level, so it drops into the existing markup with no container or stylesheet change. Only 11% of notes carry bullet lines, and a leading `- ` left as a literal dash reads fine in prose. Verified after the change: `<code>` present, **zero** `<p>`/`<ul>`/`<ol>` inside the span, zero raw backticks.
+- **Raw tool output is deliberately excluded and now pinned by a test.** Technical rows carry command output, where a backtick or asterisk is a character rather than formatting; those stay escaped and literal.
+
 ### Fixed (Code replies showed their markdown instead of rendering it)
 
 - **`Built it as a standalone **Nova** calculator experience in \`index.html\`.`** — that is what the Code surface printed, asterisks and backticks and all. **16 of 17 real Code replies carry markdown**, so nearly every one read as punctuation noise. The identical prose in Chat rendered properly: Chat runs `mdToHtml`, Code ran `esc`. Same model, same sentence, two treatments.

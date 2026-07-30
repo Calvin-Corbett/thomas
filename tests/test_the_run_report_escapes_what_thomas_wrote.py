@@ -93,6 +93,39 @@ def test_the_code_reply_renders_markdown_through_chats_renderer() -> None:
     assert "esc(reply)" not in body, "the reply is being double-handled"
 
 
+def test_progress_notes_use_the_inline_renderer_only() -> None:
+    """They render inside a <span>, so block-level output would be invalid there.
+
+    39 of 71 real progress notes carry backticks or bold; only 11% carry bullet
+    lines, and a leading "- " left as a literal dash reads fine in prose. The
+    inline renderer emits <code>/<strong>/<em>/<a> and nothing else, so it drops
+    into the existing markup with no container or stylesheet change.
+    """
+    source = CODE_JS.read_text(encoding="utf-8")
+    body = source.split("function eventHtml", 1)[1].split("\n  function", 1)[0]
+
+    assert "progressHtml(label)" in body, "progress notes no longer render their markdown"
+    assert "esc(label)" not in body, "a progress note is being escaped twice"
+
+    helper = source.split("function progressHtml", 1)[1].split("\n  function", 1)[0]
+    assert "mdInline" in helper
+    assert "mdToHtml" not in helper, (
+        "the block renderer would put <p>/<ul> inside the note's <span>"
+    )
+    assert "return esc(text)" in helper, "no fallback for a shell-less load"
+
+
+def test_raw_tool_output_is_never_rendered_as_markdown() -> None:
+    """Technical rows carry command output, not prose. Backticks and asterisks in
+    a shell line are characters, not formatting, and must stay literal."""
+    body = CODE_JS.read_text(encoding="utf-8").split("function eventHtml", 1)[1].split("\n  function", 1)[0]
+    technical = body.split("isTechnicalEvent(event)", 1)[1].split("const label", 1)[0]
+
+    assert "esc(eventLabel(event))" in technical
+    assert "progressHtml" not in technical
+    assert "replyHtml" not in technical
+
+
 def test_the_code_reply_falls_back_to_the_plain_escaper() -> None:
     """The Node contract harness loads this module with no shell around it, so
     `window.ThomasMarkdown` is absent. The reply must still render, escaped."""
@@ -127,8 +160,11 @@ def test_the_shared_renderer_is_exported_without_assuming_a_window() -> None:
     `window`; an unguarded assignment took that test down."""
     text = CHAT_HTML.read_text(encoding="utf-8")
 
-    assert "window.ThomasMarkdown = { mdToHtml }" in text
-    line = next(ln for ln in text.splitlines() if "window.ThomasMarkdown = { mdToHtml }" in ln)
+    line = next(ln for ln in text.splitlines() if "window.ThomasMarkdown =" in ln)
+    # Both renderers: the block one for replies, the inline one for progress
+    # notes, which live inside a <span> and must not receive <p>/<ul>.
+    assert "mdToHtml" in line, f"the block renderer is not exported: {line.strip()!r}"
+    assert "mdInline" in line, f"the inline renderer is not exported: {line.strip()!r}"
     assert "typeof window !== 'undefined'" in line, f"unguarded export: {line.strip()!r}"
 
 

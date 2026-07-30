@@ -214,8 +214,8 @@
     }
     const label = eventLabel(event);
     const content = label.length <= MAX_PROGRESS_EVENT_CHARS
-      ? `<span>${esc(label)}</span>`
-      : `<span>${esc(`${label.slice(0, 360).trimEnd()}…`)}</span><details class="tc-code-progress-full"><summary>Show full update</summary><span>${esc(label)}</span></details>`;
+      ? `<span>${progressHtml(label)}</span>`
+      : `<span>${progressHtml(`${label.slice(0, 360).trimEnd()}…`)}</span><details class="tc-code-progress-full"><summary>Show full update</summary><span>${progressHtml(label)}</span></details>`;
     return `<div class="tc-code-event is-${esc(kind)}" data-code-kind="${esc(kind)}"${event.delta ? ' data-code-delta="true"' : ''}${saved ? ' data-saved="true"' : ''}><strong>${esc(eventKind(event))}</strong>${content}</div>`;
   }
 
@@ -388,6 +388,21 @@
   function replyHtml(text) {
     const markdown = typeof window !== 'undefined' && window.ThomasMarkdown;
     if (markdown && typeof markdown.mdToHtml === 'function') return markdown.mdToHtml(text);
+    return esc(text);
+  }
+
+  // Progress notes have the same problem as the reply -- 39 of 71 real ones carry
+  // backticks or bold -- but they render inside a <span>, so the INLINE renderer
+  // is the one to use: it emits <code>/<strong>/<em>/<a> and nothing block-level,
+  // which drops into the existing markup without a container or stylesheet
+  // change. Only 11% carry bullet lines, and a leading "- " left as a literal
+  // dash reads fine in prose.
+  //
+  // Same escape-first guarantee as the reply path: `_mdInline` runs `esc` before
+  // it introduces any tag.
+  function progressHtml(text) {
+    const markdown = typeof window !== 'undefined' && window.ThomasMarkdown;
+    if (markdown && typeof markdown.mdInline === 'function') return markdown.mdInline(text);
     return esc(text);
   }
 

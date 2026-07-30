@@ -2190,9 +2190,15 @@
     // Exposed rather than copied. `_mdInline` escapes FIRST (`s = esc(s)`) and
     // only then introduces tags, and its link rule accepts http(s) alone -- a
     // second implementation is how one of them stops doing that.
+    // `mdInline` is exported too, for Code's progress notes. Those render inside
+    // a <span> and are short prose: 54% of real ones carry backticks or bold,
+    // only 11% carry bullet lines. The inline renderer emits <code>/<strong>/<em>
+    // and nothing block-level, so it drops into the existing markup without a
+    // container change -- and a leading "- " left as a literal dash reads fine.
+    //
     // Guarded: the markdown contract harness evaluates this script in a VM with
     // no `window`, and an unguarded assignment took that test down.
-    if (typeof window !== 'undefined') window.ThomasMarkdown = { mdToHtml };
+    if (typeof window !== 'undefined') window.ThomasMarkdown = { mdToHtml, mdInline: _mdInline };
 
     function renderCanvas() {
       if (canvasState.mode === 'construct') {
