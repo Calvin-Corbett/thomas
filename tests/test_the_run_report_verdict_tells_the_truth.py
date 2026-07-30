@@ -186,6 +186,79 @@ def test_a_run_that_verified_its_requirements_still_reads_as_passing(render) -> 
     assert "unverified" not in html
 
 
+def test_the_card_names_the_requirements_nobody_checked(render) -> None:
+    """The headline says something went unchecked; this says WHICH.
+
+    Before, the answer sat behind two closed disclosures under a section headed
+    "Rubric mapping", which gives no hint it holds it -- measured at
+    closedDisclosuresToOpen = 2 on a card whose entire point was that six things
+    went unverified.
+    """
+    html = render(
+        {
+            "attempts": [{"pass": 1, "goal": "g", "outcome": "completed", "exit_state": "exit 0"}],
+            "validations": [_PASSING_CHECK],
+            "open_risks": [],
+            "rubric_mapping": [
+                {"criterion": "the run finished without error", "status": "met", "evidence": "e"},
+                {"criterion": "Opening balance is 1000.00", "status": "unverified", "evidence": "e"},
+                {"criterion": "Sorting recomputes the balance", "status": "unverified", "evidence": "e"},
+            ],
+        }
+    )
+
+    assert "Not checked:" in html
+    assert "Opening balance is 1000.00" in html
+    assert "Sorting recomputes the balance" in html
+    # The met row is not a thing nobody checked.
+    assert html.count("the run finished without error") == 0 or "Not checked: the run finished" not in html
+
+
+def test_only_two_requirements_are_named_and_each_stays_readable(render) -> None:
+    """Three names starved the last one: against real criteria the line rendered
+    "... · So there are 3 visible headers over 4 visib... · A..." -- a stub that
+    names nothing. Two, clipped at 38, keeps both legible."""
+    long_names = [
+        "The Description header is hidden, but the Description cells are still shown",
+        "So there are 3 visible headers over 4 visible columns, each shifted one place left",
+        "AMOUNT ends up over the description and BALANCE over the amount",
+        "A fourth requirement that must not appear on the face of the card",
+    ]
+    html = render(
+        {
+            "attempts": [{"pass": 1, "goal": "g", "outcome": "completed", "exit_state": "exit 0"}],
+            "validations": [_PASSING_CHECK],
+            "open_risks": [],
+            "rubric_mapping": [
+                {"criterion": name, "status": "unverified", "evidence": "e"} for name in long_names
+            ],
+        }
+    )
+
+    line = html.split('tc-code-verdict-unchecked">', 1)[1].split("</small>", 1)[0]
+    assert line.count("·") == 1, f"expected exactly two names on the line: {line!r}"
+    assert "A fourth requirement" not in line
+    # Every name shown carries real words, not an initial and an ellipsis.
+    for part in line.replace("Not checked: ", "").split(" · "):
+        assert len(part.replace("…", "").strip()) >= 20, f"unreadable stub on the card: {part!r}"
+    # The honest total still comes from the counts line above.
+    assert "4 requirements unverified" in html
+
+
+def test_no_unchecked_line_when_everything_was_verified(render) -> None:
+    html = render(
+        {
+            "attempts": [{"pass": 1, "goal": "g", "outcome": "completed", "exit_state": "exit 0"}],
+            "validations": [_PASSING_CHECK],
+            "open_risks": [],
+            "rubric_mapping": [{"criterion": "c", "status": "met", "evidence": "e"}],
+        }
+    )
+
+    assert "tc-code-verdict-unchecked" not in html
+    assert "Not checked:" not in html
+
+
 def test_a_run_with_no_checks_at_all_says_so(render) -> None:
     html = render(
         {

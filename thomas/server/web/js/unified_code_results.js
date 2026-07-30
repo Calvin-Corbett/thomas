@@ -135,10 +135,42 @@
     facts.push(riskCount ? `${riskCount} open risk${riskCount === 1 ? '' : 's'}` : 'no open risks');
     if (attempts.length > 1) facts.push(`${attempts.length} edit passes`);
 
+    // WHICH requirements, not just how many.
+    //
+    // The headline names a problem -- "Not checked against your ask" -- and the
+    // answer to "which ones?" sat behind TWO closed disclosures, under a section
+    // headed "Rubric mapping" that gives no hint it holds the answer. Measured on
+    // the ledger run: closedDisclosuresToOpen = 2 for a card whose whole point is
+    // that six things went unchecked. Naming them is what turns the verdict into
+    // something a person can act on -- these are the things to try by hand.
+    //
+    // Two, not three, and each given enough room to be read.
+    //
+    // Three fitted the box only by starving the last one: against real criteria
+    // the line rendered "... · So there are 3 visible headers over 4 visib... ·
+    // A..." -- a stub that names nothing and reads as damage. Two at 38
+    // characters each leaves both legible on one line.
+    //
+    // No trailing "+N more" either: the line is ellipsised when it overflows, so
+    // a suffix is the FIRST thing cut -- measured at 548px against a 560px box
+    // with "+3 more" invisible. The count it would have carried is already
+    // spelled out one line above ("6 requirements unverified"), so the honest
+    // total survives and clipping only ever costs detail.
+    const clip = text => (text.length > 38 ? `${text.slice(0, 37).trimEnd()}…` : text);
+    const unverifiedNames = list(report.rubric_mapping)
+      .filter(item => String(item.status || '').toLowerCase() === 'unverified')
+      .map(item => String(item.criterion || '').trim())
+      .filter(Boolean)
+      .slice(0, 2)
+      .map(clip);
+    const uncheckedLine = unverifiedNames.length
+      ? `<small class="tc-code-verdict-unchecked">${esc(`Not checked: ${unverifiedNames.join(' · ')}`)}</small>`
+      : '';
+
     const glyph = tone === 'is-bad' ? 'ph-warning-circle' : (tone === 'is-warn' ? 'ph-warning' : (tone === 'is-unknown' ? 'ph-info' : 'ph-check-circle'));
     return `<details class="tc-code-saved-activity tc-code-run-report ${tone}${riskCount ? ' has-issues' : ''}" data-saved="true">
       <summary>
-        <span class="tc-code-verdict"><i class="ph ${glyph}" aria-hidden="true"></i><span class="tc-code-verdict-text"><strong>${esc(verdict)}</strong><small>${esc(facts.join(' · '))}</small></span></span>
+        <span class="tc-code-verdict"><i class="ph ${glyph}" aria-hidden="true"></i><span class="tc-code-verdict-text"><strong>${esc(verdict)}</strong><small>${esc(facts.join(' · '))}</small>${uncheckedLine}</span></span>
         <span class="tc-code-verdict-more">Show details</span>
       </summary>
       <div class="tc-code-technical-log">${sections}</div>

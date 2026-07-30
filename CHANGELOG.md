@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (The verdict names which requirements went unchecked)
+
+- **A gap I introduced.** The headline now reads "Not checked against your ask" — and the answer to *which* ones sat behind **two closed disclosures**, under a section headed "Rubric mapping" that gives no hint it holds it. Measured on the ledger run: `closedDisclosuresToOpen = 2`, on a card whose entire point was that six things went unverified. A verdict that names a problem without naming its subject is half a message.
+- The card now carries a third, quieter line: `Not checked: Opening balance is 1000.00 · These six transactions, in this order:`. These are the things to try by hand.
+- **Two names, not three** — found by looking at it. Three fitted the box only by starving the last one: against real criteria it rendered `… · So there are 3 visible headers over 4 visib… · A…`, a stub that names nothing and reads as damage. Two clipped at 38 characters keeps both legible and the line stops overflowing entirely (393px in a 548px box).
+- **No trailing "+N more"** either: the line is ellipsised when it overflows, so a suffix is the *first* thing cut — measured at 548px with "+3 more" invisible. The count it would have carried is already spelled out one line above, so the honest total survives and clipping only ever costs detail.
+- Guarded by three tests, including one that fails on the stub regression: every name shown must carry at least 20 readable characters. Reverting to three names turns it red.
+
 ### Changed (The browser smoke boots one viewport, and that is now written down)
 
 - **A deliverable's layout can be wrong only at one width, and the smoke would never know.** `web_artifact_smoke` boots every page at `--window-size=1280,900` and nowhere else, so a page that is right at 1280 and wrong at 390 passes exactly like a page that is right everywhere.
