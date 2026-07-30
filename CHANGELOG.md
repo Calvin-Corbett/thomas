@@ -7,6 +7,17 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Revert stops looking exactly like Keep)
+
+- The Activity drawer lists every changed file with `Keep` and `Revert`. Revert **permanently discards** that file's changes — its own approval card says so, and for a new file it deletes the file outright. Measured in the live drawer, the two buttons were identical on **every** visual property: colour `rgb(238,240,251)`, background `rgba(0,0,0,0)`, border `1px solid rgba(255,255,255,0.1)`, weight 400, size 9.5px, padding `3px 6px`. The only difference was the 6px of width the longer word adds. A three-file run rendered six buttons that looked the same and meant opposite things.
+- Revert now takes `#ff9a9a` — **not a new colour**: it is what the failed-verdict rail and icon already use, so the drawer reads as one system rather than growing a second red. Confined to text and border at rest rather than a filled red button, because the drawer is for reviewing work and a shouty control there pulls the eye off the diff. Verified on screen before and after.
+- **The guard took three attempts to become capable of failing**, which is the part worth recording:
+  1. `\bcolor\s*:` also matches `border-color:` — `-` is a word boundary — so it passed on the border alone.
+  2. Matching any rule mentioning the attribute accepted the `:hover` rule, which would leave Revert looking like Keep until the pointer is already on it.
+  3. The parser treated everything between `}` and `{` as the selector, **including comments** — and the comment above the rule quotes the selector while explaining its specificity, so the test matched its own documentation.
+- Each was caught only by deleting the fix and watching the test still pass. It now fails on two assertions when the resting rule is removed.
+- A fourth test pins the source order: `.tc-code-change button:hover` and `.tc-code-change button[data-code-revert]` both score (0,2,1), so at equal specificity the later rule wins. Moving the shared rule below would silently return Revert to looking like Keep at the exact moment someone is about to click it.
+
 ### Fixed (A run that was cut off says so, instead of blaming a check)
 
 - A Code run that hits its pass budget was summarised on screen as **"Thomas changed the project, but the final verification still failed after its repair attempts. Open the activity details for the failing check."** It never finished those attempts — it ran out of passes mid-work. The summary sent the owner to inspect a check when the useful action was to ask Thomas to carry on.

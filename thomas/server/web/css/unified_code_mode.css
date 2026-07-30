@@ -153,6 +153,34 @@
   background: var(--c-hover);
 }
 
+/* Revert permanently discards a file's changes -- its own approval card says
+   "This permanently discards its current changes" -- and it sits directly
+   beside Keep, which is benign. Measured on a real run, the two were identical
+   on colour, background, border, font-weight, font-size AND padding; the only
+   difference between them was the 6px the longer word adds. Drawing two
+   actions with opposite consequences the same way encodes something false.
+   Three files means three of each, so the row reads as six equivalent buttons.
+
+   #ff9a9a is the colour the failed-verdict rail and icon already use, so this
+   reads as the same system rather than a second, unrelated red. Kept to the
+   text and border at rest rather than a filled red button: the drawer is a
+   place for reviewing work, and a shouty control there would pull the eye away
+   from the diff, which is the thing actually worth reading.
+
+   Equal-specificity note: `.tc-code-change button:hover` above and
+   `.tc-code-change button[data-code-revert]` here both score (0,2,1), so this
+   must stay AFTER it to win at rest. The hover rule below scores (0,3,1) and
+   wins outright. */
+.tc-code-change button[data-code-revert] {
+  color: #ff9a9a;
+  border-color: rgba(255, 154, 154, 0.28);
+}
+
+.tc-code-change button[data-code-revert]:hover {
+  border-color: #ff9a9a;
+  background: rgba(255, 154, 154, 0.12);
+}
+
 .tc-code-actions button:disabled { opacity: .42; cursor: default; }
 
 .tc-code-drawer-resize {
