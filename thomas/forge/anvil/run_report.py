@@ -215,6 +215,7 @@ def _build_open_risks(
     if outcome == "noop" and not changed_files:
         risks.append({"risk": "run made no changes", "detail": "exit 0 but git shows no project delta"})
     risks.extend(_unopened_page_risks(events, validations, changed_files))
+    risks.extend(_decorative_navigation_risks(validations, events))
     if foreign_writes:
         shown = ", ".join(foreign_writes[:3]) + (f" (+{len(foreign_writes) - 3} more)" if len(foreign_writes) > 3 else "")
         risks.append(
@@ -224,6 +225,55 @@ def _build_open_risks(
             }
         )
     return risks[:_MAX_RISKS]
+
+
+def _decorative_navigation_risks(
+    validations: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Promote "the navigation is decoration" from a note on a pass to a risk.
+
+    The browser smoke clicks the navigation controls it finds and compares the
+    page before and after. When NONE of them change anything it says so, in a
+    trailing note:
+
+        browser boot clean; boot only; note: clicked 3 navigation control(s)
+        and the page never changed; the navigation may be decoration
+
+    -- and returns ok, so the check is recorded as passing and the sentence that
+    matters rides along inside evidence nobody expands. That is the exact shape
+    of the owner's Nova calculator: five nav destinations that looked finished
+    and did nothing. (The smoke could not have caught Nova at the time -- it did
+    not click anything then. It can now, and the finding was landing nowhere.)
+
+    Deliberately a risk and not a failure. A page whose navigation is not wired
+    yet is a normal midpoint of a build, and failing the run would make the
+    repair loop chase a half-finished feature instead of the goal. A risk is
+    visible on the card and steers the loop without stopping it.
+
+    Only the "none of them did anything" phrasing is promoted. The smoke also
+    reports "1 of 5 navigation control(s) changed nothing", which is the normal
+    reading for whichever destination is already active -- flagging that would
+    fire on every correct page and train people to ignore the line.
+    """
+
+    evidence = " ".join(
+        [
+            *(str(item.get("evidence") or "") for item in validations),
+            *(str(item.get("text") or "") for item in events),
+        ]
+    )
+    if "the navigation may be decoration" not in evidence:
+        return []
+    return [
+        {
+            "risk": "the navigation may be decoration",
+            "detail": (
+                "the browser check clicked every navigation control on the page and "
+                "nothing changed — the destinations may not be wired up"
+            ),
+        }
+    ]
 
 
 def _unopened_page_risks(

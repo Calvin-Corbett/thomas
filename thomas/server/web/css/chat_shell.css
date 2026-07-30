@@ -85,13 +85,23 @@
    single Code transcript -- every "Checked tool result" row in the activity
    log -- as a bullet. The rest are the names the shared surfaces reach for;
    a roughly-right symbol carries meaning and a bullet carries none. */
-.ph-check-circle::before { content: "\2705"; }
+/* Text presentation, not emoji. `\2705` is emoji-presentation-by-default, so the
+   browser paints it with the colour-emoji font and CSS `color` does nothing:
+   `.tc-code-technical > i` asks for `var(--c-accent)` and got a bright green
+   sticker 43 times in one Code transcript, next to three-word grey rows on a
+   muted surface. Measured in situ -- css color rgb(139,140,255), 156 of 570 lit
+   pixels green-dominant. `\2713` takes the colour it is given. */
+.ph-check-circle::before { content: "\2713"; }
 .ph-x-circle::before { content: "\2297"; }
 .ph-circle::before { content: "\25CB"; }
 .ph-dot-outline::before { content: "\25CC"; }
 .ph-dots-three-outline::before { content: "\22EF"; }
 .ph-info::before { content: "\2139"; }
-.ph-lightning::before { content: "\26A1"; }
+/* `\26A1` and `\1F4CE` are emoji-presentation too, and were the only other two
+   glyphs in this map that ignored `color` -- found by rendering all 108 at a
+   known colour and reading the pixels back. `\2607` and `\1F587` are the text
+   presentation forms of the same idea. */
+.ph-lightning::before { content: "\2607"; }
 .ph-spinner::before, .ph-hourglass::before { content: "\29D6"; }
 .ph-clock-countdown::before, .ph-clock-counter-clockwise::before { content: "\29D7"; }
 .ph-eye::before { content: "\25C9"; }
@@ -109,7 +119,7 @@
 .ph-package::before, .ph-cube::before { content: "\25A9"; }
 .ph-database::before, .ph-cylinder::before { content: "\233F"; }
 .ph-table::before { content: "\25A6"; }
-.ph-paperclip::before { content: "\1F4CE"; }
+.ph-paperclip::before { content: "\1F587"; }
 .ph-paper-plane-tilt::before { content: "\27A4"; }
 .ph-squares-four::before { content: "\25A6"; }
 .ph-wrench::before { content: "\2692"; }

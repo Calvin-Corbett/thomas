@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Three icons were emoji stickers that ignored the theme, and dead navigation now raises a risk)
+
+- **`ph-check-circle` was `\2705`**, an emoji-presentation codepoint. The browser paints those with the colour-emoji font and CSS `color` does nothing — so `.tc-code-technical > i { color: var(--c-accent) }` produced a bright green sticker **43 times in a single Code transcript**, next to three-word grey rows on a muted surface, and again on the run-report card where the state rail was violet and the tick beside it green. Measured in situ: css colour `rgb(139,140,255)`, 156 of 570 lit pixels green-dominant. Now `\2713`, which takes the colour it is given — re-measured at 0 of 568.
+- `ph-lightning` (`\26A1`) and `ph-paperclip` (`\1F4CE`) had the identical problem. Found by rendering all 108 glyphs at a known colour inside the live shell and reading the pixels back; they were the only other two. Now `\2607` and `\1F587`, the text-presentation forms.
+- New guard `tests/test_no_icon_ignores_the_theme_colour.py` — the sibling of the existing "every icon is drawn" test. That one catches a name with no glyph, which renders as a bullet; this one catches a glyph that refuses to be styled. Both are "the stylesheet said something and the screen did something else", and neither appears in the DOM. It also pins its own detector, and refuses to run against an empty parse.
+- **A page whose entire navigation does nothing now raises an open risk.** The browser smoke already clicks navigation controls and compares before/after — verified directly: a page with unattached handlers produces `clicked 3 navigation control(s) and the page never changed; the navigation may be decoration`, and returned **ok**, so the sentence that mattered rode along inside a passing check. That is the Nova calculator exactly. Promoted to a risk, not a failure: unwired navigation is a normal midpoint of a build, and failing the run would send the repair loop after a half-finished feature instead of the goal.
+  - Only the "none of them did anything" phrasing is promoted. The smoke also reports `1 of 5 navigation control(s) changed nothing`, which is the normal reading for whichever destination is already active — flagging that would fire on every correct page.
+
 ### Fixed (A file the verifier only decoded is not a file it checked)
 
 - **A syntactically broken TypeScript file verified clean.** `_VERIFY_SRC` in `build_verify.py` has a real arm per extension it understands — `py_compile` for `.py`, `node --check` for `.js`, an HTML parse, a JSON parse — and a fallback arm for everything else that does nothing but `raw.decode('utf-8')`. Whole languages land there: `.ts`, `.go`, `.rs`, `.sh`, `.sql`, `.md`. Measured: a file containing `const x: number = ;;; broken(((` produced `STATIC_VERIFY_OK: 1 files checked` and a passing validation.
