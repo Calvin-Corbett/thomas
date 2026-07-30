@@ -40,6 +40,7 @@ _VERIFY_SRC = (
     "mods = json.loads(sys.argv[2])\n"
     "preflight_failures = json.loads(sys.argv[3])\n"
     "assert not preflight_failures, '; '.join(preflight_failures)\n"
+    "read_only = []\n"
     "for f in files:\n"
     "    p=pathlib.Path(f); raw=p.read_bytes(); ext=p.suffix.lower()\n"
     "    if ext=='.py': py_compile.compile(f,doraise=True); print('compiled '+f)\n"
@@ -54,12 +55,32 @@ _VERIFY_SRC = (
     "    elif ext in {'.docx','.xlsx','.pptx'}: assert zipfile.is_zipfile(p),'invalid Office document'; print('opened '+f)\n"
     "    elif ext=='.png': assert raw.startswith(b'\\x89PNG\\r\\n\\x1a\\n'),'invalid PNG'; print('opened '+f)\n"
     "    elif ext in {'.jpg','.jpeg'}: assert raw.startswith(b'\\xff\\xd8') and raw.endswith(b'\\xff\\xd9'),'invalid JPEG'; print('opened '+f)\n"
-    "    else: raw.decode('utf-8'); print('read '+f)\n"
+    "    else: raw.decode('utf-8'); read_only.append(f); print('read '+f)\n"
     "for m in mods:\n"
     "    importlib.import_module(m)\n"
     "    print('imported ' + m)\n"
-    "print('STATIC_VERIFY_OK: ' + str(len(files)) + ' files checked, ' + str(len(mods)) + ' imported')\n"
+    "print('STATIC_VERIFY_OK: ' + str(len(files) - len(read_only)) + ' files checked, '"
+    " + (str(len(read_only)) + ' read only, ' if read_only else '') + str(len(mods)) + ' imported')\n"
 )
+# Why the summary separates "checked" from "read only":
+#
+# The `else` arm above is the fallback for every extension this program has no
+# real check for -- .ts, .go, .rs, .sh, .sql, .md and the rest. All it does is
+# decode the bytes as UTF-8, so it passes for any text file and cannot fail for a
+# reason anyone cares about. Whole languages were being counted in
+# "N files checked", which is the same shape as a skipped browser smoke reading
+# as a pass: a check that could not have found anything, reported as one that
+# found nothing wrong.
+#
+# The per-file lines were always honest -- `compiled`/`parsed`/`checked` for the
+# real arms, `read` for this one -- so only the total lied. A run whose one
+# changed file is a .ts now says "0 files checked, 1 read only", which is a
+# statement someone can act on, instead of "1 files checked".
+#
+# Deliberately unchanged: this still exits 0. Reading a text asset is a weak
+# check, not a failure, and turning it into one would break every run that
+# legitimately emits a .md alongside its code. Making the count honest is what
+# was actually wrong here.
 
 _REPAIR_TRUNCATION_SUFFIXES = {".css", ".html", ".htm", ".js", ".mjs", ".cjs"}
 _REPAIR_TRUNCATION_MIN_BYTES = 1024

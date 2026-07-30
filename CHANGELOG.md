@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A file the verifier only decoded is not a file it checked)
+
+- **A syntactically broken TypeScript file verified clean.** `_VERIFY_SRC` in `build_verify.py` has a real arm per extension it understands — `py_compile` for `.py`, `node --check` for `.js`, an HTML parse, a JSON parse — and a fallback arm for everything else that does nothing but `raw.decode('utf-8')`. Whole languages land there: `.ts`, `.go`, `.rs`, `.sh`, `.sql`, `.md`. Measured: a file containing `const x: number = ;;; broken(((` produced `STATIC_VERIFY_OK: 1 files checked` and a passing validation.
+- The per-file lines were always honest — `compiled` / `parsed` / `checked` for the real arms, `read` for the fallback — so only the total lied. It now reads `0 files checked, 1 read only`, which is a statement someone can act on. A mixed change reports `1 files checked, 1 read only`.
+- **Deliberately still exits 0.** Reading a text asset is a weak check, not a failure, and failing the run would break every task that legitimately emits a `.md` alongside its code. The count was what was wrong.
+- Format is unchanged for files that really are checked, so `STATIC_VERIFY_OK: 2 files checked` still holds for an html+js change and the existing assertion in `test_evolve_claude_bridge.py` still passes.
+- `tests/test_a_file_only_read_is_not_a_file_checked.py` names `.ts`/`.go`/`.rs`/`.sh`/`.sql` one by one, so adding a real check for any of them is a deliberate act that turns a test red rather than a silent change in what "checked" means. It also pins the direction that matters most: a broken `.py` still fails the run. Reverting the count turns 7 of its 9 red.
+
 ### Fixed (A check the engine skipped is not a check that passed)
 
 - `passed` is derived server-side from the *absence of an error* (`run_report.py`: `"passed": event.get("is_error") is not True`). When no browser is installed, `smoke_html_artifacts` returns `attempted=False` and `build_verify` emits `BROWSER_SMOKE_SKIPPED: …` with `is_error` unset — so a check that never ran reaches the card flagged as passing, and was counted in "2/2 checks passed". The evidence string said `SKIPPED` all along; nothing read it.
