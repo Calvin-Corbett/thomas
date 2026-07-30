@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (The viewer opens beside the chat, as its own label promises)
+
+- The artifact card says **"Click to open it beside the chat"** and the viewer's own stylesheet comment says *"beside the conversation"* — but `.tc-code-viewer` is `position: absolute`, so opening it moved nothing. Measured at 1920 wide: the transcript stayed **768px at x=716** while the viewer covered from **x=1160** — **324px of the conversation underneath it**, clipping **300px off every line** of Thomas's reply, mid-word (`…correct running b`, `…orders transactions s`).
+- The layout now reserves the viewer's width when one is open. After: transcript at x=336, right edge 1104, viewer at 1160 — **0px overlap, 0px clipped**. Reserved with padding on the shared row rather than by resizing the transcript, so the drawer keeps its own width.
+- Reserved with the **same expression the viewer uses** for its width (`min(760px, 62vw)`), and a test asserts the two match — a reservation that guesses at the panel's width is a gap waiting to reopen.
+- **Full-bleed is excluded on purpose:** it covers the surface deliberately, and squeezing a layout nobody can see would only make reopening it jump. Verified — the panel drops the class when the viewer goes full.
+- Found by clicking the card for the first time. I had looked at those cards a dozen times this session and never pressed one.
+
 ### Fixed (The drawer told you to choose the project it had just named)
 
 - The Activity drawer's Files section printed **"Choose a project beside Tools to browse its files."** whenever the list was empty — and an empty list has **three** different causes, of which it named one. Measured on a new task: for **45 seconds, the whole run**, the drawer header read `Code task 2026-07-30 1018` while the list directly beneath it told you to choose a project. Also on screen before sending anything.

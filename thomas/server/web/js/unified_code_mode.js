@@ -761,7 +761,21 @@
     const filesEmptyMessage = !state.projectRoot
       ? 'Choose a project beside Tools to browse its files.'
       : (state.treeLoaded ? 'This folder has no files yet.' : 'Loading files…');
-    root.innerHTML = `<div class="tc-code-panel${state.drawerOpen ? ' is-drawer-open' : ''}" style="--tc-code-drawer-width:${clampDrawerWidth(state.drawerWidth)}px">
+    // `is-viewer-open` lets the layout make room for the viewer.
+    //
+    // The artifact card promises "Click to open it beside the chat" and the
+    // viewer's own stylesheet comment says "beside the conversation", but it is
+    // `position: absolute`, so it never moved anything: measured at 1920 wide,
+    // the transcript stayed 768px at x=716 while the viewer covered x=1160
+    // onward -- 324px of the conversation underneath it, clipping 300px off
+    // every line of Thomas's reply mid-word.
+    //
+    // Not applied when the viewer is full-bleed: it covers the surface
+    // deliberately then, and reserving room behind it would only squeeze a
+    // layout nobody can see.
+    const viewerOpen = Boolean(state.viewer && state.viewer.file);
+    const viewerFull = Boolean(state.viewer && state.viewer.full);
+    root.innerHTML = `<div class="tc-code-panel${state.drawerOpen ? ' is-drawer-open' : ''}${viewerOpen && !viewerFull ? ' is-viewer-open' : ''}" style="--tc-code-drawer-width:${clampDrawerWidth(state.drawerWidth)}px">
       <header class="tc-code-context" data-ui-id="code.context" data-ui-label="Code activity bar" data-ui-policy="move"><button data-code-results-jump type="button" aria-expanded="${state.drawerOpen ? 'true' : 'false'}"><i class="ph ph-sidebar-simple"></i> Activity <small>${statusLabels[state.runStatus] || 'Ready'}</small>${hasResults ? '<span class="tc-code-activity-count" aria-hidden="true"></span>' : ''}</button></header>
       <div class="tc-code-layout">
         <section class="tc-code-transcript" aria-label="Code conversation" data-ui-id="code.transcript" data-ui-label="Code conversation" data-ui-policy="move resize" data-ui-constraints="minWidth=320;minHeight=200">${historyAsk}<div id="tc-code-turns">${turns.map(turnHtml).join('') || (hasLiveTurn ? '' : emptyStateHtml())}</div>${liveTurn}</section>

@@ -108,3 +108,39 @@ def test_internal_paths_are_not_offered_as_results() -> None:
     body = text.split("function artifactCardsHtml", 1)[1].split("\n  }", 1)[0]
 
     assert "isInternalResultPath" in body
+
+
+def test_the_viewer_makes_room_instead_of_covering_the_conversation() -> None:
+    """The card says "Click to open it beside the chat". It opened over it.
+
+    `.tc-code-viewer` is `position: absolute`, so opening it moved nothing.
+    Measured at 1920 wide: the transcript stayed 768px at x=716 while the viewer
+    covered from x=1160 -- 324px of the conversation underneath it, clipping
+    300px off every line of Thomas's reply, mid-word ("correct running b").
+
+    After: transcript at x=336, right edge 1104, viewer at 1160. Zero overlap.
+    """
+    js = _js()
+    css = CODE_CSS.read_text(encoding="utf-8")
+
+    assert "is-viewer-open" in js, "the panel no longer marks an open viewer"
+    assert ".tc-code-panel.is-viewer-open .tc-code-layout" in css, (
+        "nothing reserves room for the viewer, so it covers the conversation again"
+    )
+    reserve = css.split(".tc-code-panel.is-viewer-open .tc-code-layout", 1)[1].split("}", 1)[0]
+    assert "padding-right" in reserve
+    # The same width the viewer itself uses, or the reservation is a guess.
+    viewer_width = css.split(".tc-code-viewer {", 1)[1].split("}", 1)[0]
+    assert "min(760px, 62vw)" in viewer_width
+    assert "min(760px, 62vw)" in reserve, "the reserved width does not match the viewer's"
+
+
+def test_a_full_bleed_viewer_does_not_reserve_room_behind_itself() -> None:
+    """It covers the surface deliberately then; squeezing a layout nobody can see
+    would only make reopening it jump."""
+    js = _js()
+
+    marker = js.split("is-viewer-open", 1)[0]
+    assert "viewerFull" in marker or "viewerFull" in js, "the full-bleed case is not distinguished"
+    line = next(ln for ln in js.splitlines() if "is-viewer-open" in ln and "class=" in ln)
+    assert "!viewerFull" in line, f"full-bleed still reserves room: {line.strip()[:120]!r}"

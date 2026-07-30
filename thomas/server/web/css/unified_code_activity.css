@@ -185,6 +185,14 @@
   backdrop-filter: blur(22px);
   animation: tc-code-viewer-in .2s ease;
 }
+/* "Beside", made literal. The panel above is `position: absolute`, so opening it
+   moved nothing: at 1920 wide the transcript stayed 768px at x=716 while the
+   viewer covered from x=1160 -- 324px of the conversation underneath it, and
+   300px clipped off every line of the reply, mid-word. The card that opens it
+   says "Click to open it beside the chat".
+   Reserved with padding on the layout rather than by resizing the transcript,
+   so the drawer keeps its own width and only the shared row gets narrower. */
+.tc-code-panel.is-viewer-open .tc-code-layout { padding-right: min(760px, 62vw); }
 /* Full-bleed across Thomas, for a page that wants the whole screen. */
 .tc-code-viewer.is-full { width: 100%; border-left: 0; }
 @keyframes tc-code-viewer-in { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
