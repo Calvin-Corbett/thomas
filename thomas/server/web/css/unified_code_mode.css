@@ -124,10 +124,36 @@
   backdrop-filter: blur(18px);
 }
 
+/* The flex ITEM has to be allowed to shrink, not just the text inside it.
+   `min-width: auto` is the default for a flex item and refuses to go below its
+   content, so setting `text-overflow: ellipsis` on the `small` alone did
+   nothing: the wrapper grew to fit the label and the label went with it.
+   Measured after that half-fix -- ellipsis applied, and still 458px wide inside
+   a 280px drawer. Both levels are needed. */
+.tc-code-drawer-head > div { min-width: 0; }
 .tc-code-drawer-head strong,
 .tc-code-drawer-head small { display: block; }
+.tc-code-drawer-head strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .tc-code-drawer-head strong { font-size: 13px; }
-.tc-code-drawer-head small { margin-top: 2px; color: var(--c-muted); font-size: 10.5px; }
+/* Truncated like every other filename in this rail. The project label is a path
+   segment with no spaces to break at, so a long one ran straight out of the
+   280px drawer and was cut off at the VIEWPORT edge -- measured at 458px wide
+   inside a 280px panel, with no ellipsis to say it had been shortened.
+   `.tc-code-change header strong` and `.tc-code-artifact-name` beside it already
+   did exactly this; the subtitle and the file tree were the two that did not. */
+.tc-code-drawer-head small {
+  margin-top: 2px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--c-muted);
+  font-size: 10.5px;
+}
 .tc-code-drawer-head > button,
 .tc-code-actions button,
 .tc-code-change button {
@@ -236,6 +262,21 @@
   text-align: left;
 }
 .tc-code-tree li > button:hover { background: var(--c-hover); }
+/* The name is wrapped in a span so it can be truncated. `text-overflow` needs a
+   block container: the button is `display: flex`, and a bare text node inside it
+   becomes an anonymous flex item, which the property never reaches -- so setting
+   it on the button alone clipped mid-character with no ellipsis, which is what
+   it did. Measured: scrollWidth 518 against clientWidth 247, `text-overflow:
+   clip`, spilling past the drawer's right edge.
+   `min-width: 0` on the span because a flex item's default `min-width: auto`
+   refuses to shrink below its content, so without it the span simply pushes the
+   row wider instead of ellipsing. */
+.tc-code-tree li > button > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .tc-code-tree .is-dir { color: var(--c-text); font-weight: 650; }
 
 .tc-code-turn {

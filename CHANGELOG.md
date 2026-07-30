@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A long filename stops running out of the Activity drawer)
+
+- The drawer is ~280px and shows names in four places. Measured with an 86-character unbreakable name, `scrollWidth`/`clientWidth`: change row **491/137 ellipsis**, artifact name **607/386 ellipsis**, file tree **518/247 `text-overflow: clip`**, drawer subtitle **458/458 — grown to 458px inside a 280px panel**. Two truncated properly and two spilled past the edge: the same "every sibling but one" shape as `overflow-wrap` and `--c-danger`.
+- **The subtitle also pushed the drawer's × close button off the panel**, so a long project name made the drawer impossible to close. Functional, not cosmetic — visible in the before/after screenshots.
+- Two distinct causes, and the first attempt only addressed one. `text-overflow` needs a block container: the tree row is `display: flex` and the name was a bare text node, which becomes an anonymous flex item the property never reaches — so the name is now wrapped in a span. And a flex **item** defaults to `min-width: auto` and refuses to shrink below its content, so setting ellipsis on the `small` alone left it measuring **458px with the ellipsis applied**. Both levels were needed.
+- Each of the three changes is independently catchable — removing the wrapper's `min-width`, the span rule, or the span from the *renderer* each turns exactly one test red. That last one matters: CSS aimed at an element nobody emits is a silent no-op, and the guard for it fails without the CSS being touched at all.
+- The guard's own first version failed against a correct fix: `.tc-code-drawer-head small` appears in a shared `display: block` rule as well as its own, and taking the **first** regex match read the wrong block. It now joins every matching rule, as the browser does.
+
 ### Fixed (Your own message wraps like Thomas's replies do)
 
 - `.tc-code-turn.is-user` set `white-space: pre-wrap` and nothing else. `pre-wrap` breaks at whitespace and does nothing for a single long token — a hash, an API key, a path with no separators — which is exactly what gets pasted into a build request. Every sibling that renders free text already handled it: `.tc-code-reply`, `.tc-code-event span` and `.tc-code-technical code` all set `overflow-wrap: anywhere`. **Three siblings had the rule; one did not**, so Thomas's messages wrapped and yours did not.
