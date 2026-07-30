@@ -10,7 +10,7 @@
   const MAX_PROGRESS_EVENT_CHARS = 420;
   const NARRATIVE_EVENT_KINDS = new Set(['approval', 'disconnected', 'done', 'final', 'insight', 'planning', 'say', 'steering', 'stopped', 'stopping']);
   const state = {
-    conversations: [], activeId: '', conversation: null, liveEvents: [], changes: [], tree: [], treePath: '', artifacts: [], filePreview: null,
+    conversations: [], activeId: '', conversation: null, liveEvents: [], changes: [], tree: [], treeLoaded: false, treePath: '', artifacts: [], filePreview: null,
     pendingApproval: null, pendingRequest: null, lastContext: {}, running: false, runStartedAt: 0, runStatus: 'ready', source: null,
     finishing: null, approvalBusy: false, steeringBusy: false, projectRoot: '', projectNames: {}, terminalTool: '', contextEpoch: 0, runProof: null,
     pendingHistoryChoice: null, historyChoiceBusy: false,
@@ -583,6 +583,7 @@
     state.liveEvents = [];
     state.changes = [];
     state.tree = [];
+    state.treeLoaded = false;
     state.treePath = '';
     state.artifacts = [];
     state.artifactDocs = {};
@@ -745,11 +746,26 @@
     // the answer belongs on screen rather than in a log file.
     const historyAsk = state.pendingHistoryChoice ? `<section class="tc-code-approval" role="alert"><strong>${esc(state.pendingHistoryChoice.projectName || 'This folder')} has no version history</strong><p>${esc(state.pendingHistoryChoice.message)}</p><div><button data-code-history-setup ${state.historyChoiceBusy ? 'disabled' : ''}>${state.historyChoiceBusy ? 'Working...' : 'Set up history'}</button><button data-code-history-without ${state.historyChoiceBusy ? 'disabled' : ''}>Work without undo</button><button data-code-history-cancel ${state.historyChoiceBusy ? 'disabled' : ''}>Cancel</button></div></section>` : '';
     const projectLabel = state.projectRoot ? codeProjects().projectDisplayLabel() : 'Choose a project';
+    // An empty file list has three different causes and used to name only one:
+    // it always read "Choose a project beside Tools to browse its files."
+    //
+    // Measured on a new task: for 45 seconds -- the whole run -- the drawer
+    // header said "Code task 2026-07-30 1018" while the list directly beneath it
+    // told you to choose a project. The header has always used `state.projectRoot`
+    // for exactly this decision; the list simply did not ask.
+    //
+    // `treeLoaded` separates the other two, which no existing field could: a
+    // fetch that has not returned yet is not the same as a folder with nothing
+    // in it, and saying "no files" while still loading would be the same kind of
+    // guess in a new coat.
+    const filesEmptyMessage = !state.projectRoot
+      ? 'Choose a project beside Tools to browse its files.'
+      : (state.treeLoaded ? 'This folder has no files yet.' : 'Loading files…');
     root.innerHTML = `<div class="tc-code-panel${state.drawerOpen ? ' is-drawer-open' : ''}" style="--tc-code-drawer-width:${clampDrawerWidth(state.drawerWidth)}px">
       <header class="tc-code-context" data-ui-id="code.context" data-ui-label="Code activity bar" data-ui-policy="move"><button data-code-results-jump type="button" aria-expanded="${state.drawerOpen ? 'true' : 'false'}"><i class="ph ph-sidebar-simple"></i> Activity <small>${statusLabels[state.runStatus] || 'Ready'}</small>${hasResults ? '<span class="tc-code-activity-count" aria-hidden="true"></span>' : ''}</button></header>
       <div class="tc-code-layout">
         <section class="tc-code-transcript" aria-label="Code conversation" data-ui-id="code.transcript" data-ui-label="Code conversation" data-ui-policy="move resize" data-ui-constraints="minWidth=320;minHeight=200">${historyAsk}<div id="tc-code-turns">${turns.map(turnHtml).join('') || (hasLiveTurn ? '' : emptyStateHtml())}</div>${liveTurn}</section>
-        <aside class="tc-code-actions" aria-label="Code activity" aria-hidden="${state.drawerOpen ? 'false' : 'true'}"${state.drawerOpen ? '' : ' inert'} data-ui-id="code.activity" data-ui-label="Code activity drawer" data-ui-policy="move resize" data-ui-constraints="minWidth=280;minHeight=240;maxWidth=520"><section class="tc-code-rail-section" data-ui-id="code.outputs" data-ui-label="Outputs" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=120"><div class="tc-code-section-title">Outputs</div>${approval}${preview}${artifactRows}${changeRows || (!preview && !artifactRows ? '<p class="tc-code-rail-empty">Previews, changed files, and proof will appear here without interrupting the conversation.</p>' : '')}${changeRows && !state.running ? `<button id="tc-code-checkpoint" class="tc-code-checkpoint" data-ui-id="code.action.checkpoint" data-ui-label="Checkpoint changes" data-ui-policy="protected" title="Commit these changes on a thomas-code/ branch">Checkpoint — commit these changes</button>` : ''}</section><section class="tc-code-rail-section tc-code-tree" data-ui-id="code.files" data-ui-label="Project files" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=120"><div class="tc-code-tree-head"><div class="tc-code-section-title">Files · ${esc(state.treePath || '/')}</div>${state.treePath ? '<button id="tc-code-tree-up">Up</button>' : ''}</div><ul>${treeRows || '<li class="tc-code-muted">Choose a project beside Tools to browse its files.</li>'}</ul></section><form id="tc-code-steer-form" class="tc-code-steer" ${state.running ? '' : 'hidden'} data-ui-id="code.steer" data-ui-label="Steer Thomas" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=80"><label for="tc-code-steer">Steer Thomas</label><input id="tc-code-steer" name="message" required placeholder="Change direction…" ${state.steeringBusy ? 'disabled' : ''}><button ${state.steeringBusy ? 'disabled' : ''}>${state.steeringBusy ? 'Confirming…' : 'Apply'}</button><button type="button" id="tc-code-stop" data-ui-id="code.action.stop" data-ui-label="Stop this run" data-ui-policy="protected" title="Stop this run" ${state.steeringBusy ? 'disabled' : ''}>Stop</button></form></aside>
+        <aside class="tc-code-actions" aria-label="Code activity" aria-hidden="${state.drawerOpen ? 'false' : 'true'}"${state.drawerOpen ? '' : ' inert'} data-ui-id="code.activity" data-ui-label="Code activity drawer" data-ui-policy="move resize" data-ui-constraints="minWidth=280;minHeight=240;maxWidth=520"><section class="tc-code-rail-section" data-ui-id="code.outputs" data-ui-label="Outputs" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=120"><div class="tc-code-section-title">Outputs</div>${approval}${preview}${artifactRows}${changeRows || (!preview && !artifactRows ? '<p class="tc-code-rail-empty">Previews, changed files, and proof will appear here without interrupting the conversation.</p>' : '')}${changeRows && !state.running ? `<button id="tc-code-checkpoint" class="tc-code-checkpoint" data-ui-id="code.action.checkpoint" data-ui-label="Checkpoint changes" data-ui-policy="protected" title="Commit these changes on a thomas-code/ branch">Checkpoint — commit these changes</button>` : ''}</section><section class="tc-code-rail-section tc-code-tree" data-ui-id="code.files" data-ui-label="Project files" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=120"><div class="tc-code-tree-head"><div class="tc-code-section-title">Files · ${esc(state.treePath || '/')}</div>${state.treePath ? '<button id="tc-code-tree-up">Up</button>' : ''}</div><ul>${treeRows || `<li class="tc-code-muted">${esc(filesEmptyMessage)}</li>`}</ul></section><form id="tc-code-steer-form" class="tc-code-steer" ${state.running ? '' : 'hidden'} data-ui-id="code.steer" data-ui-label="Steer Thomas" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=80"><label for="tc-code-steer">Steer Thomas</label><input id="tc-code-steer" name="message" required placeholder="Change direction…" ${state.steeringBusy ? 'disabled' : ''}><button ${state.steeringBusy ? 'disabled' : ''}>${state.steeringBusy ? 'Confirming…' : 'Apply'}</button><button type="button" id="tc-code-stop" data-ui-id="code.action.stop" data-ui-label="Stop this run" data-ui-policy="protected" title="Stop this run" ${state.steeringBusy ? 'disabled' : ''}>Stop</button></form></aside>
       </div>${codeResults().viewerHtml()}</div>`;
     const activityDrawer = root.querySelector('.tc-code-actions');
     codeResults().bindViewer(root, render);
@@ -1232,6 +1248,7 @@
     if (!response.ok || !data.ok) throw new Error(data.error || `Project files could not be loaded (${response.status})`);
     if (!lifecycle().contextMatches(state, token)) return false;
     state.tree = Array.isArray(data.entries) ? data.entries : [];
+    state.treeLoaded = true;
     state.treePath = String(data.path || '');
     if (!(options && options.deferRender)) render();
     return true;

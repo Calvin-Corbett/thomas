@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (The drawer told you to choose the project it had just named)
+
+- The Activity drawer's Files section printed **"Choose a project beside Tools to browse its files."** whenever the list was empty — and an empty list has **three** different causes, of which it named one. Measured on a new task: for **45 seconds, the whole run**, the drawer header read `Code task 2026-07-30 1018` while the list directly beneath it told you to choose a project. Also on screen before sending anything.
+- The header had always used `state.projectRoot` for exactly this decision (`state.projectRoot ? label : 'Choose a project'`). The list simply never asked. Both now agree.
+- A new `treeLoaded` flag separates the other two causes, which no existing field could: **"Loading files…"** while a fetch is outstanding, **"This folder has no files yet."** once it has returned empty. Saying "no files" while still loading would have been the same guess in a new coat.
+- Re-measured: **0 seconds** of contradiction. Controls verified — with no project chosen the original sentence is still exactly what shows, and with real entries no message renders at all. All four states are pinned in the Node harness; restoring the single hardcoded message fails it with `told the reader to choose a project that is already chosen`.
+- Found by watching the drawer during a live run, a state it had never been looked at in: the "Steer Thomas" form and Stop button only exist while `state.running`.
+
 ### Fixed (The starter cards no longer sit above a running task)
 
 - **"What should we make?" and its four starter cards stayed on screen for the entire first run of every new conversation** — measured at **76 seconds, every single sample** — sitting directly above the live "Thomas · working" turn, while the question just asked was nowhere on screen. On the most common path there is: a new user's very first Code task.

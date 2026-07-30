@@ -585,6 +585,10 @@ def test_code_adapter_lifecycle_behavior_in_node() -> None:
         # the whole of a new conversation's first run -- 76 seconds, every sample --
         # above the live turn, with the question just asked nowhere to be seen.
         "emptyStateStandsDown": True,
+        # An empty file list has three causes and named only one: for 45 seconds
+        # the drawer header named a project while the list beneath it told you to
+        # choose one.
+        "fileListNamesItsReason": True,
     }
 
 

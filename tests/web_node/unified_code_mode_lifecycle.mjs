@@ -672,9 +672,56 @@ async function proveTheEmptyStateStandsDownForALiveRun() {
   if (!idle.includes('tc-code-starter')) throw new Error('the starter cards are gone');
 }
 
+// An empty file list has three different causes and used to name only one:
+// whatever the reason, it read "Choose a project beside Tools to browse its
+// files." Measured on a new task: for 45 seconds -- the whole run -- the drawer
+// header said "Code task 2026-07-30 1018" while the list directly beneath it
+// told you to choose a project. The header had always used `state.projectRoot`
+// for exactly this decision; the list simply did not ask.
+async function proveTheFileListNamesTheRealReasonItIsEmpty() {
+  const renderWith = (patch) => {
+    resetState();
+    Object.assign(state, {
+      activeId: 'c1', conversation: { id: 'c1', turns: [] }, drawerOpen: true, ...patch,
+    });
+    snapshots.length = 0;
+    api.render();
+    return snapshots.at(-1) || '';
+  };
+
+  const noProject = renderWith({ projectRoot: '', tree: [], treeLoaded: false });
+  if (!noProject.includes('Choose a project beside Tools')) {
+    throw new Error('with no project chosen the list must still say to choose one');
+  }
+
+  const loading = renderWith({ projectRoot: '/repo', tree: [], treeLoaded: false });
+  if (loading.includes('Choose a project beside Tools')) {
+    throw new Error('told the reader to choose a project that is already chosen');
+  }
+  if (!loading.includes('Loading files')) throw new Error('a pending fetch is not reported as loading');
+
+  const empty = renderWith({ projectRoot: '/repo', tree: [], treeLoaded: true });
+  if (empty.includes('Choose a project beside Tools')) {
+    throw new Error('an empty folder was blamed on not choosing a project');
+  }
+  if (!empty.includes('no files yet')) throw new Error('an empty folder is not reported as empty');
+  if (empty.includes('Loading files')) throw new Error('a finished fetch still claims to be loading');
+
+  // The control: with entries, the list shows them and no message at all.
+  const filled = renderWith({
+    projectRoot: '/repo', treeLoaded: true,
+    tree: [{ kind: 'file', name: 'tally.html', path: 'tally.html' }],
+  });
+  if (!filled.includes('tally.html')) throw new Error('tree entries stopped rendering');
+  if (filled.includes('no files yet') || filled.includes('Choose a project beside Tools')) {
+    throw new Error('an empty-list message rendered beside real entries');
+  }
+}
+
 await proveApprovalRetry();
 await proveNarrativeNeverRepeatsItself();
 await proveTheEmptyStateStandsDownForALiveRun();
+await proveTheFileListNamesTheRealReasonItIsEmpty();
 await proveScopedSwitch();
 await proveSteeringConfirmation();
 await proveEvidenceAndRefresh();
@@ -687,4 +734,4 @@ await proveLostSendRetryAndCursor();
 await proveAccessibleDrawerAndPickerErrors();
 await proveTheRealReasonSurvivesTheExitWrapper();
 console.warn = originalWarn;
-process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true, failureReason: true, narrativeNotRepeated: true, emptyStateStandsDown: true }));
+process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true, failureReason: true, narrativeNotRepeated: true, emptyStateStandsDown: true, fileListNamesItsReason: true }));
