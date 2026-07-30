@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Reverting a file removes it from the file list too)
+
+- Reverting a **new** file deletes it, but `changeAction` only re-read the *changes* list — so the drawer's Files section went on offering a file that no longer existed. Measured after an approved revert: the change row cleared, the tree still listed `scratchpad.html`, and the server answered `entries: []` with the artifact route returning **404**. The UI was the only thing that still believed in it.
+- The file list is now re-read after a change action, preserving the current folder so a revert does not also walk the reader back to the project root.
+- **Its failure is reported on its own rather than thrown.** The revert has already succeeded by that point, and letting a stale-list problem reject would report a change that happened as one that did not — the exact class of lie this session has been removing. Tested: a `/tree` that answers 500 still returns a successful revert.
+- **The approval surface itself is sound**, and this was the first look at it. `Revert` raises an `role="alert"` card reading *"Approval required — Revert scratchpad.html? This permanently discards its current changes."* with `Approve once` / `Cancel`. Verified both outcomes rather than just the prompt: **Cancel** dismisses and leaves the file; **Approve once** dismisses and the file is genuinely gone from disk, the tree and the changes list.
+- An existing scenario's fetch stub gained an explicit `/tree` handler, so it exercises the happy path instead of silently landing in its own "unexpected fetch" throw and passing only because the new call catches its own errors.
+
 ### Fixed (A stopped run stops calling itself "working")
 
 - After pressing Stop, the turn header read **"Thomas · Code · working"** directly above its own note saying **"Stopped — you interrupted this run."** Measured: status `Stopped`, the turn still carrying `is-live`, the `::after` suffix still `" · working"`. The class drives that suffix and was set for as long as a live turn existed at all — which outlives the run. It now follows `state.running`, the same condition the steer form already used to hide itself on stop, so the two agree instead of contradicting each other.

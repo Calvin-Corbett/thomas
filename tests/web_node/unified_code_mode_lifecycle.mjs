@@ -147,6 +147,10 @@ async function proveApprovalRetry() {
     if (url.endsWith('/approve')) throw new Error('retry re-approved an already approved receipt');
     if (url.endsWith('/revert')) { revertCalls += 1; return response({ ok: true }); }
     if (url.includes('/changes?')) return response({ changed: [] });
+    // A successful revert now re-reads the file list too, because reverting a
+    // NEW file deletes it. Stubbed explicitly so this scenario exercises the
+    // happy path rather than silently landing in the throw below.
+    if (url.includes('/tree')) return response({ ok: true, entries: [], path: '' });
     throw new Error(`unexpected approval retry fetch ${url}`);
   };
   if (await api.approvePending() !== true) throw new Error('approved change retry did not succeed');
@@ -772,7 +776,45 @@ async function proveAStoppedRunStopsCallingItselfWorking() {
   }
 }
 
+// Reverting a NEW file deletes it, and `changeAction` only re-read the CHANGES
+// list -- so the drawer's Files section went on offering a file that no longer
+// existed. Measured after an approved revert: the change row cleared, the tree
+// still listed `scratchpad.html`, and the server answered `entries: []` with the
+// artifact route returning 404.
+async function proveRevertRefreshesTheFileList() {
+  resetState();
+  Object.assign(state, {
+    activeId: 'c1', projectRoot: '/repo', conversation: { id: 'c1', turns: [] },
+    changes: [{ file: 'gone.html', diff: '+new', untracked: true }],
+    tree: [{ kind: 'file', name: 'gone.html', path: 'gone.html' }], treeLoaded: true,
+  });
+  let treeCalls = 0;
+  fetchHandler = async url => {
+    if (url.endsWith('/revert')) return response({ ok: true });
+    if (url.includes('/changes?')) return response({ changed: [] });
+    if (url.includes('/tree')) { treeCalls += 1; return response({ ok: true, entries: [], path: '' }); }
+    throw new Error(`unexpected revert fetch ${url}`);
+  };
+  if (await api.changeAction('revert', 'gone.html') !== true) throw new Error('revert reported failure');
+  if (treeCalls !== 1) throw new Error(`revert did not re-read the file list (tree fetches: ${treeCalls})`);
+  if (state.tree.length) throw new Error('the file list still holds the reverted file');
+
+  // A tree that cannot be re-read must not turn a revert that HAPPENED into one
+  // reported as failed.
+  Object.assign(state, { changes: [{ file: 'gone.html', diff: '+new', untracked: true }] });
+  fetchHandler = async url => {
+    if (url.endsWith('/revert')) return response({ ok: true });
+    if (url.includes('/changes?')) return response({ changed: [] });
+    if (url.includes('/tree')) return response({ ok: false, error: 'tree unavailable' }, 500);
+    throw new Error(`unexpected revert fetch ${url}`);
+  };
+  if (await api.changeAction('revert', 'gone.html') !== true) {
+    throw new Error('a stale file list turned a successful revert into a failure');
+  }
+}
+
 await proveApprovalRetry();
+await proveRevertRefreshesTheFileList();
 await proveNarrativeNeverRepeatsItself();
 await proveTheEmptyStateStandsDownForALiveRun();
 await proveTheFileListNamesTheRealReasonItIsEmpty();
@@ -789,4 +831,4 @@ await proveLostSendRetryAndCursor();
 await proveAccessibleDrawerAndPickerErrors();
 await proveTheRealReasonSurvivesTheExitWrapper();
 console.warn = originalWarn;
-process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true, failureReason: true, narrativeNotRepeated: true, emptyStateStandsDown: true, fileListNamesItsReason: true, stoppedRunIsNotWorking: true }));
+process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true, failureReason: true, narrativeNotRepeated: true, emptyStateStandsDown: true, fileListNamesItsReason: true, stoppedRunIsNotWorking: true, revertRefreshesFileList: true }));

@@ -592,6 +592,9 @@ def test_code_adapter_lifecycle_behavior_in_node() -> None:
         # After Stop the header read "Thomas - Code - working" directly above its
         # own note saying "Stopped - you interrupted this run".
         "stoppedRunIsNotWorking": True,
+        # Reverting a NEW file deletes it, but only the CHANGES list was re-read,
+        # so the drawer kept offering a file the server answered 404 for.
+        "revertRefreshesFileList": True,
     }
 
 

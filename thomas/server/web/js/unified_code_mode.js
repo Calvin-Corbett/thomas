@@ -1340,6 +1340,20 @@
     state.runStatus = 'completed';
     pushLiveEvent({ type: 'meta', text: `${action === 'revert' ? 'Reverted' : 'Kept'} ${file}.` });
     await loadChanges({ token, deferRender: true });
+    // Reverting a NEW file deletes it, and only `loadChanges` was re-read -- so
+    // the drawer's Files list went on offering a file that no longer existed.
+    // Measured: after Approve the change row cleared, the tree still listed
+    // `scratchpad.html`, and the server said `entries: []` with the artifact
+    // route answering 404.
+    //
+    // The current folder is preserved so a revert does not also walk the reader
+    // back to the project root.
+    //
+    // Its failure is reported on its own rather than thrown: the revert has
+    // already succeeded by this point, and letting a stale-list problem reject
+    // here would report a change that happened as one that did not.
+    await loadTree(state.treePath || '', { token, deferRender: true })
+      .catch(error => recordError(error, 'The file list could not be refreshed.'));
     if (!(options && options.deferRender)) render();
     return true;
   }
