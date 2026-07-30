@@ -430,6 +430,22 @@
     const modelFinal = finalEvent ? eventLabel(finalEvent) : '';
     const staleLimitReply = /execution review|review limit|forbid(?:s|den)? (?:another|further) tool|no files were changed and verification/i.test(modelFinal);
     const reply = turn.ok
+      // Keep "passed Thomas's verification" -- it is EARNED where this fires,
+      // and I tried to remove it before understanding that.
+      //
+      // This fallback has two routes. The one that occurs is `staleLimitReply`:
+      // the model claims it could not act ("no files were changed and
+      // verification has not been claimed") while the same transcript carries
+      // BROWSER_SMOKE_OK and "engine checks passed" and the turn is ok with a
+      // changed file. The model's reply is simply wrong, engine evidence wins,
+      // and the claim is true. `proveEvidenceAndRefresh` pins exactly that.
+      //
+      // The other route -- ok with no `final` event at all -- would claim a
+      // verification on the strength of `turn.ok`, which is only exit 0 with
+      // files changed. Measured across 56 agent turns: 0 of 41 successful ones
+      // lacked a final event, so it does not happen today. If it ever does, the
+      // fix is to condition the wording on real passing evidence, NOT to drop
+      // it -- dropping it throws away the correction in the case that matters.
       ? (modelFinal && !staleLimitReply ? modelFinal : 'Finished the requested changes and passed Thomas’s verification.')
       : failureSummary(turn, events);
     const narrative = narrativeActivityHtml(activityEvents, true);

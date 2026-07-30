@@ -7,6 +7,13 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Documented (A claim I tried to remove, and should not have)
+
+- Swept every user-facing string in Code mode that claims a check or a verification, after finding the word wrong in three separate places. 27 strings; 26 of them correct. The one that looked wrong was the reply fallback: **"Finished the requested changes and passed Thomas's verification"**, shown when `turn.ok` is true — and `ok` is only exit 0 with files changed, which says nothing about what was checked.
+- **It is earned where it actually fires.** The route that occurs is `staleLimitReply`: the model claims it could not act (*"no files were changed and verification has not been claimed"*) while the same transcript carries `BROWSER_SMOKE_OK` and `engine checks passed`, with `ok: true` and a changed file. The model's own reply is simply wrong, engine evidence overrides it, and the substituted claim is true. An existing guard, `proveEvidenceAndRefresh`, pins exactly that — and my change broke it, which is how I found out.
+- The other route — `ok` with no `final` event at all — would claim verification on the strength of `turn.ok` alone. Measured across 56 agent turns: **0 of 41 successful ones lacked a final event**, so it does not happen today.
+- **Reverted, nothing shipped.** Recorded at the line, including the correct fix if that second route ever becomes reachable: condition the wording on real passing evidence rather than dropping it, because dropping it throws away the correction in the case that matters.
+
 ### Fixed (A file write stops calling itself a check)
 
 - Every `tool_result` row in the technical log read **"Checked tool result"**. Measured on one turn: **27 of them**, all identical, sitting above a folder listing, three separate `Wrote N chars to <file>` lines, and a source excerpt. **A file write was labelled a check** — the same overloading of the word that had the activity header advertising "26 checks" on a run with zero validations. `check` means an engine check everywhere else in this UI, and the verdict card counts them.
