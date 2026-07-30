@@ -145,7 +145,41 @@ def _build_attempts(
 
 
 def _build_validations(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Each engine check actually run: the ``run`` tool call paired with its result."""
+    """Each engine check actually run: the ``run`` tool call paired with its result.
+
+    KNOWN GAP, MEASURED, NOT FIXED — a check here describes the files as they
+    were WHEN IT RAN, and the report presents it as though it describes what was
+    delivered. Those differ whenever a run edits after its last check and is then
+    cut off before re-checking.
+
+    Measured end to end on conversation ``fc_20260730T161200_256915`` (the study
+    planner, 2026-07-30). Its report's headline validation is::
+
+        BROWSER_SMOKE_FAILED: index.html: Uncaught TypeError:
+        Cannot read properties of null (reading 'value')
+
+    Running that exact smoke — ``smoke_html_artifacts`` — against the run's real
+    ``project_root`` gives ``ok=True``, ``errors=[]``, four times out of four,
+    deterministically. The folder holds only the three delivered files, so this
+    is not a leftover-asset difference; the reconstruction and the real folder
+    agree with each other and disagree with the report. The transcript order is
+    STATIC_VERIFY_OK, then BROWSER_SMOKE_FAILED, then "Pass budget exhausted
+    after 10 passes while work was still active". Edits therefore landed after
+    the last recorded check and were never re-verified.
+
+    The reader is sent to hunt a null ``.value`` that no longer exists, while the
+    defect the current smoke does report — three of four sidebar sections never
+    switch, because script.js queries ``.section`` and the markup says
+    ``class="panel"`` — is absent from the report entirely.
+
+    Not fixed here because doing it honestly needs something this function cannot
+    see: whether any file changed between the last check and the end of the run.
+    The events carry no edit-vs-check ordering to compare. The two candidate
+    fixes are re-verifying once before the report is written, or recording an
+    edit watermark per validation so a stale one can be marked as such. Both are
+    pipeline changes rather than a change to this assembly, and guessing here
+    would replace a wrong claim with a differently wrong one.
+    """
     validations: list[dict[str, Any]] = []
     pending: str | None = None
     for event in events:
