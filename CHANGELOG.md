@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Documented (A z-index "fix" that destroys every theme, and the wrong diagnosis behind it)
+
+- At 900px on the Code empty state a drifting 30px moon sits under the subtitle, and *"Describe the outcome in the composer below."* reads as *"…the composer belo⬤ Keep using this same"*. Cropped at 3×, it looks unambiguously like the sprite is painted on top.
+- **It is not.** `main` is `position: relative; z-index: 1` and the worlds wrapper is `z-index: 0`, both children of `#tc-shell`, so the text genuinely paints above the sprite. What fails is **contrast**: the subtitle is `--c-dim`, `rgba(238,240,251,.66)`, and light grey on a bright sphere has almost none. The sprites animate, so the same line is legible seconds later — which is why it reads as intermittent rather than broken.
+- Setting the wrapper to `z-index: -1` — which the comment above it invites, since it has always said *"behind everything"* — was tried and **reverted**: a negative z-index puts it behind `#tc-shell`'s opaque `--c-bg` and every theme goes flat black. Verified by screenshot, the entire nebula gone. That trades an intermittent contrast dip for losing the design.
+- Two measurements worth nothing here, both tried and recorded: `elementFromPoint` names the text as topmost but the layer is `pointer-events: none`, which that API skips regardless; and hiding the wrapper removes the sphere *and* the whole background, proving only that the sprite belongs to it.
+- **Nothing shipped.** A real fix is a design decision — dim or exclude sprites beneath running text, or give the empty-state copy its own backdrop — not a z-index. Recorded at the exact line so the next person does not make the change I just made and backed out.
+
 ### Fixed (Opening the viewer stops reducing the conversation to a sliver)
 
 - Found immediately after the drawer fix, by checking its mirror image — and **this one was mine**, shipped earlier the same day. The viewer and the space reserved for it were two copies of `min(760px, 62vw)`.

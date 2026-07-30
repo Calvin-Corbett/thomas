@@ -34,7 +34,40 @@
   <!-- Shell. Default vars below = Nebula Core (mirrors the design's inline root). -->
   <div id="tc-shell" class="tc-shell" data-theme="nebula" data-ui-id="chat.shell" data-ui-label="Thomas Chat shell" data-ui-policy="root protected" style="position: relative; display: flex; height: 100vh; width: 100%; overflow: hidden; font-family: var(--font-sans); color: var(--c-text); background: var(--c-bg); --c-bg: #070912; --c-sidebar: rgba(11,14,26,0.72); --c-surface: rgba(255,255,255,0.04); --c-surface-2: rgba(255,255,255,0.08); --c-hover: rgba(255,255,255,0.06); --c-border: rgba(255,255,255,0.10); --c-border-2: rgba(255,255,255,0.17); --c-text: #eef0fb; --c-dim: rgba(238,240,251,0.66); --c-muted: rgba(238,240,251,0.42); --c-accent: #8b8cff; --c-accent-ink: #0a0b16; --c-accent-soft: rgba(139,140,255,0.16); --c-accent-line: rgba(139,140,255,0.45); --c-user-bg: rgba(124,118,235,0.20); --c-user-text: #eef0fb; --c-composer-bg: rgba(16,19,34,0.86); --c-menu-bg: #15142b; --c-shadow: 0 18px 50px rgba(2,4,12,0.55); --bot-primary: #9ad8ff; --bot-secondary: #5aaeff; --bot-glow: rgba(90,174,255,0.5); --bot-trim: #0d1117; --r-card: 14px; --r-composer: 18px; --font-head: 'Manrope', system-ui, sans-serif; --font-label: 'Manrope', system-ui, sans-serif; --font-sans: 'Manrope', system-ui, sans-serif; --font-serif: 'Newsreader', Georgia, serif; --font-mono: 'JetBrains Mono', ui-monospace, monospace; --sidebar-margin: 0;">
 
-    <!-- ===================== LIVING WORLDS (behind everything) ===================== -->
+    <!-- ===================== LIVING WORLDS (behind everything) =====================
+         KNOWN, MEASURED, DELIBERATELY NOT CHANGED — and z-index: 0 is correct
+         here, so do not "fix" it to -1. See below for what that costs.
+
+         At 900px on the Code empty state, a drifting 30px moon sits under the
+         subtitle and "Describe the outcome in the composer below." reads as
+         "...the composer belo(sphere) Keep using this same" -- the w and the
+         full stop apparently swallowed. Cropped at 3x, it looks like the sprite
+         is painted on top.
+
+         It is NOT. `main` is `position: relative; z-index: 1` and this wrapper is
+         `z-index: 0`, both children of #tc-shell, so the text genuinely paints
+         above the sprite. What actually fails is contrast: the subtitle is
+         `--c-dim`, rgba(238,240,251,.66), and light grey on a bright sphere has
+         almost none. The sprites are animated, so the same line is legible a few
+         seconds later -- which is why this reads as intermittent rather than
+         broken.
+
+         Two measurements that are worth nothing here, both tried:
+           * `elementFromPoint` reports the TEXT as topmost, but this layer is
+             `pointer-events: none` and that API skips it either way.
+           * A screenshot alone cannot separate "covered" from "no contrast".
+             Hiding this wrapper removes the sphere AND the whole background,
+             which proves only that the sprite belongs to it.
+
+         Setting this wrapper to `z-index: -1` was tried and REVERTED: a negative
+         z-index puts it behind #tc-shell's own opaque `--c-bg`, and every theme
+         goes flat black -- verified by screenshot, the entire nebula gone. It
+         trades an intermittent contrast dip for losing the design.
+
+         A real fix is a design decision, not a z-index: dim or exclude sprites
+         beneath running text, or give the empty-state copy its own backdrop.
+         Left alone rather than guessed at. -->
+
     <div aria-hidden="true" style="position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;">
 
       <!-- NEBULA -->
