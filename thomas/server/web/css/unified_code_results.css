@@ -132,7 +132,49 @@
   color: var(--c-muted);
 }
 .tc-code-empty strong { color: var(--c-text); font-size: 16px; }
-.tc-code-empty > span:last-child { max-width: 440px; font-size: 13px; line-height: 1.55; }
+/* `:last-child` no longer matches -- the starters grid is now the last child --
+   so the intro is targeted by its own class instead. Left as a selector rather
+   than a nth-of-type so adding anything below cannot silently unstyle it. */
+.tc-code-empty > span.tc-code-empty-intro,
+.tc-code-empty > span:nth-of-type(2) { max-width: 440px; font-size: 13px; line-height: 1.55; }
+
+/* Starting points, because "describe the outcome" with nothing to look at is
+   an instruction rather than an invitation, and the blank surface was one line
+   of text above roughly 700px of nothing on a 1080p screen. */
+/* Two columns, not auto-fit. With four cards, `auto-fit` gave three across and
+   one orphaned underneath, which reads as a wrapping accident rather than a
+   layout. A 2x2 block is symmetrical under a centred hero and stays balanced
+   however wide the window gets. */
+.tc-code-starters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  max-width: 620px;
+  margin-top: 22px;
+  text-align: left;
+}
+@media (max-width: 720px) { .tc-code-starters { grid-template-columns: minmax(0, 1fr); } }
+.tc-code-starter {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 13px 14px;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--c-surface) 70%, transparent);
+  color: var(--c-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s, background .15s, transform .15s;
+}
+.tc-code-starter:hover, .tc-code-starter:focus-visible { border-color: var(--c-accent-line); background: var(--c-surface-2); transform: translateY(-1px); }
+.tc-code-starter:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.tc-code-starter > i { font-size: 17px; color: var(--c-accent); }
+.tc-code-starter-title { font-size: 13px; font-weight: 700; }
+.tc-code-starter-text { font-size: 11.5px; line-height: 1.5; color: var(--c-muted); }
+@media (prefers-reduced-motion: reduce) { .tc-code-starter { transition: none; } .tc-code-starter:hover { transform: none; } }
 .tc-code-muted { color: var(--c-muted); }
 
 .tc-code-panel .tc-mode-status.is-disconnected,

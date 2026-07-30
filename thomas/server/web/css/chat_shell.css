@@ -123,6 +123,7 @@
 .ph-user-circle::before { content: "\25CE"; }
 .ph-note::before { content: "\25A4"; }
 .ph-game-controller::before { content: "\235F"; }
+.ph-app-window::before { content: "\1F5D4"; }
 html, body { margin: 0; padding: 0; height: 100%; }
 *, *::before, *::after { box-sizing: border-box; }
 .tc-scroll { scrollbar-width: thin; scrollbar-color: var(--c-border-2) transparent; }

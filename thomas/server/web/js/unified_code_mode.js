@@ -570,6 +570,36 @@
     return true;
   }
 
+  // A blank Code surface used to be one line of encouragement above 700px of
+  // empty space -- measured on a 1920x1080 screen, the hero sat at the top and
+  // nothing else occupied the view down to the composer. It told you to
+  // describe an outcome without showing what a good one looks like.
+  //
+  // These fill the composer rather than sending. A starter is a suggestion, and
+  // a click that silently spends a model call on a prompt nobody read is a
+  // worse surprise than one extra keystroke.
+  const CODE_STARTERS = [
+    { icon: 'ph-play-circle', title: 'A small game', text: 'Build a playable Minesweeper in index.html. A 9x9 grid with 10 mines, left click reveals, right click flags, and a mine counter. Plain HTML/CSS/JS.' },
+    { icon: 'ph-chart-bar', title: 'A chart from data', text: 'Build report.html that reads sales.csv from the same folder and draws a bar chart of revenue per region on a canvas, with the grand total shown as text.' },
+    { icon: 'ph-app-window', title: 'A little tool', text: 'Build a habit tracker in index.html: a seven day grid, click a day to toggle it done, a current streak count, and it remembers what I ticked after a reload.' },
+    { icon: 'ph-wrench', title: 'Work on my code', text: 'Look at the project I have selected, tell me what it does, and suggest the three changes that would improve it most.' },
+  ];
+
+  function emptyStateHtml() {
+    const cards = CODE_STARTERS.map(s => `<button class="tc-code-starter" type="button" data-code-starter="${esc(s.text)}">
+      <i class="ph ${s.icon}" aria-hidden="true"></i>
+      <span class="tc-code-starter-title">${esc(s.title)}</span>
+      <span class="tc-code-starter-text">${esc(s.text.length > 96 ? `${s.text.slice(0, 96).trim()}…` : s.text)}</span>
+    </button>`).join('');
+    return `<div class="tc-code-empty">
+      <span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span>
+      <strong>What should we make?</strong>
+      <span class="tc-code-empty-intro">Describe the outcome in the composer below. Keep using this same conversation for changes, tests, and review.</span>
+      <div class="tc-code-starters">${cards}</div>
+    </div>`;
+  }
+
+
   function render() {
     if (!adapterActive) return;
     const root = surface(); if (!root) return;
@@ -626,7 +656,7 @@
     root.innerHTML = `<div class="tc-code-panel${state.drawerOpen ? ' is-drawer-open' : ''}" style="--tc-code-drawer-width:${clampDrawerWidth(state.drawerWidth)}px">
       <header class="tc-code-context" data-ui-id="code.context" data-ui-label="Code activity bar" data-ui-policy="move"><button data-code-results-jump type="button" aria-expanded="${state.drawerOpen ? 'true' : 'false'}"><i class="ph ph-sidebar-simple"></i> Activity <small>${statusLabels[state.runStatus] || 'Ready'}</small>${hasResults ? '<span class="tc-code-activity-count" aria-hidden="true"></span>' : ''}</button></header>
       <div class="tc-code-layout">
-        <section class="tc-code-transcript" aria-label="Code conversation" data-ui-id="code.transcript" data-ui-label="Code conversation" data-ui-policy="move resize" data-ui-constraints="minWidth=320;minHeight=200">${historyAsk}<div id="tc-code-turns">${turns.map(turnHtml).join('') || '<div class="tc-code-empty"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>What should we make?</strong><span>Describe the outcome in the composer below. Keep using this same conversation for changes, tests, and review.</span></div>'}</div>${liveTurn}</section>
+        <section class="tc-code-transcript" aria-label="Code conversation" data-ui-id="code.transcript" data-ui-label="Code conversation" data-ui-policy="move resize" data-ui-constraints="minWidth=320;minHeight=200">${historyAsk}<div id="tc-code-turns">${turns.map(turnHtml).join('') || emptyStateHtml()}</div>${liveTurn}</section>
         <aside class="tc-code-actions" aria-label="Code activity" aria-hidden="${state.drawerOpen ? 'false' : 'true'}"${state.drawerOpen ? '' : ' inert'} data-ui-id="code.activity" data-ui-label="Code activity drawer" data-ui-policy="move resize" data-ui-constraints="minWidth=280;minHeight=240;maxWidth=520"><section class="tc-code-rail-section" data-ui-id="code.outputs" data-ui-label="Outputs" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=120"><div class="tc-code-section-title">Outputs</div>${approval}${preview}${artifactRows}${changeRows || (!preview && !artifactRows ? '<p class="tc-code-rail-empty">Previews, changed files, and proof will appear here without interrupting the conversation.</p>' : '')}${changeRows && !state.running ? `<button id="tc-code-checkpoint" class="tc-code-checkpoint" data-ui-id="code.action.checkpoint" data-ui-label="Checkpoint changes" data-ui-policy="protected" title="Commit these changes on a thomas-code/ branch">Checkpoint — commit these changes</button>` : ''}</section><section class="tc-code-rail-section tc-code-tree" data-ui-id="code.files" data-ui-label="Project files" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=120"><div class="tc-code-tree-head"><div class="tc-code-section-title">Files · ${esc(state.treePath || '/')}</div>${state.treePath ? '<button id="tc-code-tree-up">Up</button>' : ''}</div><ul>${treeRows || '<li class="tc-code-muted">Choose a project beside Tools to browse its files.</li>'}</ul></section><form id="tc-code-steer-form" class="tc-code-steer" ${state.running ? '' : 'hidden'} data-ui-id="code.steer" data-ui-label="Steer Thomas" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=80"><label for="tc-code-steer">Steer Thomas</label><input id="tc-code-steer" name="message" required placeholder="Change direction…" ${state.steeringBusy ? 'disabled' : ''}><button ${state.steeringBusy ? 'disabled' : ''}>${state.steeringBusy ? 'Confirming…' : 'Apply'}</button><button type="button" id="tc-code-stop" data-ui-id="code.action.stop" data-ui-label="Stop this run" data-ui-policy="protected" title="Stop this run" ${state.steeringBusy ? 'disabled' : ''}>Stop</button></form></aside>
       </div>${codeResults().viewerHtml()}</div>`;
     const activityDrawer = root.querySelector('.tc-code-actions');
@@ -726,6 +756,17 @@
     root.querySelector('[data-code-history-setup]')?.addEventListener('click', () => answerHistory('setup'));
     root.querySelector('[data-code-history-without]')?.addEventListener('click', () => answerHistory('without'));
     root.querySelector('[data-code-history-cancel]')?.addEventListener('click', () => { state.pendingHistoryChoice = null; state.historyChoiceBusy = false; render(); });
+    // A starter loads the composer and hands the cursor over. It deliberately
+    // does NOT send: the text is a suggestion to edit, and a click that quietly
+    // spends a model call on a prompt nobody read is the worse surprise.
+    root.querySelectorAll('[data-code-starter]').forEach(card => card.addEventListener('click', () => {
+      const input = document.getElementById('tc-input');
+      if (!input) return;
+      input.value = card.dataset.codeStarter || '';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.focus();
+      try { input.setSelectionRange(input.value.length, input.value.length); } catch (error) { /* not a text input */ }
+    }));
     root.querySelector('#tc-code-steer-form')?.addEventListener('submit', event => { event.preventDefault(); void safely(() => steer(new FormData(event.currentTarget).get('message')), 'Could not steer the Code task.'); });
     root.querySelector('#tc-code-stop')?.addEventListener('click', () => { void safely(() => stopRun(), 'Could not stop the Code run.'); });
     root.querySelector('#tc-code-checkpoint')?.addEventListener('click', () => { void safely(() => checkpointChanges(), 'Could not checkpoint the changes.'); });

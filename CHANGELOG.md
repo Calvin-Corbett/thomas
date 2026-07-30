@@ -7,6 +7,15 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Added (A blank Code surface now shows you where to start)
+
+- **An empty Code surface was one line of encouragement above roughly 700px of nothing.** Measured on a 1920×1080 screen: the hero sat near the top and nothing else occupied the view down to the composer. It told you to "describe the outcome" without showing what a good one looks like.
+- Four starting points now sit under the hero — a small game, a chart from data, a little tool, and work on an existing project — each with the real prompt behind it.
+- **They fill the composer rather than sending.** A starter is a suggestion to edit, and a click that quietly spends a model call on a prompt nobody read is a worse surprise than one extra keystroke. Verified: clicking "A chart from data" loads the full prompt into `#tc-input`, fires its `input` event so the send button enables, and focuses the caret at the end.
+- **Laid out 2×2 rather than `auto-fit`.** With four cards `auto-fit` produced three across and one orphaned underneath, which reads as a wrapping accident rather than a layout; a 2×2 block stays symmetrical under a centred hero at any width, and collapses to one column under 720px.
+- The intro paragraph was styled by `.tc-code-empty > span:last-child`, which the new grid displaced — it now carries its own class, so adding anything below cannot silently unstyle it again.
+- **The icon guard added minutes earlier caught a mistake in this very change**: `ph-app-window` on the third card had no glyph and was rendering as a bullet on screen. Mapped, re-checked live — all four card icons draw (`▶ ↗ 🗔 ⚒`).
+
 ### Fixed (Thomas had no face — 17 icons in Code were drawing a dot)
 
 - **Thomas's avatar was a bullet.** `ph-robot` sits on every message he sends and in the Code empty state, and it had no glyph, so it fell through to the `\2022` catch-all at the top of `chat_shell.css`. So did `ph-check-circle`, drawn **18 times in a single transcript** — once per "Checked tool result" row in the activity log.
