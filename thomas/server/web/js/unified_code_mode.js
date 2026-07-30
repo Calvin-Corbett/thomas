@@ -734,7 +734,22 @@
     // localStorage does not, which a small number of generated apps rely on.
     const previewIsPage = state.filePreview && /\.x?html?$/i.test(String(state.filePreview.path || ''));
     const previewBody = (previewIsPage && state.filePreviewRendered !== false)
-      ? `<iframe title="Preview of ${esc(state.filePreview.path)}" sandbox="allow-scripts" srcdoc="${esc(String(state.filePreview.content || ''))}" style="width:100%;height:320px;border:0;border-radius:8px;background:#fff;"></iframe>`
+      // A miniature of the page, not a crop of its top-left corner.
+      //
+      // This rendered the document at 1:1 into the drawer's ~247px column, so a
+      // layout built for ~1200px arrived as a keyhole: "Sort by amount" cut to
+      // "Sort by", the table header reading "DATE DESCRIPTION AM…", about a
+      // fifth of the page visible and every edge sliced mid-word. It reads as a
+      // broken render rather than a preview.
+      //
+      // Exactly the mistake the artifact thumbnail had and had already fixed --
+      // a different element, so the fix never reached here. Same fixed box and
+      // same fixed scale, deliberately not percentages: the drawer is resizable
+      // (280-520px) and a proportional preview would drift with it instead of
+      // being the same picture every time. 1280x1600 at 0.19375 lands on
+      // 248x310, which is the thumbnail's scale over twice its height, because
+      // this one was opened on purpose.
+      ? `<div class="tc-code-file-shot"><iframe title="Preview of ${esc(state.filePreview.path)}" sandbox="allow-scripts" srcdoc="${esc(String(state.filePreview.content || ''))}" tabindex="-1" scrolling="no"></iframe></div>`
       : (state.filePreview ? `<pre>${esc(state.filePreview.content)}</pre>` : '');
     const previewToggle = previewIsPage
       ? `<button data-code-preview-toggle style="margin-right:6px;">${state.filePreviewRendered === false ? 'Show page' : 'Show code'}</button>`

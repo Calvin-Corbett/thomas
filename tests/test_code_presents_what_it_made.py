@@ -13,6 +13,7 @@ CODE_JS = WEB / "js" / "unified_code_mode.js"
 # browser assembles it, not about which of its two files a line sits in.
 CODE_RESULTS_JS = WEB / "js" / "unified_code_results.js"
 CODE_CSS = WEB / "css" / "unified_code_activity.css"
+CODE_RESULTS_CSS = WEB / "css" / "unified_code_results.css"
 
 
 def _js() -> str:
@@ -144,3 +145,52 @@ def test_a_full_bleed_viewer_does_not_reserve_room_behind_itself() -> None:
     assert "viewerFull" in marker or "viewerFull" in js, "the full-bleed case is not distinguished"
     line = next(ln for ln in js.splitlines() if "is-viewer-open" in ln and "class=" in ln)
     assert "!viewerFull" in line, f"full-bleed still reserves room: {line.strip()[:120]!r}"
+
+
+def _css_block(css: str, selector: str) -> str:
+    return css.split(selector, 1)[1].split("}", 1)[0]
+
+
+def test_a_previewed_file_is_a_miniature_not_a_keyhole() -> None:
+    """Clicking a file in the drawer tree rendered the page 1:1 into a ~247px
+    column: "Sort by amount" cut to "Sort by", the header row reading
+    "DATE DESCRIPTION AM…", about a fifth of the page visible and every edge
+    sliced mid-word.
+
+    The artifact thumbnail had this exact bug and was fixed; this is a different
+    element, so the fix never reached it.
+    """
+    js = _js()
+    css = CODE_RESULTS_CSS.read_text(encoding="utf-8")
+
+    assert "tc-code-file-shot" in js, "the file preview no longer wraps its frame"
+    assert 'style="width:100%;height:320px' not in js, (
+        "the preview iframe is inline-sized again, which is what produced the keyhole"
+    )
+    assert ".tc-code-file-shot {" in css
+    box = _css_block(css, ".tc-code-file-shot {")
+    assert "overflow: hidden" in box
+    frame = _css_block(css, ".tc-code-file-shot iframe {")
+    assert "transform: scale(" in frame
+
+
+def test_the_preview_scale_actually_fits_the_box() -> None:
+    """The invariant the whole thing rests on: the document width times the
+    scale must equal the box width. Get that wrong and it is a keyhole again --
+    the same defect wearing a transform."""
+    css = CODE_RESULTS_CSS.read_text(encoding="utf-8")
+
+    for box_sel, frame_sel in (
+        (".tc-code-file-shot {", ".tc-code-file-shot iframe {"),
+        (".tc-code-artifact-shot {", ".tc-code-artifact-shot iframe {"),
+    ):
+        box = _css_block(css, box_sel)
+        frame = _css_block(css, frame_sel)
+        box_w = int(re.search(r"width:\s*(\d+)px", box).group(1))
+        doc_w = int(re.search(r"width:\s*(\d+)px", frame).group(1))
+        scale = float(re.search(r"scale\(([\d.]+)\)", frame).group(1))
+        assert abs(doc_w * scale - box_w) <= 2, (
+            f"{box_sel} draws a {doc_w}px document at {scale} into a {box_w}px box "
+            f"-> {doc_w * scale:.1f}px, so it is cropped, not scaled"
+        )
+        assert doc_w > box_w, f"{frame_sel} is not rendering a full-width page"

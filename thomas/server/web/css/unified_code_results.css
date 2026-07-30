@@ -105,6 +105,36 @@
 .tc-code-artifact img { display: block; max-width: 100%; max-height: 260px; margin: auto; object-fit: contain; }
 .tc-code-artifact.is-link > span { display: block; padding: 0 9px 9px; color: var(--c-dim); font-size: 10px; }
 
+/* The clicked file, as a miniature of the whole page. Same fixed box and fixed
+   scale as `.tc-code-artifact-shot` above -- that element had this exact keyhole
+   bug and was fixed; this one is a different element, so the fix never reached
+   it. Twice the height, because a file preview is opened deliberately. */
+.tc-code-file-shot {
+  position: relative;
+  width: 248px;
+  height: 310px;
+  margin: 0 auto;
+  overflow: hidden;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  background: #fff;
+}
+.tc-code-file-shot iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* 900 rather than 1280: the scale is pinned by the box width (248/900), so a
+     narrower document renders LARGER in the same frame. At 1280 a page that
+     centres itself vertically sat as a small card adrift in white. 900 is still
+     comfortably desktop -- well clear of the narrow breakpoints pages actually
+     use -- and 248/900 = .27556, so 310px of box shows 1125px of page. */
+  width: 900px;
+  height: 1125px;
+  border: 0;
+  transform: scale(.27556);
+  transform-origin: top left;
+  pointer-events: none;
+}
 .tc-code-file-preview header button,
 .tc-code-change button { width: auto; padding: 3px 6px; font-size: 9.5px; }
 .tc-code-file-preview pre,

@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A previewed file is a miniature, not a keyhole)
+
+- Clicking a file in the drawer's tree rendered the page **1:1 into a ~247px column**: "Sort by amount" cut to "Sort by", the table header reading `DATE DESCRIPTION AM…`, about a fifth of the page visible and every edge sliced mid-word. It reads as a broken render rather than a preview.
+- **This is the exact bug the artifact thumbnail had and had already fixed.** `.tc-code-artifact-shot` was given a fixed box and a fixed scale; `.tc-code-file-preview` is a different element, so the fix never reached it. Same treatment now applies to both.
+- The document renders at **900px wide, not 1280**: the scale is pinned by the box width (`248/900`), so a *narrower* document renders **larger** in the same frame. At 1280 a page that centres itself vertically sat as a small card adrift in white. 900 is still comfortably desktop, well clear of the narrow breakpoints pages actually use.
+- **The invariant is now a test, for both shots:** document width × scale must equal box width. Get that wrong and it is a keyhole again — the same defect wearing a transform. Setting the file shot to the thumbnail's scale (900 × .19375 = 174px into a 248px box) fails it.
+- Found by clicking a file in the tree for the first time. The previous attempt had failed with `<aside class="tc-code-viewer"> subtree intercepts pointer events` — which was itself the evidence for the viewer bug fixed in the commit before this one.
+
 ### Fixed (The viewer opens beside the chat, as its own label promises)
 
 - The artifact card says **"Click to open it beside the chat"** and the viewer's own stylesheet comment says *"beside the conversation"* — but `.tc-code-viewer` is `position: absolute`, so opening it moved nothing. Measured at 1920 wide: the transcript stayed **768px at x=716** while the viewer covered from **x=1160** — **324px of the conversation underneath it**, clipping **300px off every line** of Thomas's reply, mid-word (`…correct running b`, `…orders transactions s`).
