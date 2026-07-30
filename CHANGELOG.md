@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A generated first-person game could shoot but not turn)
+
+- From a game Thomas built today: `if (document.pointerLockElement !== canvas) canvas.requestPointerLock?.();` and mouse-look gated on `document.pointerLockElement === canvas`. The artifact CSP sandbox did not grant `allow-pointer-lock`, so that is **never true** — the player can shoot, but cannot look around. Nothing raises; the request is refused silently.
+- **Third instance of one shape**, each found by using the app rather than by a failing test: `'unsafe-eval'` missing made a correct calculator print `Error`; `allow-modals` missing made every confirm-before-delete button dead; `allow-pointer-lock` missing makes every first-person game unplayable. Two of the owner's own deliverables call `requestPointerLock`.
+- Verified with a control, because pointer lock also needs a user gesture and might not engage headless — a bare "BLOCKED" could have meant any of three things. Removing the token again: control (unsandboxed shell) **still LOCKED**, artifact **BLOCKED**, guard red. The control holding constant across both directions is what makes it evidence.
+- `allow-popups` deliberately **not** granted: no deliverable calls `window.open(`, so there is no defect behind it. A test pins that, so widening later has to be justified by a measured failure.
+- The same-origin `/deliverable/` route was **not** updated, and that is recorded as a known gap at the exact line rather than fixed blind: nothing in the unified shell requests it, so there is no surface to verify the change on, and an unverified header change on a security boundary is worse than a written-down inconsistency.
+
 ### Fixed (Every generated confirm-before-delete button was silently dead)
 
 - Thomas built a habit tracker whose Reset handler reads `if (!confirm("Clear all habit checkoffs?")) return;`. Clicking Reset did **nothing** — no dialog, no error, no console message.

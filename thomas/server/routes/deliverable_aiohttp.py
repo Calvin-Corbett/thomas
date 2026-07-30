@@ -601,8 +601,28 @@ class DeliverablePreviewService:
         # What it removes is a whole class of generated app -- anything with a
         # confirm-before-delete -- being silently dead on the one button that
         # matters. Guard: tests/test_generated_apps_can_ask_before_they_delete.py
+        #
+        # `allow-pointer-lock` is the third instance of the same shape, and it is
+        # the one that makes first-person games unplayable. From a game Thomas
+        # built on 2026-07-30 (~/.thomas/projects/Code task 2026-07-30 1137/game.js):
+        #
+        #     if (document.pointerLockElement !== canvas) canvas.requestPointerLock?.();
+        #     ...
+        #     addEventListener("mousemove", (event) => {
+        #       if (... && document.pointerLockElement === canvas && state.player)
+        #         state.player.angle += event.movementX * .0023;
+        #     });
+        #
+        # Mouse-look is gated entirely on `pointerLockElement === canvas`. Without
+        # the token that is never true, so the player cannot TURN -- an FPS where
+        # you may only shoot straight ahead. No error is raised; the request is
+        # simply refused. Two of the owner's own deliverables call it
+        # (that game.js and code_scratch/blocktown-84.html).
+        #
+        # `allow-popups` is deliberately NOT granted: zero deliverables call
+        # `window.open(`, so there is no defect to fix and no reason to widen.
         response.headers["Content-Security-Policy"] = (
-            "sandbox allow-scripts allow-forms allow-same-origin allow-modals; "
+            "sandbox allow-scripts allow-forms allow-same-origin allow-modals allow-pointer-lock; "
             "default-src 'self' data: blob:; "
             "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; "
             "style-src 'self' 'unsafe-inline' data:; img-src 'self' data: blob:; "
@@ -642,6 +662,20 @@ async def handle_deliverable(request: web.Request) -> web.StreamResponse:
     # PDF viewer working; we deliberately omit `allow-same-origin`. This is the
     # call-site-independent backstop to the iframe `sandbox` attributes in the chat UI,
     # which are otherwise a single point of failure. (Adversarial review 2026-06-17.)
+    #
+    # NOT updated with `allow-modals` / `allow-pointer-lock`, and that is a known
+    # gap rather than a decision that this route is different. The preview service
+    # above got both because generated apps demonstrably need them: a
+    # confirm-before-delete button that never asks, and an FPS whose mouse-look is
+    # gated on `pointerLockElement`. The same generated files would hit the same
+    # walls here.
+    #
+    # It is left alone because nothing in the unified shell requests this route --
+    # `grep -rn "/deliverable/" thomas/server/web/js/ chat.html` finds nothing --
+    # so there is no surface to verify the change on, and shipping an unverified
+    # header change on a security boundary is worse than an inconsistency that is
+    # written down. If a caller appears, mirror the tokens above and verify with
+    # tests/test_generated_apps_can_ask_before_they_delete.py.
     csp = "sandbox allow-scripts allow-forms"
     # The opaque-origin sandbox makes `localStorage`/`sessionStorage` THROW on access.
     # A huge fraction of generated games/apps use them (e.g. a high-score), and the

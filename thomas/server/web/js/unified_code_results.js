@@ -415,10 +415,15 @@
            NB: no backticks in this comment -- it sits inside a template literal,
            and quoting that snippet with them closed the literal and turned the
            rest of the function into a syntax error that killed all of Code mode.
+           allow-pointer-lock, same reason: a generated FPS gates its mouse-look on
+           "document.pointerLockElement === canvas", which is never true without the
+           token, so the player can shoot but cannot TURN. Two of the owner's own
+           deliverables call requestPointerLock.
            Deliberately NOT added to the transcript thumbnail or the drawer shot
            (unified_code_results.js:184, :212): both are tabindex="-1" decoration,
-           and a 168px picture must never be able to pop a dialog over the chat. -->
-      <div class="tc-code-viewer-stage"><iframe title="${esc(file)}" sandbox="allow-scripts allow-forms allow-modals" src="${esc(doc)}"></iframe></div>
+           and a 168px picture must never be able to pop a dialog over the chat or
+           swallow the mouse cursor. -->
+      <div class="tc-code-viewer-stage"><iframe title="${esc(file)}" sandbox="allow-scripts allow-forms allow-modals allow-pointer-lock" src="${esc(doc)}"></iframe></div>
     </aside>`;
   }
 
