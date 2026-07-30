@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Code replies showed their markdown instead of rendering it)
+
+- **`Built it as a standalone **Nova** calculator experience in \`index.html\`.`** — that is what the Code surface printed, asterisks and backticks and all. **16 of 17 real Code replies carry markdown**, so nearly every one read as punctuation noise. The identical prose in Chat rendered properly: Chat runs `mdToHtml`, Code ran `esc`. Same model, same sentence, two treatments.
+- Code now uses **Chat's renderer**, exposed rather than copied — for the same reason there is exactly one `esc` in these files: a second implementation is how one of them stops escaping.
+- **Verified inert, not assumed.** `_mdInline` escapes first (`s = esc(s)`) and only then introduces tags, and its link rule accepts `http(s)` alone. Driven with a reply carrying `<script>`, an `<img onerror>` and a `javascript:` link: **0 script elements, 0 imgs, no anchor minted, `window.__pwned` never set**, and the tags visible as ordinary characters. Markdown still rendered alongside.
+- That escape-first property is now pinned where it lives — moving it after the replacements turns the test red, and it would make Chat and Code injectable from model output at once.
+- Falls back to the plain escaper when no shell is present, which is what the Node contract harness gets; and the export is guarded with `typeof window !== 'undefined'`, because that harness evaluates chat.html's script in a VM with no `window` and an unguarded assignment took it down.
+
 ### Changed (The verdict names which requirements went unchecked)
 
 - **A gap I introduced.** The headline now reads "Not checked against your ask" — and the answer to *which* ones sat behind **two closed disclosures**, under a section headed "Rubric mapping" that gives no hint it holds it. Measured on the ledger run: `closedDisclosuresToOpen = 2`, on a card whose entire point was that six things went unverified. A verdict that names a problem without naming its subject is half a message.

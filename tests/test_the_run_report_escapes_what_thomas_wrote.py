@@ -76,6 +76,62 @@ def test_every_filename_reaching_the_dom_is_escaped() -> None:
     assert 'src="${esc(doc)}"' in body, "a preview URL is interpolated raw into an attribute"
 
 
+CHAT_HTML = WEB_JS.parent / "chat.html"
+
+
+def test_the_code_reply_renders_markdown_through_chats_renderer() -> None:
+    """Thomas writes markdown in his Code replies -- 16 of 17 real ones -- and
+    this surface printed it raw: "a standalone **Nova** calculator experience in
+    `index.html`". The identical prose in Chat rendered properly.
+
+    Reuses Chat's `mdToHtml` rather than copying it, for the same reason there is
+    exactly one `esc`: a second implementation is how one of them stops escaping.
+    """
+    body = CODE_JS.read_text(encoding="utf-8").split("function turnHtml", 1)[1].split("\n  function", 1)[0]
+
+    assert "replyHtml(reply)" in body, "the reply no longer goes through the markdown path"
+    assert "esc(reply)" not in body, "the reply is being double-handled"
+
+
+def test_the_code_reply_falls_back_to_the_plain_escaper() -> None:
+    """The Node contract harness loads this module with no shell around it, so
+    `window.ThomasMarkdown` is absent. The reply must still render, escaped."""
+    body = CODE_JS.read_text(encoding="utf-8").split("function replyHtml", 1)[1].split("\n  function", 1)[0]
+
+    assert "window.ThomasMarkdown" in body
+    assert "return esc(text)" in body, "no fallback: a shell-less load would render nothing or throw"
+
+
+def test_the_markdown_renderer_escapes_before_it_makes_any_tags() -> None:
+    """The property the reuse rests on, pinned where it lives.
+
+    `_mdInline` runs `esc` FIRST and only then introduces markup, so untrusted
+    model text can never open a tag. Verified live against a reply carrying a
+    script tag, an img onerror and a javascript: link: zero script elements, zero
+    imgs, no anchor minted, and the tags visible as ordinary characters.
+
+    If this line ever moves after the replacements, both Chat and Code become
+    injectable from model output at once.
+    """
+    text = CHAT_HTML.read_text(encoding="utf-8")
+    body = text.split("function _mdInline", 1)[1].split("function mdToHtml", 1)[0]
+
+    first = next(line.strip() for line in body.splitlines() if line.strip().startswith("s ="))
+    assert first == "s = esc(s);", f"escaping is no longer the first step: {first!r}"
+    # Links are restricted to http(s), so `javascript:` never becomes an anchor.
+    assert "(https?:" in body
+
+
+def test_the_shared_renderer_is_exported_without_assuming_a_window() -> None:
+    """The markdown contract harness evaluates chat.html's script in a VM with no
+    `window`; an unguarded assignment took that test down."""
+    text = CHAT_HTML.read_text(encoding="utf-8")
+
+    assert "window.ThomasMarkdown = { mdToHtml }" in text
+    line = next(ln for ln in text.splitlines() if "window.ThomasMarkdown = { mdToHtml }" in ln)
+    assert "typeof window !== 'undefined'" in line, f"unguarded export: {line.strip()!r}"
+
+
 def test_open_risks_reach_the_page_through_that_row() -> None:
     """Pins the path the new provenance risk travels, so a future report
     section cannot render risk details by some other unescaped route."""

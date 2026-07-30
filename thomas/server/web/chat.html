@@ -2182,6 +2182,18 @@
       closeCode();
       return html;
     }
+    // Code mode renders Thomas's replies too, and was showing the markdown raw:
+    // "Built it as a standalone **Nova** calculator experience in `index.html`."
+    // 16 of 17 real Code replies carry markdown, so nearly every one read as
+    // punctuation noise while the identical prose in Chat rendered properly.
+    //
+    // Exposed rather than copied. `_mdInline` escapes FIRST (`s = esc(s)`) and
+    // only then introduces tags, and its link rule accepts http(s) alone -- a
+    // second implementation is how one of them stops doing that.
+    // Guarded: the markdown contract harness evaluates this script in a VM with
+    // no `window`, and an unguarded assignment took that test down.
+    if (typeof window !== 'undefined') window.ThomasMarkdown = { mdToHtml };
+
     function renderCanvas() {
       if (canvasState.mode === 'construct') {
         canvasStatus.textContent = canvasState.done ? (canvasState.name || 'Canvas')

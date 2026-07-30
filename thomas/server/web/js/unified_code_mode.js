@@ -371,7 +371,24 @@
     const narrative = narrativeActivityHtml(activityEvents, true);
     const technicalEvents = activityEvents.filter(isTechnicalEvent);
     const resultCount = (turn.artifacts || []).filter(artifact => !isInternalResultPath(artifact.file)).length;
-    return `<article class="tc-code-turn is-agent"><div class="tc-code-message-head"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>Thomas</strong><small>${esc(turn.model || 'Code')}</small><button class="tc-code-copy" data-code-copy-reply type="button" aria-label="Copy Thomas reply"><i class="ph ph-copy"></i></button></div><div class="tc-code-turn-body">${narrative}${technicalActivityHtml(technicalEvents, true)}<div class="tc-code-reply${turn.ok ? '' : ' is-error'}">${esc(reply)}</div>${codeResults().artifactCardsHtml(turn, turn.run_id || turn.ts || '0')}${codeResults().runReportHtml(turn.report)}${changedCount ? `<div class="tc-code-result-note"><span><i class="ph ph-files"></i>${changedCount} file${changedCount === 1 ? '' : 's'} changed</span></div>` : ''}</div></article>`;
+    return `<article class="tc-code-turn is-agent"><div class="tc-code-message-head"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>Thomas</strong><small>${esc(turn.model || 'Code')}</small><button class="tc-code-copy" data-code-copy-reply type="button" aria-label="Copy Thomas reply"><i class="ph ph-copy"></i></button></div><div class="tc-code-turn-body">${narrative}${technicalActivityHtml(technicalEvents, true)}<div class="tc-code-reply${turn.ok ? '' : ' is-error'}">${replyHtml(reply)}</div>${codeResults().artifactCardsHtml(turn, turn.run_id || turn.ts || '0')}${codeResults().runReportHtml(turn.report)}${changedCount ? `<div class="tc-code-result-note"><span><i class="ph ph-files"></i>${changedCount} file${changedCount === 1 ? '' : 's'} changed</span></div>` : ''}</div></article>`;
+  }
+
+  // Thomas writes markdown in his Code replies -- 16 of 17 real replies carry it
+  // -- and this surface printed it raw: "Built it as a standalone **Nova**
+  // calculator experience in `index.html`." The same prose in Chat renders
+  // properly, because Chat runs it through mdToHtml. Same model, same sentence,
+  // two treatments.
+  //
+  // Uses Chat's renderer rather than a second copy: `_mdInline` escapes first
+  // and only then introduces tags, so untrusted model text stays inert. The
+  // fallback is the plain escaper, which is what the Node contract harness gets
+  // -- it loads this module with no shell around it, so `window.ThomasMarkdown`
+  // is absent there and the reply must still render safely.
+  function replyHtml(text) {
+    const markdown = typeof window !== 'undefined' && window.ThomasMarkdown;
+    if (markdown && typeof markdown.mdToHtml === 'function') return markdown.mdToHtml(text);
+    return esc(text);
   }
 
   function transcriptScroller(root) {
@@ -671,7 +688,7 @@
     const liveNarrative = liveActivityEvents.map(event => eventHtml(event, false)).join('');
     const liveErrors = state.liveEvents.filter(event => eventType(event) === 'error');
     const liveReply = liveFinalEvent
-      ? `<div class="tc-code-reply">${esc(eventLabel(liveFinalEvent))}</div>`
+      ? `<div class="tc-code-reply">${replyHtml(eventLabel(liveFinalEvent))}</div>`
       : liveErrors.length ? `<div class="tc-code-reply is-error">${esc(failureSummary({ ok: false }, liveErrors))}</div>` : '';
     const liveTechnical = '';
     const liveTurn = state.running || state.liveEvents.length
