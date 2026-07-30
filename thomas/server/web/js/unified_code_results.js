@@ -406,7 +406,19 @@
           <button type="button" data-code-viewer-close title="Close" aria-label="Close"><i class="ph ph-x" aria-hidden="true"></i></button>
         </div>
       </header>
-      <div class="tc-code-viewer-stage"><iframe title="${esc(file)}" sandbox="allow-scripts allow-forms" src="${esc(doc)}"></iframe></div>
+      <!-- allow-modals: this is the surface the owner actually uses the app on, so
+           confirm()/alert()/prompt() have to work here. Without it the sandbox makes
+           confirm() return false and show nothing, and every generated
+           confirm-before-delete button is silently dead -- measured on a habit
+           tracker whose Reset did nothing at all, no dialog and no error, because
+           its "if (!confirm(...)) return;" guard took the early exit every time.
+           NB: no backticks in this comment -- it sits inside a template literal,
+           and quoting that snippet with them closed the literal and turned the
+           rest of the function into a syntax error that killed all of Code mode.
+           Deliberately NOT added to the transcript thumbnail or the drawer shot
+           (unified_code_results.js:184, :212): both are tabindex="-1" decoration,
+           and a 168px picture must never be able to pop a dialog over the chat. -->
+      <div class="tc-code-viewer-stage"><iframe title="${esc(file)}" sandbox="allow-scripts allow-forms allow-modals" src="${esc(doc)}"></iframe></div>
     </aside>`;
   }
 

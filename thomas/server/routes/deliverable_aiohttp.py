@@ -575,8 +575,34 @@ class DeliverablePreviewService:
         # not already have. The directives that actually contain a generated
         # page -- connect-src 'self', object-src 'none', base-uri 'none',
         # form-action 'self', and the sandbox -- are untouched.
+        # `allow-modals` for the same reason, found the same way. The owner asked
+        # for a habit tracker with a Reset button; Thomas built one whose handler
+        # reads `if (!confirm("Clear all habit checkoffs?")) return;`. Clicking
+        # Reset did nothing at all -- no dialog, no error, no console message.
+        # Without `allow-modals` the sandbox makes `confirm()` return false and
+        # show nothing, so the guard clause returns early every time. Measured on
+        # the live page: 2 boxes checked -> 2 after clicking Reset; with
+        # `window.confirm` forced to true, the same click cleared them. The page's
+        # logic was correct throughout.
+        #
+        # This is a CSP `sandbox` directive, so it applied to the top-level
+        # document too -- "open in a new tab" produced the same dead button, not
+        # just the framed preview.
+        #
+        # Granting it here raises the CEILING only. The effective sandbox is the
+        # intersection with each iframe's own `sandbox` attribute, so the
+        # decorative surfaces (transcript thumbnail, drawer shot -- both
+        # `tabindex="-1"` and non-interactive) still refuse modals and cannot pop
+        # a dialog out of a 168px picture. Only the viewer stage, which the owner
+        # actually clicks, opts in.
+        #
+        # It removes no containment: a hostile page can already draw a convincing
+        # fake dialog in HTML, and can already hang its own frame with a loop.
+        # What it removes is a whole class of generated app -- anything with a
+        # confirm-before-delete -- being silently dead on the one button that
+        # matters. Guard: tests/test_generated_apps_can_ask_before_they_delete.py
         response.headers["Content-Security-Policy"] = (
-            "sandbox allow-scripts allow-forms allow-same-origin; "
+            "sandbox allow-scripts allow-forms allow-same-origin allow-modals; "
             "default-src 'self' data: blob:; "
             "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; "
             "style-src 'self' 'unsafe-inline' data:; img-src 'self' data: blob:; "

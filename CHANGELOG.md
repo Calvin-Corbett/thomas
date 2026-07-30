@@ -7,6 +7,16 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Every generated confirm-before-delete button was silently dead)
+
+- Thomas built a habit tracker whose Reset handler reads `if (!confirm("Clear all habit checkoffs?")) return;`. Clicking Reset did **nothing** — no dialog, no error, no console message.
+- The artifact CSP carried `sandbox allow-scripts allow-forms allow-same-origin` with **no `allow-modals`**, which makes `confirm()` return false and show nothing, so the guard clause took the early exit every time. Because it is a CSP `sandbox` directive it applied to the **top-level** document too: "open in a new tab" gave the same dead button.
+- The control is what makes it evidence: real click **2 checked → 2**, no dialog; with `window.confirm` forced true, the same click **2 → 0**. The page's logic was correct throughout — this was the machinery breaking a correct deliverable.
+- Same shape as the missing `'unsafe-eval'` that made a correct calculator print `Error`: the sandbox silently removing a capability ordinary pages rely on, with no diagnostic. It is very likely a large part of why generated apps "barely work" — every confirm-before-delete in every app Thomas has ever built was dead.
+- The grant is **asymmetric on purpose**. The effective sandbox is the intersection of the CSP ceiling and each iframe's own attribute, so the ceiling was raised but only the viewer stage — the surface the owner actually uses — opts in. Verified live: top level *dialog fires, clears*; viewer stage *dialog fires, clears*; transcript thumbnail *`confirm()` → false, no dialog*. A 168px decorative picture still cannot interrupt you.
+- Removing `allow-modals` again brings Reset straight back to **2 → 2** with no dialog and turns the guard red.
+- **I broke all of Code mode on the way** and caught it by measuring rather than assuming: the explanatory comment quoted a code snippet in backticks, inside a JS template literal, which closed the literal and made the rest a syntax error (`Unexpected token 'if'`). Zero page errors after the fix; the comment now says why it carries no backticks.
+
 ### Fixed (The deliverable card drew an empty box beside its download button)
 
 - Two different markups share the class `tc-code-artifact`: the drawer preview is a `<section>` wrapping a `<header>`, and the transcript's "Thomas made this" card is a `<div>` holding three separately-bordered pills. One unscoped rule bordered both.
