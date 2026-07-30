@@ -7,6 +7,13 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A run no longer prints the same paragraph twice)
+
+- **A run that emits more than one `final` event showed the earlier one as narrative, word for word beside the `say` that had just streamed the same text.** `finalReplyEvent` takes `.at(-1)`, so only the LAST `final` is recognised and filtered; an earlier one fell straight through. Measured on a real failed run: two adjacent blocks with **byte-identical 476-character labels**, one headed `UPDATE` and one headed `THOMAS`.
+- Deduped on the label, keeping the **first** occurrence — not by dropping every non-last `final`, because the two finals in that run said different things and one of them was the only place its text appeared. Technical rows are exempt: repeated tool output *is* the log, and collapsing it would hide real repetition rather than noise.
+- Swept 14 real conversations after the change: **0 duplicate pairs, 0 conversations left without a reply, none emptied.**
+- Guarded by a new scenario in the existing Node lifecycle harness, which renders a crafted turn through the shipped `turnHtml` and counts occurrences — a real behavioural test, not a source grep. It also asserts two *distinct* steps survive, so the dedupe cannot regress into swallowing content. Reverting the filter fails it with `narrative rendered the same text 2 times, expected once`.
+
 ### Fixed (A Code conversation opens at its newest turn, not its oldest)
 
 - **A transcript that overflowed opened at `scrollTop: 0`**, so the run report — the newest thing on the page and the entire answer to "did it work" — sat below the fold and had to be hunted for. Measured on a real conversation: **702px of unscrolled overflow** with the verdict card at y=1419 inside an 868px scroller, identically via the sidebar click and via `/?forge_code=<id>`. After: `scrollTop` 702, `fromBottom` 0, card at y=717 and visible, on all four paths.

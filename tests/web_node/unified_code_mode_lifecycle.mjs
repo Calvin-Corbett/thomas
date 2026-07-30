@@ -588,7 +588,53 @@ async function proveTheRealReasonSurvivesTheExitWrapper() {
   if (/technical problem/i.test(silent)) throw new Error('a silent failure was reported as a surfaced error');
 }
 
+// A run can emit more than one `final`. `finalReplyEvent` recognises only the
+// LAST one, so an earlier `final` fell through into the narrative -- where it
+// repeated, word for word, the `say` that had just streamed the same text. On a
+// real failed run the two blocks carried byte-identical 476-character labels and
+// the reader was shown the same paragraph twice, once headed UPDATE and once
+// THOMAS.
+//
+// `ok: false` on purpose: with a passing turn the final event becomes the reply,
+// so the marker would legitimately appear again outside the narrative and this
+// could not tell the bug from correct behaviour.
+async function proveNarrativeNeverRepeatsItself() {
+  resetState();
+  const repeated = 'REPEATED-NARRATIVE-BLOCK';
+  const lastFinal = 'DISTINCT-LAST-FINAL';
+  const html = api.turnHtml({
+    role: 'agent',
+    ok: false,
+    reason: 'verification failed after fix attempts',
+    transcript: [
+      JSON.stringify({ fc: 'say', text: repeated }),
+      JSON.stringify({ fc: 'final', text: repeated }),
+      JSON.stringify({ fc: 'final', text: lastFinal }),
+    ].join('\n'),
+  });
+
+  const repeats = html.split(repeated).length - 1;
+  if (repeats !== 1) throw new Error(`narrative rendered the same text ${repeats} times, expected once`);
+
+  // The distinct text of a different event must not be collapsed away with it --
+  // deduping is meant to drop a verbatim repeat, not unrelated content.
+  const kept = api.turnHtml({
+    role: 'agent',
+    ok: false,
+    reason: 'verification failed after fix attempts',
+    transcript: [
+      JSON.stringify({ fc: 'say', text: 'FIRST-DISTINCT-STEP' }),
+      JSON.stringify({ fc: 'say', text: 'SECOND-DISTINCT-STEP' }),
+      JSON.stringify({ fc: 'final', text: lastFinal }),
+    ].join('\n'),
+  });
+  if (!kept.includes('FIRST-DISTINCT-STEP') || !kept.includes('SECOND-DISTINCT-STEP')) {
+    throw new Error('deduping swallowed distinct narrative steps');
+  }
+}
+
 await proveApprovalRetry();
+await proveNarrativeNeverRepeatsItself();
 await proveScopedSwitch();
 await proveSteeringConfirmation();
 await proveEvidenceAndRefresh();
@@ -601,4 +647,4 @@ await proveLostSendRetryAndCursor();
 await proveAccessibleDrawerAndPickerErrors();
 await proveTheRealReasonSurvivesTheExitWrapper();
 console.warn = originalWarn;
-process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true, failureReason: true }));
+process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true, failureReason: true, narrativeNotRepeated: true }));

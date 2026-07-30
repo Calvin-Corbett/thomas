@@ -228,7 +228,35 @@
 
   function progressEvents(events, finalEvent) {
     const finalText = finalEvent ? eventLabel(finalEvent) : '';
-    return events.filter(event => event !== finalEvent && !(finalText && eventType(event) === 'say' && eventLabel(event) === finalText));
+    // A run can emit more than one `final`. `finalReplyEvent` takes `.at(-1)`,
+    // so only the LAST one is recognised as the reply and filtered here --
+    // an earlier `final` fell through into the narrative, where it repeated
+    // verbatim the `say` that had just streamed the same text. The reader got
+    // the same paragraph twice, once labelled UPDATE and once THOMAS.
+    //
+    // Measured on a real failed run: blocks [3] and [4] carried byte-identical
+    // 476-character labels. The existing say-vs-final check could not catch it
+    // because it compares against the LAST final only, and this pair matched an
+    // earlier one.
+    //
+    // Deduped on the label rather than by dropping every non-last `final`,
+    // because the two finals in that run said different things and one of them
+    // was the only place its text appeared. Keeping the FIRST occurrence
+    // preserves the content and drops only the verbatim repeat.
+    //
+    // Technical events are exempt: repeated tool rows are the log, and
+    // collapsing them would hide real repetition rather than noise.
+    const seen = new Set();
+    return events.filter(event => {
+      if (event === finalEvent) return false;
+      if (finalText && eventType(event) === 'say' && eventLabel(event) === finalText) return false;
+      if (isTechnicalEvent(event)) return true;
+      const label = eventLabel(event);
+      if (!label) return true;
+      if (seen.has(label)) return false;
+      seen.add(label);
+      return true;
+    });
   }
 
   function narrativeActivityHtml(events, saved) {

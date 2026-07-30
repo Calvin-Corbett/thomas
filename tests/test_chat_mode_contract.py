@@ -576,6 +576,11 @@ def test_code_adapter_lifecycle_behavior_in_node() -> None:
         "pointercancel": True,
         "picker": True,
         "failureReason": True,
+        # A run emitting two `final` events rendered the earlier one as narrative
+        # beside the `say` that had streamed the same text -- the same paragraph
+        # twice, once headed UPDATE and once THOMAS. Measured on a real failed run
+        # at 476 identical characters each.
+        "narrativeNotRepeated": True,
     }
 
 
