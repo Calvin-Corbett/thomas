@@ -101,3 +101,49 @@ def test_every_icon_the_code_surface_uses_has_a_glyph() -> None:
 def test_thomas_has_a_face() -> None:
     """The one that started it. His avatar is on every message he sends."""
     assert "ph-robot" in _mapped_names()
+
+
+# `\bph-` followed by a template hole: `ph-${...}`. The suffix is decided at
+# runtime, so no static scan can know which name is asked for.
+_RUNTIME_ASSEMBLED_RE = re.compile(r"\bph-\$\{")
+
+
+def test_no_icon_name_is_assembled_at_runtime() -> None:
+    """The hole this file used to have, closed by forbidding the shape.
+
+    `_used_names` deliberately skips `ph-${...}`, on the reasoning that the names
+    such a template can produce "are checked on their own merits wherever they
+    appear literally". That reasoning did not hold. Of the seven names reachable
+    only through those templates, **five never appeared literally anywhere in
+    these sources** -- including `ph-check-circle`, the very icon this file's
+    docstring cites as appearing 18 times in one transcript. The guard written
+    because of check-circle could not see check-circle.
+
+    Proved by injecting `ph-${ok ? 'totally-not-a-real-glyph' : 'warning'}` into
+    `reportRow`: the three tests above stayed green while the live page rendered
+    `content: "•"` on every "Check passed" row of every run report.
+
+    Making the scanner cleverer was the wrong fix -- it would have to tell a
+    value-side literal from a condition-side one, in
+    `tone === 'is-bad' ? 'warning-circle' : ...`, and get that right forever.
+    Forbidding the un-analysable shape is smaller and total: write the whole
+    class name (`${ok ? 'ph-check-circle' : 'ph-warning'}`) and every name is a
+    literal the scan above already covers.
+    """
+    offenders: dict[str, list[str]] = {}
+    for path in CODE_SOURCES:
+        if not path.is_file():
+            continue
+        hits = [
+            line.strip()[:110]
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if _RUNTIME_ASSEMBLED_RE.search(line)
+        ]
+        if hits:
+            offenders[path.name] = hits
+
+    assert not offenders, (
+        "icon class names built at runtime cannot be checked for a missing glyph, "
+        "and a missing glyph renders as a bullet. Interpolate the WHOLE class name "
+        f"instead: {offenders}"
+    )

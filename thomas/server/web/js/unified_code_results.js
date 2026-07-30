@@ -31,7 +31,13 @@
   }
 
   function reportRow(ok, heading, label) {
-    return `<div class="tc-code-technical${ok ? '' : ' is-error'}"><i class="ph ph-${ok ? 'check-circle' : 'warning'}"></i><div><strong>${esc(heading)}</strong><code>${esc(label)}</code></div></div>`;
+    // Whole class names, never a bare `ph-` prefix with the suffix interpolated
+    // after it. The icon guard scans for literal `ph-*` names, so a suffix
+    // assembled at runtime is invisible to it: a bogus name injected here
+    // rendered as a bullet on every "Check passed" row while
+    // tests/test_every_icon_the_ui_asks_for_is_drawn.py stayed green. Written in
+    // full, the name is a literal the guard can see.
+    return `<div class="tc-code-technical${ok ? '' : ' is-error'}"><i class="ph ${ok ? 'ph-check-circle' : 'ph-warning'}"></i><div><strong>${esc(heading)}</strong><code>${esc(label)}</code></div></div>`;
   }
 
   function reportSection(title, rows) {
@@ -129,10 +135,10 @@
     facts.push(riskCount ? `${riskCount} open risk${riskCount === 1 ? '' : 's'}` : 'no open risks');
     if (attempts.length > 1) facts.push(`${attempts.length} edit passes`);
 
-    const glyph = tone === 'is-bad' ? 'warning-circle' : (tone === 'is-warn' ? 'warning' : (tone === 'is-unknown' ? 'info' : 'check-circle'));
+    const glyph = tone === 'is-bad' ? 'ph-warning-circle' : (tone === 'is-warn' ? 'ph-warning' : (tone === 'is-unknown' ? 'ph-info' : 'ph-check-circle'));
     return `<details class="tc-code-saved-activity tc-code-run-report ${tone}${riskCount ? ' has-issues' : ''}" data-saved="true">
       <summary>
-        <span class="tc-code-verdict"><i class="ph ph-${glyph}" aria-hidden="true"></i><span class="tc-code-verdict-text"><strong>${esc(verdict)}</strong><small>${esc(facts.join(' · '))}</small></span></span>
+        <span class="tc-code-verdict"><i class="ph ${glyph}" aria-hidden="true"></i><span class="tc-code-verdict-text"><strong>${esc(verdict)}</strong><small>${esc(facts.join(' · '))}</small></span></span>
         <span class="tc-code-verdict-more">Show details</span>
       </summary>
       <div class="tc-code-technical-log">${sections}</div>
@@ -363,7 +369,7 @@
       <header class="tc-code-viewer-head">
         <div class="tc-code-viewer-title"><i class="ph ph-browser" aria-hidden="true"></i><strong>${esc(file)}</strong></div>
         <div class="tc-code-viewer-tools">
-          <button type="button" data-code-viewer-full aria-pressed="${full ? 'true' : 'false'}" title="${full ? 'Shrink back beside the chat' : 'Expand to fill Thomas'}" aria-label="${full ? 'Shrink back beside the chat' : 'Expand to fill Thomas'}"><i class="ph ph-${full ? 'corners-in' : 'corners-out'}" aria-hidden="true"></i></button>
+          <button type="button" data-code-viewer-full aria-pressed="${full ? 'true' : 'false'}" title="${full ? 'Shrink back beside the chat' : 'Expand to fill Thomas'}" aria-label="${full ? 'Shrink back beside the chat' : 'Expand to fill Thomas'}"><i class="ph ${full ? 'ph-corners-in' : 'ph-corners-out'}" aria-hidden="true"></i></button>
           <a href="${esc(artifactUrlFor(file))}" target="_blank" rel="noopener noreferrer" title="Open in a new browser tab" aria-label="Open in a new browser tab"><i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>
           <button type="button" data-code-viewer-close title="Close" aria-label="Close"><i class="ph ph-x" aria-hidden="true"></i></button>
         </div>

@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (The icon guard could not see the icon it was written for)
+
+- **`test_every_icon_the_ui_asks_for_is_drawn.py` skipped every class name assembled at runtime** — `ph-${...}` — on the documented reasoning that the names such a template can produce "are checked on their own merits wherever they appear literally". That reasoning did not hold. Of the **seven** names reachable only through those templates, **five never appeared literally anywhere in the guarded sources**: `ph-check-circle`, `ph-terminal-window`, `ph-info`, `ph-corners-in`, `ph-corners-out`.
+- Among them, `ph-check-circle` — the icon that file's own docstring cites as appearing **18 times in a single transcript's activity log**. The guard written because of check-circle could not see check-circle.
+- **Proved, not argued:** injecting `ph-${ok ? 'totally-not-a-real-glyph' : 'warning'}` into `reportRow` left all three tests green while the live page rendered `content: "•"` on every "Check passed" row of every run report.
+- Fixed at the source rather than by making the scanner cleverer. A cleverer scanner would have to distinguish a value-side literal from a condition-side one in `tone === 'is-bad' ? 'warning-circle' : …` and keep getting that right; instead all six sites now interpolate the **whole** class name (`${ok ? 'ph-check-circle' : 'ph-warning'}`), so every name is a literal the existing scan already covers.
+- A new assertion forbids the un-analysable shape outright, so the hole cannot be reopened. Re-injecting the same bogus name now fails it. Verified on screen afterwards: 14 `ph-check-circle`, 6 `ph-warning`, 1 `ph-info`, 1 `ph-terminal-window`, and **zero** rendering as a bullet.
+
 ### Fixed (A run no longer prints the same paragraph twice)
 
 - **A run that emits more than one `final` event showed the earlier one as narrative, word for word beside the `say` that had just streamed the same text.** `finalReplyEvent` takes `.at(-1)`, so only the LAST `final` is recognised and filtered; an earlier one fell straight through. Measured on a real failed run: two adjacent blocks with **byte-identical 476-character labels**, one headed `UPDATE` and one headed `THOMAS`.

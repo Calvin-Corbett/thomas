@@ -210,7 +210,7 @@
     if (isTechnicalEvent(event)) {
       const failed = event.is_error === true;
       const heading = technicalHeading(event, kind);
-      return `<div class="tc-code-technical${failed ? ' is-error' : ''}" data-code-kind="${esc(kind)}"${saved ? ' data-saved="true"' : ''}><i class="ph ph-${failed ? 'warning' : 'check-circle'}"></i><div><strong>${esc(heading)}</strong><code>${esc(eventLabel(event))}</code></div></div>`;
+      return `<div class="tc-code-technical${failed ? ' is-error' : ''}" data-code-kind="${esc(kind)}"${saved ? ' data-saved="true"' : ''}><i class="ph ${failed ? 'ph-warning' : 'ph-check-circle'}"></i><div><strong>${esc(heading)}</strong><code>${esc(eventLabel(event))}</code></div></div>`;
     }
     const label = eventLabel(event);
     const content = label.length <= MAX_PROGRESS_EVENT_CHARS
@@ -287,13 +287,13 @@
     const groups = groupedTechnicalEvents(events);
     const rows = groups.map(group => {
       const count = group.count > 1 ? `<span class="tc-code-tech-count">×${group.count}</span>` : '';
-      return `<div class="tc-code-technical${group.failed ? ' is-error' : ''}" data-code-kind="${esc(group.kind)}"><i class="ph ph-${group.failed ? 'warning' : 'check-circle'}"></i><div><strong>${esc(group.heading)}${count}</strong><code>${esc(group.label)}</code></div></div>`;
+      return `<div class="tc-code-technical${group.failed ? ' is-error' : ''}" data-code-kind="${esc(group.kind)}"><i class="ph ${group.failed ? 'ph-warning' : 'ph-check-circle'}"></i><div><strong>${esc(group.heading)}${count}</strong><code>${esc(group.label)}</code></div></div>`;
     }).join('');
     const issueCount = events.filter(event => event.is_error === true || eventType(event) === 'error').length;
     const status = !saved && state.running && state.runStartedAt
       ? `<span data-code-elapsed>Working · ${esc(elapsedLabel(state.runStartedAt))}</span>`
       : 'Show details';
-    return `<details class="tc-code-saved-activity${issueCount ? ' has-issues' : ''}"${saved ? ' data-saved="true"' : ''}><summary><span class="tc-code-activity-summary"><i class="ph ph-${issueCount ? 'warning' : 'terminal-window'}"></i>${esc(technicalSummary(events))}</span><span>${status}</span></summary><div class="tc-code-technical-log">${rows}</div></details>`;
+    return `<details class="tc-code-saved-activity${issueCount ? ' has-issues' : ''}"${saved ? ' data-saved="true"' : ''}><summary><span class="tc-code-activity-summary"><i class="ph ${issueCount ? 'ph-warning' : 'ph-terminal-window'}"></i>${esc(technicalSummary(events))}</span><span>${status}</span></summary><div class="tc-code-technical-log">${rows}</div></details>`;
   }
 
   function transcriptEvents(turn) {
