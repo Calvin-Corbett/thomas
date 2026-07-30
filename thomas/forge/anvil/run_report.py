@@ -410,11 +410,24 @@ def _build_rubric_mapping(
         f"engine checks: {passed} passed, {failed} failed",
         _SNIPPET_CHARS,
     )
+    # This row measures the RUN, not the goal, so it says so.
+    #
+    # It used to read `complete the requested goal: <the goal, in full> => met`
+    # while the only thing establishing "met" was a zero exit code and a git
+    # delta. Restating the whole ask and stamping it met is a claim that every
+    # requirement in it was satisfied; nothing had examined any of them. The
+    # comment below on the prose branch already spelled this out -- "finishing is
+    # not the same as satisfying" -- and the sub-criteria under this row are
+    # honestly `unverified` for exactly that reason. The top row was the one
+    # place still overclaiming.
+    #
+    # The goal text is not lost: it is the user's own message directly above in
+    # the transcript, and it stays in the criterion rows underneath.
     mapping = [
         {
-            "criterion": f"complete the requested goal: {goal_text}",
+            "criterion": "the run finished without error",
             "status": "met" if ok else "not_met",
-            "evidence": evidence,
+            "evidence": _snippet(f"{evidence}; goal: {goal_text}", _SNIPPET_CHARS),
         }
     ]
     criteria = _extract_criteria(goal, definition)

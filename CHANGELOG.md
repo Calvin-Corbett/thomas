@@ -7,6 +7,13 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Finishing a run is not the same as satisfying what was asked)
+
+- **The rubric's first row restated the user's entire goal and stamped it `met`** — on the strength of a zero exit code and a git delta, nothing more. Read by a person, `complete the requested goal: … Start, Pause and Reset buttons that all work → met` asserts those buttons were checked. Nothing checked them, which is exactly why every sub-criterion directly beneath that row is honestly `unverified`.
+- The row now says what it can actually see: **`the run finished without error`**. The goal text moves into the evidence, so nothing is lost — and the requirement rows underneath still carry the ask itself.
+- The comment already in `run_report.py` had named this ("finishing is not the same as satisfying") when the `unverified` rows were made reachable for prose goals. The top row was the one place still overclaiming.
+- Two existing tests asserted the goal appeared in `rubric_mapping[0]["criterion"]`. They were **followed, not weakened** — the property they protect is that the rubric is bound to *this* conversation's goal, and they now assert it against the evidence where it lives. Reverting the change turns 4 of the 5 new tests red.
+
 ### Fixed (Three icons were emoji stickers that ignored the theme, and dead navigation now raises a risk)
 
 - **`ph-check-circle` was `\2705`**, an emoji-presentation codepoint. The browser paints those with the colour-emoji font and CSS `color` does nothing — so `.tc-code-technical > i { color: var(--c-accent) }` produced a bright green sticker **43 times in a single Code transcript**, next to three-word grey rows on a muted surface, and again on the run-report card where the state rail was violet and the tick beside it green. Measured in situ: css colour `rgb(139,140,255)`, 156 of 570 lit pixels green-dominant. Now `\2713`, which takes the colour it is given — re-measured at 0 of 568.

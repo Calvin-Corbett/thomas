@@ -116,7 +116,13 @@ def test_attention_pointers_rank_failure_sites_before_changed_files() -> None:
 def test_rubric_mapping_maps_outcome_onto_goal_and_acceptance_bullets() -> None:
     rubric = _full_run_report()["rubric_mapping"]
     assert rubric[0]["status"] == "met"
-    assert "Build the widget." in rubric[0]["criterion"]
+    # The goal moved from this row's CRITERION to its EVIDENCE. The row now says
+    # "the run finished without error", because a zero exit code is all it can
+    # actually see -- restating the whole ask beside "met" claimed every
+    # requirement in it had been satisfied. The property this line protects is
+    # unchanged: the rubric is bound to THIS conversation's goal.
+    assert rubric[0]["criterion"] == "the run finished without error"
+    assert "Build the widget." in rubric[0]["evidence"]
     assert "1 file(s) changed" in rubric[0]["evidence"]
     bullets = {entry["criterion"]: entry["status"] for entry in rubric[1:]}
     assert bullets == {
@@ -330,7 +336,10 @@ def test_completion_payload_and_persisted_turn_carry_the_report(tmp_path: Path, 
         report = result["report"]
         assert tuple(sorted(report)) == tuple(sorted(REPORT_SECTIONS))
         # The rubric maps the run onto the goal the USER gave this conversation.
-        assert "Build the report widget" in report["rubric_mapping"][0]["criterion"]
+        # Carried in the evidence rather than the criterion since the first row
+        # stopped restating the goal as something "met" -- the binding to this
+        # conversation's goal is what this asserts, and that is unchanged.
+        assert "Build the report widget" in report["rubric_mapping"][0]["evidence"]
         assert len(report["attempts"]) == 2
         assert len(report["validations"]) == 2
         # Persisted turn re-renders the same report after a reload.
