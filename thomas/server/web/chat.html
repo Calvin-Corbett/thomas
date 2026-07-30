@@ -177,7 +177,11 @@
         <div style="position: relative;" data-model-switch="1">
           <button id="tc-model-btn" class="hv-pill" title="Switch model" data-ui-id="chat.action.model" data-ui-label="Model switcher" data-ui-policy="control" style="display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-family: var(--font-label); font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;">
             <span style="width: 7px; height: 7px; border-radius: 999px; background: var(--c-accent); box-shadow: 0 0 8px var(--c-accent);"></span>
-            <span id="tc-model">GPT-5.6 Sol</span>
+            <!-- Neutral until the real selection arrives (setProfile fills it in).
+                 A hardcoded model name here is a claim, and it survives a failed
+                 /api/profiles fetch: the chip would sit there naming a model that
+                 was never selected, which is the same lie the message labels had. -->
+            <span id="tc-model">Loading…</span>
             <i class="ph ph-caret-down" style="font-size: 12px; color: var(--c-muted);"></i>
           </button>
           <div id="tc-model-menu" style="display: none; position: absolute; left: 0; top: calc(100% + 8px); z-index: 40; width: 300px; max-height: 60vh; overflow-y: auto; padding: 8px; border-radius: 14px; background: var(--c-menu-bg); border: 1px solid var(--c-border-2); box-shadow: var(--c-shadow);" class="tc-scroll">
@@ -881,7 +885,7 @@
         html += `<div style="display: flex; align-items: center; gap: 9px;">
           ${avatar(26, 8, 4, 5)}
           <span style="font-size: 13px; font-weight: 700;">Thomas</span>
-          <span class="tc-message-model" style="font-size: 11.5px; color: var(--c-muted); font-family: var(--font-label);">${esc(m.model || 'GPT-5.6 Sol')}</span>
+          ${m.model ? `<span class="tc-message-model" style="font-size: 11.5px; color: var(--c-muted); font-family: var(--font-label);">${esc(m.model)}</span>` : ''}
         </div>`;
         html += `<div class="tc-activity" style="display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 768px;"></div>`;
       }
@@ -1473,7 +1477,7 @@
               }
             }
           }
-          const msg = { role: 'assistant', text: String(d.message), model: state.modelLabel || 'GPT-5.6 Sol', artifacts: arts };
+          const msg = { role: 'assistant', text: String(d.message), model: state.modelLabel || '', artifacts: arts };
           state.messages.push(msg);
           appendMessage(msg);
           scrollEnd();
@@ -1703,7 +1707,7 @@
     }
     let _pendingCanvasIntent = false; // set on send(): does THIS turn want a renderable result?
     async function streamReal(text) {
-      const base = { role: 'assistant', text: '', model: state.modelLabel || 'GPT-5.6 Sol', streaming: true, activity: { thinking: '', steps: [], expanded: false, artifact: null, wantsCanvas: _pendingCanvasIntent } };
+      const base = { role: 'assistant', text: '', model: state.modelLabel || '', streaming: true, activity: { thinking: '', steps: [], expanded: false, artifact: null, wantsCanvas: _pendingCanvasIntent } };
       _pendingCanvasIntent = false;
       state.messages.push(base);
       const idx = state.messages.length - 1;
@@ -1904,7 +1908,7 @@
       if (!running.length) return;
       let idx = state.messages.length - 1;
       while (idx >= 0 && state.messages[idx].role !== 'assistant') idx -= 1;
-      if (idx < 0) { state.messages.push({ role: 'assistant', text: '', model: state.modelLabel || 'GPT-5.6 Sol' }); idx = state.messages.length - 1; appendMessage(state.messages[idx]); }
+      if (idx < 0) { state.messages.push({ role: 'assistant', text: '', model: state.modelLabel || '' }); idx = state.messages.length - 1; appendMessage(state.messages[idx]); }
       const a = state.messages[idx].activity || { thinking: '', steps: [], expanded: true, artifacts: [], artifact: null, artifactOpen: false, wantsCanvas: false, expectedHandoffCount: 0 };
       a.cancelled = false;
       a.expectedHandoffCount = Math.max(Number(a.expectedHandoffCount || 0), running.length);
@@ -2817,11 +2821,28 @@
     });
 
     // ---------- Boot: pull live model + chats + session from the backend ----------
-    function mapRealMessages(list) {
+    // The conversation row carries the model that actually answered it. Stamping
+    // `state.modelLabel` here instead credited every historical reply to whatever
+    // is selected in the picker right now: measured on this machine, 370 of 476
+    // saved chats carry a real model across NINE of them -- 185 gpt-5.6-sol, 136
+    // codex, 37 openai_codex, 5 local, 4 qwen2.5-coder:7b, plus gpt-5.5, terra
+    // and luna -- and all 370 were displayed as the current selection. Opening a
+    // codex chat with Terra selected put "GPT-5.6 Terra" on a reply codex wrote.
+    //
+    // The raw id is shown rather than a prettied name: it is what was recorded,
+    // and inventing a display name for a model no longer in the picker is how the
+    // wrong label got here in the first place.
+    //
+    // 106 rows carry no model at all. Those now show NOTHING, because the honest
+    // answer to "which model wrote this" is sometimes "not recorded" -- the same
+    // reason the run report has a "Nothing was checked" state instead of dressing
+    // an unknown up as a pass.
+    function mapRealMessages(list, rowModel) {
+      const answered = String(rowModel || '').trim();
       return (Array.isArray(list) ? list : []).map(m => ({
         role: (m.role === 'assistant' ? 'assistant' : 'user'),
         text: String(m.content != null ? m.content : (m.text || '')),
-        model: (m.role === 'assistant' ? (state.modelLabel || 'GPT-5.6 Sol') : ''),
+        model: (m.role === 'assistant' ? answered : ''),
       }));
     }
     // Pull the real recent-chat list (legacy store + live v2 sessions) into the sidebar.
@@ -2836,7 +2857,7 @@
         if (!Array.isArray(rows)) return;
         const active = state.activeChat;
         chatList = rows.map(row => {
-          const msgs = mapRealMessages(row.messages);
+          const msgs = mapRealMessages(row.messages, row.model);
           const firstUser = msgs.find(m => m.role === 'user');
           return { id: String(row.id || row.session_id || ''), title: String(row.title || 'Untitled chat'), preview: String(row.preview || (firstUser ? firstUser.text : '')).slice(0, 60), msgs, sessionId: row.sessionId || row.session_id || null, surfaceMode: String(row.surfaceMode || 'chat'), contextId: String(row.contextId || ''), updatedAt: Number(row.updatedAt || row.createdAt || 0) };
         }).filter(c => c.id);

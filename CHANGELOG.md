@@ -7,6 +7,15 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A saved reply reports the model that wrote it)
+
+- Every assistant message in a restored conversation was labelled with **whatever model is selected in the picker right now**. `mapRealMessages` stamped `state.modelLabel || 'GPT-5.6 Sol'` on each one and discarded the model the conversation row actually carries.
+- Measured on the live store: **370 of 476 saved chats record a real model, across nine of them** — 185 `gpt-5.6-sol`, 136 `codex`, 37 `openai_codex`, 5 `local`, 4 `qwen2.5-coder:7b`, plus `gpt-5.5`, `gpt-5.6-terra` and `gpt-5.6-luna`. All 370 were displayed as the current selection. Opening the chat *"Make agame"* — answered by `codex` — with Terra selected put **"GPT-5.6 Terra"** on screen under Thomas's name. Verified by screenshot before and after; it now reads **"codex"** while the picker still correctly shows Terra.
+- The **raw id** is shown rather than a prettied name. It is what was recorded, and inventing a display name for a model that is no longer in the picker is how the wrong label got here.
+- The **106 rows with no recorded model now show nothing at all**, instead of borrowing the current selection. The honest answer to "which model wrote this" is sometimes "not recorded" — the same reason the run report has a *Nothing was checked* state rather than dressing an unknown up as a pass. Checked on screen: the header collapses to just the avatar and "Thomas", with no empty chip or dangling gap.
+- Three live-message paths kept `state.modelLabel || 'GPT-5.6 Sol'` as a fallback, which would reassert the same claim whenever the model list failed to load; they now fall back to no label. The picker's own pre-load placeholder was the literal `GPT-5.6 Sol`, which survives a failed `/api/profiles` fetch and would sit there naming a model nobody selected — it is now neutral.
+- Guarded by a node harness that **executes the real function** rather than matching its spelling, with a `state.modelLabel` deliberately set in scope. Both directions, on both variants: restoring the original bug turns `codexKeepsItsOwnModel` red, and the subtler `answered || state.modelLabel` — which passes that check — is caught by `unknownIsNotInvented`, because a truthy row model hides it.
+
 ### Fixed (The smoke clicks the navigation and reports whether anything happened)
 
 - A generated app's most common real failure is the **convincing shell**, and nothing was looking for it. The delivered "calculator for ideas" shipped a five-item workspace sidebar — Calculator, Conversions, Graph studio, History, Saved formulas — where the script never mentions "conversions" or "graph" at all and not one of the five carries a handler. Every check passed it, *correctly by its own terms*: the page boots, raises no errors, and its keypad genuinely works. Verification was `boot only`, so it clicked nothing, and nobody found out until a person clicked a tab.

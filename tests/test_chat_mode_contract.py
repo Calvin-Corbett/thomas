@@ -29,6 +29,7 @@ CODE_LIFECYCLE_HARNESS = REPO_ROOT / "tests" / "web_node" / "unified_code_mode_l
 WORK_SUPPORT_HARNESS = REPO_ROOT / "tests" / "web_node" / "unified_work_support_lifecycle.mjs"
 CHAT_MARKDOWN_HARNESS = REPO_ROOT / "tests" / "web_node" / "chat_markdown_renderer.mjs"
 CHAT_ANNOUNCEMENT_HARNESS = REPO_ROOT / "tests" / "web_node" / "chat_completion_announcement_retry.mjs"
+CHAT_MODEL_ATTRIBUTION_HARNESS = REPO_ROOT / "tests" / "web_node" / "chat_message_model_attribution.mjs"
 
 
 def test_primary_chat_has_accessible_three_mode_selector_above_search() -> None:
@@ -145,6 +146,42 @@ def test_primary_chat_renders_safe_structured_markdown_for_assistant_only() -> N
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert '"userLiteral":true' in completed.stdout
     assert '"escapedHtml":true' in completed.stdout
+
+
+def test_a_saved_reply_reports_the_model_that_wrote_it() -> None:
+    """Which model answered is a fact about the past, not about the picker.
+
+    ``mapRealMessages`` stamped ``state.modelLabel || 'GPT-5.6 Sol'`` onto every
+    assistant message it restored, discarding the model the conversation row
+    actually carries. Measured on a live store: 370 of 476 saved chats record a
+    real model across NINE of them -- 185 gpt-5.6-sol, 136 codex, 37
+    openai_codex, 5 local, 4 qwen2.5-coder:7b, plus gpt-5.5, terra and luna --
+    and every one of them was displayed as whatever was selected right now.
+    Opening a codex chat with Terra selected showed "GPT-5.6 Terra" on a reply
+    codex wrote, on screen, under Thomas's name.
+
+    The harness runs the real function with a ``state`` whose modelLabel is set,
+    so a reintroduced fallback is caught rather than merely spelled around. The
+    unknown case is the load-bearing one: a truthy row model hides the bug.
+    """
+
+    completed = subprocess.run(
+        ["node", str(CHAT_MODEL_ATTRIBUTION_HARNESS), str(CHAT_HTML)],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=10,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert '"codexKeepsItsOwnModel":true' in completed.stdout
+    assert '"unknownIsNotInvented":true' in completed.stdout
+    assert '"neverBorrowsThePicker":true' in completed.stdout
+
+    # The renderer must not put the fallback back either: an unknown model shows
+    # no chip at all rather than naming one.
+    text = CHAT_HTML.read_text(encoding="utf-8")
+    assert "GPT-5.6 Sol" not in text, "a hardcoded model name is a claim about which model answered"
 
 
 def test_session_meta_round_trips_surface_namespace() -> None:
