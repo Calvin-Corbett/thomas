@@ -7,6 +7,13 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A run stops claiming it overwrote files it never touched)
+
+- The shared-project risk read *"this run replaced work from another code task — alpha.txt, beta.txt, gamma.txt … created by a different task in this shared project, **and overwritten here**"*. The last clause asserts authorship the data cannot support: `changed_files` is the git diff of a **shared folder**, not a record of what this run wrote, so any uncommitted file another task left behind lands in it untouched.
+- Measured: five conversations share `Code task 2026-07-30 1145`. The Godot FPS run held that folder from **17:05 to 17:17 UTC** while two other tasks wrote `alpha.txt` (17:09:44) and `gamma.txt` (17:15:45) into it. The FPS report listed all three as overwritten; their mtimes are still those of the tasks that made them, and the FPS run finished after both. Two Code runs sharing a folder is ordinary — Thomas allows **eight simultaneous runs**, and this is direct evidence they genuinely execute at the same time.
+- **The risk still fires, and should.** Work from another task really is mixed into this run's file list, and that is the thing worth knowing. Only the claim about who wrote it was more than the data knew. It now reads *"this run's changes include work from another code task … showing up in this run's changes; this run may not have written them"*.
+- The existing test pinned the old sentence, so it was rewritten to assert the behaviour — the risk fires and names the file — rather than one spelling, and a new case asserts the words `overwritten here` never come back. Restoring the old wording turns it red.
+
 ### Fixed (Revert stops looking exactly like Keep)
 
 - The Activity drawer lists every changed file with `Keep` and `Revert`. Revert **permanently discards** that file's changes — its own approval card says so, and for a new file it deletes the file outright. Measured in the live drawer, the two buttons were identical on **every** visual property: colour `rgb(238,240,251)`, background `rgba(0,0,0,0)`, border `1px solid rgba(255,255,255,0.1)`, weight 400, size 9.5px, padding `3px 6px`. The only difference was the 6px of width the longer word adds. A three-file run rendered six buttons that looked the same and meant opposite things.

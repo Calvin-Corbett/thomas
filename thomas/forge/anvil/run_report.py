@@ -252,10 +252,30 @@ def _build_open_risks(
     risks.extend(_decorative_navigation_risks(validations, events))
     if foreign_writes:
         shown = ", ".join(foreign_writes[:3]) + (f" (+{len(foreign_writes) - 3} more)" if len(foreign_writes) > 3 else "")
+        # Says "shows up in this run's changes", not "overwritten here", because
+        # the second is a claim about authorship this data cannot support.
+        # `changed_files` is the git diff of a SHARED folder, not a record of what
+        # this run wrote, so any uncommitted file left by another task lands in it
+        # untouched.
+        #
+        # Measured: five conversations share `Code task 2026-07-30 1145`. The
+        # Godot FPS run held that folder from 17:05 to 17:17 UTC while two other
+        # tasks wrote alpha.txt (17:09:44) and gamma.txt (17:15:45) into it. The
+        # FPS report listed all three and said it had overwritten them; their
+        # mtimes are still those of the tasks that made them, and the FPS run
+        # never touched them. Concurrency is not exotic here — Thomas allows
+        # eight simultaneous Code runs and these were two of them.
+        #
+        # The risk itself is worth keeping and fires correctly: work from another
+        # task really is mixed into this run's file list, which is the thing worth
+        # knowing. Only the claim about who wrote it was more than the data knew.
         risks.append(
             {
-                "risk": "this run replaced work from another code task",
-                "detail": f"{shown} — created by a different task in this shared project, and overwritten here",
+                "risk": "this run's changes include work from another code task",
+                "detail": (
+                    f"{shown} — created by a different task in this shared project, "
+                    "and showing up in this run's changes; this run may not have written them"
+                ),
             }
         )
     return risks[:_MAX_RISKS]

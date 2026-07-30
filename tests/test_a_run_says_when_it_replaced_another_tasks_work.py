@@ -75,8 +75,47 @@ def test_it_reaches_the_run_report_as_an_open_risk() -> None:
     risks = [str(item.get("risk") or "") for item in report["open_risks"]]
     detail = " ".join(str(item.get("detail") or "") for item in report["open_risks"])
 
-    assert any("replaced work from another code task" in risk for risk in risks)
+    assert any("another code task" in risk for risk in risks)
     assert "index.html" in detail
+
+
+def test_it_does_not_claim_this_run_wrote_the_other_task_s_files() -> None:
+    """`changed_files` is a shared folder's git diff, not a record of who wrote what.
+
+    Any uncommitted file another task left behind lands in it untouched, so
+    "overwritten here" asserts authorship the data cannot support.
+
+    Measured: five conversations share `Code task 2026-07-30 1145`. The Godot FPS
+    run held that folder 17:05-17:17 UTC while two other tasks wrote alpha.txt
+    (17:09:44) and gamma.txt (17:15:45) into it. The FPS report listed all three
+    and said it had overwritten them -- their mtimes are still those of the tasks
+    that made them. Thomas allows eight simultaneous Code runs, so two runs
+    sharing a folder is ordinary, not exotic.
+
+    The risk must still FIRE -- work from another task really is mixed into this
+    run's file list, and that is the thing worth knowing. Only the claim about
+    who wrote it was more than the data knew.
+    """
+
+    report = build_run_report(
+        goal="g",
+        transcript="",
+        changed_files=["index.html"],
+        returncode=0,
+        ok=True,
+        outcome="completed",
+        reason="",
+        foreign_writes=["index.html"],
+    )
+    text = " ".join(
+        f"{item.get('risk')} {item.get('detail')}" for item in report["open_risks"]
+    ).lower()
+
+    assert "another code task" in text, "the risk must still fire"
+    assert "index.html" in text, "it must still name the file"
+    assert "overwritten here" not in text, (
+        "the report cannot know this run overwrote a file it may never have touched"
+    )
 
 
 def test_a_run_that_replaced_nothing_says_nothing() -> None:
