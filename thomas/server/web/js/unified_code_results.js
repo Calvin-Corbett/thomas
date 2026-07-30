@@ -60,15 +60,44 @@
     ].join('');
     if (!sections) return '';
     const riskCount = risks.length;
-    const summary = `Run report · ${attempts.length} pass${attempts.length === 1 ? '' : 'es'} · ${validations.length} check${validations.length === 1 ? '' : 's'} · ${riskCount} open risk${riskCount === 1 ? '' : 's'}`;
-    return `<details class="tc-code-saved-activity tc-code-run-report${riskCount ? ' has-issues' : ''}" data-saved="true"><summary><span class="tc-code-activity-summary"><i class="ph ph-${riskCount ? 'warning' : 'clipboard-text'}"></i>${esc(summary)}</span><span>Show details</span></summary><div class="tc-code-technical-log">${sections}</div></details>`;
+    const checks = list(report.validations);
+    const passed = checks.filter(item => item.passed === true).length;
+    const failed = checks.length - passed;
+
+    // A verdict, then the numbers. It used to read "Run report · 1 pass · 2
+    // checks · 0 open risks" -- counts with nothing said about them, where
+    // "1 pass" means one EDIT pass and is read as one test passing. This is the
+    // line that answers "did the thing I asked for work", so it says so.
+    //
+    // "Nothing was checked" is its own state on purpose. A run with no
+    // validations at all must not look like a run that passed, which is exactly
+    // the confusion the whole report exists to prevent.
+    let tone = 'is-good';
+    let verdict = 'Checks passed';
+    if (failed > 0) { tone = 'is-bad'; verdict = failed === checks.length ? 'Checks failed' : 'Some checks failed'; }
+    else if (!checks.length) { tone = 'is-unknown'; verdict = 'Nothing was checked'; }
+    else if (riskCount) { tone = 'is-warn'; verdict = 'Passed, with things to look at'; }
+
+    const facts = [];
+    if (checks.length) facts.push(`${passed}/${checks.length} check${checks.length === 1 ? '' : 's'} passed`);
+    facts.push(riskCount ? `${riskCount} open risk${riskCount === 1 ? '' : 's'}` : 'no open risks');
+    if (attempts.length > 1) facts.push(`${attempts.length} edit passes`);
+
+    const glyph = tone === 'is-bad' ? 'warning-circle' : (tone === 'is-warn' ? 'warning' : (tone === 'is-unknown' ? 'info' : 'check-circle'));
+    return `<details class="tc-code-saved-activity tc-code-run-report ${tone}${riskCount ? ' has-issues' : ''}" data-saved="true">
+      <summary>
+        <span class="tc-code-verdict"><i class="ph ph-${glyph}" aria-hidden="true"></i><span class="tc-code-verdict-text"><strong>${esc(verdict)}</strong><small>${esc(facts.join(' · '))}</small></span></span>
+        <span class="tc-code-verdict-more">Show details</span>
+      </summary>
+      <div class="tc-code-technical-log">${sections}</div>
+    </details>`;
   }
 
   function artifactHtml(artifact) {
     const file = String(artifact.file || '');
     const url = `/api/evolve/agent/artifact/${encodeURIComponent(state.activeId)}/${file.split('/').map(encodeURIComponent).join('/')}`;
     const title = `<strong>${esc(file)}</strong><a href="${url}" target="_blank" rel="noopener">Open</a>`;
-    if (artifact.kind === 'html') return `<section class="tc-code-artifact"><header>${title}</header><iframe src="${url}" sandbox="allow-scripts allow-forms allow-same-origin" title="Preview ${esc(file)}"></iframe></section>`;
+    if (artifact.kind === 'html') return `<section class="tc-code-artifact"><header>${title}</header><div class="tc-code-artifact-shot"><iframe src="${url}" sandbox="allow-scripts allow-forms allow-same-origin" title="Preview ${esc(file)}" tabindex="-1" scrolling="no"></iframe></div></section>`;
     if (artifact.kind === 'image') return `<section class="tc-code-artifact"><header>${title}</header><img src="${url}" alt="Generated artifact ${esc(file)}"></section>`;
     // PDF/schematic artifacts preview inline too (parity with chat), not just a link.
     if (artifact.kind === 'pdf' || /\.pdf(?:$|[?#])/i.test(file)) return `<section class="tc-code-artifact"><header>${title}</header><iframe src="${url}#toolbar=0&navpanes=0&view=FitH" title="Preview ${esc(file)}"></iframe></section>`;

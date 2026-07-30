@@ -59,11 +59,27 @@
   width: min(100%, 768px);
   min-width: 0;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
   padding: 52px 24px 86px;
   scrollbar-width: thin;
   scrollbar-color: var(--c-border-2) transparent;
 }
+
+/* A conversation shorter than the window sat pinned to the TOP, leaving the
+   newest message stranded above a gap -- measured on a 1080p screen, 175px of
+   empty surface between the last turn and the composer, with nothing to
+   scroll. A conversation reads bottom-up in time, so the newest thing belongs
+   next to the box you reply in.
+   `margin-top: auto` rather than `justify-content: flex-end`, because the
+   latter makes the top of an overflowing transcript unreachable. Once the
+   content is taller than the surface this has no effect at all and normal
+   scrolling takes over.
+   Scoped with `:has()` so it only applies when real turns exist -- the empty
+   state stays centred, which is where a hero belongs. Browsers without `:has()`
+   simply keep the previous top-aligned behaviour. */
+#tc-code-turns:has(.tc-code-turn) { margin-top: auto; }
 
 .tc-code-transcript::-webkit-scrollbar { width: 9px; }
 .tc-code-transcript::-webkit-scrollbar-track { background: transparent; }

@@ -7,6 +7,22 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (A conversation sits where you're reading, and the drawer shows the whole page)
+
+- **A conversation shorter than the window was pinned to the top**, stranding the newest message above a gap — measured at 1080p, **175px** of empty surface between the last turn and the composer, with nothing to scroll. A conversation reads bottom-up in time, so the newest thing now sits beside the box you reply in (116px, of which 86 is deliberate padding).
+  - `margin-top: auto` on the turns block, not `justify-content: flex-end` — the latter makes the top of an overflowing transcript unreachable. Once content exceeds the surface the rule has no effect and normal scrolling takes over. Scoped with `:has(.tc-code-turn)` so the empty state stays centred, and browsers without `:has()` keep the old behaviour.
+- **The Activity drawer rendered a preview of what Thomas built at 1:1 inside a ~280px column.** A layout designed for ~1200px wide came out as a zoomed crop of its top-left corner, cut off mid-sentence — it reads as a broken render, not a preview. Same keyhole mistake the result card thumbnail had.
+  - It is now a miniature of the whole page: a fixed 248×155 box with the document rendered at 1280×800 and scaled to `0.19375`. Fixed box and fixed scale rather than percentages, so it is deterministic at any drawer width (the drawer is resizable, 280–520px) instead of drifting with it.
+  - Verified live: the drawer now shows the calculator's sidebar, heading, keypad and side panels together and legibly.
+
+### Changed (The run report says what happened instead of counting things)
+
+- **The line that answers "did the thing I asked for actually work" was a 301×28 grey strip**, styled exactly like the technical log rows around it. It read as a footnote when it is the headline.
+- **It also counted without concluding.** `Run report · 1 pass · 2 checks · 0 open risks` — "1 pass" means one *edit* pass, and reads as one test passing. It now leads with a verdict: **Checks passed** / **Some checks failed** / **Checks failed** / **Passed, with things to look at**, then the numbers underneath as `2/2 checks passed · no open risks`.
+- **"Nothing was checked" is its own state**, and the point of the change. A run with no validations at all must not look like a run that passed — that confusion is the whole reason the report exists. Seen live on the owner's failed calculator run: it now reads `Nothing was checked · 3 open risks` where it used to say `1 pass · 0 checks · 3 open risks` and bury it.
+- Given a card with a coloured state rail (accent / amber / red / muted) and its own mark, so the verdict is legible before a word of it is read. 680×62 instead of 301×28, sitting directly under the result it describes.
+- Verified live on both real conversations: the passing calculator run renders `is-good` with "Checks passed / 2/2 checks passed · no open risks"; the provider-overloaded run renders `is-unknown` with "Nothing was checked / 3 open risks".
+
 ### Added (A blank Code surface now shows you where to start)
 
 - **An empty Code surface was one line of encouragement above roughly 700px of nothing.** Measured on a 1920×1080 screen: the hero sat near the top and nothing else occupied the view down to the composer. It told you to "describe the outcome" without showing what a good one looks like.

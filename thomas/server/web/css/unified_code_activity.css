@@ -44,6 +44,44 @@
 .tc-code-activity-summary i { color: var(--c-accent); font-size: 13px; }
 .tc-code-saved-activity.has-issues .tc-code-activity-summary i { color: #ff9a9a; }
 
+/* ---- The verdict --------------------------------------------------------
+   This is the line that answers "did the thing I asked for actually work",
+   and it was rendering as an 11px grey strip 28px tall -- measured, 301x28 --
+   indistinguishable from the technical log rows around it. It reads as a
+   footnote when it is the headline. Given a card, a state colour and room. */
+.tc-code-run-report { width: 100%; max-width: 680px; margin: 12px 0 4px; }
+.tc-code-run-report > summary {
+  width: 100%;
+  min-height: 52px;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 9px 13px;
+  border: 1px solid var(--c-border);
+  border-left: 3px solid var(--c-border-2);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--c-surface) 62%, transparent);
+  transition: border-color .15s, background .15s;
+}
+.tc-code-run-report > summary:hover { background: var(--c-surface-2); }
+.tc-code-run-report[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.tc-code-verdict { display: inline-flex; align-items: center; gap: 11px; min-width: 0; }
+.tc-code-verdict > i { font-size: 19px; flex: 0 0 auto; }
+.tc-code-verdict-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tc-code-verdict-text strong { color: var(--c-text); font-size: 13px; font-weight: 700; }
+.tc-code-verdict-text small { color: var(--c-muted); font-size: 11px; }
+.tc-code-verdict-more { flex: 0 0 auto; color: var(--c-muted); font-size: 10.5px; }
+/* One colour per state, on the rail and the mark, so the verdict is legible
+   before a word of it is read. */
+.tc-code-run-report.is-good > summary { border-left-color: var(--c-accent); }
+.tc-code-run-report.is-good .tc-code-verdict > i { color: var(--c-accent); }
+.tc-code-run-report.is-warn > summary { border-left-color: #e2b25f; }
+.tc-code-run-report.is-warn .tc-code-verdict > i { color: #e2b25f; }
+.tc-code-run-report.is-bad > summary { border-left-color: #ff9a9a; }
+.tc-code-run-report.is-bad .tc-code-verdict > i { color: #ff9a9a; }
+.tc-code-run-report.is-unknown > summary { border-left-color: var(--c-muted); }
+.tc-code-run-report.is-unknown .tc-code-verdict > i { color: var(--c-muted); }
+.tc-code-run-report > .tc-code-technical-log { margin-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
+
 .tc-code-technical-log { max-height: 380px; overflow: auto; margin-top: 6px; border: 1px solid var(--c-border); border-radius: 9px; }
 .tc-code-technical { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--c-border); color: var(--c-dim); }
 .tc-code-technical:last-child { border-bottom: 0; }
