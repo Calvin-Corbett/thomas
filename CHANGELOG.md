@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A Code conversation opens at its newest turn, not its oldest)
+
+- **A transcript that overflowed opened at `scrollTop: 0`**, so the run report — the newest thing on the page and the entire answer to "did it work" — sat below the fold and had to be hunted for. Measured on a real conversation: **702px of unscrolled overflow** with the verdict card at y=1419 inside an 868px scroller, identically via the sidebar click and via `/?forge_code=<id>`. After: `scrollTop` 702, `fromBottom` 0, card at y=717 and visible, on all four paths.
+- Short transcripts were already right, because `margin-top: auto` pins them to the bottom — which is exactly why this only bit long conversations and went unnoticed.
+- Scrolls twice: immediately after render, and again once artifact thumbnails hydrate. A preview that resolves late grows the transcript underneath the first jump and would otherwise leave the newest turn just short of the bottom — the same bug, quieter.
+- **The first version of the guard did not catch its own regression.** Deleting the immediate call left the one inside the thumbnail `.then()`, so the test passed *and* the browser still scrolled. The two call sites are now asserted separately, and removing either one turns 2 tests red — verified in both directions, one site at a time.
+- `requestAnimationFrame` is guarded: `unified_code_mode.js` is also loaded by a Node contract test that stubs a DOM without it, and the unguarded call took that test down with a `ReferenceError`.
+
 ### Fixed (Finishing a run is not the same as satisfying what was asked)
 
 - **The rubric's first row restated the user's entire goal and stamped it `met`** — on the strength of a zero exit code and a git delta, nothing more. Read by a person, `complete the requested goal: … Start, Pause and Reset buttons that all work → met` asserts those buttons were checked. Nothing checked them, which is exactly why every sub-criterion directly beneath that row is honestly `unverified`.

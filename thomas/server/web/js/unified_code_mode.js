@@ -353,6 +353,33 @@
     return transcript;
   }
 
+  // Arrive at the newest turn, not the oldest.
+  //
+  // A Code transcript that overflows its surface opened at scrollTop 0, so the
+  // run report -- the newest thing on the page and the whole answer to "did it
+  // work" -- sat below the fold and had to be hunted for. Measured on a real
+  // conversation: 702px of unscrolled overflow with the verdict card at y=1419
+  // inside an 868px scroller, identically via the sidebar click and the deep
+  // link. Short transcripts were already right, because `margin-top:auto` pins
+  // them to the bottom, which is exactly why this only bit the long ones and
+  // went unnoticed.
+  //
+  // Runs twice on purpose. An artifact thumbnail hydrates asynchronously and
+  // grows the transcript underneath the first jump, which would otherwise leave
+  // the newest turn just short of the bottom -- the same amount wrong, quietly.
+  function scrollTranscriptToNewest() {
+    const jump = () => {
+      const root = surface();
+      const transcript = root && transcriptScroller(root);
+      if (transcript) transcript.scrollTop = transcript.scrollHeight;
+    };
+    jump();
+    // Guarded: this module is also loaded by a Node contract test that stubs a
+    // DOM but has no rAF, and an unguarded call took that test down with a
+    // ReferenceError.
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(jump);
+  }
+
   function captureRenderState(root) {
     const active = document.activeElement;
     const steer = root.querySelector('#tc-code-steer');
@@ -832,8 +859,14 @@
     const token = lifecycle().contextToken(state);
     await Promise.all([loadChanges({ token, deferRender: true }), loadTree('', { token, deferRender: true })]);
     if (!(options && options.deferRender)) render();
+    // Only on a real open. `internal` reloads run underneath a live run, and
+    // yanking the scroller then would fight someone reading back through it.
+    if (!internal) scrollTranscriptToNewest();
     // Results become visible on arrival rather than after a click.
-    void codeResults().hydrateArtifactThumbnails().catch(() => {});
+    void codeResults()
+      .hydrateArtifactThumbnails()
+      .then(() => { if (!internal) scrollTranscriptToNewest(); })
+      .catch(() => {});
     host().renderHistory && host().renderHistory();
     if (!internal) {
       await reattachRunFor(id);
