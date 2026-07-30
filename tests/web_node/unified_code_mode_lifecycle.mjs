@@ -276,7 +276,7 @@ async function proveEvidenceAndRefresh() {
   // "check" means an ENGINE check everywhere else in this UI -- the verdict card
   // counts validations and "1/2 checks passed" means two real ones. This header
   // used the same word for arbitrary tool output, so the Godot run advertised
-  // "26 checks" while its report recorded ZERO validations. It now reads
+  // "26 checks" while its report recorded ONE validation. It now reads
   // "25 results" on that run, which also shows only one of the 26 was a `meta`
   // status note; the misnaming was the bigger half, meta the smaller one.
   const metaCounted = api.technicalActivityHtml([

@@ -166,7 +166,7 @@
     // listing, three separate "Wrote N chars to <file>" lines and a source
     // excerpt. A file WRITE was labelled a check -- the same overloading of the
     // word that made the activity header advertise "26 checks" on a run with
-    // zero validations. "check" means an engine check everywhere else in this
+    // ONE validation. "check" means an engine check everywhere else in this
     // UI, and the verdict card counts them.
     //
     // The tool's own name was there the whole time: 25 of those 27 carried
@@ -208,7 +208,7 @@
     // "1 pass", which meant one EDIT pass and read as one test passing.
     //
     // The Godot run advertised "26 checks" in this header while its report
-    // recorded ZERO validations. Measured after the change, the same run reads
+    // recorded ONE validation. Measured after the change, the same run reads
     // "25 results", so exactly ONE of the 26 was a `meta` status note ("Kept
     // index.html") and the other 25 were tool output. The misnaming was the
     // bigger half of this by a wide margin; folding meta in was a smaller,

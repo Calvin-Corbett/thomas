@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A second wrong number of mine, found by finishing the audit)
+
+- The first audit found one bad claim in two checked. That is a poor enough ratio to finish the job, so every number baked into a **code comment** got verified against the run it cites.
+- Confirmed exact: **27 tool_result events, 25 carrying a name** on the planner turn; **26 checks → 25 results** on the Godot turn; **exactly one** of those 26 was a `meta` note; every failure and warn colour above 4.5:1 in all five themes (lowest **5.01:1**).
+- Wrong: *"its report recorded **ZERO** validations"*. That turn recorded **one**. I had read the header count off Godot turn 1 and the validation count off the *last* turn, then stated them as one fact. The point survives — 26 claimed against **1** real is still the overstatement the fix was for — but the number did not.
+- Corrected in the source comment, the harness comment and two changelog entries. Comment and prose only; 30 contract tests green.
+- **The audit itself made the same mistake twice on the way**, which is the part worth keeping: it took `agents[-1]` and measured the wrong turn, then measured the wrong *conversation* entirely before that. Selecting the wrong element is the single failure mode behind most of this session's bad measurements, and it does not stop being tempting just because the subject is my own work.
+
 ### Fixed (A number I asserted, in my own words, that was wrong)
 
 - Auditing my own changelog entries against the live data: **"370 of 476 saved chats record a real model"** is exact. **"across nine of them"** was not — it is **eight**, and the list printed immediately after it names eight (`gpt-5.6-sol`, `codex`, `openai_codex`, `local`, `qwen2.5-coder:7b`, `gpt-5.5`, `gpt-5.6-terra`, `gpt-5.6-luna`). I wrote a total above an enumeration that contradicted it, then propagated it into a code comment in `chat.html` and a test docstring.
@@ -30,7 +38,7 @@ Versioning: Semantic Versioning.
 
 ### Fixed (A file write stops calling itself a check)
 
-- Every `tool_result` row in the technical log read **"Checked tool result"**. Measured on one turn: **27 of them**, all identical, sitting above a folder listing, three separate `Wrote N chars to <file>` lines, and a source excerpt. **A file write was labelled a check** — the same overloading of the word that had the activity header advertising "26 checks" on a run with zero validations. `check` means an engine check everywhere else in this UI, and the verdict card counts them.
+- Every `tool_result` row in the technical log read **"Checked tool result"**. Measured on one turn: **27 of them**, all identical, sitting above a folder listing, three separate `Wrote N chars to <file>` lines, and a source excerpt. **A file write was labelled a check** — the same overloading of the word that had the activity header advertising "26 checks" on a turn with one validation. `check` means an engine check everywhere else in this UI, and the verdict card counts them.
 - The tool's own name was on the event the whole time: **25 of those 27 carried `name`** (`fs.write_file`, `fs.list_dir`, `code.project_structure`, `diff.create`), and the heading discarded it in favour of a word that was wrong. Rows now read `Result from fs.write_file`, so a heading describes what produced it.
 - `meta` events read **"Verified the result"** — for events whose text is literally `Kept index.html.` or `Reverted index.html.`. Keeping a file announced itself as verifying it. They now read `Workspace update`.
 - Found by *looking* at the expanded log rather than by a failing check: six consecutive rows with the same heading above six different things. Nothing was broken, no test failed, and the log simply told you less than the data it was rendering.
@@ -124,7 +132,7 @@ Versioning: Semantic Versioning.
 
 ### Fixed (The activity header stops calling tool output "checks")
 
-- The technical header read **"Worked through 1 tool run · 26 checks · 7 issues"** on a run whose report recorded **zero validations**. `check` is a load-bearing word everywhere else in this UI — the verdict card counts engine checks, and *"1/2 checks passed"* means two real ones — so using it here for arbitrary tool output made the header claim verification that never happened. Same overloading as the old **"1 pass"**, which meant one *edit* pass and read as one test passing.
+- The technical header read **"Worked through 1 tool run · 26 checks · 7 issues"** on a turn whose report recorded **one validation**. `check` is a load-bearing word everywhere else in this UI — the verdict card counts engine checks, and *"1/2 checks passed"* means two real ones — so using it here for arbitrary tool output made the header claim verification that never happened. Same overloading as the old **"1 pass"**, which meant one *edit* pass and read as one test passing.
 - It now says `results`, and `meta` status notes ("Kept index.html", "Reverted styles.css") are no longer counted among them — they fall into `details`, which is what they are. The Godot run now reads **"1 tool run · 25 results · 7 issues"**.
 - That 26→25 also corrected me: only **one** of the 26 was a `meta` event, so the misnaming was the bigger half by a wide margin and folding `meta` in was a smaller, separate inaccuracy. The first version of this comment claimed "nearly all of them were meta" — measured, that was false, and it was rewritten rather than shipped.
 - Guarded: the harness asserts the header never says "N checks", counts the one real tool result, and does not inflate to 3 when two status notes are present.
