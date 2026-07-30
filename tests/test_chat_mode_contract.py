@@ -154,7 +154,7 @@ def test_a_saved_reply_reports_the_model_that_wrote_it() -> None:
     ``mapRealMessages`` stamped ``state.modelLabel || 'GPT-5.6 Sol'`` onto every
     assistant message it restored, discarding the model the conversation row
     actually carries. Measured on a live store: 370 of 476 saved chats record a
-    real model across NINE of them -- 185 gpt-5.6-sol, 136 codex, 37
+    real model across EIGHT of them -- 185 gpt-5.6-sol, 136 codex, 37
     openai_codex, 5 local, 4 qwen2.5-coder:7b, plus gpt-5.5, terra and luna --
     and every one of them was displayed as whatever was selected right now.
     Opening a codex chat with Terra selected showed "GPT-5.6 Terra" on a reply

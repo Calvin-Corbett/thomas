@@ -7,6 +7,12 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A number I asserted, in my own words, that was wrong)
+
+- Auditing my own changelog entries against the live data: **"370 of 476 saved chats record a real model"** is exact. **"across nine of them"** was not — it is **eight**, and the list printed immediately after it names eight (`gpt-5.6-sol`, `codex`, `openai_codex`, `local`, `qwen2.5-coder:7b`, `gpt-5.5`, `gpt-5.6-terra`, `gpt-5.6-luna`). I wrote a total above an enumeration that contradicted it, then propagated it into a code comment in `chat.html` and a test docstring.
+- Corrected in all three places. Comment and prose only — no behaviour change, 30 contract tests still green.
+- Exactly the defect this session has been removing, authored by me: an unverified number stated with confidence, sitting next to the evidence that disproves it. The same audit confirmed the other load-bearing claim — every failure and warn colour is above 4.5:1 in all five themes, lowest **5.01:1** across ten measurements.
+
 ### Fixed (A silent failure says how it ended, and that nothing said why)
 
 - Four consecutive runs of the same goal (15:42, 15:44, 15:46, 15:48) each recorded exactly **three** events — Thomas stating its plan, the project structure, `(empty directory)` — then exited 1 with **no error event at all**. Nothing changed, zero validations, one generic risk.
@@ -167,7 +173,7 @@ Versioning: Semantic Versioning.
 ### Fixed (A saved reply reports the model that wrote it)
 
 - Every assistant message in a restored conversation was labelled with **whatever model is selected in the picker right now**. `mapRealMessages` stamped `state.modelLabel || 'GPT-5.6 Sol'` on each one and discarded the model the conversation row actually carries.
-- Measured on the live store: **370 of 476 saved chats record a real model, across nine of them** — 185 `gpt-5.6-sol`, 136 `codex`, 37 `openai_codex`, 5 `local`, 4 `qwen2.5-coder:7b`, plus `gpt-5.5`, `gpt-5.6-terra` and `gpt-5.6-luna`. All 370 were displayed as the current selection. Opening the chat *"Make agame"* — answered by `codex` — with Terra selected put **"GPT-5.6 Terra"** on screen under Thomas's name. Verified by screenshot before and after; it now reads **"codex"** while the picker still correctly shows Terra.
+- Measured on the live store: **370 of 476 saved chats record a real model, across eight of them** — 185 `gpt-5.6-sol`, 136 `codex`, 37 `openai_codex`, 5 `local`, 4 `qwen2.5-coder:7b`, plus `gpt-5.5`, `gpt-5.6-terra` and `gpt-5.6-luna`. All 370 were displayed as the current selection. Opening the chat *"Make agame"* — answered by `codex` — with Terra selected put **"GPT-5.6 Terra"** on screen under Thomas's name. Verified by screenshot before and after; it now reads **"codex"** while the picker still correctly shows Terra.
 - The **raw id** is shown rather than a prettied name. It is what was recorded, and inventing a display name for a model that is no longer in the picker is how the wrong label got here.
 - The **106 rows with no recorded model now show nothing at all**, instead of borrowing the current selection. The honest answer to "which model wrote this" is sometimes "not recorded" — the same reason the run report has a *Nothing was checked* state rather than dressing an unknown up as a pass. Checked on screen: the header collapses to just the avatar and "Thomas", with no empty chip or dangling gap.
 - Three live-message paths kept `state.modelLabel || 'GPT-5.6 Sol'` as a fallback, which would reassert the same claim whenever the model list failed to load; they now fall back to no label. The picker's own pre-load placeholder was the literal `GPT-5.6 Sol`, which survives a failed `/api/profiles` fetch and would sit there naming a model nobody selected — it is now neutral.
