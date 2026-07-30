@@ -345,7 +345,17 @@ def _verify_and_iterate(
             return rc or 1
         if frc != 0:
             return frc
-        changed = forge_code_git.delta_since(cwd, snap_before)
+        # project_delta_since here TOO. This is the re-check after a repair pass,
+        # and it is the second of two call sites in this function. Fixing only the
+        # first left every repair iteration re-reading the unfiltered list, so
+        # Thomas went back to verifying its own `.thomas/evolve/agent/` transcripts
+        # the moment a run needed fixing -- which is precisely when it is writing
+        # the most of them.
+        #
+        # A guard that exercises only the first verification passes with this line
+        # broken, which is how the same class of half-fix survived once before.
+        # `test_a_repair_pass_also_ignores_the_bookkeeping` covers this call.
+        changed = forge_code_git.project_delta_since(cwd, snap_before)
         if not changed:
             return 0
         ok, rc, summary = verify(cwd, changed, emit)

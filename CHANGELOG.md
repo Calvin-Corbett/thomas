@@ -7,6 +7,13 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (The same half-fix, caught by hunting the shape instead of the symptom)
+
+- `_verify_and_iterate` reads the changed set **twice**, and `a084e1f7` fixed only the first. The second read happens after a repair pass, so every repair iteration went back to the unfiltered `delta_since` — handing Thomas's own `.thomas/evolve/agent/` transcripts to the verifier **exactly when a run needs fixing**, which is when it is writing the most of them.
+- Found by grepping for every `delta_since(` caller rather than waiting for a symptom, after noticing that the nine fixes so far all share one shape: two expressions that were supposed to mean the same thing and didn't.
+- **The existing two guards passed with the second call site broken** — which is the whole lesson, and the same way a scroll fix once survived reverting. A new test forces a verification failure, drives a repair pass, and inspects the *second* file list. Reverting only that line turns it red while the other two stay green.
+- A **third** instance sits in `ci_runner.py`, feeding the unfiltered list straight into `build_run_report`. Deliberately **not** changed: nothing under `thomas/` or `scripts/` imports that module — only its own test does — so it reports to nobody and editing it would be churn in dead code. Noted at the exact line, with what to change if it is ever wired up.
+
 ### Fixed (A third permanently-red test, and a stronger guard than the one it replaces)
 
 - `test_chat_shell_boots_without_parser_blocking_cdn_assets` required the literal `"the chat shell must boot offline"` — a **comment marker** in `chat.html` that was later reworded away. The test went red and stayed red while the behaviour it guards was perfectly intact: the served shell has **zero** references to `fonts.googleapis.com`, `fonts.gstatic.com`, `unpkg.com`, `cdn.jsdelivr.net` or `cdnjs.cloudflare.com`.

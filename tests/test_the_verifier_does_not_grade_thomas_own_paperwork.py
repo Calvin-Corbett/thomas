@@ -80,6 +80,52 @@ def test_thomas_own_transcript_is_not_verified_as_a_deliverable(tmp_path, monkey
     assert "index.html" in handed and "game.js" in handed, "the real files must still be checked"
 
 
+def test_a_repair_pass_also_ignores_the_bookkeeping(tmp_path, monkeypatch) -> None:
+    """`_verify_and_iterate` reads the changed set TWICE.
+
+    The second read happens after a repair pass, and fixing only the first left
+    every repair iteration re-reading the unfiltered list -- so Thomas went back
+    to verifying its own transcripts exactly when a run needed fixing, which is
+    when it is writing the most of them.
+
+    A guard that only exercises the first verification passes with the second
+    call broken. That is how this same class of half-fix survived once before, so
+    this test forces a failure, drives a repair pass, and inspects the SECOND
+    file list.
+    """
+
+    _write(tmp_path, "index.html", "<!doctype html><p>hi</p>")
+    _write(tmp_path, BOOKKEEPING, "{}")
+
+    seen: list[list[str]] = []
+    outcomes = [(False, 1, "boom"), (True, 0, "ok")]
+
+    def fake_verify(cwd, changed, emit):  # noqa: ANN001 - test double
+        seen.append(list(changed))
+        return outcomes[min(len(seen) - 1, len(outcomes) - 1)]
+
+    from thomas.forge.anvil import forge_code_git
+
+    everything = ["index.html", BOOKKEEPING]
+    monkeypatch.setattr(forge_code_git, "delta_since", lambda cwd, snap: list(everything))
+    monkeypatch.setattr(
+        forge_code_git,
+        "project_delta_since",
+        lambda cwd, snap: [p for p in everything if not p.startswith(".thomas/evolve/agent/")],
+    )
+
+    _verify_and_iterate(
+        tmp_path, {}, lambda event: None, lambda prompt: (0, ""), "goal", verifier=fake_verify
+    )
+
+    assert len(seen) >= 2, f"expected a repair pass to re-verify; calls={len(seen)}"
+    assert BOOKKEEPING not in seen[1], (
+        "the re-check after a repair pass handed Thomas's own transcript back to "
+        "the verifier"
+    )
+    assert "index.html" in seen[1], "the real file must still be re-checked"
+
+
 def test_a_run_that_only_wrote_bookkeeping_verifies_nothing(tmp_path, monkeypatch) -> None:
     """Otherwise parsing one JSON file reads as a passing check on a run that
     changed nothing a user asked for."""
