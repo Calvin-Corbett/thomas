@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (The smoke clicks the navigation and reports whether anything happened)
+
+- A generated app's most common real failure is the **convincing shell**, and nothing was looking for it. The delivered "calculator for ideas" shipped a five-item workspace sidebar — Calculator, Conversions, Graph studio, History, Saved formulas — where the script never mentions "conversions" or "graph" at all and not one of the five carries a handler. Every check passed it, *correctly by its own terms*: the page boots, raises no errors, and its keypad genuinely works. Verification was `boot only`, so it clicked nothing, and nobody found out until a person clicked a tab.
+- The browser smoke now clicks up to 8 navigation controls (in an `aside`/`nav`/sidebar scope, excluding start/pause/reset wording that the existing probes own) and compares an observable signature before and after each one.
+- **Reported as a note with counts, never a failure.** Which control is navigation is guessed from position and wording, and a tab that is *already* the open one correctly changes nothing when clicked. It is good evidence when things do change and weak evidence when they do not, so it states the numbers rather than reaching a verdict — a check that cannot separate "broken" from "already there" must not be allowed to fail a good page, or people learn to ignore the line.
+- The signature is not canvas-only: it hashes `body.innerText` and every control's text, visibility and disabled state, so a sidebar that swaps a **panel** registers as working. A page with no `<canvas>` degrades to `""` rather than reading as inert.
+- Both directions are tested, and the second test is the one that matters: `test_navigation_that_works_is_not_called_decoration` builds a sidebar whose tabs genuinely switch and asserts the word `decoration` never appears — flagging working navigation would be worse than never printing the line. Neutering the probe turns both red, the failure reading `index.html: browser boot clean; boot only` — the exact string that let the calculator shell through.
+
 ### Fixed (Reverting a file removes it from the file list too)
 
 - Reverting a **new** file deletes it, but `changeAction` only re-read the *changes* list — so the drawer's Files section went on offering a file that no longer existed. Measured after an approved revert: the change row cleared, the tree still listed `scratchpad.html`, and the server answered `entries: []` with the artifact route returning **404**. The UI was the only thing that still believed in it.

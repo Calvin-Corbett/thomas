@@ -303,6 +303,42 @@ _SMOKE_HARNESS = r"""
             }, 60);
           }, 60);
         }
+        // Does the page's own navigation DO anything?
+        //
+        // A generated app is often a convincing shell: the delivered "calculator
+        // for ideas" shipped a five-item workspace sidebar -- Calculator,
+        // Conversions, Graph studio, History, Saved formulas -- where the script
+        // never mentions "conversions" or "graph" at all and not one of the five
+        // carries a handler. Every existing check passed it: the page boots, has
+        // no errors, and its keypad genuinely works. "Boot only" verification
+        // clicked nothing, so nobody found out until a person clicked a tab.
+        //
+        // Reported as a NOTE with counts, never a failure, for the same reason
+        // the start and pause probes are notes: which control is navigation is
+        // guessed from its position and wording, and a tab that is ALREADY the
+        // open one correctly changes nothing when clicked. It is good evidence
+        // when things do change and weak evidence when they do not, so it states
+        // the numbers and lets a reader weigh them.
+        const navScope = document.querySelector("aside, nav, [class*='sidebar' i], [class*='nav' i]");
+        if (navScope) {
+          const navControls = [...navScope.querySelectorAll("button, [role='button'], a[href^='#']")]
+            .filter((node) => visible(node) && !node.disabled && clean(node.textContent).length > 0)
+            .filter((node) => !/^(start|play|run|begin|launch|pause|resume|reset|restart)\b/i.test(clean(node.textContent)))
+            .slice(0, 8);
+          let inert = 0;
+          navControls.forEach((node) => {
+            const label = clean(node.textContent).slice(0, 24);
+            const before = observableSignature(document.querySelector("canvas"));
+            try { node.click(); } catch (_error) { return; }
+            if (observableSignature(document.querySelector("canvas")) === before) inert += 1;
+            else state.interactions.push(`nav:${label}`);
+          });
+          if (navControls.length >= 3 && inert === navControls.length) {
+            pushUnique(state.notes, `clicked ${inert} navigation control(s) and the page never changed; the navigation may be decoration`);
+          } else if (inert > 0) {
+            pushUnique(state.notes, `${inert} of ${navControls.length} navigation control(s) changed nothing when clicked`);
+          }
+        }
       } catch (error) {
         pushUnique(state.errors, error);
       }

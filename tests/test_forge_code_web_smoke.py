@@ -335,3 +335,70 @@ def test_the_missing_asset_check_ignores_the_browser_s_own_favicon_request(tmp_p
 
     assert result.ok is True, result.summary
     assert "favicon" not in result.summary.lower()
+
+
+@pytest.mark.skipif(smoke._browser_executable() is None, reason="Chrome or Edge is not installed")
+def test_a_page_whose_navigation_does_nothing_says_so(tmp_path) -> None:
+    """A convincing shell is the shape a generated app actually fails in.
+
+    The delivered "calculator for ideas" shipped a five-item workspace sidebar
+    -- Calculator, Conversions, Graph studio, History, Saved formulas -- where
+    the script never mentions "conversions" or "graph" at all and not one of
+    the five carries a handler. Every check passed it, correctly by its own
+    terms: the page boots, raises no errors, and its keypad genuinely works.
+    Verification was "boot only", so it clicked nothing, and nobody found out
+    until a person clicked a tab.
+
+    Recorded as a NOTE and never a failure, for the same reason the start and
+    pause probes are notes: which control is navigation is guessed from its
+    position and wording, and a tab that is ALREADY the open one correctly
+    changes nothing when clicked. It states the numbers and lets a reader weigh
+    them.
+    """
+
+    (tmp_path / "index.html").write_text(
+        "<!doctype html><html><head><title>Shell</title></head><body>"
+        "<aside>"
+        "<button>Calculator</button><button>Conversions</button>"
+        "<button>Graph studio</button><button>History</button>"
+        "</aside>"
+        "<section class='main'><h1>It looks finished</h1></section>"
+        "</body></html>",
+        encoding="utf-8",
+    )
+
+    result = smoke.smoke_html_artifacts(tmp_path, ["index.html"], timeout=30)
+
+    # Still passes: the page boots and this is an observation, not a verdict.
+    assert result.ok is True, result.summary
+    assert "decoration" in result.summary, result.summary
+
+
+@pytest.mark.skipif(smoke._browser_executable() is None, reason="Chrome or Edge is not installed")
+def test_navigation_that_works_is_not_called_decoration(tmp_path) -> None:
+    """The other direction, and the one that would make this useless noise.
+
+    Flagging a page whose tabs genuinely switch would train people to ignore
+    the line -- worse than never printing it. Working controls are recorded as
+    real interactions instead.
+    """
+
+    (tmp_path / "index.html").write_text(
+        "<!doctype html><html><head><title>Real</title></head><body>"
+        "<aside><button data-v='a'>Overview</button><button data-v='b'>Details</button>"
+        "<button data-v='c'>Settings</button><button data-v='d'>About</button></aside>"
+        "<section class='main'><h1 id='view'>Overview</h1></section>"
+        "<script>"
+        "const names={a:'Overview',b:'Details',c:'Settings',d:'About'};"
+        "document.querySelector('aside').addEventListener('click',e=>{"
+        "const b=e.target.closest('button'); if(!b) return;"
+        "document.getElementById('view').textContent=names[b.dataset.v];});"
+        "</script></body></html>",
+        encoding="utf-8",
+    )
+
+    result = smoke.smoke_html_artifacts(tmp_path, ["index.html"], timeout=30)
+
+    assert result.ok is True, result.summary
+    assert "decoration" not in result.summary, result.summary
+    assert "nav:Details" in result.summary, result.summary
