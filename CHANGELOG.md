@@ -7,6 +7,13 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Your own message wraps like Thomas's replies do)
+
+- `.tc-code-turn.is-user` set `white-space: pre-wrap` and nothing else. `pre-wrap` breaks at whitespace and does nothing for a single long token — a hash, an API key, a path with no separators — which is exactly what gets pasted into a build request. Every sibling that renders free text already handled it: `.tc-code-reply`, `.tc-code-event span` and `.tc-code-technical code` all set `overflow-wrap: anywhere`. **Three siblings had the rule; one did not**, so Thomas's messages wrapped and yours did not.
+- Measured with a 145-character unbreakable string: the bubble reported **`scrollWidth` 1171 against `clientWidth` 510** and was clipped mid-token on screen, while the reply beside it wrapped onto two lines from the *same* string — the defect and its control visible in one screenshot.
+- **The first attempt at that measurement proved nothing.** It used a path containing hyphens and slashes, which *are* break opportunities under `overflow-wrap: normal`; it wrapped, reported no overflow, and could not have failed even if the bug were there. The string had to be genuinely unbreakable before the check meant anything.
+- Guarded across all three free-text surfaces, plus a second test asserting the user bubble and the reply wrap *identically* — free text is free text whoever typed it. Removing the rule turns both red.
+
 ### Fixed (The page you send from now shows you your own message)
 
 - Found by asking a question never asked this session — *what does this look like while a run is actually going?* Every screenshot until now had been of a finished turn or an empty surface.

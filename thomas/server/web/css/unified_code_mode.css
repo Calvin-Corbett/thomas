@@ -256,6 +256,20 @@
   background: var(--c-user-bg);
   color: var(--c-user-text);
   white-space: pre-wrap;
+  /* `pre-wrap` breaks at whitespace and does nothing for one long token -- a
+     hash, an API key, a path with no separators -- which is exactly the sort of
+     thing that gets pasted into a build request. Every sibling that renders
+     free text already handles it: `.tc-code-reply`, `.tc-code-event span` and
+     `.tc-code-technical code` all set `overflow-wrap: anywhere`. This one did
+     not, so THOMAS's messages wrapped and YOURS did not.
+
+     Measured with a 145-character unbreakable string: the bubble reported
+     scrollWidth 1171 against clientWidth 510 and was clipped mid-token on
+     screen, while the reply beside it wrapped onto two lines from the same
+     string. The first attempt at this measurement used a path containing
+     hyphens and slashes, which ARE break opportunities under `normal`, so it
+     wrapped and proved nothing -- the test could not have failed. */
+  overflow-wrap: anywhere;
 }
 
 .tc-code-message-head { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; }
