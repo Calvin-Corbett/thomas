@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A file write stops calling itself a check)
+
+- Every `tool_result` row in the technical log read **"Checked tool result"**. Measured on one turn: **27 of them**, all identical, sitting above a folder listing, three separate `Wrote N chars to <file>` lines, and a source excerpt. **A file write was labelled a check** — the same overloading of the word that had the activity header advertising "26 checks" on a run with zero validations. `check` means an engine check everywhere else in this UI, and the verdict card counts them.
+- The tool's own name was on the event the whole time: **25 of those 27 carried `name`** (`fs.write_file`, `fs.list_dir`, `code.project_structure`, `diff.create`), and the heading discarded it in favour of a word that was wrong. Rows now read `Result from fs.write_file`, so a heading describes what produced it.
+- `meta` events read **"Verified the result"** — for events whose text is literally `Kept index.html.` or `Reverted index.html.`. Keeping a file announced itself as verifying it. They now read `Workspace update`.
+- Found by *looking* at the expanded log rather than by a failing check: six consecutive rows with the same heading above six different things. Nothing was broken, no test failed, and the log simply told you less than the data it was rendering.
+- Guarded three ways — a named result must name its tool, an unnamed one must still not say "Checked", and a `meta` row must not say "Verified". Restoring either old heading turns it red.
+
 ### Fixed (A long filename stops running out of the Activity drawer)
 
 - The drawer is ~280px and shows names in four places. Measured with an 86-character unbreakable name, `scrollWidth`/`clientWidth`: change row **491/137 ellipsis**, artifact name **607/386 ellipsis**, file tree **518/247 `text-overflow: clip`**, drawer subtitle **458/458 — grown to 458px inside a 280px panel**. Two truncated properly and two spilled past the edge: the same "every sibling but one" shape as `overflow-wrap` and `--c-danger`.

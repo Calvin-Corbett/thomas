@@ -647,6 +647,12 @@ def test_code_adapter_lifecycle_behavior_in_node() -> None:
         # streamed. Guarded both ways -- it must appear at once, and must not
         # double when the server copy lands.
         "yourMessageIsOnScreen": True,
+        # Every tool_result row read "Checked tool result" -- 27 on one turn,
+        # above a folder listing, three "Wrote N chars" lines and a source
+        # excerpt, so a file WRITE was labelled a check. The tool name was on
+        # the event all along (25 of 27 carried it). And a `meta` event whose
+        # text is "Kept index.html." announced itself as "Verified the result".
+        "toolRowsNameTheirTool": True,
     }
 
 

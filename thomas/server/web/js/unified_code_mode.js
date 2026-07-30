@@ -159,7 +159,25 @@
     }
     if (kind === 'tool') return `Used ${event.name || 'a project tool'}`;
     if (event.is_error === true) return 'Technical check failed';
-    return kind === 'meta' ? 'Verified the result' : 'Checked tool result';
+    // Neither of these is a check, and both used to say they were.
+    //
+    // `tool_result` read "Checked tool result" on every row. Measured on one
+    // turn: 27 of them, all with that identical heading, sitting above a folder
+    // listing, three separate "Wrote N chars to <file>" lines and a source
+    // excerpt. A file WRITE was labelled a check -- the same overloading of the
+    // word that made the activity header advertise "26 checks" on a run with
+    // zero validations. "check" means an engine check everywhere else in this
+    // UI, and the verdict card counts them.
+    //
+    // The tool's own name was there the whole time: 25 of those 27 carried
+    // `name` (`code.project_structure`, and so on), and the heading threw it
+    // away in favour of a word that was wrong.
+    //
+    // `meta` read "Verified the result". A meta event is a workspace action --
+    // `pushLiveEvent({ type: 'meta', text: 'Kept index.html.' })` -- so keeping
+    // or reverting a file announced itself as a verification of it.
+    if (kind === 'meta') return 'Workspace update';
+    return event.name ? `Result from ${event.name}` : 'Tool result';
   }
 
   function groupedTechnicalEvents(events) {

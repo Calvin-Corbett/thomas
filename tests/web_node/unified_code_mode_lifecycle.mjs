@@ -288,6 +288,29 @@ async function proveEvidenceAndRefresh() {
   if (!metaCounted.includes('1 result')) throw new Error('the one real tool result was not counted');
   if (/\b3 results\b/.test(metaCounted)) throw new Error('status notes were counted as tool results');
   if ((grouped.match(/tc-code-saved-activity/g) || []).length !== 1 || grouped.includes('<details class="tc-code-technical')) throw new Error('technical evidence created nested activity blobs');
+  // A tool result is not a check, and a workspace action is not a verification.
+  // Both used to claim otherwise: every tool_result row read "Checked tool
+  // result" -- measured, 27 of them on one turn, above a folder listing, three
+  // "Wrote N chars to <file>" lines and a source excerpt, so a file WRITE was
+  // labelled a check. The tool's own name was on the event the whole time (25 of
+  // those 27 carried it). And `meta` read "Verified the result" for events whose
+  // text is "Kept index.html."
+  const named = api.technicalActivityHtml([
+    { type: 'output', kind: 'tool_result', name: 'fs.write_file', text: 'Wrote 4871 chars to index.html' },
+  ], false);
+  if (!named.includes('Result from fs.write_file')) throw new Error('a tool result does not name the tool that produced it');
+  if (/Checked/.test(named)) throw new Error('a file write is still called a check');
+
+  const unnamed = api.technicalActivityHtml([
+    { type: 'output', kind: 'tool_result', text: 'no name on this one' },
+  ], false);
+  if (/Checked/.test(unnamed)) throw new Error('an unnamed tool result is still called a check');
+
+  const metaRow = api.technicalActivityHtml([
+    { type: 'output', kind: 'meta', text: 'Kept index.html.' },
+  ], false);
+  if (/Verified/.test(metaRow)) throw new Error('keeping a file still announces itself as verifying it');
+
   const groupedError = api.technicalActivityHtml([{ type: 'error', text: 'request failed' }], false);
   if (!groupedError.includes('Worked through 1 issue') || groupedError.includes('1 detail')) throw new Error('technical error was not summarized as an issue');
   state.running = true;
@@ -933,4 +956,4 @@ await proveLostSendRetryAndCursor();
 await proveAccessibleDrawerAndPickerErrors();
 await proveTheRealReasonSurvivesTheExitWrapper();
 console.warn = originalWarn;
-process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true, failureReason: true, narrativeNotRepeated: true, emptyStateStandsDown: true, fileListNamesItsReason: true, stoppedRunIsNotWorking: true, revertRefreshesFileList: true, truncatedRunSaysSo: true, yourMessageIsOnScreen: true }));
+process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true, failureReason: true, narrativeNotRepeated: true, emptyStateStandsDown: true, fileListNamesItsReason: true, stoppedRunIsNotWorking: true, revertRefreshesFileList: true, truncatedRunSaysSo: true, yourMessageIsOnScreen: true, toolRowsNameTheirTool: true }));
