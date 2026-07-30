@@ -590,6 +590,36 @@ async function proveTheRealReasonSurvivesTheExitWrapper() {
   // No errors at all is a third, distinct case and must not borrow either.
   const silent = api.failureSummary({ ok: false }, []);
   if (/technical problem/i.test(silent)) throw new Error('a silent failure was reported as a surfaced error');
+
+  // A run cut off by its pass budget did not fail its repair attempts -- it
+  // never finished them. Both errors are present on a real truncated run, and
+  // the ORDER of the branches is the whole fix: the verification branch used to
+  // match first and sent the owner to inspect a check, while the sentence that
+  // said what to do sat unread in a collapsed risk row.
+  //
+  // Taken from the study-planner run, whose recorded errors were exactly these
+  // two, in this order.
+  const truncated = api.failureSummary({ ok: false }, [
+    {
+      type: 'error',
+      text: 'Pass budget exhausted after 10 passes while work was still active. The task is incomplete; continue it in the same conversation.',
+    },
+    { type: 'error', text: 'verification failed (exit 1) after fix attempts' },
+  ]);
+  if (/repair attempts|still failed/i.test(truncated)) {
+    throw new Error('a truncated run was reported as one that failed its repair attempts');
+  }
+  if (!/unfinished|ran out of passes/i.test(truncated)) throw new Error('the run was not described as unfinished');
+  if (!/continue/i.test(truncated)) throw new Error('the only useful action was not offered');
+
+  // The verification message must still win when the run really did finish its
+  // attempts, or this trades one wrong summary for another.
+  const genuinelyFailed = api.failureSummary({ ok: false }, [
+    { type: 'error', text: 'verification failed (exit 1) after fix attempts' },
+  ]);
+  if (!/repair attempts/i.test(genuinelyFailed)) {
+    throw new Error('a genuine post-repair verification failure lost its own message');
+  }
 }
 
 // A run can emit more than one `final`. `finalReplyEvent` recognises only the
@@ -831,4 +861,4 @@ await proveLostSendRetryAndCursor();
 await proveAccessibleDrawerAndPickerErrors();
 await proveTheRealReasonSurvivesTheExitWrapper();
 console.warn = originalWarn;
-process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true, failureReason: true, narrativeNotRepeated: true, emptyStateStandsDown: true, fileListNamesItsReason: true, stoppedRunIsNotWorking: true, revertRefreshesFileList: true }));
+process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true, failureReason: true, narrativeNotRepeated: true, emptyStateStandsDown: true, fileListNamesItsReason: true, stoppedRunIsNotWorking: true, revertRefreshesFileList: true, truncatedRunSaysSo: true }));

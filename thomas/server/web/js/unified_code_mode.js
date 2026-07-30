@@ -330,6 +330,27 @@
   function failureSummary(turn, events) {
     if (turn.ok) return String(turn.reason || '').trim() || 'Verified Code result';
     const labels = events.map(eventLabel);
+    // Checked BEFORE the verification branch, because a run that was cut off did
+    // not "fail its repair attempts" -- it never got to finish them. Being
+    // truncated is the cause; the failing check is the symptom.
+    //
+    // Measured on the study-planner run, whose recorded errors were exactly:
+    //   "Pass budget exhausted after 10 passes while work was still active.
+    //    The task is incomplete; continue it in the same conversation."
+    //   "verification failed (exit 1) after fix attempts"
+    // The branch below matched first, so the screen read "the final verification
+    // still failed after its repair attempts" and sent the owner to go inspect a
+    // check. The sentence that actually says what to do -- continue it in the
+    // same conversation -- was in hand the whole time and reached nobody: it sat
+    // in an open risk headed "error surfaced during the run", behind a collapsed
+    // Show details, one of two rows sharing that same generic heading.
+    //
+    // Deliberately does NOT claim the project is fine. The planner it was
+    // measured on was genuinely half-broken; unfinished and broken are not
+    // exclusive, and only the first one is knowable from a truncated run.
+    if (labels.some(label => /pass budget exhausted|budget exhausted.*while work was still active/i.test(label))) {
+      return 'Thomas ran out of passes while still working, so this task is unfinished. Ask it to continue in this same conversation.';
+    }
     if (labels.some(label => /verification failed.*after fix attempts/i.test(label))) {
       return 'Thomas changed the project, but the final verification still failed after its repair attempts. Open the activity details for the failing check.';
     }

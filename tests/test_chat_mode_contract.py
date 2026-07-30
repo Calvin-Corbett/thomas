@@ -632,6 +632,14 @@ def test_code_adapter_lifecycle_behavior_in_node() -> None:
         # Reverting a NEW file deletes it, but only the CHANGES list was re-read,
         # so the drawer kept offering a file the server answered 404 for.
         "revertRefreshesFileList": True,
+        # A run cut off by its pass budget was summarised as "the final
+        # verification still failed after its repair attempts", which sent the
+        # owner to inspect a check. It never finished those attempts. The
+        # sentence that said what to do -- the task is incomplete, continue it in
+        # the same conversation -- was already recorded, and reached nobody: it
+        # sat in a risk headed "error surfaced during the run", behind a
+        # collapsed Show details, one of two rows sharing that heading.
+        "truncatedRunSaysSo": True,
     }
 
 

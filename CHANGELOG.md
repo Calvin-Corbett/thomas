@@ -7,6 +7,15 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A run that was cut off says so, instead of blaming a check)
+
+- A Code run that hits its pass budget was summarised on screen as **"Thomas changed the project, but the final verification still failed after its repair attempts. Open the activity details for the failing check."** It never finished those attempts — it ran out of passes mid-work. The summary sent the owner to inspect a check when the useful action was to ask Thomas to carry on.
+- `failureSummary` is an ordered chain and the verification branch matched first. Being truncated is the **cause**; the failing check is the **symptom**, so the budget branch now runs ahead of it.
+- **The sentence that says what to do already existed and reached nobody.** `loop_execution.py` records *"Pass budget exhausted after 10 passes while work was still active. The task is incomplete; continue it in the same conversation."* — and it was filed as an open risk headed `error surfaced during the run`, behind a collapsed **Show details**, as one of *two* rows sharing that same generic heading. Confirmed by looking: `document.body.innerText` on the rendered page did not contain the words "Pass budget exhausted" at all.
+- The screen now reads **"Thomas ran out of passes while still working, so this task is unfinished. Ask it to continue in this same conversation."** Verified on the real study-planner run, before and after, by screenshot.
+- **It deliberately does not claim the project is fine.** The planner it was measured on was genuinely half-broken — three of its four sidebar sections never switch. *Unfinished* and *broken* are not exclusive, and only the first is knowable from a truncated run.
+- Both directions, and the second assertion is the one that keeps this honest: a run that genuinely did finish its repair attempts must keep its own message, or this trades one wrong summary for another. Making the new branch unreachable fails with `a truncated run was reported as one that failed its repair attempts`.
+
 ### Fixed (A second permanently-red test, same shape as the first)
 
 - `test_root_chat_surfaces_gpt56_models_and_distinct_reasoning_efforts` required the literal `' · unavailable on this connection'` — with a leading middle dot, from when a model row's status was an inline suffix after its name. The picker rows are now two lines, with the status in its own `display:block` span under the name, so the separator was correctly dropped and the literal became unreachable.
