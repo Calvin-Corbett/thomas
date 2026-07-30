@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -119,7 +120,21 @@ def test_root_chat_surfaces_gpt56_models_and_distinct_reasoning_efforts() -> Non
     assert "async function hydrateProfileModels() {" in text
     assert "fetch('/api/openai-codex/models?profile=' + encodeURIComponent(p.name))" in text
     assert "body: JSON.stringify({ advanced: { model: { active_profile: profileName, model_id: modelId } } })" in text
-    assert "m.available === false ? ' · unavailable on this connection'" in text
+    # Red since the picker rows became two lines. This required the literal
+    # `' · unavailable on this connection'` -- a leading middle dot, from when the
+    # status was an inline suffix after the model name. The rows now render the
+    # status in its own display:block span under the name (verified on screen:
+    # "GPT-5.6 Terra" over "openai_codex", "gpt-4o-mini" over "needs key"), so the
+    # separator was correctly dropped and the literal became unreachable. Nothing
+    # regressed; the test just could not pass again, and a permanently-red test is
+    # how a real regression gets ignored.
+    #
+    # Now pinned to the behaviour -- an unavailable model says so, in its own
+    # status slot -- rather than to one spelling of the surrounding punctuation.
+    assert re.search(
+        r"m\.available === false\s*\?\s*'unavailable on this connection'", text
+    ), "an unavailable model must still say so in the picker"
+    assert "${status}" in text, "the status must reach the row it describes"
     assert "['none', 'None']" in text
     assert "['xhigh', 'xHigh']" in text
     assert "['max', 'Max']" in text

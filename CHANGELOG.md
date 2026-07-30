@@ -7,6 +7,13 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A second permanently-red test, same shape as the first)
+
+- `test_root_chat_surfaces_gpt56_models_and_distinct_reasoning_efforts` required the literal `' · unavailable on this connection'` — with a leading middle dot, from when a model row's status was an inline suffix after its name. The picker rows are now two lines, with the status in its own `display:block` span under the name, so the separator was correctly dropped and the literal became unreachable.
+- **Checked on screen before changing the test**, because the other reading — that the UI had genuinely lost its separator and was running words together — would have meant fixing the code instead. The open picker shows *"GPT-5.6 Terra"* over `openai_codex` and *"gpt-4o-mini"* over `needs key`. The layout is right; the assertion was stale.
+- Now pinned to the behaviour — an unavailable model still says so, and the status still reaches the row it describes — rather than to one spelling of the surrounding punctuation. **Verified it did not become a test that cannot fail**: deleting the unavailable notice from the picker turns it red.
+- This is the second one found this way, after `test_marketplace_uses_native_runtime_shell` (red 2026-07-21 to 2026-07-30, killed by a decorator wrapping the call it pinned). Both were red for over a week, both because a test named one exact spelling of something that legitimately got rewritten.
+
 ### Fixed (A saved reply reports the model that wrote it)
 
 - Every assistant message in a restored conversation was labelled with **whatever model is selected in the picker right now**. `mapRealMessages` stamped `state.modelLabel || 'GPT-5.6 Sol'` on each one and discarded the model the conversation row actually carries.
