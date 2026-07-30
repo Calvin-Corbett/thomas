@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (The deliverable card drew an empty box beside its download button)
+
+- Two different markups share the class `tc-code-artifact`: the drawer preview is a `<section>` wrapping a `<header>`, and the transcript's "Thomas made this" card is a `<div>` holding three separately-bordered pills. One unscoped rule bordered both.
+- On the transcript card that frame was not just redundant, it was **visibly wrong**: the row carries `max-width: 680px` inside a 720px turn, so the inherited border ran **39px past the last control** and painted an empty outlined box next to the download button. It reads as a fourth control that failed to draw.
+- Scoped the rule to `section.tc-code-artifact`. Verified both ways at 1920×1080: transcript card `borderWidth` **1px → 0px**, drawer preview **keeps** its 1px border, radius and header. Reverting the scoping brings the strip back at 39px and turns 2 of the 3 new guards red.
+- Guard also pins the **markup** the scoping depends on. `section.` protects the transcript card only while that card stays a `<div>`; if the renderer ever emits it as a `<section>`, the border returns and a CSS-only assertion would still pass.
+- Found by looking at a screenshot. No test asked whether the buttons existed and got the wrong answer — they all exist. Same class as an unmapped icon rendering as a dot: correct in the DOM, wrong on screen.
+
 ### Fixed (A second wrong number of mine, found by finishing the audit)
 
 - The first audit found one bad claim in two checked. That is a poor enough ratio to finish the job, so every number baked into a **code comment** got verified against the run it cites.

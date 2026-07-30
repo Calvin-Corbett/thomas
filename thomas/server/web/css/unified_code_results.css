@@ -42,7 +42,19 @@
 
 .tc-code-actions button:disabled { opacity: .4; cursor: default; }
 
-.tc-code-artifact,
+/* `section.` is load-bearing: two different markups share the class name.
+   The drawer preview is `<section class="tc-code-artifact"><header>...` -- a
+   card that wraps a header, which is what this border was drawn for. The
+   transcript card is `<div class="tc-code-artifact"><div
+   class="tc-code-artifact-row">` (unified_code_results.js:238): three
+   separately-bordered pills, which want no box around them.
+
+   Unscoped, this rule framed the transcript card too -- and because the row is
+   capped at max-width 680px inside a 720px turn, the frame ran 39px past the
+   last button and painted an empty outlined strip beside the download control.
+   Visible at any width; it just looks like a fourth control that failed to
+   draw. Guard: tests/test_the_deliverable_card_has_no_empty_slot.py */
+section.tc-code-artifact,
 .tc-code-file-preview,
 .tc-code-change {
   margin-top: 9px;
