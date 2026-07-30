@@ -1382,4 +1382,50 @@
     stop: () => { void safely(stop, 'Could not stop the Code task.'); },
     isBusy: () => state.running || Boolean(state.finishing),
   });
+
+  // A deliverable's deep link is minted as `/?forge_code=<cid>` in
+  // thomas/forge/anvil/forge_code_deliverables.py, and until now nothing on `/`
+  // read it. The only consumer lived in the split runtime, which is pulled by
+  // index.html -- served at `/classic`, not at `/`. So My Stuff's "Open Source
+  // Chat" button, which navigates the top frame straight to that link
+  // (static/my_stuff.script01.js), dropped the reader on a blank Chat surface
+  // with the parameter still sitting in the URL and no hint that anything had
+  // been asked for. Verified before the fix: `/?forge_code=<real cid>` landed in
+  // Chat mode with no active conversation and zero turns.
+  //
+  // Handled in this module because it owns Code conversations, and only on boot
+  // -- consuming the parameter on every render would reopen the task each time
+  // the surface repainted.
+  //
+  // /classic keeps its own consumer: it is a separate page that still works when
+  // reached directly, not a second copy racing this one on the same surface.
+  function openDeepLinkedConversation() {
+    let cid = '';
+    try { cid = new URLSearchParams(location.search).get('forge_code') || ''; }
+    catch (_error) { return; }
+    if (!cid) return;
+
+    // Strip the parameter BEFORE opening. If the task cannot be loaded the reader
+    // should be left on an ordinary surface, not on a URL that replays the
+    // failure on every refresh.
+    try {
+      const url = new URL(location.href);
+      url.searchParams.delete('forge_code');
+      history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    } catch (_error) { /* a stale URL is survivable; failing to open is not */ }
+
+    void (async () => {
+      await modes().setMode('code');
+      await safely(() => loadConversation(cid), 'Could not open that Code task.');
+    })();
+  }
+
+  // This file is a classic script in <head>-order, so it runs before chat.html's
+  // inline boot calls ThomasUnifiedModes.connect(). Waiting for DOMContentLoaded
+  // is what guarantees setMode has a connected host to switch.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', openDeepLinkedConversation, { once: true });
+  } else {
+    openDeepLinkedConversation();
+  }
 })();

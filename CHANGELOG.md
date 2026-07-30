@@ -7,6 +7,16 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A deliverable's link back to the conversation that built it now arrives)
+
+- **Every "Open Source Chat" button in My Stuff was a no-op for nine days.** A deliverable's deep link is minted as `/?forge_code=<cid>`, and nothing on `/` read it. The only consumer shipped inside the split runtime, which is pulled by `index.html` — served at **`/classic`**, not `/`. Measured before the fix: `/?forge_code=<real cid>` landed in **Chat** mode, no conversation selected, zero turns, parameter still sitting in the URL. No error, no hint anything had been asked for.
+  - Correction to the standing assumption: the consumer was **not** retired or orphaned. It is live and works at `/classic?forge_code=<cid>` — confirmed by watching it open the deliverable there. The link simply named a path whose shell cannot read it.
+- The live shell now consumes the parameter on boot: `unified_code_mode.js` switches to Code mode and opens that conversation, and strips the parameter first so a failed load is not replayed on every refresh. Verified end-to-end through the real button — My Stuff → Details → Open Source Chat → lands in Code mode on the countdown task, 2 turns, URL cleaned — and with two different conversation ids, so it is not keyed to one.
+  - `/classic` keeps its own consumer: a separate page that still works when reached directly, not a second copy racing this one on the same surface.
+- **The existing test could never have caught this.** `tests/test_forge_code_deliverables.py:36` asserts `entry["deep_link"] == "/?forge_code=fc_123"` — a string comparison against a dict the function under test just built. It resolves no route and runs no JavaScript, so it would have stayed green if the consumer were deleted, if `/` were rewired, or if the param were renamed. The only green check measured the producer against itself.
+  - New guard `tests/test_deliverable_deep_links_reach_the_live_shell.py` crosses the three places that had drifted: the Python that mints the link, the route that decides which shell answers `/`, and the scripts that shell actually loads. Removing the wiring turns 3 of its 4 tests red.
+  - Two mistakes in writing that guard are recorded in it, because both were the bug it hunts: resolving `/static/js/*` against the wrong directory made it report "no reader" for all 13 scripts, and matching a bare `forge_code` substring matched a *comment* mentioning `forge_code_projects.py`. Unresolvable scripts are now a hard failure rather than a skip.
+
 ### Fixed (Three assertions in one file were pinning text nobody writes any more)
 
 - **`test_marketplace_uses_native_runtime_shell` had been red since 2026-07-21** — nine days. It required the literal `moduleRenderMarketplaceSurface(moduleQueueList);`, semicolon straight after the paren. Commit `037bba3c` wrapped that call in `moduleApplyMarketplaceUiContracts(...)`, so the literal became unreachable and the test could never pass again. Nothing had regressed. A permanently-red test is how a real regression gets ignored, because the file is already failing when the real one lands.
