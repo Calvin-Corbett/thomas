@@ -155,7 +155,7 @@
 
 .tc-code-approval {
   padding: 10px;
-  border: 1px solid #d79a45;
+  border: 1px solid var(--c-warn, #d79a45);
   border-radius: 10px;
   background: rgba(215,154,69,.1);
 }

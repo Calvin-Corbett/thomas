@@ -60,19 +60,27 @@ def test_every_theme_defines_a_failure_colour() -> None:
     assert themes, "no themes could be read from chat.html"
     assert len(themes) >= 5, f"expected the five worlds, found {sorted(themes)}"
 
-    missing = [name for name, tokens in themes.items() if not tokens.get("--c-danger")]
-    assert not missing, f"these themes have no --c-danger, so failures fall back to a dark-theme red: {missing}"
+    for token in ("--c-danger", "--c-warn"):
+        missing = [name for name, tokens in themes.items() if not tokens.get(token)]
+        assert not missing, (
+            f"these themes have no {token}, so that state falls back to a dark-theme "
+            f"literal: {missing}"
+        )
 
 
 def test_the_failure_colour_is_readable_on_its_own_background() -> None:
     bad: list[str] = []
     for name, tokens in _themes().items():
-        danger, background = tokens.get("--c-danger"), tokens.get("--c-bg")
-        if not danger or not background or not danger.startswith("#") or not background.startswith("#"):
+        background = tokens.get("--c-bg")
+        if not background or not background.startswith("#"):
             continue
-        ratio = _ratio(danger, background)
-        if ratio < MINIMUM_RATIO:
-            bad.append(f"{name}: {danger} on {background} = {ratio:.2f}:1")
+        for token in ("--c-danger", "--c-warn"):
+            value = tokens.get(token)
+            if not value or not value.startswith("#"):
+                continue
+            ratio = _ratio(value, background)
+            if ratio < MINIMUM_RATIO:
+                bad.append(f"{name} {token}: {value} on {background} = {ratio:.2f}:1")
 
     assert not bad, (
         "a failure mark nobody can see is the same as no failure mark; these are "
@@ -85,8 +93,14 @@ CODE_CSS = [
     for name in ("unified_code_activity.css", "unified_code_mode.css", "unified_code_results.css")
 ]
 
-# The dark-theme reds that were hard-coded across Code mode before the token.
+# The dark-theme literals that were hard-coded across Code mode before the
+# tokens. The ambers matter as much as the reds: the WARN verdict measured
+# 1.68:1 on sandstone and the stream-disconnected message 1.27:1, so "passed,
+# with things to look at" and "the connection dropped" were both unreadable
+# there.
 DARK_REDS = ("#ff9a9a", "#ffaaaa", "#ffb0b0", "#ff7777")
+DARK_AMBERS = ("#e2b25f", "#f2b35f", "#f7ce91", "#d79a45")
+STATE_LITERALS = DARK_REDS + DARK_AMBERS
 
 
 def test_code_mode_never_hard_codes_a_failure_red() -> None:
@@ -102,14 +116,15 @@ def test_code_mode_never_hard_codes_a_failure_red() -> None:
     for path in CODE_CSS:
         css = re.sub(r"/\*.*?\*/", "", path.read_text(encoding="utf-8"), flags=re.S)
         # Remove every legitimate use, then anything left is a bare literal.
-        stripped = re.sub(r"var\(\s*--c-danger\s*,[^)]*\)", "", css, flags=re.I)
-        for red in DARK_REDS:
-            if red in stripped.lower():
-                offenders.append(f"{path.name}: {red}")
+        stripped = re.sub(r"var\(\s*--c-(?:danger|warn)\s*,[^)]*\)", "", css, flags=re.I)
+        for literal in STATE_LITERALS:
+            if literal in stripped.lower():
+                offenders.append(f"{path.name}: {literal}")
 
     assert not offenders, (
-        "these are hard-coded dark-theme reds and measure about 2:1 on the light "
-        "worlds; use var(--c-danger, ...) -> " + "; ".join(offenders)
+        "these are hard-coded dark-theme state colours and measure between 1.27:1 "
+        "and 2:1 on the light worlds; use var(--c-danger, ...) or "
+        "var(--c-warn, ...) -> " + "; ".join(offenders)
     )
 
 

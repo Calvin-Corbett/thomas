@@ -11,7 +11,7 @@
 .tc-code-event span { white-space: pre-wrap; overflow-wrap: anywhere; }
 .tc-code-event.is-reason { border-color: #8f82ff; }
 .tc-code-event.is-error { border-color: var(--c-danger, #ff7777); color: var(--c-danger, #ffaaaa); }
-.tc-code-event.is-disconnected { border-color: #f2b35f; color: #f7ce91; }
+.tc-code-event.is-disconnected { border-color: var(--c-warn, #f2b35f); color: var(--c-warn, #f7ce91); }
 .tc-code-event.is-stopped { border-color: var(--c-muted); color: var(--c-muted); }
 .tc-code-turn.is-live .tc-code-message-head small::after { content: ' · working'; color: var(--c-accent); }
 
@@ -88,8 +88,8 @@
    before a word of it is read. */
 .tc-code-run-report.is-good > summary { border-left-color: var(--c-accent); }
 .tc-code-run-report.is-good .tc-code-verdict > i { color: var(--c-accent); }
-.tc-code-run-report.is-warn > summary { border-left-color: #e2b25f; }
-.tc-code-run-report.is-warn .tc-code-verdict > i { color: #e2b25f; }
+.tc-code-run-report.is-warn > summary { border-left-color: var(--c-warn, #e2b25f); }
+.tc-code-run-report.is-warn .tc-code-verdict > i { color: var(--c-warn, #e2b25f); }
 .tc-code-run-report.is-bad > summary { border-left-color: var(--c-danger, #ff9a9a); }
 .tc-code-run-report.is-bad .tc-code-verdict > i { color: var(--c-danger, #ff9a9a); }
 .tc-code-run-report.is-unknown > summary { border-left-color: var(--c-muted); }

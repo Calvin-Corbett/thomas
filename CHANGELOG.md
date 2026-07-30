@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Asking the whole question at once: every state colour, every theme)
+
+- The reds were found one at a time, each after being noticed. That works, but it finds them in the order they happen to catch the eye. Sweeping **every literal colour in the Code stylesheets against all five theme backgrounds** asked it once and returned **six more** — all amber, none previously suspected.
+- Two matter: `.tc-code-run-report.is-warn` — the **"Passed, with things to look at"** verdict — measured **1.68:1 on sandstone**, and the stream-**disconnected** message text `#f7ce91` measured **1.27:1**. So "your run half-worked" and "the connection dropped" were both unreadable on that theme.
+- A `--c-warn` token now mirrors `--c-danger`: dark worlds keep `#e2b25f`; light gets `#a15c00`, sandstone `#8a4b12`. Both tokens confirmed resolving per theme in the live shell. The sweep now returns **1** literal instead of 6.
+- **That one is left deliberately.** `#8f82ff` on `.tc-code-event.is-reason` is 2.65:1 on sandstone, but it is a `border-color` on a left rail — a tint, not text or an icon. Fixing it would be sweeping up a number rather than a defect, and the sweep script says so in its own header: a low ratio on a decorative rule is not automatically a problem.
+- The guard covers both tokens and both literal families now; re-hard-coding the warn icon turns it red.
+
 ### Fixed (Every remaining Code failure indicator, and a guard against the next one)
 
 - The first pass covered four signals I had measured. Looking at Sandstone afterwards showed the ⚠ beside *"Worked through 2 tool runs · 27 results · 4 issues"* still pale — so it got measured too, along with its neighbours: **1.96:1 on light, 1.75:1 on sandstone**, worse than the ones already fixed.
