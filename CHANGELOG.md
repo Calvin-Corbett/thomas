@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (The browser smoke boots one viewport, and that is now written down)
+
+- **A deliverable's layout can be wrong only at one width, and the smoke would never know.** `web_artifact_smoke` boots every page at `--window-size=1280,900` and nowhere else, so a page that is right at 1280 and wrong at 390 passes exactly like a page that is right everywhere.
+- Found by hand on a real deliverable. `ledger.html` — a running-balance statement — hid its `Description` **header** at narrow widths while leaving the Description **cells** visible: three headers over four columns, each shifted one place left. `AMOUNT` sat over "Salary", `BALANCE` sat over "+$2,400.00", and the real balance column had no header at all. A financial table labelling a description as an amount is worse than one that is merely cramped. At 1280 it was perfectly aligned.
+- **Deliberately not half-fixed.** Booting a second narrow pass is cheap, but the check that would actually catch this — visible header count versus visible column count — belongs in the in-page probe in `web_artifact_smoke_assets.py`, which another agent is editing. Adding the viewport without the assertion would double the smoke's cost and still find nothing. Recorded as a measured comment at the exact line instead.
+- Thomas repaired the deliverable itself in ~20s when shown the symptom; all four headers now align at 1920, 768 and 390, and the ledger's 11-check arithmetic audit still passes.
+- Also checked and **not** a defect: Nova's narrow-width nav strip looked clipped, but it is `overflow-x: auto` and every destination is reachable by scrolling.
+
 ### Fixed (The icon guard could not see the icon it was written for)
 
 - **`test_every_icon_the_ui_asks_for_is_drawn.py` skipped every class name assembled at runtime** — `ph-${...}` — on the documented reasoning that the names such a template can produce "are checked on their own merits wherever they appear literally". That reasoning did not hold. Of the **seven** names reachable only through those templates, **five never appeared literally anywhere in the guarded sources**: `ph-check-circle`, `ph-terminal-window`, `ph-info`, `ph-corners-in`, `ph-corners-out`.

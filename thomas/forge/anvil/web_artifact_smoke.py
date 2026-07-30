@@ -252,6 +252,26 @@ def _run_one(
                 "--proxy-bypass-list=<-loopback>",
                 f"--user-data-dir={profile}",
                 "--virtual-time-budget=1400",
+                # NOT FIXED, MEASURED 2026-07-30. One viewport, so any layout that
+                # is only wrong at another width passes here identically to one
+                # that is right.
+                #
+                # Found by hand on a real deliverable (`ledger.html`, a
+                # running-balance statement): at 390px its `Description` header
+                # was hidden while the Description CELLS stayed visible, leaving
+                # three headers over four columns, each shifted one place left.
+                # `AMOUNT` sat over "Salary"; `BALANCE` sat over "+$2,400.00"; the
+                # real balance column had no header at all. At 1280 it was
+                # perfectly aligned, so this smoke saw nothing. A financial table
+                # labelling a description as an amount is worse than one that is
+                # merely cramped.
+                #
+                # Deliberately not half-fixed here. Booting a second narrow pass
+                # is cheap, but the check that would actually catch it -- visible
+                # header count versus visible column count -- belongs in the
+                # in-page probe in web_artifact_smoke_assets.py, which another
+                # agent holds right now. Adding the viewport without the assertion
+                # would double the smoke's cost and still find nothing.
                 "--window-size=1280,900",
                 "--dump-dom",
                 url,
