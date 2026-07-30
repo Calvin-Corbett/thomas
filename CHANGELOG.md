@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Three assertions in one file were pinning text nobody writes any more)
+
+- **`test_marketplace_uses_native_runtime_shell` had been red since 2026-07-21** — nine days. It required the literal `moduleRenderMarketplaceSurface(moduleQueueList);`, semicolon straight after the paren. Commit `037bba3c` wrapped that call in `moduleApplyMarketplaceUiContracts(...)`, so the literal became unreachable and the test could never pass again. Nothing had regressed. A permanently-red test is how a real regression gets ignored, because the file is already failing when the real one lands.
+  - Now a regex pinning the *behaviour* — the marketplace branch renders the native surface into `moduleQueueList` — which tolerates a decorator but still fails if the call is removed or retargeted. Proven by injecting that regression into the live runtime and watching it go red, then restoring.
+  - Deliberately **not** fixed by repointing the reader at `app_runtime_primary.mjs`, which still contains the original undecorated literal at line 41599: that would have turned the test green while measuring a bundle no page loads.
+- **`_read_all_runtime_js()` returned `""` when the runtime directory was missing**, and its two callers assert four `not in` conditions against that string. Every one of them passes vacuously against `""`. Renaming or moving `js/runtime/` would have turned assertions green instead of red — the same empty-read-as-clean shape the run report had. It now fails loudly on a missing directory, no files, or an implausibly small corpus (the real one is 3.1M chars). Both guard paths verified by pointing it at an empty tree.
+- **`test_my_stuff_surface_is_wired_into_runtime_shell` was red too**, on two more stale literals: the board heading was recased to `Project board`, and My Stuff stopped POSTing to `/api/v2/chat` when it moved to handing the project to the shell via `data-open-workspace-chat`. Both assertions now follow the capability (a stable `data-ui-id`, and the delegation control) rather than retired copy and a retired endpoint.
+
 ### Fixed (A run cannot call itself passed on requirements it never checked)
 
 - **The owner's "Nova" calculator shipped with a green ✅ `Checks passed`, and almost nothing in it worked.** Driving it by hand: the five left-nav destinations (Conversions, Graph studio, History, Saved formulas, Calculator) do nothing at all, the advertised `Ctrl+K` "calculate in plain English" palette does not exist, both header icon buttons are inert, `Clear` on Recent calculations does nothing, the three "recent calculations" are hard-coded HTML, the `Growth rate` chip returns `Error`, and `200 + 10 %` returns **2.1** because `%` divides the whole expression instead of the last operand. The keypad arithmetic is correct — which is why testing only arithmetic found nothing.

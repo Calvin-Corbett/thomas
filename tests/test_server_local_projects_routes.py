@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import tempfile
 import threading
 import time
@@ -25,12 +26,24 @@ def _read_text(relative_path: str) -> str:
 
 
 def _read_all_runtime_js() -> str:
-    """Read and concatenate all split runtime JS files in order."""
+    """Read and concatenate all split runtime JS files in order.
+
+    Fails loudly on an empty corpus instead of returning "". Callers assert both
+    `in` and `not in` against this string, and every `not in` passes vacuously
+    against "" -- so if this directory were ever renamed or moved, the shape of
+    the failure would be a handful of assertions silently going green rather
+    than a test going red. An empty read is not a clean result.
+    """
     runtime_dir = ROOT / "thomas" / "server" / "web" / "js" / "runtime"
-    if not runtime_dir.exists():
-        return ""
+    assert runtime_dir.is_dir(), f"split runtime directory is missing: {runtime_dir}"
     parts = sorted(runtime_dir.glob("*.js"))
-    return "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in parts)
+    assert parts, f"no runtime JS files found under {runtime_dir}"
+    corpus = "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in parts)
+    assert len(corpus) > 100_000, (
+        f"split runtime corpus is implausibly small ({len(corpus)} chars from "
+        f"{len(parts)} files) -- the `not in` assertions below would pass vacuously"
+    )
+    return corpus
 
 
 class TestServerLocalProjectsRoutes(AioHTTPTestCase):
@@ -442,11 +455,20 @@ def test_my_stuff_surface_is_wired_into_runtime_shell() -> None:
 
     assert 'data-nav-mode="my_stuff"' in index_html
     assert "/static/my_stuff.html?v=" in primary_runtime
-    assert "Project Board" in my_stuff_html
+    # Was `"Project Board" in my_stuff_html` and red for the same reason as the
+    # marketplace assertion below: the heading was recased to "Project board"
+    # while the surface itself never went anywhere. Pinned on the stable ui-id
+    # rather than the display copy, so a copy edit cannot turn this red again but
+    # deleting the board surface still does.
+    assert 'data-ui-id="my-stuff.project-board"' in my_stuff_html
     assert 'id="board"' in my_stuff_html
     assert 'id="detailView"' in my_stuff_html
     assert "/api/local/projects/import" in my_stuff_script
-    assert "/api/v2/chat" in my_stuff_script
+    # Was `"/api/v2/chat" in my_stuff_script`. My Stuff no longer POSTs to chat
+    # itself; it hands the project to the shell through an "Ask Thomas" control
+    # (`sendProjectChat` behind `data-open-workspace-chat`). The capability is
+    # intact, so the assertion follows it rather than the retired endpoint.
+    assert "data-open-workspace-chat" in my_stuff_script
     assert "/api/local/projects/pick-folder" in my_stuff_script
     assert "/api/local/projects/" in my_stuff_script
     assert "currentProfile ||" not in primary_runtime
@@ -469,7 +491,24 @@ def test_marketplace_uses_native_runtime_shell() -> None:
     assert "data-module-marketplace-select" in primary_runtime
     assert "marketplace-card-grid" in primary_runtime
     assert "marketplace-sticky-head" in primary_runtime
-    assert "moduleRenderMarketplaceSurface(moduleQueueList);" in primary_runtime
+    # Pins the behaviour -- the marketplace branch renders the NATIVE surface into
+    # the module queue container -- rather than one exact spelling of the call.
+    #
+    # This assertion was red from 2026-07-21 until 2026-07-30. It required the
+    # literal `moduleRenderMarketplaceSurface(moduleQueueList);`, with the
+    # semicolon directly after the closing paren. Commit 037bba3c wrapped the call
+    # in a decorator, so the live runtime now reads
+    # `moduleApplyMarketplaceUiContracts(moduleRenderMarketplaceSurface(moduleQueueList));`
+    # and the literal became unreachable. Nothing regressed; the test just could
+    # not pass again, and a permanently-red test is how a real regression gets
+    # ignored.
+    #
+    # Deliberately NOT fixed by repointing _read_all_runtime_js at
+    # app_runtime_primary.mjs, which still contains the original undecorated
+    # literal: that would turn this green while measuring a bundle no page loads.
+    assert re.search(
+        r"moduleRenderMarketplaceSurface\(\s*moduleQueueList\s*\)", primary_runtime
+    ), "the marketplace branch no longer renders the native surface into moduleQueueList"
     assert "[data-module-embedded-surface]" in primary_runtime
     assert "preferContentHeight: true" in primary_runtime
     assert "if (key === 'marketplace') return null;" in primary_runtime
