@@ -193,6 +193,31 @@
    Reserved with padding on the layout rather than by resizing the transcript,
    so the drawer keeps its own width and only the shared row gets narrower. */
 .tc-code-panel.is-viewer-open .tc-code-layout { padding-right: min(760px, 62vw); }
+
+/* The Activity drawer needs the same treatment the viewer above already gets.
+   It did not have it, so the layout reserved NOTHING for it and the drawer sat
+   on top of the transcript. Measured with the drawer open, transcript right edge
+   against drawer left edge:
+
+     1920 -> -176px (clear, and only by luck: the turn is 720px and centred)
+     1440 -> +64px  of content underneath
+     1100 -> +234px of content underneath
+
+   At 1100 the run summary was cut mid-sentence -- "so this task is unfinish" --
+   the deliverable card was clipped through its middle, and the verdict card ran
+   under the panel. `padding-right` computed as 0px at every one of those widths.
+
+   Uses the same custom property the drawer's own width comes from, so a resized
+   drawer keeps its clearance instead of drifting out of step with it.
+
+   Above 720px only: below that breakpoint the drawer is deliberately
+   `min(420px, 94vw)` with its resize handle hidden -- a near-full-width overlay,
+   where reserving that much would leave the transcript no room at all. */
+@media (min-width: 721px) {
+  .tc-code-panel.is-drawer-open .tc-code-layout {
+    padding-right: min(var(--tc-code-drawer-width, 360px), 92vw);
+  }
+}
 /* Full-bleed across Thomas, for a page that wants the whole screen. */
 .tc-code-viewer.is-full { width: 100%; border-left: 0; }
 @keyframes tc-code-viewer-in { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }

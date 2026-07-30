@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (The Activity drawer stops sitting on top of the transcript)
+
+- The drawer is a side panel and the layout reserved **nothing** for it. Measured with the drawer open — transcript right edge against drawer left edge: **1920 → −176px** (clear, and only by luck: the turn is 720px and centred), **1440 → +64px** of content underneath, **1100 → +234px**. `padding-right` computed as **0px at every width**.
+- At 1100 the run summary was cut mid-sentence — *"so this task is unfinish"* — the deliverable card was clipped through its middle, and the verdict card ran under the panel. The document never overflowed, so nothing numeric flagged it; it only shows in the picture.
+- The file viewer on the same edge already had this treatment (`.tc-code-panel.is-viewer-open .tc-code-layout`), which is what made the omission obvious once both were open: two panels, one making room and one not.
+- Fixed with the **same custom property the drawer's own width comes from**, so a resized drawer keeps its clearance instead of drifting out of step. Gated above 720px, because below that the drawer is deliberately `min(420px, 94vw)` with its resize handle hidden — a near-full-width overlay, where reserving that much would leave the transcript nothing. After: −316 / −76 / −20px, all clear, and the turn correctly narrows from 720 to 492px at 1100.
+- The guard's first version **failed against a fix that was already correct**: a `([^{}]+)\{([^}]*)\}` scan treats the `@media` brace as the opener, so it reported the selector as `@media (min-width: 721px)` and put the real rule in the body. Third parser mistake of this kind in one session; it now matches the selector directly and strips comments first.
+
 ### Fixed (The same half-fix, caught by hunting the shape instead of the symptom)
 
 - `_verify_and_iterate` reads the changed set **twice**, and `a084e1f7` fixed only the first. The second read happens after a repair pass, so every repair iteration went back to the unfiltered `delta_since` — handing Thomas's own `.thomas/evolve/agent/` transcripts to the verifier **exactly when a run needs fixing**, which is when it is writing the most of them.
