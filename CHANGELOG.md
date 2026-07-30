@@ -7,6 +7,15 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (The page you send from now shows you your own message)
+
+- Found by asking a question never asked this session — *what does this look like while a run is actually going?* Every screenshot until now had been of a finished turn or an empty surface.
+- Measured on a live run at 1920: **`.tc-code-turn.is-user` was 0** while the live turn was already streaming. `turns` comes from `state.conversation`, which is only refreshed from the server, so between pressing Enter and the run finishing **the words you just typed were nowhere on screen**. The same conversation opened in a second tab showed them fine — never missing data, only a missing render.
+- The message is now echoed from `state.pendingUserText` and **suppressed as soon as the server's copy arrives**, decided at render time rather than cleared on a lifecycle event. A clear that fires at the wrong moment leaves either no bubble or two identical ones; this cannot do either, because the pending copy is simply not drawn once `turns` contains it. Compared on trimmed text, which is what the round-trip varies.
+- **Cleared in `clearContextState`**, alongside the other per-conversation state. Without that it would print into whichever transcript you switched to, where nothing would ever match it and it would stay forever — a bug the fix would have introduced.
+- Not set for a steer: `preserveProgress` means the run is continuing, and steering text belongs in the activity feed rather than as a new message bubble.
+- Verified on a real run end to end: **exactly one copy from t+5s through t+25s**, including the moment the server's turn landed. Guarded four ways — it appears at once, does not double when the server copy arrives, survives a whitespace difference, and never leaks into another conversation. Reverting the render insertion fails with *"the message just sent is not on screen"*.
+
 ### Fixed (Asking the whole question at once: every state colour, every theme)
 
 - The reds were found one at a time, each after being noticed. That works, but it finds them in the order they happen to catch the eye. Sweeping **every literal colour in the Code stylesheets against all five theme backgrounds** asked it once and returned **six more** — all amber, none previously suspected.

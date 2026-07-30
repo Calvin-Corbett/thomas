@@ -118,7 +118,7 @@ function resetState() {
     artifacts: [], filePreview: null, pendingApproval: null, pendingRequest: null, lastContext: {}, running: false,
     runStartedAt: 0, runStatus: 'ready', source: null, finishing: null, approvalBusy: false, steeringBusy: false,
     projectRoot: '', terminalTool: '', contextEpoch: state.contextEpoch + 1, runProof: null,
-    runId: '', eventCursor: 0, retryRequest: null,
+    runId: '', eventCursor: 0, retryRequest: null, pendingUserText: '',
   });
   busy = false;
   snapshots.length = 0;
@@ -775,6 +775,63 @@ async function proveTheFileListNamesTheRealReasonItIsEmpty() {
 // Also: the stream's `done` event carries the literal string "done", so the feed
 // grew a "DONE / done" row -- transient while running, left sitting there after
 // a stop, reading as debug output.
+// The page you SEND from never showed you your own message: `turns` comes from
+// `state.conversation`, refreshed only from the server, so between pressing
+// Enter and the run finishing the words you just typed were nowhere. Measured
+// live at 1920: `.tc-code-turn.is-user` was 0 while the live turn streamed.
+//
+// The obvious fix risks the opposite bug, so both directions are asserted here:
+// it must appear at once, and must NOT double when the server's copy lands.
+async function proveYourOwnMessageIsOnScreenWhileItRuns() {
+  const renderWith = (patch) => {
+    resetState();
+    Object.assign(state, {
+      activeId: 'c1', projectRoot: '/repo', conversation: { id: 'c1', turns: [] }, ...patch,
+    });
+    snapshots.length = 0;
+    api.render();
+    return snapshots.at(-1) || '';
+  };
+  const countUserTurns = (html) => (html.match(/tc-code-turn is-user/g) || []).length;
+
+  const sending = renderWith({
+    running: true,
+    pendingUserText: 'BUILD-ECHO-ONE a page',
+    liveEvents: [{ type: 'planning', text: 'Thomas is preparing the Code run…' }],
+  });
+  if (!sending.includes('BUILD-ECHO-ONE a page')) throw new Error('the message just sent is not on screen');
+  if (countUserTurns(sending) !== 1) throw new Error(`expected exactly one user turn, saw ${countUserTurns(sending)}`);
+
+  // The server's copy arrives: still exactly one, not two.
+  const settled = renderWith({
+    running: true,
+    pendingUserText: 'BUILD-ECHO-ONE a page',
+    conversation: { id: 'c1', turns: [{ role: 'user', text: 'BUILD-ECHO-ONE a page' }] },
+    liveEvents: [{ type: 'planning', text: 'working' }],
+  });
+  if (countUserTurns(settled) !== 1) {
+    throw new Error(`the server copy duplicated the message: ${countUserTurns(settled)} user turns`);
+  }
+
+  // Whitespace is what the round-trip actually varies.
+  const trimmed = renderWith({
+    running: true,
+    pendingUserText: '  BUILD-ECHO-ONE a page  ',
+    conversation: { id: 'c1', turns: [{ role: 'user', text: 'BUILD-ECHO-ONE a page' }] },
+    liveEvents: [{ type: 'planning', text: 'working' }],
+  });
+  if (countUserTurns(trimmed) !== 1) throw new Error('trimming difference produced a duplicate');
+
+  // And it must not be drawn into a DIFFERENT conversation. The render only
+  // suppresses on matching text, so a leak here would simply stay forever.
+  const elsewhere = renderWith({
+    activeId: 'c2',
+    conversation: { id: 'c2', turns: [{ role: 'user', text: 'a completely different ask' }] },
+    pendingUserText: '',
+  });
+  if (elsewhere.includes('BUILD-ECHO-ONE')) throw new Error('the pending message leaked into another conversation');
+}
+
 async function proveAStoppedRunStopsCallingItselfWorking() {
   const renderWith = (patch) => {
     resetState();
@@ -863,6 +920,7 @@ await proveNarrativeNeverRepeatsItself();
 await proveTheEmptyStateStandsDownForALiveRun();
 await proveTheFileListNamesTheRealReasonItIsEmpty();
 await proveAStoppedRunStopsCallingItselfWorking();
+await proveYourOwnMessageIsOnScreenWhileItRuns();
 await proveScopedSwitch();
 await proveSteeringConfirmation();
 await proveEvidenceAndRefresh();
@@ -875,4 +933,4 @@ await proveLostSendRetryAndCursor();
 await proveAccessibleDrawerAndPickerErrors();
 await proveTheRealReasonSurvivesTheExitWrapper();
 console.warn = originalWarn;
-process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true, failureReason: true, narrativeNotRepeated: true, emptyStateStandsDown: true, fileListNamesItsReason: true, stoppedRunIsNotWorking: true, revertRefreshesFileList: true, truncatedRunSaysSo: true }));
+process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true, failureReason: true, narrativeNotRepeated: true, emptyStateStandsDown: true, fileListNamesItsReason: true, stoppedRunIsNotWorking: true, revertRefreshesFileList: true, truncatedRunSaysSo: true, yourMessageIsOnScreen: true }));

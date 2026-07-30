@@ -640,6 +640,13 @@ def test_code_adapter_lifecycle_behavior_in_node() -> None:
         # sat in a risk headed "error surfaced during the run", behind a
         # collapsed Show details, one of two rows sharing that heading.
         "truncatedRunSaysSo": True,
+        # The page you SEND from never rendered your own message: turns come
+        # from state.conversation, refreshed only from the server, so between
+        # pressing Enter and the run finishing your words were nowhere on
+        # screen. Measured live at 1920: zero user turns while the live turn
+        # streamed. Guarded both ways -- it must appear at once, and must not
+        # double when the server copy lands.
+        "yourMessageIsOnScreen": True,
     }
 
 

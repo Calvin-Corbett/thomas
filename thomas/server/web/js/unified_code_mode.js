@@ -14,7 +14,7 @@
     pendingApproval: null, pendingRequest: null, lastContext: {}, running: false, runStartedAt: 0, runStatus: 'ready', source: null,
     finishing: null, approvalBusy: false, steeringBusy: false, projectRoot: '', projectNames: {}, terminalTool: '', contextEpoch: 0, runProof: null,
     pendingHistoryChoice: null, historyChoiceBusy: false,
-    runId: '', eventCursor: 0, retryRequest: null, drawerOpen: false, drawerWidth: 360,
+    runId: '', eventCursor: 0, retryRequest: null, drawerOpen: false, drawerWidth: 360, pendingUserText: '',
   };
   let adapterActive = false;
   const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -627,6 +627,11 @@
     state.conversation = null;
     finishBusy();
     state.liveEvents = [];
+    // The echoed message belongs to the conversation it was typed into. The
+    // render only suppresses it once the SAME text appears in `turns`, so
+    // carrying it across a switch would print it into somebody else's
+    // transcript, where nothing would ever match it and it would simply stay.
+    state.pendingUserText = '';
     state.changes = [];
     state.tree = [];
     state.treeLoaded = false;
@@ -758,6 +763,27 @@
     // screen" is how they drift apart and both render at once -- which is
     // precisely the bug this fixes.
     const hasLiveTurn = Boolean(state.running || state.liveEvents.length);
+    // The page you SEND from never showed you your own message. `turns` comes
+    // from `state.conversation`, which is only refreshed from the server, so
+    // between pressing Enter and the run finishing the words you just typed were
+    // nowhere on screen. Measured on a live run at 1920:
+    // `.tc-code-turn.is-user` count was 0 while the live turn was already
+    // streaming, and the same conversation opened in a second tab showed the
+    // message fine -- so it was never missing data, only a missing render.
+    //
+    // Suppressed as soon as the server's copy arrives, decided at RENDER time
+    // rather than cleared on a lifecycle event. A clear that fires at the wrong
+    // moment leaves either no bubble or two identical ones; this cannot do
+    // either, because the pending copy is simply not drawn once `turns` has it.
+    // Compared on trimmed text, which is what the server round-trips.
+    const pendingUser = String(state.pendingUserText || '').trim();
+    const serverHasPending = Boolean(
+      pendingUser
+      && turns.some(turn => turn && turn.role === 'user' && String(turn.text || '').trim() === pendingUser),
+    );
+    const pendingUserTurn = pendingUser && !serverHasPending
+      ? turnHtml({ role: 'user', text: pendingUser })
+      : '';
     const liveTurn = hasLiveTurn
       // `is-live` only while the run actually is. The class drives
       // `.tc-code-turn.is-live … small::after { content: ' · working' }`, and it
@@ -848,7 +874,7 @@
     root.innerHTML = `<div class="tc-code-panel${state.drawerOpen ? ' is-drawer-open' : ''}${viewerOpen && !viewerFull ? ' is-viewer-open' : ''}" style="--tc-code-drawer-width:${clampDrawerWidth(state.drawerWidth)}px">
       <header class="tc-code-context" data-ui-id="code.context" data-ui-label="Code activity bar" data-ui-policy="move"><button data-code-results-jump type="button" aria-expanded="${state.drawerOpen ? 'true' : 'false'}"><i class="ph ph-sidebar-simple"></i> Activity <small>${statusLabels[state.runStatus] || 'Ready'}</small>${hasResults ? '<span class="tc-code-activity-count" aria-hidden="true"></span>' : ''}</button></header>
       <div class="tc-code-layout">
-        <section class="tc-code-transcript" aria-label="Code conversation" data-ui-id="code.transcript" data-ui-label="Code conversation" data-ui-policy="move resize" data-ui-constraints="minWidth=320;minHeight=200">${historyAsk}<div id="tc-code-turns">${turns.map(turnHtml).join('') || (hasLiveTurn ? '' : emptyStateHtml())}</div>${liveTurn}</section>
+        <section class="tc-code-transcript" aria-label="Code conversation" data-ui-id="code.transcript" data-ui-label="Code conversation" data-ui-policy="move resize" data-ui-constraints="minWidth=320;minHeight=200">${historyAsk}<div id="tc-code-turns">${turns.map(turnHtml).join('') || (hasLiveTurn || pendingUserTurn ? '' : emptyStateHtml())}</div>${pendingUserTurn}${liveTurn}</section>
         <aside class="tc-code-actions" aria-label="Code activity" aria-hidden="${state.drawerOpen ? 'false' : 'true'}"${state.drawerOpen ? '' : ' inert'} data-ui-id="code.activity" data-ui-label="Code activity drawer" data-ui-policy="move resize" data-ui-constraints="minWidth=280;minHeight=240;maxWidth=520"><section class="tc-code-rail-section" data-ui-id="code.outputs" data-ui-label="Outputs" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=120"><div class="tc-code-section-title">Outputs</div>${approval}${preview}${artifactRows}${changeRows || (!preview && !artifactRows ? '<p class="tc-code-rail-empty">Previews, changed files, and proof will appear here without interrupting the conversation.</p>' : '')}${changeRows && !state.running ? `<button id="tc-code-checkpoint" class="tc-code-checkpoint" data-ui-id="code.action.checkpoint" data-ui-label="Checkpoint changes" data-ui-policy="protected" title="Commit these changes on a thomas-code/ branch">Checkpoint — commit these changes</button>` : ''}</section><section class="tc-code-rail-section tc-code-tree" data-ui-id="code.files" data-ui-label="Project files" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=120"><div class="tc-code-tree-head"><div class="tc-code-section-title">Files · ${esc(state.treePath || '/')}</div>${state.treePath ? '<button id="tc-code-tree-up">Up</button>' : ''}</div><ul>${treeRows || `<li class="tc-code-muted">${esc(filesEmptyMessage)}</li>`}</ul></section><form id="tc-code-steer-form" class="tc-code-steer" ${state.running ? '' : 'hidden'} data-ui-id="code.steer" data-ui-label="Steer Thomas" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=80"><label for="tc-code-steer">Steer Thomas</label><input id="tc-code-steer" name="message" required placeholder="Change direction…" ${state.steeringBusy ? 'disabled' : ''}><button ${state.steeringBusy ? 'disabled' : ''}>${state.steeringBusy ? 'Confirming…' : 'Apply'}</button><button type="button" id="tc-code-stop" data-ui-id="code.action.stop" data-ui-label="Stop this run" data-ui-policy="protected" title="Stop this run" ${state.steeringBusy ? 'disabled' : ''}>Stop</button></form></aside>
       </div>${codeResults().viewerHtml()}</div>`;
     const activityDrawer = root.querySelector('.tc-code-actions');
@@ -1127,6 +1153,10 @@
       return true;
     }
     state.lastContext = context || state.lastContext || {};
+    // Echoed by the transcript until the server's copy of this turn arrives.
+    // Not set for a steer: `preserveProgress` means the run is continuing and the
+    // steering text belongs in the activity feed, not as a new message bubble.
+    if (!(options && options.preserveProgress)) state.pendingUserText = String(message || '');
     state.running = true;
     state.runStatus = 'working';
     if (!(options && options.preserveProgress) || !state.runStartedAt) state.runStartedAt = Date.now();
