@@ -221,6 +221,85 @@ def test_a_failed_check_outranks_an_unverified_requirement(render) -> None:
     assert "1 requirement unverified" in html
 
 
+_SKIPPED_SMOKE = {
+    "kind": "engine_check",
+    "command": "offline real-browser smoke for changed HTML or linked web assets",
+    # This is what the engine really emits when no browser is installed:
+    # build_verify prefixes BROWSER_SMOKE_SKIPPED and leaves is_error unset, and
+    # run_report derives `passed` from the absence of an error -- so a check that
+    # never ran arrives flagged True.
+    "passed": True,
+    "evidence": "BROWSER_SMOKE_SKIPPED: no chrome or edge binary found",
+}
+
+
+def test_a_skipped_check_is_not_counted_as_a_passing_one(render) -> None:
+    """Latent on this machine -- Chrome is present, so 0 of 47 real reports carry
+    a skip. On a fresh install without browsers every web run would have read
+    "2/2 checks passed" with one of the two never having run."""
+    html = render(
+        {
+            "attempts": [{"pass": 1, "goal": "g", "outcome": "completed", "exit_state": "exit 0"}],
+            "validations": [_PASSING_CHECK, _SKIPPED_SMOKE],
+            "open_risks": [
+                {"risk": "a changed page was never opened in a browser", "detail": "index.html"}
+            ],
+            "rubric_mapping": [{"criterion": "c", "status": "met", "evidence": "e"}],
+        }
+    )
+
+    assert "2/2 checks passed" not in html, "a skipped check was counted as passing"
+    assert "1/1 check passed" in html
+    assert "1 check skipped" in html
+    # The unopened-page risk is what run_report already raises here, so the tone
+    # was never the problem -- only the count.
+    assert "is-warn" in html
+    assert "1 open risk" in html
+
+
+def test_a_run_whose_only_check_was_skipped_says_nothing_was_checked(render) -> None:
+    """The edge the count fix creates: every check skipped is indistinguishable
+    from no checks at all, and must read that way rather than as a pass."""
+    html = render(
+        {
+            "attempts": [{"pass": 1, "goal": "g", "outcome": "completed", "exit_state": "exit 0"}],
+            "validations": [_SKIPPED_SMOKE],
+            "open_risks": [],
+            "rubric_mapping": [{"criterion": "c", "status": "met", "evidence": "e"}],
+        }
+    )
+
+    assert _verdict(html) == "Nothing was checked"
+    assert "is-unknown" in html
+    assert "1 check skipped" in html
+    assert "1/1 check passed" not in html
+
+
+def test_the_word_skipped_in_unrelated_evidence_does_not_downgrade_a_pass(render) -> None:
+    """The matcher keys on the engine's own marker. Evidence like
+    "1 files checked, 1 skipped" is a real static-verify string and means the
+    check ran."""
+    html = render(
+        {
+            "attempts": [{"pass": 1, "goal": "g", "outcome": "completed", "exit_state": "exit 0"}],
+            "validations": [
+                {
+                    "kind": "engine_check",
+                    "command": "static checks",
+                    "passed": True,
+                    "evidence": "exit 0 STATIC_VERIFY_OK: 2 files checked, 1 skipped",
+                }
+            ],
+            "open_risks": [],
+            "rubric_mapping": [{"criterion": "c", "status": "met", "evidence": "e"}],
+        }
+    )
+
+    assert _verdict(html) == "Checks passed"
+    assert "1/1 check passed" in html
+    assert "check skipped" not in html
+
+
 def test_open_risks_do_not_hide_behind_an_unverified_headline(render) -> None:
     """Whichever headline wins, the risk count stays on the card."""
     html = render(

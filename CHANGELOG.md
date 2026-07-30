@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A check the engine skipped is not a check that passed)
+
+- `passed` is derived server-side from the *absence of an error* (`run_report.py`: `"passed": event.get("is_error") is not True`). When no browser is installed, `smoke_html_artifacts` returns `attempted=False` and `build_verify` emits `BROWSER_SMOKE_SKIPPED: …` with `is_error` unset — so a check that never ran reaches the card flagged as passing, and was counted in "2/2 checks passed". The evidence string said `SKIPPED` all along; nothing read it.
+- The card now separates the two: `1/1 check passed · 1 check skipped`. A run whose *only* check was skipped reads **`Nothing was checked`** rather than `Checks passed` — verified by blinding the matcher and watching exactly that false green come back.
+- The tone was never wrong here: `run_report._unopened_page_risks` already raises "a changed page was never opened in a browser" for this case, and distinguishes "the browser check was skipped" from "no browser check ran". Only the count was wrong.
+- **Latent, and said plainly: this is not reproducible on this machine.** Chrome is present, so 0 of 47 real reports carry a skip, and the live cards are unchanged by this. On a fresh install without browsers, every web run would have read "2/2 checks passed" with one of the two never having run.
+- The matcher keys on the engine's own `*_SKIPPED` marker, not the word "skipped", which appears in unrelated real evidence such as `STATIC_VERIFY_OK: 2 files checked, 1 skipped`. That over-firing case is its own test.
+
 ### Fixed (A deliverable's link back to the conversation that built it now arrives)
 
 - **Every "Open Source Chat" button in My Stuff was a no-op for nine days.** A deliverable's deep link is minted as `/?forge_code=<cid>`, and nothing on `/` read it. The only consumer shipped inside the split runtime, which is pulled by `index.html` — served at **`/classic`**, not `/`. Measured before the fix: `/?forge_code=<real cid>` landed in **Chat** mode, no conversation selected, zero turns, parameter still sitting in the URL. No error, no hint anything had been asked for.

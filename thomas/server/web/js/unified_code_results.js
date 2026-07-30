@@ -61,8 +61,31 @@
     if (!sections) return '';
     const riskCount = risks.length;
     const checks = list(report.validations);
-    const passed = checks.filter(item => item.passed === true).length;
-    const failed = checks.length - passed;
+
+    // A check the engine SKIPPED is not a check that passed.
+    //
+    // `passed` is derived server-side from the absence of an error
+    // (run_report.py: `"passed": event.get("is_error") is not True`). When no
+    // browser is installed, smoke_html_artifacts returns attempted=False and
+    // build_verify emits `BROWSER_SMOKE_SKIPPED: ...` with is_error unset -- so a
+    // check that never ran arrives here flagged passed, and got counted in
+    // "2/2 checks passed". The evidence string says SKIPPED, so the honest count
+    // was available; nothing was reading it.
+    //
+    // NOT reproducible on this machine: Chrome is present, so 0 of 47 real
+    // reports carry a skip. On a fresh install without browsers, every web run
+    // would have read "2/2 checks passed" with one of the two never having run.
+    // The run's open-risk list already flags the unopened page
+    // (run_report._unopened_page_risks), so the tone was right; only the count
+    // was wrong.
+    //
+    // Matched on the engine's own marker rather than the word "skipped", which
+    // turns up in unrelated evidence such as "1 files checked, 1 skipped".
+    const wasSkipped = item => /[A-Z][A-Z_]*_SKIPPED\b/.test(String(item.evidence || ''));
+    const skipped = checks.filter(wasSkipped).length;
+    const ran = checks.length - skipped;
+    const passed = checks.filter(item => item.passed === true && !wasSkipped(item)).length;
+    const failed = checks.filter(item => item.passed !== true).length;
 
     // The rubric is where a run admits what it did NOT check, and it was not
     // reaching the verdict at all -- the headline was computed from
@@ -94,13 +117,14 @@
     // the confusion the whole report exists to prevent.
     let tone = 'is-good';
     let verdict = 'Checks passed';
-    if (failed > 0) { tone = 'is-bad'; verdict = failed === checks.length ? 'Checks failed' : 'Some checks failed'; }
-    else if (!checks.length) { tone = 'is-unknown'; verdict = 'Nothing was checked'; }
+    if (failed > 0) { tone = 'is-bad'; verdict = failed === ran ? 'Checks failed' : 'Some checks failed'; }
+    else if (!ran) { tone = 'is-unknown'; verdict = 'Nothing was checked'; }
     else if (unverified) { tone = 'is-unknown'; verdict = 'Not checked against your ask'; }
     else if (riskCount) { tone = 'is-warn'; verdict = 'Passed, with things to look at'; }
 
     const facts = [];
-    if (checks.length) facts.push(`${passed}/${checks.length} check${checks.length === 1 ? '' : 's'} passed`);
+    if (ran) facts.push(`${passed}/${ran} check${ran === 1 ? '' : 's'} passed`);
+    if (skipped) facts.push(`${skipped} check${skipped === 1 ? '' : 's'} skipped`);
     if (unverified) facts.push(`${unverified} requirement${unverified === 1 ? '' : 's'} unverified`);
     facts.push(riskCount ? `${riskCount} open risk${riskCount === 1 ? '' : 's'}` : 'no open risks');
     if (attempts.length > 1) facts.push(`${attempts.length} edit passes`);
