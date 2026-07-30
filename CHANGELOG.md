@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A third permanently-red test, and a stronger guard than the one it replaces)
+
+- `test_chat_shell_boots_without_parser_blocking_cdn_assets` required the literal `"the chat shell must boot offline"` — a **comment marker** in `chat.html` that was later reworded away. The test went red and stayed red while the behaviour it guards was perfectly intact: the served shell has **zero** references to `fonts.googleapis.com`, `fonts.gstatic.com`, `unpkg.com`, `cdn.jsdelivr.net` or `cdnjs.cloudflare.com`.
+- Confirmed pre-existing before touching it: the string is absent from `chat.html` both at `ec6d3158^` (before this session edited the file) and now.
+- Repinned to the behaviour and made **stricter** than the three hard-coded hosts it replaces — no `<link>` or `<script>` may load from *any* other origin, whichever CDN someone reaches for next. Proven capable of failing with `https://example.com/probe.css`, a host **none** of the three original assertions would have caught.
+- Third one found this way, after `test_marketplace_uses_native_runtime_shell` (red 2026-07-21 → 07-30) and `test_root_chat_surfaces_gpt56_models_and_distinct_reasoning_efforts`. All three pinned one exact spelling of something that legitimately got rewritten.
+- **Not mine and left alone:** four other failures in the wider sweep — `test_chat_runtime_policy` (426 tools without explicit policy classification) and three `test_server_task_ledger_v2_contract` cases. They exercise subsystems no commit in this session touched. 1573 passed.
+
 ### Fixed (The activity header stops calling tool output "checks")
 
 - The technical header read **"Worked through 1 tool run · 26 checks · 7 issues"** on a run whose report recorded **zero validations**. `check` is a load-bearing word everywhere else in this UI — the verdict card counts engine checks, and *"1/2 checks passed"* means two real ones — so using it here for arbitrary tool output made the header claim verification that never happened. Same overloading as the old **"1 pass"**, which meant one *edit* pass and read as one test passing.

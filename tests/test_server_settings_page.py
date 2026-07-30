@@ -88,7 +88,28 @@ class TestServerSettingsPage(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         text = await resp.text()
         self.assertIn("Thomas Chat", text)
-        self.assertIn("the chat shell must boot offline", text)
+
+        # Was `assertIn("the chat shell must boot offline", text)` -- a COMMENT
+        # marker in chat.html, which was later reworded away. The test went red
+        # and stayed red while the behaviour it guards was perfectly fine: the
+        # served shell has zero references to any CDN host. Third test found this
+        # way, after test_marketplace_uses_native_runtime_shell (red nine days)
+        # and test_root_chat_surfaces_gpt56_models_and_distinct_reasoning_efforts.
+        # A permanently-red test is how a real regression gets ignored.
+        #
+        # Pinned to the behaviour instead, and made STRICTER than the three
+        # hard-coded hosts it replaces: no parser-blocking asset may come from
+        # another origin at all, whichever CDN someone reaches for next.
+        external = re.findall(
+            r"""<(?:link|script)\b[^>]*?(?:href|src)\s*=\s*["'](https?://[^"']+)""",
+            text,
+            re.IGNORECASE,
+        )
+        self.assertEqual(
+            external,
+            [],
+            f"the chat shell must boot offline; these load from another origin: {external}",
+        )
         self.assertNotIn("fonts.googleapis.com", text)
         self.assertNotIn("fonts.gstatic.com", text)
         self.assertNotIn("unpkg.com", text)
