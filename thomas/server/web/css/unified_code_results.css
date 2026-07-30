@@ -36,7 +36,7 @@
 .tc-code-actions .is-danger {
   width: 100%;
   margin-top: 8px;
-  color: #ffaaaa;
+  color: var(--c-danger, #ffaaaa);
   text-align: center;
 }
 
@@ -235,5 +235,8 @@
 .tc-code-muted { color: var(--c-muted); }
 
 .tc-code-panel .tc-mode-status.is-disconnected,
-.tc-code-panel .tc-mode-status.is-failed { border-color: rgba(255,119,119,.45); color: #ffaaaa; }
+.tc-code-panel .tc-mode-status.is-failed {
+  border-color: color-mix(in srgb, var(--c-danger, #ff7777) 45%, transparent);
+  color: var(--c-danger, #ffaaaa);
+}
 .tc-code-panel .tc-mode-status.is-stopped { color: var(--c-muted); }

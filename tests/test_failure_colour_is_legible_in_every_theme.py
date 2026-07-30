@@ -80,6 +80,39 @@ def test_the_failure_colour_is_readable_on_its_own_background() -> None:
     )
 
 
+CODE_CSS = [
+    Path(__file__).resolve().parents[1] / "thomas" / "server" / "web" / "css" / name
+    for name in ("unified_code_activity.css", "unified_code_mode.css", "unified_code_results.css")
+]
+
+# The dark-theme reds that were hard-coded across Code mode before the token.
+DARK_REDS = ("#ff9a9a", "#ffaaaa", "#ffb0b0", "#ff7777")
+
+
+def test_code_mode_never_hard_codes_a_failure_red() -> None:
+    """A new hard-coded red is invisible on light and sandstone all over again.
+
+    Allowed only as the FALLBACK inside `var(--c-danger, ...)`, which is what the
+    themed token degrades to. Comments are stripped first -- several of them
+    quote `#ff9a9a` while explaining this very fix, and a naive scan matches its
+    own documentation.
+    """
+
+    offenders: list[str] = []
+    for path in CODE_CSS:
+        css = re.sub(r"/\*.*?\*/", "", path.read_text(encoding="utf-8"), flags=re.S)
+        # Remove every legitimate use, then anything left is a bare literal.
+        stripped = re.sub(r"var\(\s*--c-danger\s*,[^)]*\)", "", css, flags=re.I)
+        for red in DARK_REDS:
+            if red in stripped.lower():
+                offenders.append(f"{path.name}: {red}")
+
+    assert not offenders, (
+        "these are hard-coded dark-theme reds and measure about 2:1 on the light "
+        "worlds; use var(--c-danger, ...) -> " + "; ".join(offenders)
+    )
+
+
 def test_the_light_worlds_do_not_reuse_the_dark_red() -> None:
     """The specific regression: #ff9a9a shipped to light and sandstone."""
 

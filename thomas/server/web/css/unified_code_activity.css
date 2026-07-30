@@ -10,7 +10,7 @@
 .tc-code-event strong { display: block; margin-bottom: 2px; color: var(--c-muted); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
 .tc-code-event span { white-space: pre-wrap; overflow-wrap: anywhere; }
 .tc-code-event.is-reason { border-color: #8f82ff; }
-.tc-code-event.is-error { border-color: #ff7777; color: #ffaaaa; }
+.tc-code-event.is-error { border-color: var(--c-danger, #ff7777); color: var(--c-danger, #ffaaaa); }
 .tc-code-event.is-disconnected { border-color: #f2b35f; color: #f7ce91; }
 .tc-code-event.is-stopped { border-color: var(--c-muted); color: var(--c-muted); }
 .tc-code-turn.is-live .tc-code-message-head small::after { content: ' · working'; color: var(--c-accent); }
@@ -42,7 +42,7 @@
 .tc-code-saved-activity > summary > span:last-child { color: var(--c-muted); font-size: 10px; }
 .tc-code-activity-summary { display: inline-flex; align-items: center; gap: 6px; }
 .tc-code-activity-summary i { color: var(--c-accent); font-size: 13px; }
-.tc-code-saved-activity.has-issues .tc-code-activity-summary i { color: #ff9a9a; }
+.tc-code-saved-activity.has-issues .tc-code-activity-summary i { color: var(--c-danger, #ff9a9a); }
 
 /* ---- The verdict --------------------------------------------------------
    This is the line that answers "did the thing I asked for actually work",
@@ -103,7 +103,7 @@
 .tc-code-technical strong { display: block; color: var(--c-dim); font-size: 10.5px; }
 .tc-code-technical code { display: block; max-height: 84px; margin-top: 2px; overflow: auto; color: var(--c-muted); font: 10px/1.5 "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .tc-code-technical.is-error > i,
-.tc-code-technical.is-error strong { color: #ff9a9a; }
+.tc-code-technical.is-error strong { color: var(--c-danger, #ff9a9a); }
 .tc-code-tech-count { margin-left: 5px; color: var(--c-muted); font-weight: 600; }
 
 .tc-code-result-note { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }

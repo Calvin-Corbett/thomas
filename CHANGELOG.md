@@ -7,6 +7,12 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Every remaining Code failure indicator, and a guard against the next one)
+
+- The first pass covered four signals I had measured. Looking at Sandstone afterwards showed the ⚠ beside *"Worked through 2 tool runs · 27 results · 4 issues"* still pale — so it got measured too, along with its neighbours: **1.96:1 on light, 1.75:1 on sandstone**, worse than the ones already fixed.
+- Five more now use the token: the activity-summary issues icon, the technical error rows, the error event row, the danger action in Outputs, and the failed run-status pill. After: **light 6.31:1, sandstone 5.65:1**, nebula unchanged at 9.78:1. Every Code failure indicator is now above 5.6:1 in all five themes.
+- A second guard catches the *next* one: any of the four dark-theme reds appearing in the Code stylesheets outside a `var(--c-danger, …)` fallback fails the test. Comments are stripped first — several of them quote `#ff9a9a` while explaining this fix, and a naive scan matches its own documentation, which is the third time that trap has cost me a test today. Re-hard-coding one red turns it red.
+
 ### Fixed (The mark that says a run failed is now visible in every theme)
 
 - `#ff9a9a` is a **dark-theme** red. It was hard-coded into the failed-verdict rail, the failure icon, the error reply text — and, as of earlier today, the Revert control, where I reused it *because it was already there*. Measured against each world's own surface: **nebula 9.47:1, light 2.03:1, sandstone 1.89:1**. On two of the five themes, the mark that says a run FAILED and the control that permanently discards a file were both close to invisible — the two things in the surface that most need to be seen.
