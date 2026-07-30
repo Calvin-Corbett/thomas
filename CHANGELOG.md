@@ -7,6 +7,15 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Opening the viewer stops reducing the conversation to a sliver)
+
+- Found immediately after the drawer fix, by checking its mirror image — and **this one was mine**, shipped earlier the same day. The viewer and the space reserved for it were two copies of `min(760px, 62vw)`.
+- `62vw` was the bug. The viewer sits inside the panel, but `vw` measures the **viewport**, and the panel is the viewport minus a 280px sidebar — so the viewer's share of the space it actually occupies *grows* as the window narrows. Transcript width with a file open: **1920 → 720px, 1440 → 352px, 1100 → 90px.** At 1100 the conversation was a ninety-pixel column setting one word per line: *"hides / the / others, / and / marks / itself"*. The document never overflowed at any width, so nothing numeric flagged it.
+- Both now come from **one** custom property — two copies of a width that must agree cannot disagree if there is only one. Defined as `min(760px, max(360px, calc(100vw - 700px)))`: the 280px sidebar plus a 420px floor for the reading column, capped so wide screens are untouched, floored at 360px so the viewer does not shrink to a strip itself — the same mistake in the other direction.
+- Deliberately **not** a percentage: a custom property's `%` resolves against whatever element consumes it, so `calc(100% - 420px)` would mean the panel in one rule and the layout in the other. Viewport units mean the same thing in both places, which is the entire point of sharing the value.
+- After: **1920 unchanged at 720px** (padding still 760px), 1440 → 372px, 1100 → **372px**. Verified by screenshot at 1100 — full sentences across the column, viewer still rendering the page.
+- Both guards proven load-bearing separately: reverting the two *usages* fails the first, reverting the *definition* to a bare `vw` fails the second.
+
 ### Fixed (The Activity drawer stops sitting on top of the transcript)
 
 - The drawer is a side panel and the layout reserved **nothing** for it. Measured with the drawer open — transcript right edge against drawer left edge: **1920 → −176px** (clear, and only by luck: the turn is 720px and centred), **1440 → +64px** of content underneath, **1100 → +234px**. `padding-right` computed as **0px at every width**.

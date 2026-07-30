@@ -172,13 +172,36 @@
    how a result is normally handed over. It replaces the inline stage above:
    that put a tall frame in the middle of the transcript, so the thing Thomas
    built became something to scroll past instead of something to use. */
+/* ONE property for the viewer's width, used by the panel itself and by the space
+   the layout reserves for it. They were two copies of `min(760px, 62vw)` and had
+   to agree; making them one expression means they cannot drift apart.
+
+   `62vw` was the actual bug. The viewer lives inside the panel, but vw measures
+   the VIEWPORT -- and the panel is the viewport minus a 280px sidebar, so the
+   viewer's share of the space it actually occupies grows as the window narrows.
+   Measured with a file open, transcript width: 1920 -> 720px, 1440 -> 352px,
+   1100 -> 90px. At 1100 the conversation was a ninety-pixel column setting one
+   word per line: "hides / the / others, / and / marks / itself".
+
+   `100vw - 700px` is that sidebar (280px) plus a 420px floor for the transcript,
+   so the reading column survives before the viewer gets what is left. Capped at
+   760px so nothing changes on a wide screen, and floored at 360px so the viewer
+   stays usable rather than shrinking to a strip itself -- the same mistake in
+   the other direction.
+
+   Deliberately NOT a percentage: a custom property's `%` resolves against
+   whatever element consumes it, so `calc(100% - 420px)` would mean the panel in
+   one rule and the layout in the other. Viewport units mean the same thing in
+   both places, which is the entire point of sharing the value. */
+.tc-code-panel { --tc-code-viewer-width: min(760px, max(360px, calc(100vw - 700px))); }
+
 .tc-code-viewer {
   position: absolute;
   inset: 0 0 0 auto;
   z-index: 30;
   display: flex;
   flex-direction: column;
-  width: min(760px, 62vw);
+  width: var(--tc-code-viewer-width, min(760px, 62vw));
   border-left: 1px solid var(--c-border-2);
   background: color-mix(in srgb, var(--c-sidebar) 97%, transparent);
   box-shadow: -26px 0 64px color-mix(in srgb, var(--c-bg) 62%, transparent);
@@ -192,7 +215,7 @@
    says "Click to open it beside the chat".
    Reserved with padding on the layout rather than by resizing the transcript,
    so the drawer keeps its own width and only the shared row gets narrower. */
-.tc-code-panel.is-viewer-open .tc-code-layout { padding-right: min(760px, 62vw); }
+.tc-code-panel.is-viewer-open .tc-code-layout { padding-right: var(--tc-code-viewer-width, min(760px, 62vw)); }
 
 /* The Activity drawer needs the same treatment the viewer above already gets.
    It did not have it, so the layout reserved NOTHING for it and the drawer sat
