@@ -290,7 +290,22 @@ def _verify_and_iterate(
     from thomas.forge.anvil import forge_code_git
 
     verify = verifier or verify_python_changes
-    changed = forge_code_git.delta_since(cwd, snap_before)
+    # project_delta_since, not delta_since: Thomas writes its own Code transcripts
+    # into the selected repository, and those bookkeeping paths are not user work.
+    # The report already excludes them -- `project_delta_since` exists for exactly
+    # that and says so -- but this call site did not, so the two lists disagreed.
+    #
+    # Measured on the FPS run: changed_files recorded the three real files while
+    # the check beside it read "exit 0 parsed
+    # .thomas/evolve/agent/conversations/fc_20260730T164534_d8fa2f.json checked
+    # game.js parsed index.html checked styles.css STATIC_VERIFY_OK: 4 files
+    # checked". Three files delivered, four reported checked, and the extra one
+    # was another conversation's state file -- Thomas grading its own paperwork
+    # and counting it as coverage.
+    #
+    # A run that touches ONLY bookkeeping now correctly verifies nothing and
+    # returns 0, instead of parsing a JSON file and calling that a passing check.
+    changed = forge_code_git.project_delta_since(cwd, snap_before)
     if not changed:
         return 0  # nothing this run touched -> caller surfaces the no-op honestly
 

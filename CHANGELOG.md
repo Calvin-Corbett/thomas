@@ -7,6 +7,13 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (The verifier stops grading Thomas's own paperwork)
+
+- Thomas writes its Code transcripts into the selected repository under `.thomas/evolve/agent/`. `forge_code_git.project_delta_since` exists to keep those out of a run's changed set — its docstring says they *"must never inflate completion or artifact counts"* — and the run report used it. `_verify_and_iterate` used the unfiltered `delta_since`, so the two disagreed about what the run had changed.
+- Measured on the Call-of-Duty run. Recorded `changed_files` were the three real files, while the check beside them read: `exit 0 parsed .thomas/evolve/agent/conversations/fc_20260730T164534_d8fa2f.json checked game.js parsed index.html checked styles.css STATIC_VERIFY_OK: **4 files checked**`. Three delivered, four reported checked — and the extra was **another conversation's** state file, one of the empty "Untitled build" records. Thomas graded its own paperwork and counted it as coverage.
+- A run that touches only bookkeeping now verifies nothing and returns 0, rather than parsing one JSON file and calling that a passing check. That is the second guard, and the one that matters: an inflated count is misleading, but a check that *cannot fail* reported as a pass is the shape this whole area keeps producing.
+- Same defect shape as the rest of this session — two expressions of "what changed" that were supposed to mean the same thing and didn't. Restoring `delta_since` turns both guards red.
+
 ### Fixed (A run stops claiming it overwrote files it never touched)
 
 - The shared-project risk read *"this run replaced work from another code task — alpha.txt, beta.txt, gamma.txt … created by a different task in this shared project, **and overwritten here**"*. The last clause asserts authorship the data cannot support: `changed_files` is the git diff of a **shared folder**, not a record of what this run wrote, so any uncommitted file another task left behind lands in it untouched.
