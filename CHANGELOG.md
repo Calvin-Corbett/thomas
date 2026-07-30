@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A run cannot call itself passed on requirements it never checked)
+
+- **The owner's "Nova" calculator shipped with a green ✅ `Checks passed`, and almost nothing in it worked.** Driving it by hand: the five left-nav destinations (Conversions, Graph studio, History, Saved formulas, Calculator) do nothing at all, the advertised `Ctrl+K` "calculate in plain English" palette does not exist, both header icon buttons are inert, `Clear` on Recent calculations does nothing, the three "recent calculations" are hard-coded HTML, the `Growth rate` chip returns `Error`, and `200 + 10 %` returns **2.1** because `%` divides the whole expression instead of the last operand. The keypad arithmetic is correct — which is why testing only arithmetic found nothing.
+- **The report was honest; the headline was not.** Its two engine checks did pass, the second with evidence reading `browser boot clean; boot only` — it loaded the page and clicked nothing. Its own `rubric_mapping` carried `status: unverified`, saying no individual requirement had been extracted or checked. But the verdict was computed from `validations` alone, so the one honest signal in the report never reached the face of the card and sat inside a collapsed section instead.
+- The verdict now reads **`Not checked against your ask`** with the muted "we don't know" tone, over `2/2 checks passed · 1 requirement unverified · no open risks`. What *did* pass is still said — this is a truthful verdict, not an alarming one. A failed check still outranks it, and open risks still show regardless of which headline wins.
+- **It discriminates rather than blanket-warns.** Across the 43 real run reports on this machine it moves **7** off a false green, leaves the **5** that genuinely verified their requirements reading `Checks passed`, and does not touch the 24 already reading `Nothing was checked` or the 7 already reading failure. A green verdict stays reachable, which is what makes the new state mean something.
+- Guarded by `tests/test_the_run_report_verdict_tells_the_truth.py`, which executes the shipped `unified_code_results.js` in a real browser and asserts on rendered markup — seeded with the verbatim Nova report — rather than grepping the source for a keyword. Removing the fix turns 2 of its 5 tests red.
+
 ### Changed (A conversation sits where you're reading, and the drawer shows the whole page)
 
 - **A conversation shorter than the window was pinned to the top**, stranding the newest message above a gap — measured at 1080p, **175px** of empty surface between the last turn and the composer, with nothing to scroll. A conversation reads bottom-up in time, so the newest thing now sits beside the box you reply in (116px, of which 86 is deliberate padding).

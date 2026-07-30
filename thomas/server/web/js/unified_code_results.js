@@ -64,6 +64,26 @@
     const passed = checks.filter(item => item.passed === true).length;
     const failed = checks.length - passed;
 
+    // The rubric is where a run admits what it did NOT check, and it was not
+    // reaching the verdict at all -- the headline was computed from
+    // `validations` alone, so a run whose rubric said "unverified" still
+    // announced "Checks passed" and buried the admission inside a collapsed
+    // section nobody opens.
+    //
+    // Seen on the owner's Nova calculator: two engine checks passed, the second
+    // with evidence reading "browser boot clean; boot only" -- it loaded the
+    // page and clicked nothing. Meanwhile five nav destinations, the Ctrl+K
+    // command palette, both icon buttons and Clear were all inert, and
+    // `200 + 10 %` returned 2.1. None of that could have been caught by a check
+    // that never pressed a button, and the report said so; the verdict did not.
+    // An unexamined requirement is not a passing one.
+    //
+    // This discriminates rather than blanket-warns: across 43 real reports it
+    // moves 7 off a false green and leaves the 5 that genuinely checked their
+    // requirements still reading "Checks passed".
+    const unverified = list(report.rubric_mapping)
+      .filter(item => String(item.status || '').toLowerCase() === 'unverified').length;
+
     // A verdict, then the numbers. It used to read "Run report · 1 pass · 2
     // checks · 0 open risks" -- counts with nothing said about them, where
     // "1 pass" means one EDIT pass and is read as one test passing. This is the
@@ -76,10 +96,12 @@
     let verdict = 'Checks passed';
     if (failed > 0) { tone = 'is-bad'; verdict = failed === checks.length ? 'Checks failed' : 'Some checks failed'; }
     else if (!checks.length) { tone = 'is-unknown'; verdict = 'Nothing was checked'; }
+    else if (unverified) { tone = 'is-unknown'; verdict = 'Not checked against your ask'; }
     else if (riskCount) { tone = 'is-warn'; verdict = 'Passed, with things to look at'; }
 
     const facts = [];
     if (checks.length) facts.push(`${passed}/${checks.length} check${checks.length === 1 ? '' : 's'} passed`);
+    if (unverified) facts.push(`${unverified} requirement${unverified === 1 ? '' : 's'} unverified`);
     facts.push(riskCount ? `${riskCount} open risk${riskCount === 1 ? '' : 's'}` : 'no open risks');
     if (attempts.length > 1) facts.push(`${attempts.length} edit passes`);
 
