@@ -7,6 +7,14 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (The mark that says a run failed is now visible in every theme)
+
+- `#ff9a9a` is a **dark-theme** red. It was hard-coded into the failed-verdict rail, the failure icon, the error reply text — and, as of earlier today, the Revert control, where I reused it *because it was already there*. Measured against each world's own surface: **nebula 9.47:1, light 2.03:1, sandstone 1.89:1**. On two of the five themes, the mark that says a run FAILED and the control that permanently discards a file were both close to invisible — the two things in the surface that most need to be seen.
+- Now a themed `--c-danger` token: dark worlds keep `#ff9a9a`; light gets `#b3261e`, sandstone `#a33a28`. After: **light 2.03 → 6.54:1, sandstone 1.89 → 6.11:1, nebula unchanged.** Verified by screenshot on Light — Revert legible, the ⚠ solid, the verdict rail and run summary readable instead of pale salmon.
+- **Two wrong turns on the way, both recorded.** The contrast maths was inverted at first: `color(srgb 1 1 1 / .72)` gives components in 0–1 and `rgb()` in 0–255, so parsing both the same way turned white into near-black — near-black on white reported **1.32:1** and pale pink on white **10.28:1**. Then the token went into `thomas_world.css`, whose `body.tcw-on[data-tcw-world=…]` blocks **this shell never uses** (`body.className` is empty, `data-tcw-world` is null); the real tokens live in the `THEMES` object in `chat.html`. That edit was reverted, not left lying around.
+- Guarded by **computed contrast, not hex strings**: the test reads each theme's own tokens and asserts a ≥4.5:1 ratio, so it still means something after a palette change and would catch a future theme shipping its own unreadable red. Putting `#ff9a9a` back on light turns two of the three red.
+- Scoped to the four Code-mode failure signals that were measured and seen. Ten further hard-coded reds remain in work mode and the technical rows — untouched here rather than swept up unmeasured.
+
 ### Documented (A z-index "fix" that destroys every theme, and the wrong diagnosis behind it)
 
 - At 900px on the Code empty state a drifting 30px moon sits under the subtitle, and *"Describe the outcome in the composer below."* reads as *"…the composer belo⬤ Keep using this same"*. Cropped at 3×, it looks unambiguously like the sprite is painted on top.

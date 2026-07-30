@@ -90,8 +90,8 @@
 .tc-code-run-report.is-good .tc-code-verdict > i { color: var(--c-accent); }
 .tc-code-run-report.is-warn > summary { border-left-color: #e2b25f; }
 .tc-code-run-report.is-warn .tc-code-verdict > i { color: #e2b25f; }
-.tc-code-run-report.is-bad > summary { border-left-color: #ff9a9a; }
-.tc-code-run-report.is-bad .tc-code-verdict > i { color: #ff9a9a; }
+.tc-code-run-report.is-bad > summary { border-left-color: var(--c-danger, #ff9a9a); }
+.tc-code-run-report.is-bad .tc-code-verdict > i { color: var(--c-danger, #ff9a9a); }
 .tc-code-run-report.is-unknown > summary { border-left-color: var(--c-muted); }
 .tc-code-run-report.is-unknown .tc-code-verdict > i { color: var(--c-muted); }
 .tc-code-run-report > .tc-code-technical-log { margin-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }

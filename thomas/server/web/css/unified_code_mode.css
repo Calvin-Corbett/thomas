@@ -172,13 +172,13 @@
    must stay AFTER it to win at rest. The hover rule below scores (0,3,1) and
    wins outright. */
 .tc-code-change button[data-code-revert] {
-  color: #ff9a9a;
-  border-color: rgba(255, 154, 154, 0.28);
+  color: var(--c-danger, #ff9a9a);
+  border-color: color-mix(in srgb, var(--c-danger, #ff9a9a) 34%, transparent);
 }
 
 .tc-code-change button[data-code-revert]:hover {
-  border-color: #ff9a9a;
-  background: rgba(255, 154, 154, 0.12);
+  border-color: var(--c-danger, #ff9a9a);
+  background: color-mix(in srgb, var(--c-danger, #ff9a9a) 14%, transparent);
 }
 
 .tc-code-actions button:disabled { opacity: .42; cursor: default; }
@@ -287,7 +287,7 @@
 }
 .tc-code-turn-body { min-width: 0; }
 .tc-code-reply { white-space: pre-wrap; overflow-wrap: anywhere; }
-.tc-code-reply.is-error { color: #ffb0b0; }
+.tc-code-reply.is-error { color: var(--c-danger, #ffb0b0); }
 
 @media (max-width: 720px) {
   .tc-code-context { top: 10px; right: 10px; }
