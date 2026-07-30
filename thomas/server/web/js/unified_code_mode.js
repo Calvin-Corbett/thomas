@@ -182,12 +182,25 @@
 
   function technicalSummary(events) {
     const tools = events.filter(event => eventType(event) === 'tool').length;
-    const checks = events.filter(event => eventType(event) === 'tool_result' || eventType(event) === 'meta').length;
+    // "results", and NOT counting `meta`. This said "checks", which is a
+    // load-bearing word elsewhere in this UI: the verdict card counts engine
+    // checks, and "1/2 checks passed" means two real validations. Using the same
+    // word here for arbitrary tool output taught the header to claim
+    // verification that never happened -- the same overloading as the old
+    // "1 pass", which meant one EDIT pass and read as one test passing.
+    //
+    // The Godot run advertised "26 checks" in this header while its report
+    // recorded ZERO validations. Measured after the change, the same run reads
+    // "25 results", so exactly ONE of the 26 was a `meta` status note ("Kept
+    // index.html") and the other 25 were tool output. The misnaming was the
+    // bigger half of this by a wide margin; folding meta in was a smaller,
+    // separate inaccuracy, and both are fixed here.
+    const results = events.filter(event => eventType(event) === 'tool_result').length;
     const issues = events.filter(event => event.is_error === true || eventType(event) === 'error').length;
-    const other = Math.max(0, events.length - tools - checks - issues);
+    const other = Math.max(0, events.length - tools - results - issues);
     const parts = [];
     if (tools) parts.push(`${tools} tool ${tools === 1 ? 'run' : 'runs'}`);
-    if (checks) parts.push(`${checks} ${checks === 1 ? 'check' : 'checks'}`);
+    if (results) parts.push(`${results} ${results === 1 ? 'result' : 'results'}`);
     if (other) parts.push(`${other} ${other === 1 ? 'detail' : 'details'}`);
     if (issues) parts.push(`${issues} ${issues === 1 ? 'issue' : 'issues'}`);
     return parts.length ? `Worked through ${parts.join(' · ')}` : 'Technical details';

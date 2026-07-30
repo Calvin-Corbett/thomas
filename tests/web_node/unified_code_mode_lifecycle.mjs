@@ -272,7 +272,21 @@ async function proveEvidenceAndRefresh() {
     { type: 'output', kind: 'tool_result', text: 'same check' },
     { type: 'output', kind: 'tool', name: 'fs.read_file', text: 'read source' },
   ], false);
-  if (!grouped.includes('Worked through 1 tool run · 2 checks') || !grouped.includes('×2')) throw new Error('technical evidence was not summarized and deduplicated');
+  if (!grouped.includes('Worked through 1 tool run · 2 results') || !grouped.includes('×2')) throw new Error('technical evidence was not summarized and deduplicated');
+  // "check" means an ENGINE check everywhere else in this UI -- the verdict card
+  // counts validations and "1/2 checks passed" means two real ones. This header
+  // used the same word for arbitrary tool output, so the Godot run advertised
+  // "26 checks" while its report recorded ZERO validations. It now reads
+  // "25 results" on that run, which also shows only one of the 26 was a `meta`
+  // status note; the misnaming was the bigger half, meta the smaller one.
+  const metaCounted = api.technicalActivityHtml([
+    { type: 'output', kind: 'tool_result', text: 'a real result' },
+    { type: 'output', kind: 'meta', text: 'Kept index.html' },
+    { type: 'output', kind: 'meta', text: 'Reverted styles.css' },
+  ], false);
+  if (/\b\d+ checks?\b/.test(metaCounted)) throw new Error('the technical header still calls things checks');
+  if (!metaCounted.includes('1 result')) throw new Error('the one real tool result was not counted');
+  if (/\b3 results\b/.test(metaCounted)) throw new Error('status notes were counted as tool results');
   if ((grouped.match(/tc-code-saved-activity/g) || []).length !== 1 || grouped.includes('<details class="tc-code-technical')) throw new Error('technical evidence created nested activity blobs');
   const groupedError = api.technicalActivityHtml([{ type: 'error', text: 'request failed' }], false);
   if (!groupedError.includes('Worked through 1 issue') || groupedError.includes('1 detail')) throw new Error('technical error was not summarized as an issue');

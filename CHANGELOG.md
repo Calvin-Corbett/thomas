@@ -7,6 +7,13 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (The activity header stops calling tool output "checks")
+
+- The technical header read **"Worked through 1 tool run · 26 checks · 7 issues"** on a run whose report recorded **zero validations**. `check` is a load-bearing word everywhere else in this UI — the verdict card counts engine checks, and *"1/2 checks passed"* means two real ones — so using it here for arbitrary tool output made the header claim verification that never happened. Same overloading as the old **"1 pass"**, which meant one *edit* pass and read as one test passing.
+- It now says `results`, and `meta` status notes ("Kept index.html", "Reverted styles.css") are no longer counted among them — they fall into `details`, which is what they are. The Godot run now reads **"1 tool run · 25 results · 7 issues"**.
+- That 26→25 also corrected me: only **one** of the 26 was a `meta` event, so the misnaming was the bigger half by a wide margin and folding `meta` in was a smaller, separate inaccuracy. The first version of this comment claimed "nearly all of them were meta" — measured, that was false, and it was rewritten rather than shipped.
+- Guarded: the harness asserts the header never says "N checks", counts the one real tool result, and does not inflate to 3 when two status notes are present.
+
 ### Fixed (The verifier stops grading Thomas's own paperwork)
 
 - Thomas writes its Code transcripts into the selected repository under `.thomas/evolve/agent/`. `forge_code_git.project_delta_since` exists to keep those out of a run's changed set — its docstring says they *"must never inflate completion or artifact counts"* — and the run report used it. `_verify_and_iterate` used the unfiltered `delta_since`, so the two disagreed about what the run had changed.
