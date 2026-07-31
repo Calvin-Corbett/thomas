@@ -14,6 +14,14 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Fixed (three task-ledger tests that pinned behaviour `69bbbab0` deliberately removed)
+
+- All three asserted prompt-classifier behaviour that "land model-owned routing, removing the prompt classifiers" deleted on purpose. Confirmed at the source, not just from the commit message: `record_chat_task_finished` says *"Persist success from the runtime terminal event, never from reply prose"*, and `derive_active_goal` says *"Prompt wording never decides whether a turn is an acknowledgement or a follow-up."*
+- Two are rewritten to assert the **current** contract — prose must not move the ledger, and each turn re-titles the goal from its own text — with the rationale and the commit reference recorded at the assertion. Neither was deleted; the contract they guard is worth stating out loud.
+- **Known gap recorded, not papered over:** a turn where Thomas stops and asks for something is now recorded `complete`, because the structured replacement (a tool the model calls to declare itself blocked) does not exist yet. Re-adding a regex over the reply would recreate exactly what was removed, so the fix belongs on the tool side.
+- The third — Max review staying `in_progress` while background work is pending — is held as `unittest.expectedFailure` and deliberately **not** loosened, because unlike the other two it describes something the owner wants back: *"record_chat_task_pending currently has no caller."* Unexpected success is reported as a failure (verified), so the day someone wires that caller, the test says so instead of sitting silently green.
+- Also observed: `test_chat_route_failure_records_safe_blocked_state_without_leaking_detail` passes in isolation but fails in a full-suite run — order-dependent, not investigated here.
+
 ### Fixed (an honesty guard that had been red for eleven days over phrasing)
 
 - `test_forbids_claiming_work_started_and_offers_instead` asserted one literal sentence — *"never tell the user you handed something off unless you actually called the tool"*. It went red on 2026-07-20 when `24ffc614` reworded it to *"never tell the user you're handling something…"*.

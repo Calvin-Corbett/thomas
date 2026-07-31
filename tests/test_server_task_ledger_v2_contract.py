@@ -131,20 +131,58 @@ class TestTaskLedgerV2PublicContract(AioHTTPTestCase):
         self.assertEqual([event["status"] for event in history], ["complete", "in_progress"])
         self.assertEqual([event["source"] for event in history], ["chat_v2.done", "chat_v2.request"])
 
+        # A second turn re-titles the goal from its own text. This asserted that
+        # "do it" was recognised as a continuation and left the goal as "Build
+        # the verified report" -- which required reading the wording to tell an
+        # acknowledgement from a new request. `derive_active_goal` now says so at
+        # the line: "Retained for compatibility only. Prompt wording never
+        # decides whether a turn is an acknowledgement or a follow-up."
+        # `current_goal` survives only when the new text is empty.
         await self._post_chat(
             session_id=session_id,
             message="do it",
             processor=_complete_message,
         )
         followup = await self._current(session_id)
-        self.assertEqual(followup["state"]["active_goal"], "Build the verified report")
+        self.assertEqual(
+            followup["state"]["active_goal"],
+            "Do it",
+            "the ledger inferred from wording that this turn continued the "
+            "previous goal; that inference was removed in 69bbbab0",
+        )
         followup_history = (await self._history(session_id))["history"]
         self.assertEqual(
             [event["status"] for event in followup_history],
             ["complete", "in_progress", "complete", "in_progress"],
         )
 
-    async def test_chat_request_records_blocked_state_and_canonical_missing_input(self) -> None:
+    async def test_a_reply_asking_for_input_is_not_classified_from_its_prose(self) -> None:
+        """The ledger reads the runtime's terminal event, never the reply text.
+
+        This asserted the opposite until 2026-07-31: that a reply reading "I
+        need your API key before continuing" produced ``status="blocked"`` and
+        ``missing_inputs=["API key"]``. That was a prompt classifier, and
+        69bbbab0 ("land model-owned routing, removing the prompt classifiers")
+        deleted the whole family of them on purpose -- conversational judgment
+        now comes from the frontier model calling a structured tool, and
+        deterministic code "may not invent the request". `record_chat_task_finished`
+        says so in its own docstring: "Persist success from the runtime terminal
+        event, never from reply prose."
+
+        So the test was pinning removed behaviour and had been red ever since.
+        It is rewritten rather than deleted because the contract it guards is
+        worth stating explicitly: prose must NOT move the ledger.
+
+        KNOWN GAP, recorded rather than papered over. A turn where Thomas stops
+        and asks for something is recorded ``complete``, because the structured
+        replacement -- a tool the model calls to declare itself blocked -- does
+        not exist yet. Re-adding a regex over the reply would recreate exactly
+        what was removed, so the fix belongs on the tool side. `blocked` today
+        comes only from a real route failure, which
+        `test_chat_route_failure_records_safe_blocked_state_without_leaking_detail`
+        covers.
+        """
+
         session_id = "v2-ledger-blocked"
         await self._post_chat(
             session_id=session_id,
@@ -154,11 +192,16 @@ class TestTaskLedgerV2PublicContract(AioHTTPTestCase):
 
         current = await self._current(session_id)
         self.assertEqual(current["state"]["active_goal"], "Publish the report")
-        self.assertEqual(current["state"]["status"], "blocked")
-        self.assertEqual(current["state"]["missing_inputs"], ["API key"])
+        self.assertEqual(
+            current["state"]["status"],
+            "complete",
+            "the ledger classified a turn from the wording of its reply; prompt "
+            "classifiers were removed in 69bbbab0 and must not come back",
+        )
+        self.assertEqual(current["state"]["missing_inputs"], [])
 
         history = (await self._history(session_id))["history"]
-        self.assertEqual([event["status"] for event in history], ["blocked", "in_progress"])
+        self.assertEqual([event["status"] for event in history], ["complete", "in_progress"])
         self.assertEqual([event["source"] for event in history], ["chat_v2.done", "chat_v2.request"])
 
     async def test_chat_route_failure_records_safe_blocked_state_without_leaking_detail(self) -> None:
@@ -183,7 +226,30 @@ class TestTaskLedgerV2PublicContract(AioHTTPTestCase):
         self.assertEqual([event["source"] for event in history], ["chat_v2.error", "chat_v2.request"])
         self.assertNotIn("provider-secret-error-detail", json.dumps(history))
 
+    @unittest.expectedFailure
     async def test_max_review_remains_in_progress_while_background_work_is_pending(self) -> None:
+        """Held open deliberately: the feature this guards is currently gone.
+
+        69bbbab0 records it as a known loss, in the owner's words: "Exhaustive
+        (Max) no longer runs the crew and fresh graders. That flag read the
+        effort DIAL, not prose, and went as collateral. I restored it and backed
+        the restoration out: done is emitted inside brain.process_message, so
+        the route cannot attach max_review_pending without redesigning the
+        stream contract, and a half-restoration leaves the ledger in_progress
+        after the UI already saw done -- the zombie-task bug.
+        record_chat_task_pending currently has no caller."
+
+        So this fails twice over: `chat_v2.effective_effort` no longer exists to
+        patch, and nothing would emit `chat_v2.pending` if it did.
+
+        Kept as an expected failure rather than deleted, and NOT loosened to
+        match today's behaviour, because unlike the two tests above this one
+        does not describe a decision -- it describes something the owner wants
+        back. unittest's expectedFailure reports an unexpected SUCCESS as a
+        failure, so the day someone gives `record_chat_task_pending` a caller,
+        this test says so instead of sitting silently green.
+        """
+
         session_id = "v2-ledger-max-pending"
         with (
             patch("thomas.server.routes.chat_v2.effective_effort", return_value="max"),
