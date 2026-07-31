@@ -7,6 +7,16 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Added (You can choose which model does research again)
+
+- Thomas already **had** per-specialist models and stopped showing them. The whole path worked — `worker_runtime._resolve_profile` consults the per-role override before the chat default, `GET /api/models` returns `role_profiles` and `role_model_ids`, and `PATCH /api/preferences` writes them. What was missing was any way to set one: `persist_user_model_role_preference` has **no production caller at all**, and nothing in the unified shell ever mentioned `role_profiles`. The feature was reachable only by hand-editing preferences.
+- Six rows at the foot of the model menu — Reasoning, Coding, Research, Tools, Writing, Data — each defaulting to *Same as chat*. Driven end to end through the actual select: choosing **GPT-5.6 Terra** for Research wrote `{research: openai_codex} / {research: gpt-5.6-terra}`, survived a full reload still reading *GPT-5.6 Terra*, and *Same as chat* cleared it back to `{}`.
+- The clear matters as much as the set: the preferences patch treats an empty map as "no change", so only an explicit **null** removes an override. A control that could set but not unset would strand you on a choice.
+- Placed in the model menu rather than behind a new settings surface — the menu is already where a model is chosen, and something you have to discover is how this got buried the first time.
+- The ids are pinned to the six the delegation runner accepts. Anything else is coerced to `reasoning`, so a prettier label here would write an override that silently never matches.
+- Changing the **default** already worked: picking any model PATCHes `active_profile`/`model_id`. Verified by round-trip.
+- **The guard failed its own both-directions check twice before it was right.** `renderSpecialistModels\(wrap\)` also matched the function *definition*, so it passed with the call commented out — the exact "defined but never called" state it exists to detect. Now four separate regressions are each caught: commenting out the call, renaming a specialist id, breaking the clear path, and dropping the state seeding.
+
 ### Fixed (A generated app now remembers your work)
 
 - Every entry into a preview went through `__enter/<token>`, which sent `Clear-Site-Data: "cache", "storage"`. The storage clear ran on **every load**, so any deliverable using `localStorage` forgot everything the moment the panel was reopened. **29 of 442** generated files use it — about one deliverable in fifteen.

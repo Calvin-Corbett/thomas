@@ -708,6 +708,102 @@
           wrap.appendChild(b);
         });
       });
+      renderSpecialistModels(wrap);
+    }
+
+    // Which model handles research, coding, and the rest.
+    //
+    // This is a feature Thomas already HAD and stopped showing. The whole path
+    // works: `worker_runtime._resolve_profile` consults the per-role override
+    // before the chat default, `GET /api/models` returns the maps, and
+    // `PATCH /api/preferences` writes them (verified by round-trip). The only
+    // missing piece was a control -- `persist_user_model_role_preference` has no
+    // production caller at all, and nothing in the unified shell ever mentioned
+    // `role_profiles`. Set it, and it takes effect immediately.
+    //
+    // The six ids are the ones the delegation runner accepts; anything else is
+    // coerced to "reasoning" (chat_delegation.py: specialist_id not in {...}).
+    // Inventing prettier names here would write overrides that never match.
+    //
+    // It lives at the foot of the model menu rather than behind a new modal:
+    // the menu is already where a model is chosen, and a settings surface the
+    // owner has to discover is how this got buried the first time.
+    const SPECIALIST_ROLES = [
+      ['reasoning', 'Reasoning'],
+      ['coding', 'Coding'],
+      ['research', 'Research'],
+      ['tools', 'Tools'],
+      ['writing', 'Writing'],
+      ['data', 'Data'],
+    ];
+
+    function persistRoleModel(role, profileName, modelId) {
+      // null, not "" -- the preferences patch treats an empty map as "no change"
+      // and only a null value clears an override.
+      const body = { advanced: { model: {
+        role_profiles: { [role]: profileName || null },
+        role_model_ids: { [role]: modelId || null },
+      } } };
+      return fetch('/api/preferences', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).catch(() => {});
+    }
+
+    function renderSpecialistModels(wrap) {
+      const usable = [];
+      profilesData.forEach(p => {
+        if (!profileIsUsable(p)) return;
+        profileModelOptions(p).forEach(m => {
+          if (m.available === false) return;
+          usable.push({ profile: p.name, id: String(m.id || p.model || ''),
+                        label: String(m.display_name || m.id || p.model || p.name).split('/').pop() });
+        });
+      });
+      // With nothing to choose between, six selects offering one option each is
+      // noise. The section simply does not appear.
+      if (usable.length < 2) return;
+
+      const head = document.createElement('div');
+      head.style.cssText = 'margin: 10px 4px 6px; padding-top: 9px; border-top: 1px solid var(--c-border); color: var(--c-muted); font: 700 10px/1.2 var(--font-label, inherit); letter-spacing: .08em; text-transform: uppercase;';
+      head.textContent = 'Use a different model for';
+      wrap.appendChild(head);
+
+      SPECIALIST_ROLES.forEach(([role, label]) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 3px 4px;';
+        const name = document.createElement('span');
+        name.style.cssText = 'flex: 0 0 74px; font-size: 12px; color: var(--c-dim);';
+        name.textContent = label;
+        const sel = document.createElement('select');
+        sel.setAttribute('aria-label', `Model for ${label}`);
+        sel.style.cssText = 'flex: 1; min-width: 0; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-family: inherit; font-size: 11.5px; cursor: pointer;';
+        const dflt = document.createElement('option');
+        dflt.value = '';
+        dflt.textContent = 'Same as chat';
+        sel.appendChild(dflt);
+        usable.forEach(u => {
+          const o = document.createElement('option');
+          o.value = `${u.profile} ${u.id}`;
+          o.textContent = u.label;
+          sel.appendChild(o);
+        });
+        const currentProfile = (state.roleProfiles || {})[role] || '';
+        const currentModel = (state.roleModelIds || {})[role] || '';
+        sel.value = currentProfile ? `${currentProfile} ${currentModel}` : '';
+        if (sel.selectedIndex < 0) sel.value = '';
+        sel.addEventListener('change', () => {
+          const [profileName, modelId] = sel.value ? sel.value.split(' ') : ['', ''];
+          state.roleProfiles = state.roleProfiles || {};
+          state.roleModelIds = state.roleModelIds || {};
+          if (profileName) { state.roleProfiles[role] = profileName; state.roleModelIds[role] = modelId; }
+          else { delete state.roleProfiles[role]; delete state.roleModelIds[role]; }
+          persistRoleModel(role, profileName, modelId);
+        });
+        row.appendChild(name); row.appendChild(sel);
+        wrap.appendChild(row);
+      });
     }
 
     // ---------- Sidebar lists ----------
@@ -2971,6 +3067,11 @@
           profilesData = Array.isArray(d.profiles) ? d.profiles : [];
           await hydrateProfileModels();
           const prefs = d.preferences || {};
+          // Per-specialist overrides, so the selects at the foot of the model
+          // menu open showing what is actually set rather than "Same as chat".
+          // This payload has always carried them; nothing in the shell read it.
+          state.roleProfiles = Object.assign({}, prefs.role_profiles || {});
+          state.roleModelIds = Object.assign({}, prefs.role_model_ids || {});
           const active = String(prefs.active_profile || d.default || '').trim().toLowerCase();
           const usable = (p) => !!p && (!!p.has_api_key || p.provider === 'openai_codex' || p.name === 'local');
           // Prefer the configured active profile; if it isn't usable (e.g. a keyless
