@@ -426,7 +426,25 @@
            (unified_code_results.js:184, :212): both are tabindex="-1" decoration,
            and a 168px picture must never be able to pop a dialog over the chat or
            swallow the mouse cursor. -->
-      <div class="tc-code-viewer-stage"><iframe title="${esc(file)}" sandbox="allow-scripts allow-forms allow-modals allow-pointer-lock allow-downloads" src="${esc(doc)}"></iframe></div>
+      <!-- allow-same-origin is what lets a multi-file deliverable load its OWN
+           styles.css and game.js. Without it the document has an opaque origin, so
+           default-src 'self' matches nothing and every relative subresource is
+           refused. The panel then shows unstyled Times New Roman markup over a dead
+           300x150 canvas, while the same file in a new tab is the finished app.
+           Isolated on a standalone page that never re-renders, after a 9s settle:
+             without: window.origin 'null', cssRules SecurityError, fetch('styles.css')
+                      TypeError, canvas 300x150
+             with   : window.origin real, cssRules 154, fetch 200, canvas 1280x800
+           Chromium reports the refusals as net::ERR_ABORTED rather than csp, which
+           reads like a cancelled request and is why this looked like a re-render.
+           NB read window.origin, not location.origin -- the latter returns the URL's
+           origin even in an opaque document and says 'not opaque' when it is.
+           The two decorative previews (:184, :212) already carry allow-same-origin;
+           this interactive one was the only frame without it. Safe here because the
+           artifact is served from its OWN port, a different origin from the shell,
+           so the frame cannot reach Thomas's DOM or cookies -- and the response CSP
+           already grants the same token at the sandbox layer. -->
+      <div class="tc-code-viewer-stage"><iframe title="${esc(file)}" sandbox="allow-scripts allow-forms allow-modals allow-pointer-lock allow-downloads allow-same-origin" src="${esc(doc)}"></iframe></div>
     </aside>`;
   }
 

@@ -7,6 +7,22 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A multi-file app rendered as unstyled text in Thomas's own panel)
+
+- Thomas builds plenty of apps as `index.html` + `styles.css` + `game.js`. The Code viewer stage — the panel beside the chat, and the main way anyone looks at a result — framed them **without `allow-same-origin`**. The document then has an opaque origin, so `default-src 'self'` matches nothing and every relative subresource is refused.
+- The owner saw unstyled Times New Roman over a dead 300×150 canvas, while the thumbnail beside it and the same file in a new tab showed the finished app.
+- Isolated on a standalone page that never re-renders, after a 9s settle, so an aborted re-render could not explain it: `window.origin` **`'null'` → real**, `cssRules` **SecurityError → 154**, `fetch('styles.css')` **TypeError → 200**, canvas **300×150 → 1280×800**.
+- Two traps worth recording. Chromium reports those refusals as `net::ERR_ABORTED`, not `csp`, which reads like a cancelled request — that is why it first looked like a rendering race. And **`location.origin` returns the URL's origin even in an opaque document**; only `window.origin` reports `'null'`. My first probe read the wrong one and nearly sent me after the wrong cause.
+- The two decorative previews already carried the token; the interactive stage was the **only** frame without it — the same "every sibling but one" shape as `project_delta_since` and `--c-danger`.
+- Safe because the artifact is served from its own port, a different origin from the shell, so the frame cannot reach Thomas's DOM or cookies; and the response CSP already grants the same token. The guard also pins that the stage is **not** granted `allow-top-navigation`.
+
+### Known gap (deliverable storage does not survive a reload) — measured, not fixed
+
+- A generated app that saves your work forgets it when the preview is reopened or refreshed. On `habits.html`: within a load `wrote True, readBack 'kept', length 1`; on the next load `before None`.
+- Ruled out by measurement rather than reasoning: the origin is **stable** across loads (the grant is reused), there is **no** `Clear-Site-Data` header anywhere in the chain, and the injected shim only replaces storage when the real one throws — `Object.getPrototypeOf(localStorage) === Storage.prototype` is **True**, so the real one is in place.
+- Control naming the cause: the identical bytes on a plain http server with no CSP persist normally (load 1 reads `'kept'`); through Thomas the same page reads `None`. The CSP **`sandbox` directive** makes storage ephemeral even though `allow-same-origin` preserves the origin.
+- **Not fixed.** The only lever is dropping `sandbox` from the CSP, which is the deliberate containment backstop — a security trade, not a bug fix. Recorded at the exact line instead.
+
 ### Fixed (Thomas called a dead page "browser boot clean")
 
 - `blocktown-84.html` loads three.js from a CDN. Through Thomas's **own** artifact route: `window.THREE` undefined, the only button *"Deploy to Blocktown"* disabled, red text reading *"The 3D engine could not load. Check your connection and refresh."*, and `requestfailed … :: csp`.

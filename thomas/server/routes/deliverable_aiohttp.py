@@ -219,6 +219,32 @@ _STORAGE_SHIM = (
     "catch(e){try{Object.defineProperty(window,n,{value:S(),configurable:true});}catch(_){}}}"
     "fix('localStorage');fix('sessionStorage');})();</script>"
 )
+# KNOWN GAP, MEASURED, NOT FIXED — deliverable storage does not survive a reload,
+# and the shim above is not why.
+#
+# A generated app that saves your work forgets it whenever the preview is closed
+# and reopened, or refreshed. Measured on habits.html through the artifact route:
+#
+#     load 0   isReal True, wrote True, readBackSameLoad 'kept', length 1
+#     load 1   before None                    <- the previous value is gone
+#
+# So the write genuinely works within a load. Ruled out, each by measurement, not
+# by reasoning: the origin is STABLE across loads (127.0.0.1:65005 three times in
+# a row, since the preview grant is reused); there is no Clear-Site-Data header on
+# any response in the chain; and the shim only replaces storage when the real one
+# THROWS, while `Object.getPrototypeOf(localStorage) === Storage.prototype` is
+# True here, so the real one is in place.
+#
+# Control that names the cause: the identical bytes served from a plain local
+# http server with no CSP persist normally — load 0 writes, load 1 reads 'kept'.
+# Through this route the same page reads None. The difference is the CSP `sandbox`
+# directive: a sandboxed document gets ephemeral storage even though
+# `allow-same-origin` preserves its origin.
+#
+# Not fixed, because the only lever is dropping `sandbox` from the CSP, and that
+# is the deliberate call-site-independent containment described below — a
+# security trade, not a bug fix, and not one to make while chasing a papercut.
+# Anyone taking it on should decide it on its own merits.
 _FAVICON_SHIM = (
     '<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' '
     "viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%238b8cff'/%3E"
