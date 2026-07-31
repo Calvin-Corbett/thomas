@@ -14,6 +14,18 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Fixed (verification skipped every page whose input is a textarea)
+
+- The type-then-press probe's entry filter tested `node.getAttribute("type") || node.type`. A `<textarea>` has no `type` attribute, so that yields the string `"textarea"`, which the regex rejected — excluding every textarea on every page, and making the branch that reads `field.tagName === "TEXTAREA"` unreachable.
+- Measured on `wordfreq.html` (one textarea; Count words / Clear / Download CSV): `entries` was 0, the probe never fired, and the receipt read `interactions: [], notes: []`.
+
+  ```
+  before   wordfreq.html: browser boot clean; boot only; 4 control(s) not exercised
+  after    wordfreq.html: browser boot clean; typed:smoke test, clicked:Count words
+  ```
+- Swept 14 real deliverables to check the *other* direction — that loosening the gate did not start driving pages it should leave alone. Only wordfreq changed; Minesweeper (82 controls), the habit tracker (33) and the tip calculator stayed `boot only`. Newly driven: 1. Wrongly driven: 0.
+- That sweep also measures the remaining gap plainly: **11 of 14 real deliverables are still verified boot-only.** The summary now says so out loud rather than implying coverage it does not have.
+
 ### Fixed (three task-ledger tests that pinned behaviour `69bbbab0` deliberately removed)
 
 - All three asserted prompt-classifier behaviour that "land model-owned routing, removing the prompt classifiers" deleted on purpose. Confirmed at the source, not just from the commit message: `record_chat_task_finished` says *"Persist success from the runtime terminal event, never from reply prose"*, and `derive_active_goal` says *"Prompt wording never decides whether a turn is an acknowledgement or a follow-up."*

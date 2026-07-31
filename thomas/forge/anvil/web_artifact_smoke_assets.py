@@ -379,9 +379,20 @@ _SMOKE_HARNESS = r"""
         // task" is real evidence the app works, where before the same run
         // reported "boot only" and proved nothing.
         if (!state.interactions.length) {
+          // A <textarea> has no type attribute, so `node.type` reports the
+          // string "textarea" -- which this filter's regex rejected, silently
+          // excluding every textarea on the page. The branch below that reads
+          // `field.tagName === "TEXTAREA"` could therefore never run.
+          //
+          // Measured on wordfreq.html (one textarea, buttons Count words /
+          // Clear / Download CSV): entries was 0, the probe never fired, and the
+          // receipt read `interactions: [], notes: []` -- "boot only; 4
+          // control(s) not exercised" on a page that works perfectly when a
+          // person types in it.
           const entries = [...document.querySelectorAll("input, textarea")].filter((node) =>
             visible(node) && !node.disabled && !node.readOnly
-            && /^(text|search|number|email|tel|url|)$/i.test(node.getAttribute("type") || node.type || ""));
+            && (node.tagName === "TEXTAREA"
+              || /^(text|search|number|email|tel|url|)$/i.test(node.getAttribute("type") || node.type || "")));
           const submits = [...document.querySelectorAll("button, [role='button']")]
             .filter((node) => visible(node) && !node.disabled && clean(node.textContent).length > 0)
             .filter((node) => !/(delete|remove|clear|reset|restart|erase|trash|discard|wipe|start over|cancel)/i.test(

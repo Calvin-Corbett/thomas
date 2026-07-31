@@ -19,6 +19,21 @@ shipping this time::
 
     apps wrongly reported dead: 0
 
+2026-07-31: the gate excluded every ``<textarea>``. A textarea has no ``type``
+attribute, so ``node.type`` returns the string "textarea", which the entry
+regex rejected -- and the branch reading ``field.tagName === "TEXTAREA"`` could
+therefore never run. Measured on ``wordfreq.html`` (one textarea; Count words /
+Clear / Download CSV): ``entries`` was 0, the probe never fired, and the receipt
+read ``interactions: [], notes: []``::
+
+    before   wordfreq.html: browser boot clean; boot only; 4 control(s) not exercised
+    after    wordfreq.html: browser boot clean; typed:smoke test, clicked:Count words
+
+Swept across 14 real deliverables afterwards to check the other direction --
+that loosening the gate did not start driving pages it should leave alone. Only
+wordfreq changed; Minesweeper (82 controls), the habit tracker (33) and the tip
+calculator stayed "boot only". Newly-driven pages: 1. Wrongly driven: 0.
+
 Two runs that previously proved nothing now carry real evidence that the app
 responds. That is the point: not catching more failures, but being able to say
 something TRUE about whether the thing works.
@@ -71,6 +86,27 @@ def test_it_only_drives_a_single_unambiguous_field() -> None:
     assert re.search(r"entries\.length\s*===\s*1", body), (
         "the probe no longer requires exactly ONE entry field, so it will fill "
         "one field of a multi-field form and report a working app as dead"
+    )
+
+
+def test_a_textarea_counts_as_an_entry_field() -> None:
+    """Otherwise the TEXTAREA branch below it is unreachable.
+
+    `<textarea>` carries no `type` attribute, so `node.type` yields the string
+    "textarea" and the entry regex rejected it. Every page whose input is a
+    textarea -- a notes app, a word counter, a formatter, anything that takes a
+    paragraph -- reported "boot only" no matter how well it worked.
+    """
+
+    body = _source()
+    match = re.search(r"const entries = \[[\s\S]{0,700}?\)\);", body)
+    assert match, "the entry-field filter is gone"
+    entries = match.group(0)
+    assert "TEXTAREA" in entries, (
+        "the entry filter no longer admits a <textarea>. `node.type` is the "
+        "string 'textarea', which the type regex rejects, so the probe never "
+        "fires on a page whose only input is a textarea -- and the "
+        "`field.tagName === \"TEXTAREA\"` branch further down is dead code."
     )
 
 
