@@ -219,54 +219,29 @@ _STORAGE_SHIM = (
     "catch(e){try{Object.defineProperty(window,n,{value:S(),configurable:true});}catch(_){}}}"
     "fix('localStorage');fix('sessionStorage');})();</script>"
 )
-# KNOWN GAP, MEASURED, NOT FIXED — deliverable storage does not survive a reload,
-# and the shim above is not why.
+# Deliverable storage survives a reload again. A generated app that saves your
+# work used to forget it whenever the preview was reopened or refreshed.
 #
-# A generated app that saves your work forgets it whenever the preview is closed
-# and reopened, or refreshed. Measured on habits.html through the artifact route:
-#
-#     load 0   isReal True, wrote True, readBackSameLoad 'kept', length 1
-#     load 1   before None                    <- the previous value is gone
-#
-# So the write genuinely works within a load. Ruled out, each by measurement, not
-# by reasoning: the origin is STABLE across loads (127.0.0.1:65005 three times in
-# a row, since the preview grant is reused); there is no Clear-Site-Data header on
-# any response in the chain; and the shim only replaces storage when the real one
-# THROWS, while `Object.getPrototypeOf(localStorage) === Storage.prototype` is
-# True here, so the real one is in place.
-#
-# Control that names the cause: the identical bytes served from a plain local
-# http server with no CSP persist normally — load 0 writes, load 1 reads 'kept'.
-# Through this route the same page reads None. The difference is the CSP `sandbox`
-# directive: a sandboxed document gets ephemeral storage even though
-# `allow-same-origin` preserves its origin.
-#
-# CAUSE FOUND 2026-07-31, and it is NOT the sandbox. It is the
-# `Clear-Site-Data: "cache", "storage"` header on the `__enter` handler further
-# down this file, which runs on every entry into a preview.
-#
-# The earlier note here blamed the CSP `sandbox` directive on the strength of a
-# three-way comparison. That comparison was confounded -- the two cases that
-# kept their storage were navigated DIRECTLY, the one that lost it went through
-# the `/api/evolve/agent/artifact/...` -> `__enter/<token>` redirect. Removing
-# the sandbox directive was tried and changed nothing, then reverted.
-#
-# What settles it, same origin throughout:
-#     navigate straight to the resolved preview URL, twice   kept, kept
-#     the same page through the redirect                     LOST
+# The cause is the `Clear-Site-Data` header on the `__enter` handler further down
+# this file, which runs on every entry into a preview -- NOT the CSP `sandbox`
+# directive, which an earlier note here blamed on the strength of a confounded
+# comparison (the two cases that kept storage were navigated directly; the one
+# that lost it went through the redirect). Removing the sandbox directive was
+# tried, changed nothing, and was reverted. What settles it, same origin
+# throughout: straight to the resolved preview URL twice -> kept, kept; the same
+# page through the redirect -> LOST.
 #
 # The clear is deliberate, not a bug: the preview port is REUSED between grants,
 # so without it one deliverable could read the localStorage another left behind
-# on the same origin. Dropping just `"storage"` from that header restores
-# per-deliverable persistence and leaves the cache clear alone; the residual
-# risk is a later preview landing on a recycled ephemeral port and seeing the
-# previous deliverable's keys. That is a trade between isolation and "the app
-# remembers your work", worth stating plainly rather than making in passing:
-# 29 of 442 generated files use localStorage, about one deliverable in fifteen.
+# on the same origin. Dropping only `"storage"` restores per-deliverable
+# persistence and leaves the cache clear alone. The residual risk is a later
+# preview landing on a recycled ephemeral port and seeing the previous
+# deliverable's keys -- a trade between isolation and "the app remembers your
+# work", stated plainly rather than made in passing: 29 of 442 generated files
+# use localStorage, about one deliverable in fifteen.
 #
-# Also corrected here: this note previously asserted "there is no Clear-Site-Data
-# header on any response in the chain". There is. The header dump behind that
-# claim filtered to a fixed list of header names and never printed it.
+# Full measurement in CHANGELOG.md; guard in
+# tests/test_a_deliverable_remembers_your_work.py.
 _FAVICON_SHIM = (
     '<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' '
     "viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%238b8cff'/%3E"
@@ -622,79 +597,40 @@ class DeliverablePreviewService:
         # listens on its own ephemeral port, so 'self' is one app's own origin;
         # it grants nothing to another preview or to a remote page.
         frame_ancestors = f"{self._main_origin} 'self'" if self._main_origin else "'none'"
-        # 'unsafe-eval' matches what the browser smoke already allows when it
-        # CERTIFIES these pages. Without it the viewer was stricter than the
-        # checker, so a page could pass every verification and still be broken
-        # the moment the owner opened it -- with nothing to report, because both
-        # halves did exactly what they were configured to do.
+        # Four capabilities were silently removed here, each killing correct
+        # generated code with no error anywhere. Each is granted for the same
+        # reason and each has a guard holding it; the full measurement for every
+        # one is in CHANGELOG.md under its own "Fixed" entry.
         #
-        # Measured, not theorised: the owner asked for a calculator, Thomas
-        # built one, verification returned `completed`, and `12 + 8` produced
-        # `Error` on screen. `Function('return (12+8)')()` -- the ordinary way a
-        # calculator evaluates a typed expression -- threw `EvalError:
-        # Evaluating a string as JavaScript violates the following Content
-        # Security Policy directive`, and the page's own catch turned that into
-        # `Error`. Proven by injecting an inline <script> into the live preview,
-        # which CSP governs; evaluating the same call from devtools reported
-        # success, because the devtools console is not subject to CSP.
+        #   'unsafe-eval'        a calculator's `Function('return (12+8)')()`
+        #                        threw EvalError and the page showed "Error".
+        #                        The browser smoke already allows it when it
+        #                        CERTIFIES these pages, so the viewer was
+        #                        stricter than the checker.
+        #   allow-modals         a Reset button reading `if (!confirm(...)) return;`
+        #                        did nothing: sandboxed confirm() returns false
+        #                        silently, so the guard returned every time.
+        #                        Guard: test_generated_apps_can_ask_before_they_delete
+        #   allow-pointer-lock   mouse-look gated on `pointerLockElement === canvas`
+        #                        never becomes true, so an FPS cannot turn.
+        #                        Guard: test_a_first_person_game_can_turn
+        #   allow-downloads      an Export CSV button was dead here and worked
+        #                        from a plain local server -- same bytes, same
+        #                        clicks. Guard: test_an_export_button_produces_a_file
         #
-        # It costs nothing to allow. 'unsafe-inline' is already granted here, so
-        # a hostile page can run whatever JavaScript it likes by writing it out
-        # directly; refusing to evaluate a STRING removes no capability it does
-        # not already have. The directives that actually contain a generated
-        # page -- connect-src 'self', object-src 'none', base-uri 'none',
-        # form-action 'self', and the sandbox -- are untouched.
-        # `allow-modals` for the same reason, found the same way. The owner asked
-        # for a habit tracker with a Reset button; Thomas built one whose handler
-        # reads `if (!confirm("Clear all habit checkoffs?")) return;`. Clicking
-        # Reset did nothing at all -- no dialog, no error, no console message.
-        # Without `allow-modals` the sandbox makes `confirm()` return false and
-        # show nothing, so the guard clause returns early every time. Measured on
-        # the live page: 2 boxes checked -> 2 after clicking Reset; with
-        # `window.confirm` forced to true, the same click cleared them. The page's
-        # logic was correct throughout.
+        # 'unsafe-inline' is already granted, so refusing to evaluate a STRING
+        # removed no capability a hostile page did not already have by writing
+        # the script out directly. The directives that actually contain a page --
+        # connect-src 'self', object-src 'none', base-uri 'none', form-action
+        # 'self', and the sandbox itself -- are untouched.
         #
-        # This is a CSP `sandbox` directive, so it applied to the top-level
-        # document too -- "open in a new tab" produced the same dead button, not
-        # just the framed preview.
-        #
-        # Granting it here raises the CEILING only. The effective sandbox is the
-        # intersection with each iframe's own `sandbox` attribute, so the
-        # decorative surfaces (transcript thumbnail, drawer shot -- both
-        # `tabindex="-1"` and non-interactive) still refuse modals and cannot pop
-        # a dialog out of a 168px picture. Only the viewer stage, which the owner
-        # actually clicks, opts in.
-        #
-        # It removes no containment: a hostile page can already draw a convincing
-        # fake dialog in HTML, and can already hang its own frame with a loop.
-        # What it removes is a whole class of generated app -- anything with a
-        # confirm-before-delete -- being silently dead on the one button that
-        # matters. Guard: tests/test_generated_apps_can_ask_before_they_delete.py
-        #
-        # `allow-pointer-lock` is the third instance of the same shape, and it is
-        # the one that makes first-person games unplayable. From a game Thomas
-        # built on 2026-07-30 (~/.thomas/projects/Code task 2026-07-30 1137/game.js):
-        #
-        #     if (document.pointerLockElement !== canvas) canvas.requestPointerLock?.();
-        #     ...
-        #     addEventListener("mousemove", (event) => {
-        #       if (... && document.pointerLockElement === canvas && state.player)
-        #         state.player.angle += event.movementX * .0023;
-        #     });
-        #
-        # Mouse-look is gated entirely on `pointerLockElement === canvas`. Without
-        # the token that is never true, so the player cannot TURN -- an FPS where
-        # you may only shoot straight ahead. No error is raised; the request is
-        # simply refused. Two of the owner's own deliverables call it
-        # (that game.js and code_scratch/blocktown-84.html).
-        #
-        # `allow-downloads` is the fourth, and the only one caught on FRESH
-        # output: Thomas was asked for a to-do list with an Export CSV button and
-        # built a correct one. Through this route the button did nothing at all;
-        # the identical bytes served from a plain local http server downloaded
-        # `tasks-2026-07-30.csv` immediately. Same browser, same clicks, only the
-        # sandbox differs -- which is what makes it Thomas's defect rather than
-        # the model's. Any generated export/save/report button was dead.
+        # This raises the CEILING only. The effective sandbox is the intersection
+        # with each iframe's own `sandbox` attribute, so the decorative surfaces
+        # (transcript thumbnail, drawer shot -- both `tabindex="-1"`) still refuse
+        # modals and cannot pop a dialog out of a 168px picture. Only the viewer
+        # stage the owner actually clicks opts in. Note the CSP `sandbox`
+        # directive also governs the top-level document, so "open in a new tab"
+        # had the same dead buttons, not just the framed preview.
         #
         # `allow-popups` is deliberately NOT granted: zero deliverables call
         # `window.open(`, so there is no defect to fix and no reason to widen.
