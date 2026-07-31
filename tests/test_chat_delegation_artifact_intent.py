@@ -232,8 +232,24 @@ class ArtifactIntentIsNotOnTheCompletionPath(unittest.TestCase):
         self.assertTrue(wrong)
         self.assertEqual(right, [])
 
-    def test_nothing_under_thomas_imports_this_module(self):
-        """The claim the docstring now makes, checked rather than asserted in prose."""
+    def test_the_only_importer_is_the_reporting_path_not_the_verdict(self):
+        """This module IS wired up now, and where it is wired matters.
+
+        This test previously asserted that nothing under ``thomas/`` imported the
+        module at all, and it fired the moment that changed -- which is exactly
+        what it was for. The reconnection was deliberate: the promise the
+        changelog made ("Thomas no longer calls a deliverable verified when it
+        has nothing to do with what you asked") is now kept by TELLING the owner
+        rather than by failing the run.
+
+        So the claim worth pinning is no longer "nothing imports it" but "only
+        the reporting path imports it". A token overlap must never decide
+        pass/fail: restoring the original 2026-07-24 wiring, where a mismatch
+        scored the completion review 0.0, flips a real recorded case from pass to
+        fail. ``chat_delegation_deliverable_postprocess`` reaches it, that module
+        returns a warning string, and the runner appends it to the summary
+        alongside the executability warning.
+        """
         target = "chat_delegation_artifact_intent"
         control = "chat_delegation_artifact_verification"
         importers: dict[str, set[str]] = {target: set(), control: set()}
@@ -263,9 +279,29 @@ class ArtifactIntentIsNotOnTheCompletionPath(unittest.TestCase):
         )
         self.assertEqual(
             importers[target],
-            set(),
-            "chat_delegation_artifact_intent now has a production importer -- good, but the "
-            "'NOT WIRED' note at the top of that module is now false and must be rewritten",
+            {"thomas/server/chat_delegation_deliverable_postprocess.py"},
+            "chat_delegation_artifact_intent is reachable from somewhere other than the "
+            "reporting path. It returns a token overlap, which must never decide a "
+            "verdict -- restoring its original completion-review wiring flips a real "
+            "recorded case from pass to fail. If a new importer is legitimate, say here "
+            "which one and why it does not gate.",
+        )
+
+        # And the reporting path must not feed the verdict.
+        runner = (REPO_ROOT / "thomas" / "server" / "chat_delegation_runner.py").read_text(encoding="utf-8")
+        call = next(
+            (
+                line
+                for line in runner.splitlines()
+                if "subject_mismatch_warning" in line and "(" in line and "import" not in line
+            ),
+            "",
+        )
+        self.assertTrue(call, "the reporting call is gone, so the owner is no longer told")
+        self.assertNotIn(
+            "verified_success",
+            call,
+            f"the subject warning now feeds the verdict: {call.strip()!r}",
         )
 
 

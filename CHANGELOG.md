@@ -22,6 +22,14 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Fixed (Thomas tells you again when a deliverable has nothing to do with what you asked)
+
+- The changelog promised this and it stopped being true on 2026-07-27: `6cc89af2` shipped the artifact-intent check **with** its call site, and `87ae37e5` replaced that whole file with a branch version written before the check existed, taking the call with it. Four days of the guarantee being advertised and absent.
+- **Reconnected as a report, not as a gate** — and that is the design, not a compromise. The measurement is a token overlap. A verification probe that rejects a run on that basis grades the model instead of reporting honestly, and restoring the original wiring (where a mismatch scored the completion review 0.0) flips a real recorded case from pass to fail. `verified_success` is deliberately not computed from it; the owner is simply told, in the run summary, beside the executability warning that already works this way.
+- Measured on the request *"make me a graph of current technology adoption trends"*, answered two ways: an arcade game now yields *"⚠ This may not be what you asked for — game.html does not appear to be about what was asked (matched 0 of the requested subject: adoption, current, graph, technology, trends)"*, and a genuine trend page stays silent.
+- Silence still means "not checkable", never "checked and fine" — four controls pin it: a vague request, no request, no artifacts, no workspace.
+- The wave-2 guard that asserted *nothing* imported this module fired the moment this landed, which is exactly what it was for. It now pins the narrower truth: the only importer is the reporting path, and that call must not touch the verdict.
+
 ### Fixed (a generated app's Copy button did nothing, and its Fullscreen key was refused)
 
 - The same silent-capability-removal shape as the artifact sandbox, but **one layer above it**. Sandbox tokens were already correct after the four earlier fixes — an inventory of every artifact CSP and every artifact iframe found no remaining token mismatch. `fullscreen` and the async clipboard are **Permissions Policy** features whose default allowlist is `self`, so the *embedding page* must delegate them with `allow=`.

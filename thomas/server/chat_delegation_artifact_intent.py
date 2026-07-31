@@ -1,12 +1,22 @@
 """Does the artifact have anything to do with what was asked?
 
-NOT WIRED. Read this before believing anything below: **nothing in production
-calls this module.** As of dev 043d737c (2026-07-31) the only importer anywhere
-in the tree is ``tests/test_chat_delegation_artifact_intent.py``. The check
-described here is real and it works -- it is simply not on the path that decides
-whether a run is reported as verified. See "Why it is unwired" at the bottom, and
-``ArtifactIntentIsNotOnTheCompletionPath`` in that test file, which measures both
-halves of that sentence and goes red if either changes.
+WIRED TO REPORT, NOT TO GATE. Read this before believing anything below: this
+module is reached from exactly one production path --
+``chat_delegation_deliverable_postprocess.subject_mismatch_warning`` -- whose
+result the delegation runner appends to the run summary beside the executability
+warning. It does **not** decide whether a run is reported as verified, and
+``verified_success`` is deliberately not computed from it.
+
+That distinction is the design, not a compromise. What this measures is a token
+overlap, and a verification probe that rejects a run on that basis grades the
+model instead of reporting honestly. Restoring the original wiring below -- where
+a mismatch scored the completion review 0.0 -- flips a real recorded case from
+pass to fail. So the owner is told, and the verdict stays whatever the evidence
+made it.
+
+``ArtifactIntentIsNotOnTheCompletionPath`` in the test file pins both halves: the
+only importer is the reporting path, and the reporting call does not touch
+``verified_success``. It goes red if either changes.
 
 Thomas's success check reduces to "a non-empty file exists". That is how a
 request for a graph of current trends was closed as verified by a one-button
@@ -23,8 +33,8 @@ verifier that rejects good work is not an improvement on one that accepts bad
 work -- it just moves the dishonesty. Anything subtler than "these are unrelated"
 belongs to a model, not to token overlap.
 
-Why it is unwired
------------------
+How it came to be unwired, and how it came back
+-----------------------------------------------
 This module shipped in 6cc89af2 (2026-07-24) together with its call site: an
 ``intent_evidence`` call inside ``_hidden_completion_review_passes`` in
 ``chat_delegation_artifact_verification``, scoring the review 0.0 when the
@@ -32,7 +42,12 @@ artifact matched nothing. 87ae37e5 (2026-07-27) replaced that whole file with th
 ``codex/organic-routing-no-regex`` version, which was written on 2026-07-22 --
 two days before this module existed -- and so never had the import. The loss was
 collateral to "prompt classifiers out", not a decision about this check; neither
-merge message mentions it.
+merge message mentions it. It went unnoticed for four days while CHANGELOG.md
+kept telling the owner the guarantee was in force.
+
+Reconnected 2026-07-31, deliberately as a report rather than as the gate it
+originally was. The original shape would have made this the thing that decides a
+verdict, which is the one job a token overlap should not have.
 
 The sibling this module used to cite is gone for real, though. Its previous
 docstring said "the Canvas path already refuses this: chat_delegation_canvas_review

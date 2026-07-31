@@ -15,6 +15,7 @@ from thomas.server.chat_delegation_deliverable_postprocess import (
     executability_warning,
     render_report_pdfs,
     runtime_executability_warning,
+    subject_mismatch_warning,
 )
 from thomas.server.chat_delegation_workspace import (
     files_changed_since as _files_changed_since,
@@ -185,4 +186,5 @@ __all__ = [
     "quality_tier_clause",
     "render_report_pdfs",
     "runtime_executability_warning",
+    "subject_mismatch_warning",
 ]

@@ -22,6 +22,7 @@ from thomas.server.chat_delegation_deliverable import (
     executability_warning,
     render_report_pdfs,
     runtime_executability_warning,
+    subject_mismatch_warning,
 )
 from thomas.server.chat_delegation_emitter import _DelegationEmitter, _ThreadsafeDelegationEmitter
 from thomas.server.chat_delegation_exhaustive_runner import _run_exhaustive_worker
@@ -300,6 +301,12 @@ async def _finalize_worker_completion(
     )
     _exec_warnings = executability_warning(work_dir, created)
     _exec_warnings += await asyncio.to_thread(runtime_executability_warning, work_dir, created)
+    # Reports, never gates. `verified_success` below is deliberately not computed
+    # from this: the subject check is a token overlap, and a probe that rejects a
+    # run on that basis grades the model instead of reporting honestly. Restoring
+    # its original wiring -- where a mismatch scored the review 0.0 -- flips a
+    # real recorded case from pass to fail.
+    _exec_warnings += await asyncio.to_thread(subject_mismatch_warning, scope_prompt, work_dir, created)
     result_summary += _exec_warnings
     verified_success = bool(created) or _worker_text_is_confirmed_answer(
         result_text_parts, prompt=scope_prompt, succeeded_tools=succeeded_tools, failed_tools=failed_tools

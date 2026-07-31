@@ -83,3 +83,47 @@ def runtime_executability_warning(work_dir: Path | None, created_files: list[str
     except (AttributeError, ImportError, OSError, RuntimeError, TypeError, ValueError):
         log.warning("Runtime deliverable verification failed", exc_info=True)
         return " ⚠ Thomas could not complete the browser verification for this app."
+
+
+def subject_mismatch_warning(
+    prompt: str,
+    work_dir: Path | None,
+    created_files: list[str] | None,
+) -> str:
+    """Say so when a deliverable shares no subject with what was asked for.
+
+    This REPORTS; it does not gate. `verified_success` is untouched by design.
+
+    The check itself (`chat_delegation_artifact_intent`) shipped on 2026-07-24
+    with a call site inside `_hidden_completion_review_passes`, where a mismatch
+    scored the review 0.0 and failed the run. `87ae37e5` replaced that whole file
+    with a branch version written before the gate existed, and the call site went
+    with it -- so since 2026-07-27 nothing has called this, while the changelog
+    told the owner "Thomas no longer calls a deliverable 'verified' when it has
+    nothing to do with what you asked".
+
+    Reconnecting it as a GATE is the wrong repair. A verification probe that
+    rejects a run grades the model rather than reporting honestly, and the
+    measurement behind this is a token overlap, which is exactly the kind of
+    judgement that should not decide pass/fail on its own. Restoring the original
+    wiring flips a real recorded case from pass to fail.
+
+    So the promise is kept the other way round: the owner is TOLD, in the run
+    summary, next to the executability warning that already works this way, and
+    the verdict stays whatever the evidence made it. `artifact_intent_issues`
+    returns [] whenever the question cannot be answered honestly -- no request,
+    no artifacts, a request too vague to have a subject, unreadable files -- so
+    silence here means "not checkable", never "checked and fine".
+    """
+
+    try:
+        from thomas.server.chat_delegation_artifact_intent import artifact_intent_issues
+
+        issues = artifact_intent_issues(prompt, work_dir, list(created_files or []))
+        if not issues:
+            return ""
+        shown = "; ".join(str(issue) for issue in issues[:2])
+        return f" ⚠ This may not be what you asked for — {shown}."
+    except (AttributeError, ImportError, OSError, RuntimeError, TypeError, ValueError):
+        log.warning("Artifact subject check failed", exc_info=True)
+        return ""
