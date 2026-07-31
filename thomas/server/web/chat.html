@@ -232,6 +232,13 @@
           </button>
           <div id="tc-model-menu" style="display: none; position: absolute; left: 0; top: calc(100% + 8px); z-index: 40; width: 300px; max-height: 60vh; overflow-y: auto; padding: 8px; border-radius: 14px; background: var(--c-menu-bg); border: 1px solid var(--c-border-2); box-shadow: var(--c-shadow);" class="tc-scroll">
             <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--c-muted); padding: 6px 8px 8px;">Model</div>
+            <!-- Which account is answering. /api/openai-codex/status has always
+                 returned logged_in, email and plan_type, and the unified shell
+                 showed none of it -- so "4 ready" was the only signal that a
+                 provider was usable, and nothing said WHOSE account it was or
+                 what plan it was spending. Filled by refreshAccountLine(); the
+                 element stays empty and takes no space when signed out. -->
+            <div id="tc-model-account" style="display: none; padding: 0 8px 8px; font-size: 11px; color: var(--c-dim); line-height: 1.35;"></div>
             <div id="tc-model-options"></div>
           </div>
         </div>
@@ -709,6 +716,7 @@
         });
       });
       renderSpecialistModels(wrap);
+      refreshAccountLine();
     }
 
     // Which model handles research, coding, and the rest.
@@ -736,6 +744,49 @@
       ['writing', 'Writing'],
       ['data', 'Data'],
     ];
+
+    // Who is answering, and on whose plan.
+    //
+    // `/api/openai-codex/status?profile=<name>` has always returned logged_in,
+    // email and plan_type; the unified shell read none of it. The old Model
+    // Setup modal showed it via model_settings_dropdown.js, which the new shell
+    // never loads (it targets #modelSetupModal, an element that no longer
+    // exists), so the account behind every answer became invisible.
+    //
+    // Cached per profile: the menu re-renders on every open and on every
+    // accordion toggle, and this must not become a request per keystroke.
+    // A failed lookup hides the line rather than guessing -- claiming "signed
+    // out" because a fetch failed would be a worse lie than saying nothing.
+    const accountByProfile = {};
+    function refreshAccountLine() {
+      const el = document.getElementById('tc-model-account');
+      if (!el) return;
+      const profile = profilesData.find(p => p.name === state.profile);
+      const isCodex = profile && String(profile.provider || '').replace('-', '_') === 'openai_codex';
+      if (!isCodex) { el.style.display = 'none'; el.textContent = ''; return; }
+
+      const paint = (info) => {
+        if (!info || !info.logged_in || !info.email) { el.style.display = 'none'; el.textContent = ''; return; }
+        el.style.display = 'block';
+        el.textContent = '';
+        const who = document.createElement('div');
+        who.style.cssText = 'overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
+        who.textContent = info.email;
+        const plan = document.createElement('div');
+        plan.style.cssText = 'color: var(--c-muted); font-size: 10.5px;';
+        const bits = [String(info.plan_type || '').trim(), 'signed in'].filter(Boolean);
+        plan.textContent = bits.join(' · ');
+        el.appendChild(who); el.appendChild(plan);
+      };
+
+      if (Object.prototype.hasOwnProperty.call(accountByProfile, state.profile)) {
+        paint(accountByProfile[state.profile]); return;
+      }
+      fetch('/api/openai-codex/status?profile=' + encodeURIComponent(state.profile))
+        .then(r => (r.ok ? r.json() : null))
+        .then(info => { accountByProfile[state.profile] = info; paint(info); })
+        .catch(() => { accountByProfile[state.profile] = null; paint(null); });
+    }
 
     function persistRoleModel(role, profileName, modelId) {
       // null, not "" -- the preferences patch treats an empty map as "no change"

@@ -7,6 +7,13 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Added (The model menu says whose account is answering)
+
+- `/api/openai-codex/status?profile=<name>` has always returned `logged_in`, `email` and `plan_type`. The unified shell read **none of it**. The old Model Setup modal showed it through `model_settings_dropdown.js` — 18.8 KB the new shell never loads, because it targets `#modelSetupModal`, an element that no longer exists. So `4 ready` was the only signal a provider was usable, and nothing said whose account was being spent.
+- The menu now heads with the signed-in address and plan — `calvinandaustin31@gmail.com` / `pro · signed in` — verified on screen at 1920×1080.
+- **Hides rather than guesses.** A failed lookup shows nothing; claiming "signed out" because a fetch was rejected would be a worse lie than silence. And the lookup is cached per profile, since the menu re-renders on every open and every accordion toggle.
+- **The guard needed two corrections of its own, both caught by reverting.** `refreshAccountLine\(\)` also matched the function *definition*, so it passed with the call commented out. And a bare `.catch(` check passed with the handler deleted, because the search window reached into the next function's `.catch(() => {})` — a neighbour's error handling standing in for the one under test. Five separate regressions are now each caught: commenting out the call, dropping the element, reading the wrong field, removing the cache guard, and removing failure handling.
+
 ### Added (You can choose which model does research again)
 
 - Thomas already **had** per-specialist models and stopped showing them. The whole path worked — `worker_runtime._resolve_profile` consults the per-role override before the chat default, `GET /api/models` returns `role_profiles` and `role_model_ids`, and `PATCH /api/preferences` writes them. What was missing was any way to set one: `persist_user_model_role_preference` has **no production caller at all**, and nothing in the unified shell ever mentioned `role_profiles`. The feature was reachable only by hand-editing preferences.
