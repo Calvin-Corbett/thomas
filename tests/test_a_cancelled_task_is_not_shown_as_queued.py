@@ -28,7 +28,10 @@ purpose is not a failure."
 
 from __future__ import annotations
 
-from thomas.core.task_bot_states import TERMINAL_STATES, VALID_STATES
+# From task_bot_runtime, not task_bot_states: the latter is an untracked
+# in-flight split of the former, so a tracked file that imports it breaks a fresh
+# checkout. task_bot_runtime exports both names before and after that split.
+from thomas.core.task_bot_runtime import TERMINAL_STATES, VALID_STATES
 from thomas.server.routes.mission_control_routes import (
     _DELEGATION_ACTIVE_STATES,
     _DELEGATION_STATE_ROOM_STATUS,

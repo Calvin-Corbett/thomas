@@ -11,8 +11,15 @@ from typing import Any
 
 from aiohttp import web
 
+# TERMINAL_STATES is taken from task_bot_runtime, NOT from task_bot_states, on
+# purpose. `thomas/core/task_bot_states.py` exists in this working tree but is
+# UNTRACKED -- it is another agent's in-flight split of task_bot_runtime, and at
+# HEAD task_bot_runtime still defines TERMINAL_STATES inline. A tracked file that
+# imports the new module makes a fresh checkout of dev fail at import.
+# task_bot_runtime exports the name either way, so this works before and after
+# that split lands.
 from thomas.core import task_bot_runtime
-from thomas.core.task_bot_states import TERMINAL_STATES
+from thomas.core.task_bot_runtime import TERMINAL_STATES
 from thomas.desktop_operator import manager as desktop_operator_manager
 from thomas.server.app_keys import APP_APPROVALS_BROKER
 
