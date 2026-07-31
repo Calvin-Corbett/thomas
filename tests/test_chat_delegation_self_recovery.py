@@ -5,6 +5,7 @@ it out when on max autonomy." At L4 a failed worker attempt feeds its failure
 into a fresh attempt (bounded); below L4 it does a single pass and reports.
 """
 
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -67,6 +68,15 @@ def _scripted_events(scripts: list[list[dict]]):
 
 
 class TestSelfRecovery(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        # A throwaway repo root per test. `Path(".")` is the live checkout when
+        # pytest runs from it, and the worker hands repo_root straight to
+        # task_bot_runtime, which writes execution records under
+        # runtime/coordination/task_bots/ -- the directory Mission Control reads.
+        self._repo_root_tmpdir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self._repo_root_tmpdir.cleanup)
+        self.repo_root = Path(self._repo_root_tmpdir.name).resolve()
+
     async def _run(self, scripts, autonomy_level):
         emitter = _FakeEmitter()
         bot = types.SimpleNamespace(name="Taylor", id="taylor")
@@ -88,7 +98,7 @@ class TestSelfRecovery(unittest.IsolatedAsyncioTestCase):
                 bot=bot,
                 emitter=emitter,
                 instructions="inst",
-                repo_root=Path("."),
+                repo_root=self.repo_root,
                 work_dir=None,
                 profile="test",
                 model_id="test-model",
@@ -197,7 +207,7 @@ class TestSelfRecovery(unittest.IsolatedAsyncioTestCase):
                 bot=bot,
                 emitter=emitter,
                 instructions="inst",
-                repo_root=Path("."),
+                repo_root=self.repo_root,
                 autonomy_level=4,
             )
         self.assertEqual(state, {"calls": 1, "closed": 1})
@@ -230,7 +240,7 @@ class TestSelfRecovery(unittest.IsolatedAsyncioTestCase):
                 bot=bot,
                 emitter=emitter,
                 instructions="inst",
-                repo_root=Path("."),
+                repo_root=self.repo_root,
                 autonomy_level=4,
             )
         self.assertEqual(state, {"calls": 1, "closed": 1})
@@ -265,7 +275,7 @@ class TestSelfRecovery(unittest.IsolatedAsyncioTestCase):
                 bot=bot,
                 emitter=emitter,
                 instructions="i",
-                repo_root=Path("."),
+                repo_root=self.repo_root,
                 work_dir=None,
                 autonomy_level=4,
             )

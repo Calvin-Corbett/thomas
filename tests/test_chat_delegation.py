@@ -45,6 +45,17 @@ def _model_runtime_event(*, model: str = "test-model") -> dict[str, object]:
 
 
 class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        # A throwaway repo root per test. These cases used to pass
+        # `repo_root=Path(".").resolve()`, and pytest runs from the checkout, so
+        # that WAS the live repo: any unpatched `task_bot_runtime.update_execution`
+        # wrote a real execution record into runtime/coordination/task_bots/ and
+        # left it there. Mission Control reads that directory, so the leftovers
+        # showed up as live agents in three later tests.
+        self._repo_root_tmpdir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self._repo_root_tmpdir.cleanup)
+        self.repo_root = Path(self._repo_root_tmpdir.name).resolve()
+
     def test_supervisor_reserves_a_longer_idle_window_for_max_model_passes(self):
         self.assertEqual(
             chat_delegation_runner._supervisor_worker_timeout_s({"effort": "diligent"}, has_progress=True),
@@ -895,7 +906,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 specialist_id="coding",
                 bot=_BotStub(),
                 emitter=emitter,
-                repo_root=Path(".").resolve(),
+                repo_root=self.repo_root,
                 worker_kwargs={},
             )
 
@@ -930,7 +941,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 specialist_id="reasoning",
                 bot=_BotStub(),
                 emitter=emitter,
-                repo_root=Path(".").resolve(),
+                repo_root=self.repo_root,
                 worker_kwargs={"effort": "max"},
             )
 
@@ -996,7 +1007,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 bot=_BotStub(),
                 emitter=emitter,
                 instructions="Do the work.",
-                repo_root=Path(".").resolve(),
+                repo_root=self.repo_root,
                 model_id="gpt-5.6-terra",
                 reasoning_effort="max",
             )
@@ -1080,7 +1091,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                         bot=_BotStub(),
                         emitter=emitter,
                         instructions="Answer accurately.",
-                        repo_root=Path(".").resolve(),
+                        repo_root=self.repo_root,
                         profile="test",
                         model_id="expected-model",
                         autonomy_level=1,
@@ -1542,7 +1553,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 bot=_BotStub(),
                 emitter=emitter,
                 instructions="Do the work.",
-                repo_root=Path(".").resolve(),
+                repo_root=self.repo_root,
             )
 
         fail_execution.assert_called_once()
@@ -1587,7 +1598,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                 bot=_BotStub(),
                 emitter=emitter,
                 instructions="Do the work.",
-                repo_root=Path(".").resolve(),
+                repo_root=self.repo_root,
                 autonomy_level=1,
             )
 
@@ -1624,7 +1635,7 @@ class TestChatDelegation(unittest.IsolatedAsyncioTestCase):
                     bot=_BotStub(),
                     emitter=emitter,
                     instructions="do",
-                    repo_root=Path(".").resolve(),
+                    repo_root=self.repo_root,
                 )
 
         fail_execution.assert_called_once()

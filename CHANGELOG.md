@@ -14,6 +14,13 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Fixed (delegation tests wrote real task records into the checkout, and Mission Control counted them)
+
+- Eleven cases across `test_chat_delegation.py` and `test_chat_delegation_self_recovery.py` passed `repo_root=Path(".")` into `_run_agent_worker`. pytest runs from the checkout, so that argument **was the live repo**. Two of them patched `fail_execution` and `get_execution` but not `task_bot_runtime.update_execution`, and the worker's first act is a real write.
+- The result was permanent files in the working tree — `exec-c.json` (state `requested`), `exec-native.json` (state `executing`), and an `executions-summary.json` claiming `active_count: 2`. Neither state is terminal, so `_summary_row` kept them off the stale list for five minutes and Mission Control counted them as live work.
+- **Confirmed in this checkout**: both files were present, stamped `2026-07-31T16:31:29` from that day's own test runs. They sit under a gitignored path, so they never showed up in `git status` — which is why the failures looked like flakes.
+- Each case now gets a `TemporaryDirectory` repo root. Verified with the reporter's minimal reproduction (two tests, one file each, previously `.F`, now `..`), and with delegation plus all three mission-control files run together: **82 passed**.
+
 ### Fixed (the research library had been dead code since `69bbbab0`, while advertising itself as on)
 
 - `retrieve_library()` gated on `route.path not in ("research", "planning", "debug_audit", "coding_task")`, and `_LIBRARY_CAPTURE_ROUTES` held the same four. But since `69bbbab0` removed the prompt classifiers, `routing.decide()` returns `path="model_owned"` **unconditionally** — verified at `routing.py:68`, whose `RouteDecision` is documented as *"Execution metadata that does not classify the user's prose"*.
