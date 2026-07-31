@@ -231,7 +231,7 @@ def orphaned_web_assets(cwd: str | Path, files: list[str]) -> list[str]:
     if not candidates:
         return []
 
-    haystack: list[str] = []
+    haystack: list[tuple[Path, str]] = []
     scanned = 0
     for path in root.rglob("*"):
         if scanned >= ORPHAN_SCAN_MAX_FILES:
@@ -251,20 +251,34 @@ def orphaned_web_assets(cwd: str | Path, files: list[str]) -> list[str]:
         # added alongside this catches that wreckage -- this is the cause of it.
         if any(part in {".git", "node_modules", ".thomas"} for part in path.relative_to(root).parts):
             continue
-        if path.resolve() in {c for c in candidates}:
-            continue  # a file mentioning only itself is still an orphan
+        # Candidate files stay IN the haystack, paired with their own path.
+        #
+        # They used to be skipped outright, with the comment "a file mentioning
+        # only itself is still an orphan" -- a true statement that the code
+        # over-delivered on. `candidates` is exactly the web assets this run
+        # wrote, so skipping all of them meant the only evidence that could make
+        # a candidate reachable came from files the run did NOT touch. For any
+        # two assets written in the same pass where one imports the other, the
+        # reference was structurally invisible, and the imported file could only
+        # ever be reported as an orphan -- however correct the code was.
+        #
+        # The self-reference exclusion it was reaching for is kept below, by
+        # comparing paths at match time rather than by removing the text.
         try:
             if path.stat().st_size > ORPHAN_SCAN_MAX_BYTES:
                 continue
-            haystack.append(path.read_text(encoding="utf-8", errors="replace"))
+            haystack.append((path.resolve(), path.read_text(encoding="utf-8", errors="replace")))
         except OSError:
             continue
         scanned += 1
-    blob = "\n".join(haystack)
 
     failures: list[str] = []
     for path in candidates:
-        if path.name not in blob:
+        # Any OTHER file mentioning this name makes it reachable; a file that
+        # only mentions itself does not.
+        if any(other != path and path.name in text for other, text in haystack):
+            continue
+        if True:
             # "takes effect", because this checks stylesheets too and a
             # stylesheet does not run. A message that misdescribes the file it
             # is about invites the reader to decide it does not really apply --
