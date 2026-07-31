@@ -14,6 +14,13 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Fixed (a task that was only waiting got a permanent "Task failed" in the transcript)
+
+- One decision — *is this run over, and did it fail* — is spelled out twice in the classic shell's runtime, and the two disagreed about `blocked`. `013_actions_interactions_02.js`'s `_delegationIsTerminalState` correctly excludes it; the Mission-Control poll fallback in `006_easy_setup_onboarding_04.js` gated on `chatTaskIsTerminal`, whose list **includes** it, and then called it failed on the very next line.
+- So a task merely waiting on an approval gate had a permanent "Task failed" card written into the chat transcript, while the live SSE stream and the supervisor both still considered it running. Settled by the state machine rather than taste: `ALLOWED_TRANSITIONS` lets `blocked` return to `queued`/`claimed`/`executing`, and it is absent from `TERMINAL_STATES`.
+- Confirmed live code, not a dead bundle: `index.html` loads `app_runtime_loader.js`, which pulls every module from `/static/js/runtime/`, and that shell "still hosts every workspace and is served at `/classic`". The near-identical copy in `js/app_runtime_primary.mjs` has **no importer anywhere** and was deliberately left alone.
+- **`cancelled` is still grouped with failures, and that is recorded rather than silently settled.** The card is binary — `delegation_failed` or `delegation_completed` — so telling the truth about a deliberate stop needs a third result type and a renderer that draws it. Calling a run you stopped "failed" is wrong; calling it "completed" is also wrong. A test pins the comment so the compromise cannot go quiet.
+
 ### Fixed (delegation tests wrote real task records into the checkout, and Mission Control counted them)
 
 - Eleven cases across `test_chat_delegation.py` and `test_chat_delegation_self_recovery.py` passed `repo_root=Path(".")` into `_run_agent_worker`. pytest runs from the checkout, so that argument **was the live repo**. Two of them patched `fail_execution` and `get_execution` but not `task_bot_runtime.update_execution`, and the worker's first act is a real write.

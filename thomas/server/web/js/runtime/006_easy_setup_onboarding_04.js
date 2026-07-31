@@ -181,10 +181,32 @@ function appendTerminalDelegationActivityResults(activity) {
     activity.agents.forEach((row) => {
         if (!row || typeof row !== 'object') return;
         const state = safeString(row?.state || row?.status).toLowerCase();
-        if (!chatTaskIsTerminal(state)) return;
+        // `blocked` is NOT an ending, and this path used to treat it as one.
+        //
+        // One decision -- "is this run over, and did it fail" -- is spelled out in
+        // two places. The live SSE path, `_delegationIsTerminalState` in
+        // 013_actions_interactions_02.js, correctly excludes `blocked`. This
+        // fallback gated on `chatTaskIsTerminal` (003_easy_setup_onboarding_01.js),
+        // which INCLUDES it, and then called it failed on the next line. So a task
+        // merely waiting on an approval gate got a permanent "Task failed" card
+        // written into the transcript, while the stream and the supervisor both
+        // still considered it running.
+        //
+        // `task_bot_runtime.ALLOWED_TRANSITIONS` lets `blocked` go back to
+        // queued/claimed/executing, and it is absent from `TERMINAL_STATES`, so
+        // this is settled by the state machine rather than by taste.
+        if (!chatTaskIsTerminal(state) || state === 'blocked') return;
         const executionId = safeString(row?.execution_id);
         if (!executionId) return;
-        const failed = state === 'failed' || state === 'blocked' || state === 'cancelled' || state === 'dead';
+        // KNOWN, NOT FIXED HERE: `cancelled` is still reported as a failure.
+        // task_bot_runtime says at its own line that "'cancelled' is its own
+        // ending. Stopping a run on purpose is not a failure", and the Mission
+        // Control board was corrected to match. This card is binary --
+        // delegation_failed or delegation_completed -- so saying it truthfully
+        // needs a third result type and a renderer that draws it. Calling a run
+        // you stopped "failed" is wrong; calling it "completed" is also wrong.
+        // Left as-is rather than trading one false label for another.
+        const failed = state === 'failed' || state === 'cancelled' || state === 'dead';
         const summary = safeString(row?.last_progress || row?.summary || row?.task || row?.current_task);
         appendDelegationResultMessage({
             ...row,
