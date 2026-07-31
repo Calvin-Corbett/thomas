@@ -15,9 +15,18 @@ Versioning: Semantic Versioning.
 - The value is cleared from the field the moment it is sent, and the input is a password field: this menu is screenshotted constantly, and a key in a text input ends up in the picture.
 - Five regressions each caught by reverting: not rendering the row, a plain-text field, leaving the key in the DOM, the wrong request field, and switching the active model on save.
 
-### Known red test (not mine, not fixed)
+### Found (the autonomy preference never applies — recorded, not fixed)
 
-- `tests/test_server_preferences_runtime.py::…::test_v2_applies_model_runtime_memory_tool_and_quality_preferences` asserts `autonomy_level == 4` and gets `2`. It fails in isolation, so it is not pollution; it uses a temp `THOMAS_DB_PATH` and a fake brain, so no preference of mine reaches it; and no file I changed mentions `autonomy_level`. Recorded rather than passed over — a permanently-red test is how a real regression gets ignored.
+- Chasing that red test found a **real bug**, not a stale assertion. Setting `autonomy.default_level` to `L4` and starting a turn still runs it at **2** — measured both on a session that existed before the preference was set, and on one created fresh afterwards. Both give 2.
+- The parts all work in isolation: `_autonomy_level('L4', default=2)` returns **4**, and the preference round-trips correctly through `PATCH /api/preferences` (`L2 → L4 → L2`). What never runs is the `else` branch in `chat_runtime_policy` — a session appears to carry meta from creation, so `elif saved_meta is not None` always wins.
+- **Masked in the app**, which is why nobody noticed: the shell sends its own `autonomy_level` from the Tools panel (`chat.html:2008`), so the explicit value takes the first branch. It bites API and CLI callers, who have a preference that silently does nothing.
+- **Not fixed on purpose.** Autonomy governs how much Thomas may do without asking. Quietly raising it for existing sessions is not a change to make on a hunch — the fix must decide whether a session's stored level is an explicit choice or just the default it was born with, and that is a product decision.
+- It was one red assertion buried inside a test with a dozen passing checks, hiding all of them. Now its own `expectedFailure` test carrying the full measurement: the file goes green, the finding stays visible, and it turns **red again the moment someone fixes the behaviour**.
+- I was wrong twice on the way and checked each time: it is not reading the real preferences DB (verified by setting the real value to L4 — still 2), and it is not a stale test asserting pre-0.19 behaviour (the fresh-session case fails too, which killed that reading).
+
+### Still red, pre-existing, not mine
+
+- `test_worker_handoff_receives_same_immutable_policy` fails with `assertTrue(captured)` on an empty list — the handoff never fires. Fails in isolation and with my new test deselected, so it predates this work and has a different cause. Left for its own investigation rather than folded into this one.
 
 ### Added (The model menu says whose account is answering)
 
