@@ -14,6 +14,12 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Fixed (an honesty guard that had been red for eleven days over phrasing)
+
+- `test_forbids_claiming_work_started_and_offers_instead` asserted one literal sentence — *"never tell the user you handed something off unless you actually called the tool"*. It went red on 2026-07-20 when `24ffc614` reworded it to *"never tell the user you're handling something…"*.
+- The rule was never weakened. That commit deliberately removed "handed off to \<worker\>" everywhere so Thomas stops naming a task manager to the user; the honesty rule simply moved to the new voice.
+- The obvious repair — pasting the old sentence back — would have reintroduced exactly the phrasing that was removed on purpose. The assertion now matches the rule structurally (`never tell the user … unless you actually called the tool`), so any voice satisfies it and deleting the rule does not. Verified by removing the sentence from the prompt and watching the test fail.
+
 ### Fixed (a row that says something failed no longer shows a success tick)
 
 - Opening a deliverable deep link whose task no longer exists rendered a green `ph-check-circle` directly above the words **"Technical check failed"**, with the row missing the `is-error` class that colours it.

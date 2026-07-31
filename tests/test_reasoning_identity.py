@@ -46,13 +46,33 @@ class TestThomasIdentity(unittest.TestCase):
         self.assertIn("never claim", low)
 
     def test_forbids_claiming_work_started_and_offers_instead(self):
-        # The chat agent must not assert work began ("on it" / "I've handed that off")
-        # when it never called send_task — that's a false claim. Guards the live
-        # "logic doesn't add up" dishonesty (positive framing, 2026-06-26).
+        # The chat agent must not assert work began ("on it" / "I've handed that
+        # off") when it never called send_task — that's a false claim. Guards the
+        # live "logic doesn't add up" dishonesty (positive framing, 2026-06-26).
+        #
+        # This asserted one literal sentence, "never tell the user you handed
+        # something off unless you actually called the tool", and went red on
+        # 2026-07-20 when 24ffc614 reworded it to "never tell the user you're
+        # handling something...". The rule was never weakened; the VOICE changed
+        # on purpose — that commit removed "handed off to <worker>" everywhere so
+        # Thomas stops naming a task manager to the user.
+        #
+        # It stayed red for eleven days, and the obvious "fix" would have been to
+        # paste the old sentence back, reintroducing exactly the phrasing Calvin
+        # had deliberately removed. So the rule is matched structurally instead:
+        # a prohibition on telling the user anything that is conditional on the
+        # tool actually having been called. Any voice satisfies that; deleting
+        # the rule does not.
         low = THOMAS_OPERATOR_SYSTEM_PROMPT.lower()
         self.assertIn("without calling send_task does nothing", low)
         self.assertIn("false claim", low)
-        self.assertIn("never tell the user you handed something off unless you actually called the tool", low)
+        self.assertRegex(
+            low,
+            r"never tell the user[^.]{0,80}unless you actually called the tool",
+            "the prompt no longer forbids telling the user work is under way "
+            "without having called send_task. Reword it freely, but the rule "
+            "must survive: the claim has to be conditional on the tool call.",
+        )
 
     def test_legacy_prompt_name_is_one_compatibility_alias(self):
         self.assertIs(THOMAS_CHATBOT_SYSTEM_PROMPT, THOMAS_OPERATOR_SYSTEM_PROMPT)
