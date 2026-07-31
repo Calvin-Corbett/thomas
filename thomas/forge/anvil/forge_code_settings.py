@@ -219,7 +219,22 @@ class ForgeCodeSettings:
         """
 
         if self.family == "gpt":
-            return bool(self.model_id)
+            # A GPT/codex request handled by the GPT executor is not a
+            # substitution, even when no exact `gpt-` id was pinned.
+            #
+            # This returned `bool(self.model_id)`, which made every
+            # codex-shaped payload -- `codex`, `chatgpt`, `openai_codex`, none of
+            # which start with `gpt-` -- report status "substituted" with the
+            # reason "'codex' is neither, so the Claude CLI handled this
+            # request". The Claude CLI handled nothing; the in-process ChatGPT
+            # path did. It replaced a true label ("configured_default") with a
+            # false sentence, which is the exact failure this method exists to
+            # prevent.
+            #
+            # Whether an EXACT model was pinned is a different question, and
+            # `capability_report` already answers it separately via `exact_gpt`
+            # -> "configured_default".
+            return True
         requested = (self.model_id or self.model).strip()
         if not requested:
             # Nothing was asked for, so nothing was substituted. The invented

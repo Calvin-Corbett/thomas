@@ -103,6 +103,41 @@ def test_an_unselected_model_is_not_reported_as_a_substitution() -> None:
     assert settings.recorded_model() == "claude:sonnet"
 
 
+def test_a_codex_shaped_request_is_not_blamed_on_the_claude_cli() -> None:
+    """A regression this file's own first version introduced, found by audit.
+
+    `runs_requested_model` returned `bool(self.model_id)` for the GPT family. But
+    `from_payload` also routes `codex`, `chatgpt` and `openai_codex` to that
+    family, and none of them start with `gpt-`, so `model_id` is empty and every
+    one of them reported::
+
+        status: substituted
+        reason: ... 'codex' is neither, so the Claude CLI handled this request.
+
+    The Claude CLI handled nothing -- the in-process ChatGPT path did. The label
+    before that change, "configured_default", was true. Replacing a true label
+    with a false sentence is precisely what this module is supposed to stop.
+
+    Whether an exact model was pinned is a separate question, and
+    `capability_report` already answers it through `exact_gpt`.
+    """
+
+    for name in ("codex", "chatgpt", "openai_codex"):
+        settings = ForgeCodeSettings.from_payload({"model": name})
+        assert settings.family == "gpt", f"{name!r} should route to the GPT executor"
+        support = settings.capability_report()["support"]["model"]
+        assert support["status"] == "configured_default", (
+            f"{name!r} runs on the GPT path but reports {support['status']!r}"
+        )
+        assert "reason" not in support, (
+            f"{name!r} carries a substitution reason: {support.get('reason')!r}. "
+            "Nothing was substituted -- a GPT request was handled by the GPT executor."
+        )
+        assert "Claude" not in str(support), (
+            f"{name!r} names the Claude CLI, which had no part in this request"
+        )
+
+
 def test_gpt_keeps_its_exact_model() -> None:
     """The forgecode profile really is pinned to that model, so it may claim it."""
 

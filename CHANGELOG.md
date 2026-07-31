@@ -14,6 +14,13 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Fixed (a codex-shaped request was blamed on the Claude CLI — a regression from earlier today)
+
+- `runs_requested_model` returned `bool(self.model_id)` for the GPT family. But `from_payload` also routes `codex`, `chatgpt` and `openai_codex` there, and none start with `gpt-`, so `model_id` is empty and each reported `status: substituted` with the reason *"'codex' is neither, so the Claude CLI handled this request."* The Claude CLI handled nothing — the in-process ChatGPT path did.
+- The label before that change, `configured_default`, was true. Replacing a true label with a false sentence is exactly what that module exists to prevent, so this was self-inflicted and is now pinned by a test.
+- Whether an exact model was pinned is a separate question, already answered through `exact_gpt`. Verified across all families: codex-shaped → `configured_default`, exact `gpt-` → `applied`, genuine Claude → `applied`, a local qwen → `substituted` naming the Claude CLI truthfully.
+- Found by the same multi-agent audit, which caught it hours after it shipped.
+
 ### Fixed (a task you stopped on purpose was shown as work still queued)
 
 - `cancelled` was the **only** state in `task_bot_states.VALID_STATES` with no entry in Mission Control's `_DELEGATION_STATE_ROOM_STATUS`, and the lookup falls back to `("inbox", "queued")`. So pressing Stop produced a board row reading *queued*, counted in the "N active" figure by `mission.script01.js` (whose `ACTIVE_STATES` includes `queued`) and sorted to the top of the live agent list.
