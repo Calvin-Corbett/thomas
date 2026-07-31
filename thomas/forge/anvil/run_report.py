@@ -70,9 +70,22 @@ def parse_forge_events(transcript: str) -> list[dict[str, Any]]:
     return events
 
 
+def _flat(text: Any) -> str:
+    """One-line text with NOTHING dropped — the whole recorded string."""
+
+    return " ".join(str(text or "").split())
+
+
 def _snippet(text: Any, limit: int = _SNIPPET_CHARS) -> str:
-    flat = " ".join(str(text or "").split())
-    return flat[:limit]
+    """A DISPLAY-length excerpt. Never ask it a question about the run.
+
+    ``_snippet`` is how every section fits into a card, and it is lossy by
+    design. Deciding a fact from its output means deciding the fact from
+    whatever happened to land inside the first ``limit`` characters — see
+    ``_build_validations`` for the measured case where that invented a risk.
+    """
+
+    return _flat(text)[:limit]
 
 
 def _segment_attempts(
@@ -227,12 +240,47 @@ def _build_validations(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     edit watermark per validation so a stale one can be marked as such. Both are
     pipeline changes rather than a change to this assembly, and guessing here
     would replace a wrong claim with a differently wrong one.
+
+    ``evidence_full`` is the check's WHOLE recorded output; ``evidence`` is the
+    240-character excerpt the card shows. Both, because a fact about the run was
+    being decided from the excerpt.
+
+    The static verifier prints one ``compiled <file>`` line per file it checked
+    and then a ``STATIC_VERIFY_OK: N files checked`` summary, and
+    ``_build_open_risks`` reads that output to decide which changed files a
+    passing check covered. It read ``evidence``, so a file whose line fell past
+    character 240 was reported as never validated — by a report whose own next
+    field named it as checked. Driven through the REAL verifier
+    (``verify_python_changes``) on real files, same code, same exit 0, varying
+    only how many files changed::
+
+        changed files   verifier result   report's open risks
+        3               exit 0, all ok    (none)
+        9               exit 0, all ok    "files changed without a matching
+                                           passing validation:
+                                           src/module_number_07.py,
+                                           src/module_number_08.py"
+
+    Both of those files are in the check's recorded result
+    (``compiled src/module_number_07.py``), 349 characters of which the report
+    kept 240.
+
+    KNOWN RESIDUE, measured, upstream. ``build_verify`` records the static result
+    as ``detail[:500]``, so past roughly 15 changed paths the names stop reaching
+    this function at all and no fix here can recover them. Measured with 10-char
+    filenames: at 20 changed files the recorder still holds every name and only
+    this module dropped them; at 30 it has lost 4 of its own, and the trailing
+    ``STATIC_VERIFY_OK`` summary with them. Closing that means widening the
+    recorder or having each check record the files it covered, which is a
+    pipeline change, not an assembly one.
     """
     validations: list[dict[str, Any]] = []
     pending: str | None = None
     for event in events:
         kind = event.get("fc")
         if kind == "tool":
+            # No `_flat` twin for the command: `build_verify` already emits it as
+            # `label[:200]`, so this snippet drops nothing the run recorded.
             pending = _snippet(event.get("text"), 200) if str(event.get("name") or "") == "run" else None
         elif kind == "tool_result" and pending is not None:
             validations.append(
@@ -241,6 +289,7 @@ def _build_validations(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "command": pending,
                     "passed": event.get("is_error") is not True,
                     "evidence": _snippet(event.get("text")),
+                    "evidence_full": _flat(event.get("text")),
                 }
             )
             pending = None
@@ -291,8 +340,23 @@ def _build_open_risks(
     # Same shape as the transcript-mention bug in `_unopened_page_risks`: a
     # string that merely CONTAINS the filename was taken as proof something
     # examined it.
+    #
+    # Reads `evidence_full`, the check's WHOLE output, not `evidence`, the
+    # 240-character excerpt the card shows. This decides a fact about the run --
+    # "nothing validated this file" -- and it was deciding it from a display
+    # excerpt, so a run with enough changed files accused its own passing check
+    # of having skipped the ones whose lines fell off the end. Nine changed
+    # files, exit 0, every one of them `compiled` in the recorded result, and the
+    # report flagged the last two. See `_build_validations` for the measurement.
+    #
+    # Its two neighbours were already immune and that is what dates this one:
+    # `_unopened_page_risks` and `_decorative_navigation_risks` both read the raw
+    # `events` alongside the validations, and the first says why in as many words
+    # -- "only one of those is guaranteed to survive truncation".
     passing_text = " ".join(
-        f"{v['command']} {v['evidence']}" for v in validations if v["passed"] and not _was_skipped(v)
+        f"{v['command']} {v.get('evidence_full') or v['evidence']}"
+        for v in validations
+        if v["passed"] and not _was_skipped(v)
     )
     uncovered = [f for f in changed_files if f.split("/")[-1] not in passing_text]
     if validations and uncovered:

@@ -432,6 +432,25 @@ _SMOKE_HARNESS = r"""
             .filter((node) => visible(node) && !node.disabled && clean(node.textContent).length > 0)
             .filter((node) => !/(delete|remove|clear|reset|restart|erase|trash|discard|wipe|start over|cancel)/i.test(
               `${clean(node.textContent)} ${node.getAttribute("aria-label") || ""}`
+            ))
+            // The same file-handing skip the press probe below applies, forced by
+            // the same measurement -- pressing a createObjectURL + anchor click
+            // leaves headless Chrome waiting on the transfer until the smoke
+            // times out, and a completely correct app comes back
+            // `ok: False, "browser smoke timed out"`.
+            //
+            // The press probe learned that; this probe did not, even though it
+            // clicks FIRST and picks `submits[0]`, which is document order. So a
+            // page whose download button is written before its real one was
+            // failed by the guard's own named hazard, one block above the guard.
+            //
+            // Measured on a one-textarea word-frequency page, same Download CSV
+            // handler in all three, varying only which probe could reach it::
+            //     Download CSV first  -> ok False  browser smoke timed out (20.9s)
+            //     Count words first   -> ok True   typed:smoke test, clicked:Count words
+            //     no text field       -> ok True   pressed:Count words
+            .filter((node) => !/(download|export|print|share|upload|save as|open file)/i.test(
+              `${clean(node.textContent)} ${node.getAttribute("aria-label") || ""}`
             ));
           if (entries.length === 1 && submits.length >= 1) {
             const field = entries[0];
