@@ -509,12 +509,33 @@ def _page_was_opened(evidence: str, page: str) -> bool:
     return re.search(rf"(?<![\w.-]){re.escape(base)}(?![\w-])", evidence) is not None
 
 
+def _normalised_path(name: Any) -> str:
+    """One spelling for a repo-relative path, so the two lists can be compared."""
+
+    return str(name or "").replace("\\", "/").lstrip("/")
+
+
 def _build_attention_pointers(
     events: list[dict[str, Any]],
     validations: list[dict[str, Any]],
     changed_files: list[str],
+    *,
+    foreign_writes: list[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Ranked reviewer starting points: failure sites first, then changed files."""
+    """Ranked reviewer starting points: failure sites first, then changed files.
+
+    ``changed_files`` is the git delta of a SHARED project folder, not a record of
+    what this run wrote. Thomas allows several simultaneous Code runs, so another
+    task's uncommitted file landing in this delta is ordinary --
+    ``forge_code_store.files_written_by_another_task`` exists precisely to spot it,
+    and ``_build_open_risks`` already reports those as foreign.
+
+    This section did not, so one report said both things about the same file: a
+    risk warning that this run may not have written it, and a pointer captioned
+    "changed in this run". Files this run really did change are also listed first
+    now, so another task's leftovers cannot push the run's own work off the end of
+    a capped list.
+    """
     ordered: list[tuple[str, str]] = []
     seen: set[str] = set()
 
@@ -532,8 +553,17 @@ def _build_attention_pointers(
     for validation in validations:
         if not validation["passed"]:
             add(validation["command"], "failing engine check")
+    foreign = {_normalised_path(name) for name in (foreign_writes or []) if str(name or "").strip()}
     for file in changed_files:
-        add(file, "changed in this run")
+        if _normalised_path(file) not in foreign:
+            add(file, "changed in this run")
+    for file in changed_files:
+        if _normalised_path(file) in foreign:
+            add(
+                file,
+                "in this run's changed-file list, but created by a different code task "
+                "in this shared project — this run may not have written it",
+            )
     return [
         {"target": target, "why": why, "rank": rank}
         for rank, (target, why) in enumerate(ordered[:_MAX_POINTERS], start=1)
@@ -678,7 +708,12 @@ def build_run_report(
             reason=reason,
             foreign_writes=list(foreign_writes or []),
         ),
-        "attention_pointers": _build_attention_pointers(parsed, validations, changed),
+        # The same `foreign` list both sections read, so the report cannot say a
+        # file "may not have been written by this run" in one place and "changed
+        # in this run" in the other.
+        "attention_pointers": _build_attention_pointers(
+            parsed, validations, changed, foreign_writes=list(foreign_writes or [])
+        ),
         "rubric_mapping": _build_rubric_mapping(goal, definition, validations, ok=ok, outcome=outcome, reason=reason),
     }
 

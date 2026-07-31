@@ -14,6 +14,13 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Fixed (one report said both things about the same file)
+
+- `attention_pointers` and `open_risks` read the same `changed_files` list and disagreed about it. `changed_files` is the git delta of a **shared** project folder, not a record of what this run wrote — Thomas allows several simultaneous Code runs, and `forge_code_store.files_written_by_another_task` exists precisely to spot another task's uncommitted file landing in the delta.
+- `_build_open_risks` already reported those as foreign. `_build_attention_pointers` did not, so a single report carried a risk saying *"this run may not have written it"* and a pointer captioned *"changed in this run"* about the same path.
+- Foreign files now get an honest caption, and this run's own files are listed **first**, so another task's leftovers cannot push the run's real work off the end of a capped list. Separator spelling is normalised on both sides — an unnormalised comparison fails *open*, keeping the false label, which is the worst direction for this guard to fail in.
+- Seven guards, five of which fail against the unfixed code (verified by running them before applying the fix, and again after removing it).
+
 ### Fixed (two token-economy tests asserted route paths `69bbbab0` deleted)
 
 - The receipts were never unbalanced — that was my hypothesis and it was wrong, and the `Reasoning failed: Request URL is missing an 'http://' or 'https://' protocol` line in the log was a *consequence*, not the cause. The actual failures are `AssertionError: 'orchestrator' != 'static'` and `!= 'control'`.
