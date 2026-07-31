@@ -77,6 +77,31 @@
     return copied;
   }
 
+  // One predicate for "what state did this run finish in", for BOTH the run you
+  // are watching and the run that had already finished when `/send` answered.
+  // There used to be two, and they disagreed: this one, and an inline
+  // `persistence_confirmed === true ? (outcome || 'completed') : 'failed'` in
+  // `acceptStartedRun`.
+  //
+  // The server builds ONE dict for a finished run
+  // (evolve_agent_runtime._record_run_outcome) and sends it verbatim down both
+  // routes -- in the SSE frame as `{type:'done', **persistence}` and in the
+  // replayed `/send` body as `{**response, **persistence, run_state:...}`. The
+  // two readings agreed on completed/noop/failed and split on exactly one
+  // value: `outcome: 'conversation'`, the run where Thomas ANSWERS a question
+  // without editing anything (`reason: "Thomas replied without changing files"`,
+  // `ok: true`) -- which is what the "Look at the project I have selected, tell
+  // me what it does" starter asks for. Watched, it read 'completed'. Replayed,
+  // 'conversation' went straight into `state.runStatus`, where it is not a word
+  // the label table knows, so `labels[...] || 'Ready'` fell through and the
+  // activity bar said **Ready** about a run that had just finished, wearing an
+  // `is-conversation` class no stylesheet defines.
+  //
+  // Derived from `persistence_confirmed`/`noop`/`ok` rather than from the
+  // `outcome` word on purpose: those three cover every outcome the writer emits
+  // (conversation and completed are both ok, persistence_failed is
+  // !persistence_confirmed), and deriving means a NEW outcome word can never
+  // leak into `state.runStatus` and blank the badge the same way.
   function terminalRunStatus(payload) {
     if (payload.persistence_confirmed !== true) return 'failed';
     if (payload.noop === true) return 'noop';
@@ -763,7 +788,11 @@
     state.pendingApproval = null;
     state.pendingRequest = null;
     if (data.run_state === 'completed' || data.run_state === 'persistence_failed') {
-      state.runStatus = data.persistence_confirmed === true ? (data.outcome || 'completed') : 'failed';
+      // The same predicate the streaming `done` frame uses -- see
+      // `terminalRunStatus`. This line used to spell the decision a second time
+      // and read `data.outcome`, which is why a replayed conversational answer
+      // landed on the badge as the raw word 'conversation'.
+      state.runStatus = terminalRunStatus(data);
       const epoch = state.contextEpoch;
       const runId = state.runId;
       const proof = state.runProof ? { ...state.runProof } : null;

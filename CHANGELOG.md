@@ -14,6 +14,14 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Fixed (a Code run that answered your question finished as "Ready")
+
+- One decision — *what state did this run finish in* — was computed in two places in `unified_code_mode.js` and they disagreed. The server builds the outcome once in `_record_run_outcome` and ships that same dict down both routes verbatim: the SSE `done` frame, and the replayed `/send` body you get when a send is retried with the same `request_id` after a lost response.
+- `terminalRunStatus()` read it one way; `acceptStartedRun()` spelled the same decision out inline. For `outcome: "conversation"` — a run that answered rather than edited — the watched path showed **"Completed"** and the replayed path showed **"Ready"**, i.e. idle.
+- Now both call `terminalRunStatus()`, which maps to the client's own controlled vocabulary (`failed` / `noop` / `completed`) instead of echoing the server's wording. That is why `conversation` correctly becomes "Completed", and a guard pins that the vocabulary is never taken from the server string.
+- Verified with a node harness driving one server payload down both client routes against the real module and the real status badge: disagreements before, none after. Both directions re-proven by hand — restoring the inline expression fails both guards.
+- Found by the tenth fixer agent, hunting the same disagreeing-predicate class that produced the green-tick bug earlier today.
+
 ### Fixed (two modules that described roles they do not have)
 
 - **`thomas/core/vault_registry.py`** claimed in the present tense that "the rest of the system consults `is_vault_protected` instead of re-deriving the list". Nothing under `thomas/` imports the module at all; the only caller is its own test. The docstring now says what it is — an audit surface for guardrail UI that has not landed — and records that there are no production consumers as of 2026-07-31.
