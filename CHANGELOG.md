@@ -7,6 +7,15 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (The Activity drawer showed the same filename twice under one heading)
+
+- The drawer's `Outputs` heading covered two different kinds of thing: the deliverable (preview + artifact row) and the changed files you can Keep or Revert. The deliverable is almost always **also** a changed file, so its name renders twice on essentially every run. Measured on the three-file kanban run, reading down the single labelled column: `index.html` (artifact, with preview), `app.js`, **`index.html`**, `styles.css`. Scanning it, the repeat reads as a rendering fault.
+- The section below (`Files · /`) has its own title and the preview above is visually distinct — the change rows were the **only** group without a label, the same "every sibling but one" shape as `project_delta_since` and `--c-danger`.
+- **Labelled, not de-duplicated**, on purpose: dropping the second row would remove the only Revert control for the deliverable, which is the file you are most likely to want to undo.
+- Drawer section titles go from `['Outputs', 'Files · /']` to `['Outputs', 'Changed files', 'Files · /']`. Verified before and after at 1920×1080; `.tc-code-section-title` has symmetric 8px margins so it sits correctly mid-section with no CSS change. Suppressed when nothing precedes it, so a changes-only run does not stack two headings.
+- **Nearly shipped a shell-killer**: `changesTitle` reads `preview`, a `const` declared much further down the same function, and my first placement was above it — a temporal-dead-zone `ReferenceError` that takes out all of Code mode. Caught before running; the declaration ORDER is now pinned by a test, not just the presence.
+- The guard itself went red once with the code correct: the declaration wraps across two lines and `re.search` needs `re.S`. Third time that brittleness has appeared in my own guards, and the reason the CSP guards now join string literals before scanning.
+
 ### Docs (Closed the open question in the sphere-over-text note)
 
 - That note recorded the defect as known and deliberately not guessed at, and stated its blocker honestly: *"A screenshot alone cannot separate 'covered' from 'no contrast'."* It now records a measurement that does.

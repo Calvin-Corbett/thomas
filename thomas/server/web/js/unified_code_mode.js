@@ -856,6 +856,29 @@
       if (!artifactKeys.has(key)) { artifactKeys.add(key); artifacts.push(artifact); }
     });
     const artifactRows = artifacts.map(codeResults().artifactHtml).join('');
+    // The drawer's "Outputs" section holds two different kinds of thing: the
+    // deliverable (preview + artifact rows) and the changed files you can Keep
+    // or Revert. The deliverable is almost always ALSO a changed file, so its
+    // name renders twice under one heading. Measured on the three-file kanban
+    // run, reading down the single "Outputs" column:
+    //     index.html   (artifact, with preview)
+    //     app.js       (change row, Keep/Revert)
+    //     index.html   (change row, Keep/Revert)   <- the same name again
+    //     styles.css   (change row, Keep/Revert)
+    // Scanning it, the repeat reads as a rendering fault rather than as "the
+    // thing you made" and "a file you may revert".
+    //
+    // Labelled rather than de-duplicated: dropping the second row would take
+    // away the only Revert control for the deliverable, which is the one file
+    // you are most likely to want to undo.
+    //
+    // Only when something precedes it -- with no preview and no artifacts there
+    // is a single group, and a second heading straight under "Outputs" would
+    // separate nothing. `.tc-code-section-title` has symmetric 8px margins, so
+    // it sits correctly mid-section with no CSS change.
+    // Defined AFTER `preview` further down, not here: `preview` is a `const`
+    // declared later in this function, so reading it at this point is a
+    // temporal-dead-zone ReferenceError that takes out the whole of Code mode.
     const hasResults = Boolean(state.pendingApproval || visibleChanges.length || artifacts.length || state.filePreview);
     // Watch it build. A generated page is far more useful rendered than as
     // source, and during a run this refreshes, so you see the thing take shape
@@ -887,6 +910,11 @@
       : '';
     const preview = state.filePreview ? `<section class="tc-code-file-preview"><header><strong>${esc(state.filePreview.path)}</strong>${previewToggle}<button data-code-file-close aria-label="Close file preview"><i class="ph ph-x"></i></button></header>${previewBody}</section>` : '';
     const approval = state.pendingApproval ? `<section class="tc-code-approval" role="alert" data-ui-id="code.approval" data-ui-label="Approval required" data-ui-policy="protected"><strong>Approval required</strong><p>${esc(state.pendingApproval.summary)}</p><div><button data-code-approve ${state.approvalBusy ? 'disabled' : ''}>${state.approvalBusy ? 'Approving...' : 'Approve once'}</button><button data-code-approval-cancel ${state.approvalBusy ? 'disabled' : ''}>Cancel</button></div></section>` : '';
+    // Separates the two groups the "Outputs" heading covers -- see the note
+    // beside `artifactRows` above for the measurement. Declared here rather than
+    // there because `preview` is a `const` on the line above this one.
+    const changesTitle = (preview || artifactRows) && changeRows
+      ? '<div class="tc-code-section-title">Changed files</div>' : '';
     // The history question. Same shape as the approval prompt above, because it
     // is the same kind of moment: Thomas needs an answer before it can act, and
     // the answer belongs on screen rather than in a log file.
@@ -925,7 +953,7 @@
       <header class="tc-code-context" data-ui-id="code.context" data-ui-label="Code activity bar" data-ui-policy="move"><button data-code-results-jump type="button" aria-expanded="${state.drawerOpen ? 'true' : 'false'}"><i class="ph ph-sidebar-simple"></i> Activity <small>${statusLabels[state.runStatus] || 'Ready'}</small>${hasResults ? '<span class="tc-code-activity-count" aria-hidden="true"></span>' : ''}</button></header>
       <div class="tc-code-layout">
         <section class="tc-code-transcript" aria-label="Code conversation" data-ui-id="code.transcript" data-ui-label="Code conversation" data-ui-policy="move resize" data-ui-constraints="minWidth=320;minHeight=200">${historyAsk}<div id="tc-code-turns">${turns.map(turnHtml).join('') || (hasLiveTurn || pendingUserTurn ? '' : emptyStateHtml())}</div>${pendingUserTurn}${liveTurn}</section>
-        <aside class="tc-code-actions" aria-label="Code activity" aria-hidden="${state.drawerOpen ? 'false' : 'true'}"${state.drawerOpen ? '' : ' inert'} data-ui-id="code.activity" data-ui-label="Code activity drawer" data-ui-policy="move resize" data-ui-constraints="minWidth=280;minHeight=240;maxWidth=520"><section class="tc-code-rail-section" data-ui-id="code.outputs" data-ui-label="Outputs" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=120"><div class="tc-code-section-title">Outputs</div>${approval}${preview}${artifactRows}${changeRows || (!preview && !artifactRows ? '<p class="tc-code-rail-empty">Previews, changed files, and proof will appear here without interrupting the conversation.</p>' : '')}${changeRows && !state.running ? `<button id="tc-code-checkpoint" class="tc-code-checkpoint" data-ui-id="code.action.checkpoint" data-ui-label="Checkpoint changes" data-ui-policy="protected" title="Commit these changes on a thomas-code/ branch">Checkpoint — commit these changes</button>` : ''}</section><section class="tc-code-rail-section tc-code-tree" data-ui-id="code.files" data-ui-label="Project files" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=120"><div class="tc-code-tree-head"><div class="tc-code-section-title">Files · ${esc(state.treePath || '/')}</div>${state.treePath ? '<button id="tc-code-tree-up">Up</button>' : ''}</div><ul>${treeRows || `<li class="tc-code-muted">${esc(filesEmptyMessage)}</li>`}</ul></section><form id="tc-code-steer-form" class="tc-code-steer" ${state.running ? '' : 'hidden'} data-ui-id="code.steer" data-ui-label="Steer Thomas" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=80"><label for="tc-code-steer">Steer Thomas</label><input id="tc-code-steer" name="message" required placeholder="Change direction…" ${state.steeringBusy ? 'disabled' : ''}><button ${state.steeringBusy ? 'disabled' : ''}>${state.steeringBusy ? 'Confirming…' : 'Apply'}</button><button type="button" id="tc-code-stop" data-ui-id="code.action.stop" data-ui-label="Stop this run" data-ui-policy="protected" title="Stop this run" ${state.steeringBusy ? 'disabled' : ''}>Stop</button></form></aside>
+        <aside class="tc-code-actions" aria-label="Code activity" aria-hidden="${state.drawerOpen ? 'false' : 'true'}"${state.drawerOpen ? '' : ' inert'} data-ui-id="code.activity" data-ui-label="Code activity drawer" data-ui-policy="move resize" data-ui-constraints="minWidth=280;minHeight=240;maxWidth=520"><section class="tc-code-rail-section" data-ui-id="code.outputs" data-ui-label="Outputs" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=120"><div class="tc-code-section-title">Outputs</div>${approval}${preview}${artifactRows}${changesTitle}${changeRows || (!preview && !artifactRows ? '<p class="tc-code-rail-empty">Previews, changed files, and proof will appear here without interrupting the conversation.</p>' : '')}${changeRows && !state.running ? `<button id="tc-code-checkpoint" class="tc-code-checkpoint" data-ui-id="code.action.checkpoint" data-ui-label="Checkpoint changes" data-ui-policy="protected" title="Commit these changes on a thomas-code/ branch">Checkpoint — commit these changes</button>` : ''}</section><section class="tc-code-rail-section tc-code-tree" data-ui-id="code.files" data-ui-label="Project files" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=120"><div class="tc-code-tree-head"><div class="tc-code-section-title">Files · ${esc(state.treePath || '/')}</div>${state.treePath ? '<button id="tc-code-tree-up">Up</button>' : ''}</div><ul>${treeRows || `<li class="tc-code-muted">${esc(filesEmptyMessage)}</li>`}</ul></section><form id="tc-code-steer-form" class="tc-code-steer" ${state.running ? '' : 'hidden'} data-ui-id="code.steer" data-ui-label="Steer Thomas" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=80"><label for="tc-code-steer">Steer Thomas</label><input id="tc-code-steer" name="message" required placeholder="Change direction…" ${state.steeringBusy ? 'disabled' : ''}><button ${state.steeringBusy ? 'disabled' : ''}>${state.steeringBusy ? 'Confirming…' : 'Apply'}</button><button type="button" id="tc-code-stop" data-ui-id="code.action.stop" data-ui-label="Stop this run" data-ui-policy="protected" title="Stop this run" ${state.steeringBusy ? 'disabled' : ''}>Stop</button></form></aside>
       </div>${codeResults().viewerHtml()}</div>`;
     const activityDrawer = root.querySelector('.tc-code-actions');
     codeResults().bindViewer(root, render);
