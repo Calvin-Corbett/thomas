@@ -14,6 +14,13 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Fixed (the research library had been dead code since `69bbbab0`, while advertising itself as on)
+
+- `retrieve_library()` gated on `route.path not in ("research", "planning", "debug_audit", "coding_task")`, and `_LIBRARY_CAPTURE_ROUTES` held the same four. But since `69bbbab0` removed the prompt classifiers, `routing.decide()` returns `path="model_owned"` **unconditionally** — verified at `routing.py:68`, whose `RouteDecision` is documented as *"Execution metadata that does not classify the user's prose"*.
+- So both gates rejected every real chat turn: library context injection **and** auto-capture were dead, while `THOMAS_LIBRARY_ENABLED`, `THOMAS_LIBRARY_AUTO_CAPTURE_RESEARCH` and `RuntimeOverheadPolicy.include_library_context` all defaulted **on**. Gating now comes from the overhead policy, which is the right place once the model owns routing.
+- A second falsehood fixed alongside it: an empty library returned `"[Library context unavailable]"`. Having nothing relevant stored is not the same as being unavailable, and it now returns nothing and logs at debug.
+- **I had guessed wrong about this one.** I predicted it was a stale assertion asserting behaviour `69bbbab0` deliberately removed, and told the agent so. It checked instead of following the hypothesis, and found the opposite: the test was right and the feature had broken. Both directions re-proven by hand — removing `model_owned` from the two allowlists fails three tests, including one named for the symptom.
+
 ### Fixed (a Code run that answered your question finished as "Ready")
 
 - One decision — *what state did this run finish in* — was computed in two places in `unified_code_mode.js` and they disagreed. The server builds the outcome once in `_record_run_outcome` and ships that same dict down both routes verbatim: the SSE `done` frame, and the replayed `/send` body you get when a send is retried with the same `request_id` after a lost response.

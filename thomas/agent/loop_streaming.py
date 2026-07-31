@@ -270,15 +270,30 @@ def apply_memory_policy(agent: AgentLoop, route: RouteDecision) -> None:
         agent._memory_retrieval_policy_blocked = pins_only
 
 
+# Route paths whose turns may draw on the library.
+#
+# ``model_owned`` is the ONLY path IntentRouter produces for a natural-language
+# turn since 69bbbab0 landed model-owned routing; the classifier-era paths below
+# survive only for callers that build a RouteDecision explicitly. Leaving
+# ``model_owned`` out made this whole function dead code for every real chat turn
+# -- 69bbbab0 added ``model_owned`` to the sibling route allowlists in
+# loop_core.py (_history_preserve_counts / _history_token_cap) and missed these
+# two. Whether the context is affordable stays a dial decision
+# (RuntimeOverheadPolicy.include_library_context, plus the benchmark_mode check
+# at the call site); Thomas still does not read the user's prose to decide.
+_LIBRARY_CONTEXT_ROUTES = frozenset({"model_owned", "research", "planning", "debug_audit", "coding_task"})
+
+
 def retrieve_library(agent: AgentLoop, prompt: str, route: RouteDecision) -> str:
     """Retrieve context from the long-form research library.
 
-    Returns formatted library context, empty string for non-qualifying routes, or a warning message on failure.
+    Returns formatted library context, empty string when the route does not
+    qualify or nothing relevant is stored, or a warning message on failure.
     """
     lib = agent._library
     if lib is None:
         return ""
-    if route.path not in ("research", "planning", "debug_audit", "coding_task"):
+    if route.path not in _LIBRARY_CONTEXT_ROUTES:
         return ""
     q = str(prompt or "").strip()
     if not q:
@@ -291,8 +306,19 @@ def retrieve_library(agent: AgentLoop, prompt: str, route: RouteDecision) -> str
         elapsed_ms = (time.time() - start_time) * 1000
 
         if not text:
-            log.warning("Library retrieval returned empty text (%.1f ms)", elapsed_ms)
-            return "[Library context unavailable]"
+            # An empty result is the normal case for a fresh or small library,
+            # not a failure. It must not put "[Library context unavailable]" in
+            # the system prompt of every turn -- which is what would happen now
+            # that ordinary model-owned turns reach this code, since a fresh
+            # install's library is empty by definition.
+            #
+            # retrieve_memory above had exactly this bug and it was fixed on
+            # 2026-03-18 ("Return empty string instead of a misleading
+            # '[Memory unavailable]' message ... Empty string = no memory
+            # context, which is the honest state"). That fix never reached this
+            # function because the route allowlist kept it unreachable.
+            log.debug("Library had no matching entry (%.1f ms)", elapsed_ms)
+            return ""
 
         log.debug("Library context retrieved successfully (%.1f ms)", elapsed_ms)
         return format_library_context(text)
@@ -303,10 +329,25 @@ def retrieve_library(agent: AgentLoop, prompt: str, route: RouteDecision) -> str
         return "[Library context unavailable]"
 
 
-# Routes whose answers are worth auto-capturing into the library.
-_LIBRARY_CAPTURE_ROUTES = frozenset({"research", "planning", "debug_audit", "coding_task"})
+# Routes whose answers are worth auto-capturing into the library. Same staleness
+# as _LIBRARY_CONTEXT_ROUTES above: without ``model_owned`` the
+# THOMAS_LIBRARY_AUTO_CAPTURE_RESEARCH dial (default on) could never capture
+# anything from a real turn.
+_LIBRARY_CAPTURE_ROUTES = frozenset({"model_owned", "research", "planning", "debug_audit", "coding_task"})
 # Non-research routes need a longer answer to be worth persisting.
-_LIBRARY_CAPTURE_MIN_CHARS = {"research": 80, "planning": 200, "debug_audit": 200, "coding_task": 300}
+#
+# ``model_owned`` takes the general 200 floor, not research's 80. The 80 floor was
+# earned by the router having already established the turn WAS research; a
+# model-owned turn carries no such evidence, and it now covers every chat turn,
+# so granting it a lower bar than a classified planning or debug turn would
+# invert the design.
+_LIBRARY_CAPTURE_MIN_CHARS = {
+    "model_owned": 200,
+    "research": 80,
+    "planning": 200,
+    "debug_audit": 200,
+    "coding_task": 300,
+}
 
 
 def auto_capture_research(
