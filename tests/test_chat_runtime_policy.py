@@ -641,13 +641,132 @@ async def test_restrictive_policy_fails_closed_for_future_unclassified_tool(tmp_
     assert not probe.calls
 
 
-def test_registered_core_tools_have_explicit_policy_classification(policy_config: AppConfig) -> None:
+def test_registered_core_tools_have_explicit_policy_classification(
+    policy_config: AppConfig,
+    tmp_path: Path,
+) -> None:
+    """Thomas's own core tool surface is classified; every other tool fails closed.
+
+    Measured on dev 2026-07-31. ``_build_tools`` registers 566 tools: 30 core
+    ones it registers itself (filesystem, shell, git, code search, diff, ssh,
+    browser, web research, runtime skills) plus 536 from
+    ``register_all_optional_tools`` -- the marketplace domain modules.
+
+    This test used to assert ``unclassified == []`` across all 566 and was red
+    from the commit that introduced it (a5324a3b, the 0.19.0 squash): 426
+    unclassified, 424 of them marketplace domain tools (``audio_mixer``,
+    ``bioinformatics_blast``, ``crm.create_contact``, ...) that the hand-curated
+    catalog in ``chat_tool_policy_model.py`` has never enumerated. A permanently
+    red assertion guards nothing, and enumerating 536 domain tools by name is not
+    what that catalog is for.
+
+    Being absent from the catalog is never a permission hole: ``_tool_denial``
+    denies an unclassified tool the moment ANY capability is off, so a stranger
+    is strictly the most restrictive case -- which the two tests above
+    (``..._fails_closed_for_future_unclassified_tool`` and
+    ``test_allowed_paths_fail_closed_for_unclassified_tool_...``) pin for a
+    single probe. The cost of being unclassified is over-blocking. So the
+    contract measured here is the one the test name always claimed -- the CORE
+    surface must be classified explicitly -- plus the stranger rule applied to
+    the whole real registry rather than one probe.
+
+    Core unclassified before this change: ``['skills.list', 'skills.use']``
+    (2 of 30). After: 0 of 30. Both only read local skill files;
+    ``thomas/marketplace/specialists/reasoning.py`` already lists them under
+    "Read-only filesystem tools ... NEVER write/shell", so they are
+    ``_SAFE_READ_TOOLS``. Strangers still hidden under one disabled capability:
+    424 of 424.
+    """
+    from thomas.server.app_helpers import _build_tools
+    from thomas.server.tool_extensions import register_all_optional_tools
+
+    optional_registry = ToolRegistry()
+    register_all_optional_tools(optional_registry)
+    optional_names = {tool.name for tool in optional_registry.list_tools()}
+
+    registry = _build_tools(policy_config)
+    registered = [tool.name for tool in registry.list_tools()]
+    core_names = [name for name in registered if name not in optional_names]
+
+    # Never let the core surface pass by being empty: fs/shell/git/code/diff/web
+    # alone are more than 20 tools, so a vacuous subtraction fails here first.
+    assert len(core_names) > 20, core_names
+    assert [name for name in core_names if not _is_classified_tool(name)] == []
+
+    # Everything the catalog does not name must actually fail closed, not merely
+    # be undescribed. One disabled capability has to hide all of them.
+    network_off = ToolRuntimePolicy(
+        allow_shell=True,
+        allow_file_write=True,
+        allow_network=False,
+        allow_browser=True,
+        allow_channels=True,
+        allow_git=True,
+        require_command_approval=False,
+        tool_timeout_s=120,
+        max_parallel_tools=6,
+        allowed_paths=(),
+        blocked_commands=(),
+    )
+    view = PolicyToolRegistryView(registry, network_off, base_root=tmp_path)
+    strangers = [name for name in registered if not _is_classified_tool(name)]
+    assert strangers, "no unclassified tools left -- rewrite this half of the test"
+    assert [name for name in strangers if view.get(name) is not None] == []
+
+
+@pytest.mark.asyncio
+async def test_the_skill_tools_stay_available_when_only_network_is_switched_off(
+    policy_config: AppConfig,
+    tmp_path: Path,
+) -> None:
+    """Turning off network must not take local skill discovery with it.
+
+    ``skills.list`` and ``skills.use`` read skill files off the local disk and
+    return their text; they reach no network and execute nothing. They were
+    missing from the policy catalog, so ``_tool_denial`` treated them as
+    unclassified and denied them as soon as any capability was disabled.
+
+    Measured on dev 2026-07-31 with the real ``_build_tools`` registry and the
+    policy ``resolve_chat_runtime_policy`` produces for local-only mode
+    (network/browser/channels off, everything else on):
+
+        before  skills.list visible=False  skills.use visible=False
+                error: "allow_network policy denied unclassified tool capability"
+        after   skills.list visible=True   skills.use visible=True
+
+    Controls, unchanged in both runs: ``fs.read_file`` and ``code.search`` stayed
+    visible (so the run can show success), and ``web.search`` stayed hidden (so
+    ``allow_network`` still bites). Model-owned skill selection -- the whole
+    point of 69bbbab0 -- was dead in privacy mode until this landed.
+    """
     from thomas.server.app_helpers import _build_tools
 
     registry = _build_tools(policy_config)
-    unclassified = [tool.name for tool in registry.list_tools() if not _is_classified_tool(tool.name)]
+    local_only = ToolRuntimePolicy(
+        allow_shell=True,
+        allow_file_write=True,
+        allow_network=False,
+        allow_browser=False,
+        allow_channels=False,
+        allow_git=True,
+        require_command_approval=False,
+        tool_timeout_s=120,
+        max_parallel_tools=6,
+        allowed_paths=(),
+        blocked_commands=(),
+    )
+    view = PolicyToolRegistryView(registry, local_only, base_root=tmp_path)
 
-    assert unclassified == []
+    for name in ("skills.list", "skills.use", "fs.read_file", "code.search"):
+        assert registry.get(name) is not None, f"{name} is not registered at all"
+        assert view.get(name) is not None, f"{name} was hidden by an unrelated capability"
+
+    # Control: the policy still bites where the capability really applies.
+    assert registry.get("web.search") is not None
+    assert view.get("web.search") is None
+
+    result = await view.execute("skills.list", {})
+    assert result.ok, result.error
 
 
 @pytest.mark.asyncio

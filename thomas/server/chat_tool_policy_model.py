@@ -200,6 +200,13 @@ _SAFE_READ_TOOLS = {
     "preferences_get",
     "preferences_list",
     "rag.search",
+    # skills.list / skills.use only read local skill files and return their text;
+    # they execute nothing. thomas/marketplace/specialists/reasoning.py already
+    # groups them with fs.read_file under "Read-only filesystem tools ... NEVER
+    # write/shell". Neither takes a caller-supplied path, so they need no
+    # _LOCAL_PATH_ARGUMENTS entry.
+    "skills.list",
+    "skills.use",
     "template_filters",
     "template_rendering",
     "tray_agent_get_status",

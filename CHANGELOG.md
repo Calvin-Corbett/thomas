@@ -14,6 +14,15 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Fixed (turning off network access silently deleted local skill discovery)
+
+- `skills.list` and `skills.use` had **no policy classification**, and `_tool_denial` denies an unclassified tool as soon as *any* capability toggle is off. So switching on local-only mode — which only flips network/browser/channels — removed both skill tools from the model's toolset. Reading local skill files has nothing to do with network access.
+- They arrived after `test_registered_core_tools_have_explicit_policy_classification` was written, in the 2-line `register_runtime_skill_tools` addition, and nobody added them to the catalog.
+- Classified by explicit name in `_SAFE_READ_TOOLS`, not by a `"skills."` prefix, so a future `skills.install` cannot inherit read-only status by accident. They execute nothing, reach no network, and take no caller-supplied path; `reasoning.py` already groups them with `fs.read_file` under *"Read-only filesystem tools … NEVER write/shell"*.
+- The test's assertion was **also** wrong, and was red from birth: it asserted over all 566 registered tools, 424 of which are marketplace domain tools that have never been classified. Verified independently — it landed in `a5324a3b` and `tool_extensions.py` has had no commits since, so it never guarded anything. It now checks the 30 core tools `_build_tools` registers itself, and **gains** coverage: every one of the 424 unclassified marketplace tools must actually be hidden under a disabled capability, against the real registry rather than one synthetic probe.
+- Being unclassified is never a permission hole — `chat_tool_policy.py:63` denies such a tool whenever any policy is off, so the failure mode is over-blocking, which is precisely the reported symptom.
+- Found by one of ten parallel fixer agents; both directions re-verified by hand before landing.
+
 ### Fixed (a codex-shaped request was blamed on the Claude CLI — a regression from earlier today)
 
 - `runs_requested_model` returned `bool(self.model_id)` for the GPT family. But `from_payload` also routes `codex`, `chatgpt` and `openai_codex` there, and none start with `gpt-`, so `model_id` is empty and each reported `status: substituted` with the reason *"'codex' is neither, so the Claude CLI handled this request."* The Claude CLI handled nothing — the in-process ChatGPT path did.
