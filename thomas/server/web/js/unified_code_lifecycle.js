@@ -13,6 +13,33 @@
     const modelId = String(context.modelId || '');
     return {
       engine: 'agent',
+      // KNOWN, MEASURED 2026-07-31, deliberately not changed here.
+      //
+      // Anything that does not start with `gpt-` is sent as `claude:sonnet`, so
+      // Code dispatches to the CLAUDE CLI. That is not a quirk of this line --
+      // forge_code_settings.from_payload has exactly two families:
+      //
+      //     gpt = id.startswith("gpt-") or model.startswith(("gpt-", "codex", ...))
+      //     if gpt:  family "gpt"      -> in-process ChatGPT (openai_codex)
+      //     else:    family "claude"   -> the claude CLI
+      //
+      // So Code can only really run GPT or Claude. Picking a local qwen, a
+      // Gemini or a Mistral in the model menu silently runs Claude instead.
+      //
+      // It also reports the wrong thing. `model_id` still carries what you
+      // picked and that is what lands on the turn
+      // (evolve_agent_routes: `settings.model_id or settings.dispatch_model`),
+      // so a run is labelled with a model that had no part in it. Observed:
+      // profile `local`, turn labelled `qwen2.5-coder:7b`, transcript ending
+      // `claude exited 1` because the Claude CLI was not logged in. For that
+      // request from_payload produced dispatch_model `claude:qwen2.5-coder:7b`
+      // -- the Claude CLI asked to run qwen.
+      //
+      // Not fixed here because the honest options are product decisions, not
+      // edits: stop offering models Code cannot run, say which engine will
+      // actually handle the request, or record the DISPATCHED model on the turn
+      // so the label matches the executor. Each changes what the owner sees or
+      // what runs. See the matching note in forge_code_settings.from_payload.
       model: modelId.startsWith('gpt-') ? modelId : 'claude:sonnet',
       model_id: modelId,
       reasoning_effort: dials.effort || 'medium',

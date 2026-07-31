@@ -7,6 +7,13 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Found (Code mode runs Claude for every model that isn't GPT)
+
+- Traced to one line, `unified_code_lifecycle.js:16`: `model: modelId.startsWith('gpt-') ? modelId : 'claude:sonnet'`. Anything not starting with `gpt-` is sent as `claude:sonnet`, which selects the **Claude CLI**.
+- Not a quirk of that line — `forge_code_settings.from_payload` has exactly **two** families: `gpt` (in-process ChatGPT via `openai_codex`) and, for everything else, `claude`. So **picking a local qwen, a Gemini or a Mistral in the model menu silently runs Claude.**
+- It reports the wrong thing too. `model_id` still carries what you picked, and that is what lands on the turn (`settings.model_id or settings.dispatch_model`), so a run is labelled with a model that had no part in it. For the observed request, `from_payload` produced `dispatch_model = "claude:qwen2.5-coder:7b"` — the Claude CLI asked to run qwen.
+- **Not fixed.** The honest options are product decisions, not edits: stop offering models Code cannot run, say which engine will actually handle the request, or record the dispatched model on the turn so the label matches the executor. Each changes what you see or what runs. Recorded at both ends — the client line and `from_payload`.
+
 ### Found (a run labelled `qwen2.5-coder:7b` was actually run by Claude)
 
 - A Code run failed with `Not logged in — Please run /login` and `claude exited 1`, wrote nothing — while the turn was labelled **`qwen2.5-coder:7b`**, the local profile's configured model, which had no part in it.
