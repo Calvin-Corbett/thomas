@@ -27,6 +27,11 @@ class ForgeCodeSettingsError(ValueError):
 
 
 _MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$")
+# Models the Claude CLI can actually serve. Anything else routed to the "claude"
+# family is a substitution, not the model the caller asked for -- see
+# `runs_requested_model`. Anchored rather than a substring test so that, say,
+# "octopus-7b" is not mistaken for "opus".
+_CLAUDE_MODEL = re.compile(r"^(?:claude[\w.:-]*|sonnet|opus|haiku)(?:[-.][\w.-]*)?$", re.I)
 _REASONING = {"none", "low", "medium", "high", "xhigh", "max"}
 _FILE_ACCESS = {"read_only", "workspace", "project", "pc", "full"}
 _GUARDRAILS = {"open", "guarded", "fortress"}
@@ -115,11 +120,15 @@ class ForgeCodeSettings:
         # nothing reconciles the two, so the owner is told a local qwen model
         # produced a failure that actually came from Claude.
         #
-        # Two candidate fixes, both behaviour changes that deserve a decision
-        # rather than a drive-by: refuse to invent a model when the caller sent
-        # none (surfacing "no model selected" instead of silently choosing
-        # Claude), or record the DISPATCHED model on the turn so the label
-        # matches the executor. Left alone because picking one changes what runs.
+        # The LABELLING half of that is now fixed: `recorded_model` reports the
+        # executor that actually ran, and `capability_report` marks the model
+        # dial "substituted" rather than "applied" when the request was rerouted.
+        # That changes only what Thomas says about the run, not what runs.
+        #
+        # The other half -- inventing `claude:sonnet` when the caller sent no
+        # model at all -- is still here, still deliberate. Refusing would surface
+        # "no model selected" instead of silently choosing Claude, but it changes
+        # what executes and deserves a decision rather than a drive-by.
         model = _validated_model(body.get("model") or "claude:sonnet", name="model")
         model_id = _validated_model(body.get("model_id"), name="model_id")
         reasoning = _choice(
@@ -201,6 +210,44 @@ class ForgeCodeSettings:
             env["THOMAS_MODELS_FORGECODE_MAX_TOKENS"] = str(_GPT_CODE_MAX_TOKENS)
         return env
 
+    def runs_requested_model(self) -> bool:
+        """Whether the executor really runs the model the caller asked for.
+
+        Code has exactly two executors: GPT through the owner's ChatGPT account,
+        and the Claude CLI. Every model that is not GPT is routed to the Claude
+        CLI, so asking for a local qwen, a Gemini or a Mistral gets Claude.
+        """
+
+        if self.family == "gpt":
+            return bool(self.model_id)
+        requested = (self.model_id or self.model).strip()
+        if not requested:
+            # Nothing was asked for, so nothing was substituted. The invented
+            # `claude:sonnet` default is reported by `recorded_model` either way.
+            return True
+        if requested.lower().startswith("claude:"):
+            requested = requested.split(":", 1)[1]
+        return bool(_CLAUDE_MODEL.fullmatch(requested))
+
+    def recorded_model(self) -> str:
+        """The model a turn should be attributed to: the one that actually ran.
+
+        `model_id` is what the OWNER picked and `dispatch_model` is what the
+        executor was given. Preferring `model_id` -- which is what the turn
+        recorder and this report both used to do -- labels a run with a model
+        that had no part in it. Observed: profile `Local`, turn labelled
+        `qwen2.5-coder:7b`, transcript ending `claude exited 1` because the
+        Claude CLI is not logged in on that machine.
+
+        GPT keeps `model_id`, because the isolated forgecode profile really is
+        pinned to that exact model (`child_environment`). Claude reports
+        `dispatch_model`, which names the executor AND the variant handed to it.
+        """
+
+        if self.family == "claude":
+            return self.dispatch_model
+        return self.model_id or self.dispatch_model
+
     def requested(self) -> dict[str, Any]:
         return {
             "engine": self.engine,
@@ -245,7 +292,8 @@ class ForgeCodeSettings:
             if self.family == "claude"
             else "an exact GPT model_id is required to apply reasoning effort safely"
         )
-        effective_model = self.model_id or self.dispatch_model
+        effective_model = self.recorded_model()
+        runs_requested = self.runs_requested_model()
         policy = self.execution_policy()
         access_spec = file_access_spec(policy["file_access_level"])
         access_reason = {
@@ -271,9 +319,32 @@ class ForgeCodeSettings:
             },
             "support": {
                 "engine": {"status": "applied"},
+                # "applied" used to cover the whole claude family, which asserted
+                # that a requested local qwen had been applied when the Claude CLI
+                # ran instead. This module exists to report what the executor
+                # "applies, fixes to a safe value, or cannot honor" -- for the
+                # model dial it was doing the opposite.
                 "model": {
-                    "status": "applied" if (self.family == "claude" or exact_gpt) else "configured_default",
+                    "status": (
+                        "applied"
+                        if runs_requested and (self.family == "claude" or exact_gpt)
+                        else "substituted"
+                        if not runs_requested
+                        else "configured_default"
+                    ),
+                    "requested": self.model_id or self.model,
                     "effective": effective_model,
+                    **(
+                        {}
+                        if runs_requested
+                        else {
+                            "reason": (
+                                "Code runs either GPT through your ChatGPT account or the Claude CLI. "
+                                f"{self.model_id or self.model!r} is neither, so the Claude CLI handled "
+                                "this request."
+                            )
+                        }
+                    ),
                 },
                 "reasoning_effort": {"status": reasoning_status, "reason": reasoning_reason},
                 "file_access": {

@@ -7,19 +7,33 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (a run is credited to the engine that actually ran it)
+
+- Both turn recorders in `evolve_agent_routes` passed `settings.model_id or settings.dispatch_model` — the owner's pick winning over the executor — and `capability_report` reported `status: "applied"` for the entire `claude` family. So a run the **Claude CLI** performed was labelled `qwen2.5-coder:7b`, and the `claude exited 1` failure was attributed to a model that had no part in it.
+- `ForgeCodeSettings.recorded_model()` now reports the executor, and the model dial reads **`substituted`** with a reason naming what ran instead. Genuine Claude requests still read `applied`; an unselected model is not called a substitution; GPT keeps its exact model; and `octopus-7b` is not mistaken for `opus`.
+- Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
+- **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
+
+### Fixed (a row that says something failed no longer shows a success tick)
+
+- Opening a deliverable deep link whose task no longer exists rendered a green `ph-check-circle` directly above the words **"Technical check failed"**, with the row missing the `is-error` class that colours it.
+- Two failure predicates had drifted apart: `eventHtml` asked `is_error === true`, `groupedTechnicalEvents` asked `is_error === true || kind === 'error'`, and `technicalHeading` sided with the second. A live `error` event — the shape `pushLiveEvent({ type: 'error' })` emits, which never sets `is_error` — therefore got failure wording under a success icon. The saved path was already correct, so only the run you were *watching* lied. Both now call one `eventFailed()`.
+- The wording was false too: nothing had been checked, the conversation simply did not exist. Same overloading of "check" already fixed for `tool_result` and `meta`, with `error` left behind.
+- Measured on the element — before: `ph-check-circle`, glyph `✓`, `rgb(139,140,255)`, `is-error` false. After: `ph-warning`, glyph `⚠`, `rgb(255,154,154)`, `is-error` true.
+
 ### Found (Code mode runs Claude for every model that isn't GPT)
 
 - Traced to one line, `unified_code_lifecycle.js:16`: `model: modelId.startsWith('gpt-') ? modelId : 'claude:sonnet'`. Anything not starting with `gpt-` is sent as `claude:sonnet`, which selects the **Claude CLI**.
 - Not a quirk of that line — `forge_code_settings.from_payload` has exactly **two** families: `gpt` (in-process ChatGPT via `openai_codex`) and, for everything else, `claude`. So **picking a local qwen, a Gemini or a Mistral in the model menu silently runs Claude.**
 - It reports the wrong thing too. `model_id` still carries what you picked, and that is what lands on the turn (`settings.model_id or settings.dispatch_model`), so a run is labelled with a model that had no part in it. For the observed request, `from_payload` produced `dispatch_model = "claude:qwen2.5-coder:7b"` — the Claude CLI asked to run qwen.
-- **Not fixed.** The honest options are product decisions, not edits: stop offering models Code cannot run, say which engine will actually handle the request, or record the dispatched model on the turn so the label matches the executor. Each changes what you see or what runs. Recorded at both ends — the client line and `from_payload`.
+- **Partly fixed since** (see *Fixed — a run is credited to the engine that actually ran it*, above): the label now names the executor and the report marks the model `substituted`. The other two options remain product decisions — stop offering models Code cannot run, or say which engine will handle the request *before* it is sent. Recorded at both ends — the client line and `from_payload`.
 
 ### Found (a run labelled `qwen2.5-coder:7b` was actually run by Claude)
 
 - A Code run failed with `Not logged in — Please run /login` and `claude exited 1`, wrote nothing — while the turn was labelled **`qwen2.5-coder:7b`**, the local profile's configured model, which had no part in it.
 - Mechanism, traced end to end: the chat profile had drifted to `local` with an empty `model_id` → the shell had no model to put in the payload → `from_payload` defaults an unspecified model to **`claude:sonnet`** → `family` is read off that prefix → the run dispatched to the **Claude CLI**, which is not logged in on this machine.
 - So the report names the *profile's* model while `family` decides the *executor*, and nothing reconciles the two. The owner is told a local qwen model produced a failure that came from Claude.
-- **Not changed.** Two candidate fixes, both behaviour changes deserving a decision rather than a drive-by: refuse to invent a model when the caller sent none (surface "no model selected" instead of silently choosing Claude), or record the dispatched model on the turn so the label matches the executor. Recorded at the exact line with the full trace.
+- **The labelling half is now fixed** (see *Fixed — a run is credited to the engine that actually ran it*, above): the turn records the dispatched model. The other candidate — refusing to invent a model when the caller sent none, surfacing "no model selected" instead of silently choosing Claude — is still open, because it changes what executes. Recorded at the exact line with the full trace.
 - **The failure reporting itself held up.** On screen the owner sees the actionable cause — `Not logged in · Please run /login`, `claude exited 1` in red, and an honest *"Nothing was checked · 3 open risks"*. Nothing was overstated; the only false note was the model label.
 - Separately: the default model had drifted to `Local` with an empty `model_id`, which is what set this off. Restored to `openai_codex` / `gpt-5.6-sol`.
 
