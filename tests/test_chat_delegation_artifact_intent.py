@@ -8,6 +8,7 @@ that rejects good work is not an improvement on one that accepts bad work.
 
 from __future__ import annotations
 
+import ast
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -16,6 +17,18 @@ from thomas.server.chat_delegation_artifact_intent import (
     artifact_intent_issues,
     intent_evidence,
 )
+from thomas.server.chat_delegation_artifact_verification import _hidden_completion_review_passes
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+# The same request, answered twice: once with the wrong thing, once with the
+# right thing. Any verifier worth the name has to separate these two.
+TRENDS_REQUEST = "make me a graph of current technology adoption trends"
+
+TRENDS_GRAPH = """<!doctype html><html><head><title>Technology trends</title></head>
+<body><h1>Technology adoption trends over time</h1>
+<p>Chart of adoption for each technology, plotted by year.</p>
+<canvas id="chart"></canvas></body></html>"""
 
 ARCADE_GAME = """<!doctype html><html><head><title>Orbit</title>
 <style>body { display: grid; background: #000; }</style></head>
@@ -150,6 +163,110 @@ class ArtifactIntentTests(unittest.TestCase):
                 ),
                 [],
             )
+
+
+class ArtifactIntentIsNotOnTheCompletionPath(unittest.TestCase):
+    """This check works and nothing in production calls it. Both halves, measured.
+
+    Measured on dev 043d737c, 2026-07-31, with one request answered twice --
+    ``make me a graph of current technology adoption trends`` delivered as an
+    arcade game, and the same request delivered as a trend graph:
+
+      * ``_hidden_completion_review_passes`` -> True for BOTH. The gate that
+        decides whether a run is reported as verified cannot separate them.
+      * ``artifact_intent_issues``           -> flags the game, passes the graph.
+        So the difference is detectable; it is just not consulted.
+      * Importers of ``chat_delegation_artifact_intent`` under ``thomas/``: 0.
+        Control, same scanner: ``chat_delegation_artifact_verification`` has 1
+        (``chat_delegation_runner``), so the scan can find a wired-up module --
+        it found none for this one.
+
+    Before/after for this change: no runtime behaviour moved. What changed is the
+    module docstring, which used to say the Canvas path "already refuses this"
+    (``review_canvas_html`` now opens with ``del prompt``) and read as though the
+    generalised check were in force. Restoring the original 6cc89af2 call site
+    was measured too: the arcade game flips True -> False, the genuine graph stays
+    True, and ``test_hidden_review_accepts_verified_nonempty_artifact`` turns red,
+    because the same merge landed the opposite contract. These tests hold the line
+    so that whichever way that is settled, it is settled on purpose.
+    """
+
+    def _workspace(self, tmp: str, body: str) -> Path:
+        root = Path(tmp)
+        (root / "index.html").write_text(body, encoding="utf-8")
+        return root
+
+    def _completion_gate(self, root: Path) -> bool:
+        return _hidden_completion_review_passes(
+            TRENDS_REQUEST,
+            root,
+            ["index.html"],
+            "Created index.html",
+            True,
+            [],
+            succeeded_tools=["fs.write_file"],
+        )
+
+    def test_the_completion_gate_cannot_tell_the_wrong_deliverable_from_the_right_one(self):
+        """Both answers to one request are reported verified. This is the defect."""
+        with TemporaryDirectory() as tmp:
+            wrong = self._completion_gate(self._workspace(tmp, ARCADE_GAME))
+        with TemporaryDirectory() as tmp:
+            right = self._completion_gate(self._workspace(tmp, TRENDS_GRAPH))
+
+        self.assertTrue(right, "a genuine trend graph must still pass; otherwise this measures nothing")
+        self.assertTrue(
+            wrong,
+            "the completion gate now separates a wrong deliverable from a right one -- "
+            "if that was wired on purpose, update the 'NOT WIRED' note in "
+            "thomas/server/chat_delegation_artifact_intent.py",
+        )
+
+    def test_this_module_can_tell_them_apart_which_is_why_it_is_kept(self):
+        """The control: the gap is detectable, so the code is worth keeping wired-out."""
+        with TemporaryDirectory() as tmp:
+            wrong = artifact_intent_issues(TRENDS_REQUEST, self._workspace(tmp, ARCADE_GAME), ["index.html"])
+        with TemporaryDirectory() as tmp:
+            right = artifact_intent_issues(TRENDS_REQUEST, self._workspace(tmp, TRENDS_GRAPH), ["index.html"])
+
+        self.assertTrue(wrong)
+        self.assertEqual(right, [])
+
+    def test_nothing_under_thomas_imports_this_module(self):
+        """The claim the docstring now makes, checked rather than asserted in prose."""
+        target = "chat_delegation_artifact_intent"
+        control = "chat_delegation_artifact_verification"
+        importers: dict[str, set[str]] = {target: set(), control: set()}
+
+        for path in (REPO_ROOT / "thomas").rglob("*.py"):
+            if path.name == f"{target}.py":
+                continue
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            except (OSError, SyntaxError, UnicodeDecodeError):
+                continue
+            for node in ast.walk(tree):
+                names: list[str] = []
+                if isinstance(node, ast.Import):
+                    names = [alias.name for alias in node.names]
+                elif isinstance(node, ast.ImportFrom):
+                    names = [node.module or ""] + [alias.name for alias in node.names]
+                for module in names:
+                    for name in (target, control):
+                        if module.rsplit(".", 1)[-1] == name:
+                            importers[name].add(path.relative_to(REPO_ROOT).as_posix())
+
+        self.assertTrue(
+            importers[control],
+            "control failed: the scanner found no importer of a module that has one, "
+            "so a zero for the target below would prove nothing",
+        )
+        self.assertEqual(
+            importers[target],
+            set(),
+            "chat_delegation_artifact_intent now has a production importer -- good, but the "
+            "'NOT WIRED' note at the top of that module is now false and must be rewritten",
+        )
 
 
 if __name__ == "__main__":

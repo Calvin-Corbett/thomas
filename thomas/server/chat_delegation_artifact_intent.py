@@ -1,22 +1,55 @@
 """Does the artifact have anything to do with what was asked?
 
+NOT WIRED. Read this before believing anything below: **nothing in production
+calls this module.** As of dev 043d737c (2026-07-31) the only importer anywhere
+in the tree is ``tests/test_chat_delegation_artifact_intent.py``. The check
+described here is real and it works -- it is simply not on the path that decides
+whether a run is reported as verified. See "Why it is unwired" at the bottom, and
+``ArtifactIntentIsNotOnTheCompletionPath`` in that test file, which measures both
+halves of that sentence and goes red if either changes.
+
 Thomas's success check reduces to "a non-empty file exists". That is how a
 request for a graph of current trends was closed as verified by a one-button
 arcade game, and how the task line "Start a local dev/static server if needed"
 was closed as verified by an arcade football game. Once success is inferred from
 the existence of a side effect, the wrong artifact is indistinguishable from the
-right one, and Thomas can neither retry correctly nor report honestly.
-
-The Canvas path already refuses this: chat_delegation_canvas_review compares the
-requested subject against the tokens actually visible in the render and fails
-closed. That check has simply never been shared with the path that produces most
-deliverables. This module is that check, generalised.
+right one, and Thomas can neither retry correctly nor report honestly. That is
+still true today: ``_hidden_completion_review_passes`` returns True for the
+arcade game and True for a genuine trend graph, from the same request.
 
 Deliberately a floor, not a rubric. It fires only when an artifact shares
 *nothing at all* with a request that was specific enough to share something. A
 verifier that rejects good work is not an improvement on one that accepts bad
 work -- it just moves the dishonesty. Anything subtler than "these are unrelated"
 belongs to a model, not to token overlap.
+
+Why it is unwired
+-----------------
+This module shipped in 6cc89af2 (2026-07-24) together with its call site: an
+``intent_evidence`` call inside ``_hidden_completion_review_passes`` in
+``chat_delegation_artifact_verification``, scoring the review 0.0 when the
+artifact matched nothing. 87ae37e5 (2026-07-27) replaced that whole file with the
+``codex/organic-routing-no-regex`` version, which was written on 2026-07-22 --
+two days before this module existed -- and so never had the import. The loss was
+collateral to "prompt classifiers out", not a decision about this check; neither
+merge message mentions it.
+
+The sibling this module used to cite is gone for real, though. Its previous
+docstring said "the Canvas path already refuses this: chat_delegation_canvas_review
+compares the requested subject against the tokens actually visible in the render".
+That is now false: ``review_canvas_html`` opens with ``del prompt`` and states
+that it "does not compare prompt words with output words". Canvas review is
+purely structural (``canvas-structural-v3``).
+
+Re-wiring it is an owner decision, not a missing screw. The same merge landed the
+opposite contract, and it is currently green: ``chat_delegation_artifact_verification``
+declares "this module intentionally does not parse a user's request", and
+``test_hidden_review_accepts_verified_nonempty_artifact`` pins it with the prompt
+``"prompt wording is ignored"``. Restoring the 6cc89af2 call site verbatim was
+measured on 2026-07-31: the arcade-game-for-a-graph case flips verified -&gt; rejected
+and the genuine trend graph stays verified, and that one test turns red. Pick one
+of those two contracts; do not quietly re-add the call and edit the test that
+notices.
 """
 
 from __future__ import annotations
