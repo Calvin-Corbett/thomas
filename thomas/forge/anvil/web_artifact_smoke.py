@@ -353,7 +353,30 @@ def _run_one(
         problems.append("page rendered no text or canvas")
     if problems:
         return False, f"{name}: " + "; ".join(problems[:5]), receipt
-    interactions = ", ".join(str(value) for value in receipt.get("interactions") or []) or "boot only"
+    # "boot only" is a claim about what the CHECK did, and this module defines it
+    # in its own words below: "it means the page loaded and nothing on it was
+    # ever touched". Since the press-and-observe probe landed, that stopped being
+    # true. The probe presses up to six controls and records only the ones that
+    # visibly changed the page, so a run that pressed three and saw nothing
+    # published an empty `interactions` -- byte-identical to a run that pressed
+    # nothing at all, and summarised with the same two words.
+    #
+    # Measured on the tip calculator deliverable, which is entirely correct when
+    # driven by hand -- five working controls, arithmetic verified independently.
+    # Its presets legitimately do nothing until a bill is entered, so the probe
+    # saw no change, and the receipt read pressed_controls 3, interactions [],
+    # summary "boot only": three presses reported as nothing touched.
+    #
+    # Not a verdict, and `ok` is untouched. This says what the check DID and what
+    # it SAW, never that the app is broken.
+    recorded = [str(value) for value in receipt.get("interactions") or []]
+    pressed = int(receipt.get("pressed_controls") or 0)
+    if recorded:
+        interactions = ", ".join(recorded)
+    elif pressed:
+        interactions = f"pressed {pressed} control(s), none of which changed the page"
+    else:
+        interactions = "boot only"
     # Surfaced, not silently dropped: the page booted clean against everything
     # this harness could actually serve, and the reader should know what it
     # could not reach rather than infer full coverage from a clean line.
