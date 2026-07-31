@@ -357,13 +357,48 @@ def _run_one(
     # Surfaced, not silently dropped: the page booted clean against everything
     # this harness could actually serve, and the reader should know what it
     # could not reach rather than infer full coverage from a clean line.
-    offline = f"; {len(blocked)} external resource(s) not fetched offline" if blocked else ""
+    #
+    # It used to read "N external resource(s) not fetched offline", and that word
+    # was false. "Offline" frames the miss as an artifact of THIS harness's DNS
+    # mapping -- something that would work for the owner. It would not. The
+    # artifact preview CSP lists no remote origin in script-src, style-src,
+    # img-src, font-src or connect-src, so a remote reference is refused there
+    # permanently, by policy.
+    #
+    # Measured on blocktown-84.html (conversation fc_20260728T184945_a97729),
+    # which is the page the exemption above was written for and named as "a game
+    # that works". Loaded through Thomas's own artifact route:
+    #   requestfailed  https://cdnjs.cloudflare.com/.../three.min.js :: csp
+    #   window.THREE   undefined
+    #   the only button, "Deploy to Blocktown", disabled
+    #   red text: "The 3D engine could not load. Check your connection and refresh."
+    # while this function returned
+    #   ok=True  "browser boot clean; boot only; 1 external resource(s) not fetched offline"
+    # Two heuristics had honest reasons to stay quiet: the canvas never got a
+    # context so paint is "unverifiable" rather than "blank", and body_text_chars
+    # is satisfied partly BY THE ERROR MESSAGE ITSELF.
+    #
+    # `ok` is deliberately still True. Depending on a CDN inside an offline
+    # sandbox is the model's mistake, and failing the run for it would make this
+    # a rejector that grades the model rather than a report that tells the truth.
+    # What changes is only what it SAYS -- and the wording names the fix, so the
+    # repair loop stops swapping CDN hosts (that run swapped jsdelivr -> jsdelivr
+    # -> cdnjs across three passes, none of which could ever have worked).
     # Prefixed, because joined with the interactions a note reads as another
     # thing that happened: "clicked:Start Over; clicked a start-like control and
     # saw no change" gives a reader no way to tell the observation from the
     # action. A note is a caveat about the check, not a result of it.
     notes = "; ".join(f"note: {value}" for value in receipt.get("notes") or [])
-    return True, f"{name}: browser boot clean; {interactions}{offline}{'; ' + notes if notes else ''}", receipt
+    tail = f"; {notes}" if notes else ""
+    if blocked:
+        listed = ", ".join(sorted(blocked)[:3])
+        return True, (
+            f"{name}: booted, but {len(blocked)} external resource(s) will not load for you "
+            f"either ({listed}) -- deliverables run with no network and the preview allows no "
+            f"remote origins; vendor them into the project folder and reference them locally; "
+            f"{interactions}{tail}"
+        ), receipt
+    return True, f"{name}: browser boot clean; {interactions}{tail}", receipt
 
 
 def _is_external_reference(value: str) -> bool:

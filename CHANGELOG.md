@@ -7,6 +7,16 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Thomas called a dead page "browser boot clean")
+
+- `blocktown-84.html` loads three.js from a CDN. Through Thomas's **own** artifact route: `window.THREE` undefined, the only button *"Deploy to Blocktown"* disabled, red text reading *"The 3D engine could not load. Check your connection and refresh."*, and `requestfailed … :: csp`.
+- Thomas's verifier returned `ok=True`, *"browser boot clean; boot only; 1 external resource(s) not fetched offline"*.
+- The exemption behind that line was added deliberately (`62a1e0fa`) on the premise that *"a page that loads three.js from a CDN could never pass — and blocktown-84 does exactly that. Failing it would say 'your game is broken' about a game that works."* **The premise is false.** The artifact preview CSP lists no remote origin in `script-src`, `style-src`, `img-src`, `font-src` or `connect-src`, so the reference is refused there permanently. The word **"offline"** framed a permanent runtime block as an artifact of the harness's own DNS mapping.
+- Two heuristics had honest reasons to stay quiet, which is why nothing else caught it: the canvas never got a context so paint reads `unverifiable` rather than `blank`, and `body_text_chars > 0` was satisfied partly **by the error message itself**.
+- `ok` stays **True**, and a test pins that. Depending on a CDN inside an offline sandbox is the *model's* mistake; failing the run for it would make this a rejector that grades the model rather than a report that tells the truth. Only the wording changed — and it now names the remedy, so the repair loop stops swapping CDN hosts (the real run swapped jsdelivr → jsdelivr → cdnjs across three passes, none of which could ever have worked).
+- Opposite failure covered: a self-contained page still reads plainly — `habits.html: browser boot clean; boot only`. Restoring the old wording turns 3 of the 5 guards red. 112 existing smoke tests still pass.
+- Found by a multi-agent audit; **verified independently** before acting, including the agent's correction of a wrong conversation id I had supplied (`fc_20260728T220253_2ea097` is a noop; the real owner is `fc_20260728T184945_a97729`).
+
 ### Fixed (The run report recorded nothing about what Thomas did)
 
 - `attempts[].key_actions` is the report's account of the agent's own work. Across **105 agent turns it was non-empty ZERO times**, while its siblings on the same record were filled 100% (`goal`, `outcome`, `exit_state`) and 18% (`errors`).
