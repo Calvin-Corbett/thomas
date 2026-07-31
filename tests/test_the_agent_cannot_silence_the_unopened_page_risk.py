@@ -30,7 +30,11 @@ of those is guaranteed to survive truncation.
 
 from __future__ import annotations
 
-from thomas.forge.anvil.run_report import _unopened_page_risks
+import inspect
+import re
+
+from thomas.forge.anvil import run_report
+from thomas.forge.anvil.run_report import _build_rubric_mapping, _unopened_page_risks
 
 SMOKE_OPENED_INDEX = [{"evidence": "BROWSER_SMOKE_OK: index.html: browser boot clean; boot only"}]
 CHANGED = ["index.html", "orphan.html"]
@@ -84,6 +88,72 @@ def test_a_marker_that_arrives_only_as_an_event_still_counts() -> None:
         "a skipped browser check is reported with the same wording as one that "
         "never ran; the owner cannot tell 'Chrome was missing' from 'nothing "
         f"was checked'. Got: {joined!r}"
+    )
+
+
+def test_a_skipped_check_is_not_counted_as_a_passing_one() -> None:
+    """`passed` is the absence of an error, and a skip sets no error.
+
+    So a browser smoke the engine never ran arrived flagged `passed: True` and
+    was counted in the rubric evidence as "2 passed, 0 failed" on a run where
+    one of the two never happened. The Code UI already excluded skips from its
+    displayed count (`unified_code_results.js`: `wasSkipped`); the rubric
+    evidence is a separate surface and had not been told.
+
+    Not reproducible on a machine that has Chrome -- every real report here
+    carries a real smoke -- which is exactly why it needs a test rather than an
+    observation.
+    """
+
+    static = {"command": "static checks", "evidence": "exit 0 STATIC_VERIFY_OK: 1 files checked", "passed": True}
+    skipped = {
+        "command": "offline real-browser smoke",
+        "evidence": "BROWSER_SMOKE_SKIPPED: page.html: browser smoke unavailable",
+        "passed": True,
+    }
+    ran = {
+        "command": "offline real-browser smoke",
+        "evidence": "BROWSER_SMOKE_OK: page.html: browser boot clean",
+        "passed": True,
+    }
+
+    def counts(validations):
+        rubric = _build_rubric_mapping(
+            "Build page.html", "", validations, ok=True, outcome="completed", reason=""
+        )
+        return " ".join(str(r.get("evidence") or "") for r in rubric)
+
+    skipped_counts = counts([static, skipped])
+    assert "1 passed" in skipped_counts and "1 skipped" in skipped_counts, (
+        "a browser check the engine skipped is counted as a passing engine "
+        f"check in the rubric evidence. Got: {skipped_counts!r}"
+    )
+    assert "2 passed" not in skipped_counts
+
+    # Control: a smoke that really ran must still count as passed, or this only
+    # shows the counter got stricter rather than more truthful.
+    ran_counts = counts([static, ran])
+    assert "2 passed" in ran_counts and "skipped" not in ran_counts, (
+        f"a check that really ran is no longer counted as passing. Got: {ran_counts!r}"
+    )
+
+
+def test_a_skipped_check_does_not_cover_the_file_it_names() -> None:
+    """Its evidence names the page, which silenced the coverage risk.
+
+    `BROWSER_SMOKE_SKIPPED: wordfreq.html: ...` put the filename into
+    `passing_text`, so "files changed without a matching passing validation"
+    treated a check that never ran as covering the file. Same shape as the
+    transcript-mention bug above: a string that merely CONTAINS the filename
+    taken as proof something examined it.
+    """
+
+    source = inspect.getsource(run_report)
+    passing_text = re.search(r"passing_text = \" \"\.join\((.{0,240}?)\)\n", source, re.S)
+    assert passing_text, "the passing_text builder is gone"
+    assert "_was_skipped" in passing_text.group(1), (
+        "passing_text still counts skipped checks as passing, so a check that "
+        "never ran silences the risk that says the file was never covered"
     )
 
 

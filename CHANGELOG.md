@@ -14,6 +14,20 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Fixed (a check the engine SKIPPED was counted, and quoted, as one that passed)
+
+- `passed` is derived from the absence of an error (`event.get("is_error") is not True`), and a skipped browser smoke sets no error — so a check that never ran arrived flagged `passed: True`. Two surfaces believed it:
+  - the **rubric evidence** read `engine checks: 2 passed, 0 failed` on a run where one of the two never happened. The Code UI already excluded skips from its displayed count (`unified_code_results.js`: `wasSkipped`); the rubric is a separate surface and had not been told.
+  - `passing_text` — whose evidence line *names the page* (`BROWSER_SMOKE_SKIPPED: wordfreq.html: …`) — so the "files changed without a matching passing validation" risk was silenced by a check that never ran. Same shape as the transcript-mention bug below: a string that merely *contains* the filename taken as proof something examined it.
+- Both now use one `_was_skipped` predicate, matching the engine's own marker rather than the word "skipped" (which appears in unrelated evidence like "1 files checked, 1 skipped") — the same test the UI uses, so the two surfaces cannot drift.
+- Verified with a control, since a stricter counter is not the same as a truthful one:
+
+  ```
+  smoke skipped   ->  engine checks: 1 passed, 0 failed, 1 skipped   + risk raised
+  smoke really ran->  engine checks: 2 passed, 0 failed              + no risk
+  ```
+- Not reproducible on a machine with Chrome installed, which is why it needed a test rather than an observation.
+
 ### Fixed (the agent could silence the "nobody opened this page" risk just by naming the file)
 
 - `_unopened_page_risks` exists to say nobody looked at a changed page. It decided that by searching for the page's basename in a blob built from validation evidence **and every event's `text`** — which includes the agent's own narration. `fs.write_file` always emits *"Wrote 4120 chars to C:/proj/orphan.html"*, so a page the browser smoke never opened counted as opened because the agent said it wrote it. Every page an agent creates is described that way, so the one risk whose job is catching unlooked-at pages could effectively never fire for them.

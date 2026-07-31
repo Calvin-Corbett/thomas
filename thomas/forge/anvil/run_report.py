@@ -34,6 +34,10 @@ _FIX_PASS_RE = re.compile(
 )
 _FILE_LINE_RE = re.compile(r"(?P<ref>[\w][\w./\\-]*\.[A-Za-z]\w{0,7}:\d+)")
 _CRITERION_RE = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+(?P<text>\S.{3,})$")
+# The engine's own skip marker (BROWSER_SMOKE_SKIPPED, and any future sibling).
+# Matched on the marker rather than the word "skipped", which appears in
+# unrelated evidence such as "1 files checked, 1 skipped".
+_SKIPPED_EVIDENCE = re.compile(r"[A-Z][A-Z_]*_SKIPPED\b")
 
 _SNIPPET_CHARS = 240
 _MAX_ACTIONS_PER_ATTEMPT = 8
@@ -275,7 +279,21 @@ def _build_open_risks(
                 "detail": f"{len(changed_files)} file(s) changed but no engine check ran",
             }
         )
-    passing_text = " ".join(f"{v['command']} {v['evidence']}" for v in validations if v["passed"])
+    # A check the engine SKIPPED is not a check that covered anything.
+    #
+    # `passed` is the absence of an error (`event.get("is_error") is not True`),
+    # and a skipped browser smoke sets no error -- so it arrives here flagged
+    # passed, and its evidence line still NAMES the page
+    # (`BROWSER_SMOKE_SKIPPED: wordfreq.html: ...`). That put the filename into
+    # `passing_text`, which silenced the very risk below that exists to say the
+    # file was never covered by a passing check.
+    #
+    # Same shape as the transcript-mention bug in `_unopened_page_risks`: a
+    # string that merely CONTAINS the filename was taken as proof something
+    # examined it.
+    passing_text = " ".join(
+        f"{v['command']} {v['evidence']}" for v in validations if v["passed"] and not _was_skipped(v)
+    )
     uncovered = [f for f in changed_files if f.split("/")[-1] not in passing_text]
     if validations and uncovered:
         shown = ", ".join(uncovered[:5]) + (f" (+{len(uncovered) - 5} more)" if len(uncovered) > 5 else "")
@@ -462,6 +480,17 @@ def _unopened_page_risks(
     ]
 
 
+def _was_skipped(validation: dict[str, Any]) -> bool:
+    """Did the engine SKIP this check rather than run it?
+
+    Matched on the engine's own marker rather than the word "skipped", which
+    turns up in unrelated evidence such as "1 files checked, 1 skipped". Same
+    test the Code UI uses, so the two surfaces cannot drift.
+    """
+
+    return bool(_SKIPPED_EVIDENCE.search(str(validation.get("evidence") or "")))
+
+
 def _page_was_opened(evidence: str, page: str) -> bool:
     """Did a browser check actually report on THIS page, pass or fail?
 
@@ -532,11 +561,19 @@ def _build_rubric_mapping(
     goal_text = _snippet(goal, 200)
     if not goal_text:
         return []
-    passed = sum(1 for v in validations if v["passed"])
-    failed = len(validations) - passed
+    # Skipped checks are counted and named separately rather than folded into
+    # "passed". The Code UI already does this
+    # (unified_code_results.js: `wasSkipped`), but the rubric evidence is a
+    # different surface and was still reporting "2 passed, 0 failed" for a run
+    # where one of the two never ran.
+    skipped = sum(1 for v in validations if v["passed"] and _was_skipped(v))
+    passed = sum(1 for v in validations if v["passed"]) - skipped
+    failed = len(validations) - passed - skipped
+    counts = f"engine checks: {passed} passed, {failed} failed" + (
+        f", {skipped} skipped" if skipped else ""
+    )
     evidence = _snippet(
-        f"outcome={outcome or ('completed' if ok else 'failed')}; {reason}; "
-        f"engine checks: {passed} passed, {failed} failed",
+        f"outcome={outcome or ('completed' if ok else 'failed')}; {reason}; {counts}",
         _SNIPPET_CHARS,
     )
     # This row measures the RUN, not the goal, so it says so.
