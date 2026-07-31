@@ -14,6 +14,20 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Fixed (the agent could silence the "nobody opened this page" risk just by naming the file)
+
+- `_unopened_page_risks` exists to say nobody looked at a changed page. It decided that by searching for the page's basename in a blob built from validation evidence **and every event's `text`** — which includes the agent's own narration. `fs.write_file` always emits *"Wrote 4120 chars to C:/proj/orphan.html"*, so a page the browser smoke never opened counted as opened because the agent said it wrote it. Every page an agent creates is described that way, so the one risk whose job is catching unlooked-at pages could effectively never fire for them.
+- It also re-broke what a comment three lines below claims was already fixed — *"the old global check let one opened page vouch for every other changed page"*.
+- Measured against controls, same validations and changed files, varying only the transcript:
+
+  ```
+  transcript "Wrote 4120 chars to C:/proj/orphan.html"  ->  no risk   (wrong)
+  transcript "Wrote 4120 chars to the second page"      ->  risk      (right)
+  no events at all                                      ->  risk      (right)
+  ```
+- Now only strings carrying a `BROWSER_SMOKE` marker count. Events stay in scope rather than being dropped, because `build_verify` emits the smoke line both as a `tool_result` event and appended to the check's detail, and only one of those is guaranteed to survive truncation. Verified it does not over-fire: a page the smoke genuinely opened still raises nothing.
+- Found by a multi-agent audit hunting the bug *classes* found by hand earlier in the session, then confirmed by direct call with controls.
+
 ### Fixed (a page with a blocked resource reported no coverage at all)
 
 - The blocked-external branch returns before the clean one, and the coverage line was computed only in the latter — so a page that also referenced a Google Font reported a bare `boot only` with nothing about how much went untouched. The caveat was worth *least* on the pages that had most wrong with them.

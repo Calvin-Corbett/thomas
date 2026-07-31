@@ -397,8 +397,39 @@ def _unopened_page_risks(
     pages = [name for name in changed_files if str(name).lower().endswith((".html", ".htm"))]
     if not pages:
         return []
+    # ONLY strings that carry a browser-smoke marker, never the agent's own words.
+    #
+    # This used to join every validation evidence string with every event's
+    # `text` -- which includes the agent's narration -- and then ask whether the
+    # page's basename appeared anywhere in the result. But `fs.write_file`
+    # always says "Wrote 4120 chars to C:/proj/orphan.html", so a page the smoke
+    # never opened was treated as opened purely because the agent had mentioned
+    # writing it. Every page an agent creates is mentioned that way, so this risk
+    # could effectively never fire for the pages it exists to catch.
+    #
+    # Measured against a control, which is what makes it evidence rather than a
+    # reading of the code. Same validations (`BROWSER_SMOKE_OK: index.html`),
+    # same changed files (index.html, orphan.html), only the transcript differs::
+    #
+    #     transcript says "Wrote 4120 chars to C:/proj/orphan.html"  -> no risk
+    #     transcript says "Wrote 4120 chars to the second page"      -> risk
+    #     no events at all                                           -> risk
+    #
+    # It also re-broke what the comment below describes as already fixed: one
+    # opened page vouching for the others.
+    #
+    # Events stay in scope rather than being dropped, because build_verify emits
+    # the smoke line BOTH as a `tool_result` event and appended to the check's
+    # detail, and only one of those is guaranteed to survive truncation. The
+    # marker test is what separates a smoke line from prose -- the agent has no
+    # reason to ever type "BROWSER_SMOKE".
     evidence = " ".join(
-        [*(str(item.get("evidence") or "") for item in validations), *(str(item.get("text") or "") for item in events)]
+        text
+        for text in (
+            *(str(item.get("evidence") or "") for item in validations),
+            *(str(item.get("text") or "") for item in events),
+        )
+        if "BROWSER_SMOKE" in text
     )
     # A check that FAILED is the opposite of a check that never happened. Only
     # `BROWSER_SMOKE_OK` was treated as "opened", and a failing run says
