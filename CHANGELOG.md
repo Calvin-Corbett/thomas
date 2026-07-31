@@ -14,6 +14,13 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Fixed (two token-economy tests asserted route paths `69bbbab0` deleted)
+
+- The receipts were never unbalanced — that was my hypothesis and it was wrong, and the `Reasoning failed: Request URL is missing an 'http://' or 'https://' protocol` line in the log was a *consequence*, not the cause. The actual failures are `AssertionError: 'orchestrator' != 'static'` and `!= 'control'`.
+- Both tests pinned `route.path` values emitted by early-return paths that "land model-owned routing, removing the prompt classifiers" retired: `"control"` came from `chat_v2_ui_control.py`, whose docstring now states *"Natural-language UI control interception was removed"*, and `"static"` came from `discord_channels_support.py`, which that merge **deleted whole**.
+- Verified independently: `"path": "static"` and `"path": "control"` each appear in exactly one file at `69bbbab0^` and in **zero** files at HEAD, and `UsageReceiptDispatcher.emit_route` now hard-codes `{"path": "orchestrator"}`. With the early returns gone, both inputs fall through to the orchestrator.
+- This also explains a wave-1 agent whose patch referenced `discord_channels_support.py`: that file existed on its stale worktree base. Not fabrication — a 454-commit-old checkout.
+
 ### Fixed (a task you stopped kept its chat watcher alive, then claimed it was still running)
 
 - `task_events.py::watch_task` streams task-bot lifecycle events into the chat and breaks out of its poll loop once the run is over. That "is it over?" test was re-spelled inline as `{"completed", "failed", "abandoned"}` — the vocabulary `task_bot_runtime.TERMINAL_STATES` owns, minus `cancelled`.

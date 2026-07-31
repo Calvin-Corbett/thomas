@@ -141,13 +141,19 @@ class TestServerTokenEconomy(AioHTTPTestCase):
         self.assertTrue(sid)
         return sid
 
-    def _assert_balanced_receipts(self, events, *, route_path):  # noqa: ANN001
+    def _assert_balanced_receipts(self, events):  # noqa: ANN001
+        """One route, one done, one balanced receipt stamped on all three carriers.
+
+        ``orchestrator`` is the only path Chat V2 emits: ``UsageReceiptDispatcher.emit_route``
+        hard-codes it as the canonical entry route. Asserting it here keeps this helper from
+        silently accepting a stream that routed somewhere unexpected.
+        """
         expected = {"requested": "balanced", "applied": "optimal"}
         routes = [event for event in events if event.get("type") == "route"]
         done_events = [event for event in events if event.get("type") == "done"]
         self.assertEqual(len(routes), 1, events)
         self.assertEqual(len(done_events), 1, events)
-        self.assertEqual((routes[0].get("route") or {}).get("path"), route_path)
+        self.assertEqual((routes[0].get("route") or {}).get("path"), "orchestrator")
         self.assertEqual(routes[0].get("token_economy"), expected)
         self.assertEqual(done_events[0].get("token_economy"), expected)
         self.assertEqual((done_events[0].get("token_report") or {}).get("token_economy"), expected)
@@ -285,35 +291,52 @@ class TestServerTokenEconomy(AioHTTPTestCase):
         self.assertEqual(_FakeOrchestratorBrainTokenEconomy.last_token_economy, "optimal")
         self.assertEqual(_FakeOrchestratorBrainTokenEconomy.last_max_iterations, 10)
 
-    async def test_ui_control_early_return_keeps_balanced_receipts(self):
-        sid = await self._new_session_id()
-        resp = await self.client.post(
-            "/api/v2/chat",
-            json={
-                "session_id": sid,
-                "profile": "local",
-                "token_economy": "balanced",
-                "text": "set mode to fast",
-            },
-        )
+    async def test_prose_that_used_to_skip_the_model_still_gets_balanced_receipts(self):
+        """Prose the retired classifiers answered without a model now routes to the
+        orchestrator, and still carries its balanced token-economy receipt.
 
-        self.assertEqual(resp.status, 200)
-        self._assert_balanced_receipts(_parse_ndjson(await resp.text()), route_path="control")
+        Before: this was two tests asserting route paths ``control`` and ``static``. Commit
+        69bbbab0 retired natural-language UI control and Discord prose interception and
+        deleted both emitters -- ``chat_v2_ui_control.py`` kept only the header helper, and
+        ``discord_channels_support.py`` was removed whole. On dev, ``git grep '"path":
+        "control"'`` and ``'"path": "static"'`` both return nothing, so the two tests failed
+        ``'orchestrator' != 'control'`` and ``'orchestrator' != 'static'``. Stubbing no model,
+        they also reached a real provider and logged ``Reasoning failed: Request URL is
+        missing an 'http://' or 'https://' protocol`` -- a missing model endpoint reported
+        under the name of a receipt guarantee.
 
-    async def test_discord_static_early_return_keeps_balanced_receipts(self):
-        sid = await self._new_session_id()
-        resp = await self.client.post(
-            "/api/v2/chat",
-            json={
-                "session_id": sid,
-                "profile": "local",
-                "token_economy": "balanced",
-                "text": "show discord status",
-            },
-        )
+        After: measured on dev before this test was written, both inputs already emit
+        ``{"requested": "balanced", "applied": "optimal"}`` on ``route``, on ``done``, and
+        inside ``done.token_report`` -- unchanged by the failed provider call. The receipts
+        were never unbalanced; only the two route names were dead. The brain is stubbed here
+        so the guarantee can neither pass nor fail for a network reason, and the stubbed
+        reply is asserted first so a turn that died early cannot look like a pass.
+        """
+        for text in ("set mode to fast", "show discord status"):
+            with self.subTest(text=text):
+                sid = await self._new_session_id()
+                with patch(
+                    "thomas.server.routes.chat_v2.OrchestratorBrain",
+                    _FakeOrchestratorBrainTokenEconomy,
+                ):
+                    resp = await self.client.post(
+                        "/api/v2/chat",
+                        json={
+                            "session_id": sid,
+                            "profile": "local",
+                            "token_economy": "balanced",
+                            "text": text,
+                        },
+                    )
 
-        self.assertEqual(resp.status, 200)
-        self._assert_balanced_receipts(_parse_ndjson(await resp.text()), route_path="static")
+                self.assertEqual(resp.status, 200)
+                events = _parse_ndjson(await resp.text())
+                self.assertIn(
+                    "TOKEN_ECONOMY_OK",
+                    [event.get("text") for event in events if event.get("type") == "text"],
+                    events,
+                )
+                self._assert_balanced_receipts(events)
 
 
 if __name__ == "__main__":
