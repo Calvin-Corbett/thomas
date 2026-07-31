@@ -7,6 +7,13 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Docs (Closed the open question in the sphere-over-text note)
+
+- That note recorded the defect as known and deliberately not guessed at, and stated its blocker honestly: *"A screenshot alone cannot separate 'covered' from 'no contrast'."* It now records a measurement that does.
+- Repaint the transcript in a hue absent from both the page and the sprite (`color:#ff0000`), then compare the fraction of red pixels inside the sprite's own rect against the same-height strip beside it on the same line. Covered reads near zero on the sprite; contrast reads comparable. Measured **0.188 on the sprite against 0.257 beside it** — the glyphs are there, just washed out. Confirms the existing conclusion rather than changing it.
+- Also records the trap that produced a confident wrong answer first: thresholding on "dark" pixels scores the **background** as text, because `--c-bg` is `#070912` — every channel under 90. It reported the control strip as 100% "text" and concluded the opposite.
+- A visual sweep at 1920×1080 and 1100×880 produced three more candidates, **all three disproved by measurement**: the sprite is behind the text (not covering it), the composer ends at y=735 while the drawer ends at y=729 (they never touch), and the drawer is `overflow-y: auto` with the last file reachable by scrolling. No new defect; recorded so the same three are not re-chased.
+
 ### Fixed (A multi-file app rendered as unstyled text in Thomas's own panel)
 
 - Thomas builds plenty of apps as `index.html` + `styles.css` + `game.js`. The Code viewer stage — the panel beside the chat, and the main way anyone looks at a result — framed them **without `allow-same-origin`**. The document then has an opaque origin, so `default-src 'self'` matches nothing and every relative subresource is refused.

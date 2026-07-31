@@ -59,6 +59,19 @@
              Hiding this wrapper removes the sphere AND the whole background,
              which proves only that the sprite belongs to it.
 
+         One measurement that DOES separate them, if this comes up again:
+         repaint the transcript in a hue absent from both the page and the
+         sprite (`.tc-code-turn * { color:#ff0000 !important }`), then compare
+         the fraction of red pixels inside the sprite's own rect against the
+         same-height strip beside it on the same line. Covered would read near
+         zero on the sprite; contrast reads comparable. Measured 0.188 on the
+         sprite against 0.257 beside it -- the glyphs are there, just washed
+         out, confirming the paragraph above.
+         Do NOT threshold on "dark" pixels: `--c-bg` is #070912, every channel
+         under 90, so a brightness test scores the BACKGROUND as text and
+         returns a confident wrong answer (it reported the control strip as
+         100% "text").
+
          Setting this wrapper to `z-index: -1` was tried and REVERTED: a negative
          z-index puts it behind #tc-shell's own opaque `--c-bg`, and every theme
          goes flat black -- verified by screenshot, the entire nebula gone. It
