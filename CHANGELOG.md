@@ -14,6 +14,12 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Fixed (a task you stopped kept its chat watcher alive, then claimed it was still running)
+
+- `task_events.py::watch_task` streams task-bot lifecycle events into the chat and breaks out of its poll loop once the run is over. That "is it over?" test was re-spelled inline as `{"completed", "failed", "abandoned"}` — the vocabulary `task_bot_runtime.TERMINAL_STATES` owns, minus `cancelled`.
+- `git log -S` pins the provenance exactly: `c419f3b4` (2026-07-27, *"stopping a run is not a failure, and it is final"*) added `cancelled` to the runtime, and this copy was never updated. So stopping a run left its watcher polling for ten minutes and then reporting the task as still running.
+- Now derived from `task_bot_runtime.TERMINAL_STATES` rather than copied, so the vocabulary cannot grow past it again. Third instance of this same class today, after Mission Control's room map and the Code surface's terminal status.
+
 ### Fixed (a task that was only waiting got a permanent "Task failed" in the transcript)
 
 - One decision — *is this run over, and did it fail* — is spelled out twice in the classic shell's runtime, and the two disagreed about `blocked`. `013_actions_interactions_02.js`'s `_delegationIsTerminalState` correctly excludes it; the Mission-Control poll fallback in `006_easy_setup_onboarding_04.js` gated on `chatTaskIsTerminal`, whose list **includes** it, and then called it failed on the very next line.
