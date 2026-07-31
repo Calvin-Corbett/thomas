@@ -7,6 +7,21 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Found (a run labelled `qwen2.5-coder:7b` was actually run by Claude)
+
+- A Code run failed with `Not logged in — Please run /login` and `claude exited 1`, wrote nothing — while the turn was labelled **`qwen2.5-coder:7b`**, the local profile's configured model, which had no part in it.
+- Mechanism, traced end to end: the chat profile had drifted to `local` with an empty `model_id` → the shell had no model to put in the payload → `from_payload` defaults an unspecified model to **`claude:sonnet`** → `family` is read off that prefix → the run dispatched to the **Claude CLI**, which is not logged in on this machine.
+- So the report names the *profile's* model while `family` decides the *executor*, and nothing reconciles the two. The owner is told a local qwen model produced a failure that came from Claude.
+- **Not changed.** Two candidate fixes, both behaviour changes deserving a decision rather than a drive-by: refuse to invent a model when the caller sent none (surface "no model selected" instead of silently choosing Claude), or record the dispatched model on the turn so the label matches the executor. Recorded at the exact line with the full trace.
+- **The failure reporting itself held up.** On screen the owner sees the actionable cause — `Not logged in · Please run /login`, `claude exited 1` in red, and an honest *"Nothing was checked · 3 open risks"*. Nothing was overstated; the only false note was the model label.
+- Separately: the default model had drifted to `Local` with an empty `model_id`, which is what set this off. Restored to `openai_codex` / `gpt-5.6-sol`.
+
+### Verified (the hardest deliverable yet, and what my own driver missed)
+
+- Asked for a page that **fetches a sibling data file** — a path nothing had exercised, governed by `connect-src 'self'` rather than script/style-src, and impossible on an opaque origin. Thomas wrote both files (`report.html`, `sales.csv`), `STATIC_VERIFY_OK: 2 files checked`.
+- Driven in the viewer stage: `fetch('sales.csv')` returned **200 / 185 bytes**, the chart drew **1654 distinct colours**, and the displayed **$313,500** matches the total computed independently from the CSV's own bytes. That fetch only works because the stage has a real origin.
+- **My driver passed 5/5 while a defect was plainly on screen**: the page leaves "Loading sales data…" overlaid across the finished chart. A model-side slip, not Thomas's — but I checked the total, the canvas pixels, the fetch status and page errors, and not one of them could see a stale label sitting on the bars. Found only by opening the picture.
+
 ### Added ("needs key" is a remedy now, not just a verdict)
 
 - The model menu listed **Anthropic, Google, xAI, Meta Llama and Mistral**, marked every one `needs key`, and the unified shell had **no way to supply one**. The only code that can POST a key lives in `model_settings_dropdown.js`, which nothing loads — it targets `#modelSetupModal`, an element the new shell does not have. Five providers were visible, unusable, and unfixable from the UI.

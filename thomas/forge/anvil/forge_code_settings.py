@@ -95,6 +95,31 @@ class ForgeCodeSettings:
     def from_payload(cls, payload: dict[str, Any] | None) -> ForgeCodeSettings:
         body = payload or {}
         engine = _choice(body.get("engine"), default="agent", allowed=_ENGINES, name="engine")
+        # KNOWN TRAP, MEASURED 2026-07-31, deliberately not changed here.
+        #
+        # An unspecified model becomes `claude:sonnet`, and `family` is read off
+        # that prefix, so the run dispatches to the CLAUDE CLI. That is fine when
+        # the caller means it. It is confusing when the caller had nothing to
+        # send:
+        #
+        #   the chat profile drifted to `local` with model_id ""
+        #   -> the shell had no model to put in the payload
+        #   -> this default made it claude:sonnet
+        #   -> claude CLI, which was not logged in on this machine
+        #   -> the run died with "Not logged in - Please run /login", exited 1,
+        #      wrote nothing
+        #
+        # And the turn was labelled `qwen2.5-coder:7b`, the LOCAL profile's
+        # configured model -- a model that had no part in the run. The report
+        # names the profile's model while `family` decides the executor, and
+        # nothing reconciles the two, so the owner is told a local qwen model
+        # produced a failure that actually came from Claude.
+        #
+        # Two candidate fixes, both behaviour changes that deserve a decision
+        # rather than a drive-by: refuse to invent a model when the caller sent
+        # none (surfacing "no model selected" instead of silently choosing
+        # Claude), or record the DISPATCHED model on the turn so the label
+        # matches the executor. Left alone because picking one changes what runs.
         model = _validated_model(body.get("model") or "claude:sonnet", name="model")
         model_id = _validated_model(body.get("model_id"), name="model_id")
         reasoning = _choice(
