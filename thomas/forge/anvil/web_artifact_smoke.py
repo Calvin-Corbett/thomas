@@ -408,15 +408,24 @@ def _run_one(
     # `interactive_count` was already on every receipt and surfaced nowhere, so
     # this costs nothing to say. It reports COVERAGE, not a verdict: the page is
     # not accused of anything, the reader is simply told how thin the evidence
-    # is. Clicking one was tried instead and reverted -- see the note beside the
-    # navigation probe in web_artifact_smoke_assets.py for why it fired on three
-    # working apps out of four.
-    untouched = int(receipt.get("interactive_count") or 0)
-    coverage = (
-        f"; {untouched} control(s) not exercised"
-        if untouched > 0 and interactions == "boot only"
-        else ""
-    )
+    # is.
+    #
+    # Since the press-and-observe probe landed, SOME controls do get exercised,
+    # and that made this line more important rather than less. Pressing 6 of a
+    # Minesweeper's 82 controls and printing only "pressed:cell" would read as
+    # though the board had been checked. So the untouched count is now the ones
+    # genuinely left alone, and it is reported whether or not anything was
+    # driven -- the old version only spoke up when the run was "boot only",
+    # which is exactly the case that no longer needs it most.
+    total = int(receipt.get("interactive_count") or 0)
+    exercised = int(receipt.get("exercised_controls") or 0)
+    untouched = max(0, total - exercised)
+    if untouched > 0 and interactions == "boot only":
+        coverage = f"; {untouched} control(s) not exercised"
+    elif untouched > 0:
+        coverage = f"; {untouched} of {total} control(s) not exercised"
+    else:
+        coverage = ""
     return True, f"{name}: browser boot clean; {interactions}{coverage}{tail}", receipt
 
 

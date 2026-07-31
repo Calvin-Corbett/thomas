@@ -14,6 +14,28 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Added (verification presses controls, and stays quiet about the ones that do nothing)
+
+- A press probe was built and reverted once before: it fired on 3 of 4 button-carrying apps and was wrong every time — a Minesweeper reset face on a fresh board, a 10% tip preset with no bill, "Add task" with an empty field. All three correctly do nothing until something else happens first.
+- The recorded objection was about the **note**, not the press: *"a note that fires on working apps teaches the reader to skip it, which is how a permanently-red signal ends up hiding a real one."* This version presses and says nothing about anything that did not change. A control that does nothing yet produces no note and no verdict; one that does change the page produces the evidence boot-only verification could never supply.
+- Measured across the same 20 real deliverables, before and after:
+
+  ```
+  driven pages   4 -> 9
+  runs failed    2 -> 2    (both pre-existing and genuine: one page whose
+                            styles.css and script.js are absent, one report
+                            whose sales.csv is absent)
+
+  minesweeper    boot only; 82 not exercised
+              -> pressed:Hidden cell, row 1, colu; 76 of 82 not exercised
+  habit tracker  boot only; 33 not exercised  ->  pressed:+Add habit, ...
+  countdown      clicked:Start  ->  clicked:Start, pressed:Pause
+  palette        boot only      ->  pressed:Randomise, pressed:Coral#D13E53
+  ledger         boot only      ->  pressed:Sort by amount
+  ```
+- **A hazard found by measurement and fixed before shipping:** pressing wordfreq.html's "Download CSV" — an ordinary `createObjectURL` + anchor click — left headless Chrome waiting on the transfer until the smoke timed out, returning `ok: False, "browser smoke timed out"` on a completely correct app. A probe that fails a working deliverable is worse than one that checks nothing. File-handing controls are skipped.
+- The coverage line now subtracts what was actually exercised and reports the remainder **whether or not** anything was driven. Pressing 6 of a Minesweeper's 82 controls and printing only the successes would read as though the board had been checked.
+
 ### Fixed (verification skipped every page whose input is a textarea)
 
 - The type-then-press probe's entry filter tested `node.getAttribute("type") || node.type`. A `<textarea>` has no `type` attribute, so that yields the string `"textarea"`, which the regex rejected — excluding every textarea on every page, and making the branch that reads `field.tagName === "TEXTAREA"` unreachable.

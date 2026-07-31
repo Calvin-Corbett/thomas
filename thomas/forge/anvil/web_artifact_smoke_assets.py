@@ -424,6 +424,60 @@ _SMOKE_HARNESS = r"""
             }
           }
         }
+        // Press-and-observe, recording ONLY what worked.
+        //
+        // The comment above records why a press probe was reverted: it fired on
+        // 3 of 4 button-carrying apps and was wrong every time, because a
+        // Minesweeper reset face, a 10% tip preset and an empty-field "Add task"
+        // all correctly do nothing until something else happens first. The
+        // objection was precise -- "a note that fires on working apps teaches the
+        // reader to skip it" -- and it is about the NOTE, not the press.
+        //
+        // So this presses and stays silent about anything that did not change.
+        // A control that does nothing yet produces no note, no risk and no
+        // wolf-crying; a control that DOES change the page produces the one thing
+        // boot-only verification could never supply -- evidence the app responds.
+        // Nothing here can fail a run.
+        //
+        // Measured across 14 real deliverables, 11 of which were "boot only"
+        // beforehand, including a 9x9 Minesweeper with 82 controls and a habit
+        // tracker with 33.
+        //
+        // `pressed_controls` is published so the coverage line can keep telling
+        // the truth about the REST of the page: pressing 6 of 82 must not be
+        // allowed to read as though the whole thing was checked.
+        const alreadyDriven = state.interactions.length;
+        const pressable = [...document.querySelectorAll("button, [role='button']")]
+          .filter((node) => visible(node) && !node.disabled)
+          .filter((node) => !/(delete|remove|clear|reset|restart|erase|trash|discard|wipe|start over|cancel|sign out|log out|submit order|buy|pay)/i.test(
+            `${clean(node.textContent)} ${node.getAttribute("aria-label") || ""}`
+          ))
+          // Anything that hands a file to the browser HANGS this check.
+          // Measured: pressing wordfreq.html's "Download CSV" -- which does the
+          // ordinary createObjectURL + anchor click -- left headless Chrome
+          // waiting on the transfer until the smoke hit its timeout, and the
+          // result was `ok: False, "browser smoke timed out"` on an app that is
+          // completely correct. A probe that fails a working deliverable is
+          // worse than one that checks nothing, so these are skipped rather than
+          // pressed. The download is exercised for real elsewhere; it just
+          // cannot be exercised HERE.
+          .filter((node) => !/(download|export|print|share|upload|save as|open file)/i.test(
+            `${clean(node.textContent)} ${node.getAttribute("aria-label") || ""}`
+          ))
+          .slice(0, 6);
+        let responded = 0;
+        pressable.forEach((node) => {
+          const pressLabel = (clean(node.textContent) || clean(node.getAttribute("aria-label")) || "control").slice(0, 24);
+          const before = observableSignature(document.querySelector("canvas"));
+          try { node.click(); } catch (_error) { return; }
+          if (observableSignature(document.querySelector("canvas")) !== before) {
+            responded += 1;
+            pushUnique(state.interactions, `pressed:${pressLabel}`);
+          }
+        });
+        state.pressed_controls = pressable.length;
+        state.pressed_responded = responded;
+        state.exercised_controls = pressable.length + (alreadyDriven ? 1 : 0);
       } catch (error) {
         pushUnique(state.errors, error);
       }
