@@ -99,12 +99,21 @@ def test_the_reverted_clicking_probe_stays_reverted() -> None:
 
     Pressing a control and reporting that nothing changed is wrong whenever the
     control needs input first, which is most of them. If this comes back it must
-    solve that, not just exclude destructive labels by name.
+    SOLVE that, not just exclude destructive labels by name.
+
+    Pinned to the exact reverted wording, not to the phrase "nothing on the page
+    changed". This test originally forbade that phrase outright and promptly went
+    red against the type-then-press probe -- the correct successor, which supplies
+    input first and legitimately reports the same outcome. A guard that fails on
+    the fix is the permanently-red test this suite exists to prevent, and it took
+    about an hour to author one.
     """
 
     assets = _source(ASSETS)
-    assert "nothing on the page changed" not in assets, (
-        "the press-one-control probe is back. It reported the Minesweeper reset "
+    assert "pressed ${label} and nothing on the page changed" not in assets, (
+        "the press-WITHOUT-INPUT probe is back. It reported the Minesweeper reset "
         "face, a 10% tip preset and an empty-field 'Add task' as dead pages. A "
-        "note that fires on working apps trains the reader to ignore it"
+        "note that fires on working apps trains the reader to ignore it. Supplying "
+        "input first (see test_the_smoke_types_before_it_presses.py) is the "
+        "version that measured zero false positives"
     )

@@ -7,6 +7,26 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Added (Verification types into the app before it presses)
+
+- The reverted press-one-control probe failed because it pressed things that legitimately do nothing until something else happens first. **Supplying the input removes that excuse** — it is what a person does: fill the one field, press the one button, see whether the page responds.
+- Measured on real deliverables **before** shipping this time:
+
+  | deliverable | before | now |
+  |---|---|---|
+  | to-do list | `boot only` | **`typed:smoke test, clicked:Add task`** |
+  | kanban (3 files) | `boot only` | **`typed:smoke test, clicked:Add card`** |
+  | tip calculator | — | not driven (more than one entry field) |
+  | expenses | `nav:List, nav:Summary` | unchanged |
+  | minesweeper | `boot only` | `boot only; 82 not exercised` (no text field) |
+  | habit tracker | `boot only` | `boot only; 29 not exercised` |
+  | swatch | `boot only` | unchanged |
+
+  **Apps wrongly reported dead: 0.**
+- Two runs that previously proved nothing now carry real evidence the app responds. The point is not catching more failures — it is being able to say something **true** about whether the thing works.
+- Deliberately narrow: exactly one text entry plus a non-destructive submit-ish control. A form needing a date format, a chosen category, or two fields is not driven, because guessing there is what produced three wrong answers last time. Destructive labels are excluded by name — verification must not destroy the owner's data to learn that a button works.
+- **Also fixed a permanently-red test I had just authored.** The earlier guard forbade the phrase `"nothing on the page changed"` outright, and went red against this correct successor. A guard that fails on the fix is exactly the failure mode that suite exists to prevent; it now pins the specific reverted wording instead. 280 smoke/verify/artifact tests green.
+
 ### Fixed ("boot only" hid how much of the app was never checked)
 
 - `browser boot clean; boot only` reads as *checked*. It means the opposite: the page loaded and nothing on it was ever touched. Measured across **57 recorded runs — 29 (51%) ended that way**, and among them: a 9×9 **Minesweeper (82 controls)**, *"build me the future of calculator apps"*, a tip calculator, and the to-do list.

@@ -361,11 +361,58 @@ _SMOKE_HARNESS = r"""
         // a permanently-red signal ends up hiding a real one. Reverted; do not
         // rebuild it without solving "this control needs input first".
         //
-        // No probe is added here because none is needed: `interactive_count` is
-        // already published on every receipt and was never surfaced anywhere.
-        // The summary in web_artifact_smoke.py now reports it when nothing was
-        // driven, which is true either way and costs nothing -- a reader who
-        // sees "82 control(s) not exercised" knows what "boot clean" is worth.
+        // The coverage count itself lives in web_artifact_smoke.py, reading the
+        // `interactive_count` this file already published.
+        //
+        // WHAT IS DRIVEN HERE INSTEAD: type, then press. The reverted probe
+        // failed because it pressed controls that legitimately do nothing until
+        // something else happens first. Supplying the input removes that excuse,
+        // and it is what a person does: fill the one field, press the one button,
+        // see whether the page responds.
+        //
+        // Deliberately narrow. Only when the page has exactly one obvious text
+        // entry and a non-destructive submit-ish control. A form needing a date
+        // format, a chosen category, or two fields is NOT driven -- guessing
+        // there is how the last attempt produced three wrong answers out of four.
+        //
+        // The value is what it can then say truthfully: "typed:x, clicked:Add
+        // task" is real evidence the app works, where before the same run
+        // reported "boot only" and proved nothing.
+        if (!state.interactions.length) {
+          const entries = [...document.querySelectorAll("input, textarea")].filter((node) =>
+            visible(node) && !node.disabled && !node.readOnly
+            && /^(text|search|number|email|tel|url|)$/i.test(node.getAttribute("type") || node.type || ""));
+          const submits = [...document.querySelectorAll("button, [role='button']")]
+            .filter((node) => visible(node) && !node.disabled && clean(node.textContent).length > 0)
+            .filter((node) => !/(delete|remove|clear|reset|restart|erase|trash|discard|wipe|start over|cancel)/i.test(
+              `${clean(node.textContent)} ${node.getAttribute("aria-label") || ""}`
+            ));
+          if (entries.length === 1 && submits.length >= 1) {
+            const field = entries[0];
+            const button = document.querySelector("button[type='submit']") && submits.includes(document.querySelector("button[type='submit']"))
+              ? document.querySelector("button[type='submit']")
+              : submits[0];
+            const label = clean(button.textContent).slice(0, 24);
+            const sample = /number/i.test(field.type || "") ? "12" : "smoke test";
+            const before = observableSignature(document.querySelector("canvas"));
+            try {
+              // Native setter + input/change so framework-bound fields update too.
+              const proto = field.tagName === "TEXTAREA" ? HTMLTextAreaElement : HTMLInputElement;
+              const setter = Object.getOwnPropertyDescriptor(proto.prototype, "value");
+              if (setter && setter.set) { setter.set.call(field, sample); } else { field.value = sample; }
+              field.dispatchEvent(new Event("input", {bubbles: true}));
+              field.dispatchEvent(new Event("change", {bubbles: true}));
+              button.click();
+              if (observableSignature(document.querySelector("canvas")) !== before) {
+                state.interactions.push(`typed:${sample}`, `clicked:${label}`);
+              } else {
+                pushUnique(state.notes, `typed into the only field and pressed ${label}; nothing on the page changed`);
+              }
+            } catch (_error) {
+              pushUnique(state.notes, `typing into the only field and pressing ${label} raised an error`);
+            }
+          }
+        }
       } catch (error) {
         pushUnique(state.errors, error);
       }
