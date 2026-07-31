@@ -7,6 +7,15 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed ("boot only" hid how much of the app was never checked)
+
+- `browser boot clean; boot only` reads as *checked*. It means the opposite: the page loaded and nothing on it was ever touched. Measured across **57 recorded runs — 29 (51%) ended that way**, and among them: a 9×9 **Minesweeper (82 controls)**, *"build me the future of calculator apps"*, a tip calculator, and the to-do list.
+- The to-do list is the sharp one. Among its four untouched controls was the **Export CSV button that produced no file at all** — the smoke booted the page, called it clean, and never pressed it.
+- `interactive_count` was already published on every receipt and surfaced **nowhere**, so reporting it invents nothing and costs nothing. A boot-only pass now reads `boot only; 82 control(s) not exercised`.
+- **Coverage, not a verdict.** The page is not accused of anything; the reader is told how thin the evidence is. Gated three ways: only when nothing was driven, only when controls exist, and never on a run that did drive the app — the calculator run keeps its `nav:…` line with no coverage suffix, and `swatch.html` (zero buttons) stays plainly `boot only`.
+- **Pressing a control was built first, and reverted.** Run against the real deliverables it fired on **3 of 4** button-carrying apps and was wrong every time: the Minesweeper reset face on a fresh board, a 10% tip preset with no bill entered, `Add task` with an empty field. Each correctly does nothing until something else happens first. A note that fires on working apps teaches the reader to skip it — the same way a permanently-red test hides a real regression. A guard pins that it stays reverted.
+- 577 smoke/artifact/verify/report tests green.
+
 ### Fixed (The Activity drawer showed the same filename twice under one heading)
 
 - The drawer's `Outputs` heading covered two different kinds of thing: the deliverable (preview + artifact row) and the changed files you can Keep or Revert. The deliverable is almost always **also** a changed file, so its name renders twice on essentially every run. Measured on the three-file kanban run, reading down the single labelled column: `index.html` (artifact, with preview), `app.js`, **`index.html`**, `styles.css`. Scanning it, the repeat reads as a rendering fault.

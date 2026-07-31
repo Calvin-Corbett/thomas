@@ -339,6 +339,33 @@ _SMOKE_HARNESS = r"""
             pushUnique(state.notes, `${inert} of ${navControls.length} navigation control(s) changed nothing when clicked`);
           }
         }
+        // How much of the page did this check NOT exercise?
+        //
+        // The navigation probe above only fires inside a nav-ish container, so
+        // an app whose whole function is buttons goes untouched. Measured across
+        // 57 recorded runs: 29 (51%) reported "boot only". For most that is
+        // honest -- 0 of 12 sampled had navigation the scope missed. But among
+        // them sat a 9x9 Minesweeper (81 cells + 1 button), "build me the future
+        // of calculator apps", and a tip calculator. Those read
+        // "browser boot clean; boot only", which a reader takes as checked.
+        //
+        // COUNTED, NOT CLICKED, and that was settled by experiment rather than
+        // taste. Pressing one non-destructive control was built and run against
+        // the real deliverables; it fired on 3 of 4 button-carrying apps and was
+        // wrong every time:
+        //     minesweeper     pressed the reset face on a fresh board
+        //     tip calculator  pressed a 10% preset with no bill entered
+        //     to-do list      pressed "Add task" with an empty field
+        // Each correctly does nothing until something else happens first. A note
+        // that fires on working apps teaches the reader to skip it, which is how
+        // a permanently-red signal ends up hiding a real one. Reverted; do not
+        // rebuild it without solving "this control needs input first".
+        //
+        // No probe is added here because none is needed: `interactive_count` is
+        // already published on every receipt and was never surfaced anywhere.
+        // The summary in web_artifact_smoke.py now reports it when nothing was
+        // driven, which is true either way and costs nothing -- a reader who
+        // sees "82 control(s) not exercised" knows what "boot clean" is worth.
       } catch (error) {
         pushUnique(state.errors, error);
       }

@@ -398,7 +398,26 @@ def _run_one(
             f"remote origins; vendor them into the project folder and reference them locally; "
             f"{interactions}{tail}"
         ), receipt
-    return True, f"{name}: browser boot clean; {interactions}{tail}", receipt
+    # "boot only" reads as "checked". It is not: it means the page loaded and
+    # nothing on it was ever touched. Measured across 57 recorded runs, 29 (51%)
+    # ended that way, and among them were a 9x9 Minesweeper (81 cells), "build me
+    # the future of calculator apps", and a tip calculator -- apps whose entire
+    # function is their controls. A calculator with a dead keypad passes this
+    # check, because the check never presses a key.
+    #
+    # `interactive_count` was already on every receipt and surfaced nowhere, so
+    # this costs nothing to say. It reports COVERAGE, not a verdict: the page is
+    # not accused of anything, the reader is simply told how thin the evidence
+    # is. Clicking one was tried instead and reverted -- see the note beside the
+    # navigation probe in web_artifact_smoke_assets.py for why it fired on three
+    # working apps out of four.
+    untouched = int(receipt.get("interactive_count") or 0)
+    coverage = (
+        f"; {untouched} control(s) not exercised"
+        if untouched > 0 and interactions == "boot only"
+        else ""
+    )
+    return True, f"{name}: browser boot clean; {interactions}{coverage}{tail}", receipt
 
 
 def _is_external_reference(value: str) -> bool:
