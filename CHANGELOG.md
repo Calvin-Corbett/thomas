@@ -7,6 +7,19 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (a protected file whose name starts with a dot was guarded by nothing)
+
+- `_normalize_relpath` ended in `.lstrip("./")`. `str.lstrip` takes a *set* of characters, not a prefix, so it ate every leading `.` and `/` — and every consumer turns the result back into a real filesystem path. `.gitignore`, a `[protected] policy_files` entry in `agent_safety.toml`, became `gitignore`: a name that exists in neither the blue nor the green tree.
+- That gave `_promotion_protected_diffs` only one possible answer for it. It compared `blue/gitignore` with `green/gitignore`, found both absent, and took its `continue`. Measured on two trees differing in exactly one protected file:
+
+  ```
+  AGENTS.md  tampered ->  diffs=['AGENTS.md']  promotion BLOCKED
+  .gitignore tampered ->  diffs=[]             promotion ALLOWED
+  ```
+- The revert half reported success while doing nothing: `evolve._restore_green_path_from_blue` copies `blue/<norm>` over `green/<norm>`, so a tampered `.gitignore` was named a violation, listed as reverted, and left exactly as green wrote it (`reverted=['.gitignore']` … `-> STILL TAMPERED`). Both copies of the helper are fixed together — repairing only the gate would leave a run blocked from promoting while its green tree keeps the tampered file.
+- Two more consequences of the same line: `_normalize_delta_relpath` guards with `path.is_absolute() or ".." in path.parts`, but a leading `../` was deleted *before* the test ran, so `../thomas/agriculture/x.py` arrived as the in-tree `thomas/agriculture/x.py` and was promoted as though the caller had named it (an interior `thomas/../x.py` still raised, which is why the guard looked alive); and `_is_promotable_scope(".gitignore")` was `False` even though `.gitignore` is in `_INCLUDE_FILES` and is copied by `sync_blue_to_green`.
+- Verified it does not over-fire: with the repo's real `agent_safety.toml` and all 88 protected files mirrored faithfully into both trees, `_promotion_protected_diffs` returns `[]`. The regression test's controls (`AGENTS.md`, an untampered pair, an ordinary in-tree path) pass on the old code and the new; the four dot-related assertions fail on the old code only.
+
 ### Fixed (a shipped promise about honest verification had quietly stopped running)
 
 - The changelog told you Thomas "no longer calls a deliverable verified when it has nothing to do with what you asked", and the module implementing that said the Canvas path "already refuses this" and that it was that check "generalised". **All three sentences were false.** `chat_delegation_artifact_intent` has had zero production importers since `87ae37e5`, and `review_canvas_html` now opens with `del prompt` and states it does not compare prompt words with output words.

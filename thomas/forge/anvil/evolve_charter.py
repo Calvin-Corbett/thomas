@@ -147,7 +147,23 @@ def _sha256(path: Path) -> str:
 
 
 def _normalize_relpath(value: str | Path) -> str:
-    return str(value or "").replace("\\", "/").lstrip("./")
+    """Repo-relative spelling for a path; see ``doppelganger._normalize_relpath``.
+
+    ``removeprefix``, not ``lstrip("./")``, for the reason recorded there: the
+    latter strips a character SET, so it renamed ``.gitignore`` to ``gitignore``.
+    ``evolve._restore_green_path_from_blue`` turns this string straight back into
+    a filesystem path, so the revert of a tampered ``.gitignore`` copied nothing
+    and still reported the file as reverted -- measured, before::
+
+        AGENTS.md  violations=['AGENTS.md']  reverted=['AGENTS.md']  -> RESTORED
+        .gitignore violations=['.gitignore'] reverted=['.gitignore'] -> STILL TAMPERED
+
+    Fixed in both copies together: the promotion gate and the revert read the
+    same protected list, and repairing only one leaves a run that is blocked from
+    promoting while its green tree keeps the tampered file.
+    """
+
+    return str(value or "").replace("\\", "/").removeprefix("./")
 
 
 def build_charter_markdown(charter: EvolveCharter) -> str:

@@ -218,7 +218,43 @@ def _sync_tree(src: Path, dst: Path) -> None:
 
 
 def _normalize_relpath(value: str | Path) -> str:
-    return str(value or "").replace("\\", "/").lstrip("./")
+    """One spelling for a repo-relative path, dropping a leading ``./`` only.
+
+    This used to end in ``.lstrip("./")``. ``str.lstrip`` takes a SET of
+    characters, not a prefix, so it ate every leading ``.`` and ``/`` -- and
+    every consumer below turns the result back into a real filesystem path.
+
+    That made three checks answer only one way, whatever the input:
+
+    * ``.gitignore`` -- a ``[protected] policy_files`` entry in
+      ``agent_safety.toml`` -- became ``gitignore``, a name that exists in
+      neither tree. ``_promotion_protected_diffs`` then compared
+      ``blue/gitignore`` with ``green/gitignore``, found both absent, and took
+      its ``continue``. Measured on a pair whose only difference was that file::
+
+          AGENTS.md  tampered -> ['AGENTS.md']  promotion BLOCKED
+          .gitignore tampered -> []             promotion ALLOWED
+
+      Same gate, same call, same kind of edit; the dot decided the verdict.
+    * ``_restore_green_path_from_blue`` (evolve.py) copies ``blue/<norm>`` over
+      ``green/<norm>``, so reverting a tampered ``.gitignore`` wrote nothing and
+      still reported the path as reverted::
+
+          AGENTS.md  violations=['AGENTS.md']  reverted=['AGENTS.md']  -> RESTORED
+          .gitignore violations=['.gitignore'] reverted=['.gitignore'] -> STILL TAMPERED
+    * ``_normalize_delta_relpath`` guards with
+      ``path.is_absolute() or ".." in path.parts``. A leading ``/`` or ``../``
+      was deleted here first, so for exactly the shape that guard exists to
+      catch it could never fire: ``../thomas/agriculture/x.py`` arrived as the
+      in-tree ``thomas/agriculture/x.py`` and was promoted as though the caller
+      had named it. An interior ``thomas/../x.py`` still raised, which is why
+      the guard looked alive.
+
+    A leading ``./`` is the one thing worth removing, and ``removeprefix`` takes
+    it off without touching a filename that legitimately starts with a dot.
+    """
+
+    return str(value or "").replace("\\", "/").removeprefix("./")
 
 
 def _sha256(path: Path) -> str:
