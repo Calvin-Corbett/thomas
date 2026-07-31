@@ -280,26 +280,61 @@ _SMOKE_HARNESS = r"""
         notePaint(canvas);  // sample before input, so a title screen counts
         const keyTarget = canvas || document.body || document;
         if (canvas && Number(canvas.clientWidth || canvas.width) > 0 && Number(canvas.clientHeight || canvas.height) > 0) {
-          const keyboardBefore = observableSignature(canvas);
-          keyTarget.dispatchEvent(new KeyboardEvent("keydown", {key: "ArrowRight", bubbles: true}));
-          keyTarget.dispatchEvent(new KeyboardEvent("keyup", {key: "ArrowRight", bubbles: true}));
+          // A CONTROL WINDOW FIRST: does this page change on its own?
+          //
+          // "The signature differs 60ms after I sent a key" only means the key
+          // did something if nothing ELSE could have moved the page in those
+          // 60ms. Two things routinely do. A canvas with an animation loop
+          // redraws every frame, so its hash differs whatever you send it. And
+          // the nav/type/press probes below run synchronously between the old
+          // baseline and the deferred comparison, so their clicks landed inside
+          // the very window being attributed to the key.
+          //
+          // Measured by sending the key to a DETACHED <div> the page can never
+          // receive -- everything else byte-identical -- across 10 real
+          // deliverables. On the 5 that claimed an input response, the deaf run
+          // claimed exactly the same thing:
+          //     expenses.html      keyboard:ArrowRight   (real == deaf)
+          //     snake.html         keyboard:ArrowRight   (real == deaf)
+          //     star-catcher.html  keyboard:ArrowRight   (real == deaf)
+          //     pacman.html        keyboard:ArrowRight   (real == deaf)
+          //     exec-5d2d398f...   keyboard:ArrowRight, pointer:canvas (real == deaf)
+          // Not one claim was caused by the input. expenses.html is the plainest
+          // case: it registers no key handler that reacts, a real
+          // `keyboard.press("ArrowRight")` changes nothing, and its totals are
+          // correct by hand -- yet its summary read
+          // "nav:List, nav:Summary, pressed:Add, pressed:List, pressed:Summary,
+          // keyboard:ArrowRight". The keyboard entry was the tab clicks.
+          //
+          // So spend one identical idle window with no input at all. If the page
+          // moved by itself, a later difference proves nothing and nothing is
+          // claimed. Silent when it declines, deliberately: a note that fires on
+          // every animating game is the permanently-red signal this file's own
+          // press-probe comment warns about.
+          const idleBefore = observableSignature(canvas);
           setTimeout(() => {
-            if (state.input_listeners.keyboard > 0 && observableSignature(canvas) !== keyboardBefore) {
-              state.interactions.push("keyboard:ArrowRight");
-            }
-            const pointerBefore = observableSignature(canvas);
-            const rect = canvas.getBoundingClientRect();
-            const eventType = typeof PointerEvent === "function" ? PointerEvent : MouseEvent;
-            canvas.dispatchEvent(new eventType("pointermove", {
-              clientX: rect.left + rect.width * 0.75,
-              clientY: rect.top + rect.height * 0.75,
-              pointerType: "mouse",
-              bubbles: true
-            }));
+            const settled = observableSignature(canvas);
+            const selfChanging = settled !== idleBefore;
+            keyTarget.dispatchEvent(new KeyboardEvent("keydown", {key: "ArrowRight", bubbles: true}));
+            keyTarget.dispatchEvent(new KeyboardEvent("keyup", {key: "ArrowRight", bubbles: true}));
             setTimeout(() => {
-              if (state.input_listeners.pointer > 0 && observableSignature(canvas) !== pointerBefore) {
-                state.interactions.push("pointer:canvas");
+              if (!selfChanging && state.input_listeners.keyboard > 0 && observableSignature(canvas) !== settled) {
+                state.interactions.push("keyboard:ArrowRight");
               }
+              const pointerBefore = observableSignature(canvas);
+              const rect = canvas.getBoundingClientRect();
+              const eventType = typeof PointerEvent === "function" ? PointerEvent : MouseEvent;
+              canvas.dispatchEvent(new eventType("pointermove", {
+                clientX: rect.left + rect.width * 0.75,
+                clientY: rect.top + rect.height * 0.75,
+                pointerType: "mouse",
+                bubbles: true
+              }));
+              setTimeout(() => {
+                if (!selfChanging && state.input_listeners.pointer > 0 && observableSignature(canvas) !== pointerBefore) {
+                  state.interactions.push("pointer:canvas");
+                }
+              }, 60);
             }, 60);
           }, 60);
         }

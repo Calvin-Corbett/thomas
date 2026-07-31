@@ -46,6 +46,23 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 
+# Spellings this surface accepts on top of task_bot_runtime.TERMINAL_STATES,
+# which is the vocabulary the task ledger actually WRITES. Legacy/foreign rows
+# reach here with workboard words ("done"), with the pre-completion "verified",
+# and with "error" from non-ledger producers, so they stay recognised -- but the
+# is-it-over test is DERIVED from the writer instead of being spelled out again,
+# so it can never drift past it. "blocked" is deliberately absent: see
+# _handle_announce_delegation_locked.
+_ANNOUNCE_TERMINAL_ALIASES = frozenset({"done", "verified", "succeeded", "passed", "error"})
+# "abandoned" belongs here for the same reason the orchestrator's report-once
+# machinery lists it (brain._FAILED_STATES) and Mission Control files it under
+# review/failed: nobody is coming back to it. "cancelled" is left out on
+# purpose -- the user stopped it themselves, and this card is binary, so calling
+# a run you stopped "failed" is wrong and calling it "completed" is also wrong.
+# It is terminal (so it is no longer retried as "not_terminal" forever) but not
+# a failure, which lands it on the existing unverified-completion skip.
+_ANNOUNCE_FAILED_STATES = frozenset({"failed", "abandoned", "error"})
+
 
 def _announce_llm(app: web.Application, sid: str) -> Any | None:
     cache = app.get(APP_SESSION_LLM_CACHE) or {}
@@ -134,10 +151,30 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
         if str(row.get("reported_to_chat_at") or "").strip():
             return web.json_response({"ok": True, "skipped": "already_reported"})
         state = str(row.get("state") or "").lower()
-        terminal = {"completed", "done", "verified", "succeeded", "passed", "failed", "blocked", "error"}
+        # "blocked" is NOT an ending, and this endpoint used to treat it as one.
+        #
+        # One decision -- "is this run over, and did it fail" -- was spelled out
+        # here as a literal that disagreed with task_bot_runtime, the module that
+        # WRITES these states. TERMINAL_STATES does not contain "blocked", and
+        # ALLOWED_TRANSITIONS lets a blocked run go back to
+        # queued/claimed/executing, so a task merely waiting on an approval gate
+        # is paused, not over.
+        #
+        # The damage was durable rather than cosmetic. The blocked row passed
+        # this gate, `failed` on the next line called it a failure, and the
+        # handler wrote a model-authored "I ran into a problem and could not
+        # finish that" into the SAVED transcript -- then stamped
+        # reported_to_chat_at, which is the very first thing checked above. So
+        # when the user approved the gate and the work really did finish, the
+        # genuine announcement came back "already_reported" and Thomas never
+        # mentioned it again.
+        #
+        # Same shape as the classic shell's Mission Control fallback, which was
+        # settled the same way and by the same state machine.
+        terminal = task_bot_runtime.TERMINAL_STATES | _ANNOUNCE_TERMINAL_ALIASES
         if state not in terminal:
             return web.json_response({"ok": True, "skipped": "not_terminal"})
-        failed = state in {"failed", "blocked", "error"}
+        failed = state in _ANNOUNCE_FAILED_STATES
         receipt = delegated_action_receipt(row, session_id=sid).to_dict()
         if not failed and receipt.get("ok") is not True:
             return web.json_response({"ok": True, "skipped": "unverified_completion"})
