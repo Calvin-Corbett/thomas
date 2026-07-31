@@ -241,10 +241,30 @@ _STORAGE_SHIM = (
 # directive: a sandboxed document gets ephemeral storage even though
 # `allow-same-origin` preserves its origin.
 #
-# Not fixed, because the only lever is dropping `sandbox` from the CSP, and that
-# is the deliberate call-site-independent containment described below — a
-# security trade, not a bug fix, and not one to make while chasing a papercut.
-# Anyone taking it on should decide it on its own merits.
+# NARROWED 2026-07-31, and the answer is sharper than "the sandbox". It is
+# specifically the CSP `sandbox` DIRECTIVE, not sandboxing as such. Same page,
+# same browser, two loads each; read `before` on the second load:
+#
+#     A  no sandbox at all                                  kept
+#     B  iframe sandbox ATTRIBUTE + allow-same-origin        kept
+#     C  this route as it ships (CSP sandbox, same tokens)   LOST
+#
+# So the identical token set applied via the frame attribute preserves storage,
+# while the response header does not: Chromium gives a CSP-sandboxed document an
+# ephemeral storage partition even though `allow-same-origin` keeps its origin.
+#
+# That makes the fix one line -- drop `sandbox` from the CSP and rely on the
+# frame attributes, which every surface in the shell already sets (transcript
+# thumbnail, drawer shot, viewer stage). What it costs is exactly the backstop
+# described below: a client that frames an artifact WITHOUT a sandbox attribute
+# would get an unsandboxed document. Today no such call-site exists.
+#
+# Still not changed here. That header was added by adversarial review as
+# deliberate defence-in-depth, and trading it away is the owner's call, not a
+# papercut fix to make in passing. Scale for whoever decides: 29 of 442 generated
+# files use localStorage, so this is the difference between "saves your work" and
+# "forgets it every time you reopen the preview" for roughly one deliverable in
+# fifteen.
 _FAVICON_SHIM = (
     '<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' '
     "viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%238b8cff'/%3E"
