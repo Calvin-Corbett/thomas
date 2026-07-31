@@ -303,7 +303,18 @@ async def test_html_preview_redirects_to_expiring_execution_capability(
         assert handshake.status == 302
         assert handshake.headers["Location"] == "/index.html"
         assert handshake.headers["Referrer-Policy"] == "no-referrer"
-        assert handshake.headers["Clear-Site-Data"] == '"cache", "storage"'
+        # Cache only, deliberately: `"storage"` was dropped on 2026-07-31.
+        # It ran on EVERY entry into a preview, so any generated app using
+        # localStorage forgot your work the moment the panel was reopened --
+        # measured, same origin throughout: navigating straight to the resolved
+        # preview URL twice keeps the value, the same page through this redirect
+        # loses it every time. 29 of 442 generated files use localStorage.
+        # The cache clear stays; a stale build served after an edit is a
+        # correctness problem. See tests/test_a_deliverable_remembers_your_work.py
+        # for the trade this makes (a recycled ephemeral port could expose the
+        # previous deliverable's keys) and why it was judged worth it.
+        assert handshake.headers["Clear-Site-Data"] == '"cache"'
+        assert "storage" not in handshake.headers["Clear-Site-Data"]
         assert "no-store" in handshake.headers["Cache-Control"]
         assert "HttpOnly" in handshake.headers["Set-Cookie"]
         assert "SameSite=Strict" in handshake.headers["Set-Cookie"]

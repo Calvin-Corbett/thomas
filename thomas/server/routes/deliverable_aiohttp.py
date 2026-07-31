@@ -241,30 +241,32 @@ _STORAGE_SHIM = (
 # directive: a sandboxed document gets ephemeral storage even though
 # `allow-same-origin` preserves its origin.
 #
-# NARROWED 2026-07-31, and the answer is sharper than "the sandbox". It is
-# specifically the CSP `sandbox` DIRECTIVE, not sandboxing as such. Same page,
-# same browser, two loads each; read `before` on the second load:
+# CAUSE FOUND 2026-07-31, and it is NOT the sandbox. It is the
+# `Clear-Site-Data: "cache", "storage"` header on the `__enter` handler further
+# down this file, which runs on every entry into a preview.
 #
-#     A  no sandbox at all                                  kept
-#     B  iframe sandbox ATTRIBUTE + allow-same-origin        kept
-#     C  this route as it ships (CSP sandbox, same tokens)   LOST
+# The earlier note here blamed the CSP `sandbox` directive on the strength of a
+# three-way comparison. That comparison was confounded -- the two cases that
+# kept their storage were navigated DIRECTLY, the one that lost it went through
+# the `/api/evolve/agent/artifact/...` -> `__enter/<token>` redirect. Removing
+# the sandbox directive was tried and changed nothing, then reverted.
 #
-# So the identical token set applied via the frame attribute preserves storage,
-# while the response header does not: Chromium gives a CSP-sandboxed document an
-# ephemeral storage partition even though `allow-same-origin` keeps its origin.
+# What settles it, same origin throughout:
+#     navigate straight to the resolved preview URL, twice   kept, kept
+#     the same page through the redirect                     LOST
 #
-# That makes the fix one line -- drop `sandbox` from the CSP and rely on the
-# frame attributes, which every surface in the shell already sets (transcript
-# thumbnail, drawer shot, viewer stage). What it costs is exactly the backstop
-# described below: a client that frames an artifact WITHOUT a sandbox attribute
-# would get an unsandboxed document. Today no such call-site exists.
+# The clear is deliberate, not a bug: the preview port is REUSED between grants,
+# so without it one deliverable could read the localStorage another left behind
+# on the same origin. Dropping just `"storage"` from that header restores
+# per-deliverable persistence and leaves the cache clear alone; the residual
+# risk is a later preview landing on a recycled ephemeral port and seeing the
+# previous deliverable's keys. That is a trade between isolation and "the app
+# remembers your work", worth stating plainly rather than making in passing:
+# 29 of 442 generated files use localStorage, about one deliverable in fifteen.
 #
-# Still not changed here. That header was added by adversarial review as
-# deliberate defence-in-depth, and trading it away is the owner's call, not a
-# papercut fix to make in passing. Scale for whoever decides: 29 of 442 generated
-# files use localStorage, so this is the difference between "saves your work" and
-# "forgets it every time you reopen the preview" for roughly one deliverable in
-# fifteen.
+# Also corrected here: this note previously asserted "there is no Clear-Site-Data
+# header on any response in the chain". There is. The header dump behind that
+# claim filtered to a fixed list of header names and never printed it.
 _FAVICON_SHIM = (
     '<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' '
     "viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%238b8cff'/%3E"
@@ -503,7 +505,28 @@ class DeliverablePreviewService:
                     "Pragma": "no-cache",
                     "Expires": "0",
                     "Referrer-Policy": "no-referrer",
-                    "Clear-Site-Data": '"cache", "storage"',
+                    # `"storage"` was here and is deliberately gone. It ran on
+                    # EVERY entry into a preview, so a generated app that saved
+                    # your work forgot it the moment you reopened the panel --
+                    # measured: navigating straight to the resolved preview URL
+                    # twice keeps the value, the same page through this redirect
+                    # loses it every time, same origin throughout. 29 of 442
+                    # generated files use localStorage.
+                    #
+                    # It was not pointless. The preview port is REUSED between
+                    # grants, so clearing on entry stopped one deliverable
+                    # reading keys another left on the same origin. The residual
+                    # risk after this change is exactly that: a later preview
+                    # landing on a recycled ephemeral port sees the previous
+                    # deliverable's keys. Both are the owner's own generated apps
+                    # on loopback, and "the app remembers your work" was judged
+                    # worth more than isolation between them.
+                    #
+                    # `"cache"` stays: it stops a stale build being served after
+                    # an edit, which is a correctness problem rather than a
+                    # privacy one. Guard:
+                    # tests/test_a_deliverable_remembers_your_work.py
+                    "Clear-Site-Data": '"cache"',
                     "X-Content-Type-Options": "nosniff",
                 }
             )
@@ -678,6 +701,29 @@ class DeliverablePreviewService:
         # Census across 442 generated files: modals 9, pointer lock 3, downloads
         # 3, popups 0.
         response.headers["Content-Security-Policy"] = (
+            # This directive was REMOVED on 2026-07-31 to fix deliverable storage
+            # and put straight back, because the diagnosis behind removing it was
+            # confounded. Recorded so nobody repeats it.
+            #
+            # The evidence looked clean: serve the same page three ways, read the
+            # value back on a second load.
+            #     no sandbox at all                             kept
+            #     iframe sandbox ATTRIBUTE + allow-same-origin  kept
+            #     this header, identical tokens                 LOST
+            # Conclusion drawn: the header costs storage. Wrong. The first two
+            # cases were served from a plain local http server and navigated
+            # DIRECTLY; the third went through `/api/evolve/agent/artifact/...`,
+            # which 302s via `__enter/<token>`. Two variables, one conclusion.
+            #
+            # Removing the directive changed nothing -- served CSP confirmed
+            # clean, `window.origin` real, `Storage.prototype` in place, value
+            # still gone on the next load. Navigating straight to the resolved
+            # preview URL twice KEPT it; going through the redirect lost it every
+            # time, same origin throughout. The cause is the
+            # `Clear-Site-Data: "cache", "storage"` header on the `__enter`
+            # handler below, which is deliberate: the preview port is reused
+            # between grants, so entry clears state that would otherwise leak
+            # from one deliverable to the next.
             "sandbox allow-scripts allow-forms allow-same-origin allow-modals "
             "allow-pointer-lock allow-downloads; "
             "default-src 'self' data: blob:; "

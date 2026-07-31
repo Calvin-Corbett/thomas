@@ -7,6 +7,16 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (A generated app now remembers your work)
+
+- Every entry into a preview went through `__enter/<token>`, which sent `Clear-Site-Data: "cache", "storage"`. The storage clear ran on **every load**, so any deliverable using `localStorage` forgot everything the moment the panel was reopened. **29 of 442** generated files use it — about one deliverable in fifteen.
+- Measured, same origin throughout: navigating straight to the resolved preview URL twice **keeps** the value; the same page through the redirect **loses** it every time. After the change the redirect keeps it too.
+- Dropped only `"storage"`. The cache clear stays — a stale build served after an edit is a correctness problem, not a privacy one.
+- **The trade, stated plainly:** the preview port is reused between grants, so the clear stopped one deliverable reading keys another left on the same origin. What remains is that risk — a later preview landing on a recycled ephemeral port could see the previous deliverable's keys. Both are the owner's own generated apps on loopback.
+- **I got this wrong first and reverted it.** I blamed the CSP `sandbox` directive on a three-way comparison where the two passing cases were navigated *directly* and the failing one went through the redirect — two variables, one conclusion. Removing the directive changed nothing (served CSP clean, `window.origin` real, `Storage.prototype` in place, value still gone) and cost the call-site-independent containment backstop, so it went straight back. The wrong turn is recorded at the line.
+- Also corrected: a comment of mine asserting *"there is no Clear-Site-Data header on any response in the chain"*. There is — my header dump filtered to a fixed list of names and never printed it.
+- An existing contract test pinned the old header exactly; updated with the reason rather than relaxed. 364 deliverable/artifact/smoke tests green.
+
 ### Added (Verification types into the app before it presses)
 
 - The reverted press-one-control probe failed because it pressed things that legitimately do nothing until something else happens first. **Supplying the input removes that excuse** — it is what a person does: fill the one field, press the one button, see whether the page responds.
