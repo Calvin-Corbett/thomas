@@ -14,6 +14,13 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Fixed (two modules that described roles they do not have)
+
+- **`thomas/core/vault_registry.py`** claimed in the present tense that "the rest of the system consults `is_vault_protected` instead of re-deriving the list". Nothing under `thomas/` imports the module at all; the only caller is its own test. The docstring now says what it is — an audit surface for guardrail UI that has not landed — and records that there are no production consumers as of 2026-07-31.
+- Critically, the two lists were compared element by element rather than assumed equivalent: they are **deliberately not identical**. The filesystem guard protects four files this registry does not — `.runtime_protection_disabled`, `.runtime_protection_key`, `.breakglass_window`, `.breakglass_window_key` — which are the bypass mechanism itself. So "unifying" them by pointing the filesystem guard at this module would have been a **security change**, not a documentation one. The docstring now says so explicitly, and `tests/test_guardrails_vault.py` pins the difference in both directions.
+- **`thomas/agent/fleet_reply.py`** called `InboxChannel` "the real default … an in-process inbox the session's own loop drains". Nothing polls it. It is now described as what it is: a passive thread-safe buffer with no drainer, where `register_session` *returns* the only handle that can reach the queue, and a registrar that drops that handle leaves envelopes buffered and unreadable.
+- Both are docstring-only — zero executable lines changed — and both ship with guards. Found by two of ten parallel fixer agents.
+
 ### Fixed (an app nobody measured was diagnosed as a loading spinner)
 
 - `runtime_smoke_load` polls a render probe and keeps the best sample, but `best` was **seeded** with `{"visText": 0, "loadingOnly": True, …}`. A seeded sample is indistinguishable from one the probe actually returned, so a page whose every real sample lost the `better` comparison — or where the poll loop exited before its first tick — kept the seed, and the seed says `loadingOnly: True`.

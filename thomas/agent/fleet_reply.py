@@ -45,9 +45,10 @@ Ordering & determinism
 
 Injectable edges
     * ``clock`` — a ``Callable[[], float]`` (defaults to ``time.monotonic``).
-    * :class:`DeliveryChannel` — the per-session transport. The real default,
-      :class:`InboxChannel`, is a stdlib in-process inbox the session's own
-      loop drains; tests use a hermetic :class:`FakeChannel`.
+    * :class:`DeliveryChannel` — the per-session transport. The default,
+      :class:`InboxChannel`, is a passive stdlib buffer that whoever registered
+      the session must drain; nothing in Thomas polls it today (see that
+      class's docstring). Tests use a hermetic :class:`FakeChannel`.
 """
 
 from __future__ import annotations
@@ -197,13 +198,31 @@ class DeliveryReceipt:
 
 
 class InboxChannel:
-    """Real default channel: an in-process inbox the session loop drains.
+    """Default channel: a passive in-process buffer for undelivered steers.
 
-    The registered session's own runtime pulls envelopes via :meth:`drain`
-    (or :meth:`pop`) and, once it has applied a steer, calls back into
-    :meth:`FleetReplyService.acknowledge`. ``open`` gates delivery so a session
-    that is winding down can cleanly refuse (``deliver`` -> ``False``) rather
-    than silently swallowing steers.
+    This is a thread-safe queue, not a delivery pump -- it has no drainer of
+    its own and nothing inside Thomas polls it. Whoever registers the session
+    owns the draining: :meth:`FleetReplyService.register_session` *returns* the
+    channel, and that returned handle is the only way to reach the queue (the
+    service deliberately exposes no accessor for a session's channel). A
+    registrar that keeps the handle consumes envelopes with :meth:`drain` or
+    :meth:`pop` and then calls :meth:`FleetReplyService.acknowledge`; a
+    registrar that drops the handle leaves them buffered and unreadable.
+
+    No in-process registrar exists yet, so :meth:`drain` / :meth:`pop` have no
+    production consumer today -- they are the API such a runtime would use once
+    it owns a handle. The only production registrar is
+    ``POST /api/fleet/reply/sessions`` in
+    :mod:`thomas.server.routes.fleet_reply_routes`, which registers by id and
+    discards the returned channel. Steers to those sessions therefore reach
+    ``DELIVERED`` (the buffer accepted them) but are never read, and their
+    receipts reconcile to ``FAILED``/``ack_timeout`` once the ack deadline
+    elapses. Every real ``ACKED`` in production today comes from an operator
+    clicking the dashboard's "Mark acknowledged" control, not from a session
+    applying the steer.
+
+    ``open`` gates delivery so a session that is winding down can cleanly
+    refuse (``deliver`` -> ``False``) rather than silently swallowing steers.
     """
 
     def __init__(self, *, open: bool = True, maxlen: int | None = None) -> None:
@@ -283,8 +302,9 @@ class FleetReplyService:
         """Register a running session and its delivery channel.
 
         With no channel supplied a fresh :class:`InboxChannel` is created and
-        returned, so a caller that just wants "a steerable session" gets a
-        working default. Re-registering an id replaces its channel.
+        returned. Keep that return value: it is the only handle to the buffer,
+        and steers land in it unread until its owner drains and acknowledges
+        them. Re-registering an id replaces its channel.
         """
         if not session_id:
             raise ValueError("session_id must be a non-empty string")

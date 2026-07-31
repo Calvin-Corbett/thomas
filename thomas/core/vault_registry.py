@@ -1,14 +1,36 @@
-"""The Vault — safety-critical paths that agent tools may NEVER modify, regardless
-of any guardrail preset or user toggle.
+"""The Vault — a readable inventory of the safety-critical paths that agent tools
+may never modify, regardless of any guardrail preset or user toggle.
 
-Enumerated from ``agent_safety.toml`` (``[runtime_protection]`` + top-level
-``protected_files``) and loaded at import so the set is code-local and cannot be
-weakened at runtime. This is the single, testable source of truth that mirrors the
-hard enforcement already in ``thomas/tools/filesystem.py`` — the rest of the system
-consults ``is_vault_protected`` instead of re-deriving the list.
+This module *describes* the policy; it does not enforce it. The set is parsed
+from ``agent_safety.toml`` (``[runtime_protection]``) on first use, not at import,
+and it is therefore config-derived rather than code-local: point ``_REPO_ROOT`` at
+a tree with a weakened config and the set shrinks to match.
+
+Enforcement lives in ``thomas/tools/filesystem.py::_is_protected_runtime_path``,
+which keeps its own hardcoded copy of the list **on purpose** — see the comment at
+``_HARDCODED_PROTECTED_DIRS`` and the ``[runtime_protection]`` preamble in
+``agent_safety.toml``. That guard must hold even when the config is missing or
+corrupt, and this module cannot offer that: ``_load`` swallows a parse failure and
+returns empty sets, so a corrupt ``agent_safety.toml`` makes every
+``is_vault_protected`` answer ``False``. It fails open; the filesystem guard fails
+closed. Do not "unify" the two by pointing the filesystem guard at this module.
+
+The two sets are deliberately **not** identical. They list the same seven protected
+directories, but the filesystem guard protects four files this registry does not:
+``runtime/.runtime_protection_disabled``, ``runtime/.runtime_protection_key``,
+``runtime/.breakglass_window`` and ``runtime/.breakglass_window_key``. Those are the
+bypass mechanism itself (see PR runtime-protection-fix-2026-05-27), so widening this
+registry is not a documentation change — it is a security change.
+``tests/test_guardrails_vault.py`` pins the difference in both directions.
+
+Consumers, as of 2026-07-31: none in production. Nothing under ``thomas/`` imports
+this module; the only caller of ``is_vault_protected`` is
+``tests/test_guardrails_vault.py``. It exists as an audit/reporting surface for
+guardrail UI that has not landed yet.
 
 The Vault is orthogonal to the toggleable guardrail policy (see
-``thomas.server.guardrails_state``): guardrails can be relaxed; the Vault cannot.
+``thomas.server.guardrails_state``): guardrails can be relaxed; the paths listed
+here are ones the filesystem guard refuses regardless.
 """
 
 from __future__ import annotations

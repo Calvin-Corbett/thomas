@@ -324,9 +324,83 @@ def test_inbox_channel_default_delivers_and_drains():
     assert r.state is DeliveryState.DELIVERED
     assert channel.pending() == 1
 
-    # The session loop drains its inbox, applies the steer, then acks.
+    # This test plays the owner role by hand -- it keeps the returned handle,
+    # drains, and acks. Nothing in production does this yet; see
+    # test_a_default_registered_inbox_has_no_drainer_so_its_steer_times_out.
     envelopes = channel.drain()
     assert [e.text for e in envelopes] == ["look at the logs"]
     assert channel.pending() == 0
     svc.acknowledge(envelopes[0].receipt_id)
     assert svc.get_receipt(r.id).state is DeliveryState.ACKED
+
+
+# ---------------------------------------------------------------------------
+# InboxChannel has no drainer in production -- the docs must not claim one
+# ---------------------------------------------------------------------------
+
+
+def test_a_default_registered_inbox_has_no_drainer_so_its_steer_times_out():
+    """A session registered without a channel buffers its steer unread.
+
+    ``InboxChannel`` used to document itself as "an in-process inbox the
+    session loop drains", and said "the registered session's own runtime pulls
+    envelopes via drain() ... and calls back into acknowledge()". Measured
+    against the real route stack, no such runtime exists: grepping callers of
+    ``drain``/``pop``/``pending`` outside ``tests/`` returns 0 hits, and
+    ``FleetReplyService`` exposes no accessor for a session's channel, so the
+    handle ``register_session`` returns is the only way to reach the buffer.
+    The only production registrar, ``POST /api/fleet/reply/sessions``, discards
+    it.
+
+    Measurement, ack deadline 30s, one steer dispatched at t=0:
+      * registrar drops the handle (production): drained 0 envelopes, buffer
+        still holds 1 at t=31s, receipt FAILED/``ack_timeout``, undelivered
+        True. Never ACKED.
+      * registrar keeps the handle (control): drained 1 envelope, buffer holds
+        0, receipt ACKED, undelivered False.
+
+    The control proves this assertion can show success, so "never ACKED" is a
+    real finding and not a test that only ever fails. This test pins the
+    documented contract to the measured one.
+    """
+    # -- production arm: registrar discards the handle, exactly like the route
+    clock = FakeClock()
+    svc = _service(clock, deadline=30.0)
+    svc.register_session("sess-http", None)  # return value dropped on purpose
+
+    receipt = svc.dispatch_reply("sess-http", "stop and run the tests")
+    assert receipt.state is DeliveryState.DELIVERED
+
+    # There is no public way back to that buffer, so nothing can drain it.
+    public = {name for name in dir(svc) if not name.startswith("_")}
+    assert not {n for n in public if "channel" in n.lower() or "inbox" in n.lower()}
+
+    clock.advance(31.0)
+    assert [r.id for r in svc.reconcile()] == [receipt.id]
+    timed_out = svc.get_receipt(receipt.id)
+    assert timed_out.state is DeliveryState.FAILED
+    assert timed_out.reason == "ack_timeout"
+    assert timed_out.state is not DeliveryState.ACKED
+
+    # -- control arm: an owner that keeps the handle really does reach ACKED
+    clock_b = FakeClock()
+    svc_b = _service(clock_b, deadline=30.0)
+    inbox = svc_b.register_session("sess-owned", None)
+    r_b = svc_b.dispatch_reply("sess-owned", "stop and run the tests")
+    assert inbox.pending() == 1
+    envelopes = inbox.drain()
+    assert len(envelopes) == 1
+    assert inbox.pending() == 0
+    svc_b.acknowledge(envelopes[0].receipt_id)
+    clock_b.advance(31.0)
+    assert svc_b.reconcile() == []
+    acked = svc_b.get_receipt(r_b.id)
+    assert acked.state is DeliveryState.ACKED
+    assert acked.undelivered is False
+
+    # -- the docs must describe the production arm, not the control arm
+    doc = " ".join((InboxChannel.__doc__ or "").split()).lower()
+    assert doc, "InboxChannel must keep a docstring"
+    assert "the session loop drains" not in doc
+    assert "session's own runtime pulls envelopes" not in doc
+    assert "no production consumer" in doc
