@@ -150,15 +150,42 @@
     return event.terminal === true || containsToolProtocol(event) || !NARRATIVE_EVENT_KINDS.has(eventType(event));
   }
 
+  // One failure predicate for the whole file. There used to be two, and they
+  // disagreed: `eventHtml` asked `is_error === true`, while
+  // `groupedTechnicalEvents` asked `is_error === true || kind === 'error'`.
+  // `technicalHeading` sided with the second.
+  //
+  // So a live `error` event -- the shape `pushLiveEvent({ type: 'error' })`
+  // produces, which never sets `is_error` -- rendered the failure WORDS under a
+  // green `ph-check-circle`, and without the `is-error` class that colours the
+  // row. Seen on screen by opening a deliverable deep link whose task no longer
+  // exists: a green tick directly above the word "failed".
+  //
+  // Live-vs-saved is the axis that hid it. The grouped path was already right,
+  // so the finished transcript of the same run looked correct; only the run you
+  // were watching lied.
+  function eventFailed(event, kind) {
+    return event.is_error === true || (kind == null ? eventType(event) : kind) === 'error';
+  }
+
   function technicalHeading(event, kind) {
     if (kind === 'reason') return 'Reviewed the approach';
-    if (kind === 'error') return 'Technical check failed';
+    // Not a check. Nothing was verified: this is the run, or the client,
+    // reporting that something broke. `pushLiveEvent({ type: 'error' })` carries
+    // client faults too -- a failed file preview, a task that cannot be opened.
+    // The dead-deep-link case read "Technical check failed / not found" about a
+    // conversation that does not exist, which asserts a check ran on work that
+    // was never done.
+    if (kind === 'error') return 'Something went wrong';
     if (event.terminal === true) {
       if (kind === 'tool') return 'Ran terminal command';
       return event.is_error === true ? 'Terminal check failed' : 'Read terminal result';
     }
     if (kind === 'tool') return `Used ${event.name || 'a project tool'}`;
-    if (event.is_error === true) return 'Technical check failed';
+    // The same overloading the comment below describes: a tool that returned an
+    // error is a failed tool CALL, not a failed check. The tool's own name is
+    // present on most of these and says more than the word "technical" did.
+    if (event.is_error === true) return event.name ? `${event.name} failed` : 'Tool call failed';
     // Neither of these is a check, and both used to say they were.
     //
     // `tool_result` read "Checked tool result" on every row. Measured on one
@@ -187,7 +214,7 @@
       const kind = eventType(event);
       const heading = technicalHeading(event, kind);
       const label = eventLabel(event);
-      const failed = event.is_error === true || kind === 'error';
+      const failed = eventFailed(event, kind);
       const key = `${kind}\u0000${failed ? '1' : '0'}\u0000${heading}\u0000${label}`;
       const existing = byKey.get(key);
       if (existing) { existing.count += 1; return; }
@@ -239,7 +266,7 @@
   function eventHtml(event, saved) {
     const kind = eventType(event);
     if (isTechnicalEvent(event)) {
-      const failed = event.is_error === true;
+      const failed = eventFailed(event, kind);
       const heading = technicalHeading(event, kind);
       return `<div class="tc-code-technical${failed ? ' is-error' : ''}" data-code-kind="${esc(kind)}"${saved ? ' data-saved="true"' : ''}><i class="ph ${failed ? 'ph-warning' : 'ph-check-circle'}"></i><div><strong>${esc(heading)}</strong><code>${esc(eventLabel(event))}</code></div></div>`;
     }
