@@ -38,6 +38,10 @@ class RuntimeResult:
     rendered_chars: int = 0
     canvas_drawn: bool = False
     dom_nodes: int = 0
+    # False when the render probe never returned a sample, so the counts above are
+    # unmeasured rather than measured-as-zero. Consumers must not read "0 chars" as
+    # "the page rendered nothing" unless this is True.
+    probed: bool = True
 
     def summary(self) -> str:
         if self.skipped:
@@ -45,7 +49,8 @@ class RuntimeResult:
         if self.ok:
             return f"runtime OK: {self.entry} rendered ({self.rendered_chars} chars / canvas={self.canvas_drawn}), 0 errors"
         if self.page_errors:
-            return f"runtime FAILED: JS error on load — {self.page_errors[0][:160]}"
+            measured = "" if self.probed else " (render never sampled)"
+            return f"runtime FAILED: JS error on load — {self.page_errors[0][:160]}{measured}"
         return f"runtime FAILED: {self.reason or 'app rendered blank'}"
 
 
@@ -162,20 +167,26 @@ def runtime_smoke_load(root: str | Path, entry: str = "index.html", *, timeout_m
                 page.goto(f"{base}/{entry}", wait_until="load", timeout=timeout_ms)
                 # Poll across a settle WINDOW (not a single 800ms sample): catch content
                 # that renders late (fetch/async) AND crashes that fire seconds after load.
-                best = {"visText": 0, "loadingOnly": True, "hasApp": False, "canvasDrawn": False, "dom": 0}
+                # `best` starts as None, NOT as a pre-filled sample: a seeded sample is
+                # indistinguishable from one the probe actually returned, so a page whose
+                # every sample loses the `better` comparison (a truly blank render) would
+                # keep the seed's `loadingOnly: True` and be misreported as a loading
+                # spinner. None means "the probe has not answered yet", and the first
+                # answer always wins.
+                best: dict | None = None
                 waited, window_ms, step = 0, 3000, 500
                 while waited < window_ms and not page_errors:
                     page.wait_for_timeout(step)
                     waited += step
                     s = page.evaluate(_RENDER_PROBE_JS)
-                    better = (
-                        (int(s.get("visText", 0) or 0) > int(best["visText"]))
-                        or (s.get("canvasDrawn") and not best["canvasDrawn"])
-                        or (s.get("hasApp") and not best["hasApp"])
+                    better = best is None or (
+                        (int(s.get("visText", 0) or 0) > int(best.get("visText", 0) or 0))
+                        or (s.get("canvasDrawn") and not best.get("canvasDrawn"))
+                        or (s.get("hasApp") and not best.get("hasApp"))
                     )
                     if better:
                         best = s
-                sig = best
+                sig = best or {}
             finally:
                 browser.close()
     except Exception as e:  # noqa: BLE001 — a check failure must never block finalize
@@ -183,6 +194,11 @@ def runtime_smoke_load(root: str | Path, entry: str = "index.html", *, timeout_m
     finally:
         httpd.shutdown()
 
+    # An empty `sig` means the render probe never returned a sample at all (the poll
+    # loop exited before its first tick). That is "no answer received", which is NOT
+    # the same as an answer of "blank" or "loading" — the counts below are unmeasured
+    # rather than measured-as-zero, so say so instead of reporting a seeded verdict.
+    probed = bool(sig)
     rendered_chars = int(sig.get("visText", 0) or 0)
     dom_nodes = int(sig.get("dom", 0) or 0)
     canvas_drawn = bool(sig.get("canvasDrawn", False))
@@ -198,6 +214,7 @@ def runtime_smoke_load(root: str | Path, entry: str = "index.html", *, timeout_m
             rendered_chars=rendered_chars,
             canvas_drawn=canvas_drawn,
             dom_nodes=dom_nodes,
+            probed=probed,
             reason=reason,
         )
 
@@ -213,6 +230,10 @@ def runtime_smoke_load(root: str | Path, entry: str = "index.html", *, timeout_m
     # do NOT count.)
     has_real_content = (rendered_chars >= 1 and not loading_only) or canvas_drawn or (has_app and dom_nodes >= 5)
     if not has_real_content:
+        if not probed:
+            # Never measured — report that, rather than a blank/loading diagnosis we
+            # have no evidence for.
+            return _result(False, "could not tell what the app rendered — the page never reported back")
         why = "still showing a loading placeholder" if loading_only else "no visible content (blank/invisible render)"
         return _result(False, f"app rendered nothing usable — {why}")
     return _result(True)

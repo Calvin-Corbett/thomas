@@ -14,6 +14,13 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Fixed (an app nobody measured was diagnosed as a loading spinner)
+
+- `runtime_smoke_load` polls a render probe and keeps the best sample, but `best` was **seeded** with `{"visText": 0, "loadingOnly": True, …}`. A seeded sample is indistinguishable from one the probe actually returned, so a page whose every real sample lost the `better` comparison — or where the poll loop exited before its first tick — kept the seed, and the seed says `loadingOnly: True`.
+- The run then reported *"app rendered nothing usable — still showing a loading placeholder"* about a page it had never successfully measured: a diagnosis invented from a default value, pointing the reader at a spinner that may not exist.
+- `best` now starts as `None`, a `probed` flag records whether any sample arrived, and the unmeasured case says *"could not tell what the app rendered — the page never reported back"* in its own words. `probed` defaults to `True`, so every existing construction site is unaffected.
+- Found by one of ten parallel fixer agents. Its diff omitted the regression test it claimed, so the guard was written and both directions proven by hand: re-seeding `best` fails the seeded-sample test, neutering the unmeasured branch fails the wording test, and a rendering app still reads `runtime OK`.
+
 ### Fixed (turning off network access silently deleted local skill discovery)
 
 - `skills.list` and `skills.use` had **no policy classification**, and `_tool_denial` denies an unclassified tool as soon as *any* capability toggle is off. So switching on local-only mode — which only flips network/browser/channels — removed both skill tools from the model's toolset. Reading local skill files has nothing to do with network access.
