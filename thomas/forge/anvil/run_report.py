@@ -489,16 +489,12 @@ def _unopened_page_risks(
     # writing it. Every page an agent creates is mentioned that way, so this risk
     # could effectively never fire for the pages it exists to catch.
     #
-    # Measured against a control, which is what makes it evidence rather than a
-    # reading of the code. Same validations (`BROWSER_SMOKE_OK: index.html`),
-    # same changed files (index.html, orphan.html), only the transcript differs::
-    #
-    #     transcript says "Wrote 4120 chars to C:/proj/orphan.html"  -> no risk
-    #     transcript says "Wrote 4120 chars to the second page"      -> risk
-    #     no events at all                                           -> risk
-    #
-    # It also re-broke what the comment below describes as already fixed: one
-    # opened page vouching for the others.
+    # Measured against a control -- same validations and changed files, varying
+    # only the transcript: naming orphan.html suppressed the risk, not naming it
+    # raised it. Full table in CHANGELOG.md; guard in
+    # tests/test_the_agent_cannot_silence_the_unopened_page_risk.py. It also
+    # re-broke what the comment below describes as fixed: one opened page
+    # vouching for the others.
     #
     # Events stay in scope rather than being dropped, because build_verify emits
     # the smoke line BOTH as a `tool_result` event and appended to the check's
