@@ -14,6 +14,14 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Fixed (a task you stopped on purpose was shown as work still queued)
+
+- `cancelled` was the **only** state in `task_bot_states.VALID_STATES` with no entry in Mission Control's `_DELEGATION_STATE_ROOM_STATUS`, and the lookup falls back to `("inbox", "queued")`. So pressing Stop produced a board row reading *queued*, counted in the "N active" figure by `mission.script01.js` (whose `ACTIVE_STATES` includes `queued`) and sorted to the top of the live agent list.
+- It also missed the terminal set — an inline literal `{"completed", "verified", "failed", "abandoned"}` sitting three lines beneath the comment *"FREEZE elapsed for finished work: a task that ran for 3 minutes must not display 7h just because it finished 7 hours ago."* Reproduced by running the route in-process against a 3-minute run stopped 7h earlier: `room: inbox | status: queued | ended_at: '' | elapsed_seconds 25379 → 25382` between two polls.
+- Both sets are now **derived** from the writer's vocabulary rather than spelled out a second time. The defect was never a wrong value — it was two vocabularies for one idea, the same shape as an icon and its heading being chosen by two different failure tests. A guard now asserts every `VALID_STATES` member has a room and every `TERMINAL_STATES` member is treated as finished, so the class cannot return.
+- Filed under `("done", "cancelled")`, not `("review", "failed")`: `task_bot_states` says at its own line that *"'cancelled' is its own ending. Stopping a run on purpose is not a failure."*
+- Found by a multi-agent audit; its verifier reproduced the bug in-process **and corrected three of the finder's supporting claims** — `status_rank["cancelled"]` is live for jobs and runs rather than dead, the row is truncated at 20 rather than accumulating forever, and `elapsed_seconds` has no front-end consumer, so the growing timer is a false API field rather than a rendered "7h".
+
 ### Fixed (a check the engine SKIPPED was counted, and quoted, as one that passed)
 
 - `passed` is derived from the absence of an error (`event.get("is_error") is not True`), and a skipped browser smoke sets no error — so a check that never ran arrived flagged `passed: True`. Two surfaces believed it:

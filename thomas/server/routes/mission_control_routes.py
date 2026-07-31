@@ -12,6 +12,7 @@ from typing import Any
 from aiohttp import web
 
 from thomas.core import task_bot_runtime
+from thomas.core.task_bot_states import TERMINAL_STATES
 from thomas.desktop_operator import manager as desktop_operator_manager
 from thomas.server.app_keys import APP_APPROVALS_BROKER
 
@@ -32,8 +33,29 @@ _DELEGATION_STATE_ROOM_STATUS: dict[str, tuple[str, str]] = {
     "completed": ("done", "completed"),
     "failed": ("review", "failed"),
     "abandoned": ("review", "failed"),
+    # "cancelled" was the ONE state in task_bot_states.VALID_STATES with no entry
+    # here, and the lookup below falls back to ("inbox", "queued") -- so a task
+    # the owner deliberately stopped was displayed as work still QUEUED and
+    # waiting. It also missed the terminal set, so its elapsed time ticked up
+    # live forever, which is the exact bug the "FREEZE elapsed for finished work"
+    # comment further down exists to prevent.
+    #
+    # Filed under "done" rather than "review": stopping a run on purpose is an
+    # ending, not something for the owner to go and look at. task_bot_states says
+    # the same at its own line -- "'cancelled' is its own ending. Stopping a run
+    # on purpose is not a failure." The status word stays "cancelled" rather than
+    # being folded into "failed" for that reason; the shell already recognises it
+    # as terminal.
+    "cancelled": ("done", "cancelled"),
 }
 _DELEGATION_ACTIVE_STATES = {"requested", "classified", "queued", "claimed", "executing", "running", "awaiting_proof"}
+# Derived from the writer's own vocabulary instead of being spelled out again.
+# The literal that used to sit inline at the `is_terminal` line omitted
+# "cancelled", so the two disagreed about what "finished" means -- the same shape
+# as an icon and its heading being chosen by two different failure tests.
+# "verified" is added because this surface treats it as an ending (it maps to
+# done/completed above) while the state machine keeps it distinct from complete.
+_DELEGATION_TERMINAL_STATES = TERMINAL_STATES | {"verified"}
 
 from .mission_runtime_views import (
     _job_room_and_summary,
@@ -472,7 +494,7 @@ def build_mission_control_routes(
             task_ask = str(deleg.get("summary") or "").strip()
             created_at = _coerce_iso(deleg.get("created_at"))
             updated_at = _coerce_iso(deleg.get("updated_at") or deleg.get("created_at"))
-            is_terminal = state in {"completed", "verified", "failed", "abandoned"}
+            is_terminal = state in _DELEGATION_TERMINAL_STATES
             # FREEZE elapsed for finished work: a task that ran for 3 minutes must not
             # display "7h" just because it finished 7 hours ago. Active tasks elapse
             # live (now - created); terminal tasks freeze at (ended - created).
