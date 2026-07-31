@@ -714,6 +714,16 @@
           if (usable) b.addEventListener('click', () => { setProfile(p, m); closeModelMenu(); });
           wrap.appendChild(b);
         });
+        // A dead end otherwise. The menu lists Anthropic, Google, xAI, Meta
+        // Llama and Mistral, marks every one "needs key", and the unified shell
+        // had NO way to supply one -- the only code that can POST a key lives in
+        // model_settings_dropdown.js, which nothing loads. So five providers
+        // were visible, unusable, and unfixable from the UI.
+        const keyless = [];
+        group.entries.forEach(({ p }) => {
+          if (!profileIsUsable(p) && !keyless.some(x => x.name === p.name)) keyless.push(p);
+        });
+        keyless.forEach(p => wrap.appendChild(buildKeyRow(p)));
       });
       renderSpecialistModels(wrap);
       refreshAccountLine();
@@ -744,6 +754,80 @@
       ['writing', 'Writing'],
       ['data', 'Data'],
     ];
+
+    // Re-read the profile list from the server and redraw the menu.
+    //
+    // The load in boot() is inline and also picks the active profile, which is
+    // wrong to redo here: saving a key for Mistral must not silently switch the
+    // conversation to Mistral. This refreshes what is USABLE and leaves the
+    // selection alone.
+    async function reloadModelProfiles() {
+      const r = await fetch('/api/models');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const d = await r.json();
+      profilesData = Array.isArray(d.profiles) ? d.profiles : [];
+      await hydrateProfileModels();
+      renderModelMenu();
+    }
+
+    // Somewhere to put the key for a provider that needs one.
+    //
+    // POST /api/secrets/{profile} {api_key} has always existed and the unified
+    // shell never called it, so "needs key" was a verdict with no remedy. The
+    // input is type=password so the value is not shoulder-readable and does not
+    // land in the DOM as text; it is never logged, and the field is cleared the
+    // moment the request is sent.
+    //
+    // On success the whole model list is reloaded rather than patched locally:
+    // the server decides what is usable (has_api_key, reachability, per-model
+    // availability), and guessing "it works now" in the client is how a menu
+    // ends up claiming a provider is ready when the key was rejected.
+    function buildKeyRow(profile) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display: flex; align-items: center; gap: 6px; padding: 4px 9px 8px 26px;';
+      const input = document.createElement('input');
+      input.type = 'password';
+      input.autocomplete = 'off';
+      input.spellcheck = false;
+      input.placeholder = `Paste ${profile.name} API key`;
+      input.setAttribute('aria-label', `API key for ${profile.name}`);
+      input.style.cssText = 'flex: 1; min-width: 0; padding: 5px 7px; border-radius: 8px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-family: inherit; font-size: 11.5px;';
+      const save = document.createElement('button');
+      save.type = 'button'; save.className = 'hv-soft'; save.textContent = 'Save';
+      save.style.cssText = 'flex: 0 0 auto; padding: 5px 10px; border-radius: 8px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-family: inherit; font-size: 11.5px; cursor: pointer;';
+      const note = document.createElement('div');
+      note.style.cssText = 'display: none; padding: 0 9px 6px 26px; font-size: 10.5px; color: var(--c-danger, #ff9a9a);';
+
+      const submit = () => {
+        const key = input.value.trim();
+        if (!key) return;
+        input.value = '';
+        save.disabled = true; save.textContent = 'Saving…';
+        note.style.display = 'none';
+        fetch('/api/secrets/' + encodeURIComponent(profile.name), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ api_key: key }),
+        })
+          .then(r => {
+            if (!r.ok) return r.text().then(t => { throw new Error(t || ('HTTP ' + r.status)); });
+            // Reload from the server; do not assume the key was accepted.
+            return reloadModelProfiles();
+          })
+          .catch(err => {
+            save.disabled = false; save.textContent = 'Save';
+            note.textContent = String(err && err.message ? err.message : err).slice(0, 90);
+            note.style.display = 'block';
+          });
+      };
+      save.addEventListener('click', submit);
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+
+      const holder = document.createElement('div');
+      row.appendChild(input); row.appendChild(save);
+      holder.appendChild(row); holder.appendChild(note);
+      return holder;
+    }
 
     // Who is answering, and on whose plan.
     //

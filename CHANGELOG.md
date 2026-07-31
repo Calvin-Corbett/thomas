@@ -7,6 +7,18 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Added ("needs key" is a remedy now, not just a verdict)
+
+- The model menu listed **Anthropic, Google, xAI, Meta Llama and Mistral**, marked every one `needs key`, and the unified shell had **no way to supply one**. The only code that can POST a key lives in `model_settings_dropdown.js`, which nothing loads — it targets `#modelSetupModal`, an element the new shell does not have. Five providers were visible, unusable, and unfixable from the UI.
+- `POST /api/secrets/{profile} {api_key}` has always existed. An inline key field now appears under any keyless provider when its family is expanded. Driven end to end against a keyless profile with a dummy value, then cleaned up: field is `type=password` / `autocomplete=off`, `has_key` went **False → True**, and the row then vanished because the profile became usable. No page errors.
+- **Reloads from the server rather than assuming.** The menu re-reads `/api/models` after a save, so a rejected key does not leave a provider looking ready. The refresh deliberately does **not** re-run `boot()`'s selection logic — pasting a Mistral key must not silently move your conversation to Mistral, and a test pins that.
+- The value is cleared from the field the moment it is sent, and the input is a password field: this menu is screenshotted constantly, and a key in a text input ends up in the picture.
+- Five regressions each caught by reverting: not rendering the row, a plain-text field, leaving the key in the DOM, the wrong request field, and switching the active model on save.
+
+### Known red test (not mine, not fixed)
+
+- `tests/test_server_preferences_runtime.py::…::test_v2_applies_model_runtime_memory_tool_and_quality_preferences` asserts `autonomy_level == 4` and gets `2`. It fails in isolation, so it is not pollution; it uses a temp `THOMAS_DB_PATH` and a fake brain, so no preference of mine reaches it; and no file I changed mentions `autonomy_level`. Recorded rather than passed over — a permanently-red test is how a real regression gets ignored.
+
 ### Added (The model menu says whose account is answering)
 
 - `/api/openai-codex/status?profile=<name>` has always returned `logged_in`, `email` and `plan_type`. The unified shell read **none of it**. The old Model Setup modal showed it through `model_settings_dropdown.js` — 18.8 KB the new shell never loads, because it targets `#modelSetupModal`, an element that no longer exists. So `4 ready` was the only signal a provider was usable, and nothing said whose account was being spent.
