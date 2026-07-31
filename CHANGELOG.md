@@ -14,6 +14,14 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Fixed (a generated app's Copy button did nothing, and its Fullscreen key was refused)
+
+- The same silent-capability-removal shape as the artifact sandbox, but **one layer above it**. Sandbox tokens were already correct after the four earlier fixes — an inventory of every artifact CSP and every artifact iframe found no remaining token mismatch. `fullscreen` and the async clipboard are **Permissions Policy** features whose default allowlist is `self`, so the *embedding page* must delegate them with `allow=`.
+- `/deliverable/` 302s an HTML artifact onto its own ephemeral `127.0.0.1:PORT`, which makes every artifact frame **cross-origin** to the shell. Neither interactive frame delegated anything and the server sends no `Permissions-Policy` header — so the same bytes that work perfectly in a browser tab were dead inside Thomas, with no error surfaced.
+- Two of the owner's own deliverables hit it. `colortoy.html`'s Copy button awaits `navigator.clipboard.writeText` with no `catch`, so the `NotAllowedError` aborted the handler before its "Copied!" label and the button simply did nothing. `snake.html` advertises "F fullscreen" on its own start screen, and `requestFullscreen()` was rejected with *"Disallowed by permissions policy"*. The model's code was correct both times.
+- Census across the 414 generated HTML/JS files: `clipboard.writeText` 3, `requestFullscreen` 2, and zero uses of `getDisplayMedia`, geolocation, `window.open` or `target=_blank` — so exactly these two capabilities were delegated and nothing wider.
+- Both the Code viewer stage and Chat's canvas frame now carry `allow="fullscreen; clipboard-write"`. Verified both directions: stripping the attribute fails three guards.
+
 ### Fixed (one report said both things about the same file)
 
 - `attention_pointers` and `open_risks` read the same `changed_files` list and disagreed about it. `changed_files` is the git delta of a **shared** project folder, not a record of what this run wrote — Thomas allows several simultaneous Code runs, and `forge_code_store.files_written_by_another_task` exists precisely to spot another task's uncommitted file landing in the delta.

@@ -444,7 +444,28 @@
            artifact is served from its OWN port, a different origin from the shell,
            so the frame cannot reach Thomas's DOM or cookies -- and the response CSP
            already grants the same token at the sandbox layer. -->
-      <div class="tc-code-viewer-stage"><iframe title="${esc(file)}" sandbox="allow-scripts allow-forms allow-modals allow-pointer-lock allow-downloads allow-same-origin" src="${esc(doc)}"></iframe></div>
+      <!-- allow="fullscreen; clipboard-write" is the SAME defect one layer over.
+           Sandbox tokens are not the only gate: fullscreen and the async clipboard
+           are Permissions Policy features whose default allowlist is "self", which
+           means the embedding page has to delegate them or a cross-origin frame is
+           refused. The artifact is served from its own 127.0.0.1:PORT, so it IS
+           cross-origin here, and nothing delegated -- so both were dead in the
+           viewer while the identical bytes worked when opened in a tab. Two of the
+           owner's own deliverables, driven through this route:
+             colortoy.html Copy button   top level: says "Copied!"  framed: says "Copy"
+             snake.html    F key         top level: fullscreen      framed: nothing
+           Neither reports an error. colortoy's handler is
+           "await navigator.clipboard.writeText(...)" with no catch, so the reject
+           aborts it before the label update -- the button is silently inert. snake
+           prints "F fullscreen" on its own start screen and then ignores the key.
+           Census over 414 generated files: clipboard.writeText 3, requestFullscreen 2.
+           Deliberately NOT delegated: clipboard-READ (0 files ask for it, and it
+           would let a generated page read whatever the owner last copied), camera,
+           microphone, geolocation, display-capture. Not added to the decorative
+           previews (:184, :212) either -- a 168px tabindex="-1" picture must not be
+           able to fill the screen or touch the clipboard.
+           Guard: tests/test_a_generated_app_can_copy_and_go_fullscreen.py -->
+      <div class="tc-code-viewer-stage"><iframe title="${esc(file)}" sandbox="allow-scripts allow-forms allow-modals allow-pointer-lock allow-downloads allow-same-origin" allow="fullscreen; clipboard-write" src="${esc(doc)}"></iframe></div>
     </aside>`;
   }
 

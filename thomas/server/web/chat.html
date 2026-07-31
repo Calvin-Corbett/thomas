@@ -2546,7 +2546,21 @@
       }
       if (canvasState.mode === 'render' && canvasState.url) {
         canvasStatus.textContent = canvasState.name || 'Rendered';
-        canvasBody.innerHTML = `<iframe src="${esc(canvasState.url)}#toolbar=0&navpanes=0&view=FitH" title="${esc(canvasState.name || '')}" style="flex:0 0 auto;height:min(72vh,760px);width:100%;border:0;border-radius:10px;background:#fff;"></iframe>`;
+        // allow="fullscreen; clipboard-write" is the SAME defect one layer above
+        // the sandbox tokens. Fullscreen and the async clipboard are Permissions
+        // Policy features whose default allowlist is "self", so the EMBEDDING page
+        // must delegate them or a cross-origin frame is refused. /deliverable/ 302s
+        // an HTML artifact onto its own ephemeral 127.0.0.1:PORT, which makes this
+        // frame cross-origin, and nothing delegated anything -- so the same bytes
+        // that work in a browser tab were dead here.
+        //
+        // Measured across the owner's 414 generated files: clipboard.writeText 3,
+        // requestFullscreen 2. colortoy.html's Copy button awaits
+        // navigator.clipboard.writeText with no catch, so the NotAllowedError
+        // aborted the handler before its "Copied!" label and the button simply did
+        // nothing; snake.html advertises "F fullscreen" on its own start screen and
+        // the key was refused. The model's code was right both times.
+        canvasBody.innerHTML = `<iframe src="${esc(canvasState.url)}#toolbar=0&navpanes=0&view=FitH" title="${esc(canvasState.name || '')}" allow="fullscreen; clipboard-write" style="flex:0 0 auto;height:min(72vh,760px);width:100%;border:0;border-radius:10px;background:#fff;"></iframe>`;
         return;
       }
       if (canvasState.mode === 'building') {
