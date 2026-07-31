@@ -35,6 +35,15 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Fixed (the model you pick now applies to chats you started before you picked it)
+
+- The reported symptom was "the model default reverts across restarts". **Nothing ever reset the store** — the write always landed and survived every restart. What reverted was the *resolution*.
+- `resolve_chat_runtime_policy` ranked a session's own stored profile above the preference: `payload_profile or saved_profile or preferred_profile or default`. Sessions are **born** with a profile (`sessions_aiohttp` creates rows with the current default) and `chat_v2` then rewrites `meta.profile` from this function's own answer every turn — so the snapshot re-arms itself forever. A chat opened while `local` was the default kept resolving `local` no matter what you set, and the preference could never win back a session it had already lost.
+- The empty `model_id` was the same line's second half: once the stale profile won, `profile == preferred_profile` was false, making `preferred_model_id` unreachable and yielding `""`. That pair — `('local', '')` — is exactly what breaks Code, since `ForgeCodeSettings.from_payload` turns an unspecified model into `claude:sonnet`, the Claude CLI that is not logged in here.
+- Why it looked intermittent: **new** chats always resolved correctly, and the web shell sends its own profile every turn, masking it in the app. It bit API/CLI callers and any chat predating the change.
+- The store was ruled out by measurement, not reading: every `thomas.db` under `%LOCALAPPDATA%\Thomas` scanned (none ever held `Local`), `create_app()` run three times against an isolated DB with the value unchanged, and thread-scoped/user-split PATCH variants all leaving `advanced.model` intact.
+- **The known-failing autonomy case one field over was deliberately left alone** — Calvin recorded it in `399e708d` and declined it on purpose, because raising autonomy for existing sessions is a permissions decision. Its `expectedFailure` is still xfailed after this change, verified.
+
 ### Fixed (Thomas tells you again when a deliverable has nothing to do with what you asked)
 
 - The changelog promised this and it stopped being true on 2026-07-27: `6cc89af2` shipped the artifact-intent check **with** its call site, and `87ae37e5` replaced that whole file with a branch version written before the check existed, taking the call with it. Four days of the guarantee being advertised and absent.

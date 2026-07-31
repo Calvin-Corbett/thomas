@@ -57,7 +57,24 @@ def resolve_chat_runtime_policy(
         raise ValueError(f"unknown profile: {payload_profile}")
     saved_profile = str(getattr(session_meta, "profile", "") or "").strip() if saved_meta is not None else ""
     preferred_profile = str(getattr(model_prefs, "active_profile", "") or "").strip()
-    profile = payload_profile or saved_profile or preferred_profile or str(getattr(config, "default_model", "") or "")
+    # A session's stored profile is a SNAPSHOT of the default it was born with:
+    # session rows are created with profile=<current default>, and chat_v2 then
+    # rewrites meta.profile from whatever this function resolved. It therefore
+    # cannot express a choice that advanced.model.active_profile does not
+    # already hold. Ranking it above the preference meant the default from the
+    # day a chat started outranked one set a minute ago, permanently -- a chat
+    # opened while "local" was the default kept resolving ("local", "") however
+    # often the owner PATCHed /api/preferences, and an empty model_id is what
+    # sends Code to the Claude CLI. A known preference now wins; an explicit
+    # per-turn profile still wins over both, and an unknown preference still
+    # yields to the session so a stale name cannot strand a working chat.
+    profile = (
+        payload_profile
+        or (preferred_profile if preferred_profile in models else "")
+        or saved_profile
+        or preferred_profile
+        or str(getattr(config, "default_model", "") or "")
+    )
     if profile not in models and not payload_profile:
         profile = str(getattr(config, "default_model", "") or "")
     if profile not in models and models:
@@ -72,8 +89,13 @@ def resolve_chat_runtime_policy(
         model_id = saved_model_id if payload_profile == saved_profile else ""
         if not model_id and payload_profile == preferred_profile:
             model_id = preferred_model_id
+    elif profile == preferred_profile and preferred_model_id:
+        # The profile came from the preference, so the model id must come from
+        # the same place. Keeping the session's id here paired the new profile
+        # with the old profile's model.
+        model_id = preferred_model_id
     else:
-        model_id = saved_model_id or (preferred_model_id if profile == preferred_profile else "")
+        model_id = saved_model_id if profile == saved_profile else ""
 
     default_autonomy = _autonomy_level(getattr(prefs.autonomy, "default_level", None), default=2)
     if "autonomy_level" in payload:
