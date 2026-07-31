@@ -14,6 +14,11 @@ Versioning: Semantic Versioning.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
 
+### Fixed (a page with a blocked resource reported no coverage at all)
+
+- The blocked-external branch returns before the clean one, and the coverage line was computed only in the latter — so a page that also referenced a Google Font reported a bare `boot only` with nothing about how much went untouched. The caveat was worth *least* on the pages that had most wrong with them.
+- Measured on the flashcards deliverable: `interactive_count` 4, `exercised_controls` 1, summary stopped at `boot only`. Now: `…vendor them into the project folder and reference them locally; boot only; 3 control(s) not exercised`.
+
 ### Added (verification presses controls, and stays quiet about the ones that do nothing)
 
 - A press probe was built and reverted once before: it fired on 3 of 4 button-carrying apps and was wrong every time — a Minesweeper reset face on a fresh board, a 10% tip preset with no bill, "Add task" with an empty field. All three correctly do nothing until something else happens first.

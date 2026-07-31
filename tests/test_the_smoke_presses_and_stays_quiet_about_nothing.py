@@ -146,3 +146,34 @@ def test_the_coverage_line_still_reports_what_was_left_alone() -> None:
         "alone; pressing 6 of 82 then printing only the successes reads as "
         "though the whole page was checked"
     )
+
+
+def test_a_page_with_a_blocked_resource_still_reports_its_coverage() -> None:
+    """The caveat used to be worth less on the pages that had more wrong.
+
+    The blocked-external branch returns before the clean branch, and the
+    coverage line was computed only in the latter -- so a page that also
+    referenced a Google Font reported a bare "boot only" with no coverage at
+    all. Measured on the flashcards deliverable: `interactive_count` 4,
+    `exercised_controls` 1, and the summary stopped at "boot only".
+
+        after: ... vendor them into the project folder and reference them
+               locally; boot only; 3 control(s) not exercised
+    """
+
+    body = _strip_comments(SMOKE)
+    blocked_branch = re.search(r"if blocked:[\s\S]{0,900}?\), receipt", body)
+    assert blocked_branch, "the blocked-external branch is gone"
+    assert "{coverage}" in blocked_branch.group(0), (
+        "a page with a blocked external resource reports no coverage, so the "
+        "pages with the most wrong with them say the least about how little "
+        "was checked"
+    )
+
+    # And the value must be computed before that branch can return, not after.
+    coverage_at = body.find("coverage = f\"; {untouched}")
+    blocked_at = body.find("if blocked:")
+    assert 0 < coverage_at < blocked_at, (
+        "the coverage string is computed after the blocked-external branch "
+        "returns, so that branch can only ever interpolate an empty value"
+    )

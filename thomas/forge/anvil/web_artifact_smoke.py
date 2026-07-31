@@ -390,13 +390,29 @@ def _run_one(
     # action. A note is a caveat about the check, not a result of it.
     notes = "; ".join(f"note: {value}" for value in receipt.get("notes") or [])
     tail = f"; {notes}" if notes else ""
+    # How much of the page went untouched, worked out once and used by BOTH
+    # branches below. It used to be computed only on the clean path, so a page
+    # that also referenced a blocked font reported a bare "boot only" with no
+    # coverage at all -- the caveat was silently worth less on the pages that
+    # had more wrong with them. Measured on the flashcards deliverable:
+    # interactive_count 4, exercised 1, and the summary said "boot only" full
+    # stop.
+    total = int(receipt.get("interactive_count") or 0)
+    exercised = int(receipt.get("exercised_controls") or 0)
+    untouched = max(0, total - exercised)
+    if untouched > 0 and interactions == "boot only":
+        coverage = f"; {untouched} control(s) not exercised"
+    elif untouched > 0:
+        coverage = f"; {untouched} of {total} control(s) not exercised"
+    else:
+        coverage = ""
     if blocked:
         listed = ", ".join(sorted(blocked)[:3])
         return True, (
             f"{name}: booted, but {len(blocked)} external resource(s) will not load for you "
             f"either ({listed}) -- deliverables run with no network and the preview allows no "
             f"remote origins; vendor them into the project folder and reference them locally; "
-            f"{interactions}{tail}"
+            f"{interactions}{coverage}{tail}"
         ), receipt
     # "boot only" reads as "checked". It is not: it means the page loaded and
     # nothing on it was ever touched. Measured across 57 recorded runs, 29 (51%)
@@ -417,15 +433,6 @@ def _run_one(
     # genuinely left alone, and it is reported whether or not anything was
     # driven -- the old version only spoke up when the run was "boot only",
     # which is exactly the case that no longer needs it most.
-    total = int(receipt.get("interactive_count") or 0)
-    exercised = int(receipt.get("exercised_controls") or 0)
-    untouched = max(0, total - exercised)
-    if untouched > 0 and interactions == "boot only":
-        coverage = f"; {untouched} control(s) not exercised"
-    elif untouched > 0:
-        coverage = f"; {untouched} of {total} control(s) not exercised"
-    else:
-        coverage = ""
     return True, f"{name}: browser boot clean; {interactions}{coverage}{tail}", receipt
 
 
