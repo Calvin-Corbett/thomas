@@ -448,7 +448,30 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
                     "message": "build a verified artifact",
                 },
             )
-        self.assertEqual(response.status, 200, await response.text())
+            self.assertEqual(response.status, 200, await response.text())
+
+            # Delegation is no longer inferred from the message. chat_v2 wires
+            # `_send_task` as a CALLBACK the model invokes -- "Routing fields are
+            # structured MODEL choices, never inferred from prose" -- and passes
+            # it to process_message as `send_task` when autonomy >= 3.
+            #
+            # This test used to post prose containing "build a verified artifact"
+            # and expect a handoff to happen by itself. Under the current
+            # architecture no wording can trigger one, so `captured` was always
+            # empty and the test had been red ever since, hiding the policy
+            # assertions below -- which are the point of the test and do pass.
+            #
+            # The fake model does not call tools on its own, so the callback is
+            # invoked here, INSIDE the patch block: outside it,
+            # `start_background_delegation` is the real one and would start work.
+            send_task = _FakeBrain.calls[-1]["kwargs"].get("send_task")
+            self.assertIsNotNone(
+                send_task,
+                "chat_v2 no longer hands the model a send_task callback at autonomy 4, "
+                "so the model has no way to delegate at all",
+            )
+            await send_task(title="verified artifact", instructions="build a verified artifact")
+
         self.assertTrue(captured)
         worker_policy = captured[-1]["runtime_policy"]
         self.assertFalse(worker_policy["tools"]["allow_shell"])

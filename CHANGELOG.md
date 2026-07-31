@@ -24,9 +24,13 @@ Versioning: Semantic Versioning.
 - It was one red assertion buried inside a test with a dozen passing checks, hiding all of them. Now its own `expectedFailure` test carrying the full measurement: the file goes green, the finding stays visible, and it turns **red again the moment someone fixes the behaviour**.
 - I was wrong twice on the way and checked each time: it is not reading the real preferences DB (verified by setting the real value to L4 — still 2), and it is not a stale test asserting pre-0.19 behaviour (the fresh-session case fails too, which killed that reading).
 
-### Still red, pre-existing, not mine
+### Fixed (a second red test that had stopped testing anything)
 
-- `test_worker_handoff_receives_same_immutable_policy` fails with `assertTrue(captured)` on an empty list — the handoff never fires. Fails in isolation and with my new test deselected, so it predates this work and has a different cause. Left for its own investigation rather than folded into this one.
+- `test_worker_handoff_receives_same_immutable_policy` failed on `assertTrue(captured)` against an empty list. Different cause from the autonomy one, and this time the test genuinely was stale.
+- Delegation is no longer inferred from the message. `chat_v2` wires `_send_task` as a **callback the model invokes** — *"Routing fields are structured MODEL choices, never inferred from prose"* — passed to `process_message` as `send_task` when autonomy ≥ 3. The test posted prose ("build a verified artifact") and waited for a handoff to happen by itself. Under the current architecture no wording can cause one, so it could never pass.
+- It was hiding its own point: the policy assertions below the failure — `allow_shell` false, `allow_file_write` false, memory and quality present in the worker's copy — all pass and are what the test is named for.
+- Restored under the current design: the fake model doesn't call tools on its own, so the test now invokes the `send_task` callback **inside** the patch block (outside it, `start_background_delegation` is the real one and would start actual work). Breaking the wiring — `autonomy_level >= 3` → `>= 99` — turns it red again.
+- `tests/test_server_preferences_runtime.py`: **8 passed, 1 xfailed**, from two permanent reds.
 
 ### Added (The model menu says whose account is answering)
 
