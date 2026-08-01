@@ -7,6 +7,12 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (the browser E2E "required done gate" has never gated anything)
+
+- CAP-088 was announced below as "browser validation **is now a required done gate** … integrating with the completion gate", and the module said a missing or failed run "*blocks* completion". **Nothing has ever been blocked by it.** Measured against a control: an AST import-graph probe over `thomas/` + `scripts/` (3139 non-test files) finds **0** production importers of `thomas.browser.e2e_gate`, and **1** for `thomas.agent.completion_gate` — a gate of the same shape (`thomas/agent/loop_completion.py:11`). The probe can see a wired gate, so it could have shown success here.
+- **Not broken — it has no caller, and upstream of that no input.** Against real Chromium it works (a hidden node blocks, a visible one allows), but `enforce_e2e_gate` needs a caller-supplied `E2EFlow` and `E2EFlow(` is built nowhere outside `tests/`. Forcing it on is not a gate either way: steps without assertions return `allow` for a run that asserted nothing; an empty flow, or any machine whose browser-runtime probe reports unavailable, returns `block` for *every* interactive change. A flow producer is a feature, not this fix — so the claim was corrected rather than the code deleted or force-wired, and the module now opens `DORMANT: nothing in production imports this module`.
+- `tests/test_e2e_gate_is_not_wired_in.py` fails in *both* directions — restoring the enforcement sentences while importers is 0 (4 failed, 2 passed), or adding a production importer without deleting the notice (1 failed, 2 passed, 3 skipped). It guards the claim, not the dormancy.
+
 ### Fixed (a protected file whose name starts with a dot was guarded by nothing)
 
 - `_normalize_relpath` ended in `.lstrip("./")`. `str.lstrip` takes a *set* of characters, not a prefix, so it ate every leading `.` and `/` — and every consumer turns the result back into a real filesystem path. `.gitignore`, a `[protected] policy_files` entry in `agent_safety.toml`, became `gitignore`: a name that exists in neither the blue nor the green tree.
@@ -1274,7 +1280,7 @@ Both faults surfaced from one organic Code task — *"read sales.csv and draw a 
 - Governed connector suite (CAP-073): a governed set of productivity/deploy connectors on the BYO-connector contract, with allow/deny policy and a composed cross-app workflow that chains actions across connectors and surfaces mid-workflow failures.
 - Design-system awareness (CAP-115): discover a target project's components and design tokens and recommend reusing them (mapping an off-system value to the nearest on-system token) instead of inventing new ones.
 - CI-native execution (CAP-065): Thomas can run inside a CI job — parse a failure into structured findings, drive the reason→edit→verify loop to create a fix (pass/fail from a real subprocess exit code), and report a machine-readable result plus GitHub-Actions `::error`/`::notice` annotations and `$GITHUB_OUTPUT` vars. The fix step degrades honestly to inspection-only when no model is wired.
-- Real-browser E2E gate (CAP-088): click-type-assert browser validation is now a required done gate for interactive changes — asserting on *computed* visibility (not innerText on hidden nodes), failing closed when no browser is present, and integrating with the completion gate.
+- Real-browser E2E gate *mechanism* (CAP-088): click-type-assert browser validation for interactive changes — asserting on *computed* visibility (not innerText on hidden nodes), failing closed when no browser is present, and emitting the completion gate's own `allow`/`block` decision shape. **Not wired in:** nothing in production imports it, so it is not yet a required done gate and has never blocked a run. See the Fixed entry above.
 - Fleet TUI (CAP-099): a terminal fleet dashboard with navigate, peek, attach, reply, and a live task graph — rendered as a pure, snapshot-testable frame.
 - Embedding SDK (CAP-131): a full-harness SDK (`thomas/sdk/`) with a stable client API and an embeddable Agent View, proven end-to-end with a simulated third-party host over an injectable transport.
 - Post-deploy monitoring loop (CAP-121): deployed-app health and error signals feed back to the agent as structured findings, each trace-linked so a deployed error points back to the originating change/run.

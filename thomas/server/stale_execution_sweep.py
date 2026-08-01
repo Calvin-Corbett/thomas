@@ -26,7 +26,24 @@ log = logging.getLogger(__name__)
 # record means nobody is driving it.
 _STALE_AFTER_S = 15 * 60.0
 _SWEEP_INTERVAL_S = 10 * 60.0
-_TERMINAL = {"completed", "done", "verified", "succeeded", "passed", "failed", "blocked", "error", "cancelled"}
+# Foreign spellings this sweep still recognises on top of
+# task_bot_runtime.TERMINAL_STATES, which is the vocabulary the ledger actually
+# WRITES: the workboard's "done", the pre-completion "verified", and
+# succeeded/passed/error from non-ledger producers. Same alias list as
+# chat_v2_announcements, and derived from the writer for the same reason: the
+# literal that used to sit here disagreed with it in BOTH directions.
+#
+# It omitted "abandoned", so an already-ended record -- ALLOWED_TRANSITIONS
+# gives it no successor at all -- was rewritten to "failed" with a made-up "no
+# activity for N min (likely a restart) and did not finish", erasing its real
+# ending and filing an issue about a task nothing had interrupted.
+#
+# It listed "blocked", so the one state this module exists to rescue was the one
+# it skipped. blocked goes back to queued/claimed/executing, so it is a pause,
+# not an ending; every other waiting state (requested/queued/claimed/
+# awaiting_proof) was already swept and blocked was the lone exception.
+_SWEEP_TERMINAL_ALIASES = frozenset({"done", "verified", "succeeded", "passed", "error"})
+_TERMINAL = task_bot_runtime.TERMINAL_STATES | _SWEEP_TERMINAL_ALIASES
 
 
 def _stamped_at(record: dict[str, Any]) -> datetime | None:

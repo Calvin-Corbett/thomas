@@ -204,6 +204,13 @@ _SMOKE_HARNESS = r"""
     state.dom_ready = true;
     setTimeout(() => {
       try {
+        // The NODES this check drove, not a count of them. `exercised_controls`
+        // used to be `pressable.length + (alreadyDriven ? 1 : 0)`, and the probes
+        // overlap: the start probe, the nav probe and the type-then-press probe
+        // all click controls the press probe then finds again in `pressable`, so
+        // the same button was counted twice and the total could exceed the number
+        // of controls on the page. See where it is published, below.
+        const driven = new Set();
         const controls = [...document.querySelectorAll("button, [role='button']")];
         // VISIBLE and enabled. Matching on button words alone picks whichever
         // one happens to come first in the document, and star-catcher.html
@@ -220,6 +227,7 @@ _SMOKE_HARNESS = r"""
           const starterLabel = clean(starter.textContent);
           const bodyBefore = clean(document.body?.innerText || "");
           starter.click();
+          driven.add(starter);
           state.interactions.push(`clicked:${starterLabel}`);
           setTimeout(() => {
             const starterChanged = !visible(starter) || starter.disabled
@@ -365,6 +373,7 @@ _SMOKE_HARNESS = r"""
             const label = clean(node.textContent).slice(0, 24);
             const before = observableSignature(document.querySelector("canvas"));
             try { node.click(); } catch (_error) { return; }
+            driven.add(node);
             if (observableSignature(document.querySelector("canvas")) === before) inert += 1;
             else state.interactions.push(`nav:${label}`);
           });
@@ -468,6 +477,8 @@ _SMOKE_HARNESS = r"""
               field.dispatchEvent(new Event("input", {bubbles: true}));
               field.dispatchEvent(new Event("change", {bubbles: true}));
               button.click();
+              driven.add(field);
+              driven.add(button);
               if (observableSignature(document.querySelector("canvas")) !== before) {
                 state.interactions.push(`typed:${sample}`, `clicked:${label}`);
               } else {
@@ -500,7 +511,6 @@ _SMOKE_HARNESS = r"""
         // `pressed_controls` is published so the coverage line can keep telling
         // the truth about the REST of the page: pressing 6 of 82 must not be
         // allowed to read as though the whole thing was checked.
-        const alreadyDriven = state.interactions.length;
         const pressable = [...document.querySelectorAll("button, [role='button']")]
           .filter((node) => visible(node) && !node.disabled)
           .filter((node) => !/(delete|remove|clear|reset|restart|erase|trash|discard|wipe|start over|cancel|sign out|log out|submit order|buy|pay)/i.test(
@@ -524,6 +534,7 @@ _SMOKE_HARNESS = r"""
           const pressLabel = (clean(node.textContent) || clean(node.getAttribute("aria-label")) || "control").slice(0, 24);
           const before = observableSignature(document.querySelector("canvas"));
           try { node.click(); } catch (_error) { return; }
+          driven.add(node);
           if (observableSignature(document.querySelector("canvas")) !== before) {
             responded += 1;
             pushUnique(state.interactions, `pressed:${pressLabel}`);
@@ -531,7 +542,26 @@ _SMOKE_HARNESS = r"""
         });
         state.pressed_controls = pressable.length;
         state.pressed_responded = responded;
-        state.exercised_controls = pressable.length + (alreadyDriven ? 1 : 0);
+        // DISTINCT nodes, which `pressable.length + (alreadyDriven ? 1 : 0)` was
+        // not. The probes above overlap with this one: the start probe clicks a
+        // control that `pressable` re-selects a moment later, and so does the
+        // type-then-press probe, so a control both drove was counted twice while
+        // a nav probe that clicked eight added one.
+        //
+        // The double count could exceed the number of controls on the page, and
+        // web_artifact_smoke.py clamps `total - exercised` at zero -- so it did
+        // not print a negative, it printed NOTHING, deleting the coverage line on
+        // a page that really did have controls nobody pressed. Measured on two
+        // seven-button pages differing only in the first button's label::
+        //
+        //     first button "Alpha"       exercised 6  "1 of 7 control(s) not exercised"
+        //     first button "Start Game"  exercised 7  (no coverage line at all)
+        //
+        // Both runs pressed the same six buttons and left "Golf" untouched, and
+        // the second run's own summary says so twice over -- it lists
+        // "clicked:Start Game, pressed:Start Game" and reports pressed_controls 6
+        // next to exercised_controls 7.
+        state.exercised_controls = driven.size;
       } catch (error) {
         pushUnique(state.errors, error);
       }

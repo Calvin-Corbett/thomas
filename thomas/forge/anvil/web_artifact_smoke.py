@@ -145,28 +145,51 @@ def _allowed_proxy_path(raw_target: str, host_header: str = "") -> str | None:
 _BROWSER_INITIATED_PATHS = {"favicon.ico", "apple-touch-icon.png", "apple-touch-icon-precomposed.png"}
 
 
+def _asset_is_absent(root: Path, request_path: str) -> bool:
+    """Is the file the page asked for really not in the project folder?
+
+    `_safe_web_path` returns None both when the file is absent and when it is
+    there but this harness declines it. Only the first is a fact about the
+    deliverable, so ask the folder rather than infer it from the 404.
+    """
+
+    try:
+        target = (root / request_path).resolve()
+    except (OSError, ValueError):
+        return True
+    return not (target.is_relative_to(root) and target.is_file())
+
+
 def _handler_for(
     root: Path,
     page_path: str,
     instrumented: bytes,
     missing: list[str] | None = None,
+    unservable: list[str] | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     class ArtifactHandler(BaseHTTPRequestHandler):
         def _note_missing(self, request_path: str) -> None:
-            """Record a file the PAGE asked for that is not in the folder.
+            """Record a file the PAGE asked for and did not get.
 
             A `fetch` that 404s is an ordinary response, not an `error` event,
             so nothing in the receipt sees it: `resource_errors` only catches
             `<script src>`/`<img>`-style failures, and a page that handles its
             own failure tidily raises nothing at all. The server, on the other
-            hand, simply knows. This is a fact about the deliverable rather than
-            an inference about it.
+            hand, simply knows.
+
+            Which BUCKET it lands in is decided by LOOKING, because "not in the
+            project folder" used to be asserted from the 404 alone. For any
+            suffix outside `_WEB_ASSET_SUFFIXES` -- every audio and video format
+            among them, though this harness's own CSP grants `media-src 'self'`
+            -- present and absent produced byte-identical runs, so that sentence
+            had one reachable answer whatever the folder held.
             """
 
-            if missing is None or request_path in _BROWSER_INITIATED_PATHS:
+            if request_path in _BROWSER_INITIATED_PATHS:
                 return
-            if request_path not in missing:
-                missing.append(request_path)
+            bucket = missing if _asset_is_absent(root, request_path) else unservable
+            if bucket is not None and request_path not in bucket:
+                bucket.append(request_path)
 
         def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler contract
             allowed_path = _allowed_proxy_path(self.path, self.headers.get("Host", ""))
@@ -224,8 +247,9 @@ def _run_one(
 
     page_path = str(path.relative_to(root)).replace("\\", "/")
     missing: list[str] = []
+    unservable: list[str] = []
     server = ThreadingHTTPServer(
-        ("127.0.0.1", 0), _handler_for(root, page_path, _instrument_html(source).encode(), missing)
+        ("127.0.0.1", 0), _handler_for(root, page_path, _instrument_html(source).encode(), missing, unservable)
     )
     server.daemon_threads = True
     thread = threading.Thread(target=server.serve_forever, name="thomas-web-smoke", daemon=True)
@@ -327,9 +351,21 @@ def _run_one(
     # got far enough to do. Asking the server closes all three at once, and it
     # is a fact rather than a heuristic: the file was requested, and it is not
     # there.
+    server_notes: list[str] = []
     if missing:
         listed = ", ".join(sorted(missing)[:5])
         problems.append(f"the page asked for {listed}, which is not in the project folder")
+    # A file this harness DECLINED is a gap in the check, not a defect of the
+    # page, so it is a note and never a failure -- same shape as the blocked
+    # external resources below. Failing it accused a correct deliverable of
+    # shipping without a file sitting beside its own index.html, and sent the
+    # repair loop off to create a file that already exists.
+    if unservable:
+        listed = ", ".join(sorted(unservable)[:5])
+        server_notes.append(
+            f"the page asked for {listed}, which IS in the project folder; this check serves only "
+            f"the web formats a browser parses, so the page ran without it"
+        )
     # A <canvas> in the DOM is not a drawing. A game that renders nothing has
     # the same markup as a game that renders perfectly, so accepting the element
     # as proof of rendering passed exactly the builds this check exists to
@@ -352,7 +388,11 @@ def _run_one(
     elif not (int(receipt.get("body_text_chars") or 0) > 0 or bool(canvas)):
         problems.append("page rendered no text or canvas")
     if problems:
-        return False, f"{name}: " + "; ".join(problems[:5]), receipt
+        failed = "; ".join(problems[:5])
+        # The note rides the FAILURE too: an unserved data file is often why the
+        # chart above it came back blank, and the reader needs both halves.
+        failed += "".join(f"; note: {value}" for value in server_notes)
+        return False, f"{name}: {failed}", receipt
     # "boot only" is a claim about what the CHECK did, and this module defines it
     # in its own words below: "it means the page loaded and nothing on it was
     # ever touched". Since the press-and-observe probe landed, that stopped being
@@ -411,7 +451,7 @@ def _run_one(
     # thing that happened: "clicked:Start Over; clicked a start-like control and
     # saw no change" gives a reader no way to tell the observation from the
     # action. A note is a caveat about the check, not a result of it.
-    notes = "; ".join(f"note: {value}" for value in receipt.get("notes") or [])
+    notes = "; ".join(f"note: {value}" for value in [*(receipt.get("notes") or []), *server_notes])
     tail = f"; {notes}" if notes else ""
     # How much of the page went untouched, worked out once and used by BOTH
     # branches below. It used to be computed only on the clean path, so a page

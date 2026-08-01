@@ -30,14 +30,25 @@
     render = deps.render;
   }
 
-  function reportRow(ok, heading, label) {
+  // Did the engine SKIP this check rather than run it? Matched on the engine's
+  // own marker rather than the word "skipped", which turns up in unrelated
+  // evidence such as "1 files checked, 1 skipped". Same test run_report.py uses
+  // (`_SKIPPED_EVIDENCE`), so the two surfaces cannot drift.
+  //
+  // Module scope because BOTH the per-check rows and the headline counts need
+  // it, and the rows are built first. See the long note in runReportHtml.
+  function wasSkipped(item) {
+    return /[A-Z][A-Z_]*_SKIPPED\b/.test(String((item && item.evidence) || ''));
+  }
+
+  function reportRow(ok, heading, label, glyph) {
     // Whole class names, never a bare `ph-` prefix with the suffix interpolated
     // after it. The icon guard scans for literal `ph-*` names, so a suffix
     // assembled at runtime is invisible to it: a bogus name injected here
     // rendered as a bullet on every "Check passed" row while
     // tests/test_every_icon_the_ui_asks_for_is_drawn.py stayed green. Written in
     // full, the name is a literal the guard can see.
-    return `<div class="tc-code-technical${ok ? '' : ' is-error'}"><i class="ph ${ok ? 'ph-check-circle' : 'ph-warning'}"></i><div><strong>${esc(heading)}</strong><code>${esc(label)}</code></div></div>`;
+    return `<div class="tc-code-technical${ok ? '' : ' is-error'}"><i class="ph ${glyph || (ok ? 'ph-check-circle' : 'ph-warning')}"></i><div><strong>${esc(heading)}</strong><code>${esc(label)}</code></div></div>`;
   }
 
   function reportSection(title, rows) {
@@ -53,7 +64,21 @@
     if (!report || typeof report !== 'object') return '';
     const list = value => Array.isArray(value) ? value : [];
     const attempts = list(report.attempts).map(item => reportRow(!/fail/i.test(String(item.outcome || '')), `Pass ${item.pass || '?'} · ${String(item.outcome || 'unknown')}`, `${String(item.goal || '')} → ${String(item.exit_state || '')}`));
-    const validations = list(report.validations).map(item => reportRow(item.passed === true, item.passed === true ? 'Check passed' : 'Check failed', `${String(item.command || item.kind || 'check')} — ${String(item.evidence || '')}`));
+    // The headline already separates a skipped check from a passing one; this
+    // row did not. `passed` is the absence of an error, so a check that never
+    // ran arrives flagged true, and the row rendered "Check passed" under a
+    // green tick beside evidence reading BROWSER_SMOKE_SKIPPED. Measured: the
+    // same card said "1/1 check passed · 1 check skipped" on its face and
+    // "Check passed / Check passed" in the Validations section a reviewer opens
+    // to see WHICH check -- the detail surface was the one stating the false
+    // thing. Failed still outranks skipped, matching the headline's ordering.
+    const validations = list(report.validations).map(item => {
+      const failed = item.passed !== true;
+      const skippedItem = !failed && wasSkipped(item);
+      const heading = failed ? 'Check failed' : (skippedItem ? 'Check skipped' : 'Check passed');
+      const label = `${String(item.command || item.kind || 'check')} — ${String(item.evidence || '')}`;
+      return reportRow(!failed, heading, label, skippedItem ? 'ph-info' : '');
+    });
     const risks = list(report.open_risks).map(item => reportRow(false, String(item.risk || 'open risk'), String(item.detail || '')));
     const pointers = list(report.attention_pointers).map(item => reportRow(true, `#${item.rank || '?'} ${String(item.target || '')}`, String(item.why || '')));
     const rubric = list(report.rubric_mapping).map(item => reportRow(item.status === 'met', `${String(item.status || 'unverified')} · ${String(item.criterion || '')}`, String(item.evidence || '')));
@@ -85,9 +110,7 @@
     // (run_report._unopened_page_risks), so the tone was right; only the count
     // was wrong.
     //
-    // Matched on the engine's own marker rather than the word "skipped", which
-    // turns up in unrelated evidence such as "1 files checked, 1 skipped".
-    const wasSkipped = item => /[A-Z][A-Z_]*_SKIPPED\b/.test(String(item.evidence || ''));
+    // `wasSkipped` is module scope, above -- the per-check rows need it too.
     const skipped = checks.filter(wasSkipped).length;
     const ran = checks.length - skipped;
     const passed = checks.filter(item => item.passed === true && !wasSkipped(item)).length;

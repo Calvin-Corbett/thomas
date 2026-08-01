@@ -81,6 +81,52 @@ def test_the_idle_sweep_is_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "no activity for" in failed[0]["summary"]
 
 
+def test_a_task_the_user_abandoned_keeps_its_own_ending(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Before: the sweep closed 4 of 5 aged records and "abandoned" was one of
+    them -- rewritten to failed with "no activity for 180 min ... did not
+    finish", though ALLOWED_TRANSITIONS["abandoned"] is empty, so nothing had
+    interrupted it and nothing could follow it. After: 4 of 5 again, but
+    abandoned is not one of them. The old literal listed 8 states and this was
+    the one terminal state it missed."""
+    now = datetime.now(timezone.utc)
+    failed = _rows(monkeypatch, [_rec("exec-gone", now - timedelta(hours=3), state="abandoned")])
+
+    assert sweep.sweep_stale_executions(None) == 0
+    assert failed == []
+
+
+def test_a_blocked_task_nobody_is_driving_still_reaches_an_ending(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Before: 0 closed -- "blocked" sat in the sweep's terminal literal, so the
+    one waiting state that outlives its worker was the one state this module
+    skipped, while queued/claimed/awaiting_proof beside it were all closed.
+    After: 1 closed. blocked returns to queued/claimed/executing per
+    ALLOWED_TRANSITIONS and is absent from TERMINAL_STATES, so it is a pause,
+    not an ending -- the same reading chat_v2_announcements settled on."""
+    now = datetime.now(timezone.utc)
+    failed = _rows(monkeypatch, [_rec("exec-stuck", now - timedelta(hours=3), state="blocked")])
+
+    assert sweep.sweep_stale_executions(None) == 1
+    assert failed[0]["execution_id"] == "exec-stuck"
+
+
+def test_the_sweep_never_disagrees_with_the_module_that_writes_the_states() -> None:
+    """The pair that drifted. _TERMINAL is derived from
+    task_bot_runtime.TERMINAL_STATES now, so it cannot again claim a state is
+    over that the writer says is not, nor miss one the writer says is. Before,
+    the two differed by 7 spellings: blocked/done/error/passed/succeeded/
+    verified on one side, abandoned on the other."""
+    from thomas.core import task_bot_runtime
+
+    assert task_bot_runtime.TERMINAL_STATES <= sweep._TERMINAL
+    live = task_bot_runtime.VALID_STATES - task_bot_runtime.TERMINAL_STATES
+    # "verified" is the one live state kept out of the sweep on purpose: it has
+    # its proof and only awaits the completed write, so failing it would erase a
+    # real success. Nothing else the ledger can hold is called over.
+    assert live & sweep._TERMINAL == {"verified"}
+
+
 def test_a_record_with_no_timestamp_is_not_reaped_at_startup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

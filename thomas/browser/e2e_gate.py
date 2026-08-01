@@ -1,12 +1,24 @@
-"""Real-browser click-type-assert E2E as a required done gate (CAP-088).
+"""Real-browser click-type-assert E2E gate mechanism (CAP-088).
+
+DORMANT: nothing in production imports this module, so it gates nothing today.
+This is the mechanism a required browser gate would be built from, not a gate
+in force.  The missing piece is an *input*, not a call site:
+:func:`enforce_e2e_gate` needs a caller-supplied :class:`E2EFlow` -- the
+click/type/assert steps for the change under review -- and no production module
+builds one.  Forcing it on without a flow producer is not a gate either way:
+assertion-free steps answer ``allow`` for a run that asserted nothing, and an
+empty flow (or a machine lacking the browser runtime) answers ``block`` for
+every interactive change.  Delete this notice in the same change that adds a
+production caller; ``tests/test_e2e_gate_is_not_wired_in`` fails when the notice
+and the import graph disagree, in either direction.
 
 The existing headless smoke (``thomas.forge.anvil.web_artifact_smoke``) proves
 that a web artifact *boots* without console errors -- it is advisory and
-boot-only.  This module promotes browser validation to a *required* completion
-gate for interactive changes:
+boot-only.  This module supplies the three parts a *required* completion gate
+for interactive changes would need:
 
 1. an INTERACTIVE-CHANGE CLASSIFIER decides whether a change touches
-   UI/interactive surfaces and therefore *requires* a browser E2E run;
+   UI/interactive surfaces and would therefore *require* a browser E2E run;
 2. a CLICK-TYPE-ASSERT flow runner drives an *injectable* browser driver
    (a real Playwright-backed default via the live ``thomas.tools.browser``
    seam, and a hermetic fake for tests) performing click/type steps and
@@ -14,9 +26,10 @@ gate for interactive changes:
    assertions are refused on non-computed-visible nodes, closing the
    hidden-DOM verification trap (reading ``innerText`` off a ``display:none``
    node must never satisfy an assertion);
-3. the result is promoted to a REQUIRED gate: for an interactive change a
-   missing or failed E2E run *blocks* completion, and the gate is **fail-closed**
-   when no real browser is present.
+3. the result is *shaped* for promotion to a REQUIRED gate: for an interactive
+   change a missing or failed E2E run yields ``block``, and the outcome is
+   **fail-closed** when no real browser is present.  Nothing acts on that
+   outcome yet.
 
 Integration with the completion gate is done by *shape*, not by import: the
 gate emits an outcome whose string values mirror
@@ -24,7 +37,9 @@ gate emits an outcome whose string values mirror
 :func:`to_gate_decision` builds a real ``GateDecision`` through an injected
 factory.  This keeps the ext-tier ``browser`` package from importing the
 core-tier ``agent`` package (see ``thomas/_architecture.py``) while still
-producing the exact completion-gate decision shape.
+producing the exact completion-gate decision shape.  No production caller
+performs that integration: ``thomas.agent.loop_completion`` builds its
+``GateDecision`` from ``thomas.agent.completion_gate`` alone.
 """
 
 from __future__ import annotations

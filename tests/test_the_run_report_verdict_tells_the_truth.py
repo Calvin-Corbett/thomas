@@ -26,6 +26,7 @@ did check its requirements must still read "Checks passed".
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -145,6 +146,19 @@ def render():
 
         yield _render
         browser.close()
+
+
+def _validation_rows(html: str) -> list[tuple[str, str, str]]:
+    """(heading, glyph, evidence) for each row in the Validations section."""
+    assert "<summary>Validations" in html, "the report rendered no Validations section"
+    block = html.split("<summary>Validations", 1)[1].split("</details>", 1)[0]
+    rows = re.findall(r'<div class="tc-code-technical(?: is-error)?">.*?</div></div>', block)
+    out = []
+    for row in rows:
+        heading = row.split("<strong>", 1)[1].split("</strong>", 1)[0]
+        glyph = re.search(r'class="ph ([a-z0-9-]+)"', row).group(1)
+        out.append((heading, glyph, row.split("<code>", 1)[1].split("</code>", 1)[0]))
+    return out
 
 
 def _verdict(html: str) -> str:
@@ -371,6 +385,74 @@ def test_the_word_skipped_in_unrelated_evidence_does_not_downgrade_a_pass(render
     assert _verdict(html) == "Checks passed"
     assert "1/1 check passed" in html
     assert "check skipped" not in html
+
+
+def test_the_row_for_a_skipped_check_does_not_say_the_check_passed(render) -> None:
+    """The headline learned to separate skipped from passed; the per-check row
+    never did, and the row is what a reviewer opens to see WHICH check.
+
+    Rendered from the same report, on the same card:
+
+        face of the card   "1/1 check passed · 1 check skipped"   (honest)
+        Validations (2)    "Check passed"  ph-check-circle        (the run)
+                           "Check passed"  ph-check-circle        <- never ran
+
+    After: the second row reads "Check skipped" under ph-info, and the first is
+    untouched. `passed` is the absence of an error, so a skipped check arrives
+    flagged true -- the evidence string is the only thing that knows.
+    """
+    html = render(
+        {
+            "attempts": [{"pass": 1, "goal": "g", "outcome": "completed", "exit_state": "exit 0"}],
+            "validations": [_PASSING_CHECK, _SKIPPED_SMOKE],
+            "open_risks": [],
+            "rubric_mapping": [{"criterion": "c", "status": "met", "evidence": "e"}],
+        }
+    )
+    rows = _validation_rows(html)
+
+    assert len(rows) == 2
+    assert [heading for heading, _, _ in rows] == ["Check passed", "Check skipped"]
+    # The check that really ran keeps its tick; the one that did not must not
+    # borrow it -- a green tick beside "skipped" reads as a pass at a glance.
+    assert rows[0][1] == "ph-check-circle"
+    assert rows[1][1] != "ph-check-circle"
+    assert "BROWSER_SMOKE_SKIPPED" in rows[1][2]
+    # A skip is not a failure either: no error styling, and the count stands.
+    assert "1/1 check passed" in html
+    assert "1 check skipped" in html
+
+
+def test_a_failing_check_still_reads_as_failed_even_with_a_skip_marker(render) -> None:
+    """The severity control. Skipped must not soften a check that actually ran
+    and failed, and the word "skipped" in ordinary static-verify evidence
+    ("2 files checked, 1 skipped") must not relabel a genuine pass."""
+    html = render(
+        {
+            "attempts": [{"pass": 1, "goal": "g", "outcome": "failed", "exit_state": "exit 1"}],
+            "validations": [
+                {
+                    "kind": "engine_check",
+                    "command": "static checks",
+                    "passed": True,
+                    "evidence": "exit 0 STATIC_VERIFY_OK: 2 files checked, 1 skipped",
+                },
+                {
+                    "kind": "engine_check",
+                    "command": "offline real-browser smoke",
+                    "passed": False,
+                    "evidence": "BROWSER_SMOKE_SKIPPED: ran, then the page threw",
+                },
+            ],
+            "open_risks": [],
+            "rubric_mapping": [{"criterion": "c", "status": "met", "evidence": "e"}],
+        }
+    )
+    rows = _validation_rows(html)
+
+    assert [heading for heading, _, _ in rows] == ["Check passed", "Check failed"]
+    assert rows[1][1] == "ph-warning"
+    assert 'is-error"' in html.split("<summary>Validations", 1)[1].split("</details>", 1)[0]
 
 
 def test_open_risks_do_not_hide_behind_an_unverified_headline(render) -> None:
