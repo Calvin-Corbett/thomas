@@ -7,6 +7,21 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Added (a run you stopped reads as stopped, not failed)
+
+- The transcript card had two endings — `delegation_failed` and `delegation_completed` — so a run the owner **stopped** was filed as a crash. I left that open twice today and said why at the line: telling the truth about a deliberate stop needs a third result type and a renderer that draws it, and calling it "completed" would have been just as false as calling it "failed".
+- `delegation_cancelled` now routes to its own ending with its own word throughout. Driven through the real functions with `state='cancelled'`:
+
+  ```
+  chat text     Task failed: ...    ->  Task stopped: ...
+  strip status  failed              ->  cancelled
+  badge label   Failed              ->  Stopped
+  checkpoint    Needs review.       ->  Stopped on purpose.
+  event type    delegation_failed   ->  delegation_cancelled
+  ```
+- `failed` and `completed` are unchanged, and `blocked` still writes no card at all — the guards either side hold both ends down. A third type nothing renders would be a quieter version of the same lie, so a guard also pins the badge word, the tone, and the CSS rule that draws it.
+- The two style rules sit in `components.css` rather than beside their siblings in `components_parts/`, because that directory name matches the monolith filename guard's `[_-]parts?$` pattern and any commit staging a file from it is refused. Recorded in a comment at both the rule and the test that reads it.
+
 ### Fixed (the browser E2E "required done gate" has never gated anything)
 
 - CAP-088 was announced below as "browser validation **is now a required done gate** … integrating with the completion gate", and the module said a missing or failed run "*blocks* completion". **Nothing has ever been blocked by it.** Measured against a control: an AST import-graph probe over `thomas/` + `scripts/` (3139 non-test files) finds **0** production importers of `thomas.browser.e2e_gate`, and **1** for `thomas.agent.completion_gate` — a gate of the same shape (`thomas/agent/loop_completion.py:11`). The probe can see a wired gate, so it could have shown success here.

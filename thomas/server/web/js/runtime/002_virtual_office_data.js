@@ -538,16 +538,23 @@ function createDelegationBadge(specialistId, task) {
     return badge;
 }
 
+// One glyph table for the two call sites below. A stopped run is finished, so it
+// gets its own mark instead of spinning forever behind the default branch.
+function agentActivityStatusIcon(status) {
+    if (status === 'completed') return '<i class="ph ph-check-circle" style="color:#3fb950"></i>';
+    if (status === 'failed') return '<i class="ph ph-x-circle" style="color:#f85149"></i>';
+    if (status === 'cancelled' || status === 'canceled' || status === 'stopped') {
+        return '<i class="ph ph-stop" style="color:#d8b874"></i>';
+    }
+    return '<span class="tool-call-spinner"></span>';
+}
+
 function createAgentActivityRow(agentId, status, currentTask, elapsedMs) {
     const row = document.createElement('div');
     row.className = 'agent-activity-row';
     row.dataset.agentId = agentId;
     row.dataset.status = status || 'running';
-    const statusIcon = status === 'completed'
-        ? '<i class="ph ph-check-circle" style="color:#3fb950"></i>'
-        : status === 'failed'
-            ? '<i class="ph ph-x-circle" style="color:#f85149"></i>'
-            : '<span class="tool-call-spinner"></span>';
+    const statusIcon = agentActivityStatusIcon(status);
     const elapsed = elapsedMs > 0 ? ` (${(elapsedMs / 1000).toFixed(1)}s)` : '';
     row.innerHTML = `
         <span class="agent-activity-status">${statusIcon}</span>
@@ -570,11 +577,7 @@ function upsertAgentActivity(container, agentId, status, currentTask, elapsedMs)
         const statusEl = existing.querySelector('.agent-activity-status');
         const taskEl = existing.querySelector('.agent-activity-task');
         if (statusEl) {
-            statusEl.innerHTML = status === 'completed'
-                ? '<i class="ph ph-check-circle" style="color:#3fb950"></i>'
-                : status === 'failed'
-                    ? '<i class="ph ph-x-circle" style="color:#f85149"></i>'
-                    : '<span class="tool-call-spinner"></span>';
+            statusEl.innerHTML = agentActivityStatusIcon(status);
         }
         if (taskEl) {
             const elapsed = elapsedMs > 0 ? ` (${(elapsedMs / 1000).toFixed(1)}s)` : '';

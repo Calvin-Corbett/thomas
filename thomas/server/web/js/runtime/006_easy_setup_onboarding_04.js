@@ -198,22 +198,20 @@ function appendTerminalDelegationActivityResults(activity) {
         if (!chatTaskIsTerminal(state) || state === 'blocked') return;
         const executionId = safeString(row?.execution_id);
         if (!executionId) return;
-        // KNOWN, NOT FIXED HERE: `cancelled` is still reported as a failure.
-        // task_bot_runtime says at its own line that "'cancelled' is its own
-        // ending. Stopping a run on purpose is not a failure", and the Mission
-        // Control board was corrected to match. This card is binary --
-        // delegation_failed or delegation_completed -- so saying it truthfully
-        // needs a third result type and a renderer that draws it. Calling a run
-        // you stopped "failed" is wrong; calling it "completed" is also wrong.
-        // Left as-is rather than trading one false label for another.
-        const failed = state === 'failed' || state === 'cancelled' || state === 'dead';
+        // `cancelled` gets its own ending, matching task_bot_runtime -- "'cancelled'
+        // is its own ending. Stopping a run on purpose is not a failure" -- and the
+        // Mission Control board. Calling a run you stopped "failed" is wrong and
+        // "completed" is wrong too, so there is a third type: delegation_cancelled,
+        // drawn by chatTaskWasStopped in 003_easy_setup_onboarding_01.js.
+        const stopped = state === 'cancelled' || state === 'canceled';
+        const failed = state === 'failed' || state === 'dead';
         const summary = safeString(row?.last_progress || row?.summary || row?.task || row?.current_task);
         appendDelegationResultMessage({
             ...row,
-            type: failed ? 'delegation_failed' : 'delegation_completed',
+            type: stopped ? 'delegation_cancelled' : (failed ? 'delegation_failed' : 'delegation_completed'),
             session_id: safeString(row?.session_id) || scopedSessionId,
         }, {
-            status: failed ? 'failed' : 'completed',
+            status: stopped ? 'cancelled' : (failed ? 'failed' : 'completed'),
             summary,
         });
     });

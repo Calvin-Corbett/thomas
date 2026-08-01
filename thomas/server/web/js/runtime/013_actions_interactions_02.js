@@ -322,6 +322,9 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
         }
         function _delegationEventTypeForState(state) {
             const lower = safeString(state).toLowerCase();
+            // A stop is its own ending -- see chatTaskWasStopped. Checked before the
+            // completed/failed split so it cannot be filed as a crash.
+            if (chatTaskWasStopped(lower)) return 'delegation_cancelled';
             return _delegationIsTerminalState(state)
                 ? (lower === 'completed' || lower === 'verified' ? 'delegation_completed' : 'delegation_failed')
                 : 'delegation_progress';
@@ -403,7 +406,9 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                 ? 'completed'
                 : evtType === 'delegation_failed'
                     ? 'failed'
-                    : safeString(evt.state) || 'running';
+                    : evtType === 'delegation_cancelled'
+                        ? 'cancelled'
+                        : safeString(evt.state) || 'running';
             const cacheKey = `${activityId}::${status}::${taskText}`;
             const alreadySeen = _delegationStateCache.get(activityId) === cacheKey;
             _delegationStateCache.set(activityId, cacheKey);
@@ -442,7 +447,9 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             }
             if (!alreadySeen) {
                 const stripStatus = _delegationIsTerminalState(status)
-                    ? (safeString(status).toLowerCase() === 'failed' ? 'failed' : 'completed')
+                    ? (chatTaskWasStopped(status)
+                        ? 'cancelled'
+                        : (safeString(status).toLowerCase() === 'failed' ? 'failed' : 'completed'))
                     : 'executing';
                 // Strip backend tags like "[provider_native]" out of user-facing text.
                 const cleanText = safeString(taskText || label).replace(/^\s*\[[^\]]+\]\s*/, '').trim();

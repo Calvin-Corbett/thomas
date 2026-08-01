@@ -109,10 +109,18 @@ function renderTaskDefinitionUi(definition, evaluation, statusRaw) {
     }
 }
 
+// A run the owner stopped is a third kind of ending, not an error.
+// task_bot_runtime says so at its own line: "'cancelled' is its own ending.
+// Stopping a run on purpose is not a failure."
+function chatTaskWasStopped(statusRaw) {
+    return ['cancelled', 'canceled', 'stopped'].includes(safeString(statusRaw).toLowerCase());
+}
+
 function chatTaskStatusTone(statusRaw) {
     const status = safeString(statusRaw).toLowerCase();
     if (['completed', 'complete', 'passed', 'succeeded'].includes(status)) return 'completed';
-    if (['failed', 'blocked', 'abandoned', 'cancelled', 'dead'].includes(status)) return 'failed';
+    if (chatTaskWasStopped(status)) return 'stopped';
+    if (['failed', 'blocked', 'abandoned', 'dead'].includes(status)) return 'failed';
     if (['defining', 'spawning', 'starting', 'pending', 'queued'].includes(status)) return 'starting';
     if (['quiet', 'waiting', 'paused', 'idle'].includes(status)) return 'quiet';
     return 'running';
@@ -127,13 +135,16 @@ function chatTaskStatusLabel(statusRaw) {
     if (status === 'quiet' || status === 'waiting') return 'Waiting';
     if (status === 'paused') return 'Paused';
     if (['completed', 'complete', 'passed', 'succeeded'].includes(status)) return 'Completed';
-    if (['failed', 'blocked', 'abandoned', 'cancelled', 'dead'].includes(status)) return 'Failed';
+    if (chatTaskWasStopped(status)) return 'Stopped';
+    if (['failed', 'blocked', 'abandoned', 'dead'].includes(status)) return 'Failed';
     return 'Running';
 }
 
 function chatTaskIsTerminal(statusRaw) {
-    return ['completed', 'complete', 'passed', 'succeeded', 'failed', 'blocked', 'abandoned', 'cancelled', 'dead']
-        .includes(safeString(statusRaw).toLowerCase());
+    const status = safeString(statusRaw).toLowerCase();
+    if (chatTaskWasStopped(status)) return true;
+    return ['completed', 'complete', 'passed', 'succeeded', 'failed', 'blocked', 'abandoned', 'dead']
+        .includes(status);
 }
 
 function chatTaskFormatElapsed(startedAtRaw, endedAtRaw = 0) {
@@ -380,7 +391,10 @@ function appendDelegationResultMessage(evt, options = {}) {
     const messageId = `task-result-${executionId}`;
     if (document.getElementById(messageId)) return;
     const status = safeString(options.status || evt?.state || evt?.type).toLowerCase();
-    const failed = status.includes('failed') || safeString(evt?.type) === 'delegation_failed';
+    // Three endings, not two. A stop is checked first so it can never fall
+    // through to the failure branch.
+    const stopped = chatTaskWasStopped(status) || safeString(evt?.type) === 'delegation_cancelled';
+    const failed = !stopped && (status.includes('failed') || safeString(evt?.type) === 'delegation_failed');
     const artifactUrl = safeString(evt?.artifact_url);
     const artifactName = safeString(evt?.artifact_name);
     const artifactKind = safeString(evt?.artifact_kind);
@@ -390,17 +404,20 @@ function appendDelegationResultMessage(evt, options = {}) {
     summary = summary.replace(/no a first event/gi, 'no first event');
     const fallback = failed
         ? 'Thomas could not complete the background task.'
-        : (artifactName ? `Result ready: ${artifactName}.` : 'Task finished.');
+        : stopped
+            ? 'You stopped this task before it finished.'
+            : (artifactName ? `Result ready: ${artifactName}.` : 'Task finished.');
+    const lead = failed ? 'Task failed' : (stopped ? 'Task stopped' : 'Task finished');
     renderMessage({
         role: 'assistant',
-        content: failed ? `Task failed: ${summary || fallback}` : `Task finished: ${summary || fallback}`,
+        content: `${lead}: ${summary || fallback}`,
         id: messageId,
     });
     updateMessageTaskStrip(messageId, {
         sessionId: safeString(evt?.session_id),
-        status: failed ? 'failed' : 'completed',
+        status: failed ? 'failed' : (stopped ? 'cancelled' : 'completed'),
         summary: summary || artifactName || fallback,
-        checkpoint: failed ? 'Needs review.' : 'Result ready.',
+        checkpoint: failed ? 'Needs review.' : (stopped ? 'Stopped on purpose.' : 'Result ready.'),
         artifactUrl,
         artifactName,
         artifactKind,
@@ -511,9 +528,11 @@ function renderMessageTaskStrip(messageId) {
     const latestText = chatTaskCheckpointText(state.latestCheckpoint)
         || (tone === 'completed'
             ? 'Task finished.'
-            : tone === 'failed'
-                ? 'Task hit a failure state.'
-                : 'Waiting for the next checkpoint.');
+            : tone === 'stopped'
+                ? 'Stopped before it finished. Nothing went wrong.'
+                : tone === 'failed'
+                    ? 'Task hit a failure state.'
+                    : 'Waiting for the next checkpoint.');
     if (ui.root instanceof HTMLElement) {
         ui.root.classList.remove('hidden');
         ui.root.dataset.state = tone;

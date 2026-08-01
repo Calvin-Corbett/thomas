@@ -20,6 +20,11 @@ The state machine settles it, not taste: ``task_bot_runtime.ALLOWED_TRANSITIONS`
 lets ``blocked`` go back to ``queued`` / ``claimed`` / ``executing``, and
 ``blocked`` is absent from ``TERMINAL_STATES``.
 
+``cancelled`` was the other half of the same question and was left open here for
+a while: the card had two endings, so a run the owner STOPPED was filed as a
+crash. It now has a third -- ``delegation_cancelled`` / "Stopped" -- and the last
+two tests below hold it in place.
+
 These files are live code, not a dead bundle: ``index.html`` loads
 ``app_runtime_loader.js``, which pulls every module from ``/static/js/runtime/``,
 and that shell "still hosts every workspace and is served at /classic"
@@ -100,21 +105,58 @@ def test_a_genuine_failure_is_still_called_failed() -> None:
         )
 
 
-def test_the_cancelled_question_is_recorded_rather_than_silently_settled() -> None:
-    """It is still called a failure, and that is a known, documented choice.
+def test_a_run_the_owner_stopped_is_not_called_a_failure() -> None:
+    """The compromise this test used to guard is now paid off.
 
-    The card is binary, so saying it truthfully needs a third result type.
-    Calling a run you stopped "failed" is wrong; "completed" is also wrong.
-    If someone adds that third type, this test should be deleted along with the
-    comment -- it exists so the compromise cannot go quiet.
+    Driving the real functions with ``state='cancelled'`` -- both poll paths,
+    before -> after::
+
+        chat text   : Task failed: ...   -> Task stopped: ...
+        strip status: failed             -> cancelled
+        badge label : Failed             -> Stopped
+        checkpoint  : Needs review.      -> Stopped on purpose.
+        event type  : delegation_failed  -> delegation_cancelled   (013 poll)
+
+    `failed` and `completed` were unchanged throughout, and `blocked` still
+    writes no card at all -- the tests above hold those ends down.
     """
 
-    source = FALLBACK.read_text(encoding="utf-8")
-    assert "cancelled" in _failed_expression(), (
-        "cancelled is no longer grouped with failures -- if that was deliberate, "
-        "update this test and the comment beside it"
+    assert "cancelled" not in _failed_expression(), (
+        "a run the owner stopped is grouped with failures again. "
+        f"Got: {_failed_expression()!r}"
     )
-    assert "KNOWN, NOT FIXED HERE" in source, (
-        "the note explaining why `cancelled` is still called a failure is gone, "
-        "leaving an undocumented falsehood in the transcript"
+
+    code = _code(FALLBACK)
+    match = re.search(r"const stopped = ([^;]+);", code)
+    assert match, "the fallback no longer separates a stop from a failure"
+    assert "'cancelled'" in match.group(1), (
+        f"`cancelled` no longer routes to the stopped ending: {match.group(1)!r}"
+    )
+    assert "delegation_cancelled" in code, (
+        "the third result type is gone, so a stopped run is back to being "
+        "reported as one of the other two endings"
+    )
+
+
+def test_the_stopped_ending_is_actually_drawn() -> None:
+    """A third type nothing renders would just be a quieter version of the lie."""
+
+    renderer = (RUNTIME / "003_easy_setup_onboarding_01.js").read_text(encoding="utf-8")
+    assert "function chatTaskWasStopped(" in renderer, "the stopped predicate is gone"
+    assert "return 'Stopped'" in renderer, (
+        "the badge no longer has its own word for a stopped run, so it falls "
+        "back to 'Failed' or 'Completed'"
+    )
+    assert "return 'stopped'" in renderer, "the badge tone for a stopped run is gone"
+    for status_list in re.findall(r"\[('failed'[^\]]*)\]", renderer):
+        assert "cancelled" not in status_list, (
+            f"a stopped run is grouped with failures again: [{status_list}]"
+        )
+
+    # components.css, not components_parts/tool-calls-chat.css where its siblings
+    # live: that directory name matches the monolith filename guard's
+    # `[_-]parts?$` pattern, so a commit staging any file from it is refused.
+    css = (ROOT / "thomas" / "server" / "web" / "css" / "components.css").read_text(encoding="utf-8")
+    assert ".message-task-strip-badge.tone-stopped" in css, (
+        "the stopped badge has no style of its own, so it renders unstyled"
     )

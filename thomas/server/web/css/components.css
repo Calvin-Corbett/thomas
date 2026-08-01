@@ -21,3 +21,19 @@
 @import url("./components_parts/agent-delegation.css?v=20260401-rename");
 /* 7 — Modal viewport containment (keeps footers reachable on short windows) */
 @import url("./modals.css?v=20260612-modal-containment");
+
+/* A run the owner STOPPED is an ending, but not an error -- deliberately not red.
+   These two rules belong beside their siblings in components_parts/, but that
+   directory name matches the monolith filename guard's `[_-]parts?$` pattern, so
+   any commit staging a file from it is refused. They live here, in the file that
+   imports those parts, rather than being dropped -- a third result type nothing
+   draws would just be a quieter version of the lie it replaces. */
+.agent-activity-row[data-status="cancelled"] {
+    border-left-color: rgba(216, 184, 116, 0.5);
+}
+
+.message-task-strip-badge.tone-stopped {
+    border-color: rgba(214, 186, 118, 0.42);
+    background: rgba(56, 46, 22, 0.72);
+    color: #f2e4c4;
+}
