@@ -7,6 +7,27 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (dashboards no longer have the animated world painted through their text)
+
+- `thomas_world.css` says, deliberately, "let the world show through translucent
+  surfaces". That is right for the Chat surface -- airy, centred, lots of gutter. It
+  was wrong for the workspace iframe, which carries dense edge-to-edge dashboards
+  whose cards are `rgba(255,255,255,.04)`: 4% opaque, effectively glass. The frame
+  itself was `background: transparent`, so the world's discrete sprites showed
+  through both layers and landed on top of live text.
+- Seen at 1920x1080 in Token Economy: a hard-edged white sphere sat over the
+  "TOKENS OUT" stat label and covered the "UT", so the card read "TOKENS O". Three
+  independent checks agreed before anything was changed -- the DOM said "TOKENS OUT"
+  the whole time, the card measured 4% opacity, and the cropped pixels showed the
+  sphere over the letters. The characters were painted, then covered.
+- The frame now carries a 58% theme-token tint plus a 22px backdrop blur, so the
+  world survives as colour and glow rather than as objects. A flat opaque backdrop
+  was tried first and rejected: it fixed legibility by deleting the design.
+- Checked in both directions and against the right control -- the workspace renders
+  identically with the backdrop and without it (32k characters, 28 painted elements
+  either way), so the change costs no content. Two blank screenshots along the way
+  were the probe firing before the iframe painted, not damage.
+
 ### Fixed (a run that produced nothing no longer narrates its own success)
 
 - `complete_execution` demotes an evidence-free "done" to `failed(no_evidence)` --

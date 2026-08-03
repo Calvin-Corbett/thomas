@@ -267,7 +267,7 @@
       <div id="tc-body-row" data-ui-id="chat.body" data-ui-label="Conversation workspace" data-ui-policy="move resize" data-ui-constraints="minWidth=360;minHeight=360" style="position: relative; flex: 1; min-height: 0; display: flex;">
         <!-- The one live workspace frame is deliberately inside the body row. The
              literal Chat top bar above it never disappears or gets duplicated. -->
-        <iframe id="tc-ws-frame" class="tc-workspace-frame" title="Workspace" style="display: none; position: absolute; inset: 0; width: 100%; height: 100%; border: 0; z-index: 20; background: transparent;"></iframe>
+        <iframe id="tc-ws-frame" class="tc-workspace-frame" title="Workspace" style="display: none; position: absolute; inset: 0; width: 100%; height: 100%; border: 0; z-index: 20; background: var(--c-bg); background: color-mix(in srgb, var(--c-bg) 58%, transparent); backdrop-filter: blur(22px) saturate(118%); -webkit-backdrop-filter: blur(22px) saturate(118%);"></iframe>
         <div id="tc-primary-column" style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
           <section id="tc-mode-surface" aria-live="polite" aria-label="Mode workspace" data-ui-id="chat.mode.surface" data-ui-label="Mode workspace" data-ui-policy="move resize" data-ui-constraints="minWidth=360;minHeight=280" style="display:none;"></section>
           <div id="tc-scroll" class="tc-scroll" style="flex: 1; min-height: 0; overflow-y: auto;">
