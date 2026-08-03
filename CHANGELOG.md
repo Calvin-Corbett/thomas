@@ -7,6 +7,13 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (chat.html is back under its 3000-line ceiling)
+
+- `chat.html` was 3311 lines against the hard ceiling in `test_architecture.py::test_frontend_file_sizes`. The whole shell is one inline IIFE, so every candidate block shares `state`, `esc`, `inputEl` by closure, and 20 test files assert literal text against the page — moving a pinned line turns a refactor into a red suite. Every such literal was mapped onto line numbers first; exactly one test-free region was large enough.
+- The composer's panels moved out byte-for-byte into `js/chat_composer_panels.js` as a `create(deps)` factory: the AI-settings sheet behind "Tools", the project picker, the attachment chips and the mic. `DIAL_FIELDS` and `saveDials` deliberately stayed behind — a test pins the effort vocabulary to `chat.html`, and `setProfile` still calls `saveDials`.
+- **3311 → 2976 lines.** Verified live rather than by line count: the page loads with zero console errors, the settings sheet opens to all six dials with their option lists, and the project picker opens to its action cards.
+- Applied by line number, not `git apply`. The patch was rejected for 355 lines of byte-identical context because the authoring worktree had LF endings and this tree's `chat.html` is CRLF — a transport artefact, not a stale base. Three separate content corruptions came from the same transport and were repaired: `&nbsp;` unescaped into U+00A0, and `&lt;`/`&gt;` unescaped inside two test literals where they were genuine, one of which had silently become `X && !X`.
+
 ### Added (a run you stopped reads as stopped, not failed)
 
 - The transcript card had two endings — `delegation_failed` and `delegation_completed` — so a run the owner **stopped** was filed as a crash. I left that open twice today and said why at the line: telling the truth about a deliberate stop needs a third result type and a renderer that draws it, and calling it "completed" would have been just as false as calling it "failed".
