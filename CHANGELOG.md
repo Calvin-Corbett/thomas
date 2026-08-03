@@ -7,6 +7,21 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (a real conversation stops running on the small-talk history budget)
+
+- `IntentRouter.decide()` returns `PATH_MODEL_OWNED` unconditionally -- it opens with
+  `del text, prior_route` and never branches. There is exactly one route for a
+  natural-language turn, which `loop_streaming.py` already states outright.
+- When the prompt-word classifier was retired, `model_owned` was pasted into the
+  **casual-chat** branch of both history helpers. So every real conversation -- a
+  coding session, a research thread, a twenty-turn debugging chat -- was cut to
+  **2200 tokens and ten messages** of history, while the 5200 written for
+  `coding_task` sat in a branch nothing could reach. Thomas forgot constraints set
+  earlier in the same session, and the code meant to prevent that was dead.
+- `model_owned` now takes the most generous values in the function: **5200 tokens,
+  12 messages**. Both numbers were already there; nothing was invented. The
+  small-talk allowance still exists for actual small talk, pinned as a test.
+
 ### Fixed (a recovered search no longer discards the answer it produced)
 
 - `worker_text_is_confirmed_answer` rejected on `if failed_tools: return False` --

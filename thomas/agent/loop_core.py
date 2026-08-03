@@ -529,7 +529,16 @@ class AgentLoop:
     def _history_preserve_counts(self, route: RouteDecision) -> tuple[int, int]:
         """Choose how much conversation history to preserve per route."""
         path = str(getattr(route, "path", "") or "")
-        if path in ("casual_chat", "personal_context", "assistant_meta", "general", "model_owned"):
+        # `model_owned` is not one route among several -- IntentRouter.decide() returns
+        # it unconditionally (`del text, prior_route`, no branching), so it is EVERY
+        # turn. When the prompt-word classifier was retired it was pasted into the
+        # casual-chat branch below, which meant every real conversation ran on the
+        # small-talk allowance and the coding/research branches became dead code.
+        # It gets the most generous values in this function instead; the numbers are
+        # the ones already here, not new ones.
+        if path == "model_owned":
+            return 0, 12
+        if path in ("casual_chat", "personal_context", "assistant_meta", "general"):
             if self._context_preserve_mode in {"continuous", "persistent", "high_context", "chatty"}:
                 return 0, 12
             return 0, 10
@@ -540,7 +549,14 @@ class AgentLoop:
     def _history_token_cap(self, route: RouteDecision) -> int:
         """Route-specific soft cap for conversation history tokens."""
         path = str(getattr(route, "path", "") or "")
-        if path in ("casual_chat", "personal_context", "assistant_meta", "general", "model_owned"):
+        # See _history_preserve_counts: this is every turn, not a casual one. On the
+        # old grouping a coding conversation was cut to 2200 tokens of history --
+        # roughly ten short messages -- so Thomas forgot a constraint set earlier in
+        # the same session and the 5200 written for coding_task was never reached by
+        # anything. 5200 is that same existing value, now actually reachable.
+        if path == "model_owned":
+            return 5200
+        if path in ("casual_chat", "personal_context", "assistant_meta", "general"):
             if self._context_preserve_mode in {"continuous", "persistent", "high_context", "chatty"}:
                 return 5200
             return 2200
