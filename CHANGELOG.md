@@ -7,6 +7,32 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (a worker that stumbled, retried and delivered is no longer stamped unverified)
+
+- Completion review forgave a failed tool only if its name was in a hardcoded
+  allowlist of four filesystem-read names. Everything else was fatal. Two runs that
+  produced the identical file on disk therefore got opposite verdicts based purely
+  on which tool had stumbled along the way -- reproduced before any change:
+
+  | failed, then succeeded | verdict |
+  |---|---|
+  | `fs.read_file` (allowlisted) | verified |
+  | `shell` | NOT verified |
+  | `web.search` | NOT verified |
+
+- The signal the allowlist was groping for is computed one line earlier: the failed
+  tool also appears in `succeeded_tools`, meaning the worker recovered. That is the
+  same signal whatever the tool is called, so it is now used directly and the dead
+  allowlist is gone.
+- File evidence is untouched and is what actually guards this: every file the worker
+  claimed must still exist and be non-empty, and recovery is only credited when
+  files landed. Five controls pin that the check was loosened, not gutted -- a tool
+  that never succeeded, a claimed-but-missing file, an empty file, a missing
+  summary, and recovery-without-a-deliverable all still fail.
+- Followed superpowers:systematic-debugging (root cause reproduced before proposing
+  a fix) and superpowers:verification-before-completion (the guard was run against
+  the restored allowlist first: 6 of 11 failed).
+
 ### Fixed (an attached file is never dropped in silence)
 
 - `docs[:6]` and `images[:4]` deleted the extras before the model saw the message --
