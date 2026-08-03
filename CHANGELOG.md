@@ -7,6 +7,24 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (a run that produced nothing no longer narrates its own success)
+
+- `complete_execution` demotes an evidence-free "done" to `failed(no_evidence)` --
+  the hole-closer for "verified without verification". It wrote the reason for that
+  demotion as a *fallback*: `summary or "No verifiable result: ..."`. The only caller
+  that reaches this branch builds its summary with `_build_result_summary`, which has
+  no empty return path -- its last line is `"The worker returned no output."` So the
+  sentence explaining the failure had **never once been shown**.
+- What a person saw instead was the worker's own prose, which in this branch is a
+  claim under dispute by definition. A run stamped `failed` / `blocker=no_evidence`
+  could carry `"I created the report and verified the output."` as its summary.
+- The verdict now leads and the worker's account is attributed rather than dropped:
+  `No verifiable result: ... The worker reported: <claim>`. A run that *did* show
+  evidence keeps its own summary untouched, which the new test pins as the control.
+- The guard that would have caught this pins the *fact that made the fallback dead* --
+  that `_build_result_summary` can never return empty -- not just the behaviour that
+  fact broke. Same shape as the `errorText` fix above; found by grepping for it.
+
 ### Fixed (a Code error now says what Thomas was trying to do)
 
 - `errorText(error, fallback)` returned `error.message` whenever there was one, and

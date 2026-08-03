@@ -667,6 +667,33 @@ def mark_verified(
     )
 
 
+def _no_evidence_summary(summary: str) -> str:
+    """What a person reads when a run claimed done and could show nothing for it.
+
+    The verdict used to be a fallback -- ``summary or "No verifiable result..."`` --
+    and so it was unreachable: the only caller that can reach this branch builds its
+    summary with ``_build_result_summary``, which has no empty return path (its last
+    line is "The worker returned no output."). The sentence explaining the failure
+    had therefore never once been shown.
+
+    What was shown instead is the worker's own prose, which in this branch is a
+    claim under dispute by definition -- the branch fires precisely when a worker
+    said it finished and produced no artifact and no confirmed tool success. A run
+    stamped failed/no_evidence was carrying the text "I created the report and
+    verified the output." as its summary.
+
+    So the verdict leads and the claim is attributed rather than dropped: the worker
+    may have said something worth reading, but it does not get to narrate its own
+    result.
+    """
+
+    verdict = "No verifiable result: nothing was produced and no tool success was confirmed."
+    claim = str(summary or "").strip()
+    if not claim or claim == verdict:
+        return verdict
+    return f"{verdict} The worker reported: {claim}"
+
+
 def complete_execution(
     execution_id: str,
     *,
@@ -703,9 +730,7 @@ def complete_execution(
             execution_id,
             state="failed",
             proof_status="failed",
-            progress_summary=(
-                summary or "No verifiable result: nothing was produced and no tool success was confirmed."
-            ),
+            progress_summary=_no_evidence_summary(summary),
             blocker="no_evidence",
             heartbeat=False,
             actor=actor,
