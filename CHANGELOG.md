@@ -7,6 +7,23 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (a recovered search no longer discards the answer it produced)
+
+- `worker_text_is_confirmed_answer` rejected on `if failed_tools: return False` --
+  unconditionally, with no recovery check, while `succeeded_tools` sat unused in the
+  same signature. A research run whose first query 404s, searches again, gets the
+  answer and writes three good paragraphs was thrown away for the 404.
+- The rubber-stamp purpose this module exists for is untouched, because it never
+  rested on the failure list: "I'll get started on that" with nothing run is still
+  refused by the answer-text check and by the empty-`succeeded_tools` check. Both are
+  pinned as tests.
+- Deliberately narrow. A tool that failed and **never** succeeded still rejects;
+  widening to "any success anywhere excuses any failure" would also excuse a worker
+  whose real work failed and which then wrote an answer from nothing. `None`
+  telemetry keeps its documented meaning.
+- Same shape as `f140976f` an hour earlier: recovery was recorded and then never
+  consulted. Two modules, one habit.
+
 ### Fixed (a worker that stumbled, retried and delivered is no longer stamped unverified)
 
 - Completion review forgave a failed tool only if its name was in a hardcoded

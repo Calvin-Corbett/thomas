@@ -39,10 +39,27 @@ def worker_text_is_confirmed_answer(
     del prompt
     if not _worker_answer_text(result_text_parts):
         return False
-    if failed_tools:
-        return False
     if succeeded_tools is None:
-        return True
+        # No telemetry offered; the caller judges legitimacy by its own rubric.
+        return bool(not failed_tools)
+    # A tool that failed and then succeeded was recovered from, and the run did the
+    # thing this check exists to require. `if failed_tools: return False` used to
+    # reject regardless: a research run whose first query 404s, searches again, gets
+    # the answer and writes three good paragraphs was thrown away for the 404 -- the
+    # recovery was already recorded in succeeded_tools and simply never consulted.
+    #
+    # The anti-rubber-stamp purpose is untouched, because it never rested on the
+    # failure list. "I'll get started on that" with nothing run is still refused by
+    # the answer-text check above and by the empty-succeeded_tools check below.
+    unrecovered = [
+        str(tool) for tool in (failed_tools or []) if str(tool) and str(tool) not in set(succeeded_tools)
+    ]
+    if unrecovered:
+        # A tool that failed and never once worked is still a real gap. Widening this
+        # to "any success anywhere excuses any failure" would also excuse a worker
+        # whose actual work failed and which then wrote an answer from nothing, so it
+        # is left deliberately narrow.
+        return False
     return bool(succeeded_tools)
 
 
