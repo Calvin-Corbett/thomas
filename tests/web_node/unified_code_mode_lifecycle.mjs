@@ -99,7 +99,7 @@ for (const siblingPath of siblingPaths) {
 const source = fs.readFileSync(sourcePath, 'utf8');
 const instrumented = source.replace(
   /\n\}\)\(\);\s*$/,
-  '\n  window.__ThomasCodeModeTest = { state, activate: () => { adapterActive = true; }, approvePending, changeAction, elapsedLabel, eventHtml, failureSummary, finishRun, handleStreamError, loadConversation, narrativeActivityHtml, newConversation, pickProject, pushLiveEvent, refresh, render, send, steer, technicalActivityHtml, transcriptEvents, turnHtml };\n})();',
+  '\n  window.__ThomasCodeModeTest = { state, errorText, activate: () => { adapterActive = true; }, approvePending, changeAction, elapsedLabel, eventHtml, failureSummary, finishRun, handleStreamError, loadConversation, narrativeActivityHtml, newConversation, pickProject, pushLiveEvent, refresh, render, send, steer, technicalActivityHtml, transcriptEvents, turnHtml };\n})();',
 );
 if (instrumented === source) throw new Error('could not instrument Code lifecycle adapter');
 vm.runInThisContext(instrumented, { filename: sourcePath });
@@ -588,6 +588,35 @@ async function proveAccessibleDrawerAndPickerErrors() {
   if (!pickerError.includes('unreadable folder-picker response (200)')) throw new Error('successful non-JSON picker response failed silently');
 }
 
+async function proveTheActionSurvivesTheReason() {
+  // The mirror of the case above. That one recovered the *reason* when a wrapper
+  // buried it; this one recovers the *action*, which errorText used to throw away
+  // outright: it returned error.message whenever there was one, and a server error
+  // almost always has one. Every "Could not open that Code task." the callers pass
+  // in -- fourteen of them -- was written, handed over, and dropped on the floor.
+  //
+  // Taken from a real click: My Stuff's deep link to a task that no longer exists
+  // rendered "not found", twice, and never once said what had not been found.
+  const both = api.errorText(new Error('not found'), 'Could not open that Code task.');
+  if (!/Could not open that Code task/.test(both)) throw new Error('the action was discarded: ' + both);
+  if (!/not found/.test(both)) throw new Error('the reason was discarded: ' + both);
+
+  // No usable reason -> the caller's sentence stands alone, unchanged.
+  const bare = api.errorText(new Error(''), 'Could not steer the Code task.');
+  if (bare !== 'Could not steer the Code task.') throw new Error('an empty reason mangled the fallback: ' + bare);
+  const notAnError = api.errorText({ message: 'ignored' }, 'Could not stop the Code run.');
+  if (notAnError !== 'Could not stop the Code run.') throw new Error('a non-Error was treated as a reason: ' + notAnError);
+
+  // And it must not say the same thing twice.
+  const same = api.errorText(new Error('Could not keep that change.'), 'Could not keep that change.');
+  if (same !== 'Could not keep that change.') throw new Error('an identical reason was doubled: ' + same);
+  const restated = api.errorText(
+    new Error('Could not open that Code task: it was deleted'), 'Could not open that Code task.');
+  if (restated.indexOf('Could not open that Code task') !== restated.lastIndexOf('Could not open that Code task')) {
+    throw new Error('a reason that already named the action was doubled: ' + restated);
+  }
+}
+
 async function proveTheRealReasonSurvivesTheExitWrapper() {
   // Errors arrive oldest-first and the last is almost always `agent loop
   // exited 1`, a wrapper that says nothing. The summary took `.at(-1)` and only
@@ -968,5 +997,6 @@ await proveFinishingQueuesRapidResend();
 await proveLostSendRetryAndCursor();
 await proveAccessibleDrawerAndPickerErrors();
 await proveTheRealReasonSurvivesTheExitWrapper();
+await proveTheActionSurvivesTheReason();
 console.warn = originalWarn;
 process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true, failureReason: true, narrativeNotRepeated: true, emptyStateStandsDown: true, fileListNamesItsReason: true, stoppedRunIsNotWorking: true, revertRefreshesFileList: true, truncatedRunSaysSo: true, yourMessageIsOnScreen: true, toolRowsNameTheirTool: true, silentFailureSaysWhatIsKnown: true }));

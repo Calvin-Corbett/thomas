@@ -29,8 +29,21 @@
   const host = () => modes().host() || {};
   const surface = () => document.getElementById('tc-mode-surface');
 
+  // The fallback names the action, the error names the cause, and a reader needs
+  // both. Returning the cause alone -- which is what this did -- threw away every
+  // one of the fourteen sentences the callers below pass in, because a server
+  // error almost always carries *some* message. Opening a deleted task showed
+  // "not found", twice, and never once said what had not been found; the author's
+  // "Could not open that Code task." was written, passed in, and dropped.
   function errorText(error, fallback) {
-    return error instanceof Error && error.message ? error.message : fallback;
+    const reason = error instanceof Error && typeof error.message === 'string'
+      ? error.message.trim()
+      : '';
+    if (!reason) return fallback;
+    if (!fallback || reason === fallback) return reason;
+    // A reason that already restates the action is not worth saying twice.
+    if (reason.toLowerCase().includes(fallback.toLowerCase().replace(/[.!]+$/, ''))) return reason;
+    return `${fallback.replace(/[.!\s]+$/, '')}: ${reason}`;
   }
 
   function isInternalResultPath(value) {

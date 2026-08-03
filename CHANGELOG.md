@@ -7,6 +7,25 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (a Code error now says what Thomas was trying to do)
+
+- `errorText(error, fallback)` returned `error.message` whenever there was one, and
+  a server error almost always has one. So the fourteen sentences the callers pass
+  in -- `Could not open that Code task.`, `Could not steer the Code task.`,
+  `Could not revert that change.` and the rest -- were written, handed over, and
+  dropped on the floor. A reader effectively never saw any of them.
+- Found by clicking one: My Stuff mints a deep link to a build deliverable, and
+  following it to a task that no longer exists rendered **not found**, twice, and
+  never once said what had not been found. The author's `Could not open that Code
+  task.` was sitting right there in the call.
+- The action and the cause are now both kept -- `Could not open that Code task: not
+  found` -- and not doubled up when the cause already restates the action, or when
+  the two are identical. An error with no usable message still leaves the caller's
+  sentence exactly as written.
+- Guarded behaviourally, not by source text: `proveTheActionSurvivesTheReason()` in
+  the Code lifecycle harness drives the real function. It was run against the old
+  one-liner first and fails there, so it is a guard rather than a decoration.
+
 ### Changed (unified_code_mode.js is back under its ceiling, and the last one was)
 
 - `unified_code_mode.js` was 1808 lines against the 1500-line ceiling in
