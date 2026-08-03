@@ -18,8 +18,12 @@ _DEVICE_ACTION_RE = re.compile(
     # device/target so real phrasings (and derived titles) match.
     r"set\b[\w\s]{0,30}\b(?:thermostat|temperature|temp|heat(?:er|ing)?|ac|air\s*condition|"
     r"alarm|degrees?|lights?|scene|brightness|volume)|"
+    # The device group used to end in `?`, which made it optional -- so the bare
+    # word "toggle" matched on its own and "Add a dark mode toggle to the site"
+    # was read as a request to touch a physical device. Shipping app.js then made
+    # Thomas announce that the work had NOT been done. A device word is required.
     r"(?:dim|brighten|lock|unlock|arm|disarm|toggle)\b[\w\s]{0,24}\b"
-    r"(?:lights?|lamp|door|garage|alarm|thermostat|system)?|"
+    r"(?:lights?|lamp|door|garage|alarm|thermostat|system)|"
     r"open\b[\w\s]{0,24}\b(?:door|garage|blinds?|shades?)|"
     r"close\b[\w\s]{0,24}\b(?:door|garage|blinds?|shades?)|"
     r"(?:play|pause|send|text|email|call|schedule|book|order|pay|transfer)\b)",
@@ -291,11 +295,31 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
                     )
                 )
             note = await _generate_note(llm, system, " ".join(bits))
-            unsupported = _UNSUPPORTED_GAP_CLAIM_RE.search(note)
-            missing_name = bool(
-                artifact_names and any(name.casefold() not in note.casefold() for name in artifact_names)
-            )
-            if not note or unsupported or missing_name:
+            # Only an ABSENT note falls back to a template. Thomas's own sentence is
+            # never thrown away for what it says.
+            #
+            # It used to be. Two filters ran over the model's note and replaced the
+            # whole thing on a match, and both resolved toward the cheerful claim:
+            #
+            #   _UNSUPPORTED_GAP_CLAIM_RE matched ordinary honest English -- "still
+            #   needs to", "not yet", "isn't complete". It was meant to catch a
+            #   fabricated gap, but a fabricated gap and a REAL one read identically,
+            #   and "verified" upstream never meant "everything asked for was made"
+            #   (chat_delegation_artifact_verification.py opens with `del prompt`; it
+            #   only checks the files that were made are real). So a run that produced
+            #   two of three requested files, and said so truthfully, had that sentence
+            #   deleted and was announced as "I have a verified result ready."
+            #
+            #   missing_name required every artifact filename to appear verbatim, while
+            #   the prompt above asks for "one or two short sentences". Past about three
+            #   files those instructions cannot both be met, and a live-repo run lists
+            #   every changed file -- so good prose was discarded for naming the work
+            #   instead of reciting filenames.
+            #
+            # Naming the files is still worth having, so it is APPENDED when the note
+            # mentions none of them. Adding a fact is not the same as overruling the
+            # sentence, and the artifact cards are attached below regardless.
+            if not note:
                 if failed:
                     note = f"I couldn't finish {task_title}. I can take another run at it."
                 elif artifact_names:
@@ -306,6 +330,10 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
                     )
                 else:
                     note = f"I have a verified result ready for {task_title}."
+            elif artifact_names and not any(
+                name.casefold() in note.casefold() for name in artifact_names
+            ):
+                note = note.rstrip() + " Ready: " + ", ".join(f"`{n}`" for n in artifact_names) + "."
         # Drop any broken sandbox/local-path links the model inlined; the real
         # deliverable is attached below as an artifact card. (Same hygiene as the
         # classic AgentLoop and the V2 orchestrator reply paths.)

@@ -7,6 +7,35 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Thomas keeps its own words about a job it just finished)
+
+- The "your task finished" bubble is written by the model. Two filters ran over it
+  and replaced the **whole note** on a match, and both resolved toward the cheerful
+  claim.
+- `_UNSUPPORTED_GAP_CLAIM_RE` matched ordinary honest English -- "still needs to",
+  "not yet", "isn't complete". It was meant to catch a *fabricated* gap. But a
+  fabricated gap and a real one read identically, and "verified" upstream never
+  meant "everything asked for was produced": `chat_delegation_artifact_verification`
+  opens with `del prompt` and only checks that the files that were made are real.
+  So a run that produced two of three requested files, and said so truthfully, had
+  that sentence deleted and was announced as "I have a verified result ready."
+- The second filter required every artifact filename to appear verbatim, while the
+  same prompt asks for "one or two short sentences". Past about three files those
+  cannot both be satisfied, and a live-repo run lists every changed file -- so good
+  prose was discarded for describing the work instead of reciting filenames.
+- Now only an **absent** note falls back to a template. Filenames are still worth
+  having, so they are appended when the note mentions none; adding a fact is not the
+  same as overruling the sentence.
+- Separately, `_DEVICE_ACTION_RE`'s device group ended in `?`, making it optional --
+  the bare word "toggle" matched on its own. "Add a dark mode toggle to the site"
+  read as a request to touch a physical device, so shipping `app.js` made Thomas
+  announce the work had NOT been done. A device word is now required, and a test
+  pins that the real case ("turn off the kitchen lights") still works.
+- **Not fixed, and pinned as such:** the same pattern ends in a list of bare verbs
+  with no target at all -- play, pause, send, text, email, call, schedule, book,
+  order, pay, transfer. "Build a music player with play/pause" still matches. That
+  needs its own pass against real task titles.
+
 ### Fixed (dashboards no longer have the animated world painted through their text)
 
 - `thomas_world.css` says, deliberately, "let the world show through translucent
