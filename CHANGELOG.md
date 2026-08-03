@@ -7,6 +7,22 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (a hole in the conversation is visible to the model)
+
+- `get_context_window` keeps the first N and last M messages and drops from the
+  middle until the token budget is met. It did that in total silence, while the
+  compaction pass a few lines above already writes `"...[truncated]"` whenever it
+  shortens a single tool result. Cutting part of a message announced itself; cutting
+  twenty whole messages did not.
+- The cost is seamless amnesia. A constraint set early -- "never touch the staging
+  database" -- can vanish out of the middle of a long session with nothing in what
+  the model receives to suggest the conversation has a gap. Visible amnesia can be
+  asked about; invisible amnesia just looks like Thomas ignoring you.
+- The count of dropped turns is now prepended to the first surviving message, rather
+  than inserted as its own entry -- a mid-list system message would break the
+  user/assistant alternation some providers require. The stored conversation is
+  untouched; the marker exists only in the window handed to the model.
+
 ### Fixed (a real conversation stops running on the small-talk history budget)
 
 - `IntentRouter.decide()` returns `PATH_MODEL_OWNED` unconditionally -- it opens with

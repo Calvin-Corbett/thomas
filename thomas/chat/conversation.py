@@ -276,6 +276,29 @@ class ConversationManager:
                 kept_middle.insert(0, m)
                 budget_used += cost
 
+        # Say what was dropped. Pass 1 of the compactor above already writes
+        # "...[truncated]" when it shortens a single tool result, but removing whole
+        # turns from the middle left no trace at all -- so a constraint set twenty
+        # messages ago could disappear and the model had no way to know it was
+        # working from a conversation with a hole in it. Seamless amnesia is worse
+        # than visible amnesia: it cannot be asked about.
+        #
+        # The marker is prepended to the first surviving message rather than added
+        # as its own entry, because inserting a message mid-list breaks the
+        # user/assistant alternation some providers require.
+        dropped = len(middle) - len(kept_middle)
+        if dropped > 0:
+            plural = "s" if dropped != 1 else ""
+            marker = f"[{dropped} earlier message{plural} omitted here to fit the context window.]\n\n"
+            if kept_middle:
+                first = dict(kept_middle[0])
+                first["content"] = marker + str(first.get("content") or "")
+                kept_middle = [first, *kept_middle[1:]]
+            elif tail:
+                first = dict(tail[0])
+                first["content"] = marker + str(first.get("content") or "")
+                tail = [first, *tail[1:]]
+
         result = head + kept_middle + tail
         return copy.deepcopy(result)
 
