@@ -16,6 +16,7 @@ the class of input that should never be trusted into markup.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 WEB_JS = Path(__file__).resolve().parents[1] / "thomas" / "server" / "web" / "js"
@@ -26,10 +27,37 @@ WEB_JS = Path(__file__).resolve().parents[1] / "thomas" / "server" / "web" / "js
 # escaping.
 CODE_JS = WEB_JS / "unified_code_mode.js"
 CODE_RESULTS_JS = WEB_JS / "unified_code_results.js"
+# Split again: the render cluster left for a size ceiling and took turnHtml,
+# eventHtml and replyHtml with it. The escaper still did not move, and the
+# declaration count below still spans every module that could redeclare it.
+CODE_EVENTS_JS = WEB_JS / "unified_code_events.js"
 
 
 def _js() -> str:
-    return CODE_JS.read_text(encoding="utf-8") + "\n" + CODE_RESULTS_JS.read_text(encoding="utf-8")
+    return chr(10).join(
+        path.read_text(encoding="utf-8")
+        for path in (CODE_JS, CODE_RESULTS_JS, CODE_EVENTS_JS)
+    )
+
+def _function_body(name: str) -> str:
+    """The body of one top-level function, whichever module the split left it in.
+
+    Sliced at the next function *header* rather than at a literal two-space
+    "function": the event-render cluster sits a level deeper now, inside a
+    create() factory. A fixed-indent delimiter would not have raised here --
+    str.split returns the whole remainder when it matches nothing, so each
+    assertion below would have quietly begun scanning the rest of the file, and
+    a positive one could then pass for the wrong reason.
+    """
+
+    for path in (CODE_JS, CODE_EVENTS_JS):
+        text = path.read_text(encoding="utf-8")
+        if f"function {name}" not in text:
+            continue
+        after = text.split(f"function {name}", 1)[1]
+        return re.split(r"\n\s+(?:async )?function ", after, maxsplit=1)[0]
+    raise AssertionError(f"{name}() is in neither Code module")
+
 
 
 def test_the_escaper_covers_every_dangerous_character() -> None:
@@ -87,7 +115,7 @@ def test_the_code_reply_renders_markdown_through_chats_renderer() -> None:
     Reuses Chat's `mdToHtml` rather than copying it, for the same reason there is
     exactly one `esc`: a second implementation is how one of them stops escaping.
     """
-    body = CODE_JS.read_text(encoding="utf-8").split("function turnHtml", 1)[1].split("\n  function", 1)[0]
+    body = _function_body("turnHtml")
 
     assert "replyHtml(reply)" in body, "the reply no longer goes through the markdown path"
     assert "esc(reply)" not in body, "the reply is being double-handled"
@@ -101,13 +129,12 @@ def test_progress_notes_use_the_inline_renderer_only() -> None:
     inline renderer emits <code>/<strong>/<em>/<a> and nothing else, so it drops
     into the existing markup with no container or stylesheet change.
     """
-    source = CODE_JS.read_text(encoding="utf-8")
-    body = source.split("function eventHtml", 1)[1].split("\n  function", 1)[0]
+    body = _function_body("eventHtml")
 
     assert "progressHtml(label)" in body, "progress notes no longer render their markdown"
     assert "esc(label)" not in body, "a progress note is being escaped twice"
 
-    helper = source.split("function progressHtml", 1)[1].split("\n  function", 1)[0]
+    helper = _function_body("progressHtml")
     assert "mdInline" in helper
     assert "mdToHtml" not in helper, (
         "the block renderer would put <p>/<ul> inside the note's <span>"
@@ -118,7 +145,7 @@ def test_progress_notes_use_the_inline_renderer_only() -> None:
 def test_raw_tool_output_is_never_rendered_as_markdown() -> None:
     """Technical rows carry command output, not prose. Backticks and asterisks in
     a shell line are characters, not formatting, and must stay literal."""
-    body = CODE_JS.read_text(encoding="utf-8").split("function eventHtml", 1)[1].split("\n  function", 1)[0]
+    body = _function_body("eventHtml")
     technical = body.split("isTechnicalEvent(event)", 1)[1].split("const label", 1)[0]
 
     assert "esc(eventLabel(event))" in technical
@@ -129,7 +156,7 @@ def test_raw_tool_output_is_never_rendered_as_markdown() -> None:
 def test_the_code_reply_falls_back_to_the_plain_escaper() -> None:
     """The Node contract harness loads this module with no shell around it, so
     `window.ThomasMarkdown` is absent. The reply must still render, escaped."""
-    body = CODE_JS.read_text(encoding="utf-8").split("function replyHtml", 1)[1].split("\n  function", 1)[0]
+    body = _function_body("replyHtml")
 
     assert "window.ThomasMarkdown" in body
     assert "return esc(text)" in body, "no fallback: a shell-less load would render nothing or throw"

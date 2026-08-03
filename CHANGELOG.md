@@ -7,6 +7,33 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (unified_code_mode.js is back under its ceiling, and the last one was)
+
+- `unified_code_mode.js` was 1808 lines against the 1500-line ceiling in
+  `test_architecture.py::test_frontend_file_sizes` -- the last file still over it.
+  No single function was big enough to fix that (the largest, `render`, is 286 lines
+  against 308 needed), so the split had to take a cluster out of a 73-function shared
+  closure.
+- The cluster it took is the one with a boundary you can state in a sentence:
+  everything that turns a run's event stream into HTML, and nothing that talks to the
+  server or owns the run. It is now `js/unified_code_events.js`, a `create(deps)`
+  factory -- twelve names in, fifteen back. **1808 -> 1396 lines.**
+- `codeResults` and `surface` are passed as accessors rather than values, matching the
+  rule `unified_code_mode.js` already states for its own siblings: captured once, they
+  would freeze whatever was on `window` at create() time and make load order a second
+  ordering rule instead of the only one.
+- Verified in both directions rather than by line count. With the module present the
+  page loads with no console errors, Code mode renders, and driving the moved code
+  directly still tells a failed row from a successful one. With the module moved
+  aside the page dies at the destructure with `Cannot read properties of undefined
+  (reading 'create')` -- so the clean load is evidence and not a coincidence.
+- Five source-slicing assertions across three test files were cutting function bodies
+  at a literal two-space `function` delimiter. Four of them used `[0]`, which does not
+  raise when the delimiter is absent -- `str.split` returns the whole remainder, so
+  each would have quietly begun scanning the rest of the file and a positive assertion
+  could pass for the wrong reason. They now slice at the next function *header*, at any
+  indentation, and fail loudly when the function is in neither module.
+
 ### Changed (chat.html is back under its 3000-line ceiling)
 
 - `chat.html` was 3311 lines against the hard ceiling in `test_architecture.py::test_frontend_file_sizes`. The whole shell is one inline IIFE, so every candidate block shares `state`, `esc`, `inputEl` by closure, and 20 test files assert literal text against the page — moving a pinned line turns a refactor into a red suite. Every such literal was mapped onto line numbers first; exactly one test-free region was large enough.

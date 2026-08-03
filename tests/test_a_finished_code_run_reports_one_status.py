@@ -54,7 +54,21 @@ SIBLINGS = (
     WEB_JS / "unified_code_lifecycle.js",
     WEB_JS / "unified_code_results.js",
     WEB_JS / "unified_code_projects.js",
+    WEB_JS / "unified_code_events.js",
 )
+
+
+def _sources() -> str:
+    """Both halves of the adapter.
+
+    terminalRunStatus() stayed in unified_code_mode.js; the rendering it feeds
+    moved to unified_code_events.js. This contract spans the pair.
+    """
+
+    return chr(10).join(
+        path.read_text(encoding="utf-8")
+        for path in (CODE_JS, WEB_JS / "unified_code_events.js")
+    )
 
 
 def _drive() -> dict[str, dict[str, dict[str, str]]]:
@@ -105,7 +119,7 @@ def test_the_run_status_vocabulary_is_never_taken_from_the_server_wording() -> N
 
     code = "\n".join(
         line
-        for line in CODE_JS.read_text(encoding="utf-8").splitlines()
+        for line in _sources().splitlines()
         # This change is documented directly above itself and quotes the old
         # expression verbatim, so a scan that read its own comment would pass on
         # the strength of prose rather than behaviour.

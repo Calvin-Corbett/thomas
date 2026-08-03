@@ -24,7 +24,14 @@ CODE_LIFECYCLE_JS = REPO_ROOT / "thomas" / "server" / "web" / "js" / "unified_co
 # hands its collaborators to a module that is not there yet.
 CODE_RESULTS_JS = REPO_ROOT / "thomas" / "server" / "web" / "js" / "unified_code_results.js"
 CODE_PROJECTS_JS = REPO_ROOT / "thomas" / "server" / "web" / "js" / "unified_code_projects.js"
-CODE_SIBLING_JS = (CODE_RESULTS_JS, CODE_PROJECTS_JS)
+# The event-render cluster left unified_code_mode.js to get it under its size
+# ceiling. It is a sibling like the rest: loaded first, configured at load time.
+CODE_EVENTS_JS = REPO_ROOT / "thomas" / "server" / "web" / "js" / "unified_code_events.js"
+CODE_SIBLING_JS = (CODE_RESULTS_JS, CODE_PROJECTS_JS, CODE_EVENTS_JS)
+# Assertions about how a run is rendered do not care which side of that split
+# the code sits on, so they read both. A negative assertion gets stronger this
+# way: the markup must be absent from the pair, not merely from one file.
+CODE_RENDER_SOURCES = (CODE_JS, CODE_EVENTS_JS)
 CODE_LIFECYCLE_HARNESS = REPO_ROOT / "tests" / "web_node" / "unified_code_mode_lifecycle.mjs"
 WORK_SUPPORT_HARNESS = REPO_ROOT / "tests" / "web_node" / "unified_work_support_lifecycle.mjs"
 CHAT_MARKDOWN_HARNESS = REPO_ROOT / "tests" / "web_node" / "chat_markdown_renderer.mjs"
@@ -71,7 +78,8 @@ def test_primary_chat_loads_real_mode_adapters_not_classic_iframes() -> None:
     # unified_code_mode.js hands its state, escaper and render to the siblings at
     # load time, so every one of them must already be on the page. Ordering is
     # the whole contract between these four files.
-    for sibling in ("unified_code_lifecycle.js", "unified_code_results.js", "unified_code_projects.js"):
+    for sibling in ("unified_code_lifecycle.js", "unified_code_results.js",
+                    "unified_code_projects.js", "unified_code_events.js"):
         assert text.index(f"/static/js/{sibling}") < text.index("/static/js/unified_code_mode.js")
 
 
@@ -359,7 +367,7 @@ def test_code_adapter_preserves_terminal_stream_states() -> None:
 
 
 def test_code_adapter_collapses_terminal_and_tool_evidence_behind_details() -> None:
-    text = CODE_JS.read_text(encoding="utf-8")
+    text = "".join(p.read_text(encoding="utf-8") for p in CODE_RENDER_SOURCES)
     css = (REPO_ROOT / "thomas/server/web/css/unified_code_activity.css").read_text(encoding="utf-8")
 
     assert "function isTerminalTool(name)" in text
@@ -442,7 +450,7 @@ for (const modulePath of process.argv.slice(1)) eval(fs.readFileSync(modulePath,
 
 
 def test_code_history_replays_persisted_run_activity() -> None:
-    text = CODE_JS.read_text(encoding="utf-8")
+    text = "".join(p.read_text(encoding="utf-8") for p in CODE_RENDER_SOURCES)
 
     assert "function transcriptEvents(turn)" in text
     assert "JSON.parse(line)" in text

@@ -38,10 +38,14 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-SOURCE = (
-    Path(__file__).resolve().parents[1]
-    / "thomas" / "server" / "web" / "js" / "unified_code_mode.js"
-).read_text(encoding="utf-8")
+# eventFailed moved when the render cluster left unified_code_mode.js for its
+# size ceiling. One predicate is the whole point of this file, so it is looked
+# for across both halves -- finding it in neither must fail, not pass quietly.
+_WEB_JS = Path(__file__).resolve().parents[1] / "thomas" / "server" / "web" / "js"
+SOURCE = chr(10).join(
+    (_WEB_JS / name).read_text(encoding="utf-8")
+    for name in ("unified_code_mode.js", "unified_code_events.js")
+)
 
 
 def _without_comments() -> str:
