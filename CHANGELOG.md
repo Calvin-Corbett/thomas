@@ -7,6 +7,29 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (an attached file is never dropped in silence)
+
+- `docs[:6]` and `images[:4]` deleted the extras before the model saw the message --
+  no marker, no mention, and the composer had already drawn a chip for each one.
+  Attach nine documents, get answered about six, with nothing to suggest the other
+  three existed. The per-document trim in the same function has always printed
+  "... (truncated)" out loud; the whole-file case was simply quieter than the
+  partial-file case.
+- The limit was never really a file count. Nine short notes are cheap and two large
+  exports are not, and the old cap could drop a one-line file while admitting six
+  huge ones. Documents are now measured against a character budget, so nine small
+  attachments all arrive, and anything that genuinely will not fit is **named** in
+  the prompt as not read. A single oversized file still arrives truncated rather
+  than leaving the message with no attachments at all.
+- The image cap stays at four -- vision calls are metered per image, so that ceiling
+  is real rather than arbitrary -- but the extras are now named too.
+- Lifted the assembly out of the route as `_prompt_with_documents` and
+  `_images_for_request`. It sat inside a long async handler needing a live request,
+  a session store and an LLM, so the only test anyone could write against it was a
+  source-text one -- which is exactly how `docs[:6]` sat there unnoticed. Both are
+  pure functions now, and the new guard was run against the old caps first to
+  confirm it fails there.
+
 ### Fixed (Thomas keeps its own words about a job it just finished)
 
 - The "your task finished" bubble is written by the model. Two filters ran over it
