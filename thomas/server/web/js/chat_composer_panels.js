@@ -23,6 +23,19 @@
     const DIAL_FIELDS = deps.DIAL_FIELDS;
     const saveDials = deps.saveDials;
 
+    // Which executor Code will actually use for the model currently picked. The
+    // predicate is deliberately the same one unified_code_lifecycle.js applies when
+    // it builds the request -- two spellings of one rule is how they drift apart.
+    function codeRunsClaudeCli() {
+      return state.surfaceMode === 'code' && !String(state.modelId || '').startsWith('gpt-');
+    }
+
+    function dialUnsupportedNote(key) {
+      if (key !== 'effort' || !codeRunsClaudeCli()) return '';
+      return 'Not applied in Code: this model runs on the Claude executor, which has no '
+        + 'reasoning-effort control.';
+    }
+
     function renderToolsMenu() {
       const wrap = document.getElementById('tc-tools-menu'); if (!wrap) return;
       wrap.innerHTML = '<div style="font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--c-muted);padding:2px 2px 10px;">AI settings</div>';
@@ -35,6 +48,23 @@
         f.opts.forEach(([val, lbl]) => { const o = document.createElement('option'); o.value = String(val); o.textContent = lbl; if (String(val) === String(state.dials[f.key])) o.selected = true; sel.appendChild(o); });
         sel.addEventListener('change', () => { state.dials[f.key] = f.num ? parseInt(sel.value, 10) : sel.value; saveDials(); });
         row.appendChild(span); row.appendChild(sel); wrap.appendChild(row);
+        // Say it BEFORE the run, not after.
+        //
+        // Code has exactly two executors: anything whose id does not start with
+        // `gpt-` is dispatched to the Claude CLI (unified_code_lifecycle.js sends
+        // `claude:sonnet`), and that executor exposes no reasoning-effort control.
+        // Both facts were already known and already reported -- but only in the
+        // capability report, AFTER the run, as "substituted" and "unsupported".
+        // Until then this sheet showed a live six-position dial and the model you
+        // picked, so the only place the truth appeared was the post-mortem.
+        const noteFor = dialUnsupportedNote(f.key);
+        if (noteFor) {
+          const hint = document.createElement('div');
+          hint.className = 'tc-dial-note';
+          hint.style.cssText = 'margin:-5px 0 9px;font-size:11px;line-height:1.35;color:var(--c-muted);';
+          hint.textContent = noteFor;
+          wrap.appendChild(hint);
+        }
       });
       const memRow = document.createElement('label');
       memRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:4px;font-size:13px;cursor:pointer;';

@@ -7,6 +7,27 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Code says which executor will run, before you send)
+
+- Code has exactly two executors: any model whose id does not start with `gpt-` is
+  dispatched to the Claude CLI, which exposes **no reasoning-effort control**. Both
+  facts were already known and already reported -- but only in the capability report,
+  **after** the run, as "substituted" and "unsupported". Until then the AI-settings
+  sheet showed a live six-position Reasoning dial and the model you picked, so the
+  only place the truth appeared was the post-mortem.
+- The sheet now says so at the point of decision: pick Gemini, a local qwen, or any
+  non-GPT model in Code and the Reasoning dial carries "Not applied in Code: this
+  model runs on the Claude executor, which has no reasoning-effort control."
+- **Only when true**, which the tests pin in both directions -- silent for `gpt-`
+  models and silent outside Code mode. A warning that always showed would be its own
+  lie.
+- What RUNS is unchanged. Whether to keep offering models Code cannot run is a
+  product decision, flagged in `unified_code_lifecycle.js` and left to the owner.
+- The node harness for this module gained a real `querySelectorAll` and an
+  `innerHTML` setter that clears children. Without the latter the shared sheet
+  accumulated notes between renders, so "must be silent" could never have passed --
+  the first version of this test was green for the wrong reason.
+
 ### Fixed (compaction stops deleting the summary it just wrote)
 
 - Pass 3 drops the oldest messages until the conversation fits. Its own heading says

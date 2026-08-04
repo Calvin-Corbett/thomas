@@ -10,18 +10,40 @@ if (!modulePath) throw new Error('usage: node chat_composer_panels.mjs <chat_com
 
 function fakeEl() {
   return {
-    style: {}, title: '', value: '', innerHTML: '', dataset: {}, _on: {},
+    style: {}, title: '', value: '', dataset: {}, _on: {},
+    // Assigning innerHTML clears the element, exactly as a real one does.
+    // Without this the shared sheet accumulated notes between renders and a
+    // 'must be silent' assertion could never pass.
+    _html: '',
+    get innerHTML() { return this._html; },
+    set innerHTML(value) { this._html = value; this.children = []; },
     addEventListener(type, fn) { this._on[type] = fn; },
-    setAttribute() {}, focus() {}, appendChild() {}, closest: () => null,
+    className: '', textContent: '', children: [],
+    setAttribute() {}, focus() {}, closest: () => null,
+    appendChild(child) { this.children.push(child); return child; },
     getBoundingClientRect: () => ({ left: 0, width: 200, height: 120 }),
-    querySelectorAll: () => [],
+    // Enough of a query to find the dial notes the AI-settings sheet appends.
+    querySelectorAll(selector) {
+      const wanted = String(selector).replace('.', '');
+      const found = [];
+      const walk = (node) => {
+        for (const child of node.children || []) {
+          if (String(child.className || '').split(/\s+/).includes(wanted)) found.push(child);
+          walk(child);
+        }
+      };
+      walk(this);
+      return found;
+    },
   };
 }
 
 const mic = fakeEl();
+// The AI-settings sheet renders into this one.
+const nodes = { 'tc-tools-menu': fakeEl(), 'tc-tools-btn': fakeEl() };
 const win = { addEventListener() {} };
 const doc = {
-  getElementById: (id) => (id === 'tc-mic-btn' ? mic : null),
+  getElementById: (id) => (id === 'tc-mic-btn' ? mic : (nodes[id] || null)),
   querySelectorAll: () => [],
   createElement: () => fakeEl(),
 };
@@ -78,6 +100,37 @@ const checks = {
   micUsesAutosize: autosized === 1,
   micUsesSyncDynamic: synced === 1,
 };
+
+// Code has exactly two executors: a model whose id does not start with `gpt-` is
+// dispatched to the Claude CLI, which exposes no reasoning-effort control. Both
+// facts were already reported -- but only afterwards, in the capability report, as
+// "substituted" and "unsupported". The sheet showed a live six-position dial until
+// the run was over. This pins that it now says so beforehand, and ONLY when true:
+// a warning that always showed would be its own lie.
+function dialNotesFor(surfaceMode, modelId) {
+  const sheet = win.ThomasChatComposerPanels.create({
+    state: { surfaceMode, modelId, dials: { effort: 'high' }, toolsMenuOpen: false },
+    esc,
+    inputEl: { value: '' },
+    autosize: () => {},
+    syncDynamic: () => {},
+    DIAL_FIELDS: [{ key: 'effort', label: 'Reasoning effort', opts: [['high', 'High']] }],
+    saveDials: () => {},
+  });
+  sheet.toggleToolsMenu();
+  const menu = doc.getElementById('tc-tools-menu');
+  const notes = [...menu.querySelectorAll('.tc-dial-note')].map((n) => n.textContent || '');
+  sheet.closeToolsMenu();
+  return notes.join(' ');
+}
+
+const effortWarns = {
+  warnsForGemini: dialNotesFor('code', 'gemini-2.5-pro').includes('Not applied in Code'),
+  warnsForLocalModel: dialNotesFor('code', 'qwen2.5-coder:7b').includes('Not applied in Code'),
+  silentForGpt: !dialNotesFor('code', 'gpt-5.6-terra').includes('Not applied in Code'),
+  silentOutsideCode: !dialNotesFor('chat', 'gemini-2.5-pro').includes('Not applied in Code'),
+};
+Object.assign(checks, effortWarns);
 
 for (const [name, passed] of Object.entries(checks)) {
   if (!passed) throw new Error(`composer panel check failed: ${name}`);
