@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import secrets
+import sqlite3
 import subprocess
 import time
 from pathlib import Path
@@ -19,7 +20,7 @@ from aiohttp import web
 
 from thomas.agent.loop_tool_protocol import is_inspection_tool
 from thomas.forge.anvil import forge_code_deliverables, forge_code_git, forge_code_store, run_report
-from thomas.server.app_keys import APP_ENGINE_MANAGER
+from thomas.server.app_keys import APP_ENGINE_MANAGER, APP_RUN_STORE_ENABLED, APP_RUN_STORE_MODULE
 
 from .evolve_agent_activity import (
     acquire_code_activity_lease as _acquire_code_activity_lease,
@@ -522,6 +523,38 @@ def _agent_turn_is_in_store(root: Path, cid: str, turn: dict[str, Any]) -> bool:
     )
 
 
+# The failures a run-store write can realistically produce. Named rather than a bare
+# `except Exception`, so a bug in the recorder still surfaces while a storage hiccup
+# never breaks a run. Mirrors chat_v2_run_store's set.
+_RUN_STORE_ERRORS = (AttributeError, OSError, RuntimeError, sqlite3.Error, TypeError, ValueError)
+
+
+def _finalize_code_run(app: web.Application, run_id: str, *, ok: bool, reason: str) -> None:
+    """Close the run-store row for a finished Code run.
+
+    Without this a row opened at launch is swept as stale after ten idle minutes and
+    written as `ok = 0` -- so a run that built a working page is filed as a failure.
+    Recording must never be the reason a run appears to have gone wrong.
+    """
+
+    if not run_id:
+        return
+    module = app.get(APP_RUN_STORE_MODULE)
+    if not bool(app.get(APP_RUN_STORE_ENABLED, False)) or module is None:
+        return
+    try:
+        module.finalize_run(
+            run_id,
+            bool(ok),
+            None if ok else (reason or "run did not complete successfully"),
+            None,
+            None,
+            None,
+        )
+    except _RUN_STORE_ERRORS as exc:
+        log.warning("Code run not finalized (run store write failed): %s", exc)
+
+
 async def _drain_and_record(
     proc: Any,
     transcript: Path,
@@ -610,6 +643,17 @@ async def _drain_and_record(
         # `_agent_turn_is_in_store` goes back to disk to find it again.
         recorded_turn = (persisted.get("turns") or [{}])[-1]
         persistence_confirmed = _agent_turn_is_in_store(root, cid, recorded_turn)
+        # Close the run-store row opened at launch, with the outcome computed above
+        # from git truth. This is the other half of _record_code_run_start, and
+        # leaving it out was actively harmful rather than merely incomplete: a row
+        # with no end time is swept by reconcile_stale_runs() after ten idle minutes,
+        # and mark_run_dead() writes `ok = 0`. So every SUCCESSFUL Code run was being
+        # recorded as a failure ten minutes later. Verified on a real run that built
+        # a working tip calculator and landed in the ledger as ok=0.
+        #
+        # Placed here rather than at the SSE "done" frame because the browser can
+        # disconnect; this path runs whether or not anyone is watching.
+        _finalize_code_run(app, run_id, ok=bool(ok), reason=str(reason or ""))
         # Close the loop into "My Stuff": a SUCCESSFUL run that produced a coherent
         # deliverable (the detector decides -- a built page/doc/image/data file, not
         # a code-only edit) becomes a durable, openable entry pointing back at this

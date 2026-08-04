@@ -7,6 +7,26 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (a finished Code run is recorded as finished, not swept up as dead)
+
+- `_record_code_run_start` opened a run-store row at launch and nothing ever closed
+  it. That was not merely incomplete, it was actively wrong: `reconcile_stale_runs()`
+  sweeps any row idle for ten minutes and `mark_run_dead()` writes `ok = 0`. So every
+  **successful** Code run was being filed as a failure ten minutes later.
+- Caught by looking at the rows the previous commit had just created, not by
+  reasoning about them. The tip-calculator run — a working page, no console errors —
+  sat in the ledger as `ok=0, error="dead_run: stale run janitor reconciliation"`.
+  The prediction in that commit ("an unfinished row is loud, a missing row is
+  silent") was wrong in the way that matters: it was quietly wrong, which is the
+  defect this whole session has been about.
+- `_finalize_code_run` now closes the row from `_drain_and_record`, which is the
+  right hook for two reasons: it computes the outcome from **git truth** (did files
+  actually change), and it runs whether or not a browser is still connected — the SSE
+  `done` frame would miss every run where the tab was closed.
+- Both directions are visible in one table: the pre-fix run reads
+  `ok=0 / dead_run`, the post-fix run reads `ok=1 / error=None`. Verified on a real
+  Code run that built a working dice page (`"Roll the die ?"` → `"Roll the die 3"`).
+
 ### Fixed (Code runs are recorded at all — Thomas can finally see the mode that builds things)
 
 - The run store was wired to the **Chat** path only. `start_chat_v2_run` is called
