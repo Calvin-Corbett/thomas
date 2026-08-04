@@ -7,6 +7,24 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (compaction stops deleting the summary it just wrote)
+
+- Pass 3 drops the oldest messages until the conversation fits. Its own heading says
+  "Drop oldest non-system, **non-summary** messages" -- but it inspected
+  `messages[0]` and then popped `messages[1]` without ever looking at what index 1
+  was. A real conversation is `[system prompt, [context-summary], ...turns]`, so
+  index 1 is exactly the compaction summary.
+- That summary is the single artifact carrying the turns already compacted away.
+  Losing it costs more than losing the forty turns it replaced, because a constraint
+  agreed thirty messages ago lived only there -- and the marker left behind then
+  reported it as one of "N earlier messages", so the loss read as routine trimming.
+- Reproduced first: a conversation whose summary carried "NEVER USE THE STAGING DB"
+  went from 22 messages to 6 with the summary gone and the system prompt intact.
+  The oldest genuinely droppable message is now found by looking.
+- `test_long_multi_pass_run_compacts_context_without_raw_token_abort` is red, and
+  was **already red on HEAD** before this change -- verified by running the test
+  against the unmodified file. It is untouched here and remains open.
+
 ### Fixed (a hole in the conversation is visible to the model)
 
 - `get_context_window` keeps the first N and last M messages and drops from the
