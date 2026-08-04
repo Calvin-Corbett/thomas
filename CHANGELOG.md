@@ -7,6 +7,31 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Code runs are recorded at all — Thomas can finally see the mode that builds things)
+
+- The run store was wired to the **Chat** path only. `start_chat_v2_run` is called
+  from `chat_v2.py` and `workspace_specialist_runtime.py`, and from nowhere on the
+  Code path. So Code runs — the ones that actually produce deliverables — have
+  **never** been recorded. Not since a regression: never.
+- Proven by running Thomas rather than reading it. A real Code task built a working
+  `clock.html` (opened it; 12:45:25 → 12:45:27, no console errors) and the run count
+  in `runs.sqlite3` went **408 → 408**.
+- The damage is not to the user, whose files are fine. It is to everyone reasoning
+  ABOUT Thomas. The newest row in that database was 2026-07-29, which reads as
+  "Thomas has been idle six days" when it actually means "Chat has been idle and Code
+  was never visible". A full day of investigation — this agent plus fourteen
+  subagents across two workflows — drew conclusions from that ledger. Two agents
+  caught each other citing stale data. Nobody caught that the live mode was absent
+  from it entirely. An absence shaped like a presence.
+- One `create_run` call at the Code launch point, behind a helper that cannot raise:
+  a recorder able to take a launch down would be worse than no recorder, and this one
+  is being added precisely because nobody noticed it missing.
+- **Finalisation is deliberately NOT wired.** Rows land with `ended_at` null and
+  `reconcile_stale_runs()` already exists to close them. The "done" frame is where it
+  belongs and is named in the code comment. An unfinished row is loud; a missing row
+  is silent — that is the correct direction to fail while this is half-built.
+- Verified after: 408 → 409, `mode=code`, `model_id=gpt-5.6-terra`.
+
 ### Fixed (Code says which executor will run, before you send)
 
 - Code has exactly two executors: any model whose id does not start with `gpt-` is

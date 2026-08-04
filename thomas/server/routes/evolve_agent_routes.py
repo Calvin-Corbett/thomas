@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import secrets
+import sqlite3
 import sys
 import time
 from collections.abc import Callable
@@ -29,7 +30,7 @@ from thomas.forge.anvil.forge_code_http_stream import (
 )
 from thomas.forge.anvil.forge_code_http_stream import line_to_sse_payload as _line_to_sse_payload
 from thomas.forge.anvil.forge_code_settings import ForgeCodeSettings, ForgeCodeSettingsError
-from thomas.server.app_keys import APP_DELIVERABLE_PREVIEW_SERVICE
+from thomas.server.app_keys import APP_DELIVERABLE_PREVIEW_SERVICE, APP_RUN_STORE_ENABLED, APP_RUN_STORE_MODULE
 
 from .evolve_agent_http_support import (
     attachment_goal_note,
@@ -616,6 +617,26 @@ def build_evolve_agent_handlers(
         env["THOMAS_CODE_START_TOKEN"] = start_token
         env["THOMAS_CODE_RUN_ID"] = run_id
         env["THOMAS_CODE_REQUEST_ID"] = request_id
+        # Make this run visible to Thomas's own instruments.
+        #
+        # Until now the run store was wired to the Chat path ONLY -- start_chat_v2_run
+        # is called from chat_v2.py and workspace_specialist_runtime.py, and nothing
+        # anywhere on the Code path. So Code runs, the ones that actually build
+        # things, were never recorded at all. On 2026-08-04 a real Code run built a
+        # working clock.html and the run count in runs.sqlite3 went 408 -> 408.
+        #
+        # The damage is not to the user, it is to everyone reasoning ABOUT Thomas.
+        # The newest row in that database was 2026-07-29, which reads as "Thomas has
+        # been idle for six days" when it actually means "Chat has been idle and Code
+        # has never been visible". A day was spent drawing conclusions from it, by me
+        # and by fourteen agents, none of whom could see the mode being used.
+        #
+        # Deliberately fails silent-but-visible rather than silent: a run row with no
+        # end time is obviously incomplete and reconcile_stale_runs() already exists
+        # to close those. FINALISATION IS NOT WIRED YET -- the "done" frame below is
+        # where it belongs, and until it is there these rows will show as unfinished.
+        _record_code_run_start(app, run_id, cid, project_root, settings)
+
         response = {
             "ok": True,
             "started": True,
@@ -1467,6 +1488,43 @@ def build_evolve_agent_handlers(
         "artifact": artifact,
         "artifact_content": artifact_content,
     }
+
+
+
+# The failures a run-store write can realistically produce. Named rather than a bare
+# `except Exception`, so a recorder bug still surfaces while a storage hiccup never
+# breaks a launch. Mirrors chat_v2_run_store's set.
+_RUN_STORE_ERRORS = (AttributeError, OSError, RuntimeError, sqlite3.Error, TypeError, ValueError)
+
+
+def _record_code_run_start(app, run_id: str, cid: str, project_root, settings) -> None:
+    """Write one row so a Code run exists in Thomas's own run store.
+
+    Never raises and never blocks the run. A recorder that can take the product down
+    would be worse than no recorder, and this one is being added precisely because
+    nobody noticed it was missing for months -- so it must not become the thing that
+    makes launches fail.
+    """
+
+    module = app.get(APP_RUN_STORE_MODULE)
+    if not bool(app.get(APP_RUN_STORE_ENABLED, False)) or module is None:
+        return
+    try:
+        module.create_run(
+            {
+                "run_id": run_id,
+                "session_id": str(cid or ""),
+                "surface": "code",
+                "profile": str(getattr(settings, "family", "") or ""),
+                "model_id": str(getattr(settings, "recorded_model", lambda: "")() or ""),
+                "mode": "code",
+                "project_root": str(project_root or ""),
+            }
+        )
+    except _RUN_STORE_ERRORS as exc:
+        # Named rather than bare: a recorder must not break a launch, but it must
+        # also not swallow a bug in itself. Same set Chat's recorder uses.
+        log.warning("Code run not recorded (run store write failed): %s", exc)
 
 
 def register_evolve_agent_routes(
