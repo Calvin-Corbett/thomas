@@ -7,6 +7,23 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (choosing Thorough actually gives the worker longer to think)
+
+- Two watchdogs guard a delegated worker and they disagreed.
+  `_supervisor_worker_timeout_s` reads the effort dial and grants **360s** for
+  `max`/`exhaustive` — "Thorough" in the UI. `_next_worker_event`, the one that
+  actually cancels the event stream, took no effort argument and always used the
+  **120s** idle constant. The stricter spelling wins, so the dial was inert: pick
+  Thorough, get cut off at two minutes anyway.
+- The cut is not gentle. The timeout path cancels the pending `__anext__()`, which
+  destroys the generator; downstream, `StopAsyncIteration` then reads as *"the worker
+  said nothing"* rather than *"we stopped listening"*. So an interrupted run was
+  reported as a silent one.
+- The call site now passes the same window the supervisor grants. The tests pin
+  **agreement** rather than the number 360, so they do not go stale when either
+  constant moves, and a control asserts the watchdog still fires on a genuinely hung
+  worker — widening a window must not remove the guard.
+
 ### Fixed (a finished Code run is recorded as finished, not swept up as dead)
 
 - `_record_code_run_start` opened a run-store row at launch and nothing ever closed

@@ -109,8 +109,26 @@ def _supervisor_worker_timeout_s(worker_kwargs: dict[str, Any], *, has_progress:
     return base
 
 
-async def _next_worker_event(stream: Any, *, saw_event: bool) -> dict[str, Any] | None:
-    timeout_s = _WORKER_IDLE_EVENT_TIMEOUT_S if saw_event else _WORKER_FIRST_EVENT_TIMEOUT_S
+async def _next_worker_event(
+    stream: Any, *, saw_event: bool, timeout_s: float | None = None
+) -> dict[str, Any] | None:
+    """Wait for the worker's next event, cancelling the stream if it never comes.
+
+    `timeout_s` exists because this watchdog and `_supervisor_worker_timeout_s`
+    were two spellings of one decision and they disagreed. The supervisor reads the
+    effort dial and grants 360s for "max"/"exhaustive" -- Thorough in the UI -- while
+    this function took no effort argument and always used the 120s idle constant.
+    The stricter one wins, so choosing Thorough changed nothing and a worker that
+    thought for over two minutes was cut off mid-step.
+
+    Worth knowing what the cut costs: the timeout path cancels the pending
+    `__anext__()`, which destroys the generator. After that StopAsyncIteration reads
+    downstream as "the worker said nothing" rather than "we stopped listening", so
+    the run is reported as silent rather than interrupted.
+    """
+
+    if timeout_s is None:
+        timeout_s = _WORKER_IDLE_EVENT_TIMEOUT_S if saw_event else _WORKER_FIRST_EVENT_TIMEOUT_S
     next_task = asyncio.create_task(stream.__anext__())
     done, _pending = await asyncio.wait({next_task}, timeout=max(0.001, float(timeout_s)))
     if done:
@@ -541,7 +559,13 @@ async def _run_agent_worker(
                 runtime_policy=runtime_policy,
             ).__aiter__()
             while True:
-                event = await _next_worker_event(event_stream, saw_event=saw_event)
+                # Same window the supervisor grants, so the effort dial reaches the
+                # watchdog that actually cancels the stream.
+                event = await _next_worker_event(
+                    event_stream,
+                    saw_event=saw_event,
+                    timeout_s=_supervisor_worker_timeout_s({"effort": effort}, has_progress=saw_event),
+                )
                 if event is None:
                     break
                 event_type = str(event.get("type") or "").strip()
