@@ -61,11 +61,29 @@ def render_report_pdfs(work_dir: Path | None, created_files: list[str] | None) -
 
 
 def runtime_executability_warning(work_dir: Path | None, created_files: list[str] | None) -> str:
-    """Return a warning when the opt-in browser smoke check fails."""
+    """Say what happened when the app was opened — including that it was not.
+
+    This is the only check in Thomas that opens a generated app and watches it
+    load. Its own module docstring names the case it exists for: an app can have
+    every file present and still render a blank page. Every static check passes on
+    a crashing app, because every file really is there.
+
+    It used to require `THOMAS_RUNTIME_VERIFY` to be switched on, and that variable
+    is set in exactly one place in this repository: a test file. So the check had
+    never run for a real user. Measured 2026-08-05: Thomas built a three-file
+    expense tracker whose app.js referenced an undeclared `refreshButton` on its
+    last line; the page threw on load and rendered nothing, and Thomas handed it
+    over with no warning because nothing ever opened it.
+
+    It now runs unless explicitly switched OFF. Nothing here can reject a run — the
+    function only returns a sentence to append, and every failure path inside it
+    returns a sentence too.
+    """
+
     try:
         import os
 
-        if str(os.environ.get("THOMAS_RUNTIME_VERIFY", "")).strip().lower() not in ("1", "true", "yes", "on"):
+        if str(os.environ.get("THOMAS_RUNTIME_VERIFY", "")).strip().lower() in ("0", "false", "no", "off"):
             return ""
         if work_dir is None:
             return ""
@@ -77,8 +95,15 @@ def runtime_executability_warning(work_dir: Path | None, created_files: list[str
 
         entry = next((item for item in htmls if Path(item).name.lower() == "index.html"), htmls[0])
         result = runtime_smoke_load(work_dir, entry=entry)
-        if result.ok or result.skipped:
+        if result.ok:
             return ""
+        # "We looked and it was fine" and "we never looked" are different facts and
+        # used to return the same empty string. Silence from a step advertised as
+        # "I open the app and watch it run" reads to a person as "someone checked".
+        if result.skipped:
+            return " ⚠ I could not open this to check that it runs — " + (
+                result.reason or "no browser available"
+            ) + "."
         return " ⚠ The app did not run cleanly when opened — " + (result.reason or "runtime check failed") + "."
     except (AttributeError, ImportError, OSError, RuntimeError, TypeError, ValueError):
         log.warning("Runtime deliverable verification failed", exc_info=True)

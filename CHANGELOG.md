@@ -7,6 +7,27 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Thomas opens the app it built, and says so when it cannot)
+
+- `runtime_executability_warning` is the only check in Thomas that opens a generated
+  app and watches it load. It ran only when `THOMAS_RUNTIME_VERIFY` was switched on,
+  and that variable is set in **exactly one place in this repository — a test file**.
+  So the check had never run for a real user.
+- And `if result.ok or result.skipped: return ""` gave the same answer to "we looked
+  and it was fine" as to "we never looked". Silence, from a step advertised as *I open
+  the app and watch it run*, reads to a person as *someone checked*.
+- Measured against a real fixture rather than a synthetic one: the three-file expense
+  tracker Thomas built on 2026-08-05, whose `app.js` referenced an undeclared
+  `refreshButton` on its last line. The page threw on load and rendered nothing, and
+  Thomas handed it over with no warning. Every static check passed — every file
+  really was present. It now reports *"The app did not run cleanly when opened —
+  uncaught JS error during load/run."*
+- Runs by default; can still be switched off deliberately. A skipped check now says
+  *"I could not open this to check that it runs"* and pointedly does **not** claim the
+  app is broken — nothing was observed either way.
+- **Nothing here can reject a run.** The function returns a sentence to append, and
+  every path inside it returns a sentence. Reporting, never gating.
+
 ### Fixed (a run that looped still looks like it looped)
 
 - The progress feed collapses a note whose text repeats an earlier one, keeping the
