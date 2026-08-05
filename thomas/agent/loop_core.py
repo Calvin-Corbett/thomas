@@ -537,7 +537,12 @@ class AgentLoop:
         # It gets the most generous values in this function instead; the numbers are
         # the ones already here, not new ones.
         if path == "model_owned":
-            return 0, 12
+            # preserve_first was 0, so the HEAD of the conversation was unprotected
+            # and the user's original request was evicted before the file dumps that
+            # arrived after it. A run would then finish a job whose brief it could no
+            # longer read. One message of head protection keeps the ask; the
+            # compaction summary, when there is one, also lives at the head.
+            return 2, 12
         if path in ("casual_chat", "personal_context", "assistant_meta", "general"):
             if self._context_preserve_mode in {"continuous", "persistent", "high_context", "chatty"}:
                 return 0, 12
@@ -555,7 +560,19 @@ class AgentLoop:
         # the same session and the 5200 written for coding_task was never reached by
         # anything. 5200 is that same existing value, now actually reachable.
         if path == "model_owned":
-            return 5200
+            # A fraction of the REAL window, not a constant.
+            #
+            # 5200 was the largest number already in this function, so making it
+            # reachable was an improvement — but it is 2.6% of a 200k model. The
+            # model was being handed a thimble and asked to remember a conversation.
+            # `_build_messages` already fits everything to the true window afterwards
+            # (see the hard cap around line 400), so this soft cap only needs to stop
+            # history crowding out tools and the response, not to guess the window.
+            #
+            # The floor keeps small models exactly where they were: an 8k model still
+            # gets 5200, because `8192 // 3` is smaller than the floor. Line 318 in
+            # this same file already sizes its budget this way.
+            return max(5200, min(60_000, int(self._context_window) // 3))
         if path in ("casual_chat", "personal_context", "assistant_meta", "general"):
             if self._context_preserve_mode in {"continuous", "persistent", "high_context", "chatty"}:
                 return 5200

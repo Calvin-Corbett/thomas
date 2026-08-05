@@ -7,6 +7,28 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (the model can still see what it was asked to do)
+
+- The history budget was a **constant** — 5,200 tokens, handed to a model with a
+  200,000-token window. 2.6% utilisation. A thimble, and the model was asked to
+  remember a conversation out of it.
+- And `preserve_first` was **0**, so the head of the conversation had no protection:
+  the user's original request was evicted before the file dumps that arrived after
+  it. A run could finish a job whose brief it could no longer read.
+- The budget is now a fraction of the real window, floored so nothing gets worse:
+
+  | model window | history before | history after |
+  |---|---|---|
+  | 8,192 | 5,200 | 5,200 (unchanged) |
+  | 128,000 | 5,200 | 42,666 |
+  | 200,000 | 5,200 | 60,000 |
+
+- `_build_messages` already fits everything to the true window afterwards, so this
+  soft cap only needs to stop history crowding out tools and the response — which a
+  test pins at no more than half the window on any model size.
+- `preserve_first` is 2, so the ask (and the compaction summary, which also lives at
+  the head) survives. The small-talk route is untouched.
+
 ### Fixed (the model keeps its tools, and is never told a call failed that it never made)
 
 - On coding jobs Thomas capped inspections. After 6 read-only calls it injected

@@ -30,9 +30,14 @@ class _Route:
 
 
 class _Loop:
-    """Only the attribute the two helpers read."""
+    """Only the attributes the two helpers read.
+
+    `_context_window` was added when the history budget stopped being a constant and
+    became a fraction of the model's real window; a stub without it now raises.
+    """
 
     _context_preserve_mode = "normal"
+    _context_window = 200_000
 
 
 def _caps(path: str) -> tuple[int, int]:
