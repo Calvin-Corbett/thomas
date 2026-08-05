@@ -28,24 +28,40 @@ TOKEN_ECONOMY_ALIASES = {
 }
 RUN_MODES = ("auto", "fast", "thinking")
 
-# Number of passes (iterations) per economy level.
-# These multiply against the base max_agent_iterations from config.
-_PASS_MULTIPLIERS = {
-    "cheap": 0.3,  # ~1-3 passes — single-shot, minimal iteration
-    "optimal": 1.0,  # default number of passes from config
-    "max": 2.5,  # extended passes for thorough multi-step work
-}
+# Passes are NOT rationed. The model stops when it stops asking for tools.
+#
+# This used to hand out 3 / 15 / 32 iterations by economy level, with 15 the
+# default. That is the opposite of how every comparable agent works: the loop runs
+# until the model has nothing left it wants to look at, and an iteration cap exists
+# only as an opt-in safety net, off by default. Cost is capped in dollars, not in
+# steps.
+#
+# Rationing steps does not save money, it wastes it. A run cut off at pass 15 has
+# already paid for 15 passes and produced a half-finished edit, and the owner then
+# has to spend more asking it to continue. Measured 2026-08-05: a three-file app was
+# cut off mid-repair and shipped with an undeclared variable on the last line of
+# app.js; the user's own words afterwards were "it told me he ran out of passes,
+# just really unusable".
+#
+# What remains is a RUNAWAY GUARD. It is deliberately far above any real task, so it
+# only ever catches a genuine infinite loop — never a job that was going fine. If you
+# find yourself tempted to lower it to save tokens, lower the reasoning effort
+# instead: that is native to the model and makes each step cheaper, rather than
+# rationing how many steps the model is allowed to think in.
+_RUNAWAY_GUARD_PASSES = 400
+
+_PASS_MULTIPLIERS = {"cheap": 1.0, "optimal": 1.0, "max": 1.0}
 
 _MIN_PASSES = {
-    "cheap": 1,
-    "optimal": 3,
-    "max": 8,
+    "cheap": _RUNAWAY_GUARD_PASSES,
+    "optimal": _RUNAWAY_GUARD_PASSES,
+    "max": _RUNAWAY_GUARD_PASSES,
 }
 
 _MAX_PASSES = {
-    "cheap": 3,
-    "optimal": 15,
-    "max": 32,
+    "cheap": _RUNAWAY_GUARD_PASSES,
+    "optimal": _RUNAWAY_GUARD_PASSES,
+    "max": _RUNAWAY_GUARD_PASSES,
 }
 
 

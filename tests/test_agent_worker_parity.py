@@ -630,7 +630,11 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
         # Brisk @ L4 auto-promotes to Diligent (optimal); Exhaustive stays max.
         self.assertEqual(brisk["token_economy"], "optimal")
         self.assertEqual(exhaustive["token_economy"], "max")
-        self.assertLess(brisk["max_iterations"], exhaustive["max_iterations"])
+        # Passes are no longer rationed by effort. Every level gets the same runaway
+        # guard; spending is controlled by reasoning effort and token budget instead.
+        # A cheap run that stops early because it was ALLOWED fewer steps has already
+        # paid for those steps and thrown the result away.
+        self.assertEqual(brisk["max_iterations"], exhaustive["max_iterations"])
 
     async def test_worker_tolerates_missing_max_agent_iterations(self):
         _FakeLLM.instances = []
@@ -656,7 +660,8 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
                 ]
         self.assertIn("done", [event["type"] for event in events])
         self.assertEqual(_FakeAgentLoop.run_kwargs["token_economy"], "max")
-        self.assertEqual(_FakeAgentLoop.run_kwargs["max_iterations"], 25)
+        # Missing config falls back to the runaway guard, not to a small ration.
+        self.assertEqual(_FakeAgentLoop.run_kwargs["max_iterations"], 400)
 
     async def test_worker_forwards_self_development_job_type(self):
         _FakeLLM.instances = []

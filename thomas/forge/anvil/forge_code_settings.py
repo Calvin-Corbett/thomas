@@ -19,7 +19,16 @@ from thomas.core.file_access import file_access_spec, parse_file_access_level
 # regularly need >600s; a hard kill mid-build wastes the whole run and forces
 # a from-scratch re-dispatch that costs more than letting it finish.
 EXECUTION_TIMEOUTS_S = {"cheap": 600, "balanced": 1800, "max": 3600}
-EXECUTION_MAX_FIX_ITERS = {"cheap": 1, "balanced": 2, "max": 3}
+# Repair attempts are a runaway guard, not a ration. This was {1, 2, 3}: on the
+# default setting the build engine got TWO tries to fix whatever it found before
+# giving up and handing over broken work. A one-line undeclared-variable bug can
+# easily outlive two attempts, especially when each attempt starts from scratch.
+#
+# Same reasoning as _RUNAWAY_GUARD_PASSES in token_economy: bounding the number of
+# attempts does not save money, it spends money and then throws the result away.
+# Cheap/balanced/max still differ in reasoning effort and token budget — that is
+# where spending belongs.
+EXECUTION_MAX_FIX_ITERS = {"cheap": 20, "balanced": 20, "max": 20}
 
 
 class ForgeCodeSettingsError(ValueError):

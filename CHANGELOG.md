@@ -7,6 +7,27 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (no pass limits — the model stops when it is done, not when a counter says so)
+
+- Passes were rationed by economy level: **3 / 15 / 32**, with 15 the default. That is
+  the inverse of how every comparable agent works — the loop runs until the model
+  stops asking for tools, and an iteration cap exists only as an opt-in safety net,
+  off by default. Cost is capped in dollars, not in steps.
+- Rationing steps does not save money, it wastes it. A run cut off at pass 15 has
+  already paid for 15 passes and produced a half-finished edit, and the owner then
+  spends more asking it to continue. Reported by the owner within minutes of using
+  it: *"it told me he ran out of passes, just really unusable."*
+- What remains is a **runaway guard** — 400 passes at every level, far above any real
+  task, so it only ever catches a genuine infinite loop. Repair attempts were the same
+  disease: `{1, 2, 3}` meant the build engine got **two** tries on the default setting
+  before handing over broken work. Now 20 at every level.
+- The economy dial still means something: reasoning effort and token budget. That is
+  where spending belongs — effort is native to the model and makes each step cheaper,
+  rather than rationing how many steps the model may think in.
+- Three tests pinned the rations and are updated to the new contract, including one
+  that now protects the half that still matters: when the guard *does* fire, the run
+  must not claim it finished.
+
 ### Fixed (the model can still see what it was asked to do)
 
 - The history budget was a **constant** — 5,200 tokens, handed to a model with a

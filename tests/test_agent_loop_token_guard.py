@@ -347,8 +347,11 @@ def test_optimal_effort_exhaustion_is_incomplete_not_done() -> None:
     done = next((e for e in events if e.type == EventType.AGENT_DONE), None)
     assert done is None
     errors = [e for e in events if e.type == EventType.AGENT_ERROR]
-    assert any("pass budget exhausted after 15 passes" in str(e.data.get("error") or "").lower() for e in errors)
-    assert llm.calls == 15
+    # 15 was the old "optimal" ration. Passes are no longer rationed, so exhaustion
+    # now only happens at the runaway guard -- far above any real task. What this
+    # test still protects is the important half: when the guard DOES fire, the run
+    # must not claim it finished.
+    assert any("pass budget exhausted" in str(e.data.get("error") or "").lower() for e in errors)
 
 
 def test_token_economy_budget_metadata_is_reported() -> None:
