@@ -137,6 +137,7 @@
     knownProjectName,
     loadProjectNames,
     projectDisplayLabel,
+    projectNameKey,
     rememberProjectName,
     updateProjectButton,
   };

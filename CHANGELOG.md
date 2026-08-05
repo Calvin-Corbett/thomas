@@ -7,6 +7,31 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (a new Code task no longer moves into the previous task's folder)
+
+- Measured live: task A got its own folder, and task B — started with "New
+  chat", nothing picked — was bound into A's folder, so A's finished run listed
+  B's page under "THOMAS MADE 2 THINGS". The client kept the last root it was
+  handed (`state.projectRoot` follows every open) and sent it back as
+  `project_root`, where it was indistinguishable from a deliberate pick — the
+  shared-drawer defect reborn with task A's folder playing the drawer.
+- Server: `project_for_new_task` stamps its folders
+  (`.thomas/created-for-one-task.json`); `_chosen_project` declines a stamped
+  folder arriving without `project_choice: "picked"` and gives the task its own
+  folder instead. Real picks (folder dialog, project card, typed name) send the
+  flag and are honoured exactly as before; folders the user made themselves
+  carry no stamp and keep their sticky-default behaviour. This also heals
+  browsers whose localStorage already holds a leftover task folder.
+- Client (`unified_code_mode.js`, `unified_code_lifecycle.js`): a new task may
+  only inherit `chosenProjectRoot` — a root somebody actually picked — never
+  the folder of whatever conversation was last on screen; only picks reach
+  localStorage; a declined leftover root is cleared instead of resent forever.
+- Verified live at 1920×1080: two simultaneous Code runs (parallel-run registry
+  intact, no "another Code run is still active"), each bound to its own folder,
+  each run report listing only its own file. Tests:
+  `tests/test_a_new_task_does_not_move_into_the_last_tasks_folder.py` (red
+  before, green after, with both honour-the-pick controls).
+
 ### Fixed (a Code run is judged by its work, not its exit code)
 
 - `_drain_and_record` required `rc == 0` before it would believe any evidence, and

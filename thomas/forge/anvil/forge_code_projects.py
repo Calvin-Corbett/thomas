@@ -364,8 +364,46 @@ def project_for_new_task(task: str) -> Path:
     Nothing here migrates or moves an existing conversation: a task that is
     already bound keeps the folder it was bound to. This decides where a NEW one
     starts.
+
+    The folder is stamped as task-born on the way out. Measured 2026-08-05: the
+    Code UI keeps the last root it was handed and sends it back as
+    ``project_root`` on the next new task, so the SECOND task of a session was
+    bound into the first task's folder -- the shared-drawer defect reborn, with
+    task A's folder playing the drawer. The stamp is what lets
+    ``_chosen_project`` in evolve_agent_routes tell "a leftover of the previous
+    task" from "a folder somebody actually picked": picks now carry
+    ``project_choice: "picked"`` and are honoured, stamps without it are not a
+    choice. A failed stamp is logged and swallowed -- an unmarked folder means
+    the pre-stamp behaviour for that folder, never a task that cannot start.
     """
-    return create_named_project(project_name_for_task(task))
+    project = create_named_project(project_name_for_task(task))
+    try:
+        marker = _task_born_marker(project)
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text('{"created_by": "project_for_new_task"}\n', encoding="utf-8")
+    except OSError:
+        log.warning("task-born stamp could not be written for %s", project, exc_info=True)
+    return project
+
+
+def _task_born_marker(root: str | Path) -> Path:
+    return Path(root) / ".thomas" / "created-for-one-task.json"
+
+
+def is_task_born_project(path: str | Path | None) -> bool:
+    """True when a folder was minted by ``project_for_new_task`` for one task.
+
+    Reads the stamp that function writes. Only the stamp is trusted -- the slug
+    shape is not, because a person can type a project name that looks exactly
+    like a task sentence, and their folder must never be mistaken for a
+    leftover.
+    """
+    if not path:
+        return False
+    try:
+        return _task_born_marker(Path(path).expanduser()).is_file()
+    except (OSError, ValueError):
+        return False
 
 
 def create_named_project(name: str) -> Path:

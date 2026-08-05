@@ -12,7 +12,12 @@
   const state = {
     conversations: [], activeId: '', conversation: null, liveEvents: [], changes: [], tree: [], treeLoaded: false, treePath: '', artifacts: [], filePreview: null,
     pendingApproval: null, pendingRequest: null, lastContext: {}, running: false, runStartedAt: 0, runStatus: 'ready', source: null,
-    finishing: null, approvalBusy: false, steeringBusy: false, projectRoot: '', projectNames: {}, terminalTool: '', contextEpoch: 0, runProof: null,
+    // projectRoot is the folder of the conversation ON SCREEN; chosenProjectRoot
+    // is the folder a person actually PICKED (dialog, project card, typed name)
+    // and is the only root a new task may inherit. Conflating the two is how
+    // task B was bound into task A's auto-made folder: viewing anything set
+    // projectRoot, and the next new task treated that as a choice.
+    finishing: null, approvalBusy: false, steeringBusy: false, projectRoot: '', chosenProjectRoot: '', chosenProjectPicked: false, projectNames: {}, terminalTool: '', contextEpoch: 0, runProof: null,
     pendingHistoryChoice: null, historyChoiceBusy: false,
     runId: '', eventCursor: 0, retryRequest: null, drawerOpen: false, drawerWidth: 360, pendingUserText: '',
   };
@@ -835,10 +840,20 @@
     const epoch = state.contextEpoch + 1;
     state.contextEpoch = epoch;
     const context = host().getContext ? host().getContext() : {};
-    const requestedRoot = String(projectRoot == null ? state.projectRoot : projectRoot).trim();
     const historyChoice = String((options && options.historyChoice) || '').trim();
     const newProjectName = String((options && options.newProjectName) || '').trim();
-    const response = await fetch('/api/evolve/agent/conversations/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_root: requestedRoot || undefined, history_choice: historyChoice || undefined, new_project_name: newProjectName || undefined, ...lifecycle().requestSettings(context) }) });
+    // Inherit only a root somebody PICKED, never the folder of whatever
+    // conversation happened to be on screen. state.projectRoot follows every
+    // open, so inheriting it bound each new task into the previous task's
+    // folder -- measured 2026-08-05: task B built inside task A, and A's run
+    // report listed B's page as its own output.
+    const explicitPick = projectRoot != null || Boolean(newProjectName);
+    const requestedRoot = String(projectRoot == null ? state.chosenProjectRoot : projectRoot).trim();
+    // `picked` tells the server this root is a real choice. A root restored
+    // from localStorage travels WITHOUT it, so a leftover task folder saved by
+    // an older session is declined server-side and the task gets its own.
+    const pickFlag = requestedRoot && (explicitPick || state.chosenProjectPicked) ? 'picked' : undefined;
+    const response = await fetch('/api/evolve/agent/conversations/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_root: requestedRoot || undefined, project_choice: pickFlag, history_choice: historyChoice || undefined, new_project_name: newProjectName || undefined, ...lifecycle().requestSettings(context) }) });
     const data = await response.json();
     // A folder with no version history is a QUESTION, not a failure. Throwing
     // here is what made 117 of this user's 121 projects unopenable: the menu
@@ -863,10 +878,27 @@
     state.projectRoot = data.conversation.project_root || requestedRoot;
     codeProjects().rememberProjectName(state.projectRoot, projectLabel);
     codeProjects().updateProjectButton();
-    try {
-      localStorage.setItem('thomas_code_project_root', state.projectRoot);
-      localStorage.setItem('thomas_code_project_label', codeProjects().knownProjectName(state.projectRoot));
-    } catch (error) { recordError(error, 'Project selection could not be saved for the next session.'); }
+    if (explicitPick) {
+      // Only a real pick becomes the sticky default for future tasks -- and
+      // only real picks reach localStorage, so a task-born folder can no
+      // longer install itself as every later session's destination.
+      state.chosenProjectRoot = state.projectRoot;
+      state.chosenProjectPicked = true;
+      try {
+        localStorage.setItem('thomas_code_project_root', state.chosenProjectRoot);
+        localStorage.setItem('thomas_code_project_label', codeProjects().knownProjectName(state.chosenProjectRoot));
+      } catch (error) { recordError(error, 'Project selection could not be saved for the next session.'); }
+    } else if (requestedRoot && codeProjects().projectNameKey(state.projectRoot) !== codeProjects().projectNameKey(requestedRoot)) {
+      // The server declined the restored root (a leftover task folder from an
+      // older session). Stop offering it, or every new task pays the same
+      // round-trip to be told the same thing.
+      state.chosenProjectRoot = '';
+      state.chosenProjectPicked = false;
+      try {
+        localStorage.removeItem('thomas_code_project_root');
+        localStorage.removeItem('thomas_code_project_label');
+      } catch (error) { recordPreferenceWarning(error, 'The declined project root could not be cleared.'); }
+    }
     const token = lifecycle().contextToken(state);
     await Promise.all([refresh(), loadTree('', { token, deferRender: true })]);
     render();
@@ -909,6 +941,19 @@
         replacePendingApproval(data, requestBody); finishBusy(); render(); return false;
       }
       if (!response.ok || !data.ok) throw new Error(data.error || `Code request failed (${response.status})`);
+      if (
+        !requestBody.conversation_id && requestBody.project_root && !requestBody.project_choice && data.project_root
+        && codeProjects().projectNameKey(data.project_root) !== codeProjects().projectNameKey(requestBody.project_root)
+      ) {
+        // Same healing as newConversation: the server declined a restored
+        // leftover root and assigned this task its own folder.
+        state.chosenProjectRoot = '';
+        state.chosenProjectPicked = false;
+        try {
+          localStorage.removeItem('thomas_code_project_root');
+          localStorage.removeItem('thomas_code_project_label');
+        } catch (cleanupError) { recordPreferenceWarning(cleanupError, 'The declined project root could not be cleared.'); }
+      }
       return await acceptStartedRun(data);
     } catch (error) {
       if (requestBody) state.retryRequest = requestBody;
@@ -1279,6 +1324,11 @@
     // source repo — never use it as a scratch Code project.
     state.projectRoot = /[\\/](thomas|thomas-dev)[\\/]?$/i.test(_storedRoot) ? '' : _storedRoot;
     if (!state.projectRoot && _storedRoot) { try { localStorage.removeItem('thomas_code_project_root'); } catch (e) {} }
+    // Restored, not picked: it goes to the server WITHOUT the pick flag, so a
+    // leftover task folder saved by an older session heals itself on the next
+    // task instead of collecting every build this browser ever starts.
+    state.chosenProjectRoot = state.projectRoot;
+    state.chosenProjectPicked = false;
     // Restore the human name alongside the path, or a returning user is back to
     // reading "exec-25fb7d1499a6" off the chip. Filed against the PATH it names,
     // never held as "the current label": as a single loose value it outlived the

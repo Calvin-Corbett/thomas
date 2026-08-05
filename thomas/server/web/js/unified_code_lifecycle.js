@@ -63,7 +63,14 @@
     const base = {
       message,
       conversation_id: state.activeId || undefined,
-      project_root: state.projectRoot || undefined,
+      // An open conversation names its own folder (the server verifies it
+      // against the registry). A NEW task may only name a root somebody
+      // PICKED -- state.projectRoot follows whatever conversation was last on
+      // screen, and sending it here is how task B was built inside task A's
+      // folder. The pick flag rides along so the server can tell a real choice
+      // from a root restored out of an old session's localStorage.
+      project_root: (state.activeId ? state.projectRoot : state.chosenProjectRoot) || undefined,
+      project_choice: !state.activeId && state.chosenProjectRoot && state.chosenProjectPicked ? 'picked' : undefined,
       ...requestSettings(context),
     };
     if (docs.length) base.docs = docs;

@@ -142,20 +142,36 @@ def _new_task_project_root(root: Path, task: str) -> Path:
         return forge_code_projects.default_scratch_project(root)
 
 
-def _chosen_project(requested: Any) -> Any:
-    """Drop a "choice" that is only the shared drawer handed back to us.
+def _chosen_project(requested: Any, *, picked: bool = False) -> Any:
+    """Drop a "choice" that is only a leftover handed back to us.
 
     The Code UI saves whatever root it was given and sends it as ``project_root``
-    on the next NEW task. Until now that root was always ~/.thomas/code_scratch,
+    on the next NEW task. Originally that root was always ~/.thomas/code_scratch,
     so the value is already sitting in browsers -- and arriving as an explicit
     project_root it is indistinguishable from a deliberate pick. It cannot be
     one: the picker offers real projects and the drawer is not among them, so
     there is no click that produces it.
 
-    Only new tasks pass through here. A conversation already bound to the drawer
-    is resolved from the registry and still opens it.
+    Task-born folders get the same treatment, for the same reason, measured
+    2026-08-05: task A's own folder came back as task B's ``project_root``
+    (nothing was picked -- the client had simply kept it), so B built inside A
+    and A's finished run listed B's page under "THOMAS MADE 2 THINGS". Unlike
+    the drawer, a task folder CAN be clicked -- it appears in the picker -- so
+    it is dropped only when the request carries no ``project_choice: "picked"``,
+    the flag every real pick now sends. Folders the user made or chose
+    themselves carry no task-born stamp and pass through untouched, flag or no
+    flag.
+
+    Only new tasks pass through here. A conversation already bound to one of
+    these folders is resolved from the registry and still opens it.
     """
-    return None if requested and forge_code_projects.is_shared_scratch(requested) else requested
+    if not requested:
+        return None
+    if forge_code_projects.is_shared_scratch(requested):
+        return None
+    if not picked and forge_code_projects.is_task_born_project(requested):
+        return None
+    return requested
 
 
 def _friendly_project_error(exc: Exception, requested_root: Any = None) -> str:
@@ -467,6 +483,10 @@ def build_evolve_agent_handlers(
         source_evolve_item = source_evolve_item if isinstance(source_evolve_item, dict) else None
 
         requested_project = body.get("project_root")
+        # Sent by every control that actually picks a folder (the dialog, a
+        # project card, a typed name). Its absence is what identifies a root the
+        # client merely kept from the previous task.
+        project_picked = str(body.get("project_choice") or "").strip().lower() == "picked"
         # "setup" | "without" | "" -- the answer to the history question, absent
         # until the person has actually been asked one.
         history_choice = str(body.get("history_choice") or "").strip().lower()
@@ -479,7 +499,7 @@ def build_evolve_agent_handlers(
                 if conv is None:
                     # An id with nothing behind it is still a NEW task, so it
                     # gets its own folder rather than the shared drawer.
-                    chosen = _chosen_project(requested_project)
+                    chosen = _chosen_project(requested_project, picked=project_picked)
                     project_root = (
                         forge_code_projects.validate_project_root(chosen, fallback=catalog_root)
                         if chosen
@@ -538,7 +558,7 @@ def build_evolve_agent_handlers(
                 # New conversation, no explicit project -> a folder of ITS OWN,
                 # named after the task. Never the one shared scratch drawer, and
                 # never Thomas's own source tree (the catalog root).
-                chosen = _chosen_project(requested_project)
+                chosen = _chosen_project(requested_project, picked=project_picked)
                 _fallback: Path = (
                     catalog_root
                     if chosen
@@ -1034,7 +1054,10 @@ def build_evolve_agent_handlers(
         source = (body or {}).get("source_evolve_item")
         if not isinstance(source, dict):
             source = None
-        requested_root = _chosen_project((body or {}).get("project_root"))
+        requested_root = _chosen_project(
+            (body or {}).get("project_root"),
+            picked=str((body or {}).get("project_choice") or "").strip().lower() == "picked",
+        )
         # "setup" | "without" | "" -- the answer to the history question, absent
         # until the person has actually been asked.
         history_choice = str((body or {}).get("history_choice") or "").strip().lower()
