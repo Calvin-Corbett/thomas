@@ -91,7 +91,27 @@ def run_configured_turn(args: argparse.Namespace, *, oauth_access_token: str = "
     root = Path(args.project_root).resolve()
     history = history_turns(root, str(args.conversation_id or "")) if args.memory == "on" else []
     live_edit = args.autonomy >= 3 and args.file_access != "read_only"
-    allow_shell = live_edit and args.guardrails == "open"
+    # A builder that cannot run anything cannot check anything.
+    #
+    # This used to be `guardrails == "open"`, and the default is "guarded" — so the
+    # only way to let Thomas run the tests for the code it just wrote was to also
+    # pick the setting branded least safe. Measured cost, 2026-08-05: Thomas shipped
+    # a three-file app whose last line referenced an undeclared variable. It said it
+    # was "doing a quick source review", which is a READ. Nothing ever executed the
+    # page. Raising the pass budget from 10 to 25 produced more edits and the same
+    # bug, because after a file is written no new information can reach a model that
+    # cannot run things — there is nothing left for it to react to.
+    #
+    # Everywhere else in software "guarded" means *asks before dangerous things*,
+    # not *cannot do things*. Fortress remains the setting that means no shell.
+    #
+    # What actually bounds this: ToolRegistry gets `sandbox_root = cwd` (the user's
+    # project folder) and ShellTool resolves any requested cwd through `_safe_path`
+    # against that root, so commands run inside the project. That is a PATH boundary,
+    # the same shape Codex CLI uses. It is not a capability boundary — a command can
+    # still do damage inside the project folder, which is the trade every comparable
+    # tool makes to let an agent verify its own work.
+    allow_shell = live_edit and args.guardrails in ("open", "guarded")
     timeout = EXECUTION_TIMEOUTS_S[args.token_economy]
     max_fix_iters = EXECUTION_MAX_FIX_ITERS[args.token_economy]
     definition = ""

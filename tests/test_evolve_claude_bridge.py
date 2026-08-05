@@ -261,21 +261,29 @@ def test_cli_dispatch_honors_emergency_stop(monkeypatch):
     assert called["n"] == 0  # the kill switch blocked the live CLI dispatch
 
 
-def test_compose_headless_prompt_is_edit_only():
+def test_compose_headless_prompt_describes_the_build_role_truthfully():
     from thomas.forge.anvil.evolve_claude_bridge import compose_headless_prompt
 
     p = compose_headless_prompt("do x", definition="x is done", plan="edit y.py")
-    assert "edit-only builder" in p
+    # The agent is no longer edit-only: it has a shell inside the project folder,
+    # so a prompt calling it "edit-only" would now be the dishonest option. The
+    # SC-SE-3 intent is preserved by asserting the prompt matches the capability.
+    assert "edit-only builder" not in p
+    assert "RUN WHAT YOU BUILT" in p
     assert "NEW git branch" not in p
     assert "Run the tests" not in p
     assert "do x" in p
 
 
-def test_cli_dispatch_dry_run_prompt_is_edit_only():
+def test_cli_dispatch_dry_run_prompt_describes_the_build_role_truthfully():
     from thomas.forge.anvil.evolve_claude_bridge import dispatch_via_claude_cli
 
     res = dispatch_via_claude_cli("do x", cwd=".", dry_run=True)
-    assert "edit-only builder" in res.prompt
+    # The agent is no longer edit-only: it has a shell inside the project folder,
+    # so a prompt calling it "edit-only" would now be the dishonest option. The
+    # SC-SE-3 intent is preserved by asserting the prompt matches the capability.
+    assert "edit-only builder" not in res.prompt
+    assert "RUN WHAT YOU BUILT" in res.prompt
     assert "NEW git branch" not in res.prompt
 
 
@@ -298,7 +306,9 @@ def test_compose_headless_prompt_is_conversational_not_a_forced_build():
     # the old unconditional build order must be gone
     assert "Make the required file changes directly in the working tree now" not in p
     # honesty about the edit/verify loop is preserved for when it DOES build
-    assert "edit-only builder" in p and "REAL verification" in p
+    # Honesty about the edit/verify loop is preserved for when it DOES build; the
+    # agent now runs its own work AND the engine verifies afterwards.
+    assert "RUN WHAT YOU BUILT" in p and "verifies your" in p
 
 
 def test_compose_headless_prompt_weaves_in_conversation_history():
@@ -1090,9 +1100,14 @@ def test_compose_headless_prompt_is_honest_about_engine_verify():
     from thomas.forge.anvil.evolve_claude_bridge import compose_headless_prompt
 
     p = compose_headless_prompt("do x")
-    assert "edit-only builder" in p  # the AGENT is still edit-only (SC-SE-3 honesty)
+    # The engine still verifies; the agent is no longer edit-only, and the prompt
+    # must say so rather than under-claim (SC-SE-3 honesty, updated capability).
+    assert "verifies your" in p
+    assert "edit-only builder" not in p
     assert "reason→edit→verify" in p
-    assert "REAL verification" in p
+    # Same claim, current wording: the engine verifies AFTER the agent has run its
+    # own work, and feeds failures back. Pinned on the promise, not the phrasing.
+    assert "feeds failures back" in p
     # but it must NOT re-introduce the desktop/branch-mode language
     assert "NEW git branch" not in p
     assert "Run the tests" not in p

@@ -7,6 +7,37 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (the builder can run what it writes)
+
+- Thomas's builder had `Read/Edit/Write/Glob/Grep` and no shell. The comment above
+  that list names the assumption it was built on: *"The human watcher reviews the
+  resulting diff and runs the tests."* Thomas is used unsupervised, by people who
+  cannot read a diff — **nobody was running those tests.**
+- Shell was gated on `guardrails == "open"` while the default is `"guarded"`, so the
+  only way to let Thomas run the tests for code it had just written was to also pick
+  the setting branded least safe. Everywhere else in software "guarded" means *asks
+  before dangerous things*, not *cannot do things*.
+- Measured cost: Thomas shipped a three-file app whose `app.js` referenced an
+  undeclared `refreshButton` on its last line. It reported it was *"doing a quick
+  source review"* — a **read**. Nothing executed the page. Raising the pass budget
+  from 10 to 25 produced more edits and the same bug, because once a file is written
+  no new information can reach a model that cannot run anything.
+- Shell now runs at `open` and `guarded`; `fortress` still means no shell, and
+  read-only or low autonomy still means no shell in every mode. What bounds it is a
+  **path** boundary — `sandbox_root` is the user's project folder and `ShellTool`
+  resolves any requested cwd through `_safe_path` against it, the same shape Codex
+  CLI uses. It is not a capability boundary, which is the trade every comparable tool
+  makes to let an agent verify its own work.
+- The prompt no longer tells the model *"you do not run shell or git yourself"* — an
+  unused capability is the same as no capability. It now asks for the loop that
+  actually catches bugs: run the project's test or build command, or exercise the
+  thing you changed, and read the output. *"A file that parses is not a file that
+  runs."*
+- Four existing tests pinned `"edit-only builder"` to enforce that the prompt
+  honestly describes the agent's capability. That intent is right and is kept — the
+  fact underneath it changed, so they now assert the prompt matches what the agent
+  can actually do.
+
 ### Fixed (Thomas opens the app it built, and says so when it cannot)
 
 - `runtime_executability_warning` is the only check in Thomas that opens a generated

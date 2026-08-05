@@ -94,7 +94,10 @@ def compose_headless_prompt(
     }
     guardrail_rules = {
         "open": "permissive: shell may be available after the route's explicit risky-action approval",
-        "guarded": "standard: shell is unavailable and external or destructive actions require approval",
+        "guarded": (
+            "standard: shell runs inside the project folder; external or destructive "
+            "actions require approval"
+        ),
         "fortress": "strict: shell is unavailable, risky actions require approval, and tool calls are serialized",
     }
     access = str(file_access or "project").strip().lower()
@@ -106,15 +109,24 @@ def compose_headless_prompt(
         f"Autonomy level = {max(1, min(4, int(autonomy_level)))}. "
         "Do not claim access or permissions broader than these enforced settings."
     )
+    # This used to tell the model "you do not run shell or git yourself" and to leave
+    # verification entirely to the engine. That instruction was the reason a one-line
+    # undeclared-variable bug shipped: the model reviewed its work by READING it,
+    # because reading was the only thing it could do. Now that the shell is available
+    # inside the project folder, ask for the thing that actually catches bugs.
     parts.append(
         "When — and only when — the user asks you to build or change something, you are "
-        "an edit-only builder and the EDIT step of a reason→edit→verify loop: make the "
-        "file changes directly in the working tree (Read/Write/Edit; you do not run "
-        "shell or git yourself). After your edits, Thomas's build engine runs a REAL "
-        "verification on the files you changed (it byte-compiles and imports the changed "
-        "modules, and executes a changed test file with pytest); if that check fails the "
-        "engine feeds the failure back for another edit pass. Do NOT create branches or "
-        "commit. Do not modify protected files or gate scripts."
+        "the EDIT and VERIFY steps of a reason→edit→verify loop. Make the file changes "
+        "directly in the working tree (Read/Write/Edit), and then RUN WHAT YOU BUILT "
+        "before you say it works: run the project's own test or build command if it has "
+        "one, and otherwise exercise the thing you changed — start it, open it, or "
+        "execute the script — and read the output. A file that parses is not a file "
+        "that runs. If running it surfaces an error, fix it and run it again; that loop "
+        "is the job, not an optional extra. Thomas's build engine also verifies your "
+        "changed files afterwards and feeds failures back for another pass, but do not "
+        "wait for it to find what you could have found yourself. Shell commands run "
+        "inside the project folder. Do NOT create branches or commit. Do not modify "
+        "protected files or gate scripts."
     )
     return "\n\n".join(parts)
 
