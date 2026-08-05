@@ -45,7 +45,7 @@ from .evolve_agent_receipts import (
 log = logging.getLogger(__name__)
 
 
-def _confirmed_conversation_reply(transcript: str) -> bool:
+def _confirmed_conversation_reply(transcript: str, *, require_final: bool = False) -> bool:
     """Return true for a structured turn that answered without changing files.
 
     Reading is not a failed edit. A request to inspect and explain something
@@ -57,6 +57,12 @@ def _confirmed_conversation_reply(transcript: str) -> bool:
     disagree the failure does not go away, it just moves to whichever one the
     request happened to take. Relaxed only on positive evidence -- tool names
     were present and every one of them was read-only.
+
+    ``require_final`` narrows the evidence to ``final`` frames alone. The
+    stream translator emits ``final`` only for a non-error CLI ``result``
+    message, so it is protocol-level proof the answer arrived -- which is what
+    lets a reply outvote a nonzero exit code. Streamed ``say`` text is not
+    that proof: a run that crashed mid-narration has ``say`` frames too.
     """
 
     saw_reply = False
@@ -80,7 +86,8 @@ def _confirmed_conversation_reply(transcript: str) -> bool:
                 if not is_inspection_tool(name):
                     saw_mutating_tool = True
         elif kind in {"final", "say"} and str(event.get("text") or "").strip():
-            saw_reply = True
+            if kind == "final" or not require_final:
+                saw_reply = True
     if saw_tool and not (saw_named_tool and not saw_mutating_tool):
         return False
     return saw_reply
@@ -570,10 +577,16 @@ async def _drain_and_record(
 ) -> dict[str, Any]:
     """Drain the live transcript, then record the run outcome onto the conversation.
 
-    The outcome is computed from *git truth* at the moment the build finishes:
-    a run that exits 0 but touched nothing is a no-op, exits 0 with changes is a
-    success, and a non-zero exit is a failure. Recording is wrapped so a bad
-    store/git call can never crash the server or lose the transcript.
+    The outcome is computed from *evidence* at the moment the build finishes,
+    and the exit code is the weakest evidence there is: the Claude CLI exits 1
+    even when the files landed and work, which is how successful runs were
+    being filed as failures. Git truth outranks it -- changed files mean the
+    run did something, whatever the code says (the code stays visible in the
+    reason). A confirmed ``final`` reply outranks it too. A clean exit that
+    touched nothing is a no-op; a dirty exit with nothing to show for it is a
+    failure; an interruption the person asked for is ``stopped``, in those
+    words. Recording is wrapped so a bad store/git call can never crash the
+    server or lose the transcript.
     """
     activity_task = asyncio.create_task(_keep_code_run_active(app, proc))
     try:
@@ -587,24 +600,47 @@ async def _drain_and_record(
         rc = proc.returncode
         text = transcript.read_text(encoding="utf-8", errors="replace")
         changed = forge_code_git.project_delta_since(root, snap)
-        conversation_reply = run_capture_confirmed and rc == 0 and not changed and _confirmed_conversation_reply(text)
-        noop = run_capture_confirmed and rc == 0 and not changed and not conversation_reply
-        ok = run_capture_confirmed and rc == 0 and (bool(changed) or conversation_reply)
+        # "stop" | "steer" | "" -- stamped onto the process by the stop endpoint
+        # and the steer handler before they kill it. An interruption someone
+        # asked for used to be recorded as `failed / exited 1`, which reads as
+        # the run's error when it was the person's decision.
+        interrupted = str(getattr(proc, "thomas_stop_requested", "") or "")
+        conversation_reply = (
+            run_capture_confirmed
+            and not changed
+            and not interrupted
+            and _confirmed_conversation_reply(text, require_final=rc != 0)
+        )
+        noop = run_capture_confirmed and rc == 0 and not changed and not conversation_reply and not interrupted
+        ok = run_capture_confirmed and rc is not None and not interrupted and (bool(changed) or conversation_reply)
         if not run_capture_confirmed or rc is None:
             reason = "process output or exit could not be confirmed"
             outcome = "failed"
+        elif interrupted:
+            outcome = "stopped"
+            reason = "stopped for your steering update" if interrupted == "steer" else "stopped by you"
+            if changed:
+                # The interrupted work is still named, so Keep/Revert has a
+                # subject rather than a mystery.
+                reason += f" — {len(changed)} file(s) had already changed"
         elif conversation_reply:
             reason = "Thomas replied without changing files"
             outcome = "conversation"
         elif noop:
             reason = "no change made"
             outcome = "noop"
-        elif rc:
+        elif changed:
+            reason = f"{len(changed)} file(s) changed"
+            if rc:
+                # The exit code stays on the record -- visible, no longer a
+                # verdict. The Claude CLI exits 1 on runs whose files landed
+                # and work, and requiring rc == 0 here filed those successes
+                # as failures.
+                reason += f" (build process exited {rc})"
+            outcome = "completed"
+        else:
             reason = f"exited {rc}"
             outcome = "failed"
-        else:
-            reason = f"{len(changed)} file(s) changed"
-            outcome = "completed"
         # CAP-141: structured post-run report, built from the run's REAL recorded
         # data (forge events + git truth). The goal is the conversation's latest
         # user message — the completion criteria this run was given.
@@ -783,6 +819,25 @@ def _kill_tree(proc: Any) -> None:
             )
         else:
             proc.terminate()
+
+
+def _mark_stop_requested(proc: Any, kind: str = "stop") -> None:
+    """Stamp WHY a process is about to be killed, before it is killed.
+
+    The recorder reads this stamp to file "stopped by you" (or "stopped for
+    your steering update") instead of "failed / exited 1" -- an interruption
+    someone asked for is not an error the run committed. Stamped by the STOP
+    and STEER routes only, never inside ``_terminate_process``: that helper is
+    also how an aborted LAUNCH cleans up after itself, and a launch nobody
+    managed to start is not a run somebody chose to stop. A stamp already in
+    place is kept, so steer's mark survives the stop machinery running after it.
+    """
+    with contextlib.suppress(AttributeError, TypeError):
+        proc.thomas_stop_requested = str(getattr(proc, "thomas_stop_requested", "") or "") or kind
+
+
+def _mark_steer_requested(proc: Any) -> None:
+    _mark_stop_requested(proc, "steer")
 
 
 async def _terminate_process(proc: Any, *, timeout_s: float = 5.0) -> dict[str, Any]:

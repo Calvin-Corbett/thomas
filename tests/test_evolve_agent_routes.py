@@ -1162,7 +1162,10 @@ def test_send_passes_raw_prompt_to_gpt_without_local_semantic_approval(
         assert spawned["env"]["THOMAS_CODE_START_GATE"] == "pipe"
         assert spawned["env"]["THOMAS_CODE_RUN_ID"] == payload["run_id"]
         assert spawned["env"]["THOMAS_CODE_REQUEST_ID"] == payload["request_id"]
-        assert payload["settings"]["support"]["token_economy"]["max_fix_iters"] == 3
+        # The runaway ceiling, not a per-tier budget: cd0203a7 removed pass
+        # limits (abandoning nearly-working code saves nothing), so every
+        # economy reports the same generous cap.
+        assert payload["settings"]["support"]["token_economy"]["max_fix_iters"] == 20
 
         assert spawned["cwd"] == str(project.resolve())
         args = list(spawned["args"])

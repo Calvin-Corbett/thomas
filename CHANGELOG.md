@@ -7,6 +7,29 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (a Code run is judged by its work, not its exit code)
+
+- `_drain_and_record` required `rc == 0` before it would believe any evidence, and
+  the Claude CLI exits 1 even when the files landed and work — so successful runs
+  were recorded as failures. Evidence now outranks the exit code: changed files
+  mean `completed` whatever the code says (the code stays visible in the reason,
+  e.g. "2 file(s) changed (build process exited 1)"); a transcript `final` frame —
+  emitted only for a non-error CLI result — lets an answer-only run record
+  `conversation` past a lying exit code. A run that died mid-narration (say frames
+  only, nonzero exit, nothing changed) still records `failed`.
+- An interruption the person asked for is no longer dressed up as the run's error.
+  The STOP and STEER routes stamp the process before killing it
+  (`_mark_stop_requested` / `_mark_steer_requested` in
+  `thomas/server/routes/evolve_agent_runtime.py`), and the recorder files
+  `stopped` — "stopped by you", "stopped for your steering update" — instead of
+  `failed / exited 1`. An aborted launch is deliberately NOT stamped: a run nobody
+  managed to start is not a run somebody chose to stop.
+- Tests: `tests/test_a_run_is_judged_by_its_work_not_its_exit_code.py` (red
+  against the old recorder, green now, with a crashed-run control so the fix
+  cannot be rewritten into "any output counts as success").
+  `tests/test_evolve_agent_routes.py` stops asserting the pass-limit of 3 that
+  `cd0203a7` deliberately removed.
+
 ### Fixed (effort changes how hard Thomas thinks, never what he is allowed to know)
 
 - The token-economy dial and the Reasoning-effort dial are the **same setting**

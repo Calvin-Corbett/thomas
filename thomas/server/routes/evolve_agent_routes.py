@@ -56,6 +56,8 @@ from .evolve_agent_runtime import (
     _drain_and_record,
     _finish_approval_execution,
     _kill_tree,
+    _mark_steer_requested,
+    _mark_stop_requested,
     _recording_active,
     _recording_status,
     _release_code_activity_lease,
@@ -771,6 +773,7 @@ def build_evolve_agent_handlers(
             proc = (slot.get("session") or {}).get("proc")
             if proc is None or proc.returncode is not None:
                 return web.json_response({"ok": False, "error": "that Code run is not running"}, status=409)
+            _mark_steer_requested(proc)
             asyncio.get_running_loop().run_in_executor(None, _kill_tree, proc)
             return web.json_response(
                 {"ok": True, "stop_requested": True, "restart_required": True, "message": message}, status=202
@@ -782,6 +785,7 @@ def build_evolve_agent_handlers(
             return stale
         proc = app.get(APP_EVOLVE_AGENT_TASK)
         if proc is not None and proc.returncode is None:
+            _mark_steer_requested(proc)
             asyncio.get_running_loop().run_in_executor(None, _kill_tree, proc)
         return web.json_response(
             {"ok": True, "stop_requested": True, "restart_required": True, "message": message}, status=202
@@ -939,6 +943,7 @@ def build_evolve_agent_handlers(
         slot = _slot_for_run_id(str((body or {}).get("run_id") or ""))
         if slot is not None:
             proc = (slot.get("session") or {}).get("proc")
+            _mark_stop_requested(proc)
             receipt = await _terminate_process(proc)
             if receipt["termination_confirmed"]:
                 receipt.update(await _await_recording(slot.get("drain")))
@@ -951,6 +956,7 @@ def build_evolve_agent_handlers(
             if stale is not None:
                 return stale
         proc = app.get(APP_EVOLVE_AGENT_TASK)
+        _mark_stop_requested(proc)
         receipt = await _terminate_process(proc)
         if receipt["termination_confirmed"]:
             receipt.update(await _await_recording(app.get(APP_EVOLVE_AGENT_DRAIN)))
