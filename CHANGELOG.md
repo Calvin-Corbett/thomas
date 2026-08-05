@@ -7,6 +7,26 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (effort changes how hard Thomas thinks, never what he is allowed to know)
+
+- The token-economy dial and the Reasoning-effort dial are the **same setting**
+  (`brisk→cheap`, `diligent→optimal`, `exhaustive→max`). The problem was never that
+  it existed — it was that it rationed **capability** rather than depth.
+- At "brisk", `_RUNTIME_OVERHEAD_POLICIES` switched off `include_project_instructions`.
+  **Choosing a faster reasoning setting made Thomas stop reading the project's own
+  rules** — along with the editing policy, library context, memory profile and skills.
+  That is not a cheaper Thomas; it is a Thomas that forgot the repo it was working in,
+  chosen by someone who thought they were picking a speed.
+- `loop_tool_spec_budgets` gave "brisk" **0.75× the tools** — a cheaper reasoning
+  setting literally removed capabilities from the request. `loop_context_budgets` gave
+  it 0.6× the window.
+- All three are levelled: every effort setting now gets the full context, the full
+  tool set and the most generous window. Effort is native to the model and changes how
+  hard it thinks per step — that is the honest way to spend less. Context the model
+  needs in order to be correct is not a place to economise.
+- Together with `cd0203a7` (no pass rationing), the dial no longer decides how many
+  steps Thomas may take, what he may see, or what tools he may use.
+
 ### Fixed (no pass limits — the model stops when it is done, not when a counter says so)
 
 - Passes were rationed by economy level: **3 / 15 / 32**, with 15 the default. That is

@@ -215,7 +215,8 @@ class TestAgentLoopMemoryAndTokens(unittest.TestCase):
         policy = memory.thread_memory_policy("t1")
         self.assertTrue(policy.get("enabled"))
         self.assertTrue(policy.get("include_global"))
-        self.assertFalse(policy.get("include_profile"))
+        # The profile now rides along at every effort level (see above).
+        self.assertTrue(policy.get("include_profile"))
 
     def test_memory_policy_pref_overrides_apply_to_thread_settings(self) -> None:
         agent, memory = self._build_agent()
@@ -338,13 +339,19 @@ class TestAgentLoopMemoryAndTokens(unittest.TestCase):
         optimal = runtime_overhead_policy("balanced")
         max_policy = runtime_overhead_policy("max")
 
-        self.assertFalse(cheap.include_autonomy_profile)
-        self.assertFalse(cheap.include_library_context)
-        self.assertEqual(cheap.runtime_skills_mode, "off")
+        # Effort no longer decides what Thomas is allowed to KNOW. "cheap" (the Brisk
+        # setting) used to switch off include_project_instructions, so choosing a
+        # faster reasoning setting made Thomas stop reading the project's own rules.
+        # Reasoning effort is native to the model and is the honest place to spend
+        # less; context the model needs to be correct is not.
+        self.assertTrue(cheap.include_autonomy_profile)
+        self.assertTrue(cheap.include_project_instructions)
+        self.assertTrue(cheap.include_library_context)
+        self.assertEqual(cheap.runtime_skills_mode, "explicit")
 
         self.assertTrue(optimal.include_autonomy_profile)
         self.assertTrue(optimal.include_project_instructions)
-        self.assertFalse(optimal.include_memory_profile)
+        self.assertTrue(optimal.include_memory_profile)
         self.assertEqual(optimal.runtime_skills_mode, "explicit")
 
         self.assertTrue(max_policy.include_memory_profile)

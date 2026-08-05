@@ -86,43 +86,35 @@ class RuntimeOverheadPolicy:
     runtime_skills_mode: str
 
 
+# Effort does not decide what Thomas is allowed to KNOW.
+#
+# This used to vary by level, and "cheap" (the Brisk effort setting) switched off
+# include_project_instructions — so choosing a faster reasoning setting made Thomas
+# stop reading the project's own instructions, along with the editing policy, the
+# library context, memory and skills. That is not a cheaper Thomas, it is a Thomas
+# that forgot the rules of the repo it was working in, chosen by a user who thought
+# they were picking a speed.
+#
+# Reasoning effort is native to the model: it changes how hard the model thinks per
+# step, which is the honest way to spend less. Everything here is context the model
+# needs to be correct, so every level now gets all of it.
+_FULL_CONTEXT_POLICY = RuntimeOverheadPolicy(
+    include_purpose_brief=True,
+    include_autonomy_profile=True,
+    include_editing_policy=True,
+    include_project_instructions=True,
+    include_best_practice_hint=True,
+    include_review_quality_hint=True,
+    include_test_visibility_hint=True,
+    include_library_context=True,
+    include_memory_profile=True,
+    runtime_skills_mode="explicit",
+)
+
 _RUNTIME_OVERHEAD_POLICIES: dict[str, RuntimeOverheadPolicy] = {
-    "cheap": RuntimeOverheadPolicy(
-        include_purpose_brief=False,
-        include_autonomy_profile=False,
-        include_editing_policy=False,
-        include_project_instructions=False,
-        include_best_practice_hint=False,
-        include_review_quality_hint=False,
-        include_test_visibility_hint=False,
-        include_library_context=False,
-        include_memory_profile=False,
-        runtime_skills_mode="off",
-    ),
-    "optimal": RuntimeOverheadPolicy(
-        include_purpose_brief=False,
-        include_autonomy_profile=True,
-        include_editing_policy=True,
-        include_project_instructions=True,
-        include_best_practice_hint=True,
-        include_review_quality_hint=True,
-        include_test_visibility_hint=False,
-        include_library_context=True,
-        include_memory_profile=False,
-        runtime_skills_mode="explicit",
-    ),
-    "max": RuntimeOverheadPolicy(
-        include_purpose_brief=True,
-        include_autonomy_profile=True,
-        include_editing_policy=True,
-        include_project_instructions=True,
-        include_best_practice_hint=True,
-        include_review_quality_hint=True,
-        include_test_visibility_hint=True,
-        include_library_context=True,
-        include_memory_profile=True,
-        runtime_skills_mode="explicit",
-    ),
+    "cheap": _FULL_CONTEXT_POLICY,
+    "optimal": _FULL_CONTEXT_POLICY,
+    "max": _FULL_CONTEXT_POLICY,
 }
 
 
@@ -237,7 +229,12 @@ def loop_context_budgets(level: Any, mode: Any) -> tuple[int, int | None, int]:
         "auto": 180_000,
         "thinking": 320_000,
     }.get(run_mode, 180_000)
-    multiplier = {"cheap": 0.6, "optimal": 1.0, "max": 2.0}[applied]
+    # Effort does not ration context. This used to give "brisk" 0.6x the window,
+    # so choosing a faster reasoning setting also made Thomas dumber -- less of the
+    # conversation, for a decision the user thought was about speed. Effort is
+    # native to the model and changes how hard it thinks per step; it must not
+    # change what it is allowed to SEE. Every level gets the most generous value.
+    multiplier = 2.0
     mode_budget = max(40_000, int(base_mode_budget * multiplier))
 
     emergency_budget = 1_800_000
@@ -251,7 +248,10 @@ def loop_tool_spec_budgets(level: Any, mode: Any) -> tuple[int, int]:
 
     base_tool_count = {"fast": 8, "auto": 16, "thinking": 24}.get(run_mode, 16)
     base_spec_tokens = {"fast": 1800, "auto": 2600, "thinking": 3600}.get(run_mode, 2600)
-    multiplier = {"cheap": 0.75, "optimal": 1.0, "max": 1.45}[applied]
+    # Same rule, and this one was worse: at "brisk" the model was handed 0.75x the
+    # TOOLS. A cheaper reasoning setting literally removed capabilities from the
+    # request. Effort never decides which tools exist.
+    multiplier = 1.45
 
     tool_count_cap = max(4, min(40, int(base_tool_count * multiplier)))
     tool_spec_token_cap = max(1200, min(7200, int(base_spec_tokens * multiplier)))
