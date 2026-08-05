@@ -7,6 +7,20 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Added (failure-string reachability report — sight, not a gate)
+
+- `scripts/failure_string_reachability_report.py`: scans `thomas/` for
+  hand-written user-facing failure/fallback sentences and reports which ones no
+  test under `tests/` ever produces — the measured shape behind every "Thomas
+  lied": a carefully worded sentence sitting in a branch nothing establishes
+  can occur. First full run: **1,509 sentences, 1,485 untested**. Writes
+  `reports/failure_string_reachability.md` (git-ignored output) and always
+  exits 0 — by design it must never be wired into pre-commit or CI as a
+  blocker. Placed at `scripts/` top level because `.gitignore`'s `reports/`
+  pattern (unanchored, line 188) ignores any nested `reports/` directory —
+  the originally intended `scripts/crew/reports/` would have been invisible
+  to git.
+
 ### Fixed (a new Code task no longer moves into the previous task's folder)
 
 - Measured live: task A got its own folder, and task B — started with "New
