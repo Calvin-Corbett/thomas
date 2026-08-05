@@ -319,102 +319,7 @@ def test_provider_structured_tool_call_still_executes() -> None:
     assert llm.calls == 2
 
 
-def test_coding_loop_forces_a_final_response_after_post_edit_inspection_churn() -> None:
-    cfg = AppConfig(
-        models={"local": ModelConfig(name="local", model="dummy")},
-        default_model="local",
-        # This test isolates the execution-loop inspection budget. Quality
-        # validation has its own focused coverage and would otherwise start a
-        # fresh model turn after the guard has already produced its handoff.
-        quality=QualityConfig(enabled=False, enforce=False),
-    )
-    llm = _WriteInspectThenFinishLLM()
-    tools = ToolRegistry()
-    tools.register(_WriteFileTool())
-    tools.register(_ReadFileTool())
-    agent = AgentLoop(cfg, llm, tools, conversation=[], memory=None, autonomy_level=4)
 
-    async def run_once():
-        events = []
-        async for event in agent.run(
-            "Create and verify notes.txt.",
-            tools_policy="always",
-            max_iterations=20,
-            job_type="coding",
-        ):
-            events.append(event)
-        return events
-
-    events = asyncio.run(run_once())
-    done = next(event for event in events if event.type == EventType.AGENT_DONE)
-    assert done.data["text"] == "Done. Created and reviewed notes.txt."
-    assert llm.calls == 8
-    assert llm.tool_counts[-1] == 0
-    assert "engine will run the actual verification" in llm.final_prompt
-    assert "do not call this review limit a blocker" in llm.final_prompt
-
-
-def test_coding_loop_requires_a_mutation_after_pre_edit_inspection_churn() -> None:
-    cfg = AppConfig(
-        models={"local": ModelConfig(name="local", model="dummy")},
-        default_model="local",
-        quality=QualityConfig(enabled=False, enforce=False),
-    )
-    llm = _InspectThenWriteLLM()
-    tools = ToolRegistry()
-    write_tool = _WriteFileTool()
-    tools.register(write_tool)
-    tools.register(_ReadFileTool())
-    agent = AgentLoop(cfg, llm, tools, conversation=[], memory=None, autonomy_level=4)
-
-    async def run_once():
-        return [
-            event
-            async for event in agent.run(
-                "Update and verify notes.txt.", tools_policy="always", max_iterations=20, job_type="coding"
-            )
-        ]
-
-    events = asyncio.run(run_once())
-    assert any(event.type == EventType.AGENT_DONE for event in events)
-    assert write_tool.calls == [{"path": "notes.txt", "content": "acted"}]
-    assert llm.restricted_names
-    assert all(
-        name.replace("_", ".") in {"fs.write.file", "diff.apply.patch", "diff.create"} for name in llm.restricted_names
-    )
-
-
-def test_coding_loop_caps_one_large_inspection_batch_before_execution() -> None:
-    cfg = AppConfig(
-        models={"local": ModelConfig(name="local", model="dummy")},
-        default_model="local",
-        quality=QualityConfig(enabled=False, enforce=False),
-    )
-    llm = _BatchInspectThenWriteLLM()
-    tools = ToolRegistry()
-    tools.register(_ReadFileTool())
-    write_tool = _WriteFileTool()
-    tools.register(write_tool)
-    agent = AgentLoop(cfg, llm, tools, conversation=[], memory=None, autonomy_level=4)
-
-    async def run_once():
-        return [
-            event
-            async for event in agent.run(
-                "Inspect and update notes.txt.", tools_policy="always", max_iterations=5, job_type="coding"
-            )
-        ]
-
-    events = asyncio.run(run_once())
-    read_results = [
-        event
-        for event in events
-        if event.type == EventType.TOOL_RESULT and event.data.get("tool_name") == "fs.read_file"
-    ]
-    assert sum(event.data.get("ok") is True for event in read_results) == 6
-    assert sum(event.data.get("budget_refusal") is True for event in read_results) == 29
-    assert write_tool.calls == [{"path": "notes.txt", "content": "acted"}]
-    assert any(event.type == EventType.AGENT_DONE for event in events)
 
 
 def test_coding_loop_counts_provider_safe_tool_aliases_for_pre_edit_guard() -> None:
@@ -626,3 +531,43 @@ def test_tool_usage_detector_does_not_disable_tools_for_long_coding_prompt() -> 
     start = next((e for e in events if e.type == EventType.AGENT_START), None)
     assert start is not None
     assert start.data.get("tools_policy") == "always"
+
+# The three tests that used to live here pinned inspection caps that have been
+# removed. They asserted that after 6 read-only calls Thomas ordered the model to
+# stop inspecting and stripped its read tools; that after 6 post-edit reads it
+# removed ALL tools and told the model to hand off; and that a batched call over
+# the budget came back as a tool result with ok=False.
+#
+# Reading back what you just edited is the highest-value action an agent has, and
+# those caps made it impossible exactly when it mattered. The last one was worse
+# than a cap: it taught the model its tool had FAILED when the call was never
+# attempted. Replaced below with the opposite contract, so the removal cannot be
+# quietly undone.
+
+
+def test_the_model_keeps_its_tools_for_the_whole_run() -> None:
+    """No branch may strip or filter the tool list mid-run."""
+
+    from pathlib import Path
+
+    from thomas.agent import loop_execution
+
+    source = Path(loop_execution.__file__).read_text(encoding="utf-8")
+    assert "force_mutation" not in source, "the pre-edit tool strip is back"
+    assert "force_final_response" not in source, "the post-edit tool strip is back"
+    assert "iteration_tool_specs = tool_specs" in source, (
+        "the tool list is being derived rather than passed through"
+    )
+
+
+def test_a_call_that_was_never_attempted_is_not_reported_as_failed() -> None:
+    """Thomas must not fabricate a tool failure for a call it declined to make."""
+
+    from pathlib import Path
+
+    from thomas.agent import loop_execution
+
+    source = Path(loop_execution.__file__).read_text(encoding="utf-8")
+    assert "Inspection limit reached" not in source, (
+        "a refused call is being returned to the model as a failed tool result again"
+    )

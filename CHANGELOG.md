@@ -7,6 +7,38 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (the model keeps its tools, and is never told a call failed that it never made)
+
+- On coding jobs Thomas capped inspections. After 6 read-only calls it injected
+  *"Stop inspecting and make the requested change now"* **and filtered the tool list
+  down to mutation tools only**. After 6 post-edit reads it removed **every** tool,
+  injected *"Stop re-reading, give your handoff"*, and told the model not to report
+  the limit as a blocker.
+- Reading back what you just edited is the highest-value action an agent has, and
+  this made it impossible exactly when it mattered. Opening a package.json, an
+  index.html, a stylesheet and two sources is already five of the six.
+- Worse: a batched call over the remaining budget was dropped and returned as a tool
+  result with `ok=False` — teaching the model its tool **failed** when the call had
+  simply never been attempted. Thomas lying to the model about its own environment.
+- All three are gone, along with 45 lines of now-unreachable machinery. Pairs with
+  the shell landed in `44422a6d`: a model that can run things but cannot read the
+  output is no better off.
+- Three tests pinned the caps. They are replaced, not deleted, with the opposite
+  contract — no branch may strip the tool list, and no refused call may be reported
+  as failed — so the removal cannot be quietly undone.
+
+### Not fixed, and left honest: exhausting the pass budget still records a failure
+
+- Recording "I used up my own allowance" as a failed run is wrong; the work survives
+  on disk. The one-line version of the fix (drop `state.error`, emit a status) was
+  tried and **made things worse**: with no error set, post-loop completion emits
+  `AGENT_DONE`, so a run that stopped mid-repair would claim it had finished.
+  Claiming completion you did not reach is a worse lie than claiming a failure you
+  did not have, and `test_optimal_effort_exhaustion_is_incomplete_not_done` correctly
+  caught it.
+- The real fix is a third state — done / paused-and-continuable / failed. The reason
+  is recorded at the line rather than left for the next reader to rediscover.
+
 ### Fixed (the builder can run what it writes)
 
 - Thomas's builder had `Read/Edit/Write/Glob/Grep` and no shell. The comment above

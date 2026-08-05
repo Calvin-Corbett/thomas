@@ -22,12 +22,6 @@ from thomas.agent.loop_helpers import (
     httpx_ConnectError,
 )
 from thomas.agent.loop_tool_protocol import (
-    _MAX_POST_EDIT_INSPECTIONS as _MAX_POST_EDIT_INSPECTIONS,
-)
-from thomas.agent.loop_tool_protocol import (
-    _MAX_PRE_EDIT_INSPECTIONS as _MAX_PRE_EDIT_INSPECTIONS,
-)
-from thomas.agent.loop_tool_protocol import (
     _MAX_TOOL_RESULT_CHARS as _MAX_TOOL_RESULT_CHARS,
 )
 from thomas.agent.loop_tool_protocol import (
@@ -255,8 +249,6 @@ async def _agent_loop_run(
     code_mutation_seen = False
     pre_edit_inspections = 0
     post_edit_inspections = 0
-    force_mutation = False
-    force_final_response = False
     runaway_guard_reason: str | None = None
     memory_text = ""
     continuity_hint = ""
@@ -428,14 +420,11 @@ async def _agent_loop_run(
             if library_text:
                 mem = (mem + "\n\n" + library_text).strip() if mem else library_text
         self_development_job = current_job_type == "self_development"
-        if force_final_response:
-            iteration_tool_specs = None
-        elif force_mutation:
-            iteration_tool_specs = [
-                spec for spec in (tool_specs or []) if _is_code_mutation_name(_tool_spec_name(spec))
-            ]
-        else:
-            iteration_tool_specs = tool_specs
+        # The model keeps every tool for the whole run. Thomas used to strip the
+        # read tools after 6 inspections, and ALL tools after 6 post-edit reads, so
+        # the one action most likely to catch a mistake -- re-reading what you just
+        # wrote -- was removed precisely when it mattered.
+        iteration_tool_specs = tool_specs
         messages = self._build_messages(
             state,
             memory_text=mem,
@@ -743,24 +732,11 @@ async def _agent_loop_run(
         # inspection budget before scheduling the batch rather than after every
         # task has already run. Refused calls still receive tool-result messages,
         # preserving a valid provider history without the 35-call log avalanche.
+        # Every requested call is executed. A call over an inspection budget used to
+        # be dropped and returned as a tool result with ok=False -- telling the model
+        # its tool FAILED when it had simply never been attempted. Teaching a model
+        # something false about its own environment is the worst version of this bug.
         execution_tool_calls = pending_tool_calls
-        budget_refused_calls: list[dict[str, Any]] = []
-        if current_job_type == "coding":
-            remaining_inspections = max(
-                0,
-                (_MAX_POST_EDIT_INSPECTIONS - post_edit_inspections)
-                if code_mutation_seen
-                else (_MAX_PRE_EDIT_INSPECTIONS - pre_edit_inspections),
-            )
-            execution_tool_calls = []
-            for tool_call in pending_tool_calls:
-                parsed, _error = self._parse_tool_args(tool_call.get("arguments"))
-                if _code_tool_action(str(tool_call.get("name") or ""), parsed or {}) == "inspection":
-                    if remaining_inspections <= 0:
-                        budget_refused_calls.append(tool_call)
-                        continue
-                    remaining_inspections -= 1
-                execution_tool_calls.append(tool_call)
 
         tool_results: list[AgentEvent] = []
         tool_results_by_id: dict[str, AgentEvent] = {}
@@ -768,20 +744,6 @@ async def _agent_loop_run(
         async def _bounded_tool_results() -> AsyncIterator[AgentEvent]:
             async for executed in self._execute_tools(execution_tool_calls, iteration):
                 yield executed
-            for refused in budget_refused_calls:
-                yield AgentEvent(
-                    type=EventType.TOOL_RESULT,
-                    data={
-                        "tool_id": str(refused.get("id") or ""),
-                        "tool_name": str(refused.get("name") or "tool"),
-                        "result": "Inspection limit reached; this batched call was not executed.",
-                        "result_text": "Inspection limit reached; this batched call was not executed.",
-                        "ok": False,
-                        "budget_refusal": True,
-                        "duration_ms": 0,
-                    },
-                    iteration=iteration,
-                )
 
         async for result_event in _bounded_tool_results():
             tc_id = str(result_event.data.get("tool_id", ""))
@@ -885,7 +847,6 @@ async def _agent_loop_run(
                 tool_action = _code_tool_action(str(tc.get("name") or ""), args_meta)
                 if tool_action == "mutation" and result_event.data.get("ok"):
                     code_mutation_seen = True
-                    force_mutation = False
                     post_edit_inspections = 0
                 elif code_mutation_seen and tool_action == "inspection":
                     post_edit_inspections += 1
@@ -919,34 +880,25 @@ async def _agent_loop_run(
         if state.finished or state.user_interrupted:
             break
 
-        if not code_mutation_seen and pre_edit_inspections >= _MAX_PRE_EDIT_INSPECTIONS and not force_mutation:
-            force_mutation = True
-            self._conversation.append(
-                {
-                    "role": "user",
-                    "content": (
-                        "You have enough repository evidence. Stop inspecting and make the requested change now. "
-                        "The next tool call must edit the project; only mutation tools are available. If the change "
-                        "cannot be made, state the concrete blocker instead of claiming completion."
-                    ),
-                }
-            )
-        elif code_mutation_seen and post_edit_inspections >= _MAX_POST_EDIT_INSPECTIONS:
-            force_final_response = True
-            self._conversation.append(
-                {
-                    "role": "user",
-                    "content": (
-                        "Execution review limit reached: you have already made project edits and completed "
-                        f"{post_edit_inspections} read-only inspections since the last edit. Stop re-reading. "
-                        "Give a concise implementation handoff now. Thomas's engine will run the actual verification "
-                        "after your response, so do not call this review limit a blocker and do not claim verification "
-                        "has already passed. Do not call another tool in this turn."
-                    ),
-                }
-            )
 
     if not state.finished and not state.user_interrupted:
+        # NOT YET FIXED — deliberately left as an error, and here is why.
+        #
+        # Recording "I used up my own allowance" as a failed run is wrong: the work
+        # survives on disk and every instrument that reads these records learns
+        # something false. The fix is a THIRD state — done / paused-and-continuable /
+        # failed — because the two that exist collapse "unfinished" into "failed".
+        #
+        # I tried the one-line version (drop state.error, emit STATUS) and it made
+        # things worse: with no error set, post-loop completion emits AGENT_DONE, so
+        # a run that stopped mid-repair would claim it had finished. Claiming
+        # completion you did not reach is a worse lie than claiming a failure you did
+        # not have. test_optimal_effort_exhaustion_is_incomplete_not_done exists to
+        # catch exactly that and correctly caught me.
+        #
+        # Doing this properly means teaching handle_post_loop_completion a paused
+        # outcome that keeps the artifacts and suppresses the done event. That is a
+        # real change, not a line edit, and it should be made deliberately.
         runaway_guard_reason = (
             f"Pass budget exhausted after {max_iter} passes while work was still active. "
             "The task is incomplete; continue it in the same conversation."
