@@ -99,7 +99,7 @@ for (const siblingPath of siblingPaths) {
 const source = fs.readFileSync(sourcePath, 'utf8');
 const instrumented = source.replace(
   /\n\}\)\(\);\s*$/,
-  '\n  window.__ThomasCodeModeTest = { state, errorText, activate: () => { adapterActive = true; }, approvePending, changeAction, elapsedLabel, eventHtml, failureSummary, finishRun, handleStreamError, loadConversation, narrativeActivityHtml, newConversation, pickProject, pushLiveEvent, refresh, render, send, steer, technicalActivityHtml, transcriptEvents, turnHtml };\n})();',
+  '\n  window.__ThomasCodeModeTest = { state, errorText, progressEvents, activate: () => { adapterActive = true; }, approvePending, changeAction, elapsedLabel, eventHtml, failureSummary, finishRun, handleStreamError, loadConversation, narrativeActivityHtml, newConversation, pickProject, pushLiveEvent, refresh, render, send, steer, technicalActivityHtml, transcriptEvents, turnHtml };\n})();',
 );
 if (instrumented === source) throw new Error('could not instrument Code lifecycle adapter');
 vm.runInThisContext(instrumented, { filename: sourcePath });
@@ -588,6 +588,32 @@ async function proveAccessibleDrawerAndPickerErrors() {
   if (!pickerError.includes('unreadable folder-picker response (200)')) throw new Error('successful non-JSON picker response failed silently');
 }
 
+async function proveARepeatedStepStillLooksRepeated() {
+  // The filter that collapses a duplicated progress note exempts technical rows,
+  // because -- its own words -- "collapsing them would hide real repetition rather
+  // than noise". That argument does not stop being true for the notes the owner
+  // reads. A run that announced "Running the test suite." five times looped five
+  // times, and with the repeats dropped and nothing in their place it read as one
+  // clean step. The clean step is the wrong story.
+  const looped = Array.from({ length: 5 }, () => ({ type: 'say', kind: 'say', text: 'Running the test suite.' }));
+  looped.push({ type: 'say', kind: 'say', text: 'All checks passed.' });
+  const kept = api.progressEvents(looped, null);
+
+  if (kept.length !== 2) throw new Error(`repeat collapse changed shape: ${kept.length} rows, expected 2`);
+  const first = String(kept[0].text || '');
+  if (!/×5/.test(first)) throw new Error(`a five-pass loop left no trace: ${JSON.stringify(first)}`);
+
+  // A distinct note must NOT grow a counter, or the number means nothing.
+  if (/×/.test(String(kept[1].text || ''))) {
+    throw new Error('a note that happened once was labelled as repeated');
+  }
+  // And the stored events must be untouched: this list is re-rendered on every
+  // repaint, so annotating in place would multiply the counter each time.
+  if (looped.some(e => /×/.test(String(e.text || '')))) {
+    throw new Error('the counter was written onto the stored event, so it will compound on repaint');
+  }
+}
+
 async function proveTheActionSurvivesTheReason() {
   // The mirror of the case above. That one recovered the *reason* when a wrapper
   // buried it; this one recovers the *action*, which errorText used to throw away
@@ -998,5 +1024,6 @@ await proveLostSendRetryAndCursor();
 await proveAccessibleDrawerAndPickerErrors();
 await proveTheRealReasonSurvivesTheExitWrapper();
 await proveTheActionSurvivesTheReason();
+await proveARepeatedStepStillLooksRepeated();
 console.warn = originalWarn;
 process.stdout.write(JSON.stringify({ approval: true, switch: true, steering: true, evidence: true, stream: true, dedup: true, persistence: true, replay: true, finishing: true, cursor: true, drawer: true, pointercancel: true, picker: true, failureReason: true, narrativeNotRepeated: true, emptyStateStandsDown: true, fileListNamesItsReason: true, stoppedRunIsNotWorking: true, revertRefreshesFileList: true, truncatedRunSaysSo: true, yourMessageIsOnScreen: true, toolRowsNameTheirTool: true, silentFailureSaysWhatIsKnown: true }));

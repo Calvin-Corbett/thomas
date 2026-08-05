@@ -7,6 +7,25 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (a run that looped still looks like it looped)
+
+- The progress feed collapses a note whose text repeats an earlier one, keeping the
+  first. Technical rows are exempt because — the code's own words — "collapsing them
+  would hide real repetition rather than noise". That argument does not stop being
+  true for the notes the **owner** reads.
+- Reproduced by driving the real function: five identical "Running the test suite."
+  notes plus a finish went in, two rows came out, and nothing anywhere said it had
+  happened five times. A five-pass loop read as one clean step, and the clean step is
+  the wrong story.
+- The feed still stays short — one row per distinct note — and the row now says how
+  many times it happened: `Running the test suite. ×5`. Annotated on a copy, never on
+  the stored event, because this list is re-rendered on every repaint and mutating it
+  would compound the counter.
+- Guarded three ways, all of which fail on the old code: a repeat shows its count, a
+  note that happened once does **not** grow a counter (or the number means nothing),
+  and the stored events stay untouched.
+- **Twelfth and last of the auto-rejection findings** raised on 2026-08-03.
+
 ### Fixed (choosing Thorough actually gives the worker longer to think)
 
 - Two watchdogs guard a delegated worker and they disagreed.

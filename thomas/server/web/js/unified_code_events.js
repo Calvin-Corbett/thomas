@@ -219,7 +219,8 @@
       // Technical events are exempt: repeated tool rows are the log, and
       // collapsing them would hide real repetition rather than noise.
       const seen = new Set();
-      return events.filter(event => {
+      const repeats = new Map();
+      const kept = events.filter(event => {
         if (event === finalEvent) return false;
         if (finalText && eventType(event) === 'say' && eventLabel(event) === finalText) return false;
         if (isTechnicalEvent(event)) return true;
@@ -237,9 +238,30 @@
         // a filter over there fixed the saved transcript and left the live one
         // untouched. This is the seam both paths share.
         if (!label || label.toLowerCase() === String(eventKind(event) || '').trim().toLowerCase()) return false;
-        if (seen.has(label)) return false;
+        if (seen.has(label)) {
+          repeats.set(label, (repeats.get(label) || 1) + 1);
+          return false;
+        }
         seen.add(label);
         return true;
+      });
+      // Keep the collapse, keep the count.
+      //
+      // The exemption above says repeated tool rows must survive because
+      // "collapsing them would hide real repetition rather than noise". That
+      // argument does not stop being true for the notes the OWNER reads. A run
+      // that announced "Running the test suite." five times looped five times;
+      // with the repeats dropped and nothing in their place it read as one clean
+      // step, and the clean step is the wrong story.
+      //
+      // So the feed stays short -- one row per distinct note -- and the row says
+      // how many times it happened. Annotated on a copy, never on the stored
+      // event, because this list is rendered repeatedly and mutating it would
+      // multiply the counter on every repaint.
+      if (!repeats.size) return kept;
+      return kept.map(event => {
+        const times = repeats.get(String(eventLabel(event) || '').trim());
+        return times ? { ...event, text: `${String(eventLabel(event) || '').trim()} ×${times}` } : event;
       });
     }
 
