@@ -9,6 +9,20 @@ Versioning: Semantic Versioning.
 
 ### Changed (design unification wave 1: one token set)
 
+### Removed (design unification: the banned *_parts CSS directories)
+
+- `css/components_parts/` and `css/layout_parts/` are gone: live files moved
+  (git mv) to `css/component_styles/` and `css/layout_styles/` with every
+  import and test path updated, because the old names match the banned
+  monolith split pattern and blocked any commit staging them. The two rules
+  stranded in `components.css` by that guard went home to their siblings
+  (`tool-calls-chat.css`, `agent-delegation.css`). Deleted outright as dead
+  design code (docs/deletions/2026-08-06-design-unification-dead-paths.json):
+  `layout-app-shell-legacy.css`, `layout-debug-panel-legacy.css`,
+  `layout-workspace-split-a.css` (zero references) and
+  `layout-responsive.css` (never imported since birth; its test assertions
+  are satisfied by `layout-workspace.css`).
+
 - Satellite pages consume the shared set: `workspace_shell.css` keeps shell
   components only (its palette/theme blocks moved to `tokens.css`),
   `settings.html` and `mission.html` link tokens.css first, and Token

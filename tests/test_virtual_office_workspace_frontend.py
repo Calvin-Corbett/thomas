@@ -4,7 +4,7 @@ from pathlib import Path
 from tests.web_ui_source import read_app_js_source
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-LAYOUT_DEBUG_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "layout-debug-panel.css"
+LAYOUT_DEBUG_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "layout_styles" / "layout-debug-panel.css"
 VIRTUAL_OFFICE_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "virtual_office_workspace.css"
 APP_RUNTIME_LOADER = REPO_ROOT / "thomas" / "server" / "web" / "js" / "app_runtime_loader.js"
 RUNTIME_DIR = REPO_ROOT / "thomas" / "server" / "web" / "js" / "runtime"

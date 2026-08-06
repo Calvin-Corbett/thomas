@@ -126,7 +126,7 @@ class TestServerSettingsPage(AioHTTPTestCase):
         settings_css = (root / "thomas" / "server" / "web" / "settings.style01.css").read_text(encoding="utf-8")
         # `part-001a.css` was renamed to `layout-app-shell.css` during the
         # CSS module reorganization. The selectors below moved with it.
-        layout_css = (root / "thomas" / "server" / "web" / "css" / "layout_parts" / "layout-app-shell.css").read_text(
+        layout_css = (root / "thomas" / "server" / "web" / "css" / "layout_styles" / "layout-app-shell.css").read_text(
             encoding="utf-8"
         )
 

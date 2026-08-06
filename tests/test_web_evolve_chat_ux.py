@@ -280,13 +280,12 @@ def test_chat_runtime_uses_structured_office_delegation_bridge() -> None:
 
 
 def test_chat_css_supports_footer_actions_settings_scroll_and_new_robot_idles() -> None:
-    bubble_css = _read(ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "chat-game-animations.css")
-    settings_css = _read(ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "settings-panel.css")
-    robot_css = _read(ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "chat-robot-animations.css")
+    bubble_css = _read(ROOT / "thomas" / "server" / "web" / "css" / "component_styles" / "chat-game-animations.css")
+    settings_css = _read(ROOT / "thomas" / "server" / "web" / "css" / "component_styles" / "settings-panel.css")
+    robot_css = _read(ROOT / "thomas" / "server" / "web" / "css" / "component_styles" / "chat-robot-animations.css")
     office_layout_css = _read_many(
         [
-            ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "layout-workspace.css",
-            ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "layout-responsive.css",
+            ROOT / "thomas" / "server" / "web" / "css" / "layout_styles" / "layout-workspace.css",
         ]
     )
     assert ".message-footer {" in bubble_css

@@ -9,7 +9,7 @@ APP_JS_PATH = REPO_ROOT / "thomas" / "server" / "web" / "js" / "app.js"
 RUNTIME_DIR = REPO_ROOT / "thomas" / "server" / "web" / "js" / "runtime"
 APP_PARTS_DIR = REPO_ROOT / "thomas" / "server" / "web" / "js" / "app_parts"
 LAYOUT_CSS_PATH = REPO_ROOT / "thomas" / "server" / "web" / "css" / "layout.css"
-LAYOUT_PARTS_DIR = REPO_ROOT / "thomas" / "server" / "web" / "css" / "layout_parts"
+LAYOUT_STYLES_DIR = REPO_ROOT / "thomas" / "server" / "web" / "css" / "layout_styles"
 
 
 def _extract_part_names(loader_source: str) -> list[str]:
@@ -76,16 +76,16 @@ def read_app_js_source() -> str:
 
 def read_layout_css_source() -> str:
     source = LAYOUT_CSS_PATH.read_text(encoding="utf-8")
-    if "./layout_parts/" not in source or not LAYOUT_PARTS_DIR.exists():
+    if "./layout_styles/" not in source or not LAYOUT_STYLES_DIR.exists():
         return source
 
-    names = re.findall(r'@import url\("./layout_parts/([^"]+\.css)"\);', source)
+    names = re.findall(r'@import url\("./layout_styles/([^"]+\.css)"\);', source)
     if not names:
         return source
 
     chunks: list[str] = []
     for name in names:
-        part_path = LAYOUT_PARTS_DIR / name
+        part_path = LAYOUT_STYLES_DIR / name
         if not part_path.exists():
             return source
         part = part_path.read_text(encoding="utf-8")

@@ -153,10 +153,13 @@ def test_the_stopped_ending_is_actually_drawn() -> None:
             f"a stopped run is grouped with failures again: [{status_list}]"
         )
 
-    # components.css, not components_parts/tool-calls-chat.css where its siblings
-    # live: that directory name matches the monolith filename guard's
-    # `[_-]parts?$` pattern, so a commit staging any file from it is refused.
-    css = (ROOT / "thomas" / "server" / "web" / "css" / "components.css").read_text(encoding="utf-8")
+    # The rule lives beside its tone-* siblings. (It was stranded in
+    # components.css while the directory was named components_parts/ and the
+    # monolith filename guard refused commits staging files from it; the
+    # rename to component_styles/ let it go home.)
+    css = (
+        ROOT / "thomas" / "server" / "web" / "css" / "component_styles" / "tool-calls-chat.css"
+    ).read_text(encoding="utf-8")
     assert ".message-task-strip-badge.tone-stopped" in css, (
         "the stopped badge has no style of its own, so it renders unstyled"
     )

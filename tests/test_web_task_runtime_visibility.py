@@ -2,9 +2,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_DIR = ROOT / "thomas" / "server" / "web" / "js" / "runtime"
-TASK_CSS = ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "tool-calls-chat.css"
-MISSION_CSS = ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "layout-workspace.css"
-SIDEBAR_CSS = ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "layout-app-shell.css"
+TASK_CSS = ROOT / "thomas" / "server" / "web" / "css" / "component_styles" / "tool-calls-chat.css"
+MISSION_CSS = ROOT / "thomas" / "server" / "web" / "css" / "layout_styles" / "layout-workspace.css"
+SIDEBAR_CSS = ROOT / "thomas" / "server" / "web" / "css" / "layout_styles" / "layout-app-shell.css"
 MOTION_PROOF_SCRIPT = ROOT / "scripts" / "capture_chat_motion_proof.mjs"
 
 
