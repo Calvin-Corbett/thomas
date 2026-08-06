@@ -78,14 +78,18 @@ def test_a_read_only_answer_is_a_success(repo: Path) -> None:
     assert "NO repo changes" not in result.reason
 
 
-def test_a_write_that_changed_nothing_is_still_a_failure(repo: Path) -> None:
-    """The guard this relaxation must not remove: the agent tried to edit and
-    produced nothing, which is an incomplete build, not an answer."""
+def test_a_write_that_reported_failure_is_still_a_failure(repo: Path) -> None:
+    """The guard the relaxations must not remove: the agent tried to edit, the
+    tool REPORTED failure, and nothing changed — an incomplete build, not an
+    answer. (A write whose every result succeeded while git says nothing
+    changed now files as the answer with a visible neutral note — see
+    test_an_answer_after_a_clean_write_capable_run_is_filed_not_failed.)"""
     result = _dispatch(
         repo,
         [
             {FORGE_EVENT_KEY: "tool", "name": "fs.read_file", "text": "read"},
             {FORGE_EVENT_KEY: "tool", "name": "fs.write_file", "text": "write app.py"},
+            {FORGE_EVENT_KEY: "tool_result", "name": "fs.write_file", "text": "denied", "is_error": True},
             _answer("I updated the file."),
         ],
     )
@@ -93,21 +97,42 @@ def test_a_write_that_changed_nothing_is_still_a_failure(repo: Path) -> None:
     assert result.ok is False, result.reason
 
 
-def test_unnamed_tool_activity_stays_strict(repo: Path) -> None:
-    """Only ``tool`` carries a name. Without one we cannot tell reading from
-    writing, so the previous strict behaviour is kept rather than guessed at."""
-    result = _dispatch(repo, [{FORGE_EVENT_KEY: "tool_result", "text": "something"}, _answer()])
+def test_unnamed_tool_activity_that_reported_failure_stays_strict(repo: Path) -> None:
+    """Only ``tool`` carries a name. Without one the call classifies as
+    write-capable, and when it also reported failure the strict verdict is
+    kept rather than guessed at."""
+    result = _dispatch(
+        repo,
+        [{FORGE_EVENT_KEY: "tool_result", "text": "boom", "is_error": True}, _answer()],
+    )
 
     assert result.ok is False, result.reason
 
 
 def test_an_unknown_tool_is_treated_as_capable_of_writing(repo: Path) -> None:
-    result = _dispatch(
-        repo,
-        [{FORGE_EVENT_KEY: "tool", "name": "some.new_tool", "text": "?"}, _answer()],
+    """Unknown names still classify as write-capable: a clean run files the
+    answer WITH the visible write-capable note, never as a plain read-only
+    answer — the classification stays conservative even though the verdict no
+    longer demotes a clean run."""
+    captured: list[dict] = []
+
+    def runner(_prompt, _cwd, _timeout, emit_event):
+        emit_event({FORGE_EVENT_KEY: "tool", "name": "some.new_tool", "text": "?"})
+        emit_event(_answer())
+        return 0, "done"
+
+    result = dispatch_via_agent_loop(
+        "inspect and explain this project",
+        cwd=repo,
+        dry_run=False,
+        runner=runner,
+        emit=captured.append,
+        verify=False,
+        token_check=lambda: True,
     )
 
-    assert result.ok is False, result.reason
+    assert result.ok is True, result.reason
+    assert any("write-capable tool ran" in str(e.get("text") or "") for e in captured), captured
 
 
 def test_a_real_edit_still_succeeds(repo: Path) -> None:
@@ -154,9 +179,14 @@ def test_transcript_verdict_accepts_a_read_only_answer() -> None:
 
 
 def test_transcript_verdict_still_rejects_an_attempted_edit() -> None:
+    # The genuine failed-edit shape: the write REPORTED failure. A clean
+    # write-capable run is no longer disqualified (contract settled 2026-08-05
+    # -- the caller has already established from git truth that nothing
+    # changed, so the tool's name alone is not evidence of failure).
     text = _transcript(
         _tool("fs.read_file"),
         _tool("fs.write_file"),
+        {FORGE_EVENT_KEY: "tool_result", "text": "disk full", "is_error": True},
         {FORGE_EVENT_KEY: "final", "text": "I updated the file."},
     )
 
@@ -243,11 +273,14 @@ def test_a_real_write_transcript_is_still_not_an_answer() -> None:
     out = _translate(
         [
             (EventType.TOOL_RESULT, {"tool_id": "1", "tool_name": "fs.read_file", "result": "x", "ok": True}),
-            (EventType.TOOL_RESULT, {"tool_id": "2", "tool_name": "fs.write_file", "result": "ok", "ok": True}),
+            (EventType.TOOL_RESULT, {"tool_id": "2", "tool_name": "fs.write_file", "result": "ok", "ok": False}),
             (EventType.AGENT_DONE, {"text": "Updated it."}),
         ]
     )
 
+    # ok=False on the write is what keeps this a failure; a CLEAN successful
+    # write whose net change is nothing (idempotent re-write) files as the
+    # answer it produced -- see the clean-write test below.
     assert _confirmed_conversation_reply(_transcript(*out)) is False
 
 
@@ -264,10 +297,24 @@ def test_a_read_access_stamp_on_a_shell_tool_does_not_disqualify_the_answer() ->
     assert _confirmed_conversation_reply(text) is True
 
 
-def test_a_write_access_stamp_still_disqualifies_even_for_an_inspection_name() -> None:
-    # The stamp outranks the name in BOTH directions -- fail toward mutating.
+def test_a_write_stamp_with_a_failed_result_still_disqualifies() -> None:
+    # The stamp outranks the name, and a write-capable tool that FAILED is the
+    # genuine failed-edit shape this predicate exists to catch.
     text = _transcript(
-        {"fc": "tool", "name": "fs.read_file", "access": "write"},
+        {"fc": "tool", "name": "fs.write_file", "access": "write"},
+        {"fc": "tool_result", "text": "permission denied", "is_error": True},
         {"fc": "final", "text": "Done."},
     )
     assert _confirmed_conversation_reply(text) is False
+
+
+def test_a_clean_write_capable_run_that_answered_is_an_answer() -> None:
+    # Same contract as dispatch_agent_loop/dispatch_claude_cli: git truth says
+    # nothing changed (the caller checked), every result succeeded, the answer
+    # arrived -- the tool's NAME is not evidence of failure.
+    text = _transcript(
+        {"fc": "tool", "name": "shell.exec", "access": "write"},
+        {"fc": "tool_result", "text": "ok", "is_error": False},
+        {"fc": "final", "text": "Here is what the project does."},
+    )
+    assert _confirmed_conversation_reply(text) is True

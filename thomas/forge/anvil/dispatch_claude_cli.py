@@ -177,11 +177,12 @@ def dispatch_via_claude_cli(
     saw_tool_activity = False
     saw_named_tool = False
     saw_mutating_tool = False
+    saw_failed_tool_result = False
     saw_login_failure = False
 
     def emit_event(event: dict[str, Any]) -> None:
         nonlocal saw_reply, saw_refusal, saw_tool_activity, saw_named_tool, saw_mutating_tool
-        nonlocal saw_login_failure
+        nonlocal saw_failed_tool_result, saw_login_failure
         kind = str(event.get(FORGE_EVENT_KEY) or "")
         if kind == "error" and is_claude_cli_login_error(str(event.get("text") or "")):
             # The CLI died unauthenticated. Remember it so the run's recorded
@@ -198,6 +199,8 @@ def dispatch_via_claude_cli(
                 saw_refusal = True
         elif kind in {"tool", "tool_result"}:
             saw_tool_activity = True
+            if kind == "tool_result" and bool(event.get("is_error")):
+                saw_failed_tool_result = True
             # Only ``tool`` carries a name; ``tool_result`` does not.
             name = str(event.get("name") or "").strip()
             if name and name != "tool":
@@ -274,7 +277,13 @@ def dispatch_via_claude_cli(
     # still have answered. Relaxed only with positive evidence -- names were
     # visible and every one was read-only.
     read_only_run = saw_named_tool and not saw_mutating_tool
-    tools_disqualify = saw_tool_activity and not read_only_run
+    # The same contract dispatch_agent_loop settled on 2026-08-05: a
+    # write-capable tool disqualifies the answer only when a tool FAILURE was
+    # also seen. Git truth (`not changed`) is already established below, every
+    # result succeeded, and the answer arrived -- demoting that run to a
+    # failure was manufacturing an error out of the tool's NAME. Unnamed tool
+    # activity still disqualifies: nothing is known about what it did.
+    tools_disqualify = saw_tool_activity and not read_only_run and (saw_failed_tool_result or not saw_named_tool)
     conversation_reply = rc == 0 and not changed and saw_reply and not tools_disqualify and not action_refused
     if rc != 0:
         if saw_login_failure:

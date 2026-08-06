@@ -7,6 +7,40 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (wave-2 organic sweep: queue affinity, classifier truth, chat queue, Work onboarding, snapshots, reload, transcript shape)
+
+- A queued Code task fires only into its own conversation; new tasks start in
+  parallel instead of queueing with an empty id (the measured deliverable
+  overwrite); Code sidebar gets loading/error states; clean stops stop leaking
+  "(process exit 1)".
+- The shell mutation classifier no longer matches its Windows verbs inside
+  ordinary words (`Format-Table` columns classified a directory listing as a
+  write), and an answer-producing run whose write-capable tools ALL succeeded
+  while git says nothing changed files as the answer with a visible neutral
+  note — never a fabricated exit-1 failure. Same contract applied in all three
+  verdict sites (`dispatch_agent_loop`, `dispatch_claude_cli`,
+  `_confirmed_conversation_reply`).
+- The LIVE composer (chat.html) queues a message sent mid-reply — the wave-1
+  queue had landed in the /classic shell's handler; the unified shell now has
+  its own (`js/chat_turn_flow.js`), with a visible queued note, ordered drains,
+  and a stale-queue guard. Revisiting a chat restores its task activity card
+  for all delegation rows; the client's terminal-state list now matches the
+  server's.
+- Work onboarding is finishable: the store demanded a 3-workflow map the tool
+  legitimately builds with one (minimum now 1); onboarding failures surface as
+  visible transcript errors instead of console-only; the board composer's text
+  is carried into the wizard instead of silently dropped; a message naming
+  exactly one offered workflow selects it; Thomas rows render markdown.
+- Task-born projects get a real snapshot commit after every successful run, so
+  an overwrite is recoverable through Keep/Revert; user-picked projects are
+  never auto-committed; `.thomas/.gitignore` ('*') is planted so a picked
+  project's own `git status` stays clean.
+- F5 lands back on the open Code task (`thomas.lastSurface` in localStorage,
+  reusing the deep-link path), never stealing an explicit deep link.
+- Transcripts persist as one string again (a list-shaped transcript was stored
+  as thousands of single-character entries); both read paths tolerate the
+  legacy array shape.
+
 ### Fixed (the Code workspace shell works on Windows and tells the truth about failing)
 
 - Every quoted inline script (`python -c "…"`, `node -e "…"`) reached the

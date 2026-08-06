@@ -41,16 +41,27 @@ def is_inspection_tool(tool_name: str) -> bool:
         return False
     return _CODE_TOOL_ALIASES.get(raw, raw) in _CODE_INSPECTION_TOOLS
 _SHELL_MUTATION_COMMAND_RE = re.compile(
-    r"(?:^|[;&|]\s*|\s)(?:python(?:3)?|py|node|deno|bun|ruby|perl|cmd\s+/c|"
+    r"(?:^|[;&|]\s*|\s)"
+    r"(?:(?:python(?:3)?|py|node|deno|bun|ruby|perl|cmd\s+/c|"
     r"sed\s+-i|npm\s+(?:i|install|uninstall|update)|npx|pnpm|yarn|"
     r"pip(?:3)?\s+(?:install|uninstall)|"
+    r"git\s+(?:add|apply|checkout|cherry-pick|clean|commit|merge|mv|pull|push|rebase|reset|restore|rm|switch))\b"
     # Windows mutation verbs. Measured miss (2026-08-05): "del x" classified as
     # inspection because every marker above was POSIX-shaped, so a deleting run
     # could have passed as read-only. The anchor group before this alternation
     # requires a command-position word (start, separator, or whitespace), which
     # keeps flag arguments like "--format" from matching.
-    r"del|erase|rd|rmdir|ren|rename|move|copy|xcopy|robocopy|mklink|fsutil|format|"
-    r"git\s+(?:add|apply|checkout|cherry-pick|clean|commit|merge|mv|pull|push|rebase|reset|restore|rm|switch))\b",
+    #
+    # These verbs end with a lookahead for a REAL token end — whitespace, a
+    # ``/`` switch (cmd allows "rd/s"), or end of command — NOT a bare ``\b``.
+    # Measured misfire (2026-08-05, w2-code-explain): ``\b`` treats ``-`` as a
+    # boundary, so the disk-format verb ``format`` matched inside PowerShell's
+    # read-only ``Format-Table`` listing cmdlet and an explain run's directory
+    # listing was stamped access='write', demoting the whole answered run to a
+    # fabricated failure. Mutating ``Verb-Noun`` cmdlets (Remove-Item,
+    # Rename-Item, Format-Volume, ...) are matched by name in the marker list
+    # in ``_shell_command_is_mutation`` instead.
+    r"|(?:del|erase|rd|rmdir|ren|rename|move|copy|xcopy|robocopy|mklink|fsutil|format)(?=[\s/]|$))",
     re.IGNORECASE,
 )
 
@@ -117,6 +128,12 @@ def _shell_command_is_mutation(args: dict[str, Any]) -> bool:
             "remove-item",
             "move-item",
             "copy-item",
+            # Mutating Verb-Noun cmdlets the bare Windows verbs used to reach
+            # through ``\b`` before the token-end lookahead was added; the
+            # lookahead now (correctly) stops at the hyphen, so the full
+            # cmdlet names must be listed here on their own.
+            "rename-item",
+            "format-volume",
             "apply_patch",
             "git apply",
             "tee ",

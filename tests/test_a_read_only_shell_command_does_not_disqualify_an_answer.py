@@ -50,14 +50,16 @@ def repo(tmp_path: Path) -> Path:
     return root
 
 
-def _shell_call(tool_id: str, command: str, result: str = "output") -> list[tuple[EventType, dict]]:
+def _shell_call(
+    tool_id: str, command: str, result: str = "output", *, ok: bool = True
+) -> list[tuple[EventType, dict]]:
     """One shell.exec call as the loop actually streams it: the command text
     arrives ONLY in the arg deltas; the executed result event has no args."""
     return [
         (EventType.TOOL_CALL_START, {"tool_id": tool_id, "tool_name": "shell.exec"}),
         (EventType.TOOL_CALL_ARGS_DELTA, {"tool_id": tool_id, "delta": '{"command": "' + command + '"}'}),
         (EventType.TOOL_CALL_END, {"tool_id": tool_id}),
-        (EventType.TOOL_RESULT, {"tool_id": tool_id, "tool_name": "shell.exec", "result": result, "ok": True}),
+        (EventType.TOOL_RESULT, {"tool_id": tool_id, "tool_name": "shell.exec", "result": result, "ok": ok}),
     ]
 
 
@@ -104,26 +106,34 @@ def test_a_readonly_type_command_also_counts_as_inspection(repo: Path) -> None:
     assert result.ok is True, result.reason
 
 
-def test_a_deleting_shell_command_still_disqualifies_the_run(repo: Path) -> None:
-    """The control the relaxation must not remove: 'del x' is a mutation
-    attempt, and a mutation attempt that changed nothing is still a failure."""
-    result = _dispatch(repo, _shell_call("1", "del x"), final_text="Removed the file.")
+def test_a_failed_deleting_shell_command_still_disqualifies_the_run(repo: Path) -> None:
+    """The control the relaxation must not remove: 'del x' that REPORTED
+    FAILURE is a genuine failed edit, and a failed edit that changed nothing
+    is still a failure. (A mutation that succeeded while git truth says
+    nothing changed now files as the answer with a visible note instead —
+    see test_an_answer_after_a_clean_write_capable_run_is_filed_not_failed.)"""
+    result = _dispatch(
+        repo,
+        _shell_call("1", "del x", result="Could Not Find x", ok=False),
+        final_text="Removed the file.",
+    )
 
     assert result.ok is False, result.reason
 
 
-def test_a_mixed_run_with_one_mutating_command_stays_disqualified(repo: Path) -> None:
-    events = _shell_call("1", "dir") + _shell_call("2", "del app.py")
+def test_a_mixed_run_with_one_failed_mutating_command_stays_disqualified(repo: Path) -> None:
+    events = _shell_call("1", "dir") + _shell_call("2", "del app.py", result="Access is denied.", ok=False)
     result = _dispatch(repo, events, final_text="Listed and deleted.")
 
     assert result.ok is False, result.reason
 
 
-def test_a_shell_command_the_stream_never_showed_stays_strict(repo: Path) -> None:
-    """No arg deltas arrived, so the command content is invisible. Without
-    positive evidence the old conservative rule stands: shell can write."""
+def test_an_unseen_command_that_reported_failure_stays_strict(repo: Path) -> None:
+    """No arg deltas arrived, so the command content is invisible and the call
+    classifies as write-capable. When that call also REPORTED failure, the
+    conservative verdict stands: the run is a failed edit, not an answer."""
     events = [
-        (EventType.TOOL_RESULT, {"tool_id": "1", "tool_name": "shell.exec", "result": "output", "ok": True}),
+        (EventType.TOOL_RESULT, {"tool_id": "1", "tool_name": "shell.exec", "result": "boom", "ok": False}),
     ]
     result = _dispatch(repo, events, final_text=ANSWER)
 
@@ -133,7 +143,11 @@ def test_a_shell_command_the_stream_never_showed_stays_strict(repo: Path) -> Non
 def test_the_failure_wording_never_calls_an_answer_nothing_to_review(repo: Path) -> None:
     """Even when a run is rightly filed as a failed edit, an answer that
     exists must be described as an answer — not as 'nothing to review'."""
-    result = _dispatch(repo, _shell_call("1", "del x"), final_text="I removed x as requested.")
+    result = _dispatch(
+        repo,
+        _shell_call("1", "del x", result="Access is denied.", ok=False),
+        final_text="I removed x as requested.",
+    )
 
     assert result.ok is False
     assert "nothing to review" not in result.reason

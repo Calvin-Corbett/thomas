@@ -466,9 +466,10 @@ def dispatch_via_agent_loop(
     saw_tool_activity = False
     saw_named_tool = False
     saw_mutating_tool = False
+    saw_failed_tool = False
 
     def emit_event(event: dict[str, Any]) -> None:
-        nonlocal saw_reply, saw_refusal, saw_tool_activity, saw_named_tool, saw_mutating_tool
+        nonlocal saw_reply, saw_refusal, saw_tool_activity, saw_named_tool, saw_mutating_tool, saw_failed_tool
         kind = str(event.get(FORGE_EVENT_KEY) or "")
         if kind in {"final", "say"}:
             reply_text = str(event.get("text") or "")
@@ -478,6 +479,10 @@ def dispatch_via_agent_loop(
                 saw_refusal = True
         elif kind in {"tool", "tool_result"}:
             saw_tool_activity = True
+            # A call that REPORTED failure is the one genuine failed-edit
+            # signal a no-change run can carry (see the verdict below).
+            if kind == "tool_result" and bool(event.get("is_error")):
+                saw_failed_tool = True
             # Only ``tool`` carries a name; ``tool_result`` does not. Record what
             # we can, and stay conservative about what we cannot see.
             name = str(event.get("name") or "").strip()
@@ -536,12 +541,19 @@ def dispatch_via_agent_loop(
     # which must read files to answer -- came back as a failure with a
     # fabricated exit 1, on top of a correct answer that was then hidden.
     #
-    # Reading is not a failed edit. The relaxation applies only with positive
-    # evidence: we saw tool names, and every one of them was read-only. If a
-    # mutating tool ran and nothing changed, that is still a failure, and if the
-    # names were never visible we cannot tell, so the old strict rule stands.
+    # Reading is not a failed edit -- and neither is a write-capable tool that
+    # RAN AND SUCCEEDED while git truth says nothing changed. The previous rule
+    # demoted that whole answered run to a synthetic failure, which meant one
+    # misclassified shell command (measured 2026-08-05: a PowerShell directory
+    # listing stamped access='write') buried a correct answer under a
+    # fabricated exit 1. The only genuine failed-edit signal a no-change run
+    # can carry is a tool call that REPORTED failure (``is_error`` on its
+    # result -- a mutating tool that failed is exactly that), so only that
+    # still disqualifies. A clean write-capable run files as the conversation
+    # outcome with a visible neutral note in the events (below), never an
+    # error. Read-only runs keep their existing, note-free wording.
     read_only_run = saw_named_tool and not saw_mutating_tool
-    tools_disqualify = saw_tool_activity and not read_only_run
+    tools_disqualify = saw_tool_activity and not read_only_run and saw_failed_tool
     conversation_reply = rc == 0 and not changed and saw_reply and not tools_disqualify and not action_refused
     if rc != 0:
         reason = f"verification failed (exit {rc}) after fix attempts" if verify_failed else f"agent loop exited {rc}"
@@ -549,13 +561,21 @@ def dispatch_via_agent_loop(
         detail = " after leaving partial file changes" if changed else ""
         reason = f"GPT could not complete the requested action{detail}"
     elif not changed:
-        if conversation_reply:
-            reason = "GPT answered from the project without changing files" if read_only_run else "GPT replied without changing files"
+        if conversation_reply and read_only_run:
+            reason = "GPT answered from the project without changing files"
+        elif conversation_reply and saw_tool_activity:
+            # Write-capable tool ran, every result succeeded, git says nothing
+            # changed: the answer IS the outcome. The fact worth knowing stays
+            # visible as a neutral note in the event stream, not an error.
+            reason = "GPT answered; a write-capable tool ran and no files changed"
+            emit_sink({FORGE_EVENT_KEY: "meta", "text": "a write-capable tool ran; no files changed", "is_error": False})
+        elif conversation_reply:
+            reason = "GPT replied without changing files"
         elif saw_reply:
-            # The run is rightly not a success — a write-capable tool ran and
-            # left no changes — but an answer EXISTS, and calling it "nothing
-            # to review" was false. Describe both facts.
-            reason = "GPT gave an answer but a write-capable tool ran and no files changed — review the answer; no edit landed"
+            # The run is rightly not a success — a tool call reported failure
+            # and no changes landed — but an answer EXISTS, and calling it
+            # "nothing to review" was false. Describe both facts.
+            reason = "GPT gave an answer but a tool call failed and no files changed — review the answer; no edit landed"
         else:
             # "Nothing to review" is reserved for when it is true: no repo
             # changes AND no answer text.
