@@ -7,6 +7,18 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (design unification wave 4: honest words on every surface)
+
+- Worker prose renders without raw markdown markers on every plain-text
+  surface: the classic Mission Control priority queue and job summaries
+  (runtime 023) and the standalone /mission page strip markers with the same
+  helper chat.html uses - and all three now strip UNPAIRED markers too,
+  because summaries arrive truncated (the closing ** was cut off) and
+  headings appear mid-sentence, which the old paired-only patterns missed.
+  Verified live: the Saturday-dinner delegation row reads clean.
+- /landing no longer serves a broken download of a file that never existed:
+  the route redirects to the app.
+
 ### Removed (design unification wave 3: dead design paths)
 
 - Deleted with an approved record (2026-08-06-design-unification-dead-paths):

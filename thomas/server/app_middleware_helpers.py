@@ -123,18 +123,11 @@ def build_page_handlers(
             return web.FileResponse(web_dir / "companion.html")
 
     async def landing(request: web.Request) -> web.StreamResponse:
-        try:
-            html = (web_dir / "landing.html").read_text(encoding="utf-8", errors="replace")
-            web_build = web_build_fingerprint("index.html", "js/landing.js")
-            html = html.replace("__THOMAS_VERSION__", THOMAS_VERSION)
-            html = html.replace("__THOMAS_WEB_BUILD__", web_build)
-            return web.Response(
-                text=html,
-                content_type="text/html",
-                headers={"Cache-Control": "no-store"},
-            )
-        except (OSError, UnicodeDecodeError):
-            return web.FileResponse(web_dir / "landing.html")
+        # landing.html does not exist (and js/landing.js never did): the old
+        # fallback served a FileResponse for a missing file, which browsers
+        # surfaced as a broken download. The deep link stays valid and lands
+        # on the app.
+        raise web.HTTPFound("/")
 
     return {
         "index": index,

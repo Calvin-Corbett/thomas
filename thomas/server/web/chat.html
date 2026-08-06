@@ -496,7 +496,7 @@
     function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
     // Activity cards and status lines render as PLAIN text — worker prose with
     // markdown markers ("**360**", "`file`") must not leak raw syntax there.
-    function deMd(s) { return String(s == null ? '' : s).replace(/\*\*([^*]+)\*\*/g, '$1').replace(/__([^_]+)__/g, '$1').replace(/`([^`]+)`/g, '$1').replace(/^#{1,4}\s+/gm, ''); }
+    function deMd(s) { return String(s == null ? '' : s).replace(/\*\*/g, '').replace(/__/g, '').replace(/`/g, '').replace(/(^|\s)#{1,6}\s+/gm, '$1'); } // markers strip even unpaired: upstream truncation eats closing ** and headings appear mid-sentence
 
     // ---------- Bot mascot (mirrors Bot.dc.html) ----------
     function botHTML(p) {

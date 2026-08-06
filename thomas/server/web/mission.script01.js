@@ -23,6 +23,13 @@
 
   const byId = (id) => document.getElementById(id);
   const safe = (value) => String(value == null ? '' : value).trim();
+  // Worker prose is plain text here - strip markdown markers so **bold**
+  // never renders with its asterisks. Mirrors chat.html deMd.
+  const plainText = (value) => safe(value)
+    .replace(/\*\*/g, '')
+    .replace(/__/g, '')
+    .replace(/`/g, '')
+    .replace(/(^|\s)#{1,6}\s+/gm, '$1');
   const escapeHtml = (value) => safe(value)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -99,7 +106,7 @@
 
   function jobSummary(job) {
     const payload = job && typeof job.payload === 'object' ? job.payload : {};
-    return safe(payload.goal || payload.prompt || payload.task || payload.message || 'No task summary provided.');
+    return plainText(payload.goal || payload.prompt || payload.task || payload.message || 'No task summary provided.');
   }
 
   function scheduleLabel(job) {
@@ -233,7 +240,7 @@
     host.innerHTML = rows.slice(0, 30).map((row, index) => {
       const key = approvalKey(row, index);
       const title = row.source === 'guardrails' ? (safe(row.tool_name) || 'Guardrail request') : (safe(row.name || row.kind) || 'Autonomy request');
-      const detail = safe(row.reason || row.summary || row.args_preview || 'Review this request before work continues.');
+      const detail = plainText(row.reason || row.summary || row.args_preview || 'Review this request before work continues.');
       return `<article class="approval-card" ${instanceAttrs('approval-card', key, 'mission.approvals')}>
         <div class="card-top"><div class="card-title"><strong>${escapeHtml(title)}</strong><small>${escapeHtml(row.source)} · requested ${escapeHtml(relativeTime(row.requested_at))}</small></div><span class="status-pill is-warning">waiting</span></div>
         <p class="card-summary">${escapeHtml(detail)}</p>
