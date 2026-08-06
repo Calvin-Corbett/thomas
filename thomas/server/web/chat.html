@@ -418,6 +418,7 @@
   <script src="/static/js/workspace_chat_drawer_view.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/workspace_chat_drawer.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/chat_composer_panels.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/chat_turn_flow.js?v=__THOMAS_WEB_BUILD__"></script>
   <script>
   (function () {
     "use strict";
@@ -1834,7 +1835,9 @@
 
     // ---------- Send / stream (wired to the real Thomas backend: POST /api/v2/chat, NDJSON) ----------
     function send() {
-      const text = state.input.trim(); if (!text || state.streaming) return;
+      const text = state.input.trim(); if (!text) return;
+      // A mid-reply send QUEUES, visibly, instead of silently vanishing (the old guard's drop); turnFlow auto-sends it when this reply finishes.
+      if (state.streaming) { turnFlow.enqueue(); return; }
       // A user re-sending (nearly) the same message means the first answer
       // didn't land — that's friction worth seeing in the report.
       const recentUser = state.messages.filter(m => m.role === 'user').slice(-2);
@@ -2088,6 +2091,7 @@
         // The backend saved this turn's session; refresh Recent so the new chat shows
         // up immediately (with its title + date) instead of only after a reload.
         refreshChats();
+        turnFlow.drainQueued(); // a message queued mid-reply sends NOW, in order
       }
     }
 
@@ -2177,13 +2181,13 @@
         syncDynamic(); scrollEnd();
       } catch (e) {}
     }
-    // Restore RUNNING work when you return to a chat whose task is still going.
-    // The background worker never stopped server-side; only the visual was lost.
-    // Re-attach the live activity card and resume polling so the bubble looks
-    // exactly as it did when you left ("I went back and the agent bubble is
-    // gone" — it should never be). Terminal rows are handled by the verified
-    // restore above.
-    async function restoreRunningDelegations(chatId, sessionId, selectionToken) {
+    // Restore the task activity card when you return to a chat. Running rows come
+    // back LIVE (controls + polling — the worker never stopped, only the visual was
+    // lost); finished/failed/stopped rows come back as a settled card. Before this,
+    // only running rows were restored, so a failed task's revisit showed the stale
+    // "On it" sentence with the card that explained it gone. Row classification lives
+    // in ThomasChatTurnFlow with the server-aligned terminal states ('verified'/'abandoned' included, which the old inline list missed).
+    async function restoreDelegationCards(chatId, sessionId, selectionToken) {
       const sid = String(sessionId || '');
       if (!sid) return;
       let rows;
@@ -2194,30 +2198,17 @@
         rows = Array.isArray(d.delegations) ? d.delegations : [];
       } catch (e) { return; }
       if (selectionToken !== chatSelectionToken || state.activeChat !== chatId || String(state.sessionId || '') !== sid) return;
-      const isTerminal = row => {
-        const st = String(row.state || row.status || '').toLowerCase();
-        return ['completed', 'done', 'succeeded', 'passed', 'failed', 'error', 'blocked', 'cancelled', 'canceled'].includes(st);
-      };
-      const running = rows.filter(row => String(row.session_id || '') === sid && !isTerminal(row) && String(row.execution_id || row.id || ''));
-      if (!running.length) return;
-      let idx = state.messages.length - 1;
-      while (idx >= 0 && state.messages[idx].role !== 'assistant') idx -= 1;
-      if (idx < 0) { state.messages.push({ role: 'assistant', text: '', model: state.modelLabel || '' }); idx = state.messages.length - 1; appendMessage(state.messages[idx]); }
-      const a = state.messages[idx].activity || { thinking: '', steps: [], expanded: true, artifacts: [], artifact: null, artifactOpen: false, wantsCanvas: false, expectedHandoffCount: 0 };
-      a.cancelled = false;
-      a.expectedHandoffCount = Math.max(Number(a.expectedHandoffCount || 0), running.length);
-      running.forEach(row => {
-        const rid = String(row.execution_id || row.id || '');
-        let step = a.steps.find(s => s.kind === 'handoff' && s.id === rid);
-        const label = String(row.last_progress || row.summary || 'Working…').replace(/^\s*\[[^\]]+\]\s*/, '').trim();
-        if (step) { step.status = 'running'; step.label = label; }
-        else a.steps.push({ kind: 'handoff', id: rid, worker: String(row.bot_name || row.specialist_id || 'worker'), label, status: 'running' });
-      });
+      const plan = window.ThomasChatTurnFlow.planDelegationRestore(rows, sid, state.messages);
+      if (!plan.steps.length) return;
+      let idx = plan.anchorIdx;
+      if (idx < 0) { state.messages.push({ role: 'assistant', text: '', model: state.modelLabel || '' }); idx = state.messages.length - 1; }
+      const a = state.messages[idx].activity || { thinking: '', steps: [], expanded: false, artifacts: [], artifact: null, artifactOpen: false, wantsCanvas: false, expectedHandoffCount: 0 };
+      window.ThomasChatTurnFlow.mergeRestoredSteps(a, plan);
       state.messages[idx].activity = a;
       threadEl.innerHTML = ''; msgRefs.length = 0;
       state.messages.forEach((message, messageIndex) => threadEl.appendChild(buildMessageNode(message, messageIndex)));
       syncDynamic(); scrollEnd();
-      pollDelegations(idx);
+      if (plan.anyRunning) pollDelegations(idx);
     }
     function selectChat(id) {
       const selectionToken = ++chatSelectionToken;
@@ -2236,7 +2227,7 @@
       resetCanvasForConversation(); renderChats(); syncView();
       state.messages.forEach((m, i) => threadEl.appendChild(buildMessageNode(m, i)));
       autosize(); syncDynamic(); scrollEnd();
-      if (c && c.sessionId) restoreVerifiedChatArtifacts(id, c.sessionId, selectionToken).then(() => restoreRunningDelegations(id, c.sessionId, selectionToken));
+      if (c && c.sessionId) restoreVerifiedChatArtifacts(id, c.sessionId, selectionToken).then(() => restoreDelegationCards(id, c.sessionId, selectionToken));
     }
     function fillAndSend(text) { state.input = text; inputEl.value = text; autosize(); send(); }
     function toggleSidebar() {
@@ -2716,6 +2707,12 @@
     } = window.ThomasChatComposerPanels.create({
       state, esc, inputEl, autosize, syncDynamic, DIAL_FIELDS, saveDials,
     });
+    // Mid-reply sends park here (visible "Queued" note on their own bubble)
+    // and drain, in order, as each reply finishes. Lives in js/chat_turn_flow.js.
+    const turnFlow = window.ThomasChatTurnFlow.create({
+      state, inputEl, msgRefs, autosize, syncDynamic, syncView, appendMessage, renderAttachments, scrollEnd,
+      sendNow: (text) => { _pendingCanvasIntent = !!detectVisualIntent(text); streamReal(text); },
+    });
 
     // ---------- Wire up ----------
     inputEl.addEventListener('input', e => { state.input = e.target.value; autosize(); syncDynamic(); });
@@ -2728,7 +2725,9 @@
         if (state.input.trim()) { send(); return; }
         if (unified.stop()) return;
       }
-      if (state.streaming) { if (abortController) { try { abortController.abort(); } catch (e) {} } }
+      // Same rule in Chat: typed text sends (send() queues it mid-reply, which
+      // is what the arrow icon promises); only an EMPTY composer stops the run.
+      if (state.streaming && !state.input.trim()) { if (abortController) { try { abortController.abort(); } catch (e) {} } }
       else { send(); }
     });
     document.getElementById('tc-search').addEventListener('input', e => { state.search = e.target.value; renderChats(); });

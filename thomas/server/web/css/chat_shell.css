@@ -262,3 +262,8 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .tc-doc-page th { background: #f2f4f9; font-weight: 700; }
 .tc-doc-cursor { display: inline-block; width: 6px; height: 1.02em; background: #2f6bff; margin-left: 1px; vertical-align: text-bottom; border-radius: 1px; animation: tc-blink 1s step-end infinite; }
 @keyframes tc-blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+/* "Queued — will send when this reply finishes": the note under a message
+   typed while Thomas was still answering (js/chat_turn_flow.js attaches it to
+   the user bubble at queue time and removes it the moment it auto-sends). The
+   bubble's flex column right-aligns user content, so the note follows it. */
+.tc-queued-note { font-size: 11.5px; color: var(--c-muted); padding: 2px 4px 0; font-style: italic; }

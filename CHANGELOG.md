@@ -41,6 +41,8 @@ Versioning: Semantic Versioning.
   as thousands of single-character entries); both read paths tolerate the
   legacy array shape.
 
+- (landed) chat live-composer queue + task-card restore -- details in the wave-2 sweep entry above.
+
 ### Fixed (the Code workspace shell works on Windows and tells the truth about failing)
 
 - Every quoted inline script (`python -c "…"`, `node -e "…"`) reached the
