@@ -88,6 +88,8 @@ class _AgentLoopForgeTranslator:
         # every shell call was assumed to write — which filed correct
         # explain-only runs as failed edits with a fabricated exit 1.
         self._tool_args_buf: dict[str, list[str]] = {}
+        # tool_id -> the shell command it ran (excerpt), so results are auditable.
+        self._last_call_command: dict[str, str] = {}
         # True once we've forwarded token-progressive ``say`` deltas for the current
         # prose run, so the boundary flush does NOT re-emit the same text as a block.
         self._streamed_say = False
@@ -131,6 +133,11 @@ class _AgentLoopForgeTranslator:
 
         raw = "".join(self._tool_args_buf.pop(tool_id, []))
         args, _parse_error = parse_tool_args(raw) if raw else (None, None)
+        # Remember the shell command so the RESULT event can carry it. Without
+        # this the durable record holds only stdout -- a passing check was
+        # unauditable after the fact, because nothing could say WHAT ran.
+        if isinstance(args, dict):
+            self._last_call_command[tool_id] = str(args.get("command") or "")[:300]
         return tool_call_access(tool_name, args if isinstance(args, dict) else None)
 
     def feed(self, et: str, data: dict[str, Any] | None) -> None:
@@ -182,9 +189,14 @@ class _AgentLoopForgeTranslator:
             access, access_basis = self._classify_call(
                 str(data.get("tool_name") or ""), str(data.get("tool_id") or "")
             )
+            command_excerpt = self._last_call_command.pop(str(data.get("tool_id") or ""), "")
             self._emit(
                 {
                     FORGE_EVENT_KEY: "tool_result",
+                    # The command the tool ran (excerpt), when the stream showed
+                    # one -- so a passing check is auditable after the fact
+                    # instead of being stdout with no provenance.
+                    **({"command": command_excerpt} if command_excerpt else {}),
                     # Carry the tool's name. TOOL_START is never emitted by the
                     # agent loop -- Events.tool_start has no callers anywhere --
                     # so this is the ONLY place a name reaches the forge stream.

@@ -1493,6 +1493,24 @@
     if (!status || status.running !== true || !status.run_id) return false;
     const session = status.session && typeof status.session === 'object' ? status.session : {};
     const cid = String(session.conversation_id || '');
+    // Adopt ONLY a run this browser was actually on. Blanket adoption turned
+    // every fresh session into an attachment to whatever run happened to be
+    // live -- and a new task typed into that "fresh" composer then queued into
+    // the adopted conversation, ran in its project, and overwrote its
+    // deliverable (measured twice, 2026-08-05/06: a countdown ask replaced a
+    // finished Bitcoin dashboard; wave-3 isolation reproduced it from a clean
+    // profile). The stored last-surface snapshot is the evidence of "was on
+    // it": a same-browser reload carries it and reattaches exactly as before;
+    // a genuinely fresh session carries nothing and stays fresh -- the live
+    // run remains visible in the sidebar and status, one click away.
+    if (cid) {
+      let wasHere = false;
+      try {
+        const stored = JSON.parse(localStorage.getItem('thomas.lastSurface') || 'null');
+        wasHere = Boolean(stored && String(stored.codeConversationId || '') === cid);
+      } catch (error) { wasHere = false; }
+      if (!wasHere && state.activeId !== cid) return false;
+    }
     if (cid && state.activeId !== cid) {
       try { await loadConversation(cid); } catch (error) {}
     }

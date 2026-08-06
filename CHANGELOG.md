@@ -53,6 +53,19 @@ Versioning: Semantic Versioning.
 
 - (landed) per-run snapshots in task-born projects + runtime verdict parity -- details above.
 
+### Fixed (a fresh session no longer adopts someone else's live run)
+
+- `adoptOrphanRun` blanket-adopted any live run into every fresh browser
+  session; a new task typed there then queued into the adopted conversation,
+  ran in its project, and overwrote its deliverable (measured twice; wave-3
+  isolation reproduced it from a clean profile). Adoption is now gated on the
+  stored last-surface snapshot: a same-browser reload reattaches exactly as
+  before, a genuinely fresh session stays fresh with the live run one sidebar
+  click away.
+- Shell tool results in the durable transcript now carry the COMMAND they ran
+  (excerpt), so a passing check is auditable instead of being stdout with no
+  provenance.
+
 ### Fixed (the Code workspace shell works on Windows and tells the truth about failing)
 
 - Every quoted inline script (`python -c "…"`, `node -e "…"`) reached the
