@@ -24,7 +24,43 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from thomas.agent.loop_tool_protocol import tool_call_access
+
 FORGE_EVENT_KEY = "fc"
+
+# Claude's own tool vocabulary, which is not Thomas's. Read-only names can never
+# change anything; mutation names always can; ``Bash`` is SHELL-LIKE — a shell
+# command is read-only or mutating by its CONTENT, not the tool's name, so it is
+# classified by COMMAND through the shared rule (``tool_call_access``). Anything
+# unlisted is assumed capable of writing, so an unrecognised tool stays strict.
+CLI_READ_ONLY_TOOL_NAMES = frozenset(
+    {"read", "glob", "grep", "notebookread", "todoread", "websearch", "webfetch", "ls"}
+)
+CLI_MUTATION_TOOL_NAMES = frozenset({"edit", "write", "multiedit", "notebookedit"})
+_CLI_SHELL_TOOL_NAMES = frozenset({"bash"})
+
+
+def _cli_tool_access(name: str, inp: Any) -> tuple[str, str, str]:
+    """Classify one claude-CLI tool call as ``(access, basis, command_excerpt)``.
+
+    Mirrors ``tool_call_access`` (the one shared rule every verdict site
+    consults) over Claude's tool vocabulary: fixed names classify by name, and
+    ``Bash`` is judged by the command it actually ran — routed through the
+    shared shell rule so ``ls`` reads and ``rm x`` writes by the SAME regex the
+    GPT loop path uses. No visible command fails toward "write"
+    (``command-unseen``): no positive evidence, no relaxation.
+    """
+    canonical = str(name or "").strip().casefold()
+    if canonical in _CLI_SHELL_TOOL_NAMES:
+        source = inp if isinstance(inp, dict) else {}
+        command = str(source.get("command") or source.get("cmd") or source.get("shell") or "").strip()
+        access, basis = tool_call_access("shell.exec", {"command": command} if command else None)
+        return access, basis, command[:300]
+    if canonical in CLI_READ_ONLY_TOOL_NAMES:
+        return "read", "name", ""
+    if canonical in CLI_MUTATION_TOOL_NAMES:
+        return "write", "name", ""
+    return "write", "unknown-tool", ""
 
 
 def _default_emit(event: dict[str, Any]) -> None:
@@ -213,6 +249,11 @@ class _StreamState:
 
     seen_observation: bool = False
     insight_keys: list[frozenset[str]] = field(default_factory=list)
+    # tool_use id -> the call's stamps ({name, access, access_basis, command}).
+    # A CLI ``tool_result`` block carries ONLY ``tool_use_id``, so without this
+    # correlation the durable record of a result holds stdout with no
+    # provenance: nothing can say WHAT ran, or whether it only read.
+    tool_stamps: dict[str, dict[str, str]] = field(default_factory=dict)
     # True once we've streamed token-progressive ``say`` deltas for the CURRENT
     # assistant text block. It lets us SUPPRESS the duplicate COMPLETE text block
     # that arrives right after — the deltas already carried that text live.
@@ -350,17 +391,37 @@ def translate_claude_event(line: str, state: _StreamState | None = None) -> list
                 # collapsed reason. Rules live in ONE place so both engines move together.
                 events.extend(_thinking_to_events(block.get("thinking"), state))
             elif btype == "tool_use":
-                events.append(
-                    {
-                        FORGE_EVENT_KEY: "tool",
-                        "name": str(block.get("name") or "tool"),
-                        "text": _summarize_tool_input(block.get("input")),
-                    }
-                )
+                name = str(block.get("name") or "tool")
+                # How this call is judged for the read-only-run verdict, and on
+                # what evidence — stamped so the decision is visible in the
+                # persisted stream instead of being re-derived (differently, by
+                # NAME alone) by whoever reads it later. Same stamps the GPT
+                # loop path (dispatch_agent_loop) already carries.
+                access, access_basis, command = _cli_tool_access(name, block.get("input"))
+                event = {
+                    FORGE_EVENT_KEY: "tool",
+                    "name": name,
+                    "text": _summarize_tool_input(block.get("input")),
+                    "access": access,
+                    "access_basis": access_basis,
+                }
+                if command:
+                    # The command the tool ran (excerpt) — so a passing check is
+                    # auditable after the fact instead of stdout with no provenance.
+                    event["command"] = command
+                events.append(event)
                 # The run has now OBSERVED (acted): reasoning after this point is
                 # eligible to surface as an insight; reasoning before it was plan.
                 if state is not None:
                     state.seen_observation = True
+                    tool_id = str(block.get("id") or "")
+                    if tool_id:
+                        state.tool_stamps[tool_id] = {
+                            "name": name,
+                            "access": access,
+                            "access_basis": access_basis,
+                            "command": command,
+                        }
     elif etype == "stream_event":
         # TOKEN-PROGRESSIVE streaming (claude ``--include-partial-messages``): forward
         # each text_delta as a ``say`` DELTA (RAW — never ``.strip()``, which would
@@ -379,13 +440,27 @@ def translate_claude_event(line: str, state: _StreamState | None = None) -> list
             if not isinstance(block, dict):
                 continue
             if block.get("type") == "tool_result":
-                events.append(
-                    {
-                        FORGE_EVENT_KEY: "tool_result",
-                        "text": _flatten_tool_result(block.get("content")),
-                        "is_error": bool(block.get("is_error")),
-                    }
+                event = {
+                    FORGE_EVENT_KEY: "tool_result",
+                    "text": _flatten_tool_result(block.get("content")),
+                    "is_error": bool(block.get("is_error")),
+                }
+                # Correlate the result back to its call (``tool_use_id``) so the
+                # result carries the call's name, access stamps, and command
+                # excerpt — a result with no correlated call stays unnamed and
+                # unstamped, and downstream verdicts keep treating it strictly.
+                stamp = (
+                    state.tool_stamps.pop(str(block.get("tool_use_id") or ""), None)
+                    if state is not None
+                    else None
                 )
+                if stamp:
+                    if stamp.get("command"):
+                        event["command"] = stamp["command"]
+                    event["name"] = stamp["name"]
+                    event["access"] = stamp["access"]
+                    event["access_basis"] = stamp["access_basis"]
+                events.append(event)
                 # A tool RESULT is the clearest observation of all — mark it.
                 if state is not None:
                     state.seen_observation = True

@@ -19,7 +19,13 @@ from typing import Any
 from aiohttp import web
 
 from thomas.agent.loop_tool_protocol import is_inspection_tool
-from thomas.forge.anvil import forge_code_deliverables, forge_code_git, forge_code_store, run_report
+from thomas.forge.anvil import (
+    forge_code_deliverables,
+    forge_code_git,
+    forge_code_projects,
+    forge_code_store,
+    run_report,
+)
 from thomas.server.app_keys import APP_ENGINE_MANAGER, APP_RUN_STORE_ENABLED, APP_RUN_STORE_MODULE
 
 from .evolve_agent_activity import (
@@ -741,6 +747,18 @@ async def _drain_and_record(
                     # this is the last line of defense and it must never
                     # rewrite a successful outcome as a failure.
                     log.warning("evolve agent: run snapshot commit failed: %s", exc, exc_info=True)
+        if outcome == "conversation":
+            # A question asked with nothing selected minted this folder moments
+            # ago and left it holding nothing but .git and .thomas internals
+            # (measured live 3x, 2026-08-05: siblings "...tell me what",
+            # "...tell me what 2", "...tell me what 3"). The transcript lives
+            # INSIDE the folder, so it is never deleted -- instead it is marked
+            # free, and the next same-named question reuses it rather than
+            # minting the next sibling. Best-effort and never a gate: the
+            # helper refuses user-picked folders and folders with any real
+            # files, and an unmarked folder only means the next question mints
+            # its own, exactly as before.
+            forge_code_projects.mark_workspace_reusable(root)
         # This flag used to be set True because execution REACHED this line,
         # while every other branch returned it False with a persistence_state.
         # That made the confirmation CIRCULAR: `_await_recording` awaits the

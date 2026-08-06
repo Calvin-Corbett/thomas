@@ -124,6 +124,8 @@ Versioning: Semantic Versioning.
 
 - (landed) preview network notice + standalone-tab connect-src -- details above.
 
+- (landed) folder reuse/rename, restore race, CLI stamping -- details above.
+
 ### Added (image generation, with the truth about credentials)
 
 - New `image.generate` tool, registered for the chat agent, the delegation

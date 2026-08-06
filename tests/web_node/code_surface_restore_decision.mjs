@@ -121,6 +121,29 @@ surfaceApi.persistSurface();
 expect(storage.get('thomas.lastSurface') === JSON.stringify({ mode: 'chat', codeConversationId: '' }),
   'switching back to Chat must persist Chat as the last surface');
 
+// --- Sync persist: the change is captured before any timer fires ------------
+// Measured (sweeps/w3-reload-restore): restore worked 5/6; the miss reloaded
+// before the 1s tick captured the just-opened conversation. Opening a
+// conversation (activeId) and starting a run (running) must persist NOW.
+const syncState = { activeId: '', running: false, projectNames: {} };
+window.ThomasCodeProjects.configure({ state: syncState });
+window.ThomasUnifiedModes.mode = () => 'code';
+storage.delete('thomas.lastSurface');
+syncState.activeId = 'fc_sync_open';
+expect(storage.get('thomas.lastSurface') === JSON.stringify({ mode: 'code', codeConversationId: 'fc_sync_open' }),
+  'opening a conversation must persist synchronously — a reload before the 1s tick must still name it');
+expect(syncState.activeId === 'fc_sync_open', 'the watched activeId must still read back its assigned value');
+
+// Run start: the surface may have changed since the last write (e.g. the mode
+// flipped to Code as the run began) — starting a run must flush it.
+window.ThomasUnifiedModes.mode = () => 'chat';
+surfaceApi.persistSurface();
+window.ThomasUnifiedModes.mode = () => 'code';
+syncState.running = true;
+expect(storage.get('thomas.lastSurface') === JSON.stringify({ mode: 'code', codeConversationId: 'fc_sync_open' }),
+  'starting a run must persist the surface synchronously');
+expect(syncState.running === true, 'the watched running flag must still read back its assigned value');
+
 console.log(JSON.stringify({
   ok: true,
   restoredUrl: historyWrites[0],

@@ -19,6 +19,36 @@
 
   function configure(deps) {
     state = deps.state;
+    watchSurfaceMoments(state);
+  }
+
+  // The moments the surface snapshot must be persisted NOW, not on the next
+  // 1s tick. Measured (sweeps/w3-reload-restore): restore-on-reload worked
+  // 5/6; the miss reloaded in the window between loadConversation setting
+  // state.activeId and the tick writing it, so the snapshot still named the
+  // previous surface. There is one shared state object (injected above), so
+  // accessor properties on it catch every writer in unified_code_mode.js
+  // without that file needing to know persistence exists: opening a
+  // conversation (activeId) and starting a run (running) both persist
+  // synchronously. The tick and the pagehide flush stay as backstops.
+  function watchSurfaceMoments(target) {
+    if (!target) return;
+    ['activeId', 'running'].forEach(prop => {
+      let current = target[prop];
+      try {
+        Object.defineProperty(target, prop, {
+          configurable: true,
+          enumerable: true,
+          get() { return current; },
+          set(value) {
+            const changed = value !== current;
+            current = value;
+            // persistSurface itself skips the write when nothing changed.
+            if (changed) persistSurface();
+          },
+        });
+      } catch (_error) { /* frozen state: the 1s tick still covers it */ }
+    });
   }
 
   // The one shared drawer, ~/.thomas/code_scratch. Held here as a path test

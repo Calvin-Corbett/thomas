@@ -340,6 +340,18 @@ def project_name_for_task(task: str) -> str:
     The folder is how someone finds this work again months later. "exec-065aad"
     and "code_scratch" tell them nothing; the sentence they typed does.
     """
+    return _name_from_task(task) or f"Code task {datetime.now().strftime('%Y-%m-%d %H%M')}"
+
+
+def _name_from_task(task: str) -> str:
+    """The usable part of a task sentence as a folder name -- "" when there is none.
+
+    Split out from :func:`project_name_for_task` so a caller can tell "the task
+    named this folder" from "the task was empty and a timestamp stood in". The
+    distinction is stamped into the task-born marker at creation, because the
+    timestamp SHAPE cannot be trusted later: a person can name a project
+    "Code task 2026" themselves.
+    """
     first_line = next((line for line in str(task or "").splitlines() if line.strip()), "")
     cleaned = "".join(ch for ch in " ".join(first_line.split()) if ch in _PROJECT_NAME_SAFE).strip(" -_.")
     if len(cleaned) > _TASK_NAME_MAX_CHARS:
@@ -348,7 +360,7 @@ def project_name_for_task(task: str) -> str:
         # Cut on a word boundary unless that would leave a stub too short to
         # recognise, in which case a hard cut still beats a one-word folder.
         cleaned = (head[:boundary] if boundary >= 12 else cleaned[:_TASK_NAME_MAX_CHARS]).strip(" -_.")
-    return cleaned or f"Code task {datetime.now().strftime('%Y-%m-%d %H%M')}"
+    return cleaned
 
 
 def project_for_new_task(task: str) -> Path:
@@ -360,6 +372,17 @@ def project_for_new_task(task: str) -> Path:
     each silently replacing the last. Four of their builds are simply gone -- the
     only surviving trace was haunted-arcade.css, an orphaned stylesheet whose
     page no longer exists.
+
+    Reuse before mint, measured 2026-08-05 in the other direction: a QUESTION
+    ("look at the project I have selected...") asked three times with nothing
+    selected minted three empty siblings -- "...tell me what", "...tell me what
+    2", "...tell me what 3" -- because every question is a new task and every
+    new task got a fresh folder. Deleting the leftovers is not an option: each
+    one holds the question's own transcript under .thomas/. So a folder whose
+    run FINISHED as a pure answer (``mark_workspace_reusable``) is claimed by
+    the next same-named task instead of minting the next sibling. Only a
+    finished answer frees a folder -- two same-named tasks in flight still get
+    separate folders, and a folder that gained files keeps its identity.
 
     Nothing here migrates or moves an existing conversation: a task that is
     already bound keeps the folder it was bound to. This decides where a NEW one
@@ -376,11 +399,27 @@ def project_for_new_task(task: str) -> Path:
     choice. A failed stamp is logged and swallowed -- an unmarked folder means
     the pre-stamp behaviour for that folder, never a task that cannot start.
     """
-    project = create_named_project(project_name_for_task(task))
+    name = project_name_for_task(task)
+    reused = _claim_reusable_sibling(_safe_project_slug(name))
+    if reused is not None:
+        # The folder already carries its stamp, shield, and the previous
+        # question's transcript -- reuse must leave all three exactly as they
+        # are. Preserving the recorded answer outranks tidiness.
+        return reused
+    project = create_named_project(name)
     try:
         marker = _task_born_marker(project)
         marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text('{"created_by": "project_for_new_task"}\n', encoding="utf-8")
+        # title_source records whether the TASK named this folder or a
+        # timestamp stood in for an empty one. "empty" is what later allows the
+        # first real message to rename the folder after itself (New chat binds
+        # a folder before any words exist); "task" folders already carry the
+        # sentence they were asked for and are never renamed.
+        title_source = "task" if _name_from_task(task) else "empty"
+        marker.write_text(
+            json.dumps({"created_by": "project_for_new_task", "title_source": title_source}) + "\n",
+            encoding="utf-8",
+        )
     except OSError:
         log.warning("task-born stamp could not be written for %s", project, exc_info=True)
     # Born shielded: the stamp directory doubles as bookkeeping, and even a
@@ -433,6 +472,184 @@ def is_task_born_project(path: str | Path | None) -> bool:
         return _task_born_marker(Path(path).expanduser()).is_file()
     except (OSError, ValueError):
         return False
+
+
+def _reusable_marker(root: str | Path) -> Path:
+    return Path(root) / ".thomas" / "free-for-another-question.json"
+
+
+def workspace_is_unused(path: str | Path | None) -> bool:
+    """True when a folder holds nothing but .git and Thomas's own .thomas dir.
+
+    That is exactly what a question leaves behind: the mint's baseline repo
+    plus the bookkeeping (transcript, stamps) Thomas wrote for itself. One
+    user file anywhere at the top level makes the folder a workspace with
+    work in it, and everything that keys off this must stand down.
+    """
+    if not path:
+        return False
+    try:
+        entries = list(Path(path).expanduser().iterdir())
+    except OSError:
+        return False
+    return all(entry.name in (".git", ".thomas") for entry in entries)
+
+
+def mark_workspace_reusable(path: str | Path | None) -> bool:
+    """Free a task-born folder that an answer-only run left empty.
+
+    Called by the run recorder when a run finishes as a pure conversation
+    (an answer, zero changed files) -- the case measured live 2026-08-05,
+    where every question asked with nothing selected minted another empty
+    sibling under ~/.thomas/projects. The marker this writes is what lets
+    the NEXT same-named question claim the folder instead of minting
+    "sentence 2", "sentence 3", ...
+
+    Guarded twice, never raising: only a task-born mint is ever freed (a
+    user's own folder is theirs, not a mint to recycle), and only while it
+    still holds nothing but .git and .thomas. Returns whether it marked --
+    False is not an error, it means the folder earned its identity.
+    """
+    if not is_task_born_project(path) or not workspace_is_unused(path):
+        return False
+    try:
+        marker = _reusable_marker(Path(path).expanduser())
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text('{"freed_by": "answer-only run"}\n', encoding="utf-8")
+        return True
+    except OSError:
+        log.warning("empty task folder %s could not be marked reusable", path, exc_info=True)
+        return False
+
+
+def _claim_reusable_sibling(slug: str) -> Path | None:
+    """Claim an existing freed folder of this exact name family, if one exists.
+
+    Matches only ``slug`` and ``slug N`` -- the names ``create_named_project``
+    itself would mint -- because the folder name is what the UI's project chip
+    shows, and a different question must never inherit a folder named after
+    someone else's sentence.
+
+    The unlink IS the claim, mirroring create_named_project's mkdir: two tasks
+    arriving together can both see the marker, but only one unlink succeeds,
+    and the loser falls through to minting its own folder. Every check is
+    re-taken here rather than trusted from marking time, because files may
+    have appeared since.
+    """
+    base = thomas_owned_root() / "projects"
+    try:
+        siblings = sorted(base.iterdir())
+    except OSError:
+        return None
+    for candidate in siblings:
+        name = candidate.name
+        if name != slug and not (name.startswith(slug + " ") and name[len(slug) + 1 :].isdigit()):
+            continue
+        if not candidate.is_dir():
+            continue
+        if not is_task_born_project(candidate) or not workspace_is_unused(candidate):
+            continue
+        try:
+            _reusable_marker(candidate).unlink()
+        except OSError:
+            continue  # no marker, or another task claimed it first
+        try:
+            return candidate.resolve()
+        except OSError:
+            continue
+    return None
+
+
+def rename_task_born_for_first_message(
+    catalog_root: str | Path,
+    conversation_id: str,
+    project_root: str | Path,
+    message: str,
+) -> Path:
+    """Give a New-chat folder the name its first message just provided.
+
+    Measured (w3-parallel-newtask, 2026-08-05): a task started via New chat got
+    the folder "Code task 2026-08-05 2020", because ``conversation_new`` binds a
+    folder before any message exists, while the send-first path names folders
+    after the task. This runs when that first message finally arrives and
+    renames the folder to the message-derived name -- but ONLY when all three
+    hold: the folder is task-born and its marker says ``title_source: "empty"``
+    (the stamp written at creation, the one precise record that a timestamp
+    stood in for a name), the working tree holds no user files yet, and the
+    message actually yields a name.
+
+    Failures keep the generic name, silently-visibly: every bail-out is logged
+    and the original root is returned, because a folder that keeps a dull name
+    is an inconvenience and a run that cannot start is a loss. If the folder is
+    renamed but the registry cannot be rewritten, the rename is undone -- a
+    registry pointing at a gone directory would strand the conversation.
+    """
+    try:
+        root = Path(project_root).expanduser().resolve()
+    except (OSError, ValueError):
+        return Path(project_root)
+    try:
+        payload = json.loads(_task_born_marker(root).read_text(encoding="utf-8"))
+        title_source = str(payload.get("title_source") or "") if isinstance(payload, dict) else ""
+    except (OSError, ValueError):
+        return root
+    if title_source != "empty":
+        return root
+    try:
+        has_user_files = any(entry.name not in (".thomas", ".git") for entry in root.iterdir())
+    except OSError:
+        log.warning("could not inspect %s before renaming; keeping its generic name", root)
+        return root
+    if has_user_files:
+        return root
+    wanted = _safe_project_slug(_name_from_task(message)) if _name_from_task(message) else ""
+    if not wanted or wanted == root.name:
+        return root
+
+    renamed: Path | None = None
+    for suffix in range(1, 500):
+        candidate = root.parent / (wanted if suffix == 1 else f"{wanted} {suffix}")
+        try:
+            if candidate.exists():
+                continue
+            root.rename(candidate)
+        except FileExistsError:
+            continue
+        except OSError:
+            log.warning("Code task folder %s could not be renamed to %s; keeping its generic name", root, candidate)
+            return root
+        renamed = candidate
+        break
+    if renamed is None:
+        log.warning("no free name for renaming %s; keeping its generic name", root)
+        return root
+
+    try:
+        registry = _load_registry(catalog_root)
+        row = registry.get(str(conversation_id or ""))
+        if row is not None:
+            row["project_root"] = str(renamed)
+            _write_registry(catalog_root, registry)
+    except OSError:
+        # A registry that still points at the old path would strand the
+        # conversation, so the rename is rolled back rather than half-kept.
+        log.warning("registry could not be rebound after renaming %s; undoing the rename", root, exc_info=True)
+        try:
+            renamed.rename(root)
+        except OSError:
+            log.error("rename of %s to %s could not be undone; conversation may need re-binding", root, renamed)
+        return root
+
+    try:
+        marker = _task_born_marker(renamed)
+        marker.write_text(
+            json.dumps({"created_by": "project_for_new_task", "title_source": "message"}) + "\n",
+            encoding="utf-8",
+        )
+    except OSError:
+        log.warning("task-born stamp could not be refreshed for %s", renamed, exc_info=True)
+    log.info("Code task folder renamed for its first message: %s -> %s", root, renamed)
+    return renamed
 
 
 def create_named_project(name: str) -> Path:

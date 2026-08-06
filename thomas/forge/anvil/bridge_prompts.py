@@ -4,6 +4,40 @@ from __future__ import annotations
 
 from typing import Any
 
+from .forge_code_projects import is_task_born_project, workspace_is_unused
+
+
+def _fresh_workspace_note(project_root: Any) -> str:
+    """Name reality when the working folder was minted for this very task.
+
+    Measured live (3x, 2026-08-05): a question like "look at the project I have
+    selected..." asked with nothing selected lands in a brand-new empty folder
+    minted seconds earlier -- and the model, told nothing about where it is
+    standing, answers as if that empty folder were the user's chosen project.
+    This is sight only: it adds a true sentence to the prompt when (and only
+    when) the folder is a task-born mint that still holds nothing but .git and
+    Thomas's own .thomas bookkeeping. It never restricts what the model may do
+    there, and any error reads as "no note", never as a failed prompt.
+    """
+    if not project_root:
+        return ""
+    try:
+        fresh = is_task_born_project(project_root) and workspace_is_unused(project_root)
+    except (OSError, ValueError):
+        return ""
+    if not fresh:
+        return ""
+    return (
+        "## Workspace\n"
+        "This is a brand-new empty folder created for this task — nothing is "
+        "selected and no existing project is open here. If the user asks about "
+        '"the project I have selected", their currently open project, or files '
+        "they expect to already exist, say plainly that no project is selected "
+        "and this folder was just created empty for this conversation — do not "
+        "present its emptiness as the contents of a project they chose, and do "
+        "not invent contents. Building something new here is fine."
+    )
+
 
 def compose_claude_prompt(goal: str, *, definition: str = "", plan: str = "", branch_only: bool = True) -> str:
     """Build the prompt that will be typed into Claude Code."""
@@ -49,9 +83,16 @@ def compose_headless_prompt(
     file_access: str = "project",
     guardrails: str = "guarded",
     autonomy_level: int = 3,
+    project_root: Any = None,
 ) -> str:
     """Compose one turn for Thomas Code — a conversational coding ASSISTANT, not a
     forced build order.
+
+    ``project_root`` (the working folder, when the dispatcher knows it) buys the
+    model sight of one fact it cannot otherwise see: whether this folder is a
+    freshly minted task-born workspace with nothing in it — so a question asked
+    with no project selected gets an answer that names that reality instead of
+    treating the empty mint as the user's chosen project.
 
     The agent decides, turn by turn, whether the message wants a plain reply (a
     greeting, a question, small talk) or real file edits (a build/fix/change
@@ -77,6 +118,9 @@ def compose_headless_prompt(
         "progress updates at meaningful milestones (for example after inspection, implementation, "
         "and verification). Explain the outcome, not raw tool output or internal counters."
     ]
+    workspace_note = _fresh_workspace_note(project_root)
+    if workspace_note:
+        parts.append(workspace_note)
     history_text = _format_history(history)
     if history_text:
         parts.append("## Conversation so far\n" + history_text)

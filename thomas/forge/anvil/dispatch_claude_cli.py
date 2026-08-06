@@ -14,6 +14,7 @@ from .bridge_prompts import compose_headless_prompt
 from .build_verify import _verify_and_iterate
 from .forge_event_stream import (
     CLAUDE_CLI_LOGIN_GUIDANCE,
+    CLI_READ_ONLY_TOOL_NAMES,
     FORGE_EVENT_KEY,
     ClaudeStreamTranslator,
     _default_emit,
@@ -26,17 +27,18 @@ from .forge_event_stream import (
 # touch the network. The human watcher reviews the resulting diff and runs the tests.
 SAFE_CLI_TOOLS = ("Read", "Edit", "Write", "Glob", "Grep", "MultiEdit", "NotebookEdit")
 
-# Claude's own tool vocabulary, which is not Thomas's. Used to tell a run that
-# only looked from one that tried to change something: a request to inspect and
-# explain must read files to answer, and reading is not a failed edit. Anything
-# not listed is assumed capable of writing, so an unrecognised tool stays strict.
-_CLI_READ_ONLY_TOOLS = frozenset(
-    {"read", "glob", "grep", "notebookread", "todoread", "websearch", "webfetch", "ls"}
-)
-
 
 def _is_read_only_cli_tool(tool_name: str) -> bool:
-    return str(tool_name or "").strip().casefold() in _CLI_READ_ONLY_TOOLS
+    """NAME-only fallback: can this claude tool, by name, only ever look?
+
+    Used to tell a run that only looked from one that tried to change something:
+    a request to inspect and explain must read files to answer, and reading is
+    not a failed edit. The name list lives in ``forge_event_stream`` next to the
+    translator that stamps ``access`` from it — the stamp (which judges Bash by
+    its COMMAND) always wins over this fallback. Anything not listed is assumed
+    capable of writing, so an unrecognised tool stays strict.
+    """
+    return str(tool_name or "").strip().casefold() in CLI_READ_ONLY_TOOL_NAMES
 
 
 @dataclass
@@ -159,6 +161,7 @@ def dispatch_via_claude_cli(
         file_access=file_access,
         guardrails=guardrails,
         autonomy_level=autonomy_level,
+        project_root=cwd,
     )
     if dry_run:
         return CliDispatchResult(False, "dry-run (claude not invoked)", prompt)
@@ -201,11 +204,21 @@ def dispatch_via_claude_cli(
             saw_tool_activity = True
             if kind == "tool_result" and bool(event.get("is_error")):
                 saw_failed_tool_result = True
-            # Only ``tool`` carries a name; ``tool_result`` does not.
+            # ``tool`` always carries a name; a ``tool_result`` carries one only
+            # when the translator correlated it back to its call.
             name = str(event.get("name") or "").strip()
             if name and name != "tool":
                 saw_named_tool = True
-                if not _is_read_only_cli_tool(name):
+                # The translator stamps ``access`` ("read"/"write") onto tool
+                # events, classifying Bash by its COMMAND rather than its name.
+                # Trust the stamp when present — without it, an explain-only run
+                # whose Bash ran `ls` counted as write-capable and an errored
+                # read demoted the whole answered run. Name-based classification
+                # stays as the fallback for unstamped events; it fails toward
+                # write, so an unseen command is never relaxed. Same contract as
+                # _confirmed_conversation_reply and dispatch_agent_loop.
+                access = str(event.get("access") or "").strip()
+                if access == "write" or (access != "read" and not _is_read_only_cli_tool(name)):
                     saw_mutating_tool = True
         emit_sink(event)
 

@@ -540,9 +540,23 @@ def build_evolve_agent_handlers(
                         )
                 else:
                     if requested_project:
-                        selected = forge_code_projects.validate_project_root(
-                            requested_project, fallback=catalog_root
-                        )
+                        try:
+                            selected = forge_code_projects.validate_project_root(
+                                requested_project, fallback=catalog_root
+                            )
+                        except forge_code_projects.ForgeCodeProjectError:
+                            # A root that no longer exists is not a choice -- it
+                            # is the client replaying a path this conversation's
+                            # folder has since been renamed away from. The bound
+                            # folder is the truth, and the folder cannot change
+                            # inside a conversation anyway, so a dead replay must
+                            # not kill the message that would use the real one.
+                            log.info(
+                                "ignoring unusable project_root %r for bound conversation %s",
+                                requested_project,
+                                conversation_id,
+                            )
+                            selected = project_root
                         if selected != project_root:
                             return web.json_response(
                                 {
@@ -581,6 +595,27 @@ def build_evolve_agent_handlers(
                                 "project_root": str(project_root),
                             },
                             status=409,
+                        )
+                    if not (conv.get("turns") or []):
+                        # The FIRST message of a conversation opened by New
+                        # chat: conversation_new bound a folder before any
+                        # words existed, so the folder carries a timestamp
+                        # name while the send-first path names folders after
+                        # the task. Now that the words exist, give the folder
+                        # its real name. The forge side only acts on folders
+                        # its own stamp proves were named from nothing and
+                        # that hold no user files; everything else -- picked
+                        # projects, folders with work in them, task-named
+                        # folders -- passes through untouched, and any
+                        # failure keeps the generic name without blocking
+                        # this run.
+                        project_root = await loop.run_in_executor(
+                            None,
+                            forge_code_projects.rename_task_born_for_first_message,
+                            catalog_root,
+                            conversation_id,
+                            project_root,
+                            message,
                         )
             else:
                 # New conversation, no explicit project -> a folder of ITS OWN,
@@ -1448,6 +1483,16 @@ def build_evolve_agent_handlers(
         # capability. What actually contains the page is untouched and is
         # stricter here than in the preview: default-src 'none', connect-src
         # 'none' (no network at all), form-action 'none', base-uri 'none'.
+        #
+        # connect-src 'none' STAYS even though the standalone preview tab now
+        # allows outbound https/wss (deliverable_aiohttp._apply_headers,
+        # measured w2-code-network / w2-code-impossible). This response never
+        # serves that tab: HTML routed through `artifact` 302s to the preview
+        # service, so what reaches here is downloads, non-HTML assets, and the
+        # capability route's decorative frames beside the chat -- surfaces
+        # where a silent network block is announced by the visible notice in
+        # unified_code_results.js, not fixed by widening a boundary nothing
+        # interactive runs on.
         response.headers["Content-Security-Policy"] = (
             "sandbox allow-scripts; default-src 'none'; "
             "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; "
