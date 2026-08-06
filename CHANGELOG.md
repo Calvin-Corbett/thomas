@@ -53,6 +53,18 @@ Versioning: Semantic Versioning.
 
 - (landed) per-run snapshots in task-born projects + runtime verdict parity -- details above.
 
+### Added (image generation, with the truth about credentials)
+
+- New `image.generate` tool, registered for the chat agent, the delegation
+  worker, and the Code agent loop: prompt + optional size/count -> real PNG
+  files in the task workspace, surfaced by the existing deliverable cards.
+  Providers: OpenAI `gpt-image-1`, then Gemini; keys discovered at call time
+  from Settings/config/env. Proven live: the ChatGPT-subscription OAuth token
+  CANNOT generate images (401, missing scope `api.model.images.request` --
+  OpenAI scopes subscription tokens to Codex only), so with no API key on the
+  machine the tool answers with the exact remedy (add an OpenAI or Gemini key)
+  instead of a silent absence or a fake image.
+
 ### Fixed (a fresh session no longer adopts someone else's live run)
 
 - `adoptOrphanRun` blanket-adopted any live run into every fresh browser

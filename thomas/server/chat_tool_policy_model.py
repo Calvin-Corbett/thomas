@@ -49,6 +49,9 @@ _WRITE_TOOLS = {
     "flow_execute",
     "git.commit",
     "git.push",
+    # image.generate downloads provider output and writes PNG files into the
+    # workspace, so it needs both file-write (here) and network (external) authority.
+    "image.generate",
     "intake_set_clipboard",
     "intake_start_watcher",
     "library_add_entry",
@@ -119,6 +122,7 @@ _EXTERNAL_TOOLS = {
     "eng.web_extract",
     "flow_execute",
     "git.push",
+    "image.generate",
     "nodes_execute_node",
     "notify_send",
     "notify_subscribe",

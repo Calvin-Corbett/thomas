@@ -339,6 +339,7 @@ async def _agent_loop_pass_async(
     from thomas.tools.code_search import register_code_search_tools
     from thomas.tools.diff import register_diff_tools
     from thomas.tools.filesystem import register_filesystem_tools
+    from thomas.tools.image_generation import register_image_generation_tools
     from thomas.tools.registry import ToolRegistry
     from thomas.tools.shell import register_shell_tools
 
@@ -365,6 +366,10 @@ async def _agent_loop_pass_async(
     )
     register_diff_tools(tools, sandbox)
     register_code_search_tools(tools, sandbox)
+    # Image generation: keys come from config profiles / env here (the forge
+    # layer must not import the server SecretStore); Settings-saved keys reach
+    # the chat/worker path via app_helpers._build_tools.
+    register_image_generation_tools(tools, config, Path(cwd))
     if allow_shell:
         register_shell_tools(tools, sandbox, config.tools.shell_timeout, allowed=True)
 
@@ -458,6 +463,7 @@ def dispatch_via_agent_loop(
         file_access=file_access,
         guardrails=guardrails,
         autonomy_level=autonomy_level,
+        project_root=cwd,
     )
     if dry_run:
         return CliDispatchResult(False, "dry-run (agent loop not invoked)", prompt)

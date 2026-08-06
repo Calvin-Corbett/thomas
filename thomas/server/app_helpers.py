@@ -15,6 +15,7 @@ from thomas.tools.code_search import register_code_search_tools
 from thomas.tools.diff import register_diff_tools
 from thomas.tools.filesystem import register_filesystem_tools
 from thomas.tools.git import register_git_tools
+from thomas.tools.image_generation import register_image_generation_tools
 from thomas.tools.registry import ToolRegistry
 from thomas.tools.resilient_web_search import get_resilient_web_search_tool
 from thomas.tools.shell import register_shell_tools
@@ -152,6 +153,23 @@ def _build_tools(config: AppConfig) -> ToolRegistry:
     # worker runtimes instead of leaving the existing implementation orphaned.
     registry.register(get_resilient_web_search_tool())
     registry.register(get_web_fetch_tool())
+
+    # Image generation is a first-class capability, like web research: always
+    # registered, honest call-time error when no image-capable key exists.
+    # The secret reader surfaces keys saved via Settings > Models (SecretStore);
+    # built lazily so a missing/broken store never blocks tool registration.
+    def _image_secret_reader(profile: str) -> str | None:
+        from thomas.server.app_core import _secret_store_root
+        from thomas.server.secrets import SecretStore
+
+        return SecretStore(_secret_store_root(config)).get(profile)
+
+    register_image_generation_tools(
+        registry,
+        config,
+        Path(sandbox),
+        secret_reader=_image_secret_reader,
+    )
     register_runtime_skill_tools(registry, config, Path(sandbox))
 
     # Register all optional domain module tools
