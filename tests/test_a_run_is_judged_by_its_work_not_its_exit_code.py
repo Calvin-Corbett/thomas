@@ -131,11 +131,15 @@ def test_a_stopped_run_is_recorded_as_stopped_not_failed(tmp_path: Path, monkeyp
     assert result["ok"] is False
     assert result["outcome"] == "stopped"
     saved = forge_code_store.load_conversation(repo, conversation["id"])
-    reason = saved["turns"][-1]["reason"]
+    turn = saved["turns"][-1]
+    reason = turn["reason"]
     assert "stopped" in reason.lower()
     assert "exited" not in reason.lower()
     # The interrupted work is still named, so Keep/Revert has a subject.
     assert "1 file(s)" in reason
+    # The outcome word is PERSISTED, so a reloaded transcript can render the
+    # stop as a stop instead of re-deriving "failed" from ok=False.
+    assert turn["outcome"] == "stopped"
 
 
 def test_a_steered_run_is_recorded_as_steering_not_failed(tmp_path: Path) -> None:

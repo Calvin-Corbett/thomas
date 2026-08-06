@@ -382,6 +382,7 @@ def append_agent_turn(
     reason: str,
     run_id: str = "",
     report: dict | None = None,
+    outcome: str = "",
 ) -> dict | None:
     """Append an agent turn carrying the model used and the run outcome."""
     conversation = load_conversation(root, cid)
@@ -403,6 +404,13 @@ def append_agent_turn(
         "reason": reason,
         "run_id": str(run_id or ""),
     }
+    if outcome:
+        # The recorder's outcome word ("completed" / "conversation" / "noop" /
+        # "stopped" / "failed"), persisted so a reloaded transcript can render
+        # a deliberate stop as a stop instead of re-deriving "failed" from
+        # ok=False -- the client checks turn.outcome === 'stopped' first and
+        # only falls back to matching the reason wording.
+        turn["outcome"] = outcome
     if report is not None:
         # CAP-141: the structured post-run report (attempts/validations/risks/
         # pointers/rubric), persisted so a reloaded conversation re-renders it.

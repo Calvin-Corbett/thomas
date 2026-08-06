@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from thomas.agent.loop_tool_protocol import is_inspection_tool
+from thomas.agent.loop_tool_protocol import is_inspection_tool, tool_call_access
 
 from .bridge_config import emergency_stop_active, emergency_stop_path
 from .bridge_prompts import compose_headless_prompt
@@ -80,6 +80,14 @@ class _AgentLoopForgeTranslator:
         self._state = _StreamState()
         self._say_buf: list[str] = []
         self._think_buf: list[str] = []
+        # Raw argument JSON per tool call, accumulated from the streaming
+        # TOOL_CALL_ARGS_DELTA events. This is the ONLY place the arguments are
+        # visible to this translator: the executed TOOL_RESULT event carries
+        # tool_id/name/result but no args, so without this buffer a shell.exec
+        # that ran "dir" is indistinguishable from one that ran "del x", and
+        # every shell call was assumed to write — which filed correct
+        # explain-only runs as failed edits with a fabricated exit 1.
+        self._tool_args_buf: dict[str, list[str]] = {}
         # True once we've forwarded token-progressive ``say`` deltas for the current
         # prose run, so the boundary flush does NOT re-emit the same text as a block.
         self._streamed_say = False
@@ -109,6 +117,22 @@ class _AgentLoopForgeTranslator:
         for ev in _thinking_to_events(text, self._state):
             self._emit(ev)
 
+    def _classify_call(self, tool_name: str, tool_id: str) -> tuple[str, str]:
+        """Classify one completed call as ``("read"|"write", basis)``.
+
+        Uses the streamed argument JSON buffered for this ``tool_id`` so a
+        shell command is judged by its content — the same repair-tolerant
+        parse the executor itself uses (``parse_tool_args``), so the
+        classification sees the same command the tool actually ran. When the
+        stream never showed the arguments, ``tool_call_access`` fails toward
+        "write": no positive evidence, no relaxation.
+        """
+        from thomas.agent.loop_tool_exec import parse_tool_args
+
+        raw = "".join(self._tool_args_buf.pop(tool_id, []))
+        args, _parse_error = parse_tool_args(raw) if raw else (None, None)
+        return tool_call_access(tool_name, args if isinstance(args, dict) else None)
+
     def feed(self, et: str, data: dict[str, Any] | None) -> None:
         """Translate one AgentLoop event, emitting forge events as a side effect."""
         ET = self._ET
@@ -126,20 +150,38 @@ class _AgentLoopForgeTranslator:
             # Accumulate reasoning deltas; they flush as one block at the next
             # boundary so the shared insight/reason rule sees a whole thought.
             self._think_buf.append(str(data.get("text") or ""))
+        elif et == ET.TOOL_CALL_ARGS_DELTA.value:
+            # Buffer the streamed argument JSON per call. The command a
+            # shell.exec ran only ever crosses this stream here, and the
+            # read-only-run verdict needs it (see _classify_call).
+            tool_id = str(data.get("tool_id") or "")
+            delta = str(data.get("delta") or "")
+            if tool_id and delta:
+                self._tool_args_buf.setdefault(tool_id, []).append(delta)
         elif et == ET.TOOL_START.value:
             # Reasoning BEFORE the tool is flushed (and gated) FIRST, then the tool
             # marks the run as having OBSERVED so later reasoning can surface.
             self._flush_think()
             self._flush_say()
+            start_args = data.get("args")
+            start_access, start_basis = tool_call_access(
+                str(data.get("tool_name") or ""),
+                start_args if isinstance(start_args, dict) else None,
+            )
             self._emit(
                 {
                     FORGE_EVENT_KEY: "tool",
                     "name": str(data.get("tool_name") or "tool"),
                     "text": _summarize_agent_event_tool(data.get("tool_name"), data.get("args")),
+                    "access": start_access,
+                    "access_basis": start_basis,
                 }
             )
             self._state.seen_observation = True
         elif et == ET.TOOL_RESULT.value:
+            access, access_basis = self._classify_call(
+                str(data.get("tool_name") or ""), str(data.get("tool_id") or "")
+            )
             self._emit(
                 {
                     FORGE_EVENT_KEY: "tool_result",
@@ -154,6 +196,12 @@ class _AgentLoopForgeTranslator:
                     "name": str(data.get("tool_name") or ""),
                     "text": str(data.get("result") or "")[:500],
                     "is_error": not bool(data.get("ok", True)),
+                    # How this call was judged for the read-only-run verdict,
+                    # and on what evidence — recorded so the decision is
+                    # visible in the persisted event stream instead of being
+                    # re-derived (differently) by whoever reads it later.
+                    "access": access,
+                    "access_basis": access_basis,
                 }
             )
             # A tool RESULT is the clearest observation — following reasoning is
@@ -435,7 +483,14 @@ def dispatch_via_agent_loop(
             name = str(event.get("name") or "").strip()
             if name and name != "tool":
                 saw_named_tool = True
-                if not is_inspection_tool(name):
+                # Prefer the per-call classification the translator stamped on
+                # the event (``access``): it judges shell.exec by the COMMAND it
+                # ran, so "dir" counts as inspection and "del x" as a write.
+                # The name-list check alone called every shell call a write,
+                # which filed explain-only runs ("dir" + a correct answer) as
+                # failed edits. Events without the stamp keep the name rule.
+                access = str(event.get("access") or "")
+                if access == "write" or (not access and not is_inspection_tool(name)):
                     saw_mutating_tool = True
         emit_sink(event)
 
@@ -496,8 +551,15 @@ def dispatch_via_agent_loop(
     elif not changed:
         if conversation_reply:
             reason = "GPT answered from the project without changing files" if read_only_run else "GPT replied without changing files"
+        elif saw_reply:
+            # The run is rightly not a success — a write-capable tool ran and
+            # left no changes — but an answer EXISTS, and calling it "nothing
+            # to review" was false. Describe both facts.
+            reason = "GPT gave an answer but a write-capable tool ran and no files changed — review the answer; no edit landed"
         else:
-            reason = "GPT ran but made NO repo changes (no-op) — nothing to review"
+            # "Nothing to review" is reserved for when it is true: no repo
+            # changes AND no answer text.
+            reason = "GPT ran but made NO repo changes and gave no answer — nothing to review"
     else:
         reason = f"dispatched via GPT (ChatGPT OAuth, in-process; {len(changed)} file(s) changed; engine checks passed)"
     return CliDispatchResult(

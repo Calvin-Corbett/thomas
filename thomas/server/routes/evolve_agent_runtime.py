@@ -83,7 +83,18 @@ def _confirmed_conversation_reply(transcript: str, *, require_final: bool = Fals
             name = str(event.get("name") or "").strip()
             if name and name != "tool":
                 saw_named_tool = True
-                if not is_inspection_tool(name):
+                # The agent-loop translator stamps `access` ("read"/"write")
+                # onto tool events, classifying shell.exec by its COMMAND
+                # rather than its name. Trust the stamp when it is present:
+                # without it, an explain-only run whose shell ran `dir` was
+                # disqualified here and filed as a fabricated exit-1 failure
+                # even after dispatch_agent_loop learned better. Name-based
+                # classification stays as the fallback for older transcripts
+                # and the claude-CLI path, which does not stamp.
+                access = str(event.get("access") or "").strip()
+                if access == "write":
+                    saw_mutating_tool = True
+                elif access != "read" and not is_inspection_tool(name):
                     saw_mutating_tool = True
         elif kind in {"final", "say"} and str(event.get("text") or "").strip():
             if kind == "final" or not require_final:
@@ -670,6 +681,7 @@ async def _drain_and_record(
             reason=reason,
             run_id=run_id,
             report=report,
+            outcome=outcome,
         )
         if persisted is None:
             raise RuntimeError("agent turn store returned no persisted conversation")

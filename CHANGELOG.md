@@ -7,6 +7,26 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (an answer is never disqualified by the tool that read the files)
+
+- P0 measured live: an explain-only run ("look at this project and tell me what
+  it does") produced the model's correct answer and Thomas filed the run as
+  FAILED with a fabricated exit 1 — `shell.exec` was not on the inspection-tool
+  name list, so one read-only `dir` disqualified the reply. Shell calls are now
+  classified by their COMMAND (the existing mutation-pattern rule, Windows verbs
+  added), the decision is stamped on every tool event (`access`/`access_basis`)
+  so it is visible instead of implicit, and the false "GPT ran but made NO repo
+  changes (no-op) — nothing to review" wording no longer fires when an answer
+  exists. The recorder honors the stamps too
+  (`_confirmed_conversation_reply` trusts `access` when present, name fallback
+  otherwise), and the outcome word is now PERSISTED on the agent turn so a
+  reloaded transcript renders a deliberate stop as a stop instead of re-deriving
+  "failed" from `ok=False`.
+  Tests: `tests/test_a_read_only_shell_command_does_not_disqualify_an_answer.py`
+  (red before), stamp-parity cases in
+  `tests/test_dispatch_agent_loop_readonly_answers.py`, outcome persistence in
+  `tests/test_a_run_is_judged_by_its_work_not_its_exit_code.py`.
+
 ### Fixed (opening one Code task can no longer freeze the whole server)
 
 - py-spy caught it live: `conversation_preview` built its allowlist with

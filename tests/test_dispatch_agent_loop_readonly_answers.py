@@ -249,3 +249,25 @@ def test_a_real_write_transcript_is_still_not_an_answer() -> None:
     )
 
     assert _confirmed_conversation_reply(_transcript(*out)) is False
+
+
+def test_a_read_access_stamp_on_a_shell_tool_does_not_disqualify_the_answer() -> None:
+    # The agent-loop translator stamps access ("read"/"write") on tool events,
+    # classifying shell.exec by its command. The runtime recorder must honor
+    # the stamp: without it, an explain run whose shell ran `dir` was filed as
+    # a fabricated exit-1 failure even after the loop learned better.
+    text = _transcript(
+        {"fc": "tool", "name": "shell.exec", "access": "read"},
+        {"fc": "tool_result", "text": "dir listing"},
+        {"fc": "final", "text": "This folder is empty. Want to pick a project?"},
+    )
+    assert _confirmed_conversation_reply(text) is True
+
+
+def test_a_write_access_stamp_still_disqualifies_even_for_an_inspection_name() -> None:
+    # The stamp outranks the name in BOTH directions -- fail toward mutating.
+    text = _transcript(
+        {"fc": "tool", "name": "fs.read_file", "access": "write"},
+        {"fc": "final", "text": "Done."},
+    )
+    assert _confirmed_conversation_reply(text) is False

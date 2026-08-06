@@ -43,9 +43,49 @@ def is_inspection_tool(tool_name: str) -> bool:
 _SHELL_MUTATION_COMMAND_RE = re.compile(
     r"(?:^|[;&|]\s*|\s)(?:python(?:3)?|py|node|deno|bun|ruby|perl|cmd\s+/c|"
     r"sed\s+-i|npm\s+(?:i|install|uninstall|update)|npx|pnpm|yarn|"
+    r"pip(?:3)?\s+(?:install|uninstall)|"
+    # Windows mutation verbs. Measured miss (2026-08-05): "del x" classified as
+    # inspection because every marker above was POSIX-shaped, so a deleting run
+    # could have passed as read-only. The anchor group before this alternation
+    # requires a command-position word (start, separator, or whitespace), which
+    # keeps flag arguments like "--format" from matching.
+    r"del|erase|rd|rmdir|ren|rename|move|copy|xcopy|robocopy|mklink|fsutil|format|"
     r"git\s+(?:add|apply|checkout|cherry-pick|clean|commit|merge|mv|pull|push|rebase|reset|restore|rm|switch))\b",
     re.IGNORECASE,
 )
+
+
+def tool_call_access(tool_name: str, args: dict[str, Any] | None = None) -> tuple[str, str]:
+    """Classify ONE tool call as ``("read"|"write", basis)``.
+
+    ``is_inspection_tool`` answers by NAME alone, which is right for the fixed
+    filesystem/diff/search tools but wrong for ``shell.exec``: a shell command
+    is read-only or mutating by its CONTENT, and classifying every shell call
+    as a write filed correct explain-only runs ("dir" + an honest answer) as
+    failed edits with a fabricated exit 1. This is the one shared rule every
+    verdict site can consult instead of re-deriving its own.
+
+    The basis names the evidence, so callers can record WHY each call was
+    classified and the decision stays visible in the event stream:
+
+      * ``"name"``          — the tool is in a fixed read or write list.
+      * ``"command"``       — shell, judged by the command text itself.
+      * ``"command-unseen"``— shell, but no command text was visible; without
+                              positive evidence the call is assumed to write.
+      * ``"unknown-tool"``  — unrecognised name; assumed capable of writing.
+    """
+    canonical = _canonical_code_tool_name(str(tool_name or ""))
+    if canonical in _CODE_INSPECTION_TOOLS:
+        return "read", "name"
+    if canonical in _CODE_MUTATION_TOOLS:
+        return "write", "name"
+    if canonical in _CODE_SHELL_TOOLS:
+        source = args if isinstance(args, dict) else {}
+        command = str(source.get("command") or source.get("cmd") or source.get("shell") or "").strip()
+        if not command:
+            return "write", "command-unseen"
+        return ("write" if _shell_command_is_mutation({"command": command}) else "read"), "command"
+    return "write", "unknown-tool"
 
 
 def _tool_spec_name(spec: object) -> str:
