@@ -4,7 +4,7 @@
   imported from claude.ai/design (project 85187ffb-...-d43e5033f957).
 
   This is a self-contained surface (markup + CSS + JS, no build step, no React/DC
-  runtime). Served by Thomas at /static/thomas_chat.html. Five "living world"
+  runtime). Served by Thomas at / (the unified shell). Five "living world"
   themes (Nebula / Dark / Light / Aurora / Sandstone), each with its own animated
   background, design tokens, fonts and welcome copy; sidebar, model pill, theme
   switcher, welcome hero, streaming message thread, composer, and the Thomas Canvas
@@ -268,7 +268,7 @@
       <div id="tc-body-row" data-ui-id="chat.body" data-ui-label="Conversation workspace" data-ui-policy="move resize" data-ui-constraints="minWidth=360;minHeight=360" style="position: relative; flex: 1; min-height: 0; display: flex;">
         <!-- The one live workspace frame is deliberately inside the body row. The
              literal Chat top bar above it never disappears or gets duplicated. -->
-        <iframe id="tc-ws-frame" class="tc-workspace-frame" title="Workspace" style="display: none; position: absolute; inset: 0; width: 100%; height: 100%; border: 0; z-index: 20; background: var(--c-bg); background: color-mix(in srgb, var(--c-bg) 58%, transparent); backdrop-filter: blur(22px) saturate(118%); -webkit-backdrop-filter: blur(22px) saturate(118%);"></iframe>
+        <iframe id="tc-ws-frame" class="tc-workspace-frame" title="Workspace" style="display: none; position: absolute; inset: 0; width: 100%; height: 100%; border: 0; z-index: 20; background: var(--c-bg); background: color-mix(in srgb, var(--c-bg) 82%, transparent); backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);"></iframe>
         <div id="tc-primary-column" style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
           <section id="tc-mode-surface" aria-live="polite" aria-label="Mode workspace" data-ui-id="chat.mode.surface" data-ui-label="Mode workspace" data-ui-policy="move resize" data-ui-constraints="minWidth=360;minHeight=280" style="display:none;"></section>
           <div id="tc-scroll" class="tc-scroll" style="flex: 1; min-height: 0; overflow-y: auto;">
@@ -998,7 +998,7 @@
       let frame = document.getElementById('tc-direct-frame');
       if (frame) return frame;
       frame = document.createElement('iframe'); frame.id = 'tc-direct-frame'; frame.className = 'tc-workspace-frame'; frame.title = 'Workspace';
-      frame.style.cssText = 'display:none;position:absolute;inset:0;width:100%;height:100%;border:0;z-index:20;background:transparent;';
+      frame.style.cssText = 'display:none;position:absolute;inset:0;width:100%;height:100%;border:0;z-index:20;background:var(--c-bg);background:color-mix(in srgb, var(--c-bg) 82%, transparent);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);';
       document.getElementById('tc-body-row').appendChild(frame); return frame;
     }
     function syncWorkspaceFrame(frame) {

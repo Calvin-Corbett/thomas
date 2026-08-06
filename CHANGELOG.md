@@ -7,6 +7,32 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Removed (design unification wave 3: dead design paths)
+
+- Deleted with an approved record (2026-08-06-design-unification-dead-paths):
+  `thomas_chat.html` (the frozen static prototype of the live chat shell -
+  zero filename references), `token_economy_preview.html`,
+  `js/thomas_world.js` + `css/thomas_world.css` (the never-wired living-world
+  re-layer: nothing loads the js and `body.tcw-on` has no setter; the
+  `html.tcw-embed` embed rules are separate, live, and untouched),
+  `js/app_modules.js` (superseded loader), `js/composer_redesign.js`
+  (self-described RETIRED stub), `js/thomas_engine_panel.js` (no caller),
+  and `tests/test_thomas_world_message_occlusion.py` (guarded the dead pair).
+
+### Fixed (design unification wave 3: workspace embeds)
+
+- Every workspace embed rendered as a white sheet: linking tokens.css gave
+  the chat document `color-scheme: dark`, and Chromium opacifies an embedded
+  transparent document whose scheme differs from its embedding element. The
+  `.tc-workspace-frame` element now declares `color-scheme: normal`, matching
+  the child document contract, and the glass stays glass.
+- The workspace frame tint deepened 58% -> 82% of the theme background (still
+  inside the see-through guard's 30-85 design bound) so embedded dashboards
+  read at full contrast over the living world; the JS-created direct frame
+  (mission / settings / my-stuff embeds) was still `background:transparent`
+  from before the original fix and now carries the same glass, with a new
+  guard covering it.
+
 ### Fixed (design unification wave 2: the chat shell)
 
 - LIVING WORLDS legibility: a theme-colored reading shade paints between the
@@ -109,6 +135,8 @@ Versioning: Semantic Versioning.
 - (landed) transcripts persist as one string; readers tolerate the legacy array shape -- details above.
 
 - (landed) per-run snapshots in task-born projects + runtime verdict parity -- details above.
+
+- (landed) the Windows shell fix + enforcement-manifest re-bless, owner-authorized in chat -- full entry below under 'the Code workspace shell works on Windows'.
 
 ### Fixed (chat replies stream as they are written)
 

@@ -58,3 +58,16 @@ def test_the_workspace_backdrop_still_lets_the_world_through() -> None:
         f"tint of {tint.group(1)}% -- below ~30% text stops lifting off the sprites, "
         "above ~85% the animated world may as well not be there"
     )
+
+
+def test_the_direct_workspace_frame_is_not_see_through_either() -> None:
+    """The JS-created frame (mission / settings / my-stuff embeds) shares the
+    same glass. It was left `background:transparent` when the markup frame was
+    fixed, so those embeds sat on raw sprites."""
+    html = CHAT_HTML.read_text(encoding="utf-8")
+    match = re.search(r"frame\.style\.cssText = '([^']*)'", html)
+    assert match, "the direct workspace frame creation is gone; rewrite this guard"
+    style = match.group(1)
+    assert "background:transparent;" not in style
+    assert "color-mix(in srgb, var(--c-bg)" in style
+    assert "backdrop-filter:blur(" in style

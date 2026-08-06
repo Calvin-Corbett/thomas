@@ -604,7 +604,7 @@ def setup_middleware_and_handlers(
         # of "the AI fixed it but it's still broken on my machine": the server had the
         # new code, the browser never re-fetched it. Covering the whole frontend means
         # ANY frontend edit busts the cache. NOTE: we walk all of js/ (not just
-        # js/runtime/) so top-level modules like js/composer_redesign.js — loaded
+        # js/runtime/) so top-level modules like js/theme_rules.js — loaded
         # directly from index.html with ?v=__THOMAS_WEB_BUILD__ — also bust the cache.
         digest = hashlib.sha1(usedforsecurity=False)
         paths: list[str] = list(relative_paths)

@@ -286,3 +286,13 @@ html, body { margin: 0; padding: 0; height: 100%; }
     color-mix(in srgb, var(--c-bg) 55%, transparent) 78%,
     transparent 98%);
 }
+
+/* tokens.css gives the chat document color-scheme: dark. An embedded workspace
+   document forces color-scheme: normal (workspace_shell.css) so its transparent
+   canvas stays transparent - but Chromium opacifies a child whose scheme differs
+   from its EMBEDDING ELEMENT, which silently turned every workspace embed into
+   a white sheet. The frame element itself declares normal so parent element and
+   child document agree and the glass stays glass. */
+.tc-workspace-frame {
+  color-scheme: normal;
+}
