@@ -11,6 +11,9 @@ TOKEN_CSS = WEB_ROOT / "css" / "token_economy_widget.css"
 COMPONENT_CSS = WEB_ROOT / "css" / "token_economy_components.css"
 THEME_CSS = WEB_ROOT / "css" / "token_economy_space_theme.css"
 WORKSPACE_SHELL_CSS = WEB_ROOT / "css" / "workspace_shell.css"
+# The five-theme token blocks moved from workspace_shell.css into tokens.css
+# (the single design-token source). The shell contract spans both files.
+TOKENS_CSS = WEB_ROOT / "css" / "tokens.css"
 
 
 def _read(path: Path) -> str:
@@ -19,7 +22,7 @@ def _read(path: Path) -> str:
 
 def test_token_economy_consumes_the_immutable_five_theme_shell() -> None:
     css = "\n".join((_read(TOKEN_CSS), _read(COMPONENT_CSS), _read(THEME_CSS)))
-    shell = _read(WORKSPACE_SHELL_CSS)
+    shell = "\n".join((_read(WORKSPACE_SHELL_CSS), _read(TOKENS_CSS)))
 
     for theme in ("nebula", "dark", "light", "aurora", "sandstone"):
         assert f'data-thomas-theme="{theme}"' in shell or theme == "nebula"

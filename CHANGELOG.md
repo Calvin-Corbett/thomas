@@ -9,6 +9,11 @@ Versioning: Semantic Versioning.
 
 ### Changed (design unification wave 1: one token set)
 
+- Satellite pages consume the shared set: `workspace_shell.css` keeps shell
+  components only (its palette/theme blocks moved to `tokens.css`),
+  `settings.html` and `mission.html` link tokens.css first, and Token
+  Economy mono cells use `--font-mono`.
+
 - `css/tokens.css` is now THE design-token source: the canonical `--c-*`
   palette (Nebula Core) plus all five theme blocks moved here from
   `workspace_shell.css`, and the legacy token names (`--bg-app`,

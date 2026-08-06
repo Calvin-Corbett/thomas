@@ -78,7 +78,12 @@ def test_mission_regions_register_editable_and_protected_contracts() -> None:
 
 def test_mission_styles_cover_themes_embed_and_source_caps() -> None:
     css = _read(MISSION_CSS_PATH)
-    shared_css = _read(ROOT / "thomas" / "server" / "web" / "css" / "workspace_shell.css")
+    # The five-theme blocks live in tokens.css (the single design-token source);
+    # workspace_shell.css keeps the shared shell components. Both are shared CSS.
+    shared_css = "\n".join(
+        _read(ROOT / "thomas" / "server" / "web" / "css" / name)
+        for name in ("workspace_shell.css", "tokens.css")
+    )
     for theme in ("dark", "light", "aurora", "sandstone"):
         assert f'html[data-thomas-theme="{theme}"]' in shared_css
     assert "--c-bg:" not in css

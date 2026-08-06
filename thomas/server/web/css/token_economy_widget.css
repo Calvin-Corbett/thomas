@@ -227,7 +227,7 @@ html.tcw-embed body:has([data-te-container] .te-v3.is-active) .main-content::aft
     align-items: baseline;
     gap: 5px;
     color: var(--c-text);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
 }
 
 .te-v3 .te-hero-dollar {

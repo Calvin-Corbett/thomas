@@ -190,7 +190,7 @@
 
 .te-v3 .te-ro-grid > :nth-child(even) {
     color: var(--c-text);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
     text-align: right;
 }
 
@@ -245,7 +245,7 @@
 
 .te-v3 .te-mprop-val {
     color: var(--c-text);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
 }
 
 .te-v3 .te-mtbl {
@@ -313,7 +313,7 @@
 
 .te-v3 .te-rv {
     color: var(--c-text);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
     text-align: right;
 }
 
