@@ -7,6 +7,26 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (design unification wave 1: one token set)
+
+- `css/tokens.css` is now THE design-token source: the canonical `--c-*`
+  palette (Nebula Core) plus all five theme blocks moved here from
+  `workspace_shell.css`, and the legacy token names (`--bg-app`,
+  `--text-primary`, `--accent`, …) became aliases onto the canonical set, so
+  every classic-SPA component follows the Thomas Chat design and its themes.
+  `settings.html` and `mission.html` now link tokens.css; `--theme-name`
+  reports "Nebula Core" (the truthful design name) instead of "Website Lock".
+- Classic chrome (`layout_parts/`) consumes canonical tokens: the sidebar,
+  nav, and workspace headers drop the old blue accent (`rgba(88,166,255,*)`,
+  `#9ad8ff`) for `--c-accent*`, the Website-Lock navy gradients for
+  `--c-bg` + `--c-accent-soft` tints, and chrome text uses `--font-label`
+  (Manrope; JetBrains Mono only in the Dark theme, matching the reference).
+  Token Economy mono data cells use `--font-mono` instead of a hardcoded
+  ui-monospace stack.
+- Contract tests (`test_token_economy_modernization_contract`,
+  `test_operator_mission_smoke`) read the five-theme shell from
+  tokens.css + workspace_shell.css — same contract, relocated source.
+
 ### Fixed (wave-2 organic sweep: queue affinity, classifier truth, chat queue, Work onboarding, snapshots, reload, transcript shape)
 
 - A queued Code task fires only into its own conversation; new tasks start in
@@ -52,6 +72,53 @@ Versioning: Semantic Versioning.
 - (landed) transcripts persist as one string; readers tolerate the legacy array shape -- details above.
 
 - (landed) per-run snapshots in task-born projects + runtime verdict parity -- details above.
+
+### Fixed (chat replies stream as they are written)
+
+- The 26-46s one-paint wall was ONE line: `buffer_prose = bool(tools)` in the
+  reasoning specialist held every token whenever tools were offered — the
+  NDJSON route and the client already streamed. Prose now streams per sentence
+  with a trailing-sentence holdback (a 400-char cap releases code blocks), so
+  the pinned honesty law — pre-call completion claims never stream — survives
+  structurally. New `js/chat_stream_consumer.js` owns transport and
+  frame-coalesced painting; the old inline reader (including its throw-away
+  "no stream body" failure) is deleted. Persist-at-send/salvage and the
+  queued-message drain are preserved; salvage now captures sentence-granular
+  partials. Proven by a gated integration test that deadlocks if any layer
+  buffers.
+
+### Fixed (the Library lists what Thomas actually made)
+
+- `_generated_deliverable_project` gated on `artifact_kind != 'web'`, so every
+  non-HTML chat deliverable was silently absent — Creations showed 0 over
+  weeks of files. Gate removed; kind-aware cards (Open App/PDF/Image/File);
+  285 real deliverables now eligible on this machine. (The shared
+  `_MAX_PROJECTS=250` cap now binds — flagged for follow-up.)
+
+### Fixed (the preview says when it blocks the internet, and the tab stops blocking it)
+
+- The Code viewer shows "This preview blocks internet access — open in its own
+  tab for live data" on pages that use fetch/XHR/WebSocket/external scripts,
+  and the STANDALONE preview tab now serves `connect-src 'self' https: wss:`
+  (document navigations only; the beside-chat iframe stays fully locked; the
+  security reasoning is documented at the header site). Live-data apps work
+  when opened in their own tab instead of debuting in their error state.
+
+### Fixed (Code workspace folders behave; CLI runs judged like GPT runs)
+
+- A question with nothing selected REUSES its empty task-born folder instead
+  of minting sibling folders forever, and the composed prompt tells the model
+  the folder is brand-new and empty so answers name reality.
+- A New-chat task's generic "Code task <timestamp>" folder is renamed to the
+  message-derived name when the first message arrives (stamped
+  `title_source`; folders with user files and picked projects never rename;
+  a stale replayed project_root no longer 400s the message).
+- The surface snapshot persists synchronously at conversation-open and
+  run-start, closing the 1-in-6 reload-restore race.
+- The claude-CLI translator classifies Bash by COMMAND via the shared rule,
+  correlates results to calls by tool_use_id, stamps access/basis/command on
+  events, and the CLI verdict honors the stamps — read-only CLI runs stop
+  being demoted, and the duplicated read-only name list is deleted.
 
 ### Added (image generation, with the truth about credentials)
 

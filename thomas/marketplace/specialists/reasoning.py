@@ -231,6 +231,34 @@ _NO_DISPATCH_HONESTY = (
 )
 
 
+# The largest pre-call tail (in characters) held back from the wire while a
+# structured call is still possible. Sentence boundaries release earlier prose;
+# this cap releases prose that has NO sentence boundaries (a code block, a long
+# table row) so honesty holdback can never quietly become buffer-the-whole-pass
+# -- the measured 26-46s one-paint reply this replaced.
+_PROSE_HOLDBACK_CAP = 400
+
+
+def _released_prose(pending: str) -> tuple[str, str]:
+    """Split streaming prose into (release now, keep holding).
+
+    Everything through the last sentence boundary that later prose has already
+    moved past is safe to stream: a structured call arriving afterwards can no
+    longer make it the pre-call claim sentence. The TRAILING sentence stays
+    held until the pass declares itself, preserving the pinned honesty law
+    (test_send_task_tool.py::test_pre_tool_completion_claim_is_never_streamed)
+    while the rest of the reply streams as the model produces it.
+    """
+    cut = 0
+    for i in range(len(pending) - 1):
+        ch = pending[i]
+        if (ch == "\n" or (ch in ".!?" and pending[i + 1] in " \t\n")) and pending[i + 1 :].strip():
+            cut = i + 1
+    if len(pending) - cut > _PROSE_HOLDBACK_CAP:
+        cut = len(pending) - _PROSE_HOLDBACK_CAP
+    return pending[:cut], pending[cut:]
+
+
 class ReasoningSpecialist(BaseSpecialist):
     """General-purpose reasoning and conversation specialist."""
 
@@ -396,10 +424,15 @@ class ReasoningSpecialist(BaseSpecialist):
                     streamed_parts: list[str] = []
                     tool_ends: list[dict[str, str]] = []
                     stream_err: str | None = None
-                    # With tools available, buffer this pass until the provider
-                    # declares whether it emitted a structured call. That keeps
-                    # pre-call prose from making an unearned completion claim.
-                    buffer_prose = bool(tools)
+                    # Prose streams AS THE MODEL PRODUCES IT. With tools offered,
+                    # only the trailing sentence is held back (see _released_prose)
+                    # so the pre-call completion claim still never reaches the wire
+                    # -- until 2026-08-06 the WHOLE pass was buffered for that law
+                    # and every chat reply painted once, after 26-46s of dead dots.
+                    # Once this pass shows a structured call, its remaining prose is
+                    # model-internal context for the next pass, never wire text.
+                    held_prose = ""
+                    pass_called_tools = False
                     async for stream_event in self.llm.stream_chat(messages=messages, tools=tools):
                         event_type = str(getattr(stream_event, "type", "") or "")
                         data = getattr(stream_event, "data", {}) or {}
@@ -408,9 +441,20 @@ class ReasoningSpecialist(BaseSpecialist):
                             if not token_text:
                                 continue
                             streamed_parts.append(token_text)
-                            if not buffer_prose and not handed_off:
+                            if pass_called_tools or handed_off:
+                                continue
+                            if not tools:
                                 yield {"type": "text", "text": token_text}
+                                continue
+                            release, held_prose = _released_prose(held_prose + token_text)
+                            if release:
+                                yield {"type": "text", "text": release}
+                        elif event_type in ("tool_call_start", "tool_call_delta"):
+                            pass_called_tools = True
+                            held_prose = ""
                         elif event_type == "tool_call_end":
+                            pass_called_tools = True
+                            held_prose = ""
                             tool_ends.append(
                                 {
                                     "id": str(data.get("id") or ""),
@@ -421,8 +465,8 @@ class ReasoningSpecialist(BaseSpecialist):
                         elif event_type == "error":
                             stream_err = str(data.get("error") or "Unknown streaming error")
                             break
-                    if buffer_prose and streamed_parts and not handed_off and not tool_ends:
-                        yield {"type": "text", "text": "".join(streamed_parts)}
+                    if held_prose and not handed_off:
+                        yield {"type": "text", "text": held_prose}
                     if stream_err:
                         yield {"type": "error", "error": f"Reasoning failed: {stream_err}"}
                         return

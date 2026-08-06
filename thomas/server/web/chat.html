@@ -418,6 +418,7 @@
   <script src="/static/js/workspace_chat_drawer_view.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/workspace_chat_drawer.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/chat_composer_panels.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/chat_stream_consumer.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/chat_turn_flow.js?v=__THOMAS_WEB_BUILD__"></script>
   <script>
   (function () {
@@ -2013,6 +2014,7 @@
       abortController = new AbortController();
       let acc = '', sawText = false;
       const setText = (t) => { state.messages[idx].text = t; updateStreamingBubble(idx); scrollEnd(); };
+      const painter = window.ThomasChatStreamConsumer.createTextPainter(setText);
       try {
         // Guarantee a known session so background delegations can be polled afterwards.
         if (!state.sessionId) {
@@ -2036,19 +2038,16 @@
         // attachments are sent with this message, then cleared
         state.docs = []; state.images = []; renderAttachments();
         const res = await fetch('/api/v2/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: abortController.signal });
-        if (!res.ok || !res.body) throw new Error('HTTP ' + res.status + (res.ok ? ' — no stream body' : ''));
-        const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
-        while (true) {
-          const { done, value } = await reader.read(); if (done) break;
-          buf += dec.decode(value, { stream: true });
-          const lines = buf.split('\n'); buf = lines.pop();
-          for (const line of lines) {
-            const t = line.trim(); if (!t) continue;
-            let evt; try { evt = JSON.parse(t); } catch (e) { continue; }
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        // Transport + paint cadence live in js/chat_stream_consumer.js: events
+        // apply as chunks arrive (the server streams sentence-by-sentence since
+        // 2026-08-06), text paints at most once per frame, and a response with
+        // no readable stream body still renders the reply from the buffered text.
+        await window.ThomasChatStreamConsumer.consume(res, (evt) => {
             const type = evt.type;
             if (type === 'text' || type === 'agent_text' || type === 'delta' || type === 'assistant_delta' || type === 'message_delta') {
               const c = chunkText(evt);
-              if (c) { if (!sawText) { sawText = true; const a = state.messages[idx].activity; if (a) { _settleActivityForReply(a); renderActivity(idx); } } acc += c; setText(acc); }
+              if (c) { if (!sawText) { sawText = true; const a = state.messages[idx].activity; if (a) { _settleActivityForReply(a); renderActivity(idx); } } acc += c; painter.paint(acc); }
                 // NOTE: Thomas's streamed text — including his planning/thinking on a
                 // complex task — stays in the chat bubble (and the collapsible thinking
                 // card). It is NEVER rendered into the Canvas. The Canvas is reserved for
@@ -2069,16 +2068,17 @@
             } else if (type === 'task_phase' || type === 'task_definition' || type === 'task_evaluation') {
               handleTaskContract(idx, evt); scrollEnd();
             } else if (type === 'error') {
-              acc += (acc ? '\n\n' : '') + '⚠ ' + (evt.error || 'error'); setText(acc);
+              acc += (acc ? '\n\n' : '') + '⚠ ' + (evt.error || 'error'); painter.paint(acc);
             } else if (type === 'done') {
               if (evt.session_id) state.sessionId = evt.session_id;
-              if (!sawText) { const d = chunkText(evt) || evt.final || evt.output_text; if (d) { acc += d; setText(acc); } }
+              if (!sawText) { const d = chunkText(evt) || evt.final || evt.output_text; if (d) { acc += d; painter.paint(acc); } }
             }
-          }
-        }
+        });
+        painter.settle();
         if (!acc.trim()) { setText('— (no text returned)'); }
         await maybePromptChatGPTConnection(acc);
       } catch (err) {
+        painter.settle(); // flush any queued frame first so the stop/error note lands after the streamed text, never under a stale repaint
         if (err && err.name === 'AbortError') acc += (acc ? '\n\n' : '') + '— [stopped]';
         else acc += (acc ? '\n\n' : '') + '⚠ ' + ((err && err.message) || 'request failed');
         setText(acc);
