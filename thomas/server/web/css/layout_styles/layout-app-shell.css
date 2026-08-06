@@ -102,7 +102,7 @@ body {
 }
 
 .sidebar-search-input-wrap:focus-within {
-    border-color: rgba(88, 166, 255, 0.4);
+    border-color: var(--c-accent-line);
     background: rgba(0, 0, 0, 0.35);
 }
 
@@ -129,7 +129,7 @@ body {
     color: var(--text-primary);
     font-size: 12px;
     line-height: 1.35;
-    font-family: var(--font-mono, 'SF Mono', 'Consolas', 'Fira Code', monospace);
+    font-family: var(--font-label, 'Manrope', system-ui, sans-serif);
     letter-spacing: 0.02em;
 }
 
@@ -161,7 +161,7 @@ body {
 .brand-text {
     font-size: 16px;
     font-weight: 800;
-    color: #9ad8ff;
+    color: var(--c-accent);
     margin: 0;
     flex: 1 1 auto;
     min-width: 0;
@@ -170,8 +170,8 @@ body {
     white-space: nowrap;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    font-family: var(--font-mono, 'SF Mono', 'Consolas', 'Fira Code', monospace);
-    text-shadow: 0 0 12px rgba(154, 216, 255, 0.4), 0 0 4px rgba(88, 166, 255, 0.2);
+    font-family: var(--font-label, 'Manrope', system-ui, sans-serif);
+    text-shadow: 0 0 12px var(--c-accent-soft);
 }
 
 .sidebar-nav {
@@ -196,7 +196,7 @@ body {
     text-transform: uppercase;
     color: var(--text-muted);
     opacity: 0.5;
-    font-family: var(--font-mono, 'SF Mono', 'Consolas', 'Fira Code', monospace);
+    font-family: var(--font-label, 'Manrope', system-ui, sans-serif);
 }
 
 .sidebar-chat-shell {
@@ -241,17 +241,17 @@ body {
     flex-direction: column;
     gap: 2px;
     transition: border-color 0.15s ease, color 0.15s ease;
-    font-family: var(--font-mono, 'SF Mono', 'Consolas', 'Fira Code', monospace);
+    font-family: var(--font-label, 'Manrope', system-ui, sans-serif);
 }
 
 .sidebar-chat-row:hover {
-    border-color: rgba(88, 166, 255, 0.2);
+    border-color: var(--c-accent-soft);
     color: var(--text-secondary);
 }
 
 .sidebar-chat-row.active {
-    border-color: rgba(88, 166, 255, 0.35);
-    background: rgba(88, 166, 255, 0.06);
+    border-color: var(--c-accent-line);
+    background: color-mix(in srgb, var(--c-accent) 6%, transparent);
     color: var(--text-primary);
 }
 
@@ -294,7 +294,7 @@ body {
     text-decoration: none;
     font-size: 13px;
     font-weight: 600;
-    font-family: var(--font-mono, 'SF Mono', 'Consolas', 'Fira Code', monospace);
+    font-family: var(--font-label, 'Manrope', system-ui, sans-serif);
     letter-spacing: 0.02em;
     transition: color 0.14s ease, border-color 0.14s ease;
     cursor: pointer;
@@ -313,14 +313,14 @@ body {
 
 .nav-item:hover {
     background: transparent;
-    border-color: rgba(88, 166, 255, 0.15);
+    border-color: var(--c-accent-soft);
     color: var(--text-secondary);
 }
 
 .nav-item.active {
     background: transparent;
-    border-color: rgba(88, 166, 255, 0.25);
-    color: #9ad8ff;
+    border-color: var(--c-accent-line);
+    color: var(--c-accent);
 }
 
 .nav-item.active::before {
@@ -378,10 +378,9 @@ body {
     overflow-x: clip;
     overflow-y: hidden;
     background:
-        radial-gradient(circle at 14% 12%, rgba(88, 166, 255, 0.2), rgba(88, 166, 255, 0) 34%),
-        radial-gradient(circle at 88% 8%, rgba(71, 215, 172, 0.12), rgba(71, 215, 172, 0) 30%),
-        radial-gradient(circle at 70% 90%, rgba(255, 178, 66, 0.12), rgba(255, 178, 66, 0) 32%),
-        linear-gradient(140deg, #12161f 0%, #171c26 48%, #10131a 100%);
+        radial-gradient(circle at 14% 12%, var(--c-accent-soft), transparent 34%),
+        radial-gradient(circle at 88% 8%, rgba(71, 215, 172, 0.10), transparent 30%),
+        var(--c-bg);
     padding-right: 0;
 }
 
@@ -530,14 +529,14 @@ body {
 }
 
 .debug-toggle-btn:hover {
-    border-color: rgba(88, 166, 255, 0.25);
+    border-color: var(--c-accent-line);
     background: transparent;
     color: var(--text-secondary);
     opacity: 1;
 }
 
 .debug-toggle-btn.active {
-    border-color: rgba(88, 166, 255, 0.35);
+    border-color: var(--c-accent-line);
     background: transparent;
     color: var(--text-secondary);
     opacity: 0.85;
@@ -882,7 +881,7 @@ body {
     gap: 10px;
     padding: 68px 12px 12px;
     background:
-        radial-gradient(circle at 14% 18%, rgba(88, 166, 255, 0.21), rgba(88, 166, 255, 0) 36%),
+        radial-gradient(circle at 14% 18%, var(--c-accent-soft), transparent 36%),
         radial-gradient(circle at 82% 18%, rgba(71, 215, 172, 0.18), rgba(71, 215, 172, 0) 40%),
         radial-gradient(circle at 64% 82%, rgba(255, 179, 89, 0.1), rgba(255, 179, 89, 0) 36%),
         linear-gradient(180deg, rgba(6, 12, 22, 0.97), rgba(8, 13, 23, 0.97));
@@ -917,8 +916,8 @@ body {
     width: 9px;
     height: 9px;
     border-radius: 50%;
-    background: #6fb8ff;
-    box-shadow: 0 0 0 3px rgba(111, 184, 255, 0.23);
+    background: var(--c-accent);
+    box-shadow: 0 0 0 3px var(--c-accent-soft);
 }
 
 .office-toolbar-group {
@@ -1071,9 +1070,9 @@ body {
 }
 
 .office-map-controls .settings-mini-btn.active {
-    border-color: rgba(105, 164, 234, 0.78);
-    background: rgba(105, 164, 234, 0.2);
-    color: #dcecff;
+    border-color: var(--c-accent-line);
+    background: var(--c-accent-soft);
+    color: var(--c-text);
 }
 
 .office-debug-overlay {

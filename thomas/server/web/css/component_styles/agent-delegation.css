@@ -71,6 +71,11 @@
 .agent-activity-row[data-status="completed"] {
     border-left-color: rgba(63, 185, 80, 0.5);
 }
+/* A run the owner STOPPED is an ending, but not an error -- deliberately not red. */
+.agent-activity-row[data-status="cancelled"] {
+    border-left-color: rgba(216, 184, 116, 0.5);
+}
+
 .agent-activity-row[data-status="failed"] {
     border-left-color: rgba(248, 81, 73, 0.5);
 }

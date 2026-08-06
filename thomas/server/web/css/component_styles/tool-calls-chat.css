@@ -515,6 +515,12 @@
     letter-spacing: 0.02em;
     color: #eef6ff;
 }
+.message-task-strip-badge.tone-stopped {
+    border-color: rgba(214, 186, 118, 0.42);
+    background: rgba(56, 46, 22, 0.72);
+    color: #f2e4c4;
+}
+
 .message-task-strip-badge.tone-running {
     border-color: rgba(96, 183, 255, 0.34);
     background: rgba(18, 45, 74, 0.68);

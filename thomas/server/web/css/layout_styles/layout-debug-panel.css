@@ -1,3 +1,14 @@
+    right: 12px;
+    z-index: 24;
+    width: min(360px, calc(100% - 24px));
+    border-radius: 12px;
+    border: 1px solid rgba(123, 156, 200, 0.58);
+    background: rgba(10, 18, 29, 0.84);
+    color: #e7f1ff;
+    box-shadow: 0 14px 26px rgba(0, 0, 0, 0.33);
+    backdrop-filter: blur(8px);
+    pointer-events: none;
+    padding: 8px 10px;
 }
 
 .office-debug-head {
@@ -520,36 +531,15 @@
     filter: drop-shadow(0 10px 18px rgba(232, 149, 137, 0.3));
 }
 
-.office-agent.state-spawning .office-agent-hitbox {
-    animation: officeAgentSpawnDrop 620ms cubic-bezier(0.2, 0.88, 0.28, 1) 1;
-}
-
-.office-agent.state-spawning .office-pixel-agent {
-    filter: drop-shadow(0 12px 22px rgba(101, 193, 255, 0.48));
-}
-
-.office-agent.state-teleporting {
-    pointer-events: none;
-}
-
-.office-agent.state-teleporting .office-agent-hitbox {
-    animation: officeAgentTeleportOut 460ms cubic-bezier(0.42, 0, 0.58, 1) 1 forwards;
-}
-
-.office-agent.state-teleporting .office-agent-label,
-.office-agent.state-teleporting .office-agent-bubble {
-    opacity: 0;
-}
-
 .office-agent-hitbox {
     border: 0;
     background: transparent;
     padding: 0;
     cursor: pointer;
     pointer-events: auto;
-    width: 118px;
-    height: 112px;
-    margin: -28px -32px;
+    width: 102px;
+    height: 98px;
+    margin: -24px -26px;
     display: grid;
     place-items: center;
     border-radius: 16px;
@@ -570,16 +560,18 @@
     animation: none;
 }
 
+/* Canonical blocky robot geometry mirrored from apps/site/src/components/pixel-agents.tsx. */
 .office-pixel-agent {
     --agent-primary: #9ad8ff;
     --agent-secondary: #5aaeff;
     --agent-glow: #7abbff;
     --agent-trim: #0d1117;
+    display: block;
     position: relative;
-    width: 54px;
-    height: 50px;
+    width: 52px;
+    height: 48px;
     image-rendering: pixelated;
-    filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.45));
+    filter: drop-shadow(0 7px 14px rgba(0, 0, 0, 0.45));
 }
 
 .office-pixel-agent.facing-left {
@@ -588,7 +580,7 @@
 
 .office-pixel-agent.looking-user {
     transform: scaleX(1);
-    filter: drop-shadow(0 8px 18px rgba(88, 166, 255, 0.42));
+    filter: drop-shadow(0 8px 18px var(--c-accent-soft));
 }
 
 .office-pixel-agent.is-bonking {
@@ -599,8 +591,8 @@
 .office-agent-head {
     position: absolute;
     top: 2px;
-    left: 15px;
-    width: 25px;
+    left: 14px;
+    width: 24px;
     height: 14px;
     border: 2px solid var(--agent-trim);
     background: var(--agent-primary);
@@ -609,8 +601,8 @@
 .office-agent-body {
     position: absolute;
     top: 18px;
-    left: 12px;
-    width: 31px;
+    left: 11px;
+    width: 30px;
     height: 18px;
     border: 2px solid var(--agent-trim);
     background:
@@ -619,15 +611,15 @@
 
 .office-agent-leg {
     position: absolute;
-    top: 37px;
+    top: 36px;
     width: 8px;
-    height: 11px;
+    height: 10px;
     border: 2px solid var(--agent-trim);
     background: var(--agent-secondary);
 }
 
 .office-agent-leg-left {
-    left: 17px;
+    left: 16px;
 }
 
 .office-agent-leg-right {
@@ -643,11 +635,11 @@
 }
 
 .office-agent-eye-left {
-    left: 6px;
+    left: 5px;
 }
 
 .office-agent-eye-right {
-    left: 15px;
+    left: 13px;
 }
 
 .office-pixel-agent.looking-user .office-agent-eye {
@@ -657,11 +649,11 @@
 }
 
 .office-pixel-agent.looking-user .office-agent-eye-left {
-    left: 5px;
+    left: 4px;
 }
 
 .office-pixel-agent.looking-user .office-agent-eye-right {
-    left: 15px;
+    left: 14px;
 }
 
 .office-pixel-agent.costume-cap::before {
@@ -689,13 +681,27 @@
 .office-pixel-agent.costume-headset::before {
     content: "";
     position: absolute;
-    top: -1px;
-    left: 10px;
-    width: 34px;
-    height: 18px;
-    border: 2px solid rgba(13, 17, 23, 0.92);
-    border-bottom: none;
-    border-radius: 22px 22px 0 0;
+    top: -2px;
+    left: 16px;
+    width: 20px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(13, 17, 23, 0.92);
+    box-shadow:
+        -8px 8px 0 1px rgba(13, 17, 23, 0.92),
+        28px 8px 0 1px rgba(13, 17, 23, 0.92);
+}
+
+.office-pixel-agent.costume-headset::after {
+    content: "";
+    position: absolute;
+    top: 15px;
+    left: 39px;
+    width: 11px;
+    height: 3px;
+    border-radius: 999px;
+    background: #9ee6ff;
+    box-shadow: -3px -2px 0 -1px rgba(13, 17, 23, 0.92);
 }
 
 .office-pixel-agent.costume-bowtie::after {
@@ -707,6 +713,93 @@
     height: 8px;
     border-radius: 2px;
     background: rgba(8, 13, 21, 0.92);
+}
+
+.office-pixel-agent.costume-toolbelt::after {
+    content: "";
+    position: absolute;
+    top: 31px;
+    left: 12px;
+    width: 28px;
+    height: 5px;
+    border: 1px solid rgba(9, 14, 23, 0.92);
+    background:
+        linear-gradient(90deg, rgba(9, 14, 23, 0.92) 0 28%, #ffd166 29% 45%, rgba(9, 14, 23, 0.92) 46% 72%, #9ee6ff 73% 100%);
+}
+
+.office-pixel-agent.costume-satchel::after {
+    content: "";
+    position: absolute;
+    top: 15px;
+    left: 8px;
+    width: 38px;
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(80, 49, 32, 0.9);
+    transform: rotate(36deg);
+    box-shadow: 21px 16px 0 -1px rgba(112, 74, 45, 0.95);
+}
+
+.office-pixel-agent.costume-scarf::after {
+    content: "";
+    position: absolute;
+    top: 16px;
+    left: 12px;
+    width: 28px;
+    height: 6px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #ff5978, #ffd166);
+    box-shadow: 16px 5px 0 -2px #ff5978;
+}
+
+.office-pixel-agent.costume-badge::after {
+    content: "";
+    position: absolute;
+    top: 24px;
+    left: 31px;
+    width: 8px;
+    height: 8px;
+    border: 1px solid rgba(9, 14, 23, 0.9);
+    border-radius: 50%;
+    background: #ffd166;
+}
+
+.office-pixel-agent.costume-tablet::after {
+    content: "";
+    position: absolute;
+    top: 24px;
+    left: 39px;
+    width: 12px;
+    height: 15px;
+    border: 2px solid rgba(9, 14, 23, 0.92);
+    border-radius: 3px;
+    background: linear-gradient(180deg, #15243d, #65dcff);
+}
+
+.office-pixel-agent.costume-wrench::after {
+    content: "";
+    position: absolute;
+    top: 29px;
+    left: 38px;
+    width: 17px;
+    height: 4px;
+    border-radius: 999px;
+    background: #d7e6f7;
+    transform: rotate(-38deg);
+    box-shadow: -7px -2px 0 -1px rgba(9, 14, 23, 0.92);
+}
+
+.office-pixel-agent.costume-mug::after {
+    content: "";
+    position: absolute;
+    top: 28px;
+    left: 40px;
+    width: 10px;
+    height: 10px;
+    border: 2px solid rgba(9, 14, 23, 0.92);
+    border-radius: 2px 2px 4px 4px;
+    background: #f04444;
+    box-shadow: 6px 2px 0 -3px rgba(9, 14, 23, 0.92);
 }
 
 .office-agent-label {
@@ -804,8 +897,6 @@
 
 .office-workspace.reduced-motion .office-agent-hitbox,
 .office-workspace.reduced-motion .office-agent.is-jumping .office-agent-hitbox,
-.office-workspace.reduced-motion .office-agent.state-spawning .office-agent-hitbox,
-.office-workspace.reduced-motion .office-agent.state-teleporting .office-agent-hitbox,
 .office-workspace.reduced-motion .office-pixel-agent.is-bonking,
 .office-workspace.reduced-motion .office-agent-bubble {
     animation: none !important;

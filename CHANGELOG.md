@@ -11,6 +11,9 @@ Versioning: Semantic Versioning.
 
 ### Removed (design unification: the banned *_parts CSS directories)
 
+- (follow-up) the rename/deletion tree itself lands: the first restructure
+  commit carried only the import-hub and test edits.
+
 - `css/components_parts/` and `css/layout_parts/` are gone: live files moved
   (git mv) to `css/component_styles/` and `css/layout_styles/` with every
   import and test path updated, because the old names match the banned
