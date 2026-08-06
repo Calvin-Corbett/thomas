@@ -7,6 +7,23 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (opening one Code task can no longer freeze the whole server)
+
+- py-spy caught it live: `conversation_preview` built its allowlist with
+  `root.rglob("*")` ON the event loop, and its filter only excluded
+  `.git`/`node_modules` entries from the results while the walk still descended
+  into them — a conversation pointed at a big checkout froze every request,
+  including `/`, for the length of a ~1.5M-entry walk, fired automatically by
+  artifact-thumbnail hydration. The walk now prunes excluded directories in
+  place, runs in a worker thread (`_preview_allowlist`), and the preview refuses
+  Thomas's own source root with the same `project_is_thomas_source` refusal the
+  edit path makes. Secondary hot spot from the same investigation:
+  `_web_build_fingerprint` re-stat'ed ~320 frontend files on the loop for every
+  page request (35–100 ms each) — now cached for 2 s per page.
+  Tests: `tests/test_the_preview_walk_prunes_and_stays_off_the_loop.py`
+  (asserts the walk never *enters* a pruned tree, not merely that results are
+  filtered).
+
 ### Added (failure-string reachability report — sight, not a gate)
 
 - `scripts/failure_string_reachability_report.py`: scans `thomas/` for

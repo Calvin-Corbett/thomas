@@ -218,6 +218,34 @@ _PREVIEWABLE_SUFFIXES = {
     ".woff", ".woff2", ".ttf", ".otf", ".mp3", ".ogg", ".wav", ".webm", ".mp4",
 }
 
+# Directories the preview walk must never even ENTER. The old rglob("*")
+# filtered these from its RESULTS but still descended into them, and it ran on
+# the event loop -- measured live (py-spy, 2026-08-05): a conversation whose
+# project root was a full checkout froze the WHOLE server for the duration of a
+# ~1.5M-entry walk; every request, including "/", timed out for four minutes.
+# The walk fires automatically -- the results UI hydrates artifact thumbnails
+# whenever a Code conversation renders -- so one click on the wrong task took
+# Thomas down for everyone watching.
+_PREVIEW_PRUNED_DIRS = {".git", "node_modules", ".thomas", ".claude", ".venv", "__pycache__"}
+
+
+def _preview_allowlist(root: Path) -> set[str]:
+    """Walk a project for previewable web assets, pruning as it goes.
+
+    Runs in a worker thread (see conversation_preview) and prunes excluded
+    directories IN PLACE so the walk never enters them, instead of enumerating
+    a million entries and discarding most of them afterwards.
+    """
+    allowed: set[str] = set()
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in _PREVIEW_PRUNED_DIRS]
+        for filename in filenames:
+            if Path(filename).suffix.lower() not in _PREVIEWABLE_SUFFIXES:
+                continue
+            rel = Path(dirpath, filename).relative_to(root)
+            allowed.add(rel.as_posix())
+    return allowed
+
 APP_EVOLVE_AGENT_TASK = "evolve_agent_task"
 APP_EVOLVE_AGENT_DRAIN = "evolve_agent_drain"
 APP_EVOLVE_AGENT_SESSION = "evolve_agent_session"
@@ -1237,22 +1265,24 @@ def build_evolve_agent_handlers(
         target = (root / tail).resolve()
         if not target.is_relative_to(root.resolve()) or not target.is_file():
             return web.json_response({"ok": False, "error": "file not found"}, status=404)
-        allowed = set()
-        for path in root.rglob("*"):
-            if not path.is_file() or path.suffix.lower() not in _PREVIEWABLE_SUFFIXES:
-                continue
-            rel = path.relative_to(root)
-            # RELATIVE parts, not the absolute path's. Projects live under
-            # ~/.thomas/projects/<name>, so testing the absolute parts matched
-            # ".thomas" on every file in every project and left the allowlist
-            # empty -- which the caller then papered over with a one-file
-            # fallback. That served the entry page and nothing it referenced,
-            # and, because the allowlist then differed per file, each file
-            # minted its own origin and tore down the one before it. Opening
-            # the game blanked the thumbnail still showing the shell page.
-            if any(part in {".git", "node_modules", ".thomas"} for part in rel.parts):
-                continue
-            allowed.add(rel.as_posix())
+        # The same refusal the edit path makes (`project_is_thomas_source`),
+        # for the same reason plus one more: walking the checkout is exactly
+        # the multi-minute freeze described above _preview_allowlist, and Code
+        # will not serve its own source tree as an app either way.
+        if _is_thomas_source(root):
+            return web.json_response(
+                {
+                    "ok": False,
+                    "error": "This task is pointed at Thomas's own source folder, which Code will not preview.",
+                    "code": "project_is_thomas_source",
+                },
+                status=409,
+            )
+        # RELATIVE paths from a PRUNED walk, off the event loop. See
+        # _preview_allowlist for both measured failure modes this closes: the
+        # absolute-parts filter that emptied every allowlist under ~/.thomas,
+        # and the on-loop rglob that froze the whole server on big roots.
+        allowed = await asyncio.to_thread(_preview_allowlist, root)
         if not allowed:
             return web.json_response({"ok": False, "error": "nothing to preview"}, status=404)
         try:

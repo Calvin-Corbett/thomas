@@ -582,9 +582,20 @@ def setup_middleware_and_handlers(
     _delete_chat_from_disk = _chat_store["_delete_chat_from_disk"]
     _load_all_chats_from_disk = _chat_store["_load_all_chats_from_disk"]
 
+    # Fingerprints are recomputed at most once every 2 seconds per page.
+    # The walk behind them (every js/ module + css/ stylesheet, ~320 stats)
+    # ran on the EVENT LOOP for every "/" request -- measured 35-100ms each,
+    # py-spy caught it mid-request during the 2026-08-05 stall investigation.
+    # Two seconds keeps dev freshness (an edited file busts the cache within
+    # one page refresh) while a burst of page loads stops paying the walk.
+    _fingerprint_cache: dict[tuple[str, ...], tuple[float, str]] = {}
+
     def _web_build_fingerprint(*relative_paths: str) -> str:
         # Cache-busting build fingerprint over file mtime/size only -- not a
         # security primitive, so sha1 is acceptable here (py/weak-sensitive-data-hashing).
+        cached = _fingerprint_cache.get(relative_paths)
+        if cached is not None and (time.monotonic() - cached[0]) < 2.0:
+            return cached[1]
         #
         # Hash the explicitly-named files PLUS every JS module and stylesheet.
         # Previously only the few named files were fingerprinted, so a fix to any
@@ -616,7 +627,9 @@ def setup_middleware_and_handlers(
             except OSError:
                 digest.update(relative.encode("utf-8", errors="ignore"))
                 digest.update(b"missing")
-        return digest.hexdigest()[:12]
+        value = digest.hexdigest()[:12]
+        _fingerprint_cache[relative_paths] = (time.monotonic(), value)
+        return value
 
     from .app_middleware_helpers import build_page_handlers
 
