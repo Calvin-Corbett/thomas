@@ -473,6 +473,17 @@
     }
     var REPLAY_NOISE = ['claude session', 'hook_started', 'hook_response', 'thinking_tokens', 'post_turn_summary', 'notification', 'init ('];
     function replayTranscript(raw) {
+        // A turn persisted before the store normalized transcript shapes can
+        // carry its transcript as an array -- of single characters (measured:
+        // one-char entries, w2-code-explain sweep) or of lines. String() on an
+        // array comma-joins it, so no line parses as a forge event. Join
+        // characters back into the string they were; join lines with the
+        // newline this replay splits on.
+        if (Array.isArray(raw)) {
+            var parts = raw.map(function (part) { return part == null ? '' : String(part); });
+            var allChars = parts.every(function (part) { return part.length <= 1; });
+            raw = allChars ? parts.join('') : parts.join('\n');
+        }
         var lines = String(raw || '').split('\n');
         for (var i = 0; i < lines.length; i++) {
             var t = stripAnsi(lines[i]).trim(); if (!t) continue;

@@ -348,13 +348,29 @@
       return `<details class="tc-code-saved-activity${alarming ? ' has-issues' : ''}"${saved ? ' data-saved="true"' : ''}><summary><span class="tc-code-activity-summary"><i class="ph ${alarming ? 'ph-warning' : 'ph-terminal-window'}"></i>${esc(technicalSummary(events, ok))}</span><span>${status}</span></summary><div class="tc-code-technical-log">${rows}</div></details>`;
     }
 
+    // A turn persisted before the store normalized transcript shapes can carry
+    // its transcript as an array -- of single characters (measured: 2541
+    // one-char entries, w2-code-explain sweep) or of lines. String() on an
+    // array comma-joins it, so nothing parsed as a forge event and the agent's
+    // produced answer never reached the screen. Join characters back into the
+    // string they were split from; join anything else with the newline the
+    // parser splits on. A string passes through untouched.
+    function transcriptText(turn) {
+      const raw = turn && turn.transcript;
+      if (Array.isArray(raw)) {
+        const parts = raw.map(part => part == null ? '' : String(part));
+        return parts.every(part => part.length <= 1) ? parts.join('') : parts.join('\n');
+      }
+      return String(raw || '');
+    }
+
     function transcriptEvents(turn) {
       const events = [];
       const terminalTracker = { name: '' };
       // Tracks whether a tool_result has been seen yet, so only the FIRST one
       // can be flagged as the expected read probe of an empty project.
       let sawToolResult = false;
-      String(turn && turn.transcript || '').split('\n').forEach(raw => {
+      transcriptText(turn).split('\n').forEach(raw => {
         const line = raw.trim(); if (!line) return;
         let parsed = null;
         if (line.startsWith('{')) {

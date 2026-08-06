@@ -49,6 +49,8 @@ Versioning: Semantic Versioning.
 
 - (landed) reload lands back on the open Code task -- details above.
 
+- (landed) transcripts persist as one string; readers tolerate the legacy array shape -- details above.
+
 ### Fixed (the Code workspace shell works on Windows and tells the truth about failing)
 
 - Every quoted inline script (`python -c "…"`, `node -e "…"`) reached the

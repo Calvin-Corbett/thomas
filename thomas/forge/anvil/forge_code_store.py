@@ -20,6 +20,35 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+
+def transcript_text(value: object) -> str:
+    """Normalize a turn transcript to the ONE string shape the store persists.
+
+    Measured (w2-code-explain sweep, 2026-08-06): a persisted turn arrived with
+    its transcript as 2541 single-character list entries (``['{', '"', 'f',
+    'c', ...]``) instead of a string, and every consumer written for a string
+    saw either characters-as-events or -- through ``str()`` -- a Python repr in
+    which no line starts with ``{``, so the run's forge events (including the
+    agent's produced answer) vanished from history.
+
+    Nothing is rejected or dropped here: a string passes through verbatim; a
+    list of single characters is the string it was split from, re-joined; any
+    other list is treated as lines and joined with the newline every reader
+    splits on. Used by the writer (so the durable record is always a string)
+    and the readers (so a record persisted before this normalization existed
+    keeps rendering).
+    """
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (list, tuple)):
+        parts = ["" if part is None else str(part) for part in value]
+        if parts and all(len(part) <= 1 for part in parts):
+            return "".join(parts)
+        return "\n".join(parts)
+    if value is None:
+        return ""
+    return str(value)
+
 # Max characters for a derived title before we truncate with an ellipsis.
 _TITLE_MAX = 60
 _DEFAULT_TITLE = "Untitled build"
@@ -392,7 +421,10 @@ def append_agent_turn(
         "role": "agent",
         "model": model,
         "ts": _now_iso(),
-        "transcript": transcript,
+        # Always ONE string. A caller that hands over a list (measured: a
+        # character-split transcript, w2-code-explain) gets its content joined
+        # back, never stored in a shape the readers cannot parse.
+        "transcript": transcript_text(transcript),
         "changed_files": list(changed_files or []),
         # Renderable/downloadable results this run produced,
         # recorded so a resumed conversation re-renders the artifact cards
@@ -432,7 +464,11 @@ def _agent_reply_text(turn: dict) -> str:
     """
     says: list[str] = []
     finals: list[str] = []
-    for raw in str(turn.get("transcript") or "").split("\n"):
+    # transcript_text, not str(): a record persisted before the writer
+    # normalized shapes can carry its transcript as a list, and str() on a
+    # list yields a repr in which no line starts with "{" -- every event,
+    # including the agent's produced answer, would silently vanish.
+    for raw in transcript_text(turn.get("transcript")).split("\n"):
         line = raw.strip()
         if not line or line[0] != "{":
             continue
