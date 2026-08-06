@@ -366,8 +366,11 @@ def test_code_adapter_preserves_terminal_stream_states() -> None:
     assert "await waitForRestartReady()" in text
     assert "state.runStatus = 'stopping'" in text
     assert "const stopWasPending = state.runStatus === 'stopping'" in text
-    assert "Stop confirmed (process exit ${payload.returncode})" in text
-    assert "process exit ${payload.returncode}" in text
+    # The live stop confirmation speaks in plain words. It used to interpolate
+    # the process exit code -- "Stop confirmed (process exit 1)." -- which
+    # reads as an error for a deliberate, clean user stop.
+    assert "Stopped — Thomas is wrapping up the record." in text
+    assert "process exit ${payload.returncode}" not in text
     assert "loadConversation(id, { internal: true, epoch, deferRender: true })" in text
     assert "approvalBusy" in text
     assert "steeringBusy" in text

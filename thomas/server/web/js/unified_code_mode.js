@@ -19,6 +19,11 @@
     // projectRoot, and the next new task treated that as a choice.
     finishing: null, approvalBusy: false, steeringBusy: false, projectRoot: '', chosenProjectRoot: '', chosenProjectPicked: false, projectNames: {}, terminalTool: '', contextEpoch: 0, runProof: null,
     pendingHistoryChoice: null, historyChoiceBusy: false,
+    // 'pending' until the first history fetch answers, 'loaded' on an answer,
+    // 'error' on a failure before any answer. The sidebar's terminal claim
+    // "No code tasks yet." is only honest in the 'loaded' state -- ~197 real
+    // tasks rendered under that claim while the first fetch was in flight.
+    historyLoadState: 'pending',
     runId: '', eventCursor: 0, retryRequest: null, drawerOpen: false, drawerWidth: 360, pendingUserText: '',
   };
   let adapterActive = false;
@@ -770,9 +775,14 @@
       const data = await response.json();
       if (!response.ok || !Array.isArray(data.conversations)) throw new Error(data.error || `Code history could not be refreshed (${response.status})`);
       state.conversations = data.conversations;
+      state.historyLoadState = 'loaded';
       host().renderHistory && host().renderHistory();
       return true;
     } catch (error) {
+      // A failure before any answer is an ERROR state, not an empty history.
+      // A failure after a successful load keeps the loaded state: the rows on
+      // screen are real, and recordError below already names the failure.
+      if (state.historyLoadState !== 'loaded') state.historyLoadState = 'error';
       host().renderHistory && host().renderHistory();
       if (options && options.throwOnError) throw error;
       recordError(error, 'Code history could not be refreshed.');
@@ -783,7 +793,17 @@
   function renderHistory(root, query) {
     const term = String(query || '').trim().toLowerCase();
     const rows = state.conversations.filter(row => Number(row.turn_count || 0) > 0 && (!term || String(row.title || '').toLowerCase().includes(term)));
-    root.innerHTML = rows.length ? '' : `<div class="tc-mode-empty">${term ? 'No matching code tasks.' : 'No code tasks yet.'}</div>`;
+    // "No code tasks yet." is a claim about the history, and before the first
+    // fetch answers the history is UNKNOWN -- ~197 real tasks rendered under
+    // that claim while the request was in flight. Same rule as the chat
+    // sidebar: loading until the fetch answers, a named error when it fails,
+    // and the terminal empty claim only once an answer confirmed it.
+    const emptyMessage = state.historyLoadState === 'loaded'
+      ? (term ? 'No matching code tasks.' : 'No code tasks yet.')
+      : state.historyLoadState === 'error'
+        ? 'Code tasks could not be loaded.'
+        : 'Loading code tasks…';
+    root.innerHTML = rows.length ? '' : `<div class="tc-mode-empty">${emptyMessage}</div>`;
     rows.forEach(row => {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'tc-mode-history-row';
       button.innerHTML = `<span>${esc(row.title || 'Untitled task')}</span>`;
@@ -934,13 +954,23 @@
 
   async function send(message, context, options) {
     if (state.approvalBusy) throw new Error('A Code approval is in progress. Resolve it before starting another task.');
-    // Codex-parity queue: sending while a run is going queues the task and
-    // auto-starts it when the current run's result is durable.
-    if (state.running || state.finishing) {
+    // Codex-parity queue: sending while THIS conversation's run is going
+    // queues the task and auto-starts it when the current run's result is
+    // durable. Only the TARGET conversation being busy queues. A send with no
+    // conversation on screen is not waiting on anything -- parallel runs are
+    // supported, so it starts immediately below as its own new conversation
+    // (runRequest sends no conversation_id for activeId:'' and the server
+    // creates one). Queueing it was the misdelivery: the entry carried cid:''
+    // and startNextQueued fired it into whichever conversation was ACTIVE
+    // when the live run finished -- measured 2026-08-05 (w2-code-network +
+    // w2-code-tiny): a countdown task sent while the Bitcoin run was live
+    // appended to the Bitcoin conversation, ran in its project root, and
+    // OVERWROTE the finished Bitcoin deliverable with a countdown page.
+    if ((state.running || state.finishing) && state.activeId) {
       state.queuedSends = state.queuedSends || [];
       // Stamp the conversation at ENQUEUE time — with parallel runs the user
       // may switch away, and a queued task must fire into ITS conversation.
-      state.queuedSends.push({ message: String(message || ''), context: context || state.lastContext || {}, cid: state.activeId || '' });
+      state.queuedSends.push({ message: String(message || ''), context: context || state.lastContext || {}, cid: state.activeId });
       pushLiveEvent({ type: 'planning', text: `Queued (${state.queuedSends.length} waiting): ${String(message || '').slice(0, 80)}` });
       render();
       return true;
@@ -1012,7 +1042,12 @@
         source.close();
         if (stopWasPending) {
           state.runStatus = 'stopped';
-          const confirmation = { type: 'stopped', text: `Stop confirmed (process exit ${payload.returncode}).` };
+          // Plain words for a deliberate click. This said "Stop confirmed
+          // (process exit 1)." -- an exit code leaked into a sentence about a
+          // clean user stop, and exit 1 reads as an error. The durable render
+          // of the stopped turn is already honest; the live confirmation now
+          // matches its register.
+          const confirmation = { type: 'stopped', text: 'Stopped — Thomas is wrapping up the record.' };
           pushLiveEvent(confirmation);
           appendLiveEvent(confirmation, false);
         } else {
@@ -1138,14 +1173,35 @@
   }
   function startNextQueued() {
     if (!state.queuedSends || !state.queuedSends.length) return;
-    // Drain only tasks queued for the ACTIVE conversation; tasks for a parked
-    // conversation wait until the user returns to it (misdelivery guard).
-    const index = state.queuedSends.findIndex(entry => !entry.cid || entry.cid === state.activeId);
-    if (index < 0) return;
-    const queued = state.queuedSends.splice(index, 1)[0];
-    pushLiveEvent({ type: 'planning', text: `Starting your queued task: ${queued.message.slice(0, 80)}` });
+    // Never drain while something is live: send() would re-queue the entry,
+    // and a drain-then-requeue is where a cid can be rewritten to whatever
+    // conversation happens to be active at that moment.
+    if (state.running || state.finishing) return;
+    // Drain ONLY tasks queued for exactly the ACTIVE conversation; tasks for a
+    // parked conversation wait until the user returns to it (misdelivery
+    // guard). `entry.cid` must match, never merely be absent: the absent-cid
+    // shortcut is what fired the countdown task into the live Bitcoin
+    // conversation and overwrote its deliverable (w2-code-tiny, 2026-08-05).
+    const index = state.queuedSends.findIndex(entry => Boolean(entry.cid) && entry.cid === state.activeId);
+    if (index >= 0) {
+      const queued = state.queuedSends.splice(index, 1)[0];
+      pushLiveEvent({ type: 'planning', text: `Starting your queued task: ${queued.message.slice(0, 80)}` });
+      render();
+      void safely(() => send(queued.message, queued.context), 'The queued Code task failed to start.');
+      return;
+    }
+    // An entry with no conversation stamp can no longer be created (see the
+    // queue branch in send), but one that somehow exists must become its own
+    // NEW conversation -- adopting whichever conversation is on screen is
+    // exactly the overwrite this queue shipped once already.
+    const orphanIndex = state.queuedSends.findIndex(entry => !entry.cid);
+    if (orphanIndex < 0) return;
+    const orphan = state.queuedSends.splice(orphanIndex, 1)[0];
+    state.contextEpoch += 1;
+    clearContextState();
+    pushLiveEvent({ type: 'planning', text: `Starting your queued task as its own conversation: ${orphan.message.slice(0, 80)}` });
     render();
-    void safely(() => send(queued.message, queued.context), 'The queued Code task failed to start.');
+    void safely(() => send(orphan.message, orphan.context), 'The queued Code task failed to start.');
   }
   async function loadChanges(options) {
     const token = (options && options.token) || lifecycle().contextToken(state);

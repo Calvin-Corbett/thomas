@@ -7,6 +7,30 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (the Code workspace shell works on Windows and tells the truth about failing)
+
+- Every quoted inline script (`python -c "…"`, `node -e "…"`) reached the
+  interpreter truncated at the first space with a literal leading quote —
+  `["cmd","/c",command]` goes through `subprocess.list2cmdline`, an encoding
+  cmd.exe cannot parse. The command now runs through
+  `powershell -NoProfile -NonInteractive -Command`, whose parser round-trips
+  that encoding exactly, with an exit-code epilogue (PowerShell collapses every
+  failure to 1) and a UTF-8 console prologue. This is why every organic Code
+  run's self-verification died with unexplained exit 1s.
+- A failed tool result no longer discards its own diagnostics:
+  `ToolResult.to_content()` serialized failures as a bare
+  `{"ok": false, "error": "Exit code N"}` and threw the captured stdout/stderr
+  away on the ok=False branch — the recurring dead-half-of-the-branch shape,
+  this time hiding every command's actual complaint from the model. Failures
+  now carry their output, truncated to the same cap as successes (all tools).
+- `> $null` no longer creates a literal `$null` file in the user's project, and
+  `background=true` spawns a detached process with a spool file, pid, and stop
+  instructions — the serve-and-verify pattern works on Windows, proven live
+  end-to-end (server up → HTTP probe → tree-kill → down).
+  Tests:
+  `tests/test_shell_exec_windows_runs_one_real_shell_with_diagnostics.py`
+  (6 red against the old shell, reproducing every defect byte-for-byte).
+
 ### Fixed (the builder summarizes from the files and hides its scratch)
 
 - The composed Code prompt (shared by both engines via `bridge_prompts.py`) now
