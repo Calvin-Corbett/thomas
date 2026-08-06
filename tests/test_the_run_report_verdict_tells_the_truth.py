@@ -170,15 +170,24 @@ def _verdict(html: str) -> str:
 
 def test_the_nova_report_that_shipped_a_false_green_no_longer_reads_as_passing(render) -> None:
     """The exact regression. Two engine checks passed and the rubric said the
-    requirements were never checked; the headline said 'Checks passed'."""
+    requirements were never checked; the headline said 'Checks passed'.
+
+    The first fix for this replaced the headline with "Not checked against your
+    ask" -- rendered directly above "2/2 checks passed", two true statements a
+    normal reader took as a self-contradiction (measured on every code scenario
+    of the 2026-08-05 audit). The card now leads with what WAS verified and
+    scopes what was not, in one sentence, and does not repeat the pass count
+    beneath a headline that already carries it."""
     html = render(NOVA_REPORT)
 
     assert _verdict(html) != "Checks passed"
-    assert _verdict(html) == "Not checked against your ask"
+    assert _verdict(html) == "Passed 2 automatic checks"
     assert "is-unknown" in html, "an unverified run must not carry the passing tone"
-    assert "1 requirement unverified" in html, "the count belongs on the face of the card"
-    # What DID pass still gets said -- this is a truthful verdict, not a scary one.
-    assert "2/2 checks passed" in html
+    assert "is-good" not in html
+    assert "your specific ask was not separately verified" in html
+    # The contradictory pair stays dead: the count lives in the headline only.
+    assert "Not checked against your ask" not in html
+    assert "2/2 checks passed" not in html
 
 
 def test_a_run_that_verified_its_requirements_still_reads_as_passing(render) -> None:
@@ -256,7 +265,7 @@ def test_only_two_requirements_are_named_and_each_stays_readable(render) -> None
     for part in line.replace("Not checked: ", "").split(" · "):
         assert len(part.replace("…", "").strip()) >= 20, f"unreadable stub on the card: {part!r}"
     # The honest total still comes from the counts line above.
-    assert "4 requirements unverified" in html
+    assert "4 parts of your ask were not separately verified" in html
 
 
 def test_no_unchecked_line_when_everything_was_verified(render) -> None:
@@ -466,5 +475,5 @@ def test_open_risks_do_not_hide_behind_an_unverified_headline(render) -> None:
         }
     )
 
-    assert _verdict(html) == "Not checked against your ask"
+    assert _verdict(html) == "Passed 1 automatic check"
     assert "1 open risk" in html

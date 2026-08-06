@@ -38,6 +38,22 @@ _CRITERION_RE = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+(?P<text>\S.{3,})$")
 # Matched on the marker rather than the word "skipped", which appears in
 # unrelated evidence such as "1 files checked, 1 skipped".
 _SKIPPED_EVIDENCE = re.compile(r"[A-Z][A-Z_]*_SKIPPED\b")
+# The harness's own stand-in sentences for an error event that carried NO text.
+# forge_event_stream falls back to "claude reported an error" when the CLI's
+# is_error result had an empty message, and dispatch_agent_loop does the same
+# with "agent loop reported an error" -- both are the translator's bookkeeping,
+# not anything the run did or said. A risk row must trace to the run: measured
+# on the 2026-08-05 audit, an explain-only run's card carried exactly two "open
+# risks" and both were manufactured from one such injected no-op error (the
+# stand-in sentence itself, plus the exit code that arrived with it). Matched
+# whole, not as substrings, so an error whose real message merely CONTAINS one
+# of these phrases is still surfaced.
+_HARNESS_FALLBACK_ERROR_TEXTS = frozenset(
+    {
+        "claude reported an error",
+        "agent loop reported an error",
+    }
+)
 
 _SNIPPET_CHARS = 240
 _MAX_ACTIONS_PER_ATTEMPT = 8
@@ -312,7 +328,17 @@ def _build_open_risks(
         risks.append({"risk": "no run activity was recorded", "detail": "the transcript contains no forge events"})
     if returncode is None:
         risks.append({"risk": "process exit could not be confirmed", "detail": _snippet(reason)})
-    elif returncode != 0:
+    elif returncode != 0 and outcome not in ("conversation", "stopped"):
+        # On a build, a dirty exit is real information and stays a risk. On the
+        # other two outcomes it is the harness's own bookkeeping: the Claude CLI
+        # exits 1 even when the answer landed (the runtime route calls the exit
+        # code "the weakest evidence there is" and outranks it with the
+        # confirmed reply), and a stopped run's exit code is the kill signal --
+        # the person's decision, already recorded as "stopped by you". Measured
+        # 2026-08-05: an explain-only run's card listed "run exited non-zero
+        # (1)" as an open risk of an answer that was correct and complete. The
+        # exit code is not hidden -- it stays in the recorded reason and in the
+        # attempts' exit_state -- it just stops being filed as the run's defect.
         risks.append({"risk": f"run exited non-zero ({returncode})", "detail": _snippet(reason)})
     if validations and validations[-1]["passed"] is not True:
         risks.append(
@@ -370,8 +396,15 @@ def _build_open_risks(
     if not ok and "could not complete the requested action" in str(reason or "").lower():
         risks.append({"risk": "the agent reported it could not complete the action", "detail": _snippet(reason)})
     for event in events:
-        if event.get("fc") == "error" and len(risks) < _MAX_RISKS:
-            risks.append({"risk": "error surfaced during the run", "detail": _snippet(event.get("text"))})
+        if event.get("fc") != "error" or len(risks) >= _MAX_RISKS:
+            continue
+        # An error event whose whole text is a translator stand-in sentence
+        # (see _HARNESS_FALLBACK_ERROR_TEXTS) carries nothing the run did, so
+        # it cannot honestly be a row in a list of the run's risks. An error in
+        # the run's own words -- any other text -- is still surfaced.
+        if _flat(event.get("text")) in _HARNESS_FALLBACK_ERROR_TEXTS:
+            continue
+        risks.append({"risk": "error surfaced during the run", "detail": _snippet(event.get("text"))})
     if outcome == "noop" and not changed_files:
         risks.append({"risk": "run made no changes", "detail": "exit 0 but git shows no project delta"})
     risks.extend(_unopened_page_risks(events, validations, changed_files))
@@ -756,6 +789,14 @@ def build_run_report(
     changed = [str(f) for f in (changed_files or [])]
     validations = _build_validations(parsed)
     return {
+        # The recorded outcome word ("completed" | "conversation" | "stopped" |
+        # "noop" | "failed"), carried on the report so the card can tell what
+        # KIND of run it is grading. Without it the renderer could only see the
+        # five sections, and it graded an answer-only run and a person's stop
+        # with the same build-verification scorecard it uses for a build --
+        # measured 2026-08-05 as "Nothing was checked · 1 requirement
+        # unverified · 2 open risks" on a run the person had stopped on purpose.
+        "outcome": str(outcome or ""),
         "attempts": _build_attempts(parsed, goal=goal, outcome=outcome, returncode=returncode, reason=reason),
         "validations": validations,
         "open_risks": _build_open_risks(

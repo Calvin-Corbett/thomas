@@ -7,6 +7,23 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (the verdict card tells one coherent story per kind of run)
+
+- The card face no longer says "Not checked against your ask" directly above
+  "2/2 checks passed · no open risks" — it leads with what WAS verified in one
+  sentence ("Passed 2 automatic checks · your specific ask was not separately
+  verified"). An answer-only run gets "This was an answer, not a build —
+  nothing to verify." instead of a build scorecard; a stopped run gets "Stopped
+  before verification could run" with no requirement-unverified or open-risk
+  language. Risk rows must trace to something the run actually did: the
+  harness's own stand-in sentences for empty errors no longer mint "error
+  surfaced during the run" rows. The report now carries the recorded `outcome`
+  word so the card knows what kind of run it is grading.
+  Tests: `tests/test_a_risk_row_must_trace_to_something_the_run_did.py`,
+  `tests/test_the_verdict_card_matches_the_kind_of_run.py` (both red before),
+  updated wording pins in `test_the_run_report_verdict_tells_the_truth.py` and
+  `test_run_report.py`.
+
 ### Fixed (Code surface honesty: stop, failure, and the feed's arithmetic)
 
 - One stop routine: the drawer Stop and the mode-adapter stop had diverged

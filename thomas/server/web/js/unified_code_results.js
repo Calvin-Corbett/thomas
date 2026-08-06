@@ -62,6 +62,21 @@
   // report renders nothing — older turns have no report field.
   function runReportHtml(report) {
     if (!report || typeof report !== 'object') return '';
+    // What KIND of run is this card grading? The server records the outcome
+    // word on the report (run_report.build_run_report); older turns predate it
+    // and fall through to the build ladder below, which is what they always got.
+    const outcome = String(report.outcome || '');
+    // An answer is not a build, so it gets no build-verification scorecard.
+    // A `conversation` run replied without changing a single file -- there is
+    // nothing a build check could have checked -- yet it was rendered with the
+    // full card, and every number on that card was therefore about a build that
+    // never happened. Measured 2026-08-05: an explain-only run's card carried
+    // two "open risks" manufactured from the harness's own injected no-op
+    // error. One line says WHY there is no card, which is more sight than
+    // either silence or a scorecard of fabricated counts.
+    if (outcome === 'conversation') {
+      return '<div class="tc-code-result-note"><span><i class="ph ph-info" aria-hidden="true"></i>This was an answer, not a build — nothing to verify.</span></div>';
+    }
     const list = value => Array.isArray(value) ? value : [];
     const attempts = list(report.attempts).map(item => reportRow(!/fail/i.test(String(item.outcome || '')), `Pass ${item.pass || '?'} · ${String(item.outcome || 'unknown')}`, `${String(item.goal || '')} → ${String(item.exit_state || '')}`));
     // The headline already separates a skipped check from a passing one; this
@@ -144,19 +159,52 @@
     // "Nothing was checked" is its own state on purpose. A run with no
     // validations at all must not look like a run that passed, which is exactly
     // the confusion the whole report exists to prevent.
+    //
+    // A STOPPED run is its own state too, and it comes first: the person ended
+    // the run before verification could finish, so grading it as an unverified
+    // build charges them with their own decision. Measured 2026-08-05, the face
+    // read "Nothing was checked · 1 requirement unverified · 2 open risks" on a
+    // run its owner had stopped on purpose. The face now says only what
+    // happened before the stop; the full record stays behind Show details.
+    //
+    // The unverified branch leads with what WAS verified and then scopes what
+    // was not, in one sentence. Its old headline pair -- "Not checked against
+    // your ask" rendered directly above "2/2 checks passed" -- was two true
+    // statements that read as a self-contradiction, because the headline named
+    // only the gap and the facts line named only the pass. The tone stays
+    // is-unknown: passing the automatic checks is not the same as the ask
+    // having been verified, and the card still says so, coherently.
     let tone = 'is-good';
     let verdict = 'Checks passed';
-    if (failed > 0) { tone = 'is-bad'; verdict = failed === ran ? 'Checks failed' : 'Some checks failed'; }
+    let askNotVerified = false;
+    if (outcome === 'stopped') { tone = 'is-unknown'; verdict = ran ? 'Stopped during verification' : 'Stopped before verification could run'; }
+    else if (failed > 0) { tone = 'is-bad'; verdict = failed === ran ? 'Checks failed' : 'Some checks failed'; }
     else if (!ran) { tone = 'is-unknown'; verdict = 'Nothing was checked'; }
-    else if (unverified) { tone = 'is-unknown'; verdict = 'Not checked against your ask'; }
+    else if (unverified) { tone = 'is-unknown'; verdict = `Passed ${ran} automatic check${ran === 1 ? '' : 's'}`; askNotVerified = true; }
     else if (riskCount) { tone = 'is-warn'; verdict = 'Passed, with things to look at'; }
 
     const facts = [];
-    if (ran) facts.push(`${passed}/${ran} check${ran === 1 ? '' : 's'} passed`);
-    if (skipped) facts.push(`${skipped} check${skipped === 1 ? '' : 's'} skipped`);
-    if (unverified) facts.push(`${unverified} requirement${unverified === 1 ? '' : 's'} unverified`);
-    facts.push(riskCount ? `${riskCount} open risk${riskCount === 1 ? '' : 's'}` : 'no open risks');
-    if (attempts.length > 1) facts.push(`${attempts.length} edit passes`);
+    if (outcome === 'stopped') {
+      // Only what actually happened before the stop. No open-risks or
+      // requirement-unverified language: a run nobody let finish has not
+      // earned charges, and the risks it does carry are the stop's own
+      // bookkeeping. The sections below keep the complete record.
+      if (ran) facts.push(`${passed}/${ran} check${ran === 1 ? '' : 's'} passed before the stop`);
+      if (failed) facts.push(`${failed} check${failed === 1 ? '' : 's'} failed before the stop`);
+    } else {
+      // In the ask-not-verified branch the headline already carries the pass
+      // count, so repeating "2/2 checks passed" under it would rebuild the
+      // old contradictory pair one line down.
+      if (ran && !askNotVerified) facts.push(`${passed}/${ran} check${ran === 1 ? '' : 's'} passed`);
+      if (skipped) facts.push(`${skipped} check${skipped === 1 ? '' : 's'} skipped`);
+      if (unverified) {
+        facts.push(askNotVerified
+          ? (unverified === 1 ? 'your specific ask was not separately verified' : `${unverified} parts of your ask were not separately verified`)
+          : `${unverified} requirement${unverified === 1 ? '' : 's'} unverified`);
+      }
+      facts.push(riskCount ? `${riskCount} open risk${riskCount === 1 ? '' : 's'}` : 'no open risks');
+      if (attempts.length > 1) facts.push(`${attempts.length} edit passes`);
+    }
 
     // WHICH requirements, not just how many.
     //
@@ -180,7 +228,10 @@
     // spelled out one line above ("6 requirements unverified"), so the honest
     // total survives and clipping only ever costs detail.
     const clip = text => (text.length > 38 ? `${text.slice(0, 37).trimEnd()}…` : text);
-    const unverifiedNames = list(report.rubric_mapping)
+    // Not on a stopped run: naming unverified requirements is the same
+    // requirement-unverified language the stopped face exists to avoid, and
+    // the person already knows why nothing was checked -- they stopped it.
+    const unverifiedNames = (outcome === 'stopped' ? [] : list(report.rubric_mapping))
       .filter(item => String(item.status || '').toLowerCase() === 'unverified')
       .map(item => String(item.criterion || '').trim())
       .filter(Boolean)

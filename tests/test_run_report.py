@@ -25,7 +25,10 @@ from thomas.forge.anvil.run_report import (
 )
 from thomas.server.routes import evolve_agent_runtime
 
-REPORT_SECTIONS = ("attempts", "validations", "open_risks", "attention_pointers", "rubric_mapping")
+# The five sections, plus `outcome` -- the recorded outcome word rides on the
+# report so the card can tell an answer or a stop apart from a build before it
+# picks a verdict (tests/test_the_verdict_card_matches_the_kind_of_run.py).
+REPORT_SECTIONS = ("outcome", "attempts", "validations", "open_risks", "attention_pointers", "rubric_mapping")
 
 # A realistic two-pass run: edit -> failing engine check -> fix pass -> passing
 # engine check -> final handoff. Shapes mirror forge_event_stream / build_verify.
