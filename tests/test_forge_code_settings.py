@@ -76,7 +76,9 @@ def test_exact_gpt_settings_apply_model_and_reasoning_without_overclaiming() -> 
     }
     assert report["support"]["memory"] == {"status": "applied", "effective": "off"}
     assert report["support"]["guardrails"]["terminal"] == "enabled_in_selected_project"
-    assert report["support"]["token_economy"]["max_fix_iters"] == 1
+    # cd0203a7 removed pass rationing: every economy reports the same generous
+    # runaway ceiling, so the dial no longer decides how many passes exist.
+    assert report["support"]["token_economy"]["max_fix_iters"] == 20
 
 
 def test_read_only_low_autonomy_enforces_plan_only_without_history() -> None:
@@ -96,7 +98,7 @@ def test_read_only_low_autonomy_enforces_plan_only_without_history() -> None:
         "history_enabled": False,
         "allow_shell": False,
         "timeout": 3600,
-        "max_fix_iters": 3,
+        "max_fix_iters": 20,
         "sandbox_root": "selected_project",
         "file_access": "read_only",
         "file_access_level": 0,
@@ -263,7 +265,7 @@ def test_configured_runner_applies_every_execution_dial(
     assert captured["history"] == []
     assert captured["allow_shell"] is False
     assert captured["timeout"] == 3600
-    assert captured["max_fix_iters"] == 3
+    assert captured["max_fix_iters"] == 20
     assert captured["file_access"] == "read_only"
     assert captured["guardrails"] == "open"
     assert captured["autonomy_level"] == 2

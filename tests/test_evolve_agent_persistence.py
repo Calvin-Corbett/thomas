@@ -150,7 +150,7 @@ def test_cancelled_start_gate_terminates_child_and_rolls_back_receipt(
 
     class _Request:
         async def json(self) -> dict[str, str]:
-            return {"message": "Build a game", "request_id": "cancelled-gate"}
+            return {"message": "Build a game", "request_id": "cancelled-gate", "model": "claude:sonnet"}
 
     async def _run() -> None:
         app = web.Application()
@@ -242,7 +242,7 @@ def test_cancelled_start_gate_after_payload_write_keeps_nonretryable_state(
 
     class _Request:
         async def json(self) -> dict[str, str]:
-            return {"message": "Perform once", "request_id": "cancel-after-write"}
+            return {"message": "Perform once", "request_id": "cancel-after-write", "model": "claude:sonnet"}
 
     async def _run() -> None:
         app = web.Application()
@@ -297,7 +297,7 @@ def test_prelaunch_preparation_failure_leaves_no_orphan_conversation(
     async def _body(client: TestClient) -> None:
         response = await client.post(
             "/api/evolve/agent/send",
-            json={"message": "Build a local page", "request_id": "prelaunch-failure"},
+            json={"message": "Build a local page", "request_id": "prelaunch-failure", "model": "claude:sonnet"},
         )
         assert response.status == 500
         assert forge_code_store.list_conversations(repo) == []
@@ -359,7 +359,7 @@ def test_parent_death_before_receipt_release_cannot_execute_first_child(
             request_id: str = "hard-death-request",
             conversation_id: str = "",
         ) -> None:
-            self.body = {"message": message, "request_id": request_id, "conversation_id": conversation_id}
+            self.body = {"message": message, "request_id": request_id, "conversation_id": conversation_id, "model": "claude:sonnet"}
 
         async def json(self) -> dict[str, str]:
             return self.body

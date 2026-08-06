@@ -29,7 +29,10 @@ cannot honor". For the model dial it did the opposite.
 
 Nothing about what RUNS changes here -- only what Thomas says ran. The other
 half of the trap, inventing ``claude:sonnet`` when the caller sent no model at
-all, is deliberately still in place; see the comment in `from_payload`.
+all, was closed 2026-08-05 after it bit live (chip on GPT-5.6 Terra, dispatch
+to an unauthenticated Claude CLI): an empty request now resolves the server's
+configured default, or fails before dispatch. That path is pinned in
+``test_an_unselected_model_never_silently_becomes_claude.py``.
 """
 
 from __future__ import annotations
@@ -37,6 +40,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
+from thomas.forge.anvil import forge_code_settings
 from thomas.forge.anvil.forge_code_settings import ForgeCodeSettings
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -92,14 +98,18 @@ def test_a_genuine_claude_request_is_still_applied() -> None:
         )
 
 
-def test_an_unselected_model_is_not_reported_as_a_substitution() -> None:
+def test_an_unselected_model_is_not_reported_as_a_substitution(monkeypatch: pytest.MonkeyPatch) -> None:
     """No choice was made, so no choice was overridden.
 
-    The invented `claude:sonnet` default is still recorded honestly as what ran.
+    An empty request no longer invents ``claude:sonnet``; it resolves the
+    server's configured default. When that default is a model Code really runs
+    (Claude here), nothing was substituted -- the report says the model came
+    from configuration, and the recorded model names what ran.
     """
 
+    monkeypatch.setattr(forge_code_settings, "_configured_default_model", lambda: "claude:sonnet")
     settings = ForgeCodeSettings.from_payload({})
-    assert settings.capability_report()["support"]["model"]["status"] == "applied"
+    assert settings.capability_report()["support"]["model"]["status"] == "configured_default"
     assert settings.recorded_model() == "claude:sonnet"
 
 

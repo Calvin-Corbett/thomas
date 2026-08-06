@@ -13,10 +13,12 @@ from .bridge_config import emergency_stop_active, emergency_stop_path
 from .bridge_prompts import compose_headless_prompt
 from .build_verify import _verify_and_iterate
 from .forge_event_stream import (
+    CLAUDE_CLI_LOGIN_GUIDANCE,
     FORGE_EVENT_KEY,
     ClaudeStreamTranslator,
     _default_emit,
     _stream_cli,
+    is_claude_cli_login_error,
 )
 
 # Safe default toolset for a dispatched headless build: edit files only — NO shell,
@@ -175,10 +177,19 @@ def dispatch_via_claude_cli(
     saw_tool_activity = False
     saw_named_tool = False
     saw_mutating_tool = False
+    saw_login_failure = False
 
     def emit_event(event: dict[str, Any]) -> None:
         nonlocal saw_reply, saw_refusal, saw_tool_activity, saw_named_tool, saw_mutating_tool
+        nonlocal saw_login_failure
         kind = str(event.get(FORGE_EVENT_KEY) or "")
+        if kind == "error" and is_claude_cli_login_error(str(event.get("text") or "")):
+            # The CLI died unauthenticated. Remember it so the run's recorded
+            # reason names the situation instead of only "claude exited 1" —
+            # the recorded reason was exactly what the owner saw when this
+            # happened live (2026-08-05: chip on GPT, dispatch on empty model,
+            # 15s to a raw "/login" prompt).
+            saw_login_failure = True
         if kind in {"final", "say"}:
             reply_text = str(event.get("text") or "")
             if _is_conversational_reply(reply_text):
@@ -266,7 +277,15 @@ def dispatch_via_claude_cli(
     tools_disqualify = saw_tool_activity and not read_only_run
     conversation_reply = rc == 0 and not changed and saw_reply and not tools_disqualify and not action_refused
     if rc != 0:
-        reason = f"verification failed (exit {rc}) after fix attempts" if verify_failed else f"claude exited {rc}"
+        if saw_login_failure:
+            # Not a build failure at all — the executor could never start work.
+            # The exit code is kept in `returncode`; the sentence carries what
+            # the owner can actually do about it.
+            reason = CLAUDE_CLI_LOGIN_GUIDANCE
+        elif verify_failed:
+            reason = f"verification failed (exit {rc}) after fix attempts"
+        else:
+            reason = f"claude exited {rc}"
     elif action_refused:
         detail = " after leaving partial file changes" if changed else ""
         reason = f"Claude could not complete the requested action{detail}"

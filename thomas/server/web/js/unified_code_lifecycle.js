@@ -43,7 +43,19 @@
       // keep offering models Code cannot run, and whether to say which engine
       // will handle the request BEFORE it is sent rather than after. See the
       // matching note in forge_code_settings.from_payload.
-      model: modelId.startsWith('gpt-') ? modelId : 'claude:sonnet',
+      //
+      // What DID change (measured 2026-08-05): an EMPTY modelId no longer rides
+      // that placeholder. The chip read GPT-5.6 Terra, client model state had
+      // been lost (modelId ""), and this line's `: 'claude:sonnet'` arm turned
+      // "I have no model" into a Claude pick — dispatched to an unauthenticated
+      // Claude CLI while OpenAI had 4 ready keys, dead in 15s with the CLI's raw
+      // login prompt as the user-facing error. Now an empty modelId sends NO
+      // `model` key at all (JSON.stringify drops undefined), and the server
+      // resolves the actually-configured default — the same resolution that
+      // feeds the chip — or refuses BEFORE dispatch with a sentence naming the
+      // real situation. Only the empty case changed; a NAMED non-gpt model
+      // still takes the placeholder above.
+      model: modelId ? (modelId.startsWith('gpt-') ? modelId : 'claude:sonnet') : undefined,
       model_id: modelId,
       reasoning_effort: dials.effort || 'medium',
       autonomy_level: dials.autonomy || 3,

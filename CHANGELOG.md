@@ -7,6 +7,32 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (an unselected model is a question, never a silent Claude dispatch)
+
+- Measured live: with the chip reading GPT-5.6 Terra and 4 OpenAI keys ready,
+  a Code run whose client model state had been lost dispatched to an
+  unauthenticated Claude CLI and died in 15 s with the CLI's raw "Not logged in
+  — Please run /login" as the user-facing error. An empty modelId now sends NO
+  model key; the server resolves the actually-configured default (the same
+  resolution that feeds the chip), reports the dial as `configured_default`
+  with the source named, or refuses BEFORE dispatch with "No model selected —
+  pick one in the top bar". Latent bug found by the tests: a claude-prefixed
+  model_id produced dispatch_model `claude:claude:sonnet`.
+- The Claude CLI's login failure now surfaces as a Thomas-actionable sentence
+  ("The Claude engine isn't signed in on this machine — add an Anthropic key in
+  Settings, or pick one of the ready OpenAI models"), with the CLI's words in
+  the details.
+- Host-machine internals stop leaking into the feed: the operator's Claude-Code
+  plugin-hook stderr ("SessionEnd hook […] failed: python3: command not found")
+  is classified structurally as a technical/debug event — visible in Show
+  details, never a top-level narrative UPDATE.
+  Tests: `tests/test_an_unselected_model_never_silently_becomes_claude.py`,
+  `tests/test_host_hook_noise_never_reaches_the_narrative_feed.py` (both red
+  before); stale pass-limit pins in `test_forge_code_settings.py` updated to
+  the cd0203a7 no-rationing truth; gate-cancellation tests in
+  `test_evolve_agent_persistence.py` pin their historical claude family
+  explicitly now that an empty model resolves the configured default.
+
 ### Fixed (the verdict card tells one coherent story per kind of run)
 
 - The card face no longer says "Not checked against your ask" directly above

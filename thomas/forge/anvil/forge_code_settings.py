@@ -7,12 +7,15 @@ values the current executor applies, fixes to a safe value, or cannot honor.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import dataclass
 from typing import Any
 
 from thomas.core.file_access import file_access_spec, parse_file_access_level
+
+log = logging.getLogger(__name__)
 
 # Wall-clock and repair budgets per token-economy dial — the single source of
 # truth (forge_code_runner imports these). Real builds (games, web apps)
@@ -88,6 +91,62 @@ def _validated_model(value: Any, *, name: str) -> str:
     return normalized
 
 
+def _configured_default_model() -> str:
+    """The model the top-bar chip is actually showing, resolved from server state.
+
+    ``/api/models`` answers the chip through ``resolve_effective_model`` (env var
+    -> user preferences -> project default -> first configured profile); this is
+    the SAME resolution, so a request that arrives with no model lands on the
+    model the owner can SEE, not on an invented one. Returns the concrete model
+    id ("gpt-5.6-terra", "qwen2.5-coder:7b", ...) — the preference override when
+    one is set, else the resolved profile's configured model — or "" when
+    nothing at all is configured, which ``from_payload`` turns into a
+    pre-dispatch refusal that names the real situation.
+
+    Defensive by design: config or preference storage being unreadable must
+    degrade to "no default" (and the honest refusal), never crash the request.
+    """
+
+    # Named rather than broad, and LOGGED: an unreadable config degrading to
+    # "no default" silently would be the next invisible failure. The set covers
+    # what config loading, preference storage, and resolution realistically
+    # raise; anything outside it is a bug that should surface.
+    _resolution_errors = (
+        AttributeError,
+        ImportError,
+        KeyError,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    )
+    try:
+        from thomas.core.config import load_config
+        from thomas.core.model_resolution import resolve_effective_model
+
+        cfg = load_config()
+        try:
+            from thomas.preferences.store import get_db_path
+
+            db_path: str | None = get_db_path()
+        except _resolution_errors:
+            log.warning("preference store unavailable while resolving the default Code model", exc_info=True)
+            db_path = None
+        profile, model_id = resolve_effective_model(
+            cfg,
+            env_profile=str(os.environ.get("THOMAS_DEFAULT_MODEL", "")).strip(),
+            user_id="default",
+            db_path=db_path,
+        )
+        if str(model_id or "").strip():
+            return str(model_id).strip()
+        entry = cfg.models.get(str(profile or "")) if getattr(cfg, "models", None) else None
+        return str(getattr(entry, "model", "") or "").strip()
+    except _resolution_errors:
+        log.warning("default Code model could not be resolved from config", exc_info=True)
+        return ""
+
+
 @dataclass(frozen=True)
 class ForgeCodeSettings:
     """One normalized Forge Code request and its honest capability report."""
@@ -104,6 +163,11 @@ class ForgeCodeSettings:
     family: str
     dispatch_model: str
     gpt_profile: str
+    # True when the request carried NO model at all and the server filled in the
+    # configured default (`_configured_default_model`). The capability report
+    # uses it to say "configured_default" instead of claiming a pick was
+    # "applied" that nobody made.
+    model_defaulted: bool = False
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any] | None) -> ForgeCodeSettings:
@@ -134,12 +198,38 @@ class ForgeCodeSettings:
         # dial "substituted" rather than "applied" when the request was rerouted.
         # That changes only what Thomas says about the run, not what runs.
         #
-        # The other half -- inventing `claude:sonnet` when the caller sent no
-        # model at all -- is still here, still deliberate. Refusing would surface
-        # "no model selected" instead of silently choosing Claude, but it changes
-        # what executes and deserves a decision rather than a drive-by.
-        model = _validated_model(body.get("model") or "claude:sonnet", name="model")
+        # The other half is now decided too (measured cost 2026-08-05: chip
+        # showing GPT-5.6 Terra, 4 ready OpenAI keys, run dispatched to an
+        # unauthenticated Claude CLI, dead in 15s with its raw login prompt as
+        # the user-facing error). A request that carries NO model at all no
+        # longer invents `claude:sonnet`: the server resolves the configured
+        # default — the same resolution `/api/models` uses to feed the chip —
+        # so the executor is the model the owner can see. When nothing is
+        # configured either, the request is refused HERE, before dispatch, with
+        # a sentence naming the real situation instead of an executor's login
+        # prompt downstream. A NAMED model, gpt or not, never consults the
+        # default and keeps today's routing exactly.
+        model = _validated_model(body.get("model"), name="model")
         model_id = _validated_model(body.get("model_id"), name="model_id")
+        model_defaulted = False
+        if not model and not model_id:
+            resolved = _validated_model(_configured_default_model(), name="model")
+            if not resolved:
+                raise ForgeCodeSettingsError(
+                    "No model selected — pick one in the top bar. "
+                    "(The request carried no model and no default model is configured.)"
+                )
+            # Treated exactly as if the owner had named it: gpt detection,
+            # dispatch routing and the substitution report all see the real
+            # default, so a non-runnable default (a local qwen) is reported
+            # "substituted" the same way an explicit pick would be.
+            model = resolved
+            model_id = resolved
+            model_defaulted = True
+        elif not model:
+            # A model_id without a model (API callers): the legacy placeholder,
+            # family still decided off model_id below.
+            model = "claude:sonnet"
         reasoning = _choice(
             body.get("reasoning_effort", body.get("effort")),
             default="medium",
@@ -182,9 +272,16 @@ class ForgeCodeSettings:
                 "gpt",
                 "codex:gpt",
                 "forgecode" if exact_model else "openai_codex",
+                model_defaulted=model_defaulted,
             )
 
-        variant = model_id or (model.split(":", 1)[1] if model.lower().startswith("claude:") else model)
+        variant = model_id or model
+        # The dispatch form is `claude:<variant>`; a value already carrying the
+        # `claude:` prefix (the wire form, or a resolved `claude:sonnet`
+        # default landing in model_id) must shed it here or the executor is
+        # handed `claude:claude:sonnet`.
+        if variant.lower().startswith("claude:"):
+            variant = variant.split(":", 1)[1]
         variant = variant or "sonnet"
         return cls(
             engine,
@@ -199,6 +296,7 @@ class ForgeCodeSettings:
             "claude",
             f"claude:{variant}",
             "",
+            model_defaulted=model_defaulted,
         )
 
     def child_environment(self, base: dict[str, str] | None = None) -> dict[str, str]:
@@ -348,26 +446,47 @@ class ForgeCodeSettings:
                 # ran instead. This module exists to report what the executor
                 # "applies, fixes to a safe value, or cannot honor" -- for the
                 # model dial it was doing the opposite.
+                # "configured_default" also covers the empty-model path
+                # (`model_defaulted`): the request named nothing and the server
+                # applied its resolved default, so "applied" would assert a pick
+                # that nobody made. A defaulted model Code cannot run still
+                # reports "substituted", with the reason saying where the model
+                # came from, exactly as an explicit pick would.
                 "model": {
                     "status": (
-                        "applied"
-                        if runs_requested and (self.family == "claude" or exact_gpt)
-                        else "substituted"
+                        "substituted"
                         if not runs_requested
                         else "configured_default"
+                        if self.model_defaulted or (self.family == "gpt" and not exact_gpt)
+                        else "applied"
                     ),
-                    "requested": self.model_id or self.model,
+                    # An empty request asked for nothing; putting the resolved
+                    # default under "requested" would fabricate that pick.
+                    "requested": "" if self.model_defaulted else (self.model_id or self.model),
                     "effective": effective_model,
                     **(
-                        {}
-                        if runs_requested
-                        else {
+                        {
                             "reason": (
-                                "Code runs either GPT through your ChatGPT account or the Claude CLI. "
+                                (
+                                    "No model arrived with this request, so the configured "
+                                    f"default {self.model_id or self.model!r} was used. "
+                                    if self.model_defaulted
+                                    else ""
+                                )
+                                + "Code runs either GPT through your ChatGPT account or the Claude CLI. "
                                 f"{self.model_id or self.model!r} is neither, so the Claude CLI handled "
                                 "this request."
                             )
                         }
+                        if not runs_requested
+                        else {
+                            "reason": (
+                                "No model arrived with this request; the server applied the "
+                                "configured default — the same model the top-bar chip shows."
+                            )
+                        }
+                        if self.model_defaulted
+                        else {}
                     ),
                 },
                 "reasoning_effort": {"status": reasoning_status, "reason": reasoning_reason},

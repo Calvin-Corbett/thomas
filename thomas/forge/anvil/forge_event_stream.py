@@ -11,6 +11,8 @@ stdout, flushed the instant it is produced. Each is ``{"fc": <kind>, ...}`` wher
   * ``tool_result`` — a tool RESULT: ``{"text": str, "is_error": bool}``
   * ``error``       — an error surfaced by the agent / CLI
   * ``meta``        — a MEANINGFUL build-status line from the engine itself
+  * ``engine_debug``— CLI-side infrastructure noise (host hook/plugin stderr):
+                      kept verbatim under Show details, never narrative text
 """
 
 from __future__ import annotations
@@ -246,6 +248,63 @@ def _thinking_to_events(thinking: str, state: _StreamState | None) -> list[dict[
     return events
 
 
+# --- CLI-side infrastructure stderr -----------------------------------------
+#
+# The claude CLI runs the OPERATOR'S OWN Claude-Code hooks (SessionStart /
+# SessionEnd / PostToolUse ... configured in the host's ~/.claude), and when one
+# fails it prints the failure to stderr, which ``_stream_cli`` merges into
+# stdout. The line is not stream-json, so the defensive fallback below used to
+# file it as ``say`` — narrative UPDATE text. Measured 2026-08-05, live product
+# feed, top-level UPDATE:
+#
+#   SessionEnd hook [python3 .../session-end-llma.py] failed: /usr/bin/bash:
+#   line 1: python3: command not found
+#
+# That is the host machine's plugin plumbing, not the build. Recognition is
+# STRUCTURAL — the CLI's own "<HookEvent> ... hook ..." stderr shape, anchored
+# at line start — never a keyword scan over model prose, so an agent SAYING
+# "added a pre-commit hook" still reaches the narrative. Matched lines become
+# ``engine_debug`` events: rendered under Show details with the raw line kept
+# verbatim. Filtered from the story, never destroyed.
+_CLI_HOOK_NOISE_RE = re.compile(
+    r"^\s*(?:Session(?:Start|End)|Pre(?:ToolUse|Compact)|PostToolUse(?:Failure)?|"
+    r"UserPromptSubmit|SubagentStop|Stop|Notification|TeammateIdle|TaskCompleted)"
+    # The CLI prints "<HookEvent>[:matcher] hook [command] ..." — the word
+    # "hook" comes IMMEDIATELY after the event name, which is what keeps a
+    # prose sentence that merely starts with "Stop" and mentions a hook later
+    # from matching.
+    r"(?::\S+)?\s+hook\b",
+    re.IGNORECASE,
+)
+
+# The Claude CLI's unauthenticated failure ("Not logged in — Please run /login",
+# exit 1). ``/login`` is a claude-CLI command a Thomas owner has no way to run
+# from the product, so surfacing the raw text verbatim was a dead end. The
+# translation names the real situation and both ways out, and keeps the CLI's
+# own words attached as the detail.
+_CLAUDE_CLI_LOGIN_RE = re.compile(r"not logged in|please run /login", re.IGNORECASE)
+
+CLAUDE_CLI_LOGIN_GUIDANCE = (
+    "The Claude engine isn't signed in on this machine — add an Anthropic key in "
+    "Settings, or pick one of the ready OpenAI models."
+)
+
+
+def is_claude_cli_login_error(text: str) -> bool:
+    """True iff ``text`` carries the Claude CLI's not-logged-in failure.
+
+    Matches the raw CLI wording, and therefore also the mapped guidance text,
+    which quotes the raw wording as its detail — so a dispatcher watching the
+    emitted stream can recognize the situation either way.
+    """
+
+    return bool(_CLAUDE_CLI_LOGIN_RE.search(str(text or "")))
+
+
+def _login_error_text(raw: str) -> str:
+    return f"{CLAUDE_CLI_LOGIN_GUIDANCE} (Claude CLI said: {str(raw or '').strip()})"
+
+
 def translate_claude_event(line: str, state: _StreamState | None = None) -> list[dict[str, Any]]:
     """Translate one ``claude -p --output-format stream-json`` line into forge events.
 
@@ -261,9 +320,9 @@ def translate_claude_event(line: str, state: _StreamState | None = None) -> list
     try:
         obj = json.loads(line)
     except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
-        return [{FORGE_EVENT_KEY: "say", "text": line}]
+        return _classify_raw_line(line)
     if not isinstance(obj, dict):
-        return [{FORGE_EVENT_KEY: "say", "text": str(line)}]
+        return _classify_raw_line(str(line))
 
     etype = obj.get("type")
     events: list[dict[str, Any]] = []
@@ -334,10 +393,32 @@ def translate_claude_event(line: str, state: _StreamState | None = None) -> list
         is_err = bool(obj.get("is_error"))
         txt = str(obj.get("result") or "").strip()
         if is_err:
+            # The CLI's own login prompt is a dead end in this product; name
+            # the situation and the ways out, keeping the raw text as detail.
+            if is_claude_cli_login_error(txt):
+                txt = _login_error_text(txt)
             events.append({FORGE_EVENT_KEY: "error", "text": txt or "claude reported an error"})
         elif txt:
             events.append({FORGE_EVENT_KEY: "final", "text": txt})
     return events
+
+
+def _classify_raw_line(line: str) -> list[dict[str, Any]]:
+    """File one NON-stream-json line (merged stderr, banners) as forge events.
+
+    The default stays the historical defensive ``say`` so the stream never dies
+    on an unexpected line. Two measured shapes are rerouted first:
+
+      * host hook/plugin stderr -> ``engine_debug`` (Show details, verbatim);
+      * the CLI's not-logged-in prompt -> an ``error`` carrying the
+        Thomas-actionable sentence, since the failure surfaces here when the
+        CLI dies before ever producing a stream-json ``result``.
+    """
+    if _CLI_HOOK_NOISE_RE.match(line):
+        return [{FORGE_EVENT_KEY: "engine_debug", "name": "claude-code hook", "text": line}]
+    if is_claude_cli_login_error(line):
+        return [{FORGE_EVENT_KEY: "error", "text": _login_error_text(line)}]
+    return [{FORGE_EVENT_KEY: "say", "text": line}]
 
 
 class ClaudeStreamTranslator:
