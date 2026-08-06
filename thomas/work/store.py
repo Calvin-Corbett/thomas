@@ -365,11 +365,15 @@ class WorkStore(WorkJobMixin, WorkWorkflowMixin, WorkConnectorBindingMixin, Work
                         "Work onboarding needs an explicitly confirmed goal before workflow mapping"
                     )
                 if phase in {"workflow_configuration", "ready"}:
+                    # The model contract (work_onboarding_tool.py) maps a job
+                    # into ONE to six workflows; a simple job legitimately has
+                    # a single flow. Demanding three here made the dinner-party
+                    # onboarding unfinishable (measured 2026-08-05).
                     workflow_count = effective_fields.get("workflow_count")
                     if (
                         isinstance(workflow_count, bool)
                         or not isinstance(workflow_count, int)
-                        or workflow_count < 3
+                        or workflow_count < 1
                         or workflow_count > 6
                         or not str(effective_fields.get("selected_workflow") or "").strip()
                     ):

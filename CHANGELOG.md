@@ -43,6 +43,8 @@ Versioning: Semantic Versioning.
 
 - (landed) chat live-composer queue + task-card restore -- details in the wave-2 sweep entry above.
 
+- (landed) Work onboarding finishable + wizard keeps your words -- details above.
+
 ### Fixed (the Code workspace shell works on Windows and tells the truth about failing)
 
 - Every quoted inline script (`python -c "…"`, `node -e "…"`) reached the

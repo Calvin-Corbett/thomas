@@ -50,6 +50,10 @@
       state.error = error && error.message ? error.message : 'Work could not complete that action.';
       // Users see the friendly banner; the console keeps the real stack, and
       // the issue ledger gets a line so failures show up in the report.
+      // Onboarding failures ALSO land in the transcript: the banner was wiped
+      // by the next turn while the console kept the only visible copy, so a
+      // 409 on the workflow click read as a dead button (measured 2026-08-05).
+      if (state.stage === 'onboarding') state.messages.push({ role: 'system', text: state.error });
       console.error('Work action failed:', error);
       try { fetch('/api/issues', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ surface: 'work-ui', kind: 'action_error', message: String(error && error.message || error).slice(0, 300), context: { stage: state.stage || '' } }) }); } catch (e) {}
     } finally { state.actionBusy = false; render(); }
@@ -415,10 +419,12 @@
     await request(appUrl('/onboarding/messages'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: role === 'assistant' ? 'thomas' : role, text }) });
   }
 
-  async function selectOnboardingWorkflow(workflowId) {
+  // Shared by the workflow buttons and by a typed message that names exactly
+  // one offered workflow. Selection stays deterministic state — never a guess.
+  function applyOnboardingSelection(workflowId) {
     const candidates = onboardingWorkflowCandidates();
     const selected = candidates.find(row => String(row.id || '') === String(workflowId || ''));
-    if (!selected) throw new Error('That workflow is no longer available.');
+    if (!selected) return false;
     state.onboardingWorkflowId = String(selected.id);
     state.onboardingSelectionUserTurn = state.messages.filter(row => row.role === 'user').length;
     state.structuredOnboardingState = {
@@ -427,6 +433,24 @@
       selected_workflow_id: state.onboardingWorkflowId,
       selected_workflow_configured: false,
     };
+    return true;
+  }
+
+  // "Yes - use the Dinner party plan workflow" IS an explicit selection when
+  // exactly one offered workflow is named. Zero or several matches change
+  // nothing — accepting the unambiguous case removes a refusal, not a check.
+  function namedOnboardingSelection(text) {
+    if (state.onboardingWorkflowId) return '';
+    const message = String(text || '').toLowerCase();
+    const matches = onboardingWorkflowCandidates().filter(row => {
+      const name = String(row.name || '').trim().toLowerCase();
+      return name && message.includes(name);
+    });
+    return matches.length === 1 ? String(matches[0].id) : '';
+  }
+
+  async function selectOnboardingWorkflow(workflowId) {
+    if (!applyOnboardingSelection(workflowId)) throw new Error('That workflow is no longer available.');
     await advanceOnboardingPhase();
   }
 
@@ -494,6 +518,11 @@
     const text = String(message || '').trim(); if (!text || state.running) return;
     // Typing to the job always shows the conversation: flip to the Chat tab.
     if (state.stage === 'job') state.dashTab = 'chat';
+    // Typing on the Work board starts onboarding with this text as the first
+    // message. This must happen BEFORE the running flag is raised: the old
+    // re-entrant send() hit its own running guard and silently dropped the
+    // text (measured 2026-08-05: wizard opened empty).
+    if (state.stage !== 'onboarding' && !(state.stage === 'job' && state.activeJob)) newConversation();
     const generation = selectionGeneration;
     const controller = new AbortController();
     activeStreamController = controller;
@@ -502,6 +531,8 @@
       if (state.stage === 'onboarding') {
         if (!await ensureOnboardingApp(text, generation)) return;
         state.messages.push({ role: 'user', text }); await appendOnboarding('user', text); render();
+        const named = namedOnboardingSelection(text);
+        if (named) applyOnboardingSelection(named);
         const turn = state.messages.filter(row => row.role === 'user').length;
         const jobName = state.creatingJobInApp ? deriveName((state.messages.find(row => row.role === 'user') || {}).text) : state.activeApp.name;
         const instruction = `[Private Thomas Work onboarding context. ${onboardingInstruction(jobName, turn)} This is follow-up ${turn}. Do not repeat answered questions and do not claim setup is complete.]\n\n${text}`;
@@ -509,7 +540,7 @@
         // every past conversation in the app and bleeds it into new jobs.
         const contextId = `${state.activeApp.id}:onboarding:${state.sessionId}`;
         const pending = { role: 'assistant', text: '' }; state.messages.push(pending); render();
-        const answer = await readChatStream(instruction, { contextId, displayPrompt: text, workOnboardingState: state.structuredOnboardingState, signal: controller.signal, onWorkOnboardingState: value => { if (generation === selectionGeneration) { state.structuredOnboardingState = value; state.onboardingPhase = String(value.phase || state.onboardingPhase); state.onboardingWorkflowId = String(value.selected_workflow_id || ''); if (adapterActive) render(); } }, onDelta: value => { if (generation === selectionGeneration) { pending.text = value; if (adapterActive) render(); } } });
+        const answer = await readChatStream(instruction, { contextId, displayPrompt: text, workOnboardingState: state.structuredOnboardingState, signal: controller.signal, onWorkOnboardingState: value => { if (generation === selectionGeneration) { state.structuredOnboardingState = value; state.onboardingPhase = String(value.phase || state.onboardingPhase); state.onboardingWorkflowId = String(value.selected_workflow_id || ''); if (state.onboardingWorkflowId && !(state.onboardingSelectionUserTurn >= 1)) state.onboardingSelectionUserTurn = state.messages.filter(row => row.role === 'user').length; if (adapterActive) render(); } }, onDelta: value => { if (generation === selectionGeneration) { pending.text = value; if (adapterActive) render(); } } });
         if (generation !== selectionGeneration) return;
         pending.text = answer; await appendOnboarding('assistant', answer);
         await advanceOnboardingPhase();
@@ -520,7 +551,7 @@
         if (generation !== selectionGeneration) return;
         pending.text = answer;
         await request(jobUrl('/history'), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message_count: state.messages.length, last_message_at: new Date().toISOString() }) });
-      } else { newConversation(); return send(text); }
+      }
       await refresh();
     } catch (error) {
       if (generation !== selectionGeneration) return;
@@ -530,7 +561,9 @@
         state.messages.push({ role: 'assistant', text: 'Stopped.' });
         return;
       }
-      state.error = error.message; state.messages.push({ role: 'assistant', text: `I couldn't safely complete that Work turn: ${error.message}` });
+      // A failure is the UI reporting, not Thomas speaking: system rows render
+      // as visible alerts and never count as conversation turns.
+      state.error = error.message; state.messages.push({ role: 'system', text: `I couldn't safely complete that Work turn: ${error.message}` });
     }
     finally {
       if (activeStreamController === controller) activeStreamController = null;
@@ -546,7 +579,7 @@
   async function finishOnboarding() {
     if (!state.activeApp) return;
     const candidates = onboardingWorkflowCandidates();
-    if (state.onboardingPhase !== 'workflow_configuration' || candidates.length < 3 || candidates.length > 6) throw new Error('Thomas needs a complete map of three to six workflows before creating this job.');
+    if (state.onboardingPhase !== 'workflow_configuration' || candidates.length < 1 || candidates.length > 6) throw new Error('Thomas needs a workflow map (one to six workflows) before creating this job.');
     const requestedSelection = selectedOnboardingWorkflow(candidates);
     if (!requestedSelection) throw new Error('Choose one named or numbered workflow before creating this job.');
     if (!onboardingConfigurationReady(candidates, requestedSelection)) throw new Error('Answer at least one configuration question about the selected workflow before creating this job.');

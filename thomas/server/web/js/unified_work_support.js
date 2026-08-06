@@ -55,8 +55,18 @@
       return String(value || '').trim();
     }
 
+    // Thomas's replies arrive as markdown-ish prose; render the inline basics
+    // instead of showing literal asterisks ("Select **Dinner party plan**").
+    // Escapes first, so no model text can inject markup.
+    function inlineMarkdown(value) {
+      return esc(value)
+        .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/(^|[\s(])\*([^*\n]+)\*(?=$|[\s).,:;!?])/g, '$1<em>$2</em>');
+    }
+
     function onboardingInstruction(jobName, turn) {
-      return `Continue Work onboarding for "${jobName}" at follow-up ${turn}. Use the structured Work onboarding state supplied by the browser, call work_onboarding_update once with your current semantic decisions, then ask at most one useful question or explain the next explicit choice. Never encode state in prose or infer a workflow selection from the user's wording.`;
+      return `Continue Work onboarding for "${jobName}" at follow-up ${turn}. Use the structured Work onboarding state supplied by the browser, call work_onboarding_update once with your current semantic decisions, then ask at most one useful question or explain the next explicit choice. Never encode state in prose. When the structured state already carries selected_workflow_id, that workflow IS selected - keep configuring it and never ask for another click.`;
     }
 
     function composerHtml(placeholder) {
@@ -70,8 +80,11 @@
         return `<div class="tc-work-welcome"><span class="tc-work-orb">T</span><div><strong>Continue this job with Thomas.</strong><p>The selected workflow, connector identities, learned decisions, and results stay private to this job while the conversation remains shared across its workflows.</p></div></div>`;
       }
       return state.messages.map(row => {
+        // System rows are the UI reporting (a failed action, a routed note):
+        // render them as visible alerts, never as Thomas or the user speaking.
+        if (row.role === 'system') return `<div class="tc-work-error" role="alert">${esc(row.text || row.content || '')}</div>`;
         const isThomas = row.role === 'assistant' || row.role === 'thomas';
-        return `<article class="tc-work-message is-${isThomas ? 'thomas' : 'user'}">${isThomas ? '<span class="tc-work-message-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span>' : ''}<div class="tc-work-message-body"><div class="tc-work-message-role">${isThomas ? 'Thomas' : 'You'}</div><div>${esc(isThomas ? visibleOnboardingText(row.text || row.content || '') : row.text || row.content || '')}</div></div></article>`;
+        return `<article class="tc-work-message is-${isThomas ? 'thomas' : 'user'}">${isThomas ? '<span class="tc-work-message-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span>' : ''}<div class="tc-work-message-body"><div class="tc-work-message-role">${isThomas ? 'Thomas' : 'You'}</div><div>${isThomas ? inlineMarkdown(visibleOnboardingText(row.text || row.content || '')) : esc(row.text || row.content || '')}</div></div></article>`;
       }).join('');
     }
 
@@ -96,7 +109,9 @@
       const thomasTurns = state.messages.filter(row => row.role === 'assistant' || row.role === 'thomas').length;
       const candidates = onboardingWorkflowCandidates();
       const selected = selectedOnboardingWorkflow(candidates);
-      const ready = state.activeApp && state.onboardingPhase === 'workflow_configuration' && candidates.length >= 3 && candidates.length <= 6 && selected && onboardingConfigurationReady(candidates, selected) && userTurns >= 4 && thomasTurns >= userTurns && !state.running;
+      // One workflow is a legitimate map for a simple job (the model contract
+      // allows one to six); demanding three made onboarding unfinishable.
+      const ready = state.activeApp && state.onboardingPhase === 'workflow_configuration' && candidates.length >= 1 && candidates.length <= 6 && selected && onboardingConfigurationReady(candidates, selected) && userTurns >= 4 && thomasTurns >= userTurns && !state.running;
       const phases = ['goal_discovery', 'workflow_mapping', 'workflow_configuration'];
       const phaseIndex = Math.max(0, phases.indexOf(state.onboardingPhase));
       const workflowChoices = candidates.map(row => `<button type="button" data-work-select-workflow="${esc(row.id)}" class="${selected && selected.id === row.id ? 'is-selected' : ''}"><strong>${esc(row.name)}</strong><span>${esc(row.purpose)}</span></button>`).join('');
