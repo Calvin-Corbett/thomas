@@ -7,6 +7,13 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (design unification: the Forge overlay is opaque)
+
+- The classic Forge/Evolve overlay sat at 98% alpha, so bright chat bubbles
+  behind it ghosted through the header (visible in the wave-0 audit shots,
+  pre-existing). It is now fully opaque `var(--c-bg)` with its green accent
+  tint kept, and its text color is `var(--c-text)`.
+
 ### Fixed (design unification wave 4: honest words on every surface)
 
 - Worker prose renders without raw markdown markers on every plain-text

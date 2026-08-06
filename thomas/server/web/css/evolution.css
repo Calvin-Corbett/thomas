@@ -25,10 +25,12 @@
     padding: 72px 18px 18px;
     overflow-y: auto;
     overflow-x: hidden;
-    color: #d6dde6;
+    color: var(--c-text);
+    /* Fully opaque: at 98% alpha the chat view behind ghosted through this
+       overlay (bright bubbles were faintly readable across the Forge header). */
     background:
-        radial-gradient(circle at 84% 8%, rgba(76, 200, 154, 0.06), rgba(76, 200, 154, 0) 40%),
-        linear-gradient(180deg, rgba(7, 11, 18, 0.98), rgba(8, 12, 20, 0.98));
+        radial-gradient(circle at 84% 8%, rgba(76, 200, 154, 0.06), transparent 40%),
+        var(--c-bg);
 }
 
 .evolution-shell {
