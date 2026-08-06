@@ -117,8 +117,12 @@ def test_the_code_reply_renders_markdown_through_chats_renderer() -> None:
     """
     body = _function_body("turnHtml")
 
-    assert "replyHtml(reply)" in body, "the reply no longer goes through the markdown path"
-    assert "esc(reply)" not in body, "the reply is being double-handled"
+    # The reply is now built per outcome (ok / stopped / failed-with-answer),
+    # and every branch that carries model prose must still route it through the
+    # markdown path: the answer on both outcomes, and the failure note.
+    assert "replyHtml(answer" in body, "the model's answer no longer goes through the markdown path"
+    assert "replyHtml(failure)" in body, "the failure note no longer goes through the markdown path"
+    assert "esc(answer" not in body, "the answer is being double-handled"
 
 
 def test_progress_notes_use_the_inline_renderer_only() -> None:

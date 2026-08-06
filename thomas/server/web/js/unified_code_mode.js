@@ -154,7 +154,7 @@
   const {
     eventLabel, annotateTerminalEvent, eventType, isTechnicalEvent, refreshElapsed, eventHtml,
     finalReplyEvent, progressEvents, failureSummary, turnHtml, replyHtml,
-    elapsedLabel, narrativeActivityHtml, technicalActivityHtml, transcriptEvents,
+    elapsedLabel, narrativeActivityHtml, technicalActivityHtml, transcriptEvents, flagExpectedProbe,
   } = window.ThomasCodeEvents.create({
     MAX_VISIBLE_PROGRESS_EVENTS, MAX_PROGRESS_EVENT_CHARS, NARRATIVE_EVENT_KINDS, state, esc,
     codeResults, surface, isInternalResultPath, safely, pushLiveEvent, render, send,
@@ -245,6 +245,13 @@
       get name() { return state.terminalTool; },
       set name(value) { state.terminalTool = value; },
     });
+    // Same probe flag the durable transcript parse applies, so the live row and
+    // the reloaded row agree. "Has a tool_result come before this one" is read
+    // off the live ring; if the run's first tool_result has already scrolled out
+    // of the 120-event ring, a later one could in principle be misread as the
+    // first -- but by then hundreds of events have passed and the durable
+    // render, which parses the whole transcript, is the record that lasts.
+    flagExpectedProbe(event, state.liveEvents.some(item => eventType(item) === 'tool_result'));
     if (state.running) refreshOpenPagePreview();
     const previous = state.liveEvents[state.liveEvents.length - 1];
     if (event.kind === 'say' && event.delta && previous && previous.kind === 'say' && previous.delta) {
@@ -413,7 +420,12 @@
         pushLiveEvent({ type: 'error', text: 'Thomas finished, but the durable Code reply could not be confirmed. Live evidence was preserved.' });
       }
       results.filter(result => result.status === 'rejected').forEach(result => pushLiveEvent({ type: 'error', text: errorText(result.reason, 'The Code result could not be refreshed.') }));
-      finishBusy(); render(); return durable;
+      finishBusy(); render();
+      // The replayed already-finished run has the same below-the-fold problem
+      // finishRun documents: its durable turn just landed in a conversation the
+      // reader is looking at, so land the viewport on it too.
+      if (durable) scrollTranscriptToNewest();
+      return durable;
     }
     openStream();
     await refresh();
@@ -465,9 +477,24 @@
     // outputs it in the activity thing on the side.")
     const liveNarrative = liveActivityEvents.map(event => eventHtml(event, false)).join('');
     const liveErrors = state.liveEvents.filter(event => eventType(event) === 'error');
-    const liveReply = liveFinalEvent
-      ? `<div class="tc-code-reply">${replyHtml(eventLabel(liveFinalEvent))}</div>`
-      : liveErrors.length ? `<div class="tc-code-reply is-error">${esc(failureSummary({ ok: false }, liveErrors))}</div>` : '';
+    // The live half of the never-suppress rule (the durable half lives in
+    // turnHtml): a failed run that nevertheless produced a final answer used to
+    // show only the answer here -- the `? :` made the two mutually exclusive --
+    // so the failure was invisible until the durable render replaced this, and
+    // when that render was the OLD one it dropped the answer instead. Both
+    // render now: the answer first, the failure note alongside. The note joins
+    // the answer only once the run has actually landed as failed; a recovered
+    // mid-run error next to a successful final would be an alarm about a
+    // problem the run already solved.
+    const liveAnswer = liveFinalEvent ? `<div class="tc-code-reply">${replyHtml(eventLabel(liveFinalEvent))}</div>` : '';
+    // Named for what it tests -- the RUN's landed status, not any one event's
+    // failure. Per-event failure flags must route through eventFailed() (the
+    // guard in test_a_failure_row_does_not_show_a_success_tick.py pins that);
+    // this is the other axis.
+    const liveRunLandedBad = state.runStatus === 'failed' || state.runStatus === 'disconnected';
+    const liveFailureNote = liveErrors.length && (!liveFinalEvent || liveRunLandedBad)
+      ? `<div class="tc-code-reply is-error">${esc(failureSummary({ ok: false }, liveErrors))}</div>` : '';
+    const liveReply = liveAnswer + liveFailureNote;
     const liveTechnical = '';
     // Hoisted so the empty state below is decided by the SAME condition that
     // decides whether a live turn is drawn. Two expressions meaning "a run is on
@@ -1048,6 +1075,10 @@
   async function finishRun() {
     if (state.finishing) return state.finishing;
     const runId = state.runId;
+    // Set by the durable branch below, read after the final render: the scroll
+    // has to run against the DOM that render() just painted, and only when this
+    // run's own result landed (a superseded finisher must not yank the view).
+    let landedDurably = false;
     state.finishing = (async () => {
       const id = state.activeId;
       const epoch = state.contextEpoch;
@@ -1056,6 +1087,7 @@
       const sameRun = state.contextEpoch === epoch && state.runId === runId;
       const durable = results[0].status === 'fulfilled' && results[0].value === true && sameRun && lifecycle().runIsDurable(state.conversation, proof);
       if (durable) {
+        landedDurably = true;
         state.liveEvents = [];
         state.artifacts = [];
         state.runProof = null;
@@ -1076,6 +1108,15 @@
       if (sameRun) {
         finishBusy();
         render();
+        // A follow-up run's answer appends BELOW the turn the reader is parked
+        // at, and scrollTranscriptToNewest only ran on conversation OPEN -- so
+        // the durable result of a run watched in an open conversation landed
+        // below the fold, invisible until a manual scroll. The loadConversation
+        // above is `internal`, which deliberately never scrolls (it also runs
+        // under live reloads where yanking the view would fight a reader); the
+        // moment a run's own durable result lands is the one internal reload
+        // where arriving at the newest turn is the point.
+        if (landedDurably) scrollTranscriptToNewest();
       }
     }
     // Codex-parity task queue: a message sent while a run was going starts
@@ -1105,21 +1146,6 @@
     pushLiveEvent({ type: 'planning', text: `Starting your queued task: ${queued.message.slice(0, 80)}` });
     render();
     void safely(() => send(queued.message, queued.context), 'The queued Code task failed to start.');
-  }
-  async function stop() {
-    const response = await fetch('/api/evolve/agent/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ run_id: state.runId }) });
-    const payload = await response.json();
-    if (response.status === 202 && payload.code === 'termination_pending') {
-      state.runStatus = 'stopping';
-      pushLiveEvent({ type: 'stopping', text: 'Stop requested; Thomas is waiting for process termination confirmation.' });
-      render();
-      return;
-    }
-    if (!response.ok || payload.termination_confirmed !== true || payload.stopped !== true) throw new Error(payload.error || payload.code || `Stop failed (${response.status})`);
-    closeSource();
-    state.runStatus = 'stopped';
-    pushLiveEvent({ type: 'stopped', text: `Code task stopped (process exit ${payload.returncode}).` });
-    await finishRun();
   }
   async function loadChanges(options) {
     const token = (options && options.token) || lifecycle().contextToken(state);
@@ -1267,6 +1293,14 @@
   }
   // Codex-parity interrupt: stop the running turn on demand. Changed files
   // stay in the workspace with Keep/Revert, so stopping is never destructive.
+  //
+  // The ONE stop routine. There used to be two -- this one behind the drawer's
+  // Stop button, and a second `stop()` behind the mode adapter -- with different
+  // wording ("Code task stopped (process exit N)" vs the sentence below) and
+  // different behavior (the adapter one ran finishRun, this one refreshed
+  // nothing). Which stop a user got depended on which button they happened to
+  // press. Both entry points now land here; the honest wording and the refresh
+  // travel with every stop.
   async function stopRun() {
     if (!state.running || state.steeringBusy) return false;
     state.steeringBusy = true;
@@ -1275,11 +1309,31 @@
       const response = await fetch('/api/evolve/agent/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ run_id: state.runId }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok && response.status !== 202) throw new Error(data.error || 'Stop failed.');
+      // The stop is requested but not yet confirmed. The badge says so, and if
+      // the confirmation poll below times out, the stream's `done` handler
+      // reads this status (`stopWasPending`) and still files the run as
+      // stopped rather than failed.
+      state.runStatus = 'stopping';
+      updateRunStatus();
       await waitForRestartReady();
       closeSource();
       pushLiveEvent({ type: 'stopped', text: 'Stopped — you interrupted this run. Anything already changed is in Outputs with Keep/Revert.' });
       state.runStatus = 'stopped';
       finishBusy();
+      // The sentence above points at Outputs, and Outputs used to be stale: a
+      // stopped run never re-read changes or the tree, so FILES sat on
+      // "Loading files…" and CHANGED FILES was absent until the user switched
+      // away and back -- measured live, on every drawer stop. Same shape as
+      // the post-Keep/Revert path: reload both, report a reload failure on its
+      // own rather than throwing, because the stop itself has already
+      // succeeded and must not be reported as one that failed.
+      const token = lifecycle().contextToken(state);
+      if (token.id) {
+        await loadChanges({ token, deferRender: true })
+          .catch(error => recordError(error, 'The changed files could not be refreshed after the stop.'));
+        await loadTree(state.treePath || '', { token, deferRender: true })
+          .catch(error => recordError(error, 'The file list could not be refreshed after the stop.'));
+      }
       startNextQueued();
       return true;
     } finally {
@@ -1406,7 +1460,9 @@
       safely(() => newConversation(projectRoot, projectLabel), 'Could not create the Code task.'),
     pickProject: () => safely(pickProject, 'Could not choose the project folder.'),
     send: (message, context) => safely(() => send(message, context), 'The Code task failed unexpectedly.'),
-    stop: () => { void safely(stop, 'Could not stop the Code task.'); },
+    // The same routine as the drawer's Stop button -- see stopRun. Two stop
+    // functions is how the two controls came to speak and behave differently.
+    stop: () => { void safely(() => stopRun(), 'Could not stop the Code task.'); },
     isBusy: () => state.running || Boolean(state.finishing),
   });
 

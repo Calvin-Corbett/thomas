@@ -64,6 +64,26 @@
       return event.terminal === true || containsToolProtocol(event) || !NARRATIVE_EVENT_KINDS.has(eventType(event));
     }
 
+    // The very first read of a brand-new project is an existence check, not a
+    // fault: the model asks for the file before writing it, and on an empty
+    // project that read HAS to fail. Measured on a flawless clock build: the
+    // activity header advertised "8 issues", of which one was exactly this
+    // probe -- an alarming red row about a project that simply did not have
+    // files yet. Flagged at ingestion (transcript parse and live push both call
+    // this) rather than at render, so the grouped saved log, the streamed live
+    // row, and both issue counters read the one flag instead of four sites
+    // re-deriving "was this the probe" and drifting.
+    //
+    // Position does the heavy lifting: only the FIRST tool_result in a run can
+    // be the probe. A later failing read is a real recovered attempt and keeps
+    // its count -- the caller says whether a tool_result came before this one.
+    const EXPECTED_PROBE_PATTERN = /no such file|not found|does not exist|could not (?:read|find|open)|is empty|empty director|enoent/i;
+    function flagExpectedProbe(event, hasPriorToolResult) {
+      if (hasPriorToolResult || eventType(event) !== 'tool_result') return event;
+      if (event.is_error === true && EXPECTED_PROBE_PATTERN.test(eventLabel(event))) event.expectedProbe = true;
+      return event;
+    }
+
     // One failure predicate for the whole file. There used to be two, and they
     // disagreed: `eventHtml` asked `is_error === true`, while
     // `groupedTechnicalEvents` asked `is_error === true || kind === 'error'`.
@@ -79,11 +99,19 @@
     // so the finished transcript of the same run looked correct; only the run you
     // were watching lied.
     function eventFailed(event, kind) {
+      // The expected first read probe of an empty project is not a failure --
+      // see flagExpectedProbe. Decided here so every consumer of "did this row
+      // fail" (icon, row class, both issue counters) agrees at once.
+      if (event.expectedProbe === true) return false;
       return event.is_error === true || (kind == null ? eventType(event) : kind) === 'error';
     }
 
     function technicalHeading(event, kind) {
       if (kind === 'reason') return 'Reviewed the approach';
+      // The existence probe of a brand-new project (see flagExpectedProbe).
+      // Named for what it is rather than falling through to "<tool> failed",
+      // which asserts a fault about a folder that simply has nothing in it yet.
+      if (event.expectedProbe === true) return 'Looked for existing files — nothing there yet';
       // Not a check. Nothing was verified: this is the run, or the client,
       // reporting that something broke. `pushLiveEvent({ type: 'error' })` carries
       // client faults too -- a failed file preview, a task that cannot be opened.
@@ -139,7 +167,7 @@
       return groups;
     }
 
-    function technicalSummary(events) {
+    function technicalSummary(events, ok) {
       const tools = events.filter(event => eventType(event) === 'tool').length;
       // "results", and NOT counting `meta`. This said "checks", which is a
       // load-bearing word elsewhere in this UI: the verdict card counts engine
@@ -155,13 +183,25 @@
       // bigger half of this by a wide margin; folding meta in was a smaller,
       // separate inaccuracy, and both are fixed here.
       const results = events.filter(event => eventType(event) === 'tool_result').length;
-      const issues = events.filter(event => event.is_error === true || eventType(event) === 'error').length;
+      // Through eventFailed, not a third inline is_error test, so the counter
+      // agrees with the row styling -- and so the expected first read probe of
+      // an empty project (flagExpectedProbe) is counted by neither.
+      const issues = events.filter(event => eventFailed(event)).length;
       const other = Math.max(0, events.length - tools - results - issues);
       const parts = [];
       if (tools) parts.push(`${tools} tool ${tools === 1 ? 'run' : 'runs'}`);
       if (results) parts.push(`${results} ${results === 1 ? 'result' : 'results'}`);
       if (other) parts.push(`${other} ${other === 1 ? 'detail' : 'details'}`);
-      if (issues) parts.push(`${issues} ${issues === 1 ? 'issue' : 'issues'}`);
+      // "issue" is only honest about a run that failed. Measured on a flawless
+      // clock build: the header read "8 issues" over a run whose outcome was ok
+      // -- 7 of them the model's own scratch-verifier retries that it then
+      // recovered from. An error the run recovered from is a failed attempt,
+      // and the header now says so when the caller vouches for the outcome.
+      // Callers that do not pass `ok` keep the old wording -- an unknown
+      // outcome must not be advertised as a recovered one.
+      if (issues) parts.push(ok === true
+        ? `${issues} failed ${issues === 1 ? 'attempt' : 'attempts'}, recovered`
+        : `${issues} ${issues === 1 ? 'issue' : 'issues'}`);
       return parts.length ? `Worked through ${parts.join(' · ')}` : 'Technical details';
     }
 
@@ -288,23 +328,32 @@
       }).join('');
     }
 
-    function technicalActivityHtml(events, saved) {
+    function technicalActivityHtml(events, saved, ok) {
       if (!events.length) return '';
       const groups = groupedTechnicalEvents(events);
       const rows = groups.map(group => {
         const count = group.count > 1 ? `<span class="tc-code-tech-count">×${group.count}</span>` : '';
         return `<div class="tc-code-technical${group.failed ? ' is-error' : ''}" data-code-kind="${esc(group.kind)}"><i class="ph ${group.failed ? 'ph-warning' : 'ph-check-circle'}"></i><div><strong>${esc(group.heading)}${count}</strong><code>${esc(group.label)}</code></div></div>`;
       }).join('');
-      const issueCount = events.filter(event => event.is_error === true || eventType(event) === 'error').length;
+      const issueCount = events.filter(event => eventFailed(event)).length;
+      // The warning icon and the has-issues tint belong to runs that FAILED.
+      // On an ok run the same errors are recovered attempts (see
+      // technicalSummary), and an alarm over a delivered result teaches the
+      // reader to ignore the alarm. Full detail stays behind Show details
+      // either way -- nothing is dropped, only labelled by outcome.
+      const alarming = issueCount > 0 && ok !== true;
       const status = !saved && state.running && state.runStartedAt
         ? `<span data-code-elapsed>Working · ${esc(elapsedLabel(state.runStartedAt))}</span>`
         : 'Show details';
-      return `<details class="tc-code-saved-activity${issueCount ? ' has-issues' : ''}"${saved ? ' data-saved="true"' : ''}><summary><span class="tc-code-activity-summary"><i class="ph ${issueCount ? 'ph-warning' : 'ph-terminal-window'}"></i>${esc(technicalSummary(events))}</span><span>${status}</span></summary><div class="tc-code-technical-log">${rows}</div></details>`;
+      return `<details class="tc-code-saved-activity${alarming ? ' has-issues' : ''}"${saved ? ' data-saved="true"' : ''}><summary><span class="tc-code-activity-summary"><i class="ph ${alarming ? 'ph-warning' : 'ph-terminal-window'}"></i>${esc(technicalSummary(events, ok))}</span><span>${status}</span></summary><div class="tc-code-technical-log">${rows}</div></details>`;
     }
 
     function transcriptEvents(turn) {
       const events = [];
       const terminalTracker = { name: '' };
+      // Tracks whether a tool_result has been seen yet, so only the FIRST one
+      // can be flagged as the expected read probe of an empty project.
+      let sawToolResult = false;
       String(turn && turn.transcript || '').split('\n').forEach(raw => {
         const line = raw.trim(); if (!line) return;
         let parsed = null;
@@ -312,6 +361,10 @@
           try { parsed = JSON.parse(line); } catch (error) { parsed = null; }
         }
         const event = annotateTerminalEvent(parsed && parsed.fc ? { type: 'output', kind: parsed.fc, name: parsed.name || '', text: parsed.text || '', is_error: parsed.is_error === true, delta: parsed.delta === true } : { type: 'output', text: raw }, terminalTracker);
+        if (eventType(event) === 'tool_result') {
+          flagExpectedProbe(event, sawToolResult);
+          sawToolResult = true;
+        }
         const previous = events[events.length - 1];
         const priorSayText = events.filter(item => item.kind === 'say' && item.delta).map(item => item.text || '').join('');
         if (event.kind === 'say' && event.delta && previous && previous.kind === 'say' && previous.delta) previous.text += event.text;
@@ -408,7 +461,18 @@
       const activityEvents = progressEvents(events, finalEvent);
       const modelFinal = finalEvent ? eventLabel(finalEvent) : '';
       const staleLimitReply = /execution review|review limit|forbid(?:s|den)? (?:another|further) tool|no files were changed and verification/i.test(modelFinal);
-      const reply = turn.ok
+      // The answer the model actually produced, minus the stale review-limit
+      // excuse -- that one is a claim about the engine that the engine's own
+      // evidence contradicts, not an answer, and the contract in
+      // unified_code_mode_lifecycle.mjs pins its suppression on BOTH outcomes.
+      const answer = modelFinal && !staleLimitReply ? modelFinal : '';
+      // A deliberately stopped run. The recorder files `outcome: 'stopped'`
+      // with reason "stopped by you" (or "stopped for your steering update");
+      // older turns carry only the reason, so both are read.
+      const wasStopped = String(turn.outcome || '').toLowerCase() === 'stopped'
+        || /\bstopped (?:by you|for your steering update)\b/i.test(String(turn.reason || ''));
+      let replySection;
+      if (turn.ok) {
         // Keep "passed Thomas's verification" -- it is EARNED where this fires,
         // and I tried to remove it before understanding that.
         //
@@ -425,12 +489,39 @@
         // lacked a final event, so it does not happen today. If it ever does, the
         // fix is to condition the wording on real passing evidence, NOT to drop
         // it -- dropping it throws away the correction in the case that matters.
-        ? (modelFinal && !staleLimitReply ? modelFinal : 'Finished the requested changes and passed Thomas’s verification.')
-        : failureSummary(turn, events);
+        replySection = `<div class="tc-code-reply">${replyHtml(answer || 'Finished the requested changes and passed Thomas’s verification.')}</div>`;
+      } else if (wasStopped) {
+        // A stop the user asked for is not a failure and must not wear the red
+        // pipeline. This rendered through failureSummary -- "The Code task
+        // stopped before it finished — stopped by you..." in error styling --
+        // which scolded the reader for their own deliberate click. `is-stopped`
+        // instead of `is-error`: unstyled today, which is exactly the neutral
+        // default this note wants; a stylesheet may pick it up later. The
+        // recorder's reason is kept verbatim (it names how much work had
+        // already changed), only capitalised.
+        const reason = String(turn.reason || '').trim();
+        const note = reason
+          ? `${reason.charAt(0).toUpperCase()}${reason.slice(1)}. Anything already changed is in Outputs with Keep/Revert.`
+          : 'Stopped — you interrupted this run. Anything already changed is in Outputs with Keep/Revert.';
+        replySection = `${answer ? `<div class="tc-code-reply">${replyHtml(answer)}</div>` : ''}<div class="tc-code-reply is-stopped">${esc(note)}</div>`;
+      } else {
+        // NEVER suppress a produced answer. A run filed as failed whose
+        // transcript nevertheless carries a `final` event with text rendered
+        // ONLY failureSummary(): the model's answer existed nowhere on screen,
+        // because this branch discarded it and progressEvents (correctly)
+        // filters the final event out of the narrative. That is the auto-reject
+        // shape applied to rendering -- work the model produced, dropped by
+        // plumbing. The answer renders first; the failure note renders
+        // alongside it, never instead of it.
+        const failure = failureSummary(turn, events);
+        replySection = answer
+          ? `<div class="tc-code-reply">${replyHtml(answer)}</div><div class="tc-code-reply is-error">${replyHtml(failure)}</div>`
+          : `<div class="tc-code-reply is-error">${replyHtml(failure)}</div>`;
+      }
       const narrative = narrativeActivityHtml(activityEvents, true);
       const technicalEvents = activityEvents.filter(isTechnicalEvent);
       const resultCount = (turn.artifacts || []).filter(artifact => !isInternalResultPath(artifact.file)).length;
-      return `<article class="tc-code-turn is-agent"><div class="tc-code-message-head"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>Thomas</strong><small>${esc(turn.model || 'Code')}</small><button class="tc-code-copy" data-code-copy-reply type="button" aria-label="Copy Thomas reply"><i class="ph ph-copy"></i></button></div><div class="tc-code-turn-body">${narrative}${technicalActivityHtml(technicalEvents, true)}<div class="tc-code-reply${turn.ok ? '' : ' is-error'}">${replyHtml(reply)}</div>${codeResults().artifactCardsHtml(turn, turn.run_id || turn.ts || '0')}${codeResults().runReportHtml(turn.report)}${changedCount ? `<div class="tc-code-result-note"><span><i class="ph ph-files"></i>${changedCount} file${changedCount === 1 ? '' : 's'} changed</span></div>` : ''}</div></article>`;
+      return `<article class="tc-code-turn is-agent"><div class="tc-code-message-head"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>Thomas</strong><small>${esc(turn.model || 'Code')}</small><button class="tc-code-copy" data-code-copy-reply type="button" aria-label="Copy Thomas reply"><i class="ph ph-copy"></i></button></div><div class="tc-code-turn-body">${narrative}${technicalActivityHtml(technicalEvents, true, turn.ok === true)}${replySection}${codeResults().artifactCardsHtml(turn, turn.run_id || turn.ts || '0')}${codeResults().runReportHtml(turn.report)}${changedCount ? `<div class="tc-code-result-note"><span><i class="ph ph-files"></i>${changedCount} file${changedCount === 1 ? '' : 's'} changed</span></div>` : ''}</div></article>`;
     }
 
     // Thomas writes markdown in his Code replies -- 16 of 17 real replies carry it
@@ -470,6 +561,7 @@
       eventLabel, annotateTerminalEvent, eventType, isTechnicalEvent, refreshElapsed,
       eventHtml, finalReplyEvent, progressEvents, failureSummary, turnHtml, replyHtml,
       elapsedLabel, narrativeActivityHtml, technicalActivityHtml, transcriptEvents,
+      flagExpectedProbe,
     };
   }
 

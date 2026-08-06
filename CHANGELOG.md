@@ -7,6 +7,30 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (Code surface honesty: stop, failure, and the feed's arithmetic)
+
+- One stop routine: the drawer Stop and the mode-adapter stop had diverged
+  (different wording, different behavior); both now call the same `stopRun`,
+  which also reloads the change list and file tree after a confirmed stop — the
+  FILES panel no longer sticks on "Loading files…" until you switch away.
+- A failed turn whose transcript carries a `final` answer renders the ANSWER
+  with the failure note alongside — never `failureSummary()` instead. This is
+  the rendering half of the explain-run fix: even a run filed as failed may not
+  have its produced text suppressed.
+- Deliberately stopped runs (persisted `outcome: "stopped"`) render neutrally,
+  not through the red failure pipeline.
+- The transcript scrolls to the newest turn when a run's durable result lands
+  in the on-screen conversation, not only on conversation open — a finished
+  follow-up no longer hides its answer below the fold.
+- The live-feed header stops calling recovered self-checks "issues": on an ok
+  run it reads "N failed attempts, recovered" without the warning tint, and the
+  expected first read probe of a brand-new empty project renders as a neutral
+  existence check instead of an alarming red row.
+  Tests: `tests/test_a_failed_run_still_shows_the_answer_it_produced.py`,
+  `tests/test_stopping_a_run_refreshes_the_work_it_leaves_behind.py` (both red
+  before), plus updated pins in `test_chat_mode_contract.py` and
+  `test_the_run_report_escapes_what_thomas_wrote.py`.
+
 ### Fixed (an answer is never disqualified by the tool that read the files)
 
 - P0 measured live: an explain-only run ("look at this project and tell me what
