@@ -157,19 +157,7 @@ textarea:focus:not(:focus-visible),
    5. SCREEN READER UTILITIES - Visually hidden but accessible to screen readers
    ============================================================================ */
 
-/* Standard sr-only class for screen reader only content */
-.sr-only,
-.screen-reader-text {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border-width: 0;
-}
+/* The sr-only base utility lives in tokens.css (single definition). */
 
 /* Visible on focus for skip links */
 .sr-only:focus,

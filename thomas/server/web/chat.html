@@ -20,6 +20,7 @@
        #tc-shell[data-surface-mode] visibility flips that reveal the Code/Work
        workspace. Dropping it during the CSS split left the mode surface
        display:none forever (P1 caught by the codex PR review, 2026-07-19). -->
+  <link rel="stylesheet" href="/static/css/tokens.css?v=__THOMAS_WEB_BUILD__">
   <link rel="stylesheet" href="/static/css/unified_modes.css?v=__THOMAS_WEB_BUILD__">
   <link rel="stylesheet" href="/static/css/unified_code_mode.css?v=__THOMAS_WEB_BUILD__">
   <link rel="stylesheet" href="/static/css/unified_code_activity.css?v=__THOMAS_WEB_BUILD__">
@@ -308,7 +309,7 @@
                          the name is capped tighter and ellipsised. -->
                     <button id="tc-code-project-btn" class="hv-icon" title="Choose what Thomas works on" aria-haspopup="dialog" aria-expanded="false" aria-controls="tc-code-library-menu" style="display: flex; align-items: center; gap: 7px; max-width: 200px; height: 36px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--c-border); background: transparent; color: var(--c-dim); font-family: inherit; cursor: pointer; transition: all .15s; text-align: left;">
                       <i class="ph ph-folder-simple" style="font-size: 15px; flex: 0 0 auto;"></i>
-                      <span class="sr-only" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;">Selected project</span>
+                      <span class="sr-only">Selected project</span>
                       <span id="tc-code-project-label" style="font-size: 13px; font-weight: 650; color: var(--c-text); line-height: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Thomas library</span>
                       <i class="ph ph-caret-up" style="font-size: 11px; flex: 0 0 auto; opacity: .6;"></i>
                     </button>
@@ -355,8 +356,6 @@
   </div>
 
   <style>
-    /* Icon-only controls (the 42px artifact download button, and others) carry their spoken label in a class="sr-only" span. The class was referenced throughout this page but defined only in css/accessibility.css, which this page never links — so "Download packing.txt" rendered as VISIBLE text crammed into a box sized for one icon, wrapping outside its border (measured live, 2026-08-05). Defined here: visually hidden, still read by screen readers. */
-    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
     /* Everything lives here rather than inline. An inline `color` outranks any
        stylesheet rule without !important, so styling the base state inline
        silently killed both the hover state and the uncommitted-tree state --
@@ -926,16 +925,16 @@
         sel.appendChild(dflt);
         usable.forEach(u => {
           const o = document.createElement('option');
-          o.value = `${u.profile} ${u.id}`;
+          o.value = `${u.profile}\u0000${u.id}`;
           o.textContent = u.label;
           sel.appendChild(o);
         });
         const currentProfile = (state.roleProfiles || {})[role] || '';
         const currentModel = (state.roleModelIds || {})[role] || '';
-        sel.value = currentProfile ? `${currentProfile} ${currentModel}` : '';
+        sel.value = currentProfile ? `${currentProfile}\u0000${currentModel}` : '';
         if (sel.selectedIndex < 0) sel.value = '';
         sel.addEventListener('change', () => {
-          const [profileName, modelId] = sel.value ? sel.value.split(' ') : ['', ''];
+          const [profileName, modelId] = sel.value ? sel.value.split('\u0000') : ['', ''];
           state.roleProfiles = state.roleProfiles || {};
           state.roleModelIds = state.roleModelIds || {};
           if (profileName) { state.roleProfiles[role] = profileName; state.roleModelIds[role] = modelId; }

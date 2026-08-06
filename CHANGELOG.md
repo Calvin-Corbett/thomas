@@ -7,6 +7,21 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (design unification wave 2: the chat shell)
+
+- LIVING WORLDS legibility: a theme-colored reading shade paints between the
+  world sprites and the content column of the unified shell (chat_shell.css,
+  no z-index changes - the fix the chat.html comment block endorses). The
+  900px Code empty state's drifting moon no longer swallows the subtitle;
+  margin sprites stay vivid. Verified by screenshot in Nebula and Aurora.
+- `.sr-only` has ONE definition (tokens.css, which chat.html now links);
+  chat.html's local copy and accessibility.css's base rule are gone, the
+  skip-link :focus reveal stays in accessibility.css. The artifact-card DOM
+  guard follows the rule to its new home.
+- chat.html is plain text again: the three literal NUL bytes used as the
+  model-select value delimiter became backslash-u0000 escapes (identical runtime
+  string), so ripgrep and every text tool stop silently skipping the file.
+
 ### Changed (design unification wave 1: one token set)
 
 ### Removed (design unification: the banned *_parts CSS directories)

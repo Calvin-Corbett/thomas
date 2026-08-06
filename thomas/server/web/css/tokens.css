@@ -284,3 +284,18 @@ body {
 .t-btn-danger:hover {
     background: rgba(255, 107, 107, 0.22);
 }
+
+/* Screen-reader-only content (single definition; accessibility.css keeps the
+   :focus reveal used by skip links). */
+.sr-only,
+.screen-reader-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}

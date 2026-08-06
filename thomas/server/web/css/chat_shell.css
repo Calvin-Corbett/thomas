@@ -267,3 +267,22 @@ html, body { margin: 0; padding: 0; height: 100%; }
    the user bubble at queue time and removes it the moment it auto-sends). The
    bubble's flex column right-aligns user content, so the note follows it. */
 .tc-queued-note { font-size: 11.5px; color: var(--c-muted); padding: 2px 4px 0; font-style: italic; }
+
+/* LIVING WORLDS legibility - the honest fix from the chat.html comment block
+   (dim sprites under the content column, no z-index changes). A soft column
+   of the theme's own background paints between the world layer and the text:
+   main has z-index 1 so this negative-z pseudo stays INSIDE its stacking
+   context - above the world sprites, below every child. Sprites crossing the
+   reading column fade; the margins stay alive. */
+#tc-shell > main::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(90deg,
+    transparent 2%,
+    color-mix(in srgb, var(--c-bg) 55%, transparent) 22%,
+    color-mix(in srgb, var(--c-bg) 55%, transparent) 78%,
+    transparent 98%);
+}

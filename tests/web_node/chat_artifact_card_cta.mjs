@@ -56,7 +56,17 @@ function labelsAreHidden(rendered) {
 // The class the labels rely on must actually exist on this page: chat.html
 // does not link css/accessibility.css, so a .sr-only rule has to be defined
 // in the page's own stylesheet or the "hidden" label is fully visible.
-const srOnlyDefined = /\.sr-only\s*[,{]/.test(html);
+// The rule now lives in css/tokens.css (the single design-token source);
+// the guard holds if the page defines it locally OR links tokens.css and
+// tokens.css defines it — either way the label can never render visible.
+import path from 'node:path';
+const tokensPath = path.join(path.dirname(htmlPath), 'css', 'tokens.css');
+const srOnlyLocal = /\.sr-only\s*[,{]/.test(html);
+const srOnlyFromTokens =
+  html.includes('/static/css/tokens.css') &&
+  fs.existsSync(tokensPath) &&
+  /\.sr-only\s*[,{]/.test(fs.readFileSync(tokensPath, 'utf8'));
+const srOnlyDefined = srOnlyLocal || srOnlyFromTokens;
 
 const checks = {
   downloadLabelHidden: labelsAreHidden(card) && labelsAreHidden(longCard),
