@@ -7,6 +7,26 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (a chat message is never lost, dropped, or falsely absent)
+
+- The user turn is persisted the moment `/api/v2/chat` accepts it, not when the
+  reply completes — an abandoned tab no longer destroys the conversation and
+  the message with it (measured: 476 stored chats, zero containing the sent
+  message). A turn that ends early persists whatever reply text streamed,
+  marked `interrupted`.
+- Pressing Enter while a reply is generating no longer silently drops the
+  message: it queues with a visible note and auto-sends when the current reply
+  finishes (the old path fired a `busy_strategy: "interrupt"` POST only the
+  retired legacy handler ever read).
+- The sidebar never claims "No chats yet." before the history fetch resolves
+  (loading state until confirmed, an honest error state on failure), and the
+  active conversation appears in the list from the moment you send instead of
+  after its first reply persists.
+  Tests: `tests/test_the_user_turn_survives_a_turn_that_never_finishes.py`
+  (real route + real store, red before),
+  `tests/test_a_message_sent_mid_reply_is_queued_not_dropped.py`,
+  `tests/test_the_sidebar_never_claims_no_chats_before_history_loads.py`.
+
 ### Fixed (an unselected model is a question, never a silent Claude dispatch)
 
 - Measured live: with the chip reading GPT-5.6 Terra and 4 OpenAI keys ready,

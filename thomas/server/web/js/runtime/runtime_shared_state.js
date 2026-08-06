@@ -11,6 +11,13 @@ let settingsNavTicking = false;
 let sidebarSearchScope = 'chat';
 let sidebarNavMode = 'chat';
 let sidebarSessions = [];
+// 'pending' until the FIRST /api/chats fetch answers, then 'loaded' (success)
+// or 'error' (failure, and never loaded since). renderSidebarChatList consults
+// this before claiming "No chats yet.": an empty sidebarSessions array means
+// "no data yet" until the fetch has actually confirmed emptiness. Measured
+// 2026-08-05: the sidebar asserted "No chats yet." over hundreds of existing
+// chats because mode/scope switches render before the history fetch resolves.
+let sidebarHistoryLoadState = 'pending';
 let chatPersistInFlight = false;
 let chatPersistQueued = false;
 let activeAgentName = 'Thomas';

@@ -302,6 +302,14 @@ function renderSidebarChatList() {
             empty.textContent = 'No matches yet. Try another search term.';
         } else if (sidebarSearchScope === 'general') {
             empty.textContent = withAgentName('Search {{agent}} to find chats and relevant items.');
+        } else if (sidebarHistoryLoadState === 'pending') {
+            // "No chats yet." is a claim about the data, and before the history
+            // fetch answers there IS no data -- this render path runs from mode
+            // and scope switches that never wait for fetchChatHistory. Measured
+            // 2026-08-05: the empty claim showed over hundreds of real chats.
+            empty.textContent = 'Loading chats…';
+        } else if (sidebarHistoryLoadState === 'error') {
+            empty.textContent = 'Chat history could not be loaded. Reload to retry.';
         } else {
             empty.textContent = 'No chats yet. Start one from New Chat.';
         }
@@ -572,11 +580,36 @@ async function fetchChatHistory() {
                     .filter(Boolean);
             }
             sidebarSessions.sort((a, b) => Number(b?.updatedAt || 0) - Number(a?.updatedAt || 0));
+            sidebarHistoryLoadState = 'loaded';
+            // This wholesale replacement used to DROP the conversation the user
+            // just started: the server list only learns about a chat once its
+            // first turn is persisted, so a refresh racing the first reply made
+            // the active chat vanish from Recent (measured 2026-08-05). If the
+            // active conversation has real messages and the server does not
+            // know it yet, re-seat it instead of trusting the stale list.
+            const activeId = safeString(activeChatId) || safeString(sessionId);
+            const activeHasMessages = Array.isArray(chatHistory) && chatHistory.length > 0;
+            const activeMissing = Boolean(activeId)
+                && activeHasMessages
+                && !sidebarSessions.some((row) => safeString(row?.id) === activeId);
+            if (activeMissing) {
+                syncActiveChatSidebarEntry({ touchUpdatedAt: false });
+            }
             rebuildChatHistorySelector();
             renderSidebarChatList();
             updateDebugDockSnapshot();
+        } else if (sidebarHistoryLoadState !== 'loaded') {
+            // A refused answer is a failure to name, not an empty history. A
+            // later failed REFRESH keeps 'loaded' -- the rows on screen are
+            // still real.
+            sidebarHistoryLoadState = 'error';
+            renderSidebarChatList();
         }
     } catch (e) {
+        if (sidebarHistoryLoadState !== 'loaded') {
+            sidebarHistoryLoadState = 'error';
+            renderSidebarChatList();
+        }
         console.error("Failed to fetch chat history:", e);
     }
 }

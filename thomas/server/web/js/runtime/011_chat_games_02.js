@@ -894,6 +894,11 @@ async function runChatSendJob(sendJob) {
         if (!existingUserRow) {
             renderMessage({ role: 'user', content: userContent, id: clientMessageId, ...attachmentMeta });
         }
+    } else {
+        // The job was rendered at queue time with a "Queued — will send when
+        // the current reply finishes" note; it is being sent now, so the note
+        // has served its purpose.
+        clearMessageQueuedNote(clientMessageId);
     }
     if (!safeString(activeChatId)) {
         activeChatId = safeString(sessionId) || `chat-${Date.now()}`;
@@ -1018,43 +1023,64 @@ async function handleSend() {
     const sendJob = buildSendJobFromComposer(text);
     if (!sendJob) return;
     if (isGenerating) {
-        // FIX (2026-03-18): Don't abort the current generation when user
-        // sends a new message. Instead, send it as an interrupt to the backend
-        // so Thomas can keep working while the user keeps chatting.
-        // The backend queues the message and the active run picks it up.
-        const interruptPayload = {
-            text: text,
-            session_id: sessionId,
-            profile: safeString(
-                (typeof modelSelector !== 'undefined' && modelSelector ? modelSelector.value : '')
-                || (typeof setupProviderSelector !== 'undefined' && setupProviderSelector ? setupProviderSelector.value : '')
-                || (typeof currentPreferences !== 'undefined' ? currentPreferences?.advanced?.model?.active_profile : '')
-            ),
-            busy_strategy: 'interrupt',
-        };
-        // Render user message immediately
-        renderMessage({ role: 'user', content: text });
-        chatHistory.push({
-            role: 'user',
-            content: text,
-            createdAt: Date.now(),
-            status: 'complete',
-        });
-        // Fire and forget — don't block, don't abort current stream
-        const chatEndpoint = '/api/v2/chat';
-        fetch(chatEndpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(interruptPayload),
-        }).catch(err => console.warn('[Thomas] Interrupt send failed:', err));
-        // Clear composer
-        composerTextarea.value = '';
-        composerTextarea.dispatchEvent(new Event('input'));
-        composerSyncSendButtonState();
+        // A message sent while a reply is generating is QUEUED and auto-sent
+        // when the current reply finishes (drainQueuedSends runs in
+        // streamChatResponse's finally). The previous branch here fired the
+        // message at /api/v2/chat as a fire-and-forget fetch tagged
+        // busy_strategy:'interrupt' -- a field only the retired legacy
+        // /api/chat handler ever read. V2 ignored it, ran a second serialized
+        // turn, and streamed its reply into a response body nobody read: the
+        // user's message appeared, no reply ever did, and nothing said why
+        // (measured 2026-08-05 -- the classic quick correction "change tuesday
+        // to 9" was silently lost).
+        queueSendJobWhileGenerating(sendJob);
         return;
     }
 
     await runChatSendJob(sendJob);
+}
+
+function queueSendJobWhileGenerating(sendJob) {
+    // Render the user message immediately (chronologically after the reply
+    // that is currently streaming) with a visible queued note, then park the
+    // job. runChatSendJob skips the duplicate render via _alreadyRendered --
+    // the hook was built for exactly this and had no caller until now.
+    const clientMessageId = safeString(sendJob?.clientMessageId);
+    const docsToSend = Array.isArray(sendJob?.docsToSend) ? sendJob.docsToSend : [];
+    const imagesToSend = Array.isArray(sendJob?.imagesToSend) ? sendJob.imagesToSend : [];
+    let userContent = safeString(sendJob?.text);
+    if (!userContent && docsToSend.length === 0 && imagesToSend.length === 0) {
+        userContent = '(Sent Attachments)';
+    }
+    const attachmentMeta = {};
+    if (imagesToSend.length > 0) attachmentMeta.images = imagesToSend;
+    if (docsToSend.length > 0) attachmentMeta.docs = docsToSend;
+    if (typeof ensureChatVisible === 'function') ensureChatVisible();
+    renderMessage({ role: 'user', content: userContent, id: clientMessageId, ...attachmentMeta });
+
+    const row = document.getElementById(clientMessageId);
+    if (row instanceof HTMLElement && !row.querySelector('.message-queued-note')) {
+        const note = document.createElement('div');
+        note.className = 'message-queued-note';
+        note.textContent = 'Queued — will send when the current reply finishes';
+        note.style.fontSize = '12px';
+        note.style.fontStyle = 'italic';
+        note.style.opacity = '0.75';
+        note.style.marginTop = '4px';
+        (row.querySelector('.message-stack') || row).appendChild(note);
+    }
+
+    sendJob._alreadyRendered = true;
+    pendingSendQueue.push(sendJob);
+    composerSyncSendButtonState();
+    pushDebugEvent('chat', 'Queued a message while a reply is generating');
+}
+
+function clearMessageQueuedNote(messageId) {
+    const row = document.getElementById(safeString(messageId));
+    if (!row) return;
+    const note = row.querySelector('.message-queued-note');
+    if (note) note.remove();
 }
 
 const VIBE_CODE_FALLBACK_NODES = [

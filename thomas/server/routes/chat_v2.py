@@ -77,6 +77,11 @@ from thomas.server.routes.chat_v2_request_support import (
     handle_cancel_delegation as handle_cancel_delegation,
 )
 from thomas.server.routes.chat_v2_run_store import ChatV2RunLifecycle, start_chat_v2_run
+from thomas.server.routes.chat_v2_send_durability import (
+    persist_user_turn_at_send,
+    salvage_interrupted_turn,
+    strip_pending_user_turn,
+)
 from thomas.server.routes.chat_v2_session_guard import session_serialised
 from thomas.server.routes.chat_v2_session_routes import (
     handle_mark_delegation_reported as handle_mark_delegation_reported,
@@ -473,6 +478,23 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
     except ChatBudgetError as exc:
         return web.json_response({"error": str(exc)}, status=503)
 
+    # The user's message becomes durable HERE, before the model runs. Until
+    # 2026-08-05 the only save for a turn ran after the reply completed, so an
+    # abandoned tab (aiohttp cancels the handler), a mid-reply crash, or a lost
+    # connection erased the entire turn -- measured live as 476 stored chats
+    # with zero containing the message the user had just sent. The stored turn
+    # carries a pending marker; _run_brain_turn strips it from the reloaded
+    # conversation so the model never sees the message twice.
+    pending_conversation = conversation
+    if not temporary:
+        pending_conversation = await persist_user_turn_at_send(
+            session_store,
+            session_id=sid,
+            conversation=conversation,
+            meta=meta,
+            user_text=history_prompt,
+        )
+
     await record_chat_task_started(
         request.app,
         session_id=sid,
@@ -498,14 +520,29 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
         mode=mode,
         autonomy_level=turn_autonomy_level,
     )
+    # Mirror streamed reply text as it goes out, so a turn that ends early can
+    # persist what the user actually saw (salvage_interrupted_turn below). The
+    # sink only fires for events that reached the wire, which is exactly the
+    # honest boundary: text that never left the server was never a reply.
+    partial_reply_chunks: list[str] = []
+
+    def _record_run_event(event: dict[str, Any]) -> None:
+        if event.get("type") == "text":
+            partial_reply_chunks.append(str(event.get("text") or ""))
+        run_recorder.record(event)
+
     dispatcher = UsageReceiptDispatcher(
-        EventDispatcher(response.write, run_id=run_recorder.run_id, event_sink=run_recorder.record),
+        EventDispatcher(response.write, run_id=run_recorder.run_id, event_sink=_record_run_event),
         llm,
         prior_session_tokens=meta.token_spend,
         token_economy=token_economy_meta,
     )
     run_lifecycle = ChatV2RunLifecycle(run_recorder, usage=lambda: dispatcher.run_usage)
     run_ok = True
+    # Flipped once the completed turn is saved; the salvage paths below check it
+    # so a failure AFTER the full save can never overwrite good state with the
+    # pending fallback.
+    turn_saved = False
     background_event_stream_open = True
 
     async def _emit_background_event(event: dict[str, Any]) -> None:
@@ -664,7 +701,10 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
                 if not temporary:
                     latest_conversation = await session_store.load(sid)
                     if latest_conversation is not None:
-                        turn_conversation = latest_conversation
+                        # The send-time save above already wrote THIS turn's user
+                        # message; process_message appends it again itself. Strip
+                        # the pending copy so the model never sees it twice.
+                        turn_conversation = strip_pending_user_turn(latest_conversation, user_text=history_prompt)
                 return await brain.process_message(
                     session_id=sid,
                     conversation=turn_conversation,
@@ -696,6 +736,9 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
             conversation = await _run_brain_turn()
             if not temporary:
                 await session_store.save(sid, conversation, meta, force=True)
+        # The completed turn is on disk; the pending send-time state is now
+        # superseded, so the salvage paths below must not resurrect it.
+        turn_saved = True
 
         await record_chat_task_finished(
             request.app,
@@ -714,10 +757,38 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
             }
         )
 
+    except asyncio.CancelledError:
+        # The client is gone -- closed tab, navigation, dropped connection --
+        # and aiohttp is tearing this handler down. The user turn is already on
+        # disk from the send-time save; keep whatever reply text made it out
+        # before the line went dead, then let the cancellation proceed.
+        if not temporary and not turn_saved:
+            await salvage_interrupted_turn(
+                session_store,
+                session_id=sid,
+                pending_conversation=pending_conversation,
+                meta=meta,
+                partial_text="".join(partial_reply_chunks),
+            )
+        raise
     except Exception as exc:
         run_ok = False
         log.error("Chat V2 failed for session %s: %s", sid[:12], exc, exc_info=True)
         await record_chat_task_failed(request.app, session_id=sid, temporary=temporary)
+        if not temporary and not turn_saved:
+            # A crash mid-reply keeps the user turn (already saved at send
+            # time) plus whatever text streamed, marked interrupted. The
+            # salvaged state also REPLACES `conversation` here: the budget
+            # sync below force-saves `conversation`, and before this
+            # reassignment it re-saved the pre-turn state over the salvage --
+            # a failed turn measurably ended as an empty stored conversation.
+            conversation = await salvage_interrupted_turn(
+                session_store,
+                session_id=sid,
+                pending_conversation=pending_conversation,
+                meta=meta,
+                partial_text="".join(partial_reply_chunks),
+            )
         await dispatcher.emit_error("Thomas could not complete this chat turn safely.")
 
     background_event_stream_open = False
