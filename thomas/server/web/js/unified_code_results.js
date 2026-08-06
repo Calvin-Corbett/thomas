@@ -251,6 +251,24 @@
     </details>`;
   }
 
+  // Does this page ask for the network? The embedded preview's CSP blocks
+  // every outbound connection, so a perfectly working generated app opens
+  // straight into its own error state -- measured (w2-code-network,
+  // w2-code-impossible): "Live feed unavailable", "Google sign-in is still
+  // loading" -- with nothing anywhere saying the PREVIEW is the reason. This
+  // scan exists so the viewer can SAY so (one visible line, see viewerHtml),
+  // never to reject or reshape anything: a flagged page still renders exactly
+  // as before. Prose like "data is fetched daily" and plain <a href="https://"
+  // links do not count -- an anchor navigates, it does not connect.
+  function htmlWantsNetwork(html) {
+    const s = String(html || '');
+    return /\bfetch\s*\(/.test(s)
+      || /\bnew\s+(?:XMLHttpRequest|WebSocket|EventSource)\b/.test(s)
+      || /\bnavigator\.sendBeacon\b/.test(s)
+      || /<(?:script|img|iframe|audio|video|source)\b[^>]*\bsrc\s*=\s*["']https?:\/\//i.test(s)
+      || /<link\b[^>]*\bhref\s*=\s*["']https?:\/\//i.test(s);
+  }
+
   function artifactHtml(artifact) {
     const file = String(artifact.file || '');
     const url = `/api/evolve/agent/artifact/${encodeURIComponent(state.activeId)}/${file.split('/').map(encodeURIComponent).join('/')}`;
@@ -366,6 +384,20 @@
       if (cut > 0) state.previewBase = { cid: token.id, url: url.slice(0, cut) };
     }
     state.artifactDocs[file] = url;
+    // Learn whether the page asks for the network BEFORE the redraw that shows
+    // it, through the same validated read the asset inliner uses. Awaited on
+    // purpose: a flag arriving after render() would need another render, and
+    // render() rewrites innerHTML, which destroys every live preview iframe
+    // (see the note above). One extra file read per HTML artifact, once.
+    if (/\.x?html?$/i.test(file)) {
+      state.artifactNet = state.artifactNet || {};
+      if (state.artifactNet[file] === undefined) {
+        try {
+          const body = await readProjectFile(token.id, file);
+          state.artifactNet[file] = body === null ? false : htmlWantsNetwork(body);
+        } catch (e) { state.artifactNet[file] = false; }
+      }
+    }
     if (!quiet) render();
     return true;
 
@@ -470,6 +502,17 @@
     const file = String(state.viewer.file);
     const doc = (state.artifactDocs && state.artifactDocs[file]) || artifactUrlFor(file);
     const full = !!state.viewer.full;
+    // One visible line when the page asks for the network: this embedded frame
+    // is served connect-src 'self', so the app's fetches fail HERE by design
+    // and used to fail silently -- the owner's first sight of a working build
+    // was its own error state, blamed on the build. The standalone tab IS
+    // allowed outbound https/wss (deliverable_aiohttp._apply_headers), so the
+    // notice points at the way that works. Sight, not a gate: the preview
+    // still renders exactly as before. Styled inline because this module owns
+    // only the notice, not the stylesheet.
+    const netNotice = (state.artifactNet && state.artifactNet[file])
+      ? `<div class="tc-code-viewer-netnote" style="display:flex;align-items:center;gap:.5em;padding:.4em .9em;font-size:.8125em;opacity:.85;"><i class="ph ph-info" aria-hidden="true"></i><span>This embedded preview blocks internet access — <a href="${esc(artifactUrlFor(file))}" target="_blank" rel="noopener noreferrer">open it in its own tab</a> for live data.</span></div>`
+      : '';
     // `allow-same-origin` is withheld on purpose: the frame only has to render.
     return `<aside class="tc-code-viewer${full ? ' is-full' : ''}" role="dialog" aria-label="${esc(file)}">
       <header class="tc-code-viewer-head">
@@ -539,6 +582,7 @@
            previews (:184, :212) either -- a 168px tabindex="-1" picture must not be
            able to fill the screen or touch the clipboard.
            Guard: tests/test_a_generated_app_can_copy_and_go_fullscreen.py -->
+      ${netNotice}
       <div class="tc-code-viewer-stage"><iframe title="${esc(file)}" sandbox="allow-scripts allow-forms allow-modals allow-pointer-lock allow-downloads allow-same-origin" allow="fullscreen; clipboard-write" src="${esc(doc)}"></iframe></div>
     </aside>`;
   }
@@ -563,6 +607,7 @@
     bindViewer,
     configure,
     ensureArtifactDoc,
+    htmlWantsNetwork,
     hydrateArtifactThumbnails,
     inlineLocalAssets,
     openViewer,

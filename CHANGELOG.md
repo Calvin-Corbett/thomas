@@ -122,6 +122,8 @@ Versioning: Semantic Versioning.
 
 - (landed) Library gate removal -- details in the wave-4 entries above.
 
+- (landed) preview network notice + standalone-tab connect-src -- details above.
+
 ### Added (image generation, with the truth about credentials)
 
 - New `image.generate` tool, registered for the chat agent, the delegation

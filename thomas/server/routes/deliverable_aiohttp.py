@@ -528,7 +528,7 @@ class DeliverablePreviewService:
                 raise web.HTTPNotFound(text="preview capability required")
             target = self._target(grant, self._safe_tail(request, grant))
             response = self._file_response(target)
-            self._apply_headers(response)
+            self._apply_headers(response, top_level=self._is_top_level_navigation(request))
             return response
 
         preview_app.router.add_get("/__enter/{capability}/{tail:.*}", enter)
@@ -587,7 +587,19 @@ class DeliverablePreviewService:
             return web.Response(body=_inject_storage_shim(html).encode("utf-8"), content_type="text/html")
         return web.FileResponse(target)
 
-    def _apply_headers(self, response: web.StreamResponse) -> None:
+    @staticmethod
+    def _is_top_level_navigation(request: web.Request) -> bool:
+        """True only for a browser's own top-level navigation to the preview.
+
+        ``Sec-Fetch-Dest: document`` is what the standalone "open in its own
+        tab" navigation carries; the frames embedded beside the chat send
+        ``iframe``/``frame``. An absent header (an old client) reads as NOT
+        top-level: the widening below requires positive evidence, never the
+        absence of it.
+        """
+        return str(request.headers.get("Sec-Fetch-Dest") or "").strip().lower() == "document"
+
+    def _apply_headers(self, response: web.StreamResponse, *, top_level: bool = False) -> None:
         # 'self' as well as the UI, because a generated app is allowed to frame
         # its OWN pages: a shell index.html embedding the game it built is an
         # ancestor chain of [preview origin, UI], and frame-ancestors is checked
@@ -597,6 +609,33 @@ class DeliverablePreviewService:
         # listens on its own ephemeral port, so 'self' is one app's own origin;
         # it grants nothing to another preview or to a remote page.
         frame_ancestors = f"{self._main_origin} 'self'" if self._main_origin else "'none'"
+        # Where a script may CONNECT, and only there, depends on how the page
+        # was opened (measured: w2-code-network, w2-code-impossible -- a
+        # generated app fetching a live feed worked exactly as written and
+        # still opened into "Live feed unavailable" on every surface Thomas
+        # offered, with nothing saying the preview was the reason):
+        #
+        #   embedded beside the chat   connect-src 'self'            (unchanged)
+        #   standalone tab navigation  connect-src 'self' https: wss:
+        #
+        # The tab grant is SECURE SCHEMES ONLY, and that is the whole safety
+        # argument: Thomas itself is plaintext http://127.0.0.1:8899 and every
+        # sibling preview grant is plaintext http://127.0.0.1:<port>, so
+        # `https:`/`wss:` structurally excludes both -- generated code still
+        # cannot reach Thomas's API or another preview's files, which is the
+        # isolation `connect-src 'self'` was doing (see the long note in
+        # tests/test_preview_lets_an_app_frame_its_own_pages.py). `http:` or
+        # `*` here would reopen both; the guard is
+        # tests/test_the_standalone_preview_tab_can_reach_the_web.py.
+        #
+        # The embedded frame stays locked on purpose, not by neglect: it sits
+        # beside the chat where nothing announces the block, so its honest fix
+        # is the visible notice in unified_code_results.js, with "open in its
+        # own tab" as the working path. Told apart by Sec-Fetch-Dest above --
+        # no header means locked. (An app's OWN inner frames also read as
+        # embedded and stay locked even in the tab; the notice still names the
+        # limitation rather than nothing doing so.)
+        connect_src = "connect-src 'self' https: wss:" if top_level else "connect-src 'self'"
         # Four capabilities were silently removed here, each killing correct
         # generated code with no error anywhere. Each is granted for the same
         # reason and each has a guard holding it; the full measurement for every
@@ -665,7 +704,7 @@ class DeliverablePreviewService:
             "default-src 'self' data: blob:; "
             "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; "
             "style-src 'self' 'unsafe-inline' data:; img-src 'self' data: blob:; "
-            "font-src 'self' data:; media-src 'self' data: blob:; connect-src 'self'; "
+            f"font-src 'self' data:; media-src 'self' data: blob:; {connect_src}; "
             "worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; "
             f"frame-ancestors {frame_ancestors}"
         )
