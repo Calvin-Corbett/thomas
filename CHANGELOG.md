@@ -120,6 +120,8 @@ Versioning: Semantic Versioning.
   events, and the CLI verdict honors the stamps — read-only CLI runs stop
   being demoted, and the duplicated read-only name list is deleted.
 
+- (landed) Library gate removal -- details in the wave-4 entries above.
+
 ### Added (image generation, with the truth about credentials)
 
 - New `image.generate` tool, registered for the chat agent, the delegation
