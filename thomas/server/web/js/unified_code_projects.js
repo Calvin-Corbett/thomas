@@ -141,4 +141,119 @@
     rememberProjectName,
     updateProjectButton,
   };
+
+  // -------------------------------------------------------------------------
+  // Where the reader LEFT OFF, so F5 does not dump them on the Chat welcome
+  // screen. Measured (sweeps/w2-code-stop): reloading during or after a Code
+  // task landed on Chat, and the task had to be hunted out of ~197 sidebar
+  // rows. Lives in this file rather than a new module because chat.html sits
+  // at its line ceiling and cannot take another <script> tag, and this file
+  // already holds the one shared state object (configure() above) where the
+  // open conversation's id lives.
+  //
+  // Persist: a snapshot {mode, codeConversationId} in localStorage, refreshed
+  // on a 1s tick (written only when it changed) and flushed on pagehide /
+  // tab-hide, so the value present at reload is the surface that was on
+  // screen when the reload was asked for.
+  //
+  // Restore: on boot, if the reader arrived with NO explicit destination (no
+  // query, no hash) and the snapshot says a Code conversation was open, write
+  // `?forge_code=<cid>` into the URL via history.replaceState. That is the
+  // exact deep link unified_code_mode.js consumes at DOMContentLoaded — and
+  // chat.html loads THIS file first, so this listener runs before that
+  // consumer, which then switches to Code, opens the conversation, and strips
+  // the parameter, exactly as if the reader had followed the link themselves.
+  // Any query or hash already in the URL means the reader chose a landing, so
+  // restore stands down: it can never steal an explicit deep link.
+  //
+  // A stale snapshot self-heals: if the stored conversation no longer opens,
+  // unified_code_mode.js reports it once and leaves activeId empty, and the
+  // next persistence tick records the surface as it actually is.
+
+  const SURFACE_STORE_KEY = 'thomas.lastSurface';
+
+  function surfaceSnapshot(mode, codeConversationId) {
+    const key = String(mode || '').toLowerCase();
+    if (key !== 'chat' && key !== 'code' && key !== 'work') return null;
+    return {
+      mode: key,
+      // A Chat or Work surface must not drag a stale Code conversation along:
+      // restoring it would move the reader somewhere they had already left.
+      codeConversationId: key === 'code' ? String(codeConversationId || '') : '',
+    };
+  }
+
+  function decideSurfaceRestore(storedRaw, landing) {
+    const search = String((landing && landing.search) || '').replace(/^\?/, '');
+    const hash = String((landing && landing.hash) || '').replace(/^#/, '');
+    if (search || hash) return { restore: false, reason: 'explicit-landing', cid: '' };
+    let stored = null;
+    try { stored = JSON.parse(String(storedRaw || '')); } catch (_error) { stored = null; }
+    if (!stored || typeof stored !== 'object') return { restore: false, reason: 'no-snapshot', cid: '' };
+    if (stored.mode !== 'code') return { restore: false, reason: 'default-surface', cid: '' };
+    const cid = typeof stored.codeConversationId === 'string' ? stored.codeConversationId : '';
+    return { restore: true, reason: cid ? 'code-conversation' : 'code-mode', cid };
+  }
+
+  let lastStoredSurface = '';
+
+  function persistSurface() {
+    const modesApi = window.ThomasUnifiedModes;
+    const mode = modesApi && modesApi.mode ? modesApi.mode() : '';
+    const snapshot = surfaceSnapshot(mode, state ? state.activeId : '');
+    if (!snapshot) return;
+    const raw = JSON.stringify(snapshot);
+    if (raw === lastStoredSurface) return;
+    try {
+      window.localStorage.setItem(SURFACE_STORE_KEY, raw);
+      lastStoredSurface = raw;
+    } catch (_error) { /* storage denied: restore simply has nothing to read */ }
+  }
+
+  function restoreLastSurface() {
+    let raw = '';
+    try { raw = window.localStorage.getItem(SURFACE_STORE_KEY) || ''; }
+    catch (_error) { return; }
+    const decision = decideSurfaceRestore(raw, window.location);
+    if (!decision.restore) return;
+    if (decision.cid) {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('forge_code', decision.cid);
+        window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+      } catch (_error) { /* a URL this page cannot parse is not one to rewrite */ }
+      return;
+    }
+    // Code mode with no open task: nothing for the deep link to open, so ask
+    // the modes host directly. DOMContentLoaded guarantees connect() has run
+    // (chat.html's inline boot executes during parsing).
+    const modesApi = window.ThomasUnifiedModes;
+    if (modesApi && modesApi.setMode) void modesApi.setMode('code');
+  }
+
+  function bootSurfaceRestore() {
+    restoreLastSurface();
+    // Feature-guarded because sibling node harnesses evaluate this classic
+    // script with a minimal window/document; in a real page every guard holds.
+    if (typeof window.setInterval === 'function') window.setInterval(persistSurface, 1000);
+    if (typeof window.addEventListener === 'function') window.addEventListener('pagehide', persistSurface);
+    if (typeof document.addEventListener === 'function') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') persistSurface();
+      });
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootSurfaceRestore, { once: true });
+  } else {
+    bootSurfaceRestore();
+  }
+
+  window.ThomasCodeSurface = {
+    decideSurfaceRestore,
+    persistSurface,
+    restoreLastSurface,
+    surfaceSnapshot,
+  };
 })();

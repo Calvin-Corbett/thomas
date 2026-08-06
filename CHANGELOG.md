@@ -45,6 +45,10 @@ Versioning: Semantic Versioning.
 
 - (landed) Work onboarding finishable + wizard keeps your words -- details above.
 
+- (landed) per-run snapshots in task-born projects + .thomas gitignore shield -- details above.
+
+- (landed) reload lands back on the open Code task -- details above.
+
 ### Fixed (the Code workspace shell works on Windows and tells the truth about failing)
 
 - Every quoted inline script (`python -c "…"`, `node -e "…"`) reached the
