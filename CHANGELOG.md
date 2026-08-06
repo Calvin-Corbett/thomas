@@ -7,6 +7,26 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (chat presentation: tables render, status lines settle, the CTA is a button)
+
+- The chat markdown renderer now renders GFM tables — an explicitly-requested
+  budget table used to arrive as literal pipe text, one `<p>` per row. Header,
+  alignment colons, and escaped pipes are honored; a pipe line with no
+  delimiter row keeps the raw-text fallback. Styled for both themes.
+- A completed delegation's transcript no longer ends on "On it — this is
+  running now, and I'll share the result when it's ready." below the Done pill:
+  once every handoff on a message is terminal, the stored promise renders as an
+  honest settled line ("Done — packing.txt is ready above.", or the
+  failed/cancelled truth).
+- The "Download <file>" call-to-action no longer overflows its 42px icon box —
+  chat.html never linked the stylesheet that defines `.sr-only`, so the
+  visually-hidden label rendered visibly; the rule now exists locally.
+- "Open UTF-8 preview" is now just "Preview".
+  Tests: `tests/test_chat_markdown_renders_a_requested_table_as_a_table.py`,
+  `tests/test_a_finished_delegation_stops_claiming_it_is_running.py`,
+  `tests/test_the_file_card_download_cta_contains_its_label.py` (all red
+  before, node harnesses driving the real extracted functions).
+
 ### Fixed (a chat message is never lost, dropped, or falsely absent)
 
 - The user turn is persisted the moment `/api/v2/chat` accepts it, not when the

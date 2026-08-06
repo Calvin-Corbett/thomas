@@ -135,7 +135,10 @@ def test_primary_chat_renders_honest_tool_and_observed_model_receipts() -> None:
 def test_primary_chat_renders_safe_structured_markdown_for_assistant_only() -> None:
     text = CHAT_HTML.read_text(encoding="utf-8")
 
-    assert "let html = isUser ? esc(m.text) : mdToHtml(m.text);" in text
+    # The assistant branch still routes through mdToHtml; since 2026-08-05 it
+    # first settles a completed delegation's stale "running now" promise
+    # (_settledStatusText) before rendering, so the pin follows the line.
+    assert "let html = isUser ? esc(m.text) : mdToHtml(m.streaming ? m.text : (_settledStatusText(m) ?? m.text));" in text
     assert "tc-bubble${isUser ? '' : ' tc-markdown'}" in text
     # The markdown rules moved with the rest of the shell's inline CSS into
     # chat_shell.css; the class the renderer emits still has to be styled.
@@ -333,7 +336,11 @@ def test_code_adapter_contains_async_failures_at_ui_boundaries() -> None:
     text = CODE_JS.read_text(encoding="utf-8")
 
     assert "async function safely(action, fallback)" in text
-    assert "void safely(stop" in text
+    # Both stop entry points -- the drawer button and the mode adapter -- run
+    # the SAME routine. There used to be a second `stop()` behind the adapter
+    # with different wording and no refresh; pinning the shared call is what
+    # keeps a third stop from drifting in again.
+    assert text.count("void safely(() => stopRun()") == 2
     assert "void safely(() => loadTree" in text
     assert "void safely(() => loadFile" in text
     assert "void safely(approvePending" in text
@@ -352,7 +359,11 @@ def test_code_adapter_preserves_terminal_stream_states() -> None:
     assert "state.runStatus = terminalRunStatus(payload)" in text
     assert "state.runStatus = 'disconnected'" in text
     assert "state.runStatus = 'stopped'" in text
-    assert "payload.termination_confirmed !== true" in text
+    # The unified stop routine does not trust the stop response's own claim of
+    # termination: it polls status until the run is genuinely gone before
+    # declaring the stop, which is what `payload.termination_confirmed` used to
+    # gate in the retired second stop function.
+    assert "await waitForRestartReady()" in text
     assert "state.runStatus = 'stopping'" in text
     assert "const stopWasPending = state.runStatus === 'stopping'" in text
     assert "Stop confirmed (process exit ${payload.returncode})" in text
@@ -373,7 +384,9 @@ def test_code_adapter_collapses_terminal_and_tool_evidence_behind_details() -> N
     assert "function isTerminalTool(name)" in text
     assert "function annotateTerminalEvent(event, tracker)" in text
     assert "function groupedTechnicalEvents(events)" in text
-    assert "function technicalActivityHtml(events, saved)" in text
+    # The third parameter carries the run's outcome, so an ok run's recovered
+    # tool errors read "failed attempts, recovered" instead of "issues".
+    assert "function technicalActivityHtml(events, saved, ok)" in text
     assert '<details class="tc-code-saved-activity' in text
     assert '<div class="tc-code-technical' in text
     assert '<details class="tc-code-technical' not in text
@@ -456,7 +469,7 @@ def test_code_history_replays_persisted_run_activity() -> None:
     assert "JSON.parse(line)" in text
     assert "parsed && parsed.fc" in text
     assert "const events = transcriptEvents(turn)" in text
-    assert "technicalActivityHtml(technicalEvents, true)" in text
+    assert "technicalActivityHtml(technicalEvents, true, turn.ok === true)" in text
     assert "tc-code-saved-activity" in text
     assert 'data-saved="true"' in text
 

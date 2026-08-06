@@ -211,6 +211,16 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .tc-markdown pre code { border: 0; background: transparent; padding: 0; font: inherit; }
 .tc-markdown hr { margin: 19px 0; border: 0; border-top: 1px solid var(--c-border); }
 .tc-markdown a { color: var(--c-accent); text-underline-offset: 3px; }
+/* GFM tables (mdToHtml wraps each in .tc-md-table). A wide table scrolls
+   inside its own container instead of stretching the bubble; colors ride the
+   --c-* variables so both themes get a readable grid without extra rules.
+   Cell alignment from the delimiter row arrives as an inline text-align,
+   which outranks the default left here. */
+.tc-markdown .tc-md-table { margin: 12px 0 15px; max-width: 100%; overflow-x: auto; }
+.tc-markdown table { border-collapse: collapse; width: max-content; max-width: 100%; font-size: 14.5px; line-height: 1.55; }
+.tc-markdown th, .tc-markdown td { border: 1px solid var(--c-border); padding: 7px 12px; text-align: left; vertical-align: top; }
+.tc-markdown th { background: var(--c-surface-2); color: var(--c-text); font-weight: 750; }
+.tc-markdown td { background: var(--c-surface); }
 
 /* Chat content "rail": its left edge is anchored to a VIEWPORT-relative
    position (not the column's width), so when the Canvas opens and the chat
@@ -244,5 +254,11 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .tc-doc-page strong { font-weight: 700; } .tc-doc-page em { font-style: italic; }
 .tc-doc-page hr { border: 0; border-top: 1px solid #e4e7ef; margin: 18px 0; }
 .tc-doc-page a { color: #2f6bff; }
+/* The document canvas renders through the same mdToHtml, so its tables need
+   grid lines too — fixed light colors here to match the paper page above. */
+.tc-doc-page .tc-md-table { margin: 0 0 12px; max-width: 100%; overflow-x: auto; }
+.tc-doc-page table { border-collapse: collapse; max-width: 100%; }
+.tc-doc-page th, .tc-doc-page td { border: 1px solid #d9dde7; padding: 6px 11px; text-align: left; vertical-align: top; }
+.tc-doc-page th { background: #f2f4f9; font-weight: 700; }
 .tc-doc-cursor { display: inline-block; width: 6px; height: 1.02em; background: #2f6bff; margin-left: 1px; vertical-align: text-bottom; border-radius: 1px; animation: tc-blink 1s step-end infinite; }
 @keyframes tc-blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }

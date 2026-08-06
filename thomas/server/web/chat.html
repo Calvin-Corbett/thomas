@@ -355,6 +355,8 @@
   </div>
 
   <style>
+    /* Icon-only controls (the 42px artifact download button, and others) carry their spoken label in a class="sr-only" span. The class was referenced throughout this page but defined only in css/accessibility.css, which this page never links — so "Download packing.txt" rendered as VISIBLE text crammed into a box sized for one icon, wrapping outside its border (measured live, 2026-08-05). Defined here: visually hidden, still read by screen readers. */
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
     /* Everything lives here rather than inline. An inline `color` outranks any
        stylesheet rule without !important, so styling the base state inline
        silently killed both the hover state and the uncommitted-tree state --
@@ -1108,10 +1110,21 @@
       const isUser = m.role === 'user';
       const showDots = !isUser && m.streaming && (!m.text || m.text.length === 0);
       const showCursor = !isUser && m.streaming && m.text && m.text.length > 0;
-      let html = isUser ? esc(m.text) : mdToHtml(m.text);
+      let html = isUser ? esc(m.text) : mdToHtml(m.streaming ? m.text : (_settledStatusText(m) ?? m.text));
       if (showCursor) html += `<span style="display: inline-block; width: 8px; height: 17px; transform: translateY(2px); margin-left: 2px; background: var(--c-accent); animation: tc-blink 1s step-end infinite;"></span>`;
       if (showDots) html = `<span style="display: inline-flex; gap: 5px; padding: 4px 0;"><span style="width: 7px; height: 7px; border-radius: 999px; background: var(--c-muted); animation: tc-dot 1.3s ease-in-out infinite;"></span><span style="width: 7px; height: 7px; border-radius: 999px; background: var(--c-muted); animation: tc-dot 1.3s ease-in-out .2s infinite;"></span><span style="width: 7px; height: 7px; border-radius: 999px; background: var(--c-muted); animation: tc-dot 1.3s ease-in-out .4s infinite;"></span></span>`;
       return html;
+    }
+    // A delegation opens with a present-tense bubble — "On it — this is running now, and I'll share the result when it's ready." (reasoning.py stores it verbatim; reasoning_context.py a sibling wording). The Done pill and deliverable card render ABOVE it, so a finished task's transcript ENDED on a false statement, on every store re-render, forever (measured live, 2026-08-05). The stored text is history; the rendering is ours: once every handoff on this message is terminal, the ONE stale sentence renders as what actually happened, naming the deliverable when known — surrounding prose survives untouched.
+    // Null = nothing to settle: no promise in the text, no delegation activity attached, or a handoff genuinely still running. Honest text and user text are never touched — this never fires while the claim is still true.
+    function _settledStatusText(m) {
+      const text = String(m.text || ''), sentence = /[^.!?\n]*\b(?:running now|getting this done now)\b[^.!?\n]*[.!?]?/i;
+      if (!sentence.test(text) || !/\bshare the result\b/i.test(text)) return null;
+      const a = m.activity, handoffs = ((a && a.steps) || []).filter(s => s && s.kind === 'handoff');
+      if (!handoffs.length || handoffs.some(s => s.status === 'running')) return null;
+      const names = ((Array.isArray(m.artifacts) && m.artifacts.length) ? m.artifacts : (Array.isArray(a.artifacts) && a.artifacts.length) ? a.artifacts : (a.artifact ? [a.artifact] : [])).map(x => String((x && (x.name || x.path)) || '')).filter(Boolean);
+      const done = handoffs.some(s => s.status === 'failed') ? 'This ran into a problem — the details are in the card above.' : (a.cancelled || handoffs.some(s => s.status === 'cancelled')) ? 'Stopped — this task was cancelled before it finished.' : names.length === 1 ? ('Done — ' + names[0] + ' is ready above.') : names.length > 1 ? ('Done — ' + names.length + ' results are ready above.') : 'Done — the result is ready above.';
+      return text.replace(sentence, done);
     }
     async function copyMessageText(text, button) {
       const value = String(text || '');
@@ -1407,7 +1420,7 @@
         return `<span style="display:inline-flex;align-items:center;gap:8px;margin-top:8px;padding:8px 12px;border:1px solid var(--c-border-2);border-radius:10px;background:var(--c-surface);color:var(--c-text);font-size:12.5px;width:max-content;"><i class="ph ph-file-text" style="color:var(--c-accent);font-size:15px;"></i> ${esc(name)}</span>`;
       }
       if (_isTextArtifact(art.kind, url, name)) {
-        return `<div style="display:flex;align-items:stretch;gap:7px;margin-top:8px;width:100%;max-width:390px;"><button type="button" data-artifact-open="0" data-artifact-url="${esc(url)}" data-artifact-name="${esc(name)}" data-artifact-kind="${esc(String(art.kind || ''))}" style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;padding:11px 13px;border:1px solid var(--c-border-2);border-radius:12px;background:var(--c-surface);color:var(--c-text);cursor:pointer;text-align:left;font-family:inherit;"><i class="ph ph-file-text" style="color:var(--c-accent);font-size:17px;"></i><span style="flex:1;min-width:0;"><span style="display:block;font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(name)}</span><span style="display:block;margin-top:2px;font-size:11.5px;color:var(--c-muted);">Open UTF-8 preview</span></span><i class="ph ph-arrow-right" style="font-size:14px;color:var(--c-muted);"></i></button><a data-artifact-download href="${esc(artifactDownloadUrl(url))}" download="${esc(name)}" title="Download ${esc(name)}" style="display:grid;place-items:center;width:42px;border:1px solid var(--c-border-2);border-radius:12px;background:var(--c-surface);color:var(--c-accent);text-decoration:none;"><i class="ph ph-download-simple" style="font-size:17px;"></i><span class="sr-only">Download ${esc(name)}</span></a></div>`;
+        return `<div style="display:flex;align-items:stretch;gap:7px;margin-top:8px;width:100%;max-width:390px;"><button type="button" data-artifact-open="0" data-artifact-url="${esc(url)}" data-artifact-name="${esc(name)}" data-artifact-kind="${esc(String(art.kind || ''))}" style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;padding:11px 13px;border:1px solid var(--c-border-2);border-radius:12px;background:var(--c-surface);color:var(--c-text);cursor:pointer;text-align:left;font-family:inherit;"><i class="ph ph-file-text" style="color:var(--c-accent);font-size:17px;"></i><span style="flex:1;min-width:0;"><span style="display:block;font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(name)}</span><span style="display:block;margin-top:2px;font-size:11.5px;color:var(--c-muted);">Preview</span></span><i class="ph ph-arrow-right" style="font-size:14px;color:var(--c-muted);"></i></button><a data-artifact-download href="${esc(artifactDownloadUrl(url))}" download="${esc(name)}" title="Download ${esc(name)}" style="display:grid;place-items:center;width:42px;border:1px solid var(--c-border-2);border-radius:12px;background:var(--c-surface);color:var(--c-accent);text-decoration:none;"><i class="ph ph-download-simple" style="font-size:17px;"></i><span class="sr-only">Download ${esc(name)}</span></a></div>`;
       }
       const src = url + '#toolbar=0&navpanes=0&view=FitH';
       if (a.artifactOpen) {
@@ -1581,6 +1594,8 @@
           void canvasRender(button.dataset.artifactUrl || '', button.dataset.artifactName || 'result', button.dataset.artifactKind || '');
         });
       });
+      // Completion events repaint this card but never repainted the bubble below it, so "On it — this is running now…" stayed the transcript's last line until a full re-render. Repaint once per settled wording (_settledStatusText) — not per poll, which would wipe an in-progress text selection for no visual change.
+      if (!m.streaming && ref.bubbleEl) { const st = _settledStatusText(m); if (st !== null && m._settledRendered !== st) { m._settledRendered = st; ref.bubbleEl.innerHTML = bubbleInner(m); } }
     }
     async function requestTaskCancel(sessionId, executionId) {
       const url = '/api/v2/chat/session/' + encodeURIComponent(sessionId) + '/delegations/' + encodeURIComponent(executionId) + '/cancel';
@@ -2444,14 +2459,16 @@
       s = s.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
       return s;
     }
+    // GFM table plumbing for mdToHtml. _tableCells splits a row treating "\|" as cell CONTENT, not a boundary; _tableAligns recognizes the delimiter row ("|:---|---:|") and reads its alignment colons. A line failing these checks is not table syntax and keeps mdToHtml's raw-text fallback.
+    function _tableCells(line) { let s = String(line).trim(); if (s.startsWith('|')) s = s.slice(1); if (s.endsWith('|') && !s.endsWith('\\|')) s = s.slice(0, -1); return s.replace(/\\\|/g, '\u0000').split('|').map(c => c.replace(/\u0000/g, '|').trim()); }
+    function _tableAligns(line) { if (String(line).indexOf('-') === -1) return null; const cells = _tableCells(line), aligns = []; if (!cells.length) return null; for (const c of cells) { if (!/^:?-+:?$/.test(c)) return null; aligns.push(c.startsWith(':') && c.endsWith(':') ? 'center' : c.endsWith(':') ? 'right' : ''); } return aligns; }
     function mdToHtml(md) {
       const lines = String(md || '').replace(/\r/g, '').split('\n');
       let html = '', list = null, code = null;
       const closeList = () => { if (list) { html += '</' + list + '>'; list = null; } };
       const closeCode = () => { if (code) { html += '<pre><code>' + esc(code.join('\n')) + '</code></pre>'; code = null; } };
-      for (const raw of lines) {
-        const line = raw.replace(/\s+$/, '');
-        let m;
+      for (let li = 0; li < lines.length; li++) {
+        const raw = lines[li], line = raw.replace(/\s+$/, ''); let m;
         if (/^\s*```/.test(line)) { closeList(); if (code) closeCode(); else code = []; continue; }
         if (code) { code.push(raw); continue; }
         if (/^\s*$/.test(line)) { closeList(); continue; }
@@ -2459,10 +2476,16 @@
         if (/^\s*(---+|\*\*\*+|___+)\s*$/.test(line)) { closeList(); html += '<hr>'; continue; }
         if ((m = line.match(/^\s*[-*]\s+(.*)$/))) { if (list !== 'ul') { closeList(); list = 'ul'; html += '<ul>'; } html += '<li>' + _mdInline(m[1]) + '</li>'; continue; }
         if ((m = line.match(/^\s*(\d+)[.)]\s+(.*)$/))) { if (list !== 'ol') { closeList(); list = 'ol'; html += '<ol start="' + m[1] + '">'; } html += '<li>' + _mdInline(m[2]) + '</li>'; continue; }
+        // GFM table: a header row whose NEXT line is a matching delimiter row. Measured (2026-08-05): an explicitly-requested budget table hit the paragraph fallback below — 0 <table> elements in the DOM, every row its own <p> of literal pipes; the model wrote correct markdown, this renderer just didn't speak it. Ragged body rows normalize to the header's width (GFM behavior); a pipe line with no delimiter row underneath is NOT a table and keeps the raw-text fallback.
+        const tA = (line.indexOf('|') !== -1 && li + 1 < lines.length) ? _tableAligns(lines[li + 1]) : null, tH = tA ? _tableCells(line) : null;
+        if (tH && tH.length === tA.length) {
+          closeList(); const at = i => tA[i] ? ' style="text-align:' + tA[i] + '"' : ''; let bi = li + 2, body = '';
+          for (; bi < lines.length && lines[bi].indexOf('|') !== -1 && !/^\s*$/.test(lines[bi]); bi++) { const cs = _tableCells(lines[bi]); body += '<tr>' + tH.map((_c, i) => '<td' + at(i) + '>' + _mdInline(cs[i] || '') + '</td>').join('') + '</tr>'; }
+          html += '<div class="tc-md-table"><table><thead><tr>' + tH.map((c, i) => '<th' + at(i) + '>' + _mdInline(c) + '</th>').join('') + '</tr></thead>' + (body ? '<tbody>' + body + '</tbody>' : '') + '</table></div>'; li = bi - 1; continue;
+        }
         closeList(); html += '<p>' + _mdInline(line) + '</p>';
       }
-      closeList();
-      closeCode();
+      closeList(); closeCode();
       return html;
     }
     // Code mode renders Thomas's replies too, and was showing the markdown raw:
