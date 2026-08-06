@@ -51,6 +51,8 @@ Versioning: Semantic Versioning.
 
 - (landed) transcripts persist as one string; readers tolerate the legacy array shape -- details above.
 
+- (landed) per-run snapshots in task-born projects + runtime verdict parity -- details above.
+
 ### Fixed (the Code workspace shell works on Windows and tells the truth about failing)
 
 - Every quoted inline script (`python -c "…"`, `node -e "…"`) reached the

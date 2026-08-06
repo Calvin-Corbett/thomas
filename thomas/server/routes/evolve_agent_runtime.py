@@ -69,6 +69,7 @@ def _confirmed_conversation_reply(transcript: str, *, require_final: bool = Fals
     saw_tool = False
     saw_named_tool = False
     saw_mutating_tool = False
+    saw_failed_result = False
     for raw in str(transcript or "").splitlines():
         try:
             event = json.loads(raw)
@@ -79,6 +80,8 @@ def _confirmed_conversation_reply(transcript: str, *, require_final: bool = Fals
         kind = str(event.get("fc") or "")
         if kind in {"tool", "tool_result"}:
             saw_tool = True
+            if kind == "tool_result" and bool(event.get("is_error")):
+                saw_failed_result = True
             # Only the tool event carries a name; tool_result does not.
             name = str(event.get("name") or "").strip()
             if name and name != "tool":
@@ -92,14 +95,20 @@ def _confirmed_conversation_reply(transcript: str, *, require_final: bool = Fals
                 # classification stays as the fallback for older transcripts
                 # and the claude-CLI path, which does not stamp.
                 access = str(event.get("access") or "").strip()
-                if access == "write":
-                    saw_mutating_tool = True
-                elif access != "read" and not is_inspection_tool(name):
+                if access == "write" or (access != "read" and not is_inspection_tool(name)):
                     saw_mutating_tool = True
         elif kind in {"final", "say"} and str(event.get("text") or "").strip():
             if kind == "final" or not require_final:
                 saw_reply = True
-    if saw_tool and not (saw_named_tool and not saw_mutating_tool):
+    # Unnamed tool activity stays disqualifying -- nothing is known about what
+    # it did. A write-capable tool disqualifies only when a tool FAILURE was
+    # also seen: the caller has already established from git truth that nothing
+    # changed, so a clean write-capable run that answered is an answer, not a
+    # failed edit. Same contract as dispatch_agent_loop and dispatch_claude_cli
+    # (settled 2026-08-05 after an explain run was demoted for a dir listing).
+    if saw_tool and not saw_named_tool:
+        return False
+    if saw_mutating_tool and saw_failed_result:
         return False
     return saw_reply
 
@@ -716,6 +725,22 @@ async def _drain_and_record(
                 title=str(conv.get("title") or ""),
                 model=model,
             )
+            if changed:
+                # A finished run in a TASK-BORN project becomes a real commit.
+                # Before this, such a project's only commit was the empty birth
+                # baseline, so when a later run overwrote a finished deliverable,
+                # Keep/Revert could only offer the empty tree back (P1, measured
+                # twice). The helper refuses user-picked projects (their history
+                # is theirs; the Checkpoint button remains their path) and never
+                # raises -- and the guard stands anyway, because preserving
+                # history must never rewrite a successful outcome as a failure.
+                try:
+                    forge_code_git.commit_run_snapshot(root, run_id=run_id, reason=reason)
+                except (AttributeError, OSError, RuntimeError, TypeError, ValueError) as exc:
+                    # Named, not broad: the helper already degrades internally;
+                    # this is the last line of defense and it must never
+                    # rewrite a successful outcome as a failure.
+                    log.warning("evolve agent: run snapshot commit failed: %s", exc, exc_info=True)
         # This flag used to be set True because execution REACHED this line,
         # while every other branch returned it False with a persistence_state.
         # That made the confirmation CIRCULAR: `_await_recording` awaits the

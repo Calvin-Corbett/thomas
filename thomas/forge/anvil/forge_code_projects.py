@@ -383,7 +383,36 @@ def project_for_new_task(task: str) -> Path:
         marker.write_text('{"created_by": "project_for_new_task"}\n', encoding="utf-8")
     except OSError:
         log.warning("task-born stamp could not be written for %s", project, exc_info=True)
+    # Born shielded: the stamp directory doubles as bookkeeping, and even a
+    # task-born project's own status output should show the work, not Thomas's
+    # internals.
+    shield_thomas_dir(project)
     return project
+
+
+def shield_thomas_dir(root: str | Path) -> None:
+    """Plant ``.thomas/.gitignore`` containing ``*`` so Thomas's bookkeeping
+    never appears as ``?? .thomas/`` noise in the project's own git status.
+
+    Observed in the user's picked project (w2-code-picked-project): one Code
+    run left ``?? .thomas/`` in THEIR ``git status`` forever -- conversation
+    transcripts and markers Thomas wrote for itself, presented to the user as
+    untracked work they never made. A ``*`` ignore inside the directory hides
+    everything in it (including itself) from status without touching the
+    project's own ``.gitignore`` or any tracked file.
+
+    Best-effort and idempotent: an existing ``.thomas/.gitignore`` is theirs
+    and is left exactly as it is, and a failure to plant is logged, never
+    raised -- a project that cannot be shielded must still open.
+    """
+    try:
+        thomas_dir = Path(root).expanduser() / ".thomas"
+        thomas_dir.mkdir(parents=True, exist_ok=True)
+        ignore = thomas_dir / ".gitignore"
+        if not ignore.exists():
+            ignore.write_text("*\n", encoding="utf-8")
+    except OSError:
+        log.warning("could not shield .thomas bookkeeping in %s", root, exc_info=True)
 
 
 def _task_born_marker(root: str | Path) -> Path:
@@ -571,6 +600,10 @@ def bind_conversation(
     row = {"project_root": str(root), "settings": dict(settings or {})}
     registry[cid] = row
     _write_registry(catalog_root, registry)
+    # Binding is the moment Thomas commits to writing its bookkeeping under
+    # this root (conversation transcripts land in <root>/.thomas/...), so it is
+    # the moment to keep that bookkeeping out of the project's git status.
+    shield_thomas_dir(root)
     return dict(row)
 
 

@@ -15,9 +15,12 @@ the UI can never mistake missing evidence for a clean run.
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import subprocess
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 # Default timeout (seconds) for a single git invocation.
 _DEFAULT_TIMEOUT = 30
@@ -171,6 +174,83 @@ def checkpoint(
         "commit": sha.strip() if code == 0 else "",
         "remote": remote.strip() if code_r == 0 else "",
     }
+
+
+# Identity for commits Thomas makes in its OWN task-born projects. Passed as
+# per-invocation -c flags (like _seal_initial_commit in forge_code_projects)
+# because a freshly minted repo has no user.name configured, and a snapshot
+# must not depend on -- or touch -- anyone's global git config.
+_SNAPSHOT_IDENTITY = (
+    "-c",
+    "user.name=Thomas",
+    "-c",
+    "user.email=thomas@localhost",
+    "-c",
+    "commit.gpgsign=false",
+)
+
+
+def commit_run_snapshot(root: str | Path, *, run_id: str = "", reason: str = "") -> dict[str, object]:
+    """Commit a finished run's working tree in a TASK-BORN project. Never raises.
+
+    Why this exists (P1, measured twice): a task-born project's only commit was
+    the empty ``Baseline: contents before Thomas opened this project``, so when
+    a later run overwrote a finished deliverable, Keep/Revert could only offer
+    the empty baseline back -- the finished work was unrecoverable. Committing
+    after each successful run makes the finished state the thing ``git diff``
+    compares against and ``git checkout --`` restores.
+
+    Scope is deliberate and asymmetric:
+
+    * Task-born projects only (the stamp ``project_for_new_task`` writes).
+      A user-picked project's history belongs to the user -- the manual
+      Checkpoint button remains their path -- so anything without the stamp is
+      reported, untouched.
+    * ``.thomas/`` internals are excluded by pathspec, so transcripts and
+      markers never enter the user's visible history.
+    * Best-effort by contract: any failure is logged and reported in the
+      returned dict. A snapshot is preservation, and failing to preserve must
+      never change a run's outcome -- the caller relies on this never raising.
+
+    Returns ``{"committed": bool, "commit": str, "reason": str}``.
+    """
+    try:
+        from thomas.forge.anvil.forge_code_projects import is_task_born_project, shield_thomas_dir
+
+        if not is_task_born_project(root):
+            return {"committed": False, "commit": "", "reason": "not a task-born project; its history belongs to the user"}
+        # Task-born projects minted before the shield existed still show their
+        # own stamp as `?? .thomas/...`; planting it here self-heals them, and
+        # it is what leaves the tree fully CLEAN after the commit below -- the
+        # property the next run's launch snapshot depends on.
+        shield_thomas_dir(root)
+        paths = sorted(
+            {
+                path
+                for _status, path in _status_entries(root)
+                if not str(path).replace("\\", "/").lower().startswith(".thomas/")
+            }
+        )
+        if not paths:
+            return {"committed": False, "commit": "", "reason": "nothing outside .thomas/ changed"}
+        prefix = str(run_id or "").strip()[:8]
+        label = f"Thomas run {prefix}" if prefix else "Thomas run"
+        message = f"{label}: {str(reason or '').strip() or 'changes recorded'}"
+        rc, out, err = _run_git(root, [*_SNAPSHOT_IDENTITY, "add", "--", *paths], timeout=60)
+        if rc != 0:
+            raise ForgeCodeGitError(f"git add failed: {(err or out).strip()[:200] or f'exited {rc}'}")
+        # Pathspec commit: only the named files enter the snapshot, even if
+        # something else was somehow sitting staged in the index.
+        rc, out, err = _run_git(root, [*_SNAPSHOT_IDENTITY, "commit", "-m", message, "--", *paths], timeout=60)
+        if rc != 0:
+            raise ForgeCodeGitError(f"git commit failed: {(err or out).strip()[:200] or f'exited {rc}'}")
+        rc, sha, _err = _run_git(root, ["rev-parse", "--short", "HEAD"])
+        return {"committed": True, "commit": sha.strip() if rc == 0 else "", "reason": message}
+    except (ForgeCodeGitError, OSError, RuntimeError, TypeError, ValueError, subprocess.SubprocessError) as exc:
+        # Named rather than broad: a snapshot failure logs and never becomes a
+        # verdict, but a bug in this helper must still show its face.
+        log.warning("run snapshot commit failed in %s", root, exc_info=True)
+        return {"committed": False, "commit": "", "reason": str(exc) or type(exc).__name__}
 
 
 def delta_since(root: str | Path, snap: dict[str, str]) -> list[str]:
