@@ -80,7 +80,17 @@ def _parse_porcelain(output: str) -> list[tuple[str, str]]:
 
 
 _STATUS_ARGS = ["status", "--porcelain=v1", "-z", "--untracked-files=all"]
-_RUNTIME_BOOKKEEPING_PREFIXES = (".thomas/evolve/agent/",)
+# Paths Thomas itself writes inside the selected repository. Two kinds:
+#   * .thomas/evolve/agent/  -- the Code transcript store.
+#   * .thomas/scratch/       -- verification scratch the headless prompt directs
+#     builders to use. Measured before this prefix existed: a homepage build's
+#     server log and verify-*.cjs probe landed in CHANGED FILES beside the
+#     user's real work (with Keep/Revert offered on each) and were swept into
+#     the checkpoint commit.
+# This is a namespace, not a pattern-match: scratch-looking files OUTSIDE these
+# prefixes stay fully visible, so a builder that ignores the prompt is seen,
+# not silently cleaned up after.
+_RUNTIME_BOOKKEEPING_PREFIXES = (".thomas/evolve/agent/", ".thomas/scratch/")
 
 
 def _status_entries(root: str | Path) -> list[tuple[str, str]]:

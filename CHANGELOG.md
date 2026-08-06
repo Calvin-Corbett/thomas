@@ -7,6 +7,22 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (the builder summarizes from the files and hides its scratch)
+
+- The composed Code prompt (shared by both engines via `bridge_prompts.py`) now
+  requires the final summary to be written AFTER re-reading the changed files
+  and to name only details present in them — a steered run had described three
+  cats by names that appear nowhere in the shipped page.
+- Verification scratch (probe scripts, server logs, one-off harnesses) is
+  directed to `.thomas/scratch/` and deleted before finishing, and
+  `forge_code_git` now actually filters that prefix from user-facing change
+  lists (the claim that it already did was measured false — only
+  `.thomas/evolve/agent/` was filtered), so `.thomas-homepage-server.log`-style
+  debris stops appearing in CHANGED FILES with Keep/Revert.
+  Tests:
+  `tests/test_the_code_prompt_summarizes_from_the_files_and_hides_its_scratch.py`
+  (red before).
+
 ### Fixed (chat presentation: tables render, status lines settle, the CTA is a button)
 
 - The chat markdown renderer now renders GFM tables — an explicitly-requested

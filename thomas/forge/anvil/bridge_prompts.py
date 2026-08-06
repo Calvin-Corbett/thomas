@@ -128,6 +128,29 @@ def compose_headless_prompt(
         "inside the project folder. Do NOT create branches or commit. Do not modify "
         "protected files or gate scripts."
     )
+    # Measured on a homepage build: verification scratch (a server log, a
+    # verify-*.cjs probe) landed in the project root, appeared in CHANGED FILES
+    # beside the user's real work with a Keep/Revert choice, and was swept into
+    # the checkpoint commit. `.thomas/` is Thomas's own namespace and
+    # `project_delta_since` keeps `.thomas/scratch/` out of every user-facing
+    # change list, so scratch parked there is invisible end-to-end.
+    parts.append(
+        "Any scratch you need while verifying — probe scripts, server logs, one-off "
+        "harnesses — goes under .thomas/scratch/ inside the project, never in the "
+        "project root, and gets deleted when you finish. Scratch left anywhere else "
+        "shows up in the user's changed-files list next to their real work."
+    )
+    # Measured on the same build: the final message described the delivered page
+    # with entirely wrong specifics — it named three cats that appear nowhere in
+    # the shipped file. The summary was written from memory of the plan, not
+    # from the artifact. Guidance only: nothing filters or rejects the summary.
+    parts.append(
+        "Write your final summary AFTER re-reading the files you changed, and name "
+        "only details that are actually in them — a name, a heading, a count you can "
+        "point to. Prefer \"I re-checked <file>\" phrasing over recalling what you "
+        "meant to build. A summary written from memory can describe content that "
+        "never shipped."
+    )
     return "\n\n".join(parts)
 
 
