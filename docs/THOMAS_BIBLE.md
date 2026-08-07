@@ -1097,7 +1097,7 @@ Most of what was here on 2026-05-06 morning has been resolved. Surviving items:
 | [`thomas/cli/_commands_base.py`](../thomas/cli/_commands_base.py) | First-run nudge logic | ✅ canonical — inlined the existence check, suggests `thomas quickstart` / `thomas serve` |
 | [`thomas/server/web/js/runtime/003_easy_setup_onboarding_01.js`](../thomas/server/web/js/runtime/003_easy_setup_onboarding_01.js) … 008 + 006b/006c | The 5-step Easy Setup modal | ✅ canonical (split via runtime loader) |
 | [`thomas/server/web/js/app_runtime_loader.js`](../thomas/server/web/js/app_runtime_loader.js) | Loads the runtime/ scripts in declared order | ✅ canonical |
-| [`thomas/server/web/js/app_runtime_primary.mjs`](../thomas/server/web/js/app_runtime_primary.mjs) (2.2 MB) | Bundled runtime served as a single mjs | ✅ canonical (build artifact / concatenated form) |
+| `thomas/server/web/js/app_runtime_primary.mjs` (2.2 MB) | Bundled runtime served as a single mjs | ❌ DELETED 2026-08-07 (was dead code; the split `js/runtime/` files are canonical) |
 
 ### Agent watchout
 

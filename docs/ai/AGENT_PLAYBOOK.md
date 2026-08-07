@@ -31,7 +31,7 @@ The following product surfaces are intentional and must remain present:
 
 ## Runtime Policy
 
-- Live browser boot uses `thomas/server/web/js/app_runtime_primary.mjs`.
+- Live browser boot uses `app_runtime_loader.js` + the ordered `js/runtime/` files (the old `app_runtime_primary.mjs` monolith was deleted 2026-08-07; its reappearance is a regression).
 - `thomas/server/web/js/app.js` must not reintroduce joined-runtime or `app_parts`
   fallbacks.
 - Source modules under `thomas/server/web/js/src/runtime_modules/` may still
