@@ -349,7 +349,7 @@ primary controls reachable and the transcript scrollable without horizontal
 scrollbars swallowing content. Broken/overlapping layout = FAIL.
 
 ### SC-RS-3 — SHOULD — Layout uses fluid/relative sizing, not magic fixed pixels for the main columns
-**Verify:** `grep -n 'width:\s*[0-9]\{3,\}px' thomas/server/web/css/evolution.css`
+**Verify:** `grep -n 'width:\s*[0-9]\{3,\}px' thomas/server/web/css/evolution*.css thomas/server/web/css/forge_code_*.css` (evolution.css is an import hub)
 for the Forge Code containers — the main transcript/columns should not be pinned to
 fixed pixel widths that break at 4K. Hardcoded large fixed widths on the primary
 Forge Code layout = SHOULD-fail.
@@ -502,7 +502,7 @@ prompt, labeled model/engine selectors, a visible Stop while running. Missing
 labels / raw jargon dump = SHOULD-fail.
 
 ### SC-UX-4 — SHOULD — No ✨ sparkle / competitor branding
-**Verify:** `grep -rn '✨\|sparkle' thomas/server/web/js/runtime/046_evolution_dashboard.js thomas/server/web/js/runtime/047_evolve_agent_chat.js thomas/server/web/css/evolution.css`
+**Verify:** `grep -rn '✨\|sparkle' thomas/server/web/js/runtime/046_evolution_dashboard.js thomas/server/web/js/runtime/047_evolve_agent_chat.js thomas/server/web/css/evolution*.css thomas/server/web/css/forge_code_*.css` (evolution.css is an import hub)
 returns nothing. Any ✨ = SHOULD-fail.
 
 ---

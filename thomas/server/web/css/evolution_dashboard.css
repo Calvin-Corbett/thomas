@@ -1,0 +1,572 @@
+/* Evolution dashboard -- the self-improvement panel.
+   Cockpit aesthetic: sharp corners, muted instrument accent, dark translucent
+   panels. Plain-English, low-jargon layout for a non-technical operator. */
+
+/* ----------------------------------------------------------------------------
+   TYPE RAMP (UI-1) -- every font-size in this file snaps to this documented
+   scale; no orphan/half-pixel one-offs (no 10.5 / 11.5 / 12.5 / 13.5 / 16.5 /
+   17px). Steps, in px:
+     10  micro labels / language + kind badges
+     11  small mono labels (status, counter labels, tags, diff stat/hunk)
+     12  secondary body / form controls / tool + result + code text
+     13  body prose / subtitles / list + history rows
+     14  card titles
+     16  section / hero / empty-state titles + hero glyph
+     20  page + brand headings
+     24  focal stat numbers
+   Hierarchy is preserved; sizes were only consolidated onto the nearest step.
+   ---------------------------------------------------------------------------- */
+
+.evolution-workspace {
+    position: absolute;
+    inset: 0;
+    z-index: 16;
+    box-sizing: border-box;
+    padding: 72px 18px 18px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    color: var(--c-text);
+    /* Fully opaque: at 98% alpha the chat view behind ghosted through this
+       overlay (bright bubbles were faintly readable across the Forge header). */
+    background:
+        radial-gradient(circle at 84% 8%, rgba(76, 200, 154, 0.06), transparent 40%),
+        var(--c-bg);
+}
+
+.evolution-shell {
+    min-height: 100%;
+    min-width: 0;
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.evolution-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.evolution-header h2 {
+    margin: 0 0 5px;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    color: #eef2f6;
+}
+
+.evo-sub {
+    margin: 0;
+    color: #93a2b5;
+    font-size: 13px;
+    line-height: 1.55;
+    max-width: 660px;
+}
+
+.evo-byline {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 9px;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 11px;
+    color: #6f7e92;
+    letter-spacing: 0.2px;
+}
+
+.evo-byline-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #5f6e82;
+    flex: 0 0 auto;
+}
+
+.evo-byline-dot.is-live {
+    background: #4cc89a;
+    animation: evoPulse 1.6s ease-in-out infinite;
+}
+
+.evolution-status-pill {
+    flex: 0 0 auto;
+    padding: 5px 12px;
+    border-radius: 3px;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    border: 1px solid rgba(140, 160, 180, 0.35);
+    background: rgba(140, 160, 180, 0.08);
+    color: #aab8c8;
+}
+
+.evolution-status-pill.is-running {
+    border-color: rgba(76, 200, 154, 0.5);
+    background: rgba(76, 200, 154, 0.12);
+    color: #7fe0bf;
+    animation: evoPulse 1.8s ease-in-out infinite;
+}
+
+.evolution-status-pill.is-attention {
+    border-color: rgba(224, 175, 104, 0.55);
+    background: rgba(224, 175, 104, 0.13);
+    color: #f0cf9a;
+}
+
+.evolution-status-pill.is-error {
+    border-color: rgba(247, 118, 142, 0.5);
+    background: rgba(247, 118, 142, 0.14);
+    color: #ffc2cd;
+}
+
+@keyframes evoPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* ---- hero status: the focal point ---- */
+.evo-hero {
+    border: 1px solid rgba(140, 160, 180, 0.16);
+    border-left: 3px solid rgba(76, 200, 154, 0.7);
+    border-radius: 3px;
+    background: rgba(10, 15, 24, 0.66);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 18px 20px;
+}
+
+.evo-hero-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.evo-hero-main { flex: 1; min-width: 0; }
+
+.evo-hero-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #eef2f6;
+}
+
+.evo-hero-detail {
+    margin-top: 3px;
+    font-size: 13px;
+    color: #93a2b5;
+    font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.evo-hero-icon {
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.evo-hero-icon.is-check { background: rgba(76, 200, 154, 0.16); color: #4cc89a; }
+.evo-hero-icon.is-check::before { content: "\2713"; }
+.evo-hero-icon.is-wand { background: rgba(140, 160, 180, 0.16); color: #aab8c8; }
+.evo-hero-icon.is-wand::before { content: "\2726"; }
+.evo-hero-icon.is-warn { background: rgba(247, 118, 142, 0.16); color: #f7768e; }
+.evo-hero-icon.is-warn::before { content: "\0021"; }
+
+.evo-hero-spin {
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2.5px solid rgba(76, 200, 154, 0.22);
+    border-top-color: #4cc89a;
+    animation: evoSpin 0.9s linear infinite;
+}
+
+@keyframes evoSpin { to { transform: rotate(360deg); } }
+
+.evo-progress {
+    margin-top: 11px;
+    height: 5px;
+    border-radius: 999px;
+    background: rgba(140, 160, 180, 0.16);
+    overflow: hidden;
+}
+
+.evo-progress-fill {
+    height: 100%;
+    background: #4cc89a;
+    border-radius: 999px;
+    transition: width 0.4s ease;
+}
+
+/* ---- buttons ---- */
+.evo-btn {
+    padding: 9px 16px;
+    border-radius: 3px;
+    border: 1px solid rgba(140, 160, 180, 0.28);
+    background: rgba(140, 160, 180, 0.06);
+    color: #d6dde6;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+
+.evo-btn:hover { background: rgba(140, 160, 180, 0.14); border-color: rgba(140, 160, 180, 0.45); }
+.evo-btn:active { transform: translateY(1px); }
+.evo-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.evo-btn-primary {
+    border-color: rgba(76, 200, 154, 0.55);
+    background: rgba(76, 200, 154, 0.16);
+    color: #8fe7c8;
+}
+
+.evo-btn-primary:hover { background: rgba(76, 200, 154, 0.26); border-color: rgba(76, 200, 154, 0.7); }
+
+/* ---- stat tiles ---- */
+.evolution-counters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+}
+
+.evo-counter {
+    padding: 13px 15px;
+    border-radius: 3px;
+    border: 1px solid rgba(140, 160, 180, 0.12);
+    background: rgba(10, 15, 24, 0.55);
+}
+
+.evo-counter-value {
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 1;
+    color: #eef2f6;
+}
+
+.evo-counter-value.is-warn { color: #f0cf9a; }
+
+.evo-counter-label {
+    margin-top: 6px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #7f8da0;
+    font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+/* ---- section titles ---- */
+.evo-section-title {
+    margin: 0 0 10px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #93a2b5;
+    font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.evo-section-warn { color: #f0cf9a; }
+
+.evo-needs-wrap[hidden] { display: none; }
+
+.evolution-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+@media (max-width: 900px) {
+    .evolution-columns { grid-template-columns: 1fr; }
+}
+
+/* ---- cards ---- */
+.evo-list { display: flex; flex-direction: column; gap: 9px; }
+
+.evo-card {
+    padding: 13px 15px;
+    border-radius: 3px;
+    border: 1px solid rgba(140, 160, 180, 0.13);
+    background: rgba(10, 15, 24, 0.6);
+}
+
+.evo-card-warn {
+    border-color: rgba(224, 175, 104, 0.4);
+    border-left: 3px solid rgba(224, 175, 104, 0.7);
+    background: rgba(28, 22, 12, 0.5);
+}
+
+.evo-card-head {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 6px;
+}
+
+.evo-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    flex: 1;
+    color: #e4eaf1;
+}
+
+.evo-card-why {
+    font-size: 12px;
+    color: #93a2b5;
+    line-height: 1.55;
+}
+
+.evo-safe-note {
+    margin-top: 6px;
+    color: #7fc9aa;
+}
+
+.evo-kind {
+    flex: 0 0 auto;
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: lowercase;
+    letter-spacing: 0.3px;
+    padding: 3px 8px;
+    border-radius: 2px;
+    border: 1px solid rgba(140, 160, 180, 0.2);
+    background: rgba(140, 160, 180, 0.07);
+    color: #aab8c8;
+    font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.evo-expand-link {
+    margin-top: 9px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: #79b8ff;
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.evo-expand-link:hover { text-decoration: underline; }
+
+.evo-detail[hidden] { display: none; }
+
+.evo-files {
+    margin: 9px 0 0;
+    padding: 0 0 0 18px;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 12px;
+    color: #93a2b5;
+    line-height: 1.7;
+}
+
+.evo-card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.evo-card-actions .evo-btn { padding: 7px 14px; font-size: 12px; }
+
+.evo-empty {
+    padding: 18px;
+    text-align: center;
+    color: #6f7e92;
+    font-size: 12px;
+    border: 1px dashed rgba(140, 160, 180, 0.18);
+    border-radius: 3px;
+}
+
+/* ---- recently-done timeline ---- */
+.evo-hist-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 3px;
+    background: rgba(10, 15, 24, 0.45);
+    font-size: 13px;
+}
+
+.evo-hist-dot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #5f6e82;
+}
+
+.evo-hist-dot.is-done { background: #4cc89a; }
+.evo-hist-dot.is-wait { background: #e0af68; }
+.evo-hist-dot.is-skip { background: #5f6e82; }
+
+.evo-hist-title { flex: 1; min-width: 0; color: #cdd6e0; }
+
+.evo-hist-tag {
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: #7f8da0;
+    font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+/* ---- advanced drawer ---- */
+.evo-advanced {
+    border: 1px solid rgba(140, 160, 180, 0.13);
+    border-radius: 3px;
+    background: rgba(10, 15, 24, 0.5);
+    padding: 12px 15px;
+}
+
+.evo-advanced > summary {
+    cursor: pointer;
+    font-size: 13px;
+    color: #93a2b5;
+    list-style: none;
+    font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.evo-advanced > summary::before {
+    content: "\002B  ";
+    color: #6f7e92;
+}
+
+.evo-advanced[open] > summary::before { content: "\2212  "; }
+
+.evo-advanced-body {
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+}
+
+.evo-advanced-body label {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 12px;
+    color: #93a2b5;
+}
+
+.evo-advanced-body select,
+.evo-advanced-body input {
+    padding: 8px 10px;
+    border-radius: 3px;
+    border: 1px solid rgba(140, 160, 180, 0.22);
+    background: rgba(7, 12, 21, 0.9);
+    color: #d6dde6;
+    font-size: 13px;
+}
+
+/* ---- Forge shell: the Evolve | Code container ---- */
+.forge-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+.forge-topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.forge-brand {
+    font-size: 20px;
+    font-weight: 600;
+    color: #eef2f6;
+    letter-spacing: 0.3px;
+}
+
+.forge-toggle {
+    display: inline-flex;
+    border: 1px solid rgba(140, 160, 180, 0.3);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.forge-tab {
+    padding: 7px 18px;
+    font-size: 13px;
+    font-weight: 500;
+    background: transparent;
+    color: #93a2b5;
+    border: none;
+    border-left: 1px solid rgba(140, 160, 180, 0.2);
+    cursor: pointer;
+}
+
+.forge-tab:first-child { border-left: none; }
+.forge-tab.is-active { background: rgba(76, 200, 154, 0.16); color: #8fe7c8; }
+.forge-tab:hover:not(.is-active) { background: rgba(140, 160, 180, 0.08); }
+
+.forge-hint {
+    margin-left: auto;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 11px;
+    color: #6f7e92;
+}
+
+.forge-view.is-hidden { display: none; }
+.forge-view .evolution-shell { max-width: none; margin: 0; }
+
+/* Bound the Code surface height so the transcript scrolls INTERNALLY (the chat
+   log can be scrolled up to read history) instead of growing the whole page.
+   min-height:0 down the flex chain lets the inner overflow:auto engage. */
+/* Own a clean stacking context so the translucent transcript/changes never let
+   stale rows from layers behind ghost through, and so the surface composites as
+   one unit. */
+#forgeCode {
+    display: flex;
+    position: relative;
+    z-index: 1;
+    isolation: isolate;
+    min-height: 440px;
+    height: min(78vh, 940px);
+}
+#forgeCode .evo-eng {
+    flex: 1;
+    min-height: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(76, 200, 154, 0.22);
+    border-radius: 3px;
+    background: rgba(10, 15, 24, 0.6);
+}
+#forgeCode .evo-eng-transcript { flex: 1; min-height: 0; max-height: none; }
+/* The wrap clips its own children so the transcript and the changes panel stay
+   inside its rounded bounds -- no row spills past the edges as a ghost. */
+#forgeCode .forge-code-wrap { flex: 1; min-height: 0; overflow: hidden; }
+
+/* ---- clickable stat tiles + expandable detail ---- */
+.evo-counter-click {
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    font: inherit;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+.evo-counter-click:hover { border-color: rgba(76, 200, 154, 0.4); }
+.evo-counter-click.is-active { border-color: rgba(76, 200, 154, 0.6); background: rgba(76, 200, 154, 0.1); }
+
+.evo-tile-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    border: 0.5px solid rgba(140, 160, 180, 0.13);
+    border-radius: 3px;
+    background: rgba(10, 15, 24, 0.4);
+    padding: 12px 14px;
+}
+.evo-tile-detail.is-hidden { display: none; }

@@ -7,6 +7,18 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (design unification: evolution.css split by responsibility)
+
+- `evolution.css` (1940 lines, 340 over the 1600 hard cap) is now an @import
+  hub over four responsibility files, cascade-identical contiguous ranges:
+  `evolution_dashboard.css`, `forge_code_shell.css`, `forge_code_activity.css`,
+  `forge_code_review.css` - all under the 600 soft cap. In the same pass: the
+  duplicate `fcSpin` keyframes dropped, the never-defined `--fc-on-accent`
+  became `--c-accent-ink`, the stale `#7fb0ff` focus fallback became
+  `var(--c-accent)`, and the Forge light overrides scoped to
+  `html[data-theme=light]` so the legacy BODY attribute can no longer flip
+  the Forge surface light under a dark page. Tests read the hub + imports.
+
 ### Fixed (design unification: classic survives the light themes)
 
 - The classic shell was legible only in the dark themes: the sidebar kept a

@@ -23,6 +23,16 @@ MARKETPLACE_CSS = WEB / "css" / "component_styles" / "marketplace-workspace.css"
 MARKETPLACE_RENDERER = WEB / "js" / "runtime" / "036_workbench_editors_08.js"
 COMPOSER_CSS = WEB / "css" / "composer.css"
 EVOLUTION_CSS = WEB / "css" / "evolution.css"
+
+def _evolution_css() -> str:
+    """evolution.css is an @import hub (split by responsibility to satisfy the
+    CSS size cap). The contract spans the hub plus every file it imports."""
+    hub = EVOLUTION_CSS.read_text(encoding="utf-8")
+    parts = [hub]
+    for name in re.findall(r'@import url\("\./([^"?]+)', hub):
+        parts.append((EVOLUTION_CSS.parent / name).read_text(encoding="utf-8"))
+    return "\n".join(parts)
+
 TOKEN_WIDGET_CSS = WEB / "css" / "token_economy_widget.css"
 PANELS = (
     WEB / "js" / "mention_context_panel.js",
@@ -81,7 +91,7 @@ def test_composer_css_is_token_driven_not_a_hex_ramp() -> None:
 
 
 def test_evolution_forge_tokens_point_at_canonical_semantics() -> None:
-    css = _read(EVOLUTION_CSS)
+    css = _evolution_css()
     assert "--fc-accent: var(--c-accent)" in css
     assert "--fc-warn: var(--c-warn)" in css
     assert "--fc-danger: var(--c-danger)" in css

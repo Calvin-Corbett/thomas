@@ -1,0 +1,517 @@
+/* ============================================================================
+   FORGE CODE — frontier engineering surface
+   Renders a Code conversation in the SAME visual language as the real Thomas
+   chat (proportional prose via .message-row / formatMarkdown), with tool calls
+   as structured cards and edits as real code-review diffs. Everything below is
+   driven by a single Forge token block that chains off the global tokens.css
+   :root scale — no orphan one-off hex/px in the component rules.
+   ============================================================================ */
+
+/* -- Forge token block: one place for color / spacing / radius / type -- */
+.forge-code-wrap {
+    /* surfaces */
+    --fc-bg: rgba(11, 16, 25, 0.55);
+    --fc-surface: rgba(17, 24, 34, 0.78);
+    --fc-surface-2: rgba(9, 13, 21, 0.72);
+    --fc-surface-3: rgba(7, 11, 18, 0.9);
+    /* lines */
+    --fc-border: rgba(148, 163, 184, 0.16);
+    --fc-border-strong: rgba(148, 163, 184, 0.3);
+    --fc-rail: rgba(148, 163, 184, 0.22);
+    /* ink */
+    --fc-ink: var(--text-primary);
+    --fc-ink-2: var(--text-secondary);
+    --fc-ink-3: #8593a8;
+    /* accent + semantics: canonical Chat tokens (one accent hue; semantics
+       reserved for meaning). Soft tints derive from the same tokens so every
+       theme keeps the pairing coherent. */
+    --fc-accent: var(--c-accent);
+    --fc-accent-soft: var(--c-accent-soft);
+    --fc-mint: var(--c-success);
+    --fc-mint-soft: color-mix(in srgb, var(--c-success) 13%, transparent);
+    --fc-warn: var(--c-warn);
+    --fc-warn-soft: color-mix(in srgb, var(--c-warn) 12%, transparent);
+    --fc-danger: var(--c-danger);
+    --fc-danger-soft: color-mix(in srgb, var(--c-danger) 13%, transparent);
+    /* diff semantics (colorblind-safe: always paired with a gutter sign + rail) */
+    --fc-add-ink: #5fd38a;
+    --fc-add-tint: rgba(63, 185, 80, 0.14);
+    --fc-add-rail: #2ea043;
+    --fc-add-word: rgba(63, 185, 80, 0.4);
+    --fc-del-ink: #f0867a;
+    --fc-del-tint: rgba(248, 81, 73, 0.13);
+    --fc-del-rail: #da3633;
+    --fc-del-word: rgba(248, 81, 73, 0.38);
+    /* type */
+    --fc-mono: var(--font-mono);
+    --fc-code-size: 12px;
+    /* radius (chains off global scale) */
+    --fc-r-sm: var(--radius-sm);
+    --fc-r-md: var(--radius-md);
+    --fc-r-lg: var(--radius-lg);
+    /* diff gutter width (overwritten per-card from the file's max line no.) */
+    --fc-gut: 2.5ch;
+
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    gap: var(--space-3);
+}
+
+/* Light-theme override: the surface stays legible if the app theme flips. */
+html[data-theme="light"] .forge-code-wrap {
+    --fc-bg: #f6f8fb;
+    --fc-surface: #ffffff;
+    --fc-surface-2: #f1f4f9;
+    --fc-surface-3: #eef1f6;
+    --fc-border: rgba(15, 23, 42, 0.12);
+    --fc-border-strong: rgba(15, 23, 42, 0.2);
+    --fc-rail: rgba(15, 23, 42, 0.16);
+    --fc-ink: #14233b;
+    --fc-ink-2: #3a4a63;
+    --fc-ink-3: #5a6b85;
+    /* --fc-accent inherits the canonical --c-accent, which already flips per theme. */
+    --fc-add-ink: #1a7f37;
+    --fc-add-tint: rgba(46, 160, 67, 0.12);
+    --fc-add-word: rgba(46, 160, 67, 0.3);
+    --fc-del-ink: #cf222e;
+    --fc-del-tint: rgba(207, 34, 46, 0.1);
+    --fc-del-word: rgba(207, 34, 46, 0.28);
+}
+
+/* -- layout shell: session-history rail + main column ------------------ */
+/* The wrap is a column; its single child is a flex ROW that places the
+   collapsible history rail beside the main conversation column. The rail is the
+   primary history surface (it replaced the cramped day-grouped <select>). */
+.forge-code-shell {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    gap: var(--space-3);
+    position: relative; /* anchor for the overlay rail at narrow widths */
+}
+
+.forge-code-main {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    gap: var(--space-3);
+    position: relative; /* anchor for the pinned "Jump to latest" affordance */
+}
+
+/* -- the session-history left rail ------------------------------------- */
+.forge-code-rail {
+    flex: 0 0 clamp(220px, 22vw, 300px); /* caps so it stays a rail even at 4K */
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--fc-border);
+    border-radius: var(--fc-r-lg);
+    background: var(--fc-bg);
+}
+
+.fc-rail-top { display: flex; align-items: center; gap: var(--space-2); }
+
+.fc-rail-new {
+    flex: 1 1 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 12px;
+    border-radius: var(--fc-r-sm);
+    border: 1px solid var(--fc-border-strong);
+    background: var(--fc-surface-3);
+    color: var(--fc-ink);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+.fc-rail-new:hover { border-color: var(--fc-accent); background: var(--fc-accent-soft); }
+.fc-rail-new svg { width: 16px; height: 16px; flex: 0 0 auto; }
+
+.fc-rail-collapse,
+.fc-rail-handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: var(--fc-r-sm);
+    border: 1px solid var(--fc-border-strong);
+    background: var(--fc-surface-3);
+    color: var(--fc-ink-2);
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+.fc-rail-collapse:hover,
+.fc-rail-handle:hover { border-color: var(--fc-rail); color: var(--fc-ink); }
+.fc-rail-collapse svg,
+.fc-rail-handle svg { width: 18px; height: 18px; }
+
+/* The collapsed re-open handle takes the rail's place when it is hidden. */
+.fc-rail-handle { display: none; align-self: flex-start; }
+.forge-code-wrap.is-rail-collapsed .forge-code-rail { display: none; }
+.forge-code-wrap.is-rail-collapsed .fc-rail-handle { display: inline-flex; }
+
+.fc-rail-search-wrap { position: relative; display: flex; align-items: center; }
+.fc-rail-search-ic {
+    position: absolute;
+    left: 9px;
+    width: 15px;
+    height: 15px;
+    color: var(--fc-ink-3);
+    pointer-events: none;
+}
+.fc-rail-search {
+    width: 100%;
+    padding: 7px 10px 7px 30px;
+    border-radius: var(--fc-r-sm);
+    border: 1px solid var(--fc-border-strong);
+    background: var(--fc-surface-3);
+    color: var(--fc-ink);
+    font-family: var(--font-sans);
+    font-size: 12px;
+}
+.fc-rail-search:focus-visible { outline: 2px solid var(--fc-accent); outline-offset: 1px; }
+.fc-rail-search::placeholder { color: var(--fc-ink-3); }
+
+.fc-rail-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding-right: 2px;
+}
+.fc-rail-empty {
+    color: var(--fc-ink-3);
+    font-size: 12px;
+    padding: var(--space-3) 4px;
+    text-align: center;
+}
+.fc-rail-group { display: flex; flex-direction: column; gap: 3px; }
+.fc-rail-group-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--fc-ink-3);
+    padding: 2px 4px 4px;
+}
+
+/* one conversation row: title + meta, with rename/delete actions */
+.fc-convo {
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    border-radius: var(--fc-r-sm);
+    border: 1px solid transparent;
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+.fc-convo:hover { background: var(--fc-surface); border-color: var(--fc-border); }
+.fc-convo.is-active { background: var(--fc-accent-soft); border-color: var(--fc-accent); }
+.fc-convo-open {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 7px 9px;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--font-sans);
+}
+.fc-convo-title {
+    font-size: 13px;
+    color: var(--fc-ink);
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.fc-convo.is-active .fc-convo-title { font-weight: 600; }
+.fc-convo-meta {
+    font-size: 11px;
+    color: var(--fc-ink-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* per-row actions revealed on hover/focus; always reachable by keyboard */
+.fc-convo-actions {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    padding-right: 4px;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+.fc-convo:hover .fc-convo-actions,
+.fc-convo:focus-within .fc-convo-actions,
+.fc-convo.is-active .fc-convo-actions { opacity: 1; }
+.fc-convo-act {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--fc-r-sm);
+    background: transparent;
+    color: var(--fc-ink-3);
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+.fc-convo-act:hover { background: var(--fc-surface-2); color: var(--fc-ink); }
+.fc-convo-del:hover { color: var(--fc-danger); }
+.fc-convo-act svg { width: 15px; height: 15px; }
+
+/* inline rename input (replaces the title in place) */
+.fc-convo-rename {
+    width: 100%;
+    padding: 4px 6px;
+    margin: 1px 0;
+    border-radius: var(--fc-r-sm);
+    border: 1px solid var(--fc-accent);
+    background: var(--fc-surface-3);
+    color: var(--fc-ink);
+    font-family: var(--font-sans);
+    font-size: 13px;
+}
+.fc-convo-rename:focus-visible { outline: 2px solid var(--fc-accent); outline-offset: 1px; }
+.forge-code-rail :focus-visible { outline: 2px solid var(--fc-accent); outline-offset: 1px; }
+
+/* -- header: intro + run controls -------------------------------------- */
+.forge-code-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex: 0 0 auto;
+}
+
+.forge-code-head .fc-sub {
+    font-size: 13px;
+    color: var(--fc-ink-2);
+    line-height: 1.55;
+    max-width: 62ch;
+}
+
+.forge-code-run {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.forge-code-run select {
+    padding: 6px 10px;
+    border-radius: var(--fc-r-sm);
+    border: 1px solid var(--fc-border-strong);
+    background: var(--fc-surface-3);
+    color: var(--fc-ink);
+    font-size: 12px;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+}
+
+.forge-code-run select:hover { border-color: var(--fc-rail); }
+.forge-code-run select:focus-visible {
+    outline: 2px solid var(--fc-accent);
+    outline-offset: 1px;
+}
+
+.forge-code-status {
+    font-family: var(--fc-mono);
+    font-size: 11px;
+    color: var(--fc-ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.forge-code-status.working { color: var(--fc-mint); }
+.forge-code-status.working::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--fc-mint);
+    animation: fcPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes fcPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+.forge-code-stop {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 13px;
+    border-radius: var(--fc-r-sm);
+    border: 1px solid var(--fc-danger);
+    background: var(--fc-danger-soft);
+    color: var(--fc-danger);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.forge-code-stop:hover { background: rgba(224, 110, 95, 0.22); }
+.forge-code-stop:focus-visible { outline: 2px solid var(--fc-accent); outline-offset: 1px; }
+
+/* -- "Jump to latest": the return-to-live-edge control (Perf-10 / UX-54) ---
+   Pinned just inside the bottom of the transcript, centered. Hidden (the [hidden]
+   attribute) while following the live edge; the chat JS reveals it once the user
+   scrolls up, optionally with an unread tally. Click re-attaches auto-scroll. */
+.forge-code-jump {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(var(--space-5) + 6px);
+    z-index: 5;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--fc-border);
+    background: var(--fc-accent);
+    color: var(--c-accent-ink);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+    transition: background 0.15s ease, transform 0.12s ease, opacity 0.15s ease;
+}
+.forge-code-jump[hidden] { display: none; }
+.forge-code-jump:hover { transform: translateX(-50%) translateY(-1px); }
+.forge-code-jump:focus-visible { outline: 2px solid var(--fc-accent); outline-offset: 2px; }
+.forge-code-jump svg { width: 14px; height: 14px; }
+
+/* -- transcript: a real chat surface, not a console log ---------------- */
+.forge-code-transcript {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overflow-anchor: none; /* we manage scroll ourselves; no jump on append */
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-4) var(--space-5);
+    border: 1px solid var(--fc-border);
+    border-radius: var(--fc-r-lg);
+    background: var(--fc-bg);
+    scroll-behavior: smooth;
+    font-family: var(--font-sans);
+}
+
+/* The transcript hosts the REAL chat message rows; tighten their in-Forge
+   spacing a touch (no avatars here) but keep the bubble look identical. */
+.forge-code-transcript .message-row { animation: none; width: 100%; }
+.forge-code-transcript .message-row.is-assistant { padding-right: 0; }
+.forge-code-transcript .message-row.is-user { padding-left: clamp(48px, 9vw, 140px); }
+.forge-code-transcript .message-row.is-assistant .message-stack { gap: var(--space-2); }
+
+/* Message prose is proportional. The #forgeCode ID raises specificity to (1,1,0)
+   and !important beats any equal- or lower-priority monospace base rule that the
+   outer chat cascade might set on .message-content or its block children.
+   Only genuine code/pre elements stay monospace via the explicit rule below. */
+#forgeCode .message-content,
+#forgeCode .message-content :where(p, li, span, h1, h2, h3, blockquote) {
+    font-family: var(--font-sans) !important;
+}
+#forgeCode .message-content code,
+#forgeCode .message-content pre { font-family: var(--fc-mono) !important; }
+
+/* Markdown TABLES in transcript prose had no border / zebra / padding, so a
+   piped table rendered as bare runaway text. Give them the same bordered,
+   zebra-striped, padded grammar as the artifact data table -- driven by the
+   Forge tokens so both themes (dark default + light) stay legible (UI-1/10/44). */
+#forgeCode .message-content table {
+    border-collapse: collapse;
+    width: auto;
+    max-width: 100%;
+    margin: var(--space-2) 0;
+    font-size: 12.5px;
+    border: 1px solid var(--fc-border);
+    border-radius: var(--fc-r-sm);
+    overflow: hidden;
+}
+#forgeCode .message-content th,
+#forgeCode .message-content td {
+    padding: 6px 11px;
+    border: 1px solid var(--fc-border);
+    text-align: left;
+    vertical-align: top;
+}
+#forgeCode .message-content thead th {
+    background: var(--fc-surface-2);
+    color: var(--fc-ink-2);
+    font-weight: 600;
+}
+#forgeCode .message-content tbody tr:nth-child(even) td { background: var(--fc-surface-2); }
+
+/* streaming caret on the live assistant bubble (UI-27) */
+.forge-code-transcript .assistant-bubble.is-streaming::after {
+    content: '';
+    display: inline-block;
+    width: 2px;
+    height: 1.05em;
+    margin-left: 1px;
+    vertical-align: text-bottom;
+    background: var(--fc-accent);
+    animation: fcCaret 1s steps(2, start) infinite;
+}
+
+@keyframes fcCaret { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* empty / first-run state — designed, centered, themed (UI-39) */
+.fc-empty {
+    margin: auto;
+    max-width: 46ch;
+    text-align: center;
+    color: var(--fc-ink-2);
+    font-size: 13px;
+    line-height: 1.65;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.fc-empty .fc-empty-glyph {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--fc-r-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--fc-accent);
+    background: var(--fc-accent-soft);
+    border: 1px solid var(--fc-border);
+}
+
+.fc-empty .fc-empty-glyph svg { width: 22px; height: 22px; }
+.fc-empty .fc-empty-title { font-size: 16px; font-weight: 600; color: var(--fc-ink); }

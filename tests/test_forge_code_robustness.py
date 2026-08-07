@@ -22,6 +22,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_DIR = ROOT / "thomas" / "server" / "web" / "js" / "runtime"
 EVOLUTION_CSS = ROOT / "thomas" / "server" / "web" / "css" / "evolution.css"
+
+def _evolution_css() -> str:
+    """evolution.css is an @import hub (split by responsibility to satisfy the
+    CSS size cap). The contract spans the hub plus every file it imports."""
+    hub = EVOLUTION_CSS.read_text(encoding="utf-8")
+    parts = [hub]
+    for name in re.findall(r'@import url\("\./([^"?]+)', hub):
+        parts.append((EVOLUTION_CSS.parent / name).read_text(encoding="utf-8"))
+    return "\n".join(parts)
+
 CHAT_JS = RUNTIME_DIR / "047_evolve_agent_chat.js"
 
 
@@ -73,7 +83,7 @@ def test_build_error_has_plain_cause_and_retry_dom() -> None:
 
 
 def test_build_error_styles_present() -> None:
-    css = EVOLUTION_CSS.read_text(encoding="utf-8")
+    css = _evolution_css()
     assert ".fc-error.is-build" in css
     assert ".fc-error-cause" in css
     assert ".fc-error-retry" in css
@@ -114,7 +124,7 @@ def test_clean_done_is_not_treated_as_a_drop() -> None:
 
 
 def test_reconnect_styles_present() -> None:
-    css = EVOLUTION_CSS.read_text(encoding="utf-8")
+    css = _evolution_css()
     assert ".fc-reconnect" in css
     assert ".fc-reconnect-ic" in css
 
@@ -162,7 +172,7 @@ def test_huge_diff_renders_a_bounded_node_count() -> None:
 
 
 def test_virtualization_styles_present() -> None:
-    css = EVOLUTION_CSS.read_text(encoding="utf-8")
+    css = _evolution_css()
     assert ".fc-diff-body.fc-diff-virt" in css
     assert ".fc-diff-sizer" in css
     assert ".fc-diff-window" in css
