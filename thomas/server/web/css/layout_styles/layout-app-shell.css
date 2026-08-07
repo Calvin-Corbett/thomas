@@ -34,7 +34,7 @@ body {
     min-width: var(--sidebar-min-width);
     max-width: min(var(--sidebar-max-width), calc(100vw - var(--sidebar-safe-gutter)));
     position: relative;
-    background: rgba(8, 9, 12, 0.82);
+    background: var(--c-sidebar);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     display: flex;
@@ -90,7 +90,7 @@ body {
 .sidebar-search-input-wrap {
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 0;
-    background: rgba(0, 0, 0, 0.25);
+    background: var(--c-surface);
     display: flex;
     align-items: center;
     gap: 6px;
@@ -103,7 +103,7 @@ body {
 
 .sidebar-search-input-wrap:focus-within {
     border-color: var(--c-accent-line);
-    background: rgba(0, 0, 0, 0.35);
+    background: var(--c-surface-2);
 }
 
 .sidebar-search-input-wrap .search-icon {

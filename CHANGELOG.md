@@ -7,6 +7,16 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (design unification: classic survives the light themes)
+
+- The classic shell was legible only in the dark themes: the sidebar kept a
+  hardcoded near-black background while its text followed the theme (light /
+  sandstone rendered dark-on-dark), and both chat bubbles kept hardcoded navy
+  slabs on the cream/white backdrops. Sidebar, search field, and both message
+  bubbles now consume the canonical tokens (`--c-sidebar`, `--c-surface`,
+  `--c-composer-bg`, `--c-user-bg`) - verified by screenshot in light,
+  sandstone, and nebula.
+
 - (landed) dead design code deleted, ~4 MB across 174 files, each grep-proven -- details in the design wave-1 entry below.
 
 - (landed) satellite restyle onto tokens -- details in the design wave-1 entry below.
