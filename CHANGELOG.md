@@ -7,6 +7,19 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Added (design unification: the contract now has its own guard)
+
+- `tests/test_design_tokens_single_source.py` pins the workstream's
+  invariants: tokens.css carries the five-theme shell plus the
+  reduced-motion and focus-ring guards, chat_themes.js derives from it,
+  the retired theme classes stay dead, and - with ratios RECOMPUTED from
+  the live token values - the light themes stay WCAG AA. The new guard
+  immediately out-audited the hand audit: it checks contrast against the
+  page background as well as the menu surface, catching three pairs a
+  hair under 4.5; light muted rises to .64 alpha, sandstone muted to .68
+  and its accent deepens to #a84e30 (4.75-5.16 across all checked
+  pairs, both directions).
+
 ### Changed (design unification: the agent docs tell the current truth)
 
 - `docs/AGENT_FILE_EDITING_RULES.md` no longer describes deleted files as

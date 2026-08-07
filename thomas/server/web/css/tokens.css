@@ -85,7 +85,7 @@ html[data-thomas-theme="light"], html[data-theme="light"] {
     color-scheme: light; --c-bg: #fafbfc; --c-sidebar: #f3f5f8; --c-surface: #fff;
     --c-surface-2: #f3f5f8; --c-hover: rgba(20, 30, 60, .05); --c-border: rgba(20, 30, 60, .10);
     --c-border-2: rgba(20, 30, 60, .16); --c-text: #1c2330; --c-dim: rgba(28, 35, 48, .66);
-    --c-muted: rgba(28, 35, 48, .62); --c-accent: #2b62f3; --c-accent-ink: #fff;
+    --c-muted: rgba(28, 35, 48, .64); --c-accent: #2b62f3; --c-accent-ink: #fff;
     --c-accent-soft: rgba(43, 98, 243, .10); --c-accent-line: rgba(43, 98, 243, .42);
     --c-user-bg: #eaeef6; --c-user-text: #1c2330; --c-composer-bg: #fff;
     --c-shadow: 0 14px 40px rgba(20, 30, 60, .12);
@@ -114,8 +114,8 @@ html[data-thomas-theme="sandstone"], html[data-theme="sandstone"] {
     color-scheme: light; --c-bg: #f4ede1; --c-sidebar: #efe5d6; --c-surface: #fbf6ee;
     --c-surface-2: #f1e7d7; --c-hover: rgba(80, 52, 28, .06); --c-border: rgba(90, 62, 34, .16);
     --c-border-2: rgba(90, 62, 34, .26); --c-text: #2f2a22; --c-dim: rgba(47, 42, 34, .70);
-    --c-muted: rgba(47, 42, 34, .66); --c-accent: #b05233; --c-accent-ink: #fdf6ee;
-    --c-accent-soft: rgba(176, 82, 51, .12); --c-accent-line: rgba(176, 82, 51, .45);
+    --c-muted: rgba(47, 42, 34, .68); --c-accent: #a84e30; --c-accent-ink: #fdf6ee;
+    --c-accent-soft: rgba(168, 78, 48, .12); --c-accent-line: rgba(168, 78, 48, .45);
     --c-user-bg: #ece0cd; --c-user-text: #2f2a22; --c-composer-bg: #fbf6ee;
     --c-shadow: 0 14px 40px rgba(90, 62, 34, .16);
     --c-menu-bg: #fbf6ee; --font-head: "Newsreader", Georgia, serif;
