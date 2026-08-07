@@ -1323,7 +1323,7 @@ button.sidebar-toggle.sidebar-toggle i {
     flex-direction: column;
     border: 1px solid var(--border-light);
     border-radius: var(--radius-xl);
-    background: linear-gradient(140deg, #12161f 0%, #171c26 48%, #10131a 100%);
+    background: var(--c-menu-bg);
     box-shadow: var(--shadow-strong);
     overflow: hidden;
     position: relative;
@@ -1341,7 +1341,7 @@ button.sidebar-toggle.sidebar-toggle i {
     top: 0;
     z-index: 6;
     backdrop-filter: blur(12px);
-    background: rgba(17, 20, 26, 0.86);
+    background: color-mix(in srgb, var(--c-bg) 86%, transparent);
 }
 
 .settings-suite-left {

@@ -7,6 +7,16 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (design unification: the classic Settings Suite chrome follows the theme)
+
+- Probing themes x widths found the last dark-anchored chrome: the classic
+  Settings Suite modal kept a hardcoded navy shell and header, so under the
+  light theme its title bar was near-black with invisible text over a light
+  body. Shell and sticky header now use `var(--c-menu-bg)` and a
+  `color-mix` glass of `--c-bg` - verified by screenshot in light (fully
+  light, legible) and nebula (unchanged). Code and Work modes verified
+  clean in light and sandstone at 1920 and 1280.
+
 ### Changed (design unification: the classic theme control speaks all five themes)
 
 - The classic settings Theme dropdown offers Nebula Core, Dark, Light,
