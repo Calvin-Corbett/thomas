@@ -13,6 +13,11 @@
  * that forks the design again.
  */
 
+/* Shared component classes (.status-pill, .empty-state, .t-input, …) ride
+   along with the tokens: every page that links tokens.css gets them with no
+   extra <link> line. Bump the version when shared_components.css changes. */
+@import url("./shared_components.css?v=20260806-audited-winners");
+
 :root {
     color-scheme: dark;
     --theme-name: "Nebula Core";
@@ -38,6 +43,15 @@
     --c-shadow: 0 18px 50px rgba(2, 4, 12, .55);
     --c-menu-bg: #15142b;
 
+    /* ── Semantic status (per theme; dark values mirror chat.html THEMES) ── */
+    --c-danger: #ff9a9a;
+    --c-warn: #e2b25f;
+    --c-success: #47d7ac;
+
+    /* ── Scrollbars (per theme; light themes get LIGHT scrollbars) ───────── */
+    --c-scroll-track: rgba(17, 20, 26, .74);
+    --c-scroll-thumb: rgba(173, 179, 194, .40);
+
     /* ── Typography ──────────────────────────────────────────────────── */
     --font-head: "Manrope", system-ui, sans-serif;
     --font-label: "Manrope", system-ui, sans-serif;
@@ -61,6 +75,8 @@ html[data-thomas-theme="dark"], html[data-theme="dark"] {
     --c-composer-bg: #1b1e23; --c-shadow: 0 14px 40px rgba(0, 0, 0, .45);
     --c-menu-bg: #22252b; --font-head: "Manrope", system-ui, sans-serif;
     --font-label: "JetBrains Mono", ui-monospace, monospace; --r-card: 8px; --r-composer: 12px;
+    --c-danger: #ff9a9a; --c-warn: #e2b25f; --c-success: #47d7ac;
+    --c-scroll-track: rgba(13, 15, 18, .74); --c-scroll-thumb: rgba(173, 179, 194, .40);
 }
 
 html[data-thomas-theme="light"], html[data-theme="light"] {
@@ -73,6 +89,8 @@ html[data-thomas-theme="light"], html[data-theme="light"] {
     --c-shadow: 0 14px 40px rgba(20, 30, 60, .12);
     --c-menu-bg: #fff; --font-head: "Manrope", system-ui, sans-serif;
     --font-label: "Manrope", system-ui, sans-serif; --r-card: 16px; --r-composer: 18px;
+    --c-danger: #b3261e; --c-warn: #a15c00; --c-success: #197849;
+    --c-scroll-track: rgba(20, 30, 60, .07); --c-scroll-thumb: rgba(28, 35, 48, .32);
 }
 
 html[data-thomas-theme="aurora"], html[data-theme="aurora"] {
@@ -86,6 +104,8 @@ html[data-thomas-theme="aurora"], html[data-theme="aurora"] {
     --c-shadow: 0 18px 50px rgba(0, 12, 10, .55);
     --c-menu-bg: #0c2226; --font-head: "Manrope", system-ui, sans-serif;
     --font-label: "Manrope", system-ui, sans-serif; --r-card: 14px; --r-composer: 18px;
+    --c-danger: #ff9a9a; --c-warn: #e2b25f; --c-success: #47d7ac;
+    --c-scroll-track: rgba(6, 20, 22, .74); --c-scroll-thumb: rgba(160, 220, 205, .34);
 }
 
 html[data-thomas-theme="sandstone"], html[data-theme="sandstone"] {
@@ -98,6 +118,8 @@ html[data-thomas-theme="sandstone"], html[data-theme="sandstone"] {
     --c-shadow: 0 14px 40px rgba(90, 62, 34, .16);
     --c-menu-bg: #fbf6ee; --font-head: "Newsreader", Georgia, serif;
     --font-label: "Newsreader", Georgia, serif; --r-card: 12px; --r-composer: 14px;
+    --c-danger: #a33a28; --c-warn: #8a4b12; --c-success: #40704a;
+    --c-scroll-track: rgba(90, 62, 34, .10); --c-scroll-thumb: rgba(90, 62, 34, .34);
 }
 
 /* ── Legacy bridge ────────────────────────────────────────────────────
@@ -115,7 +137,12 @@ html[data-thomas-theme="sandstone"], html[data-theme="sandstone"] {
     --border-focus: var(--c-accent-line);
     --accent: var(--c-accent);
     --accent-strong: color-mix(in srgb, var(--c-accent) 72%, #10101c);
-    --accent-mint: #47d7ac;
+    --accent-mint: var(--c-success);
+
+    /* Migration aliases — older pages use the long names. They follow the
+       per-theme semantic tokens automatically; never give them literals. */
+    --c-warning: var(--c-warn);
+    --c-positive: var(--c-success);
     --warn-bg: rgba(255, 191, 71, 0.16);
     --warn-line: rgba(255, 191, 71, 0.45);
     --warn-ink: #ffd89a;
@@ -151,16 +178,17 @@ html[data-thomas-theme="sandstone"], html[data-theme="sandstone"] {
     --z-tooltip: 70;
     --z-skip-link: 9999;
 
-    /* ── Button Profile (Thomas Standard) ─────────────────────────────
-       Thomas uses a SKINNY button profile across the entire UI.
-       All interactive buttons should reference these tokens.
-       Vertical padding is intentionally tight (3–5px) to keep UI dense. */
-    --btn-pad-y: 4px;
-    --btn-pad-x: 12px;
-    --btn-font-size: 12px;
-    --btn-font-weight: 600;
-    --btn-line-height: 1.4;
-    --btn-radius: var(--radius-sm);
+    /* ── Button Profile (Thomas Standard = the Chat surface's language) ──
+       Filled var(--c-accent) buttons, 38px tall, radius 10, Manrope 12.5/700.
+       The old "skinny" 4px-pad outline profile is gone: it had exactly one
+       consumer product-wide and matched nothing the unified Chat ships. */
+    --btn-pad-y: 8px;
+    --btn-pad-x: 14px;
+    --btn-min-h: 38px;
+    --btn-font-size: 12.5px;
+    --btn-font-weight: 700;
+    --btn-line-height: 1.2;
+    --btn-radius: 10px;
     --btn-transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
 }
 
@@ -182,9 +210,13 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
+/* Scrollbars follow the theme: light worlds get light tracks. The colours
+   live in each theme block as --c-scroll-track/--c-scroll-thumb — never put
+   a literal back here, that is exactly what painted dark scrollbars onto
+   the light themes. */
 * {
     scrollbar-width: thin;
-    scrollbar-color: rgba(173, 179, 194, 0.44) rgba(17, 20, 26, 0.62);
+    scrollbar-color: var(--c-scroll-thumb) var(--c-scroll-track);
 }
 
 *::-webkit-scrollbar {
@@ -193,34 +225,40 @@ body {
 }
 
 *::-webkit-scrollbar-track {
-    background: rgba(17, 20, 26, 0.74);
+    background: var(--c-scroll-track);
     border-radius: 999px;
 }
 
 *::-webkit-scrollbar-thumb {
     border-radius: 999px;
-    border: 2px solid rgba(17, 20, 26, 0.8);
-    background: rgba(173, 179, 194, 0.36);
+    border: 2px solid var(--c-scroll-track);
+    background: var(--c-scroll-thumb);
 }
 
 *::-webkit-scrollbar-thumb:hover {
-    background: rgba(173, 179, 194, 0.52);
+    background: color-mix(in srgb, var(--c-scroll-thumb) 78%, var(--c-text) 22%);
 }
 
 /* ── Thomas Button Standard ───────────────────────────────────────────────────
-   Reusable utility classes for the skinny button profile.
-   Usage: <button class="t-btn t-btn-accent">Label</button>
-   Variants: t-btn-accent, t-btn-mint, t-btn-ghost, t-btn-danger
+   The Chat surface's button, as a reusable class: filled accent, 38px tall,
+   radius 10, Manrope 12.5/700.
+   Usage: <button class="t-btn">Label</button>          (filled — the default)
+          <button class="t-btn t-btn-quiet">Label</button>  (transparent + border)
+   Variants: t-btn-quiet, t-btn-ghost, t-btn-danger.
+   t-btn-accent needs no rules any more (kept in markup for compat): the base
+   IS the accent profile now. t-btn-mint is gone — it had zero consumers.
    ─────────────────────────────────────────────────────────────────────────── */
 .t-btn {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    justify-content: center;
+    gap: 6px;
+    min-height: var(--btn-min-h);
     padding: var(--btn-pad-y) var(--btn-pad-x);
     border-radius: var(--btn-radius);
-    border: 1px solid var(--border-light);
-    background: transparent;
-    color: var(--text-secondary);
+    border: 1px solid transparent;
+    background: var(--c-accent);
+    color: var(--c-accent-ink);
     font-size: var(--btn-font-size);
     font-weight: var(--btn-font-weight);
     font-family: var(--font-sans);
@@ -232,57 +270,50 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 .t-btn:hover {
-    background: var(--c-hover);
-    border-color: var(--c-border-2);
-    color: var(--text-primary);
+    background: color-mix(in srgb, var(--c-accent) 86%, var(--c-text) 14%);
 }
 .t-btn:active {
-    transform: scale(0.97);
+    transform: scale(0.98);
+}
+.t-btn:focus-visible {
+    outline: 2px solid var(--c-accent-line);
+    outline-offset: 2px;
 }
 .t-btn:disabled {
     opacity: 0.45;
     cursor: not-allowed;
     pointer-events: none;
 }
-/* Accent variant */
-.t-btn-accent {
-    border-color: var(--c-accent);
-    color: var(--c-accent);
-    background: color-mix(in srgb, var(--c-accent) 6%, transparent);
-}
-.t-btn-accent:hover {
-    background: var(--c-accent-soft);
-    border-color: var(--c-accent);
-    color: var(--c-accent);
-}
-/* Mint / success variant */
-.t-btn-mint {
-    border-color: var(--accent-mint);
-    color: var(--accent-mint);
-    background: rgba(71, 215, 172, 0.06);
-}
-.t-btn-mint:hover {
-    background: rgba(71, 215, 172, 0.14);
-    border-color: var(--accent-mint);
-    color: var(--accent-mint);
-}
-/* Ghost / minimal variant */
-.t-btn-ghost {
-    border-color: transparent;
+/* Quiet variant — transparent with the hairline border */
+.t-btn-quiet {
     background: transparent;
+    border-color: var(--c-border);
+    color: var(--c-dim);
+}
+.t-btn-quiet:hover {
+    background: var(--c-hover);
+    border-color: var(--c-border-2);
+    color: var(--c-text);
+}
+/* Ghost / minimal variant — quiet without even the border */
+.t-btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--c-dim);
 }
 .t-btn-ghost:hover {
     background: var(--c-hover);
     border-color: transparent;
+    color: var(--c-text);
 }
-/* Danger / destructive variant */
+/* Danger / destructive variant — quiet shape, semantic colour */
 .t-btn-danger {
-    border-color: var(--danger-line);
-    color: var(--danger-ink);
-    background: var(--danger-bg);
+    background: color-mix(in srgb, var(--c-danger) 12%, transparent);
+    border-color: color-mix(in srgb, var(--c-danger) 45%, transparent);
+    color: var(--c-danger);
 }
 .t-btn-danger:hover {
-    background: rgba(255, 107, 107, 0.22);
+    background: color-mix(in srgb, var(--c-danger) 20%, transparent);
 }
 
 /* Screen-reader-only content (single definition; accessibility.css keeps the

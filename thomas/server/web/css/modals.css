@@ -1,16 +1,85 @@
-/* modals.css */
-/* Viewport containment for generic modals. The centered .thomas-modal
-   overlay clips BOTH the header and the footer when .modal-content grows
-   taller than the window — on laptop-height screens the Model Setup
-   modal's "Apply Configuration" button became unreachable. Cap the modal
-   at viewport height and let the body scroll; header/footer stay pinned. */
+/* modals.css — the generic .thomas-modal overlay, in ONE place.
+ *
+ * The modal core was relocated here from
+ * css/component_styles/chat-game-animations.css:814-877 (2026-08-06, token
+ * audit): patches to the modal kept landing in this file while the base
+ * rules hid in a file named after game animations. Loaded via the last
+ * @import in css/components.css (index/classic + companion), so it keeps
+ * the cascade position the patches always had.
+ *
+ * Also merged in: viewport containment. The centered overlay used to clip
+ * BOTH the header and the footer when .modal-content grew taller than the
+ * window — on laptop-height screens the Model Setup modal's "Apply
+ * Configuration" button became unreachable. The modal is capped at viewport
+ * height and the body scrolls; header/footer stay pinned. */
 
-.thomas-modal .modal-content {
-    max-height: calc(100vh - 32px);
+.thomas-modal {
+    display: none;
+    /* hidden by default */
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
 }
 
-.thomas-modal .modal-body {
+.thomas-modal.active {
+    display: flex;
+}
+
+.modal-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1;
+}
+
+.modal-backdrop.easy-setup-backdrop-locked {
+    cursor: not-allowed;
+}
+
+.modal-content {
+    position: relative;
+    z-index: 2;
+    background: var(--bg-surface);
+    width: 400px;
+    max-width: 90vw;
+    /* Containment: never taller than the window. */
+    max-height: calc(100vh - 32px);
+    border-radius: var(--radius-xl);
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border-light);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.modal-body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    /* Containment: the body is the scrolling region; let this flex child
+       actually shrink below its content height. */
     overflow-y: auto;
-    /* Let this flex child actually shrink below its content height. */
     min-height: 0;
 }

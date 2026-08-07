@@ -7,6 +7,8 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+- (landed) tokens single-source + shared winner components -- details in the design wave-1 entry below.
+
 ### Fixed (design unification wave 1: one product, in every light)
 
 - P0: iframe workspaces (Mission Control, Library, Channels, Token Economy,
