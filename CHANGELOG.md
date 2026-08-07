@@ -7,6 +7,20 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (design unification: the chat shell derives its themes from tokens.css)
+
+- js/chat_themes.js no longer hand-mirrors the token values: at load time it
+  reads the :root and per-theme blocks of tokens.css via CSSOM and builds the
+  THEMES vars payloads from them, so editing tokens.css updates the chat
+  shell (and every embed it relays vars to) automatically - drift between
+  the stylesheet and the switcher is now impossible. The baked values remain
+  as the offline fallback and key template, and a one-line console warning
+  fires if the fallback snapshot ever diverges from the sheet (the detector
+  proved itself immediately by catching three #ffffff-vs-#fff spelling
+  differences, now aligned). Verified live: all five themes switch with
+  values arriving in tokens.css's own serialization, the embed relay carries
+  derived vars, zero warnings, zero page errors.
+
 ### Fixed (design unification: 888 hardcoded colors follow the theme)
 
 - The last dark-anchored classic components render legibly under light and

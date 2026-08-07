@@ -4,9 +4,11 @@
  * (chat.html, served at /). Every surface — the unified shell, the classic
  * SPA (/classic), /settings, /mission, /companion — consumes these tokens.
  *
- * chat.html's THEMES JS map mirrors these values for its live theme switcher
- * (it writes the same vars inline on #tc-shell). If you change a value here,
- * change it there too, or the shell and the satellite pages drift apart.
+ * chat.html's theme switcher DERIVES its vars payloads from this file at
+ * load time (js/chat_themes.js reads these blocks via CSSOM), so editing a
+ * value here updates the chat shell automatically. The baked fallback in
+ * chat_themes.js only fires if this sheet is unreachable - refresh it when
+ * you reshape the token set.
  *
  * Legacy token names (--bg-app, --text-primary, --accent, …) are BRIDGED onto
  * the canonical set further down. Never assign a legacy name a literal value:
