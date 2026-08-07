@@ -13,9 +13,16 @@
     try { return safeTheme(localStorage.getItem(STORAGE_KEY)); }
     catch (_) { return "nebula"; }
   }
+  const LIGHT_THEMES = ["light", "sandstone"];
   function applyTheme(theme, options) {
     const name = safeTheme(theme); const root = document.documentElement;
     root.dataset.thomasTheme = name; root.dataset.theme = name;
+    // Pin the theme's explicit color-scheme on the root. An embedded document
+    // whose scheme differs from its iframe element's gets an OPAQUE canvas from
+    // Chromium (white on light-pref machines), so both sides of every frame
+    // boundary must state the same scheme. Never 'normal' - that means "light
+    // only" and mismatches every dark theme.
+    root.style.colorScheme = LIGHT_THEMES.includes(name) ? "light" : "dark";
     if (options && options.vars) {
       Object.entries(options.vars).forEach(([key, value]) => {
         if (key.startsWith("--c-") && typeof value === "string") root.style.setProperty(key, value);
@@ -69,16 +76,93 @@
   function hasVisibleWorkspaceFrame() {
     return Array.from(document.querySelectorAll("iframe")).some((frame) => frame.contentWindow && getComputedStyle(frame).display !== "none" && frame.getBoundingClientRect().width > 0);
   }
+  // Plugin workspace modes (paper_trading, freedom_transit, ...) only become
+  // routable after the async /api/marketplace/installed fetch registers them.
+  // Firing setSidebarNavMode once at runtime-ready raced that fetch: the mode
+  // fell back to 'chat', and in ?embed=1 every chat surface is CSS-hidden, so
+  // the workspace rendered as a silent black panel. Poll until the mode is
+  // mountable; past the deadline, say so instead of showing nothing.
+  const WORKSPACE_NAV_POLL_MS = 250;
+  const WORKSPACE_NAV_TIMEOUT_MS = 8000;
+  const WORKSPACE_CORE_MODES = new Set(["chat", "search", "office", "mission", "content"]);
+  let workspaceNavPending = null;
+
+  function workspaceModeAvailable(mode) {
+    if (WORKSPACE_CORE_MODES.has(mode)) return true;
+    if (typeof window.normalizeNavMode === "function") {
+      try { return window.normalizeNavMode(mode) === mode; } catch (_) { /* fall through to DOM check */ }
+    }
+    return Boolean(document.querySelector(`[data-nav-mode="${mode}"]`));
+  }
+  function workspaceModeLabel(mode) {
+    return String(mode || "").replace(/[_-]+/g, " ").replace(/\b[a-z]/g, (c) => c.toUpperCase()).trim() || "This workspace";
+  }
+  function workspaceNoticeEl() {
+    let el = document.getElementById("workspaceShellNotice");
+    if (el) return el;
+    el = document.createElement("div");
+    el.id = "workspaceShellNotice";
+    el.className = "workspace-shell-notice";
+    el.setAttribute("role", "status");
+    el.innerHTML = '<div class="workspace-shell-notice-card">' +
+      '<div class="workspace-shell-notice-glyph" aria-hidden="true"></div>' +
+      '<h2 class="workspace-shell-notice-title"></h2>' +
+      '<p class="workspace-shell-notice-body"></p>' +
+      "</div>";
+    (document.body || document.documentElement).appendChild(el);
+    return el;
+  }
+  function showWorkspaceNotice(mode, phase) {
+    const el = workspaceNoticeEl();
+    const label = workspaceModeLabel(mode);
+    const title = el.querySelector(".workspace-shell-notice-title");
+    const body = el.querySelector(".workspace-shell-notice-body");
+    if (phase === "unavailable") {
+      if (title) title.textContent = label + " isn't available here yet";
+      if (body) body.textContent = "This workspace didn't load — it may not be installed or enabled on this Thomas. Your chats are untouched; pick another workspace from the sidebar.";
+    } else {
+      if (title) title.textContent = "Opening " + label + "…";
+      if (body) body.textContent = "Loading this workspace.";
+    }
+    el.dataset.phase = phase === "unavailable" ? "unavailable" : "loading";
+    el.classList.add("is-visible");
+  }
+  function hideWorkspaceNotice() {
+    const el = document.getElementById("workspaceShellNotice");
+    if (el) el.classList.remove("is-visible");
+  }
   function navigateWorkspace(mode) {
     const normalized = String(mode || "").replace(/[^a-z0-9_-]/gi, "");
     if (!normalized) return;
     const perform = () => {
-      if (typeof window.setSidebarNavMode === "function") { window.setSidebarNavMode(normalized); return; }
+      if (typeof window.setSidebarNavMode === "function") { window.setSidebarNavMode(normalized); return true; }
       const fallbackIds = { office: "navOfficeBtn", chat: "navChatBtn", content: "navContentBtn" };
       const button = document.querySelector(`[data-nav-mode="${normalized}"]`) || document.getElementById(fallbackIds[normalized] || "");
-      if (button instanceof HTMLElement) button.click();
+      if (button instanceof HTMLElement) { button.click(); return true; }
+      return false;
     };
-    Promise.resolve(window.__thomasRuntimeReady).then(perform, perform);
+    const start = () => {
+      if (workspaceNavPending && workspaceNavPending.timer) window.clearTimeout(workspaceNavPending.timer);
+      const pending = { mode: normalized, deadline: Date.now() + WORKSPACE_NAV_TIMEOUT_MS, timer: 0 };
+      workspaceNavPending = pending;
+      const attempt = () => {
+        if (workspaceNavPending !== pending) return;
+        if (workspaceModeAvailable(normalized) && perform()) {
+          workspaceNavPending = null;
+          hideWorkspaceNotice();
+          return;
+        }
+        if (Date.now() >= pending.deadline) {
+          workspaceNavPending = null;
+          showWorkspaceNotice(normalized, "unavailable");
+          return;
+        }
+        showWorkspaceNotice(normalized, "loading");
+        pending.timer = window.setTimeout(attempt, WORKSPACE_NAV_POLL_MS);
+      };
+      attempt();
+    };
+    Promise.resolve(window.__thomasRuntimeReady).then(start, start);
   }
   function setRemoteEdit(active, save) {
     if (!window.ThomasUiEditMode) return;

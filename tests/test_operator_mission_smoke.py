@@ -92,7 +92,10 @@ def test_mission_styles_cover_themes_embed_and_source_caps() -> None:
     assert "html.is-embedded .mission-world { display: none !important; }" in css
     assert "html.is-embedded body { background: var(--c-bg); }" not in css
     assert "html.is-embedded .mission-app { background: transparent !important; }" in css
-    assert "html.is-embedded { color-scheme: normal !important; }" in css
+    # color-scheme: normal ('light only') mismatched the dark shell's iframe
+    # element and made Chromium paint the embed as an opaque white sheet on
+    # light-pref machines. The embedded doc keeps the active theme's scheme now.
+    assert "color-scheme: normal" not in css
     assert len(css.splitlines()) <= 600
     assert len(_read(MISSION_JS_PATH).splitlines()) <= 800
     assert len(_read(MISSION_HTML_PATH).splitlines()) <= 1000

@@ -62,9 +62,11 @@
 }
 html.is-embedded .thomas-standalone-only { display: none !important; }
 html.is-embedded, html.is-embedded body, html.tcw-embed, html.tcw-embed body { background: transparent !important; }
-/* Chromium otherwise gives a transparent embedded document an opaque canvas
-   derived from its dark/light color scheme, hiding Chat's literal live world. */
-html.is-embedded, html.tcw-embed { color-scheme: normal !important; }
+/* color-scheme is NOT forced here. The embedded document's scheme must equal
+   the embedding iframe element's scheme or Chromium paints the transparent
+   canvas opaque (white on light-pref machines). tokens.css sets the per-theme
+   scheme on :root and workspace_shell.js applyTheme() pins it inline, so both
+   sides of the frame boundary always agree on the active theme's scheme. */
 html.tcw-embed .module-workspace:is(
   [data-mode="app_builder"], [data-mode="channels"],
   [data-mode="token_economy"], [data-mode="marketplace"]
@@ -77,6 +79,45 @@ html.tcw-embed .module-workspace:is(
   [data-mode="app_builder"], [data-mode="channels"],
   [data-mode="token_economy"], [data-mode="marketplace"]
 )::after { display: none; }
+
+/* Honest state for a workspace mode the runtime cannot mount (unknown mode, or
+   a plugin surface that never registered). Shown by workspace_shell.js while a
+   plugin mode is still loading and after the poll deadline — an embedded
+   workspace must never render as a silent black panel. */
+.workspace-shell-notice {
+  position: fixed; inset: 0; z-index: 400;
+  display: none; align-items: center; justify-content: center;
+  padding: 24px; pointer-events: none;
+}
+.workspace-shell-notice.is-visible { display: flex; }
+.workspace-shell-notice-card {
+  max-width: 420px; text-align: center; pointer-events: auto;
+  padding: 30px 34px; border-radius: var(--r-card, 14px);
+  border: 1px solid var(--c-border, rgba(255, 255, 255, .12));
+  background: color-mix(in srgb, var(--c-surface, #14161d) 78%, transparent);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  color: var(--c-text, #e8e9f1); font-family: var(--font-sans, "Manrope", system-ui, sans-serif);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .28);
+}
+.workspace-shell-notice-glyph {
+  width: 38px; height: 38px; margin: 0 auto 14px; border-radius: 10px;
+  background: var(--c-accent-soft, rgba(139, 140, 255, .18));
+  border: 1px solid var(--c-accent-line, rgba(139, 140, 255, .4));
+}
+.workspace-shell-notice[data-phase="loading"] .workspace-shell-notice-glyph {
+  animation: workspace-shell-notice-pulse 1.2s ease-in-out infinite;
+}
+.workspace-shell-notice-title {
+  margin: 0 0 8px; font-size: 16.5px; font-weight: 700;
+  font-family: var(--font-head, "Manrope", system-ui, sans-serif);
+}
+.workspace-shell-notice-body {
+  margin: 0; font-size: 13px; line-height: 1.55; color: var(--c-muted, #9aa0b4);
+}
+@keyframes workspace-shell-notice-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .55; transform: scale(.92); }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }

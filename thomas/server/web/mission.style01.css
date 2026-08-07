@@ -163,7 +163,8 @@ html.is-embedded .mission-content { max-width: none; padding: clamp(18px, 2.5vw,
 html.is-embedded,
 html.is-embedded body,
 html.is-embedded .mission-app { background: transparent !important; }
-html.is-embedded { color-scheme: normal !important; }
+/* No color-scheme override: the embedded doc must keep the active theme's
+   scheme (tokens.css / workspace_shell.js) or Chromium opacifies the canvas. */
 html.is-embedded .mission-world { display: none !important; }
 
 @media (max-width: 960px) {

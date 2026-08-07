@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WEB_ROOT = REPO_ROOT / "thomas" / "server" / "web"
 TOKEN_JS = WEB_ROOT / "js" / "token_economy.js"
@@ -195,7 +194,10 @@ def test_token_economy_is_a_dense_tool_without_the_legacy_space_backdrop() -> No
     assert "html.tcw-embed [data-te-container]" in widget
     assert "html.tcw-embed:has([data-te-container] .te-v3.is-active) #moduleWorkspace" in widget
     assert "html.tcw-embed:has([data-te-container] .te-v3.is-active)" in widget
-    assert "color-scheme: normal !important" in widget
+    # color-scheme: normal was a transparency hack that made light-pref Chromium
+    # paint the embedded canvas as an opaque white sheet (mismatched schemes
+    # across the frame boundary). The embed now keeps the active theme's scheme.
+    assert "color-scheme" not in widget
     assert "body:has([data-te-container] .te-v3.is-active) .main-content" in widget
     assert "body:has([data-te-container] .te-v3.is-active) .main-content::before" in widget
     assert "body:has([data-te-container] .te-v3.is-active) .main-content::after" in widget

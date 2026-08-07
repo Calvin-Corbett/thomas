@@ -7,6 +7,34 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (design unification wave 1: one product, in every light)
+
+- P0: iframe workspaces (Mission Control, Library, Channels, Token Economy,
+  Marketplace) rendered as an unreadable WHITE SHEET under a light OS
+  preference — three `color-scheme: normal !important` transparency hacks
+  fought the shell's dark scheme (`normal` means light-ONLY, not
+  follow-the-OS). The theme channel now pins each embedded document's explicit
+  scheme; proven across 14 screenshot combinations of {OS pref} x {theme} x
+  {workspace}.
+- P0: Paper Trading rendered silent black — a navigate/ready race in the
+  classic embed; fixed, and ANY unmountable mode now shows an honest
+  glass-card notice instead of black, ever.
+- tokens.css is the single source: semantic --c-danger/--c-warn/--c-success in
+  every theme, per-theme scrollbar colors (light themes had dark scrollbars),
+  the dead skinny `.t-btn` rewritten to the real Chat profile, and the audited
+  winner components (.status-pill, .empty-state, .t-input, .thomas-modal)
+  shipped as shared classes reachable from every tokens.css consumer.
+- Satellites converge on the tokens: Marketplace loses its marketing-hero
+  costume and hardcoded blue for the workspace header pattern; Token Economy
+  keeps mono for numbers only; the classic composer's 20-hex ramp is now
+  0 hex / 89 var(); evolution console and three injected JS panels rebased.
+- ~4.0 MB of PROVEN-dead design code deleted (20 entries, each with grep
+  proof): the 2.3 MB unloaded app_runtime_primary.mjs, two diverging 65-file
+  archive trees + their extractor, nine dead static page trios, the parallel
+  'Deep Space' theme system, model_settings_dropdown pair, legacy shims, the
+  /landing dead route, js/settings.js finished-code-with-no-caller — with 14
+  test files retargeted to the live tree, never weakened.
+
 ### Fixed (design unification: the Forge overlay is opaque)
 
 - The classic Forge/Evolve overlay sat at 98% alpha, so bright chat bubbles

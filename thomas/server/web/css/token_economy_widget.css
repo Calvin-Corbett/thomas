@@ -28,10 +28,6 @@ html.tcw-embed [data-te-container] .te-v3 {
     background: transparent !important;
 }
 
-html.tcw-embed:has([data-te-container] .te-v3.is-active) {
-    color-scheme: normal !important;
-}
-
 html.tcw-embed body:has([data-te-container] .te-v3.is-active) .main-content {
     background: transparent !important;
     background-image: none !important;
@@ -120,7 +116,7 @@ html.tcw-embed body:has([data-te-container] .te-v3.is-active) .main-content::aft
     border-radius: 6px;
     background: var(--c-accent-soft);
     color: var(--c-text);
-    font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font: 700 10px/1 var(--font-label, "Manrope", system-ui, sans-serif);
     letter-spacing: .04em;
     text-transform: uppercase;
     white-space: nowrap;
@@ -187,7 +183,7 @@ html.tcw-embed body:has([data-te-container] .te-v3.is-active) .main-content::aft
 
 .te-v3 .te-topbar-clock {
     color: var(--c-muted);
-    font: 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font: 11px/1 var(--font-mono, ui-monospace, monospace);
     white-space: nowrap;
 }
 
@@ -227,7 +223,7 @@ html.tcw-embed body:has([data-te-container] .te-v3.is-active) .main-content::aft
     align-items: baseline;
     gap: 5px;
     color: var(--c-text);
-    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+    font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 .te-v3 .te-hero-dollar {
@@ -318,7 +314,7 @@ html.tcw-embed body:has([data-te-container] .te-v3.is-active) .main-content::aft
 .te-v3 .te-ds-num {
     overflow: hidden;
     color: var(--c-text);
-    font: 750 17px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font: 750 17px/1.1 var(--font-mono, ui-monospace, monospace);
     text-overflow: ellipsis;
 }
 

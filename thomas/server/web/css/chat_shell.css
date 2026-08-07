@@ -287,12 +287,14 @@ html, body { margin: 0; padding: 0; height: 100%; }
     transparent 98%);
 }
 
-/* tokens.css gives the chat document color-scheme: dark. An embedded workspace
-   document forces color-scheme: normal (workspace_shell.css) so its transparent
-   canvas stays transparent - but Chromium opacifies a child whose scheme differs
-   from its EMBEDDING ELEMENT, which silently turned every workspace embed into
-   a white sheet. The frame element itself declares normal so parent element and
-   child document agree and the glass stays glass. */
-.tc-workspace-frame {
-  color-scheme: normal;
-}
+/* Chromium keeps an embedded document's canvas transparent only when the
+   iframe ELEMENT's used color-scheme matches the embedded DOCUMENT root's.
+   Any mismatch paints an opaque canvas (white on light-pref machines - the
+   "white sheet" P0). So both sides carry the ACTIVE THEME's explicit scheme:
+   tokens.css declares it on :root per theme, workspace_shell.js applyTheme()
+   pins it inline in every embedded doc, and this rule pins the frame element.
+   Never reach for a 'normal' scheme as a transparency hack - it means
+   "light only", which mismatches every dark theme. */
+.tc-workspace-frame { color-scheme: dark; }
+html[data-theme="light"] .tc-workspace-frame,
+html[data-theme="sandstone"] .tc-workspace-frame { color-scheme: light; }
