@@ -143,12 +143,12 @@ html[data-thomas-theme="sandstone"], html[data-theme="sandstone"] {
        per-theme semantic tokens automatically; never give them literals. */
     --c-warning: var(--c-warn);
     --c-positive: var(--c-success);
-    --warn-bg: rgba(255, 191, 71, 0.16);
-    --warn-line: rgba(255, 191, 71, 0.45);
-    --warn-ink: #ffd89a;
-    --danger-bg: rgba(255, 107, 107, 0.14);
-    --danger-line: rgba(255, 120, 120, 0.42);
-    --danger-ink: #ffd0d0;
+    --warn-bg: color-mix(in srgb, var(--c-warn) 14%, transparent);
+    --warn-line: color-mix(in srgb, var(--c-warn) 45%, transparent);
+    --warn-ink: var(--c-warn);
+    --danger-bg: color-mix(in srgb, var(--c-danger) 12%, transparent);
+    --danger-line: color-mix(in srgb, var(--c-danger) 42%, transparent);
+    --danger-ink: var(--c-danger);
     --shadow-strong: var(--c-shadow);
 
     /* Consistent Spacing */

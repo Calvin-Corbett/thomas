@@ -54,21 +54,20 @@
 </head>
 <body>
 <script>
-/* Early theme flash prevention — apply saved theme class before first paint */
+/* Early theme flash prevention — apply the UNIFIED theme before first paint
+   (same key and attributes ThomasWorkspaceShell manages; mission.html has the
+   reference pattern). The old script read the retired 'thomas_theme' key and
+   set body classes no stylesheet reads, so light/sandstone users got a dark
+   nebula flash on every load. */
 (function() {
-    var theme = 'auto';
+    var theme = 'nebula';
     try {
-        theme = String(window.localStorage.getItem('thomas_theme') || 'auto').toLowerCase();
+        theme = String(window.localStorage.getItem('thomas_chat_theme') || 'nebula').toLowerCase();
     } catch (_) {}
-    if (theme === 'light') {
-        document.body.classList.add('te-theme-light');
-        document.body.setAttribute('data-theme', 'light');
-    } else if (theme === 'dark') {
-        document.body.classList.add('te-theme-dark');
-        document.body.setAttribute('data-theme', 'dark');
-    } else {
-        document.body.classList.add('te-space-active');
-    }
+    var de = document.documentElement;
+    de.dataset.thomasTheme = theme;
+    de.dataset.theme = theme;
+    if (theme === 'nebula') document.body.classList.add('te-space-active');
 })();
 </script>
 <form id="settingsCredentialForm" class="hidden" aria-hidden="true">

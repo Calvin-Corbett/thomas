@@ -19,19 +19,11 @@ const _allIconClasses = [
     'ph-plus','ph-paperclip',
     'ph-microphone','ph-waveform','ph-speaker-high'
 ];
-const THOMAS_THEME_STORAGE_KEY = 'thomas_theme';
-
 function normalizeThemePreference(theme) {
     const normalized = safeString(theme).toLowerCase();
     if (normalized === 'system') return 'auto';
     if (normalized === 'light' || normalized === 'dark' || normalized === 'auto') return normalized;
     return 'auto';
-}
-
-function storeThemePreference(theme) {
-    try {
-        window.localStorage?.setItem(THOMAS_THEME_STORAGE_KEY, normalizeThemePreference(theme));
-    } catch (_) {}
 }
 
 function syncSpaceThemeState(theme) {
@@ -66,202 +58,37 @@ function _swapComposerIcons(iconMap) {
     });
 }
 
-function applyTheme(theme) {
-    const normalizedTheme = normalizeThemePreference(theme);
-    const body = document.body;
-    body.classList.remove('te-theme-light', 'te-theme-dark');
-    body.removeAttribute('data-theme');
-    storeThemePreference(normalizedTheme);
-    if (normalizedTheme === 'light') {
-        body.classList.add('te-theme-light');
-        body.setAttribute('data-theme', 'light');
-        syncSpaceThemeState(normalizedTheme);
-        _swapComposerIcons(_lightIcons);
-        _injectLightThemeIntoIframes();
-    } else if (normalizedTheme === 'dark') {
-        body.classList.add('te-theme-dark');
-        body.setAttribute('data-theme', 'dark');
-        syncSpaceThemeState(normalizedTheme);
-        _swapComposerIcons(_defaultIcons);
-        _removeLightThemeFromIframes();
-    } else {
-        // 'auto' = Nebula Core — restore space
-        syncSpaceThemeState(normalizedTheme);
-        _swapComposerIcons(_defaultIcons);
-        _removeLightThemeFromIframes();
-    }
+function applyTheme(_legacyServerPreference) {
+    /* The palette belongs to the unified engine (tokens.css themes applied by
+       ThomasWorkspaceShell onto <html>). This keeps only the classic shell's
+       side effects - the space backdrop and the composer icon set - derived
+       from the CURRENT unified theme, so the legacy 3-value server preference
+       can never stomp the theme the user actually chose. The parameter is
+       accepted (call sites pass the server preference) and ignored. */
+    const unified = safeString(document.documentElement.dataset.thomasTheme
+        || document.documentElement.dataset.theme || 'nebula').toLowerCase();
+    const lightish = unified === 'light' || unified === 'sandstone';
+    syncSpaceThemeState(unified === 'nebula' ? 'auto' : (lightish ? 'light' : 'dark'));
+    _swapComposerIcons(lightish ? _lightIcons : _defaultIcons);
 }
 
-/* ── Iframe theme injection ─────────────────────────────────────
-   Plugin workspaces (Life Manager, My Stuff, etc.) render inside
-   same-origin iframes. Our main-document CSS can't reach them,
-   so we inject a <style> block that adopts the journal palette. */
-const _LIGHT_IFRAME_CSS = `
-/* Injected by Thomas — light journal theme for plugin iframes */
-:root, body, html {
-    background: #ebe5d9 !important;
-    color: #2c2420 !important;
-    font-family: 'Georgia','Palatino Linotype','Palatino','Book Antiqua',serif !important;
-}
-*:not(.ph):not([class*="ph-"]) {
-    font-family: 'Georgia','Palatino Linotype','Palatino','Book Antiqua',serif !important;
-}
-/* Kill ALL dark rgba backgrounds */
-[style*="gradient"], [style*="rgba(8"], [style*="rgba(1"], [style*="rgba(3"],
-[style*="rgba(6"], [style*="rgba(5"], [style*="rgb(5,"], [style*="rgb(8,"],
-[style*="rgb(10,"], [style*="rgb(1"], [style*="rgb(2"], [style*="rgb(3"] {
-    background: #ebe5d9 !important;
-    background-image: none !important;
-}
-/* Broad overrides for common dark patterns */
-section, div, main, article, header, footer, aside, nav {
-    background-color: transparent !important;
-    background-image: none !important;
-}
-/* Cards, tiles, panels */
-[class*="-card"], [class*="-tile"], [class*="-panel"],
-[class*="-section"], [class*="-block"], [class*="-widget"],
-[class*="-hero"], [class*="-header"], [class*="-toolbar"],
-[class*="-board"], [class*="-frame"], [class*="-view"],
-[class*="stuff-"], [class*="lm-"], [class*="plugin-"] {
-    background: #f4efe6 !important;
-    background-image: none !important;
-    color: #2c2420 !important;
-    border-color: #c8bfab !important;
-}
-/* Body and wrapper backgrounds */
-body, .app, .wrapper, .container, .content, .main,
-[class*="-wrap"], [class*="-container"], [class*="-content"],
-[class*="-page"], [class*="-screen"], [class*="-workspace"],
-[class*="-dashboard"], [class*="-statusbar"] {
-    background: #ebe5d9 !important;
-    background-image: none !important;
-    color: #2c2420 !important;
-}
-/* Text: always dark */
-h1, h2, h3, h4, h5, h6, p, span, a, label, strong, em, li, td, th, dt, dd {
-    color: #2c2420 !important;
-    text-shadow: none !important;
-}
-/* Muted text */
-small, .muted, .meta, .subtitle, [class*="-meta"], [class*="-sub"],
-[class*="-muted"], [class*="-hint"], [class*="-note"] {
-    color: #8a7a65 !important;
-}
-/* Buttons */
-button, .btn, [class*="-btn"] {
-    background: #e0d8ca !important;
-    background-image: none !important;
-    color: #3d3028 !important;
-    border: 1px solid #c8bca8 !important;
-    border-radius: 2px !important;
-    text-shadow: none !important;
-}
-button:hover, .btn:hover { background: #d6cebf !important; }
-/* Primary button — accent */
-[class*="primary"], [class*="accent"] {
-    background: #8a7250 !important;
-    background-image: none !important;
-    color: #f5f0e8 !important;
-    border-color: #7a6240 !important;
-}
-/* Inputs */
-input, select, textarea {
-    background: #f0ebe2 !important;
-    color: #2c2420 !important;
-    border: 1px solid #c8bca8 !important;
-    border-radius: 1px !important;
-}
-input::placeholder, textarea::placeholder { color: #a0907a !important; font-style: italic !important; }
-/* Tables */
-table, th, td { background: #f4efe6 !important; color: #2c2420 !important; border-color: #c8bfab !important; }
-th { background: #e6dfd2 !important; font-weight: 700 !important; }
-/* Badges */
-[class*="-badge"], [class*="-pill"], [class*="-tag"], [class*="-status"] {
-    background: #e0d8ca !important;
-    color: #3d3028 !important;
-    border: 1px solid #c8bca8 !important;
-    text-shadow: none !important;
-}
-/* Scrollbar */
-::-webkit-scrollbar-thumb { background: #c0ad90 !important; }
-::-webkit-scrollbar-track { background: #e2dbd0 !important; }
-/* Empty states */
-[class*="-empty"], [class*="empty-"] {
-    background: #f4efe6 !important;
-    color: #8a7a65 !important;
-}
-`.trim();
+/* Follow every unified theme change (switcher, cross-tab, embed messages). */
+window.addEventListener('thomas:themechange', () => { try { applyTheme(); } catch (_) { /* side effects only */ } });
 
-function _injectLightThemeIntoIframes() {
-    try {
-        document.querySelectorAll('iframe').forEach(frame => {
-            try {
-                const doc = frame.contentDocument || frame.contentWindow?.document;
-                if (!doc) return;
-                /* Remove old injection if any */
-                const old = doc.getElementById('thomas-light-theme-inject');
-                if (old) old.remove();
-                const style = doc.createElement('style');
-                style.id = 'thomas-light-theme-inject';
-                style.textContent = _LIGHT_IFRAME_CSS;
-                (doc.head || doc.documentElement).appendChild(style);
-            } catch(_) { /* cross-origin — skip */ }
-        });
-    } catch(_) {}
-    /* Also re-run after a short delay for lazy-loaded iframes */
-    clearTimeout(window._lightIframeTimer);
-    window._lightIframeTimer = setTimeout(() => _injectLightThemeIntoIframes_once(), 1500);
-}
-
-function _injectLightThemeIntoIframes_once() {
-    if (!document.body.classList.contains('te-theme-light')) return;
-    try {
-        document.querySelectorAll('iframe').forEach(frame => {
-            try {
-                const doc = frame.contentDocument || frame.contentWindow?.document;
-                if (!doc || doc.getElementById('thomas-light-theme-inject')) return;
-                const style = doc.createElement('style');
-                style.id = 'thomas-light-theme-inject';
-                style.textContent = _LIGHT_IFRAME_CSS;
-                (doc.head || doc.documentElement).appendChild(style);
-            } catch(_) {}
-        });
-    } catch(_) {}
-}
-
-/* Watch for new iframes being added to the DOM and inject light theme */
-(function _watchForNewIframes() {
-    const obs = new MutationObserver(muts => {
-        if (!document.body.classList.contains('te-theme-light')) return;
-        for (const m of muts) {
-            for (const n of m.addedNodes) {
-                if (n.tagName === 'IFRAME') {
-                    n.addEventListener('load', () => _injectLightThemeIntoIframes_once());
-                } else if (n.querySelectorAll) {
-                    n.querySelectorAll('iframe').forEach(f => {
-                        f.addEventListener('load', () => _injectLightThemeIntoIframes_once());
-                    });
-                }
-            }
-        }
+/* The classic settings dropdown (auto/light/dark) drives the unified engine
+   directly - auto maps to the Nebula default. */
+(function _bindLegacyThemeControl() {
+    const el = document.getElementById('settingTheme');
+    if (!el || el._thomasUnifiedBound) return;
+    el._thomasUnifiedBound = true;
+    el.addEventListener('change', () => {
+        const v = safeString(el.value).toLowerCase();
+        const unified = v === 'light' ? 'light' : (v === 'dark' ? 'dark' : 'nebula');
+        if (window.ThomasWorkspaceShell && window.ThomasWorkspaceShell.applyTheme) {
+            window.ThomasWorkspaceShell.applyTheme(unified);
+        } else { applyTheme(); }
     });
-    obs.observe(document.body, { childList: true, subtree: true });
 })();
-
-function _removeLightThemeFromIframes() {
-    clearTimeout(window._lightIframeTimer);
-    try {
-        document.querySelectorAll('iframe').forEach(frame => {
-            try {
-                const doc = frame.contentDocument || frame.contentWindow?.document;
-                if (!doc) return;
-                const el = doc.getElementById('thomas-light-theme-inject');
-                if (el) el.remove();
-            } catch(_) {}
-        });
-    } catch(_) {}
-}
 
 function applyFontSize(px) {
     document.documentElement.style.setProperty('--user-font-size', px + 'px');

@@ -7,6 +7,29 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (design unification: one theme authority)
+
+- The classic shell ran THREE theme systems at once; now it runs one. The
+  legacy server-preference path (runtime 040) no longer paints its own
+  palette - `applyTheme` keeps only the space-backdrop and composer-icon
+  side effects, derived from the CURRENT unified theme, and follows every
+  `thomas:themechange`; the classic settings dropdown (auto/light/dark)
+  drives the unified engine directly (auto = Nebula). The hardcoded
+  "journal" light stylesheet injected into plugin iframes is deleted -
+  same-origin frames already receive the unified theme.
+- /classic pre-paint script reads the unified `thomas_chat_theme` key and
+  sets the root attributes, so light/sandstone users stop seeing a dark
+  nebula flash on every load; the retired `thomas_theme` key has no
+  remaining writers.
+- Cross-tab theme switching works everywhere workspace_shell.js runs: a
+  storage listener follows the unified key, and applyTheme clears stale
+  inline `--c-*` vars from earlier postMessage payloads so a vars-less
+  follow-up can actually win. The settings page delegates its apply path
+  to the unified engine (it used to set only one of the two root attrs).
+- `--warn-*` / `--danger-*` aliases follow the per-theme `--c-warn` /
+  `--c-danger` semantics instead of dark-only literals, so warning and
+  danger text stays legible on light and sandstone.
+
 ### Changed (design unification: evolution.css split by responsibility)
 
 - `evolution.css` (1940 lines, 340 over the 1600 hard cap) is now an @import

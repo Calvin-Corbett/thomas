@@ -23,6 +23,13 @@
     // boundary must state the same scheme. Never 'normal' - that means "light
     // only" and mismatches every dark theme.
     root.style.colorScheme = LIGHT_THEMES.includes(name) ? "light" : "dark";
+    /* Clear inline vars from any previous vars payload first: a later theme
+       applied WITHOUT vars (storage events) must not lose to stale inline
+       values from an earlier postMessage. */
+    for (let i = root.style.length - 1; i >= 0; i--) {
+      const key = root.style[i];
+      if (key && key.indexOf("--c-") === 0) root.style.removeProperty(key);
+    }
     if (options && options.vars) {
       Object.entries(options.vars).forEach(([key, value]) => {
         if (key.startsWith("--c-") && typeof value === "string") root.style.setProperty(key, value);
@@ -180,6 +187,9 @@
       }
     } catch (_) { /* malformed URLs fall back safely */ }
     applyTheme(queryTheme || storedTheme(), { persist: Boolean(queryTheme) });
+    window.addEventListener("storage", (event) => {
+      if (event.key === STORAGE_KEY && event.newValue) applyTheme(event.newValue, { persist: false });
+    });
     document.querySelectorAll("[data-thomas-theme-select]").forEach((control) => control.addEventListener("change", () => applyTheme(control.value)));
     if (window.parent !== window) window.parent.postMessage({ type: "thomas:workspace-ready", workspace: workspaceKey() }, location.origin);
   }

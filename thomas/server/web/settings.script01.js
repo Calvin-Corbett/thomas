@@ -99,7 +99,14 @@
 
     function applyChatTheme(theme, options = {}) {
       const normalized = normalizeChatTheme(theme);
-      document.documentElement.dataset.theme = normalized;
+      /* The unified engine owns BOTH root attributes and color-scheme; setting
+         only data-theme left a stale data-thomas-theme outranking the change. */
+      if (window.ThomasWorkspaceShell && window.ThomasWorkspaceShell.applyTheme) {
+        window.ThomasWorkspaceShell.applyTheme(normalized, { persist: false });
+      } else {
+        document.documentElement.dataset.theme = normalized;
+        document.documentElement.dataset.thomasTheme = normalized;
+      }
       if (document.body) document.body.dataset.theme = normalized;
       settings.theme = normalized;
       const select = document.getElementById('theme');

@@ -57,7 +57,8 @@ function stopGeneration() {
 
 function _getSendIconClass() {
     /* Return theme-appropriate send icon */
-    return document.body.classList.contains('te-theme-light') ? 'ph-pen-nib' : 'ph-arrow-up';
+    const _t = String(document.documentElement.dataset.thomasTheme || document.documentElement.dataset.theme || '').toLowerCase();
+    return (_t === 'light' || _t === 'sandstone') ? 'ph-pen-nib' : 'ph-arrow-up';
 }
 
 function setGeneratingState(generating) {
