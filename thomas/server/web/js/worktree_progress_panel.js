@@ -345,7 +345,7 @@
     });
     root.appendChild(top);
 
-    var msg = el('div', 'wtp-msg', 'loading...');
+    var msg = el('div', 'wtp-msg', 'Checking branches…');
     root.appendChild(msg);
 
     var secWt = el('section', 'wtp-sec');

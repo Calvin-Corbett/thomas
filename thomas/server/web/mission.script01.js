@@ -82,7 +82,7 @@
     }
     if (!response.ok) {
       const detail = typeof payload === 'object' && payload ? safe(payload.error || payload.message) : safe(payload);
-      throw new Error(detail || `Request failed (${response.status})`);
+      throw new Error(detail || "Thomas couldn't complete that. Try again.");
     }
     return payload;
   }
@@ -194,9 +194,9 @@
       const bLive = ACTIVE_STATES.has(normalizeStatus(b.status)) ? 0 : 1;
       return aLive - bLive || epoch(b.updated_at) - epoch(a.updated_at);
     });
-    byId('jobsCount').textContent = state.jobsUnavailable ? 'Runtime unavailable' : plural(state.jobs.length, 'job');
+    byId('jobsCount').textContent = state.jobsUnavailable ? 'Paused' : plural(state.jobs.length, 'job');
     if (!jobs.length) {
-      host.innerHTML = empty(state.jobsUnavailable ? 'The autonomy runtime is unavailable. Create a mission to start it.' : `No ${state.filter === 'all' ? '' : state.filter + ' '}jobs to show.`);
+      host.innerHTML = empty(state.jobsUnavailable ? 'Missions are paused. Create one and Thomas starts them up.' : `No ${state.filter === 'all' ? '' : state.filter + ' '}jobs to show.`);
       return;
     }
     host.innerHTML = jobs.slice(0, 40).map((job, index) => {

@@ -1144,7 +1144,7 @@ const VIBE_CODE_FALLBACK_EDGES = [
 ];
 const VIBE_CODE_PROJECT_NODES = [
     { id: 'project.frontend', label: 'Frontend UI', summary: 'Sidebar, composer, and user input.' },
-    { id: 'project.api', label: 'Chat API', summary: 'HTTP/SSE stream entrypoint.' },
+    { id: 'project.api', label: 'Chat API', summary: 'Where your messages arrive.' },
     { id: 'project.session', label: 'Session + Memory', summary: 'Session/profile/runtime context.' },
     { id: 'project.router', label: 'Route + Planner', summary: 'Routing and execution strategy.' },
     { id: 'project.model', label: 'Model Runtime', summary: 'Reasoning + generation.' },

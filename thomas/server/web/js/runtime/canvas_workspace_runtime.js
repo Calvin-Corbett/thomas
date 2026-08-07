@@ -207,7 +207,8 @@
                 var controller = currentApi.mount(host, { apiBase: '/api/canvas' });
                 if (workbench) workbench.uiStudioCanvas = controller;
             } catch (error) {
-                host.textContent = 'Canvas failed to load: ' + String(error && error.message || error || 'Unknown error');
+                host.textContent = "Canvas couldn't open. Reload the page to try again.";
+                try { console.error('Canvas mount failed:', error); } catch (_e) {}
                 host.classList.add('ui-studio-empty');
             }
             return host;

@@ -308,7 +308,7 @@ def test_virtual_office_draft_map_runtime_hooks_present() -> None:
     assert "item.dataset.officeDraftOverviewAssetKind = spec.kind;" in js
     assert "officeDraftCreateOverviewAssetDetail(item, spec.kind, color);" in js
     assert "function syncModelSetupCurrentLabel({ force = false, profile = '' } = {})" in js
-    assert "const placeholderLabels = new Set(['', 'loading...', 'model setup', 'connection & defaults']);" in js
+    assert "const placeholderLabels = new Set(['', 'loading...', 'checking your model\u2026', 'model setup', 'connection & defaults']);" in js
     assert "if (typeof syncModelSetupCurrentLabel === 'function') syncModelSetupCurrentLabel({ force: true });" in js
     assert "function officeRenderDraftMapEditorPanel()" in js
     assert "function officeToggleDraftEditor(event)" in js

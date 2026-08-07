@@ -1182,7 +1182,7 @@
                 finalizeTurn();
                 clearReconnect(); // a clean terminal frame -> no reconnect owed
                 if (rc !== 0) {
-                    appendBuildError('The build process exited with code ' + rc + '.', rc);
+                    appendBuildError(plainCause(safeString(d && (d.error || d.detail || d.message)), rc), rc);
                 } else if (changed.length > 0) {
                     renderArtifacts(d.artifacts, d.conversation_id || currentConvoId);
                     appendNote('is-done', 'check', 'Done — ' + changed.length + ' file' + (changed.length === 1 ? '' : 's') + ' changed');

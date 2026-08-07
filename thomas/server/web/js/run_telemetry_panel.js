@@ -212,7 +212,7 @@
 
     function renderSnapshot(snap) {
       if (!snap || typeof snap !== 'object') {
-        markStatus('error', 'no data');
+        markStatus('idle', 'Nothing recorded yet.');
         return;
       }
 

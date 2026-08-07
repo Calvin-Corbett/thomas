@@ -78,8 +78,9 @@ def test_build_error_has_plain_cause_and_retry_dom() -> None:
     assert "fc-error-detail" in js  # raw detail kept available but secondary
     assert "fc-error-retry" in js  # a Retry action
     # A non-zero build exit renders the actionable error (with Retry), not a bare
-    # dead-end pill.
-    assert "appendBuildError('The build process exited with code ' + rc + '.', rc)" in js
+    # dead-end pill - and the message goes through the plainCause humanizer
+    # instead of quoting the raw exit code at the user.
+    assert "appendBuildError(plainCause(safeString(d && (d.error || d.detail || d.message)), rc), rc)" in js
 
 
 def test_build_error_styles_present() -> None:

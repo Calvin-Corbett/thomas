@@ -963,7 +963,7 @@ function _profileHeaderLabel(profileName) {
 function syncModelSetupCurrentLabel({ force = false, profile = '' } = {}) {
     if (!modelSetupCurrentLabel) return '';
     const current = safeString(modelSetupCurrentLabel.textContent);
-    const placeholderLabels = new Set(['', 'loading...', 'model setup', 'connection & defaults']);
+    const placeholderLabels = new Set(['', 'loading...', 'checking your model…', 'model setup', 'connection & defaults']);
     if (!force && current && !placeholderLabels.has(current.toLowerCase())) {
         return current;
     }

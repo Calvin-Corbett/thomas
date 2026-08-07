@@ -1028,9 +1028,8 @@ async function runEasySetupRepair(trigger = 'repair') {
 
     if (!Boolean(res.data?.ok)) {
         const errorMsg = safeString(res.data?.error) || `Repair exited with code ${res.data?.exit_code}.`;
-        const stderrTail = safeString(res.data?.stderr_tail);
-        const finalMsg = stderrTail ? `${errorMsg}\n${stderrTail}` : errorMsg;
-        setEasySetupStatus(easySetupDependencyStatus, `${finalMsg} Remediation: approve prompts and retry.`, 'error');
+        /* The wizard speaks plainly; exit codes and stderr stay in telemetry. */
+        setEasySetupStatus(easySetupDependencyStatus, "Setup couldn't finish installing what Thomas needs. Approve the prompts and retry.", 'error');
         emitOnboardingTelemetry('wizard.download_approval_failed', {
             trigger,
             error: errorMsg,

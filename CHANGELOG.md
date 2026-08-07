@@ -7,6 +7,26 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (design unification: the interface stops speaking developer)
+
+- The onboarding wizard no longer shows exit codes and stderr ("Repair
+  exited with code N") - it says what to do; the diagnostics stay in
+  telemetry. The Missions chip reads "Paused" instead of "Runtime
+  unavailable", failed requests say "Thomas couldn't complete that. Try
+  again." instead of "Request failed (500)", the Evolve terminal frame
+  routes through its own plainCause humanizer instead of quoting the exit
+  code, the Canvas mount failure shows plain words and logs the real error,
+  and workspace chat says "Thomas didn't answer. Send it again." instead of
+  "returned HTTP 500".
+- No control ships a 'loading...' label: the model button says "Checking
+  your model...", plugin imports say "Importing..." / "Opening...",
+  companion app cards say "Finding your apps..." and drop the internal
+  module id from the card face, the worktree panel says "Checking
+  branches...", fleet ack rows drop "(HTTP 502)" (logged instead), the
+  telemetry panel says "Nothing recorded yet." at neutral tone, and the
+  vibe-code game map says "Where your messages arrive." instead of
+  "HTTP/SSE stream entrypoint."
+
 - (landed) Verified-label scoping -- details in the refusal/Verified entry below.
 
 ### Fixed (a refusal carries its remedy, and Verified means what was checked)

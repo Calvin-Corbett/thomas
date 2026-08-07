@@ -94,7 +94,7 @@
       return result.data.error;
     }
     if (result && typeof result.status === 'number' && result.status) {
-      return fallback + ' (HTTP ' + result.status + ')';
+      try { console.warn('fleet reply failed with HTTP', result.status); } catch (_e) {}
     }
     return fallback;
   }

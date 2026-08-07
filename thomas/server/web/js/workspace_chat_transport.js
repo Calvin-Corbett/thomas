@@ -63,7 +63,7 @@
     if (!response.ok || !response.body) {
       let detail = '';
       try { detail = String((await response.json()).error || ''); } catch (_error) {}
-      throw new Error(detail || 'Workspace Thomas returned HTTP ' + response.status);
+      throw new Error(detail || "Thomas didn't answer. Send it again.");
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();

@@ -382,7 +382,7 @@ function renderAppsPanel() {
   if (state.apps.loading) {
     const row = document.createElement("div");
     row.className = "companion-app-card";
-    row.innerHTML = "<h3>Loading...</h3>";
+    row.innerHTML = "<h3>Finding your apps…</h3>";
     refs.appsList.appendChild(row);
     return;
   }
@@ -409,7 +409,7 @@ function renderAppsPanel() {
     card.innerHTML = `
       <h3>${displayName}</h3>
       <div class="app-meta">${description}</div>
-      <div class="app-meta">Module: ${moduleId} | Version: ${asText(release.module_version, "n/a")}</div>
+      <div class="app-meta">${asText(release.module_version, "") ? `Version ${asText(release.module_version, "")}` : ""}</div>
       <div class="app-actions">
         <span class="app-chip ${eligible ? "good" : "bad"}">${eligible ? "Eligible" : "Blocked"}</span>
         <button type="button" class="settings-mini-btn" data-app-push="${moduleId}" ${eligible ? "" : "disabled"}>Push</button>

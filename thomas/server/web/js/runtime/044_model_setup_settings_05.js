@@ -855,7 +855,7 @@ moduleRenderWorkbenchAppBuilder = function moduleRenderWorkbenchAppBuilderUiEdit
             return;
         }
         importBtn.disabled = true;
-        importBtn.textContent = 'Loading...';
+        importBtn.textContent = 'Importing…';
         try {
             const result = await moduleUiEditorFetchShellPluginFromUrl(url);
             if (!result.ok || !result.plugin) {
@@ -881,8 +881,8 @@ moduleRenderWorkbenchAppBuilder = function moduleRenderWorkbenchAppBuilderUiEdit
             return;
         }
         catalogLoadBtn.disabled = true;
-        catalogLoadBtn.textContent = 'Loading...';
-        catalogStatus.textContent = auto ? 'Auto-loading marketplace...' : 'Loading marketplace...';
+        catalogLoadBtn.textContent = 'Opening…';
+        catalogStatus.textContent = auto ? 'Opening the marketplace…' : 'Opening the marketplace…';
         try {
             const result = await moduleUiEditorFetchShellPluginManifestFromUrl(url);
             if (!result.ok || !Array.isArray(result.rows) || !result.rows.length) {
