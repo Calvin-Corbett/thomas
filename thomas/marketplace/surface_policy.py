@@ -163,7 +163,14 @@ def classify_marketplace_row(
     scaffold_match = _matches_exact_or_prefix(plugin_id, exact=scaffold_ids, prefixes=scaffold_prefixes)
     scaffold_term_match = any(term and term in text_blob for term in scaffold_terms)
     scaffold_tag_match = bool(tags & scaffold_tags)
-    if explicit_availability == "scaffold" or scaffold_match or scaffold_term_match or scaffold_tag_match:
+    # The scaffold heuristics exist to keep catalog vaporware off the surface;
+    # a row with an installed runtime is real by definition, so description
+    # words like "stub" must not make an installed plugin invisible (and
+    # therefore unmanageable). Explicit availability still wins.
+    heuristic_scaffold = (
+        scaffold_match or scaffold_term_match or scaffold_tag_match
+    ) and not bool(row.get("installed"))
+    if explicit_availability == "scaffold" or heuristic_scaffold:
         reason = "proxy_noop" if "proxy" in text_blob or "noop" in text_blob else "placeholder_surface"
         return {
             "availability": "scaffold",

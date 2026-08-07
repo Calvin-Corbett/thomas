@@ -195,6 +195,12 @@ def _normalize_installed_record(record: dict[str, Any]) -> dict[str, Any]:
         "surface_url": _build_surface_url(plugin_id, entry_html) if plugin_id and entry_html else "",
         "installed": True,
         "enabled": bool(record.get("enabled", True)),
+        # Signed installs predate the verified flag, so only an explicit False
+        # (the unverified community tier) reads as unverified.
+        "verified": record.get("verified") is not False,
+        "agent_plugin": record.get("agent_plugin")
+        if isinstance(record.get("agent_plugin"), dict)
+        else None,
         "version": _safe_text(record.get("version")) or "0.0.0",
         "publisher_id": _safe_text(record.get("publisher_id")),
         "publisher_name": _safe_text(record.get("publisher_name")),
@@ -369,6 +375,31 @@ def _detect_extracted_plugin_root(extract_root: Path) -> Path:
     raise ValueError("Bundle does not contain a plugin manifest")
 
 
+def _extract_bundle_zip(bundle_bytes: bytes, tmp_dir: Path) -> None:
+    """Safely extract a plugin bundle zip into ``tmp_dir``.
+
+    Shared by the signed installer and the Agent Plugins adapter so zip
+    hardening (path containment today; size caps or symlink rejection
+    tomorrow) protects every install path at once.
+    """
+    try:
+        with zipfile.ZipFile(io.BytesIO(bundle_bytes)) as archive:
+            for info in archive.infolist():
+                if info.is_dir():
+                    continue
+                rel_path = _safe_rel_path(info.filename)
+                destination = (tmp_dir / PurePosixPath(rel_path)).resolve()
+                try:
+                    destination.relative_to(tmp_dir.resolve())
+                except ValueError as exc:
+                    raise ValueError("Bundle contains unsafe paths") from exc
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(info, "r") as src, destination.open("wb") as dst:
+                    shutil.copyfileobj(src, dst)
+    except zipfile.BadZipFile as exc:
+        raise ValueError("Invalid plugin bundle") from exc
+
+
 def install_plugin_bundle_bytes(
     config: AppConfig,
     bundle_bytes: bytes,
@@ -385,22 +416,7 @@ def install_plugin_bundle_bytes(
 
     with tempfile.TemporaryDirectory(dir=str(plugins_root.parent)) as tmp_dir_raw:
         tmp_dir = Path(tmp_dir_raw)
-        try:
-            with zipfile.ZipFile(io.BytesIO(bundle_bytes)) as archive:
-                for info in archive.infolist():
-                    if info.is_dir():
-                        continue
-                    rel_path = _safe_rel_path(info.filename)
-                    destination = (tmp_dir / PurePosixPath(rel_path)).resolve()
-                    try:
-                        destination.relative_to(tmp_dir.resolve())
-                    except ValueError as exc:
-                        raise ValueError("Bundle contains unsafe paths") from exc
-                    destination.parent.mkdir(parents=True, exist_ok=True)
-                    with archive.open(info, "r") as src, destination.open("wb") as dst:
-                        shutil.copyfileobj(src, dst)
-        except zipfile.BadZipFile as exc:
-            raise ValueError("Invalid plugin bundle") from exc
+        _extract_bundle_zip(bundle_bytes, tmp_dir)
 
         plugin_root = _detect_extracted_plugin_root(tmp_dir)
         manifest_raw = _read_json_file(plugin_root / "manifest.json", {})

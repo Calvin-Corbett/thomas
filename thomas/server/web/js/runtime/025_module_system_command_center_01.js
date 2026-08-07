@@ -1243,6 +1243,7 @@ function moduleRefreshMarketplace({ force = false, storeUrl = '' } = {}) {
                     download_available: downloadAvailable,
                     installable: Boolean(plugin?.installable),
                     installed: Boolean(plugin?.installed),
+                    verified: plugin?.verified !== false,
                     enabled: Boolean(plugin?.enabled),
                     update_available: Boolean(plugin?.update_available),
                     installed_version: safeString(plugin?.installed_version),
@@ -1356,16 +1357,25 @@ async function moduleSetMarketplacePluginEnabled(moduleIdRaw, enabled = false) {
     }
 }
 
-async function moduleImportMarketplacePlugin(file) {
-    if (!(file instanceof File)) {
-        return { ok: false, error: 'Pick a plugin ZIP first.' };
+async function moduleImportMarketplacePlugin(source) {
+    // One import contract for both shapes: a File posts multipart, a
+    // { url } object posts JSON - the response handling must not fork.
+    let body = null;
+    let headers;
+    if (source instanceof File) {
+        body = new FormData();
+        body.append('file', source, source.name || 'plugin.zip');
+    } else if (safeString(source?.url).trim()) {
+        headers = { 'Content-Type': 'application/json' };
+        body = JSON.stringify({ url: safeString(source.url).trim() });
+    } else {
+        return { ok: false, error: 'Pick a plugin ZIP or paste a plugin URL first.' };
     }
-    const formData = new FormData();
-    formData.append('file', file, file.name || 'plugin.zip');
     try {
         const response = await fetch('/api/marketplace/import', {
             method: 'POST',
-            body: formData,
+            headers,
+            body,
         });
         const text = await response.text();
         let payload = {};

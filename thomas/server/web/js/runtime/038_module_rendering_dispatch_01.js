@@ -8,7 +8,12 @@ function initModuleWorkspace() {
     }
 
     const itemActionHandler = async (event) => {
-        const target = event.target instanceof Element ? event.target.closest('.module-item-btn[data-module-action-id]') : null;
+        // Secondary marketplace actions (Uninstall, Download ZIP) render as
+        // .marketplace-secondary-btn; the category chip carries its own
+        // data-module-marketplace-filter handler and stays excluded here.
+        const target = event.target instanceof Element
+            ? event.target.closest('.module-item-btn[data-module-action-id], .marketplace-secondary-btn[data-module-action-id]:not([data-module-marketplace-filter])')
+            : null;
         if (!target) return;
         const mode = MODULE_NAV_MODE_SET.has(target.dataset.moduleMode) ? target.dataset.moduleMode : (state.activeMode || 'dashboard');
         const section = safeString(target.dataset.moduleSection).toLowerCase() || 'queue';
@@ -233,6 +238,27 @@ function initModuleWorkspace() {
             const fileInput = moduleQueueList.querySelector('input[data-marketplace-import-input]');
             if (fileInput instanceof HTMLInputElement) {
                 fileInput.click();
+            }
+        });
+        moduleQueueList.addEventListener('click', async (event) => {
+            const urlButton = event.target instanceof Element ? event.target.closest('[data-marketplace-import-url][data-module-mode]') : null;
+            if (!urlButton) return;
+            const raw = window.prompt('Paste a plugin ZIP URL (GitHub links work - use the repo’s "Download ZIP" or release asset URL). Community plugins install unverified with their tool servers switched off.');
+            const url = safeString(raw).trim();
+            if (!url) return;
+            urlButton.disabled = true;
+            try {
+                const result = await moduleImportMarketplacePlugin({ url });
+                if (!result?.ok) {
+                    throw new Error(safeString(result?.error) || 'Unable to install from that URL.');
+                }
+                await moduleRefreshMarketplace({ force: true });
+                moduleRender('marketplace', { touch: false });
+                notifyUser('Plugin installed from URL.', { tone: 'success', durationMs: 1800, debugKind: 'marketplace-import' });
+            } catch (error) {
+                notifyUser(safeString(error?.message) || 'Unable to install from that URL.', { tone: 'error', durationMs: 2600, debugKind: 'marketplace-import' });
+            } finally {
+                urlButton.disabled = false;
             }
         });
         moduleQueueList.addEventListener('change', async (event) => {

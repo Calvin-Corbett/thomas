@@ -113,11 +113,12 @@ function moduleRenderMarketplaceSurface(container) {
 
     const buildStatus = (app) => {
         if (app?.update_available) return { label: 'Update available', tone: 'catalog' };
-        if (app?.installable) {
-            if (app?.installed && app?.enabled) return { label: 'Installed', tone: 'ready' };
-            if (app?.installed) return { label: 'Disabled', tone: 'catalog' };
-            return { label: 'Ready to install', tone: 'ready' };
+        if (app?.installed) {
+            const suffix = app?.verified === false ? ' · unverified' : '';
+            if (app?.enabled) return { label: `Installed${suffix}`, tone: 'ready' };
+            return { label: `Disabled${suffix}`, tone: 'catalog' };
         }
+        if (app?.installable) return { label: 'Ready to install', tone: 'ready' };
         if (app?.download_available) return { label: 'Downloadable', tone: 'ready' };
         return { label: 'Potential only', tone: 'catalog' };
     };
@@ -152,28 +153,28 @@ function moduleRenderMarketplaceSurface(container) {
     );
 
     const installBehaviorLabel = (app) => {
-        if (app?.installable) {
-            if (app?.installed && app?.enabled) return isWorkspaceModule(app) ? 'Installed' : 'Enabled';
-            if (app?.installed) return 'Installed';
-            return 'Installable';
+        if (app?.installed) {
+            if (app?.verified === false) return 'Community install';
+            return app?.enabled && !isWorkspaceModule(app) ? 'Enabled' : 'Installed';
         }
+        if (app?.installable) return 'Installable';
         if (app?.download_available) return 'Downloadable';
         return 'No verified install';
     };
 
     const buildPrimaryAction = (app) => {
+        if (app?.installable && app?.update_available) {
+            return { id: 'install', label: 'Update' };
+        }
+        if (app?.installed) {
+            if (isWorkspaceModule(app)) {
+                return { id: 'open', label: 'Open' };
+            }
+            return app?.enabled
+                ? { id: 'disable', label: 'Disable' }
+                : { id: 'enable', label: 'Enable' };
+        }
         if (app?.installable) {
-            if (app?.update_available) {
-                return { id: 'install', label: 'Update' };
-            }
-            if (app?.installed) {
-                if (isWorkspaceModule(app)) {
-                    return { id: 'open', label: 'Open' };
-                }
-                return app?.enabled
-                    ? { id: 'disable', label: 'Disable' }
-                    : { id: 'enable', label: 'Enable' };
-            }
             return { id: 'install', label: 'Install' };
         }
         if (app?.download_available) {
@@ -185,7 +186,7 @@ function moduleRenderMarketplaceSurface(container) {
     const buildSecondaryActions = (app) => {
         const downloadUrl = safeString(app?.install?.release_download_endpoint || app?.install?.release_manifest_endpoint);
         const actions = [];
-        if (app?.installable && app?.installed) {
+        if (app?.installed) {
             actions.push({ id: 'uninstall', label: 'Uninstall' });
         }
         if (downloadUrl) {
@@ -374,7 +375,7 @@ function moduleRenderMarketplaceSurface(container) {
     const verifiedEmptyMarkup = !loading && !error && !potentialMode && !searchText ? `
         <section class="marketplace-store-empty" data-ui-id="marketplace.verified-empty" data-ui-label="Verified store status" data-ui-component="store-status" data-ui-policy="move resize" data-ui-constraints="contain=parent,minWidth=320,minHeight=220,maxHeight=620,collision=avoid">
             <div><span>Verified Store</span><h2>No packages have proven operating evidence yet.</h2><p>Thomas is keeping the main store honest. Packages appear here only after an installed runtime, backend-approved install action, or trusted download action is present.</p></div>
-            <div class="marketplace-store-empty-actions"><button type="button" class="marketplace-command-btn marketplace-command-btn-primary" data-module-action-id="review-potential" data-module-marketplace-filter="potential" data-module-mode="marketplace">Review ${escapeHtml(String(potentialApps.length))} potential packages</button><button type="button" class="marketplace-command-btn" data-module-action-id="install-file-empty" data-marketplace-import data-module-mode="marketplace">Install From File</button></div>
+            <div class="marketplace-store-empty-actions"><button type="button" class="marketplace-command-btn marketplace-command-btn-primary" data-module-action-id="review-potential" data-module-marketplace-filter="potential" data-module-mode="marketplace">Review ${escapeHtml(String(potentialApps.length))} potential packages</button><button type="button" class="marketplace-command-btn" data-module-action-id="install-file-empty" data-marketplace-import data-module-mode="marketplace">Install From File</button><button type="button" class="marketplace-command-btn" data-module-action-id="install-url-empty" data-marketplace-import-url data-module-mode="marketplace">Install from URL</button></div>
         </section>
     ` : '';
     const emptyMarkup = `
@@ -400,6 +401,7 @@ function moduleRenderMarketplaceSurface(container) {
                     </label>
                     <div class="marketplace-command-actions">
                         <button type="button" class="marketplace-command-btn" data-module-action-id="install-file-command" data-marketplace-import data-module-mode="marketplace">Install From File</button>
+                        <button type="button" class="marketplace-command-btn" data-module-action-id="install-url-command" data-marketplace-import-url data-module-mode="marketplace">Install from URL</button>
                         ${searchText ? `<button type="button" class="marketplace-command-btn" data-module-marketplace-clear data-module-mode="marketplace">Clear</button>` : ''}
                         <button type="button" class="marketplace-command-btn marketplace-command-btn-primary" data-module-marketplace-refresh data-module-mode="marketplace">Sync Catalog</button>
                     </div>

@@ -7,6 +7,63 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Added (marketplace: Agent Plugins land as the unverified community tier)
+
+- Thomas now imports Agent Plugins (the agent-plugins.org 1.0.0 open
+  standard Vercel/OpenAI shipped): `thomas/server/agent_plugins_manifest.py`
+  detects and validates bundles (plugin.json schema + name rules, skills/
+  layout, mcp.json transports), `agent_plugins_adapter.py` installs them
+  through the REAL desktop-plugin record pipeline as the unverified
+  community tier (`signature: unverified-community`, `verified: False`),
+  and `agent_plugins_surface.py` writes the about page the record's
+  surface points at. Skills copy into the user skills root with a
+  provenance sidecar (collisions get a plugin-name prefix, never an
+  overwrite); MCP servers register DISABLED with provenance - nothing a
+  community bundle ships runs until the owner enables it. The signed
+  desktop-plugin path is untouched and always wins detection.
+  `tests/test_agent_plugins_adapter.py` pins the whole contract.
+- `POST /api/marketplace/import` accepts the new bundles from file upload
+  and from a `url` key (GitHub-host allowlist through validate_public_url,
+  30MB cap, redirect re-check - the downloader lives in
+  `marketplace_bundle_download.py`), and the classic Marketplace grew an
+  Install from URL button beside Install From File. Uninstall removes
+  exactly what install added: sidecar-owned skills, provenance-matched
+  MCP rows, the data dir.
+- The xhigh code review caught and fixed before landing: the adapter wrote
+  mcp_servers.json as a bare list where the canonical store is a
+  {servers: [...]} envelope (installing would have wiped existing servers
+  and hidden its own rows from every canonical reader); GitHub Download-ZIP
+  archives failed detection because their explicit directory entries
+  counted as top-level files; ${PLUGIN_ROOT} was never expanded in the MCP
+  command field; a plugin named x.data collided with plugin x's data dir
+  (data now lives under .plugin-data/); reinstalls orphaned skills and MCP
+  rows the new version dropped; the about page escaped angle brackets but
+  not quotes while interpolating the plugin's homepage into an href
+  (attribute-breakout XSS on the app origin); and the import response
+  leaked local file paths by returning the raw record where the signed
+  path returns the normalized shape. The zip-extraction loop is now shared
+  with the signed installer so future hardening protects both paths.
+
+### Fixed (marketplace: community installs are visible and manageable)
+
+- An installed plugin absent from the website catalog now surfaces in the
+  marketplace on BOTH sync paths (the local fallback never merged orphan
+  installed rows), carries `verified` through the record normalizer, the
+  orphan/overlay builders, and the JS app mapping, and renders with an
+  Installed - unverified status chip, a Community install locus line, and
+  working Enable/Disable + Uninstall actions (installed rows no longer
+  hide behind `installable` gates in the card builders).
+- `classify_marketplace_row` no longer scaffold-hides a row whose runtime
+  is actually installed: the scaffold terms ("stub", "placeholder") exist
+  to keep catalog vaporware off the surface, but they were making real
+  installed plugins invisible - and therefore unmanageable - when their
+  descriptions used those words. Explicit availability still wins;
+  `tests/test_marketplace_cleanup_wave.py` pins the exemption.
+- Secondary marketplace actions (Uninstall, Download ZIP) actually
+  dispatch now: the delegated click handler only matched
+  `.module-item-btn`, so every `.marketplace-secondary-btn` - for signed
+  and community plugins alike - rendered as a dead button.
+
 ### Added (design unification: the contract now has its own guard)
 
 - `tests/test_design_tokens_single_source.py` pins the workstream's

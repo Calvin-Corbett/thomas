@@ -226,3 +226,27 @@ def test_classify_marketplace_row_marks_policy_scaffold_and_hidden(monkeypatch, 
     assert installable["availability"] == "installable"
     assert family_requires_strict_entrypoint("message") is True
     assert family_requires_strict_entrypoint("misc") is False
+
+
+def test_classify_marketplace_row_installed_beats_scaffold_heuristics() -> None:
+    """An installed runtime is proof the package is real: description words
+    like 'stub' must not scaffold-hide it (it would become unmanageable in the
+    marketplace UI). Explicit availability still wins."""
+    policy = {"scaffold_terms": ["stub"], "scaffold_tags": ["scaffold"]}
+    row = {
+        "id": "community-notes",
+        "description": "A notes skill plus a stub MCP server.",
+        "installed": True,
+    }
+    installed = classify_marketplace_row(row, installable_candidate=False, policy=policy)
+    assert installed["availability"] == "catalog_only"
+
+    uninstalled = classify_marketplace_row(
+        {**row, "installed": False}, installable_candidate=False, policy=policy
+    )
+    assert uninstalled["availability"] == "scaffold"
+
+    explicit = classify_marketplace_row(
+        {**row, "availability": "scaffold"}, installable_candidate=False, policy=policy
+    )
+    assert explicit["availability"] == "scaffold"
