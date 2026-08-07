@@ -7,6 +7,18 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (design unification: the agent docs tell the current truth)
+
+- `docs/AGENT_FILE_EDITING_RULES.md` no longer describes deleted files as
+  present: the old monolith and split-file sections became
+  watch-for-resurrection notes, the standalone-script list includes
+  `chat_themes.js` / `chat_connect_prompt.js` / `workspace_shell.js`, and a
+  new CSS section documents tokens.css as the single source with the
+  `component_styles/` / `layout_styles/` layout. The UI checklist stops
+  instructing agents to verify a file that no longer exists. `docs/KNOWN_ISSUES.md` now exists with the four pitfalls
+  this work paid for: iframe color-scheme opacification, heredoc backslash
+  collapse, NUL-byte grep blindness, and the *_parts filename guard.
+
 ### Fixed (design unification: the light themes reach WCAG AA)
 
 - A computed contrast audit of the token pairs found the light and
