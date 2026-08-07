@@ -345,3 +345,12 @@ body {
         transition-duration: .01ms !important;
     }
 }
+
+/* Keyboard focus: one accent ring on every page. !important because several
+   legacy controls suppress outlines inline (outline: none) - a keyboard user
+   must always be able to see where they are. Pointer clicks are unaffected
+   (:focus-visible only matches keyboard-driven focus). */
+:focus-visible {
+    outline: 2px solid var(--c-accent) !important;
+    outline-offset: 2px;
+}

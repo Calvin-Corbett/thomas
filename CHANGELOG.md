@@ -7,6 +7,17 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (design unification: keyboard focus is always visible)
+
+- One accent-colored :focus-visible ring in tokens.css covers every page.
+  Before: the chat search field suppressed its outline entirely (inline
+  outline: none - keyboard users lost their place), and most controls fell
+  back to the browser default ring, which reads poorly on the translucent
+  dark surfaces. The rule uses !important precisely because legacy controls
+  suppress outlines inline; pointer clicks are unaffected. Measured by
+  tabbing both shells: every stop shows the 2px accent ring, in the
+  active theme's accent.
+
 ### Fixed (design unification: reduced motion is honored everywhere)
 
 - The prefers-reduced-motion guard lived only in workspace_shell.css, which
