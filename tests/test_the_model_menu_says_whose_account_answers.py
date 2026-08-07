@@ -2,10 +2,10 @@
 
 `/api/openai-codex/status?profile=<name>` has always returned `logged_in`,
 `email` and `plan_type`. The unified shell read none of it. The old Model Setup
-modal showed it through `model_settings_dropdown.js` -- 18.8 KB that the new
-shell never loads, because it targets `#modelSetupModal`, an element that no
-longer exists. So "4 ready" was the only signal a provider was usable, and
-nothing said WHOSE account was being spent.
+modal showed it through `model_settings_dropdown.js` -- 18.8 KB the new shell
+never loaded, because it targeted `#modelSetupModal`, an element that no longer
+exists (that dead file has since been deleted). So "4 ready" was the only
+signal a provider was usable, and nothing said WHOSE account was being spent.
 
 Now the menu heads with the signed-in email and plan (`pro · signed in`),
 verified on screen at 1920x1080.

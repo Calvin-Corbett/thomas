@@ -488,9 +488,12 @@ class TestOpenAICodexRoutes(AioHTTPTestCase):
         assert has_openai_codex_token(self.app[APP_SECRETS], "chatgpt") is True
 
 
-def test_model_settings_scopes_oauth_status_login_and_logout_to_selected_profile() -> None:
-    text = (Path(__file__).parents[1] / "thomas/server/web/js/model_settings_dropdown.js").read_text(encoding="utf-8")
+def test_chat_shell_scopes_oauth_status_and_login_to_selected_profile() -> None:
+    # The live surface for this contract is chat.html. (It used to be asserted
+    # against model_settings_dropdown.js, which no page loaded; that file is
+    # deleted.) Status lookups and login must both carry the selected profile,
+    # or a multi-profile setup reads/creates tokens for the wrong account.
+    text = (Path(__file__).parents[1] / "thomas/server/web/chat.html").read_text(encoding="utf-8")
 
-    assert "provider === 'codex' || provider === 'openai_codex'" in text
-    assert "status?profile=' + encodeURIComponent(profile.name)" in text
-    assert text.count("body: JSON.stringify({ profile: profile.name })") == 2
+    assert text.count("'/api/openai-codex/status?profile=' + encodeURIComponent(state.profile)") == 2
+    assert "body: JSON.stringify({ profile: state.profile || 'openai_codex', timeout_s: 300 })" in text

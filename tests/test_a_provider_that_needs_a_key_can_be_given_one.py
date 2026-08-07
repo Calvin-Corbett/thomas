@@ -2,9 +2,10 @@
 
 The model menu listed Anthropic, Google, xAI, Meta Llama and Mistral, marked
 every one "needs key", and the unified shell had NO way to supply one. The only
-code that can POST a key lives in ``model_settings_dropdown.js``, which nothing
-loads -- it targets ``#modelSetupModal``, an element the new shell does not have.
-Five providers were visible, unusable, and unfixable from the UI.
+code that could POST a key lived in ``model_settings_dropdown.js``, which
+nothing loaded -- it targeted ``#modelSetupModal``, an element the new shell
+does not have. (That dead file has since been deleted.) Five providers were
+visible, unusable, and unfixable from the UI.
 
 ``POST /api/secrets/{profile} {api_key}`` has always existed. Driven end to end
 against a keyless profile with a dummy value, then cleaned up::

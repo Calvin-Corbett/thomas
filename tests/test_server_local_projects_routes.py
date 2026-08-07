@@ -503,9 +503,10 @@ def test_marketplace_uses_native_runtime_shell() -> None:
     # not pass again, and a permanently-red test is how a real regression gets
     # ignored.
     #
-    # Deliberately NOT fixed by repointing _read_all_runtime_js at
-    # app_runtime_primary.mjs, which still contains the original undecorated
-    # literal: that would turn this green while measuring a bundle no page loads.
+    # Deliberately NOT fixed by repointing _read_all_runtime_js at a bundled
+    # copy: the old app_runtime_primary.mjs bundle (since deleted) still carried
+    # the original undecorated literal, and measuring it would have turned this
+    # green while checking a bundle no page loads.
     assert re.search(
         r"moduleRenderMarketplaceSurface\(\s*moduleQueueList\s*\)", primary_runtime
     ), "the marketplace branch no longer renders the native surface into moduleQueueList"

@@ -141,7 +141,7 @@ def setup_middleware_and_handlers(
         is_prod = bool(getattr(cfg, "is_production", False))
 
         if request.method == "GET":
-            if request.path in {"/", "/mission", "/settings", "/companion", "/landing"}:
+            if request.path in {"/", "/mission", "/settings", "/companion"}:
                 resp.headers.setdefault("Cache-Control", "no-store")
                 resp.headers.setdefault("Pragma", "no-cache")
                 resp.headers.setdefault("Expires", "0")
@@ -604,7 +604,7 @@ def setup_middleware_and_handlers(
         # of "the AI fixed it but it's still broken on my machine": the server had the
         # new code, the browser never re-fetched it. Covering the whole frontend means
         # ANY frontend edit busts the cache. NOTE: we walk all of js/ (not just
-        # js/runtime/) so top-level modules like js/theme_rules.js — loaded
+        # js/runtime/) so top-level modules like js/token_economy_space.js — loaded
         # directly from index.html with ?v=__THOMAS_WEB_BUILD__ — also bust the cache.
         digest = hashlib.sha1(usedforsecurity=False)
         paths: list[str] = list(relative_paths)
@@ -638,7 +638,6 @@ def setup_middleware_and_handlers(
     classic = _page_handlers["classic"]
     settings = _page_handlers["settings"]
     companion = _page_handlers["companion"]
-    landing = _page_handlers["landing"]
 
     from .app_routes_init import _setup_routes_and_handlers
 
@@ -671,6 +670,5 @@ def setup_middleware_and_handlers(
             "classic": classic,
             "settings": settings,
             "companion": companion,
-            "landing": landing,
         },
     )

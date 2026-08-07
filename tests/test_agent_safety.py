@@ -43,7 +43,7 @@ class TestAgentSafety:
                 f"To fix: git checkout -- {part_file}"
             )
 
-    def test_app_runtime_primary_has_valid_javascript(self):
+    def test_split_runtime_files_have_valid_javascript(self):
         """
         Test that all split runtime JS files have valid JavaScript syntax.
 

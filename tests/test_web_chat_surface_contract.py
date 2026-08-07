@@ -16,14 +16,9 @@ TOKEN_ECONOMY_SPACE_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "tok
 MY_STUFF_HTML = REPO_ROOT / "thomas" / "server" / "web" / "static" / "my_stuff.html"
 MY_STUFF_JS = REPO_ROOT / "thomas" / "server" / "web" / "static" / "my_stuff.script01.js"
 MY_STUFF_CSS = REPO_ROOT / "thomas" / "server" / "web" / "static" / "my_stuff.style01.css"
-APP_RUNTIME_JS = REPO_ROOT / "thomas" / "server" / "web" / "js" / "app_runtime_primary.mjs"
 BRAIN_PY = REPO_ROOT / "thomas" / "marketplace" / "orchestrator" / "brain.py"
 COMPONENT_ICON_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "component_styles" / "composer-attachments.css"
 INDEX_HTML = REPO_ROOT / "thomas" / "server" / "web" / "index.html"
-TOGGLE_SIDEBAR_MODULE = REPO_ROOT / "thomas" / "server" / "web" / "js" / "modules" / "060_togglesidebarcollapsed.js"
-TOGGLE_SIDEBAR_RUNTIME_MODULE = (
-    REPO_ROOT / "thomas" / "server" / "web" / "js" / "src" / "runtime_modules" / "060_togglesidebarcollapsed.js"
-)
 
 
 def _read(path: Path) -> str:
@@ -153,17 +148,15 @@ def test_sidebar_chat_label_and_search_shell_contract() -> None:
     components_css = _read(COMPONENT_ICON_CSS)
     index_html = _read(INDEX_HTML)
     js = _read_all_runtime_js()
-    modules = [_read(TOGGLE_SIDEBAR_MODULE), _read(TOGGLE_SIDEBAR_RUNTIME_MODULE)]
 
     assert '<span class="nav-chat-robot-wrap"' not in index_html
     assert ".nav-chat-robot-wrap {" in components_css
     assert "display: none !important;" in components_css
-    assert all("const stripNavChatRobot = () => {" in content for content in modules)
-    assert all(
-        "label.querySelectorAll('.nav-chat-robot-wrap, .nav-chat-robot, .pixel-agent').forEach((node) => node.remove());"
-        in content
-        for content in modules
-    )
+    # The robot markup must not come back through the live runtime either. (The
+    # old check asserted a defensive stripper inside the js/modules archive
+    # trees, which no page loaded; the trees are deleted, so the invariant is
+    # now pinned on the code that actually runs.)
+    assert "nav-chat-robot-wrap" not in js
 
     assert ".sidebar-search-input-wrap input {" in layout_css
     assert "background: transparent !important;" in layout_css
@@ -287,9 +280,9 @@ def test_my_stuff_indexes_installed_workspace_plugins() -> None:
 
 def test_paper_trading_is_promoted_high_in_workspace_nav() -> None:
     runtime_07 = _read(RUNTIME_DIR / "035_workbench_editors_07.js")
-    bundled_runtime = _read(APP_RUNTIME_JS)
+    runtime_08 = _read(RUNTIME_DIR / "036_workbench_editors_08.js")
 
-    for js in (runtime_07, bundled_runtime):
+    for js in (runtime_07, runtime_08):
         assert "promoteAfter('paper_trading', 'mission');" in js
         assert "const ordered = stored.concat(appended);" in js
         assert "return ordered;" in js
@@ -298,10 +291,6 @@ def test_paper_trading_is_promoted_high_in_workspace_nav() -> None:
 def test_chat_games_keep_deterministic_proof_hooks_and_neutral_actor_payload() -> None:
     game_js = _read(RUNTIME_DIR / "010_chat_games_01.js")
     hook_js = _read(RUNTIME_DIR / "011_chat_games_02.js")
-    module_js = _read(REPO_ROOT / "thomas" / "server" / "web" / "js" / "modules" / "013_chatgamestepdinogameover.js")
-    source_module_js = _read(
-        REPO_ROOT / "thomas" / "server" / "web" / "js" / "src" / "runtime_modules" / "013_chatgamestepdinogameover.js"
-    )
 
     assert "function chatGameRenderToTextPayload()" in game_js
     assert "function chatGameAdvanceTime(ms = 16)" in hook_js
@@ -314,17 +303,18 @@ def test_chat_games_keep_deterministic_proof_hooks_and_neutral_actor_payload() -
     render_block = game_js[render_start:]
     assert "actor: {" in render_block
     assert "bot: {" not in render_block
-    assert "actor: {" in module_js
-    assert "bot: {" not in module_js
-    assert "actor: {" in source_module_js
-    assert "bot: {" not in source_module_js
+    # The neutral payload key holds across the whole live game module, not just
+    # the render block. (This used to be asserted against the js/modules archive
+    # copies of chatGameStepDinoGameOver, which no page loaded; the archives are
+    # deleted, so the same invariant is pinned on the live file.)
+    assert "function chatGameStepDinoGameOver(" in game_js
+    assert "bot: {" not in game_js
 
 
 def test_failed_delegation_cards_prefer_failure_progress_over_title() -> None:
     js = _read(ACTION_RUNTIME_JS)
     setup_js = _read(RUNTIME_DIR / "003_easy_setup_onboarding_01.js")
     continuity_js = _read(RUNTIME_DIR / "006_easy_setup_onboarding_04.js")
-    primary_js = _read(REPO_ROOT / "thomas" / "server" / "web" / "js" / "app_runtime_primary.mjs")
 
     assert "function _delegationTask(evt) {" in js
     assert "safeString(evt?.type) === 'delegation_failed'" in js
@@ -335,10 +325,9 @@ def test_failed_delegation_cards_prefer_failure_progress_over_title() -> None:
     assert "appendDelegationResultMessage(evt, { status, summary: cleanText });" in js
     assert "summary = summary.replace(/no a first event/gi, 'no first event');" in setup_js
     assert "void persistActiveChat({ quiet: true });" in setup_js
+    assert "function appendDelegationResultMessage(evt, options = {})" in setup_js
     assert "function appendTerminalDelegationActivityResults(activity)" in continuity_js
     assert "appendTerminalDelegationActivityResults(activity);" in continuity_js
-    assert "function appendDelegationResultMessage(evt, options = {})" in primary_js
-    assert "function appendTerminalDelegationActivityResults(activity)" in primary_js
 
 
 def test_model_setup_surface_uses_compact_centered_chip_and_themed_provider_dropdown() -> None:

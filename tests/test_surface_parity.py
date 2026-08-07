@@ -362,13 +362,6 @@ def test_web_nav_chat_robot_uses_website_pixel_agent_contract() -> None:
         for part in sorted(runtime_dir.glob("*.js")):
             runtime_content += part.read_text(encoding="utf-8") + "\n"
 
-    runtime_sources = {
-        "module": (root / "thomas/server/web/js/modules/060_togglesidebarcollapsed.js").read_text(encoding="utf-8"),
-        "src_module": (root / "thomas/server/web/js/src/runtime_modules/060_togglesidebarcollapsed.js").read_text(
-            encoding="utf-8"
-        ),
-    }
-
     for token in (
         "pixel-agent pixel-agent-",
         "agent-head",
@@ -395,10 +388,12 @@ def test_web_nav_chat_robot_uses_website_pixel_agent_contract() -> None:
     assert "pixel-agent pixel-agent-blue nav-chat-robot" not in web_index
     assert '<i class="ph ph-chat-teardrop"></i>' not in web_index
 
-    for name, text in runtime_sources.items():
-        assert "stripNavChatRobot" in text, name
-        assert "MutationObserver" in text, name
-        assert (
-            "label.querySelectorAll('.nav-chat-robot-wrap, .nav-chat-robot, .pixel-agent').forEach((node) => node.remove());"
-            in text
-        ), name
+    # The robot markup must not creep back in through the live runtime either.
+    # (The old assertion checked a defensive stripper in the js/modules /
+    # js/src/runtime_modules archive trees, which no page loaded; those trees
+    # are deleted, so the invariant is now pinned on the code that actually runs.)
+    # (The bare pixel-agent classes stay legal in the runtime -- the chat game
+    # robot legitimately wears them -- it is the nav robot combination that is
+    # banned.)
+    assert "nav-chat-robot" not in runtime_content
+    assert "pixel-agent pixel-agent-blue nav-chat-robot" not in runtime_content

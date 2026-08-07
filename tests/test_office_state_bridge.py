@@ -45,17 +45,12 @@ def test_office_bridge_declares_reload_and_live_iframe_refresh_contract() -> Non
     root = Path(__file__).resolve().parents[1] / "thomas" / "server" / "web" / "js"
     loader = (root / "app_runtime_loader.js").read_text(encoding="utf-8")
     bridge = (root / "runtime" / "office_server_state.js").read_text(encoding="utf-8")
-    module_bridge = (root / "modules" / "office_server_state.js").read_text(encoding="utf-8")
-    source_bridge = (root / "src" / "runtime_modules" / "office_server_state.js").read_text(
-        encoding="utf-8"
-    )
     transport = (root / "workspace_chat_transport.js").read_text(encoding="utf-8")
     assert "'office_server_state.js'" in loader
     assert "fetch('/api/office/state', { cache: 'no-store' })" in bridge
     assert "event.origin !== location.origin" in bridge
     assert "event.data.type !== 'thomas:office-state:refresh'" in bridge
     assert "frame.contentWindow.postMessage(refresh, location.origin)" in transport
-    assert bridge == module_bridge == source_bridge
 
 
 @pytest.mark.skipif(importlib.util.find_spec("playwright") is None, reason="playwright not installed")

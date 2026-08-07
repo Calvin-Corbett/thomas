@@ -2,7 +2,7 @@
 
 Extracted from ``thomas.server.app_middleware_handlers`` to keep that module
 under the architecture size limit. These builders return the static HTML page
-handlers (index / settings / companion / landing) used by the web app. They are
+handlers (index / classic / settings / companion) used by the web app. They are
 plain factories so behavior is identical to the previous inline closures.
 """
 
@@ -122,17 +122,9 @@ def build_page_handlers(
         except (OSError, UnicodeDecodeError):
             return web.FileResponse(web_dir / "companion.html")
 
-    async def landing(request: web.Request) -> web.StreamResponse:
-        # landing.html does not exist (and js/landing.js never did): the old
-        # fallback served a FileResponse for a missing file, which browsers
-        # surfaced as a broken download. The deep link stays valid and lands
-        # on the app.
-        raise web.HTTPFound("/")
-
     return {
         "index": index,
         "classic": classic,
         "settings": settings,
         "companion": companion,
-        "landing": landing,
     }

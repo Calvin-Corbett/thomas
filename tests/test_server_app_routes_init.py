@@ -172,7 +172,6 @@ def _build_test_app(
         "index": _simple_page,
         "settings": _simple_page,
         "companion": _simple_page,
-        "landing": _simple_page,
     }
 
     async def _webhook(_request: web.Request) -> web.Response:
@@ -365,10 +364,15 @@ async def test_static_compat_rejects_traversal_and_page_aliases(
     app, _ = _build_test_app(tmp_path, monkeypatch)
     client = await _start_client(app)
     try:
-        for route in ("/", "/mission", "/settings", "/companion", "/landing"):
+        for route in ("/", "/mission", "/settings", "/companion"):
             response = await client.get(route)
             assert response.status == 200
             assert await response.text() == "ok"
+
+        # /landing was a dead deep-link that only ever redirected; the route is
+        # gone and must stay gone rather than silently serving a broken page.
+        landing_response = await client.get("/landing")
+        assert landing_response.status == 404
 
         for route in ("/my-stuff", "/my-stuff/", "/my_stuff", "/my_stuff/"):
             response = await client.get(route)
@@ -543,7 +547,6 @@ def test_optional_route_registration_wires_runtime_dependencies(
         "index": lambda request: web.Response(text="index"),
         "settings": lambda request: web.Response(text="settings"),
         "companion": lambda request: web.Response(text="companion"),
-        "landing": lambda request: web.Response(text="landing"),
     }
 
     cfg = AppConfig(
@@ -661,7 +664,6 @@ async def test_route_edges_cover_missing_ledger_engine_tool_registry_and_unknown
             "index": _simple_page,
             "settings": _simple_page,
             "companion": _simple_page,
-            "landing": _simple_page,
         },
     )
 
@@ -783,7 +785,6 @@ def test_route_registration_skips_when_runtime_guards_missing(
                 "index": _simple_page,
                 "settings": _simple_page,
                 "companion": _simple_page,
-                "landing": _simple_page,
             },
         )
 
@@ -972,7 +973,6 @@ def test_route_registration_logs_module_failures(tmp_path: Path, monkeypatch: py
                 "index": _simple_page,
                 "settings": _simple_page,
                 "companion": _simple_page,
-                "landing": _simple_page,
             },
         )
 

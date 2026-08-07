@@ -78,7 +78,6 @@ def test_shell_layout_guards_prevent_duplicate_suggestions_and_forced_chat_setti
     primary_runtime = _read_all_runtime_js()
     layout_css = _read_text("thomas/server/web/css/layout_styles/layout-app-shell.css")
     suggestion_css = _read_text("thomas/server/web/css/component_styles/easy-setup-ui.css")
-    marketplace_css = _read_text("thomas/server/web/static/plugin_marketplace.style01_part01.css")
 
     open_settings_block = primary_runtime.split("function openSettingsModal()", 1)[1].split(
         "function isSettingsScreenOpen()", 1
@@ -95,5 +94,3 @@ def test_shell_layout_guards_prevent_duplicate_suggestions_and_forced_chat_setti
     assert "mask-image: linear-gradient(90deg, transparent 0, #000 8%, #000 92%, transparent 100%);" in suggestion_css
     assert "function renderAssistantAvatarVisual" in primary_runtime
     assert "resolveActiveChatProfileMeta" in primary_runtime
-    assert "body::before" in marketplace_css
-    assert "animation: thomasMarketGridDrift 16s linear infinite;" in marketplace_css

@@ -30,15 +30,12 @@ def test_browser_does_not_infer_tasks_or_rooms_from_prompt_words() -> None:
 
 
 def test_mention_task_creation_requires_the_explicit_task_command() -> None:
-    for relative_path in (
-        "thomas/server/web/js/modules/030_officehandlemention.js",
-        "thomas/server/web/js/src/runtime_modules/030_officehandlemention.js",
-    ):
-        source = _read(relative_path)
-        assert "parsed.command === 'task'" in source
-        assert "lower.includes('build')" not in source
-        assert "lower.includes('ship')" not in source
-        assert "OFFICE_TASK_KEYWORDS" not in source
+    # The live mention handler (the js/modules archive copies were deleted).
+    source = _read("thomas/server/web/js/runtime/020_virtual_office_04.js")
+    assert "parsed.command === 'task'" in source
+    assert "lower.includes('build')" not in source
+    assert "lower.includes('ship')" not in source
+    assert "OFFICE_TASK_KEYWORDS" not in source
 
 
 def test_natural_language_cannot_switch_runtime_model() -> None:

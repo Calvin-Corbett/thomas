@@ -7,6 +7,8 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+- (landed) dead design code deleted, ~4 MB across 174 files, each grep-proven -- details in the design wave-1 entry below.
+
 - (landed) satellite restyle onto tokens -- details in the design wave-1 entry below.
 
 - (landed) tokens single-source + shared winner components -- details in the design wave-1 entry below.

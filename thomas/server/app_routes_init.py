@@ -167,7 +167,6 @@ def _setup_routes_and_handlers(
     classic = locals_dict.get("classic")
     settings = locals_dict.get("settings")
     companion = locals_dict.get("companion")
-    landing = locals_dict.get("landing")
 
     # Task ledger routes
     async def api_task_ledger_current(request: web.Request) -> web.Response:
@@ -388,7 +387,9 @@ def _setup_routes_and_handlers(
                     )
                     or 0
                 )
-            except Exception as janitor_exc:
+            except (AttributeError, OSError, RuntimeError, TypeError, ValueError) as janitor_exc:
+                # Named, not broad: a storage hiccup skips one sweep; a bug in
+                # the janitor itself still surfaces.
                 log.debug("Run store janitor skipped: %s", janitor_exc)
                 continue
             if reconciled:
@@ -410,7 +411,8 @@ def _setup_routes_and_handlers(
                     )
                     or 0
                 )
-            except Exception as startup_exc:
+            except (AttributeError, OSError, RuntimeError, TypeError, ValueError) as startup_exc:
+                # Named, not broad -- same contract as the janitor above.
                 log.debug("Run store startup reconciliation skipped: %s", startup_exc)
             else:
                 if reconciled:
@@ -533,7 +535,8 @@ def _setup_routes_and_handlers(
                             force_event=force_event,
                         )
                         return
-                except Exception as e:
+                except (AttributeError, KeyError, OSError, RuntimeError, TypeError, ValueError) as e:
+                    # Named, not broad: ledger compat is best-effort bookkeeping.
                     log.debug("Task ledger compat update failed: %s", e)
                 _task_ledger_update(session_id, active_goal, status or "in_progress")
 
@@ -1246,7 +1249,6 @@ def _setup_routes_and_handlers(
     app.router.add_get("/mission", index)
     app.router.add_get("/settings", settings)
     app.router.add_get("/companion", companion)
-    app.router.add_get("/landing", landing)
 
     async def my_stuff_page(request: web.Request) -> web.StreamResponse:
         _ = request

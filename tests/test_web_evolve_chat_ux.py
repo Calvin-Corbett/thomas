@@ -8,7 +8,7 @@ WEB_INDEX_PATH = ROOT / "thomas" / "server" / "web" / "index.html"
 RUNTIME_DIR = ROOT / "thomas" / "server" / "web" / "js" / "runtime"
 COMPOSER_CONTROLS_PATH = ROOT / "thomas" / "server" / "web" / "js" / "composer_controls.js"
 COMPANION_RUNTIME_PATH = ROOT / "thomas" / "server" / "web" / "js" / "companion_runtime.js"
-PRIMARY_RUNTIME_PATH = ROOT / "thomas" / "server" / "web" / "js" / "app_runtime_primary.mjs"
+RETIRED_PRIMARY_RUNTIME_PATH = ROOT / "thomas" / "server" / "web" / "js" / "app_runtime_primary.mjs"
 CHAT_HTML_PATH = ROOT / "thomas" / "server" / "web" / "chat.html"
 
 
@@ -63,19 +63,17 @@ def test_chat_runtime_uses_only_v2_and_renders_delegation_activity() -> None:
 
 
 def test_chatgpt_connection_reply_opens_profile_scoped_easy_setup_recovery() -> None:
-    split_runtime = _read(RUNTIME_DIR / "013_actions_interactions_02.js")
-    bundled_runtime = _read(PRIMARY_RUNTIME_PATH)
+    text = _read(RUNTIME_DIR / "013_actions_interactions_02.js")
 
-    for text in (split_runtime, bundled_runtime):
-        assert "function shouldPromptChatGPTConnectionRecovery(assistantText = '', payload = {}) {" in text
-        assert "if (!isChatGPTConnectionProfile(payload?.profile || payload?.model)) return false;" in text
-        assert "/^(?:the )?chatgpt(?: oauth| model)? (?:is not|isn't) connected\\b/i" in text
-        assert "if (!normalized || normalized.length > 500) return false;" in text
-        assert "if (shouldPromptChatGPTConnectionRecovery(assistantFinalText, payload)) {" in text
-        assert "await promptChatGPTConnectionRecovery(payload);" in text
-        assert "source: 'chatgpt_connection_recovery'" in text
-        assert "handleEasySetupPathSelect('codex');" in text
-        assert "Your ChatGPT or Codex app sign-in is separate from Thomas." in text
+    assert "function shouldPromptChatGPTConnectionRecovery(assistantText = '', payload = {}) {" in text
+    assert "if (!isChatGPTConnectionProfile(payload?.profile || payload?.model)) return false;" in text
+    assert "/^(?:the )?chatgpt(?: oauth| model)? (?:is not|isn't) connected\\b/i" in text
+    assert "if (!normalized || normalized.length > 500) return false;" in text
+    assert "if (shouldPromptChatGPTConnectionRecovery(assistantFinalText, payload)) {" in text
+    assert "await promptChatGPTConnectionRecovery(payload);" in text
+    assert "source: 'chatgpt_connection_recovery'" in text
+    assert "handleEasySetupPathSelect('codex');" in text
+    assert "Your ChatGPT or Codex app sign-in is separate from Thomas." in text
 
 
 def test_companion_chat_uses_the_canonical_v2_endpoint() -> None:
@@ -84,11 +82,11 @@ def test_companion_chat_uses_the_canonical_v2_endpoint() -> None:
     assert 'fetch("/api/chat", {' not in text
 
 
-def test_primary_runtime_fallback_has_no_v1_chat_switch() -> None:
-    text = _read(PRIMARY_RUNTIME_PATH)
-    assert "window.__THOMAS_CHAT_V2__" not in text
-    assert "'/api/chat'" not in text
-    assert text.count("const chatEndpoint = '/api/v2/chat';") >= 2
+def test_retired_primary_runtime_bundle_stays_deleted() -> None:
+    # app_runtime_primary.mjs was a 2.3 MB near-copy of js/runtime/ that no
+    # page loaded. Every contract test that consulted it was measuring a dead
+    # bundle; it is deleted and must not be resurrected as a parallel truth.
+    assert not RETIRED_PRIMARY_RUNTIME_PATH.exists()
 
 
 def test_chat_shell_defaults_to_a_usable_profile_case_insensitively() -> None:

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
 from aiohttp import web
+
+log = logging.getLogger(__name__)
 
 _ROUTES: tuple[tuple[str, str, str], ...] = (
     ("get", "/api/task-ledger/current", "api_task_ledger_current"),
@@ -34,8 +37,6 @@ def register_core_routes(
         app.router.add_get("/settings", handlers["settings"])
     if "companion" in handlers:
         app.router.add_get("/companion", handlers["companion"])
-    if "landing" in handlers:
-        app.router.add_get("/landing", handlers["landing"])
     app.router.add_static("/static/", web_dir, show_index=False)
 
     async def _revalidate_static(request: web.Request, response: web.StreamResponse) -> None:
@@ -107,6 +108,11 @@ def register_core_routes(
         except web.HTTPServerError:
             return await handle_500(request)
         except Exception:
+            # Top-level error boundary: broad ON PURPOSE -- its whole job is
+            # turning any unhandled failure into a 500 page. Logged in full so
+            # the failure is never silent; re-raising here would replace the
+            # error page with a dropped connection.
+            log.exception("Unhandled error converted to 500 for %s %s", request.method, request.path)
             return await handle_500(request)
 
     # Insert error middleware at the beginning for proper error handling

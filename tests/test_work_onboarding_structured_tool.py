@@ -146,8 +146,6 @@ def test_easy_setup_only_accepts_explicit_onboarding_controls() -> None:
     runtime_paths = (
         "thomas/server/web/js/runtime/008_easy_setup_onboarding_06.js",
         "thomas/server/web/js/runtime/011_chat_games_02.js",
-        "thomas/server/web/js/modules/007_errormsg.js",
-        "thomas/server/web/js/src/runtime_modules/007_errormsg.js",
     )
     sources = {path: (ROOT / path).read_text(encoding="utf-8") for path in runtime_paths}
 

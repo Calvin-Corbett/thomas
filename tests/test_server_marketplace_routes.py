@@ -575,21 +575,17 @@ class TestServerMarketplaceRoutes(AioHTTPTestCase):
 
 
 def test_marketplace_surface_uses_plugin_catalog_only() -> None:
-    html = _read_text("thomas/server/web/static/plugin_marketplace.html")
-    script = _read_text("thomas/server/web/static/plugin_marketplace.script01.js")
+    # The live marketplace surface is the classic shell's runtime module; the
+    # old target, static/plugin_marketplace.html, was a dead standalone page no
+    # route or iframe loaded and is deleted. The invariant is the same: the
+    # marketplace reads the marketplace catalog, never the retired companion
+    # app-store endpoints.
+    script = _read_all_runtime_js()
 
-    assert "/api/marketplace/plugins" in script
+    assert "/api/marketplace/" in script
     assert "/api/companion/v1/app-store" not in script
     assert "/api/companion/v1/modules" not in script
-    assert "Thomas Companion" not in html
-    assert "extensions/catalog.json" in html
-    assert "Loading Thomas upgrades..." in script
     assert "No upgrades match this view." in script
-    assert "No upgrade metadata yet." in script
-    assert "ReactDOM" not in html
-    assert "react-dom" not in html.lower()
-    assert "unpkg.com/react" not in html
-    assert "babel" not in html.lower()
 
 
 def test_marketplace_runtime_supports_reorderable_workspace_nav_and_import() -> None:
@@ -633,8 +629,6 @@ def test_workspaces_render_in_sidebar_markup() -> None:
 
 def test_marketplace_runtime_uses_store_specific_empty_state_copy() -> None:
     script = _read_all_runtime_js()
-    static_html = _read_text("thomas/server/web/static/plugin_marketplace.html")
-    static_script = _read_text("thomas/server/web/static/plugin_marketplace.script01.js")
 
     assert "Browse and install Thomas upgrades" in script
     assert "Browse and install Thomas upgrades from the marketplace catalog." in script
@@ -648,10 +642,7 @@ def test_marketplace_runtime_uses_store_specific_empty_state_copy() -> None:
     assert "Installable Thomas plugins from the extension catalog." not in script
     assert "No live queue data yet." not in script
     assert "moduleWorkspaceMeta.textContent = 'Extension catalog';" not in script
-    assert "Browse real Thomas upgrades from the marketplace catalog." in static_html
-    assert "Browse real Thomas plugins from the extension catalog." not in static_html
-    assert "Source: marketplace catalog" in static_script
-    assert "extension catalog" not in static_script.lower()
+    assert "extension catalog" not in script.lower()
 
 
 def test_tray_agent_bootstraps_repo_runtime_and_prefers_repo_venv() -> None:

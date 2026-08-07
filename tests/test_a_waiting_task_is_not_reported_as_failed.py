@@ -28,9 +28,8 @@ two tests below hold it in place.
 These files are live code, not a dead bundle: ``index.html`` loads
 ``app_runtime_loader.js``, which pulls every module from ``/static/js/runtime/``,
 and that shell "still hosts every workspace and is served at /classic"
-(app_middleware_helpers.py). The near-identical copy in
-``js/app_runtime_primary.mjs`` has no importer anywhere and is deliberately left
-alone.
+(app_middleware_helpers.py). The near-identical copy that used to sit in
+``js/app_runtime_primary.mjs`` had no importer anywhere and has been deleted.
 """
 
 from __future__ import annotations
