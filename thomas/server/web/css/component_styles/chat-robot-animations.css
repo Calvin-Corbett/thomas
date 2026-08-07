@@ -234,7 +234,7 @@
     50%      { transform: translateY(-1px); }
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Restart overlay Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* -- Restart overlay -- */
 .restart-overlay {
     position: fixed;
     inset: 0;
@@ -248,6 +248,6 @@
 }
 .restart-overlay.hidden { display: none; }
 .restart-overlay-inner {
-    background: var(--surface-elevated, #222);
+    background: var(--c-menu-bg);
     padding: 24px 32px;
     border-radius: 12px;

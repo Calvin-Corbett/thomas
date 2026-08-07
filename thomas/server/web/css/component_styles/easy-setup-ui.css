@@ -661,8 +661,8 @@
     bottom: var(--robot-alert-bubble-bottom);
     max-width: min(220px, calc(100vw - 104px));
     border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    background: rgba(17, 23, 33, 0.94);
+    border: 1px solid var(--c-border-2);
+    background: var(--c-menu-bg);
     color: var(--text-primary);
     font-size: 12px;
     line-height: 1.35;

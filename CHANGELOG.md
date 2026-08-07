@@ -7,6 +7,16 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (design unification: the robot messenger follows the theme)
+
+- The robot alert bubble (server-restart notices and other robot-delivered
+  messages on /classic) hardcoded a near-black background while its ink
+  followed the theme - a dark slab with invisible text under light and
+  sandstone. It now uses the menu surface token, verified live under the
+  light theme with the real stale-code notice. The restart dialog dropped
+  its undefined `--surface-elevated` var (whose #222 fallback always won)
+  for the same token, and its mojibake comment banner is readable again.
+
 ### Fixed (design unification: the classic Settings Suite chrome follows the theme)
 
 - Probing themes x widths found the last dark-anchored chrome: the classic
