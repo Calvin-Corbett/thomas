@@ -355,52 +355,6 @@
     </button>
   </div>
 
-  <style>
-    /* Everything lives here rather than inline. An inline `color` outranks any
-       stylesheet rule without !important, so styling the base state inline
-       silently killed both the hover state and the uncommitted-tree state --
-       the attribute was set and nothing changed colour. */
-    #tc-build-badge {
-      position: absolute; right: 10px; bottom: 8px; z-index: 40;
-      display: inline-flex; align-items: center; gap: 7px;
-      padding: 4px 10px; border-radius: 999px;
-      border: 1px solid var(--c-border); background: var(--c-surface);
-      font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .02em;
-      line-height: 1; color: var(--c-muted); cursor: pointer; opacity: .55;
-      transition: opacity .14s ease, color .14s ease, border-color .14s ease;
-    }
-    #tc-build-badge[hidden] { display: none; }
-    #tc-build-badge:hover, #tc-build-badge:focus-visible { opacity: 1; color: var(--c-dim); border-color: var(--c-border-2); }
-    #tc-build-badge:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
-    /* An uncommitted tree is the one state worth interrupting for: what is
-       running is not the commit named beside it. */
-    #tc-build-badge[data-dirty="1"] { color: #e8b45c; border-color: rgba(232,180,92,.42); opacity: .82; }
-    #tc-build-badge[data-dirty="1"]:hover, #tc-build-badge[data-dirty="1"]:focus-visible { color: #f5cd85; opacity: 1; }
-    @media (prefers-reduced-motion: reduce) { #tc-build-badge { transition: none; } }
-    /* NOT FIXED, MEASURED 2026-07-30. This badge overlaps the "Thomas can make
-       mistakes" line below about 1210px, and 640 is far too low to prevent it.
-       Measured by comparing the PAINTED text extents (a Range over each text
-       node, not the element boxes -- the disclaimer's box spans the whole
-       composer column while its text is centred and much narrower, which
-       reports a 168px overlap at 1280 where the picture shows a 37px gap):
-
-         1220px  clear        1200px  1px        1160px  21px
-         1120px  41px         1100px  46px       900px  133px
-
-       Left alone deliberately. The crossover moves with the badge's own text --
-       "uncommitted" adds roughly 60px, a shorter commit or port takes some
-       back -- so any fixed breakpoint is approximate, and the honest ones are
-       bad trades: 1280 hides a build identity the owner uses on the commonest
-       laptop width, and anything lower still overlaps on a clean tree. The fix
-       that would actually hold is structural -- disclaimer and badge in one
-       flex row so the layout engine keeps them apart -- and that is a footer
-       rewrite, not a number.
-
-       Severity, stated plainly so the next person can weigh it: both elements
-       are low-emphasis and the badge is 55% opaque, so this is untidy rather
-       than misleading. Nothing reads as wrong; it just looks unfinished. */
-    @media (max-width: 640px) { #tc-build-badge { display: none; } }
-  </style>
 
   <script src="/static/js/workspace_shell.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/ui_edit_layout.js?v=__THOMAS_WEB_BUILD__"></script>
@@ -419,32 +373,15 @@
   <script src="/static/js/chat_composer_panels.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/chat_stream_consumer.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/chat_turn_flow.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/chat_themes.js?v=__THOMAS_WEB_BUILD__"></script>
   <script>
   (function () {
     "use strict";
 
-    // ---------- Theme data (mirrors the design's THEMES / THEME_META) ----------
-    const THEMES = {
-      nebula: { name: 'Nebula Core', tagline: 'Deep space — planets & flybys', sw: ['#0a0c18', '#1a1d33', '#8b8cff'],
-        vars: { '--c-bg': '#070912', '--c-sidebar': 'rgba(11,14,26,0.72)', '--c-surface': 'rgba(255,255,255,0.04)', '--c-surface-2': 'rgba(255,255,255,0.08)', '--c-hover': 'rgba(255,255,255,0.06)', '--c-border': 'rgba(255,255,255,0.10)', '--c-border-2': 'rgba(255,255,255,0.17)', '--c-text': '#eef0fb', '--c-dim': 'rgba(238,240,251,0.66)', '--c-muted': 'rgba(238,240,251,0.42)', '--c-accent': '#8b8cff', '--c-accent-ink': '#0a0b16', '--c-accent-soft': 'rgba(139,140,255,0.16)', '--c-accent-line': 'rgba(139,140,255,0.45)', '--c-user-bg': 'rgba(124,118,235,0.20)', '--c-user-text': '#eef0fb', '--c-composer-bg': 'rgba(16,19,34,0.86)', '--c-shadow': '0 18px 50px rgba(2,4,12,0.55)', '--c-danger': '#ff9a9a', '--c-warn': '#e2b25f' } },
-      dark: { name: 'Dark', tagline: 'Blueprint workshop, mono', sw: ['#16181c', '#23262c', '#6e9bff'],
-        vars: { '--c-bg': '#16181c', '--c-sidebar': '#101216', '--c-surface': 'rgba(255,255,255,0.035)', '--c-surface-2': 'rgba(255,255,255,0.07)', '--c-hover': 'rgba(255,255,255,0.055)', '--c-border': 'rgba(255,255,255,0.09)', '--c-border-2': 'rgba(255,255,255,0.15)', '--c-text': '#e7e9ee', '--c-dim': 'rgba(231,233,238,0.64)', '--c-muted': 'rgba(231,233,238,0.40)', '--c-accent': '#6e9bff', '--c-accent-ink': '#0b1020', '--c-accent-soft': 'rgba(110,155,255,0.14)', '--c-accent-line': 'rgba(110,155,255,0.42)', '--c-user-bg': '#2a2e36', '--c-user-text': '#e7e9ee', '--c-composer-bg': '#1b1e23', '--c-shadow': '0 14px 40px rgba(0,0,0,0.45)', '--c-danger': '#ff9a9a', '--c-warn': '#e2b25f' } },
-      light: { name: 'Light', tagline: 'Daylight studio, airy', sw: ['#ffffff', '#eef1f6', '#2f6bff'],
-        vars: { '--c-bg': '#fafbfc', '--c-sidebar': '#f3f5f8', '--c-surface': '#ffffff', '--c-surface-2': '#f3f5f8', '--c-hover': 'rgba(20,30,60,0.05)', '--c-border': 'rgba(20,30,60,0.10)', '--c-border-2': 'rgba(20,30,60,0.16)', '--c-text': '#1c2330', '--c-dim': 'rgba(28,35,48,0.66)', '--c-muted': 'rgba(28,35,48,0.46)', '--c-accent': '#2f6bff', '--c-accent-ink': '#ffffff', '--c-accent-soft': 'rgba(47,107,255,0.10)', '--c-accent-line': 'rgba(47,107,255,0.40)', '--c-user-bg': '#eaeef6', '--c-user-text': '#1c2330', '--c-composer-bg': '#ffffff', '--c-shadow': '0 14px 40px rgba(20,30,60,0.12)', '--c-danger': '#b3261e', '--c-warn': '#a15c00' } },
-      aurora: { name: 'Aurora', tagline: 'Tundra night, falling snow', sw: ['#08161a', '#0f2a2a', '#34e0b0'],
-        vars: { '--c-bg': '#08151a', '--c-sidebar': 'rgba(9,22,26,0.78)', '--c-surface': 'rgba(120,255,220,0.04)', '--c-surface-2': 'rgba(120,255,220,0.08)', '--c-hover': 'rgba(120,255,220,0.06)', '--c-border': 'rgba(140,255,225,0.12)', '--c-border-2': 'rgba(140,255,225,0.20)', '--c-text': '#e7f3ef', '--c-dim': 'rgba(231,243,239,0.66)', '--c-muted': 'rgba(231,243,239,0.42)', '--c-accent': '#34e0b0', '--c-accent-ink': '#04211a', '--c-accent-soft': 'rgba(52,224,176,0.14)', '--c-accent-line': 'rgba(52,224,176,0.45)', '--c-user-bg': 'rgba(36,120,100,0.30)', '--c-user-text': '#e7f3ef', '--c-composer-bg': 'rgba(10,28,30,0.88)', '--c-shadow': '0 18px 50px rgba(0,12,10,0.55)', '--c-danger': '#ff9a9a', '--c-warn': '#e2b25f' } },
-      sandstone: { name: 'Sandstone', tagline: 'Warm desert, editorial serif', sw: ['#f4ece0', '#e7d9c4', '#c0603c'],
-        vars: { '--c-bg': '#f4ede1', '--c-sidebar': '#efe5d6', '--c-surface': '#fbf6ee', '--c-surface-2': '#f1e7d7', '--c-hover': 'rgba(80,52,28,0.06)', '--c-border': 'rgba(90,62,34,0.16)', '--c-border-2': 'rgba(90,62,34,0.26)', '--c-text': '#2f2a22', '--c-dim': 'rgba(47,42,34,0.70)', '--c-muted': 'rgba(47,42,34,0.48)', '--c-accent': '#c0603c', '--c-accent-ink': '#fdf6ee', '--c-accent-soft': 'rgba(192,96,60,0.12)', '--c-accent-line': 'rgba(192,96,60,0.42)', '--c-user-bg': '#ece0cd', '--c-user-text': '#2f2a22', '--c-composer-bg': '#fbf6ee', '--c-shadow': '0 14px 40px rgba(90,62,34,0.16)', '--c-danger': '#a33a28', '--c-warn': '#8a4b12' } },
-    };
-
-    const THEME_META = {
-      nebula:    { bot: ['#9ad8ff', '#5aaeff', 'rgba(90,174,255,0.5)'],  trim: '#0d1117', fontHead: "'Manrope', system-ui, sans-serif", fontLabel: "'Manrope', system-ui, sans-serif", rCard: '14px', rComposer: '18px', menuBg: '#15142b', composerAccent: 'linear-gradient(90deg, transparent, rgba(139,140,255,0.7), transparent)', msgRule: '0', welcome: ['Where to, Captain?', 'Thomas understands the ask, acts within your boundaries, and shows you what changed.'] },
-      dark:      { bot: ['#9ad8ff', '#5aaeff', 'rgba(90,174,255,0.30)'], trim: '#0d1117', fontHead: "'Manrope', system-ui, sans-serif", fontLabel: "'JetBrains Mono', ui-monospace, monospace", rCard: '8px', rComposer: '12px', menuBg: '#22252b', composerAccent: 'transparent', msgRule: '0', welcome: ['Ready when you are.', 'Describe the task. Thomas plans it, dispatches a worker, and reports back.'] },
-      light:     { bot: ['#7db0ff', '#2f6bff', 'rgba(47,107,255,0.28)'], trim: '#16233a', fontHead: "'Manrope', system-ui, sans-serif", fontLabel: "'Manrope', system-ui, sans-serif", rCard: '16px', rComposer: '18px', menuBg: '#ffffff', composerAccent: 'transparent', msgRule: '0', welcome: ['How can I help?', 'Ask a question or describe something you want done — Thomas handles the rest.'] },
-      aurora:    { bot: ['#a8f0da', '#34e0b0', 'rgba(52,224,176,0.45)'], trim: '#06302a', fontHead: "'Manrope', system-ui, sans-serif", fontLabel: "'Manrope', system-ui, sans-serif", rCard: '14px', rComposer: '18px', menuBg: '#0c2226', composerAccent: 'linear-gradient(90deg, transparent, rgba(52,224,176,0.7), rgba(70,160,255,0.5), transparent)', msgRule: '0', welcome: ['Good evening.', 'A calm place to think. Thomas takes the ask, hands it off, and reports back.'] },
-      sandstone: { bot: ['#ffd6a7', '#ffad60', 'rgba(192,96,60,0.40)'],  trim: '#3a2a1a', fontHead: "'Newsreader', Georgia, serif", fontLabel: "'Newsreader', Georgia, serif", rCard: '12px', rComposer: '14px', menuBg: '#fbf6ee', composerAccent: 'transparent', msgRule: '2px solid var(--c-accent-line)', welcome: ['What shall we make?', 'An unhurried workspace. Thomas takes the ask, hands it off, and reports back.'] },
-    };
-
+    // ---------- Theme data ----------
+    // Lives in js/chat_themes.js (mirrors tokens.css - the single source).
+    const THEMES = window.ThomasChatThemes.THEMES;
+    const THEME_META = window.ThomasChatThemes.THEME_META;
     // ---------- State ----------
     const state = { theme: loadTheme(), surfaceMode: 'chat', themeMenuOpen: false, input: '', search: '', messages: [], activeChat: null, streaming: false, artifactOpen: false, artifactKind: 'board', sessionId: null, restoredCanvas: null, profile: '', modelId: '', modelLabel: '' };
     let timer = null, abortController = null;
@@ -2599,91 +2536,6 @@
       canvasStatus.textContent = 'Ready';
       canvasBody.innerHTML = `<div style="flex:1;min-height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--c-muted);text-align:center;padding:24px;"><i class="ph ph-cards-three" style="font-size:30px;color:var(--c-border-2);"></i><div style="font-size:13px;line-height:1.5;max-width:240px;">When a worker builds something renderable, it shows up here — live as it works, then rendered.</div></div>`;
     }
-    function _removed_renderTabs() {
-      const tabs = [ { kind: 'board', icon: 'ph-scribble-loop', label: 'Whiteboard' }, { kind: 'pdf', icon: 'ph-file-text', label: 'Document' }, { kind: 'chart', icon: 'ph-chart-bar', label: 'Chart' } ];
-      const wrap = document.getElementById('tc-tabs');
-      if (!wrap) return;
-      tabs.forEach(t => {
-        const sel = false;
-        const b = document.createElement('button');
-        b.className = 'hv-soft';
-        b.style.cssText = `flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px; border-radius: 9px; border: 1px solid ${sel ? 'var(--c-accent-line)' : 'var(--c-border)'}; background: ${sel ? 'var(--c-accent-soft)' : 'transparent'}; color: ${sel ? 'var(--c-text)' : 'var(--c-dim)'}; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: all .14s;`;
-        b.innerHTML = `<i class="ph ${t.icon}" style="font-size: 15px;"></i> ${t.label}`;
-        b.addEventListener('click', () => {});
-        wrap.appendChild(b);
-      });
-    }
-    function boardHTML() {
-      return `<div style="position: relative; border-radius: 16px; background: linear-gradient(160deg, #14342c, #0c241e); border: 6px solid #6b4a2f; box-shadow: inset 0 0 60px rgba(0,0,0,0.5), 0 14px 30px rgba(0,0,0,0.4); padding: 14px; overflow: hidden;">
-        <div style="font-family: 'Caveat', cursive; font-size: 26px; color: #eafff6; opacity: 0; animation: tc-fade-up .5s ease forwards .1s;">How Thomas works</div>
-        <svg viewBox="0 0 400 250" style="width: 100%; height: auto; margin-top: 4px; overflow: visible;">
-          <g fill="none" stroke="#7fe9c8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="110" y="18" width="180" height="44" rx="10" pathLength="1" style="stroke-dasharray: 1; stroke-dashoffset: 1; animation: tc-draw .7s ease forwards .3s;"></rect>
-            <path d="M200 62 L200 96" pathLength="1" style="stroke-dasharray: 1; stroke-dashoffset: 1; animation: tc-draw .4s ease forwards 1.0s;"></path>
-            <path d="M192 88 L200 98 L208 88" pathLength="1" style="stroke-dasharray: 1; stroke-dashoffset: 1; animation: tc-draw .3s ease forwards 1.3s;"></path>
-            <rect x="110" y="98" width="180" height="44" rx="10" pathLength="1" stroke="#9ad8ff" style="stroke-dasharray: 1; stroke-dashoffset: 1; animation: tc-draw .7s ease forwards 1.5s;"></rect>
-            <path d="M200 142 L200 176" pathLength="1" style="stroke-dasharray: 1; stroke-dashoffset: 1; animation: tc-draw .4s ease forwards 2.2s;"></path>
-            <path d="M192 168 L200 178 L208 168" pathLength="1" style="stroke-dasharray: 1; stroke-dashoffset: 1; animation: tc-draw .3s ease forwards 2.5s;"></path>
-            <rect x="110" y="178" width="180" height="44" rx="10" pathLength="1" stroke="#ffd6a7" style="stroke-dasharray: 1; stroke-dashoffset: 1; animation: tc-draw .7s ease forwards 2.7s;"></rect>
-            <path d="M110 200 C40 200 40 40 108 40" pathLength="1" stroke="#f4a7c8" stroke-dasharray="1" style="stroke-dashoffset: 1; animation: tc-draw 1s ease forwards 3.4s;"></path>
-            <path d="M104 48 L108 38 L116 44" pathLength="1" stroke="#f4a7c8" style="stroke-dasharray: 1; stroke-dashoffset: 1; animation: tc-draw .3s ease forwards 4.3s;"></path>
-          </g>
-          <text x="200" y="45" text-anchor="middle" fill="#eafff6" font-family="Caveat, cursive" font-size="21" style="opacity: 0; animation: tc-fade-up .4s ease forwards 1.0s;">You ask</text>
-          <text x="200" y="125" text-anchor="middle" fill="#eafff6" font-family="Caveat, cursive" font-size="21" style="opacity: 0; animation: tc-fade-up .4s ease forwards 2.2s;">Thomas plans</text>
-          <text x="200" y="205" text-anchor="middle" fill="#eafff6" font-family="Caveat, cursive" font-size="21" style="opacity: 0; animation: tc-fade-up .4s ease forwards 3.4s;">Worker builds it</text>
-          <text x="44" y="125" text-anchor="middle" fill="#f4a7c8" font-family="Caveat, cursive" font-size="17" style="opacity: 0; animation: tc-fade-up .4s ease forwards 4.6s;">reports back</text>
-        </svg>
-        <div style="position: absolute; right: 12px; bottom: 8px;" data-bot data-primary="#9ad8ff" data-secondary="#5aaeff" data-trim="#0a0e1c" data-glow="rgba(90,174,255,0.4)" data-scale="0.7" data-flame="false"></div>
-      </div>
-      <p style="margin: 14px 2px 0; font-size: 13px; color: var(--c-dim); line-height: 1.6;">Thomas sketches the flow live — you ask, he plans, a worker builds it, and the result reports back to chat. He never does the work in the chat thread itself.</p>`;
-    }
-    function pdfHTML() {
-      const pdfLines = [ { w: '100%', delay: '.8s' }, { w: '96%', delay: '.9s' }, { w: '88%', delay: '1.0s' }, { w: '93%', delay: '1.1s' }, { w: '64%', delay: '1.2s' } ];
-      const pdfLines2 = [ { w: '92%', delay: '1.9s' }, { w: '85%', delay: '2.0s' }, { w: '70%', delay: '2.1s' } ];
-      const pdfBars = [ { h: '40%', delay: '1.4s' }, { h: '65%', delay: '1.5s' }, { h: '52%', delay: '1.6s' }, { h: '80%', delay: '1.7s' }, { h: '95%', delay: '1.8s' } ];
-      const line = ln => `<div style="height: 9px; border-radius: 4px; background: rgba(20,30,60,0.10); margin-bottom: 10px; width: ${ln.w}; opacity: 0; animation: tc-fade-up .4s ease forwards ${ln.delay};"></div>`;
-      return `<div style="position: relative; border-radius: 12px; background: #ffffff; color: #1d2330; box-shadow: 0 14px 36px rgba(0,0,0,0.4); overflow: hidden; border: 1px solid rgba(0,0,0,0.1);">
-        <div style="position: absolute; inset: 0; z-index: 3; overflow: hidden; pointer-events: none;"><div style="position: absolute; top: 0; bottom: 0; left: 0; width: 60%; transform: translateX(-120%); background: linear-gradient(100deg, transparent, rgba(120,140,255,0.22), transparent); animation: tc-shimmer 1.3s ease-out forwards;"></div></div>
-        <div style="height: 7px; background: linear-gradient(90deg, #2f6bff, #8b8cff);"></div>
-        <div style="padding: 22px 24px;">
-          <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #2f6bff; opacity: 0; animation: tc-fade-up .4s ease forwards .3s;">Launch Note</div>
-          <h2 style="margin: 6px 0 2px; font-family: var(--font-serif); font-size: 23px; line-height: 1.2; color: #131826; opacity: 0; animation: tc-fade-up .4s ease forwards .45s;">The New Thomas Chat — redesigned</h2>
-          <div style="font-size: 12px; color: #6b7280; opacity: 0; animation: tc-fade-up .4s ease forwards .6s;">Drafted by Thomas · just now · 1 page</div>
-          <div style="height: 1px; background: rgba(0,0,0,0.08); margin: 14px 0; opacity: 0; animation: tc-fade-up .4s ease forwards .7s;"></div>
-          ${pdfLines.map(line).join('')}
-          <div style="display: flex; align-items: flex-end; gap: 10px; height: 90px; margin: 18px 0 6px; padding: 12px; border-radius: 10px; background: #f5f7fb;">
-            ${pdfBars.map(bar => `<div style="flex: 1; height: ${bar.h}; border-radius: 5px 5px 0 0; background: linear-gradient(180deg, #6f9bff, #2f6bff); transform-origin: bottom; transform: scaleY(0); animation: tc-bar .6s cubic-bezier(.2,.8,.2,1) forwards ${bar.delay};"></div>`).join('')}
-          </div>
-          ${pdfLines2.map(line).join('')}
-        </div>
-      </div>
-      <div style="display: flex; gap: 8px; margin-top: 14px;">
-        <button class="hv-surface" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 9px; border-radius: 10px; border: 1px solid var(--c-border-2); background: var(--c-surface); color: var(--c-text); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;"><i class="ph ph-download-simple" style="font-size: 15px;"></i> Download</button>
-        <button class="hv-surface" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 9px; border-radius: 10px; border: 1px solid var(--c-border-2); background: var(--c-surface); color: var(--c-text); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;"><i class="ph ph-arrow-square-out" style="font-size: 15px;"></i> Open</button>
-      </div>`;
-    }
-    function chartHTML() {
-      const chartBars = [
-        { label: 'Nebula', h: '88%', color: '#8b8cff', glow: 'rgba(139,140,255,0.4)', delay: '.3s' },
-        { label: 'Dark', h: '62%', color: '#6e9bff', glow: 'rgba(110,155,255,0.35)', delay: '.42s' },
-        { label: 'Light', h: '74%', color: '#2f6bff', glow: 'rgba(47,107,255,0.3)', delay: '.54s' },
-        { label: 'Aurora', h: '53%', color: '#34e0b0', glow: 'rgba(52,224,176,0.4)', delay: '.66s' },
-        { label: 'Sandstone', h: '41%', color: '#c0603c', glow: 'rgba(192,96,60,0.4)', delay: '.78s' },
-      ];
-      return `<div style="border-radius: 14px; background: var(--c-surface); border: 1px solid var(--c-border); padding: 18px;">
-        <div style="font-size: 14px; font-weight: 700; opacity: 0; animation: tc-fade-up .4s ease forwards .2s;">Weekly active chats by theme</div>
-        <div style="font-size: 11.5px; color: var(--c-muted); margin-top: 2px; opacity: 0; animation: tc-fade-up .4s ease forwards .3s;">Live from the workspace · last 7 days</div>
-        <div style="display: flex; align-items: flex-end; gap: 12px; height: 180px; margin-top: 18px; padding-bottom: 26px; position: relative;">
-          <div style="position: absolute; left: 0; right: 0; bottom: 26px; height: 1px; background: var(--c-border);"></div>
-          ${chartBars.map(bar => `<div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 8px;">
-            <div style="width: 100%; max-width: 46px; height: ${bar.h}; border-radius: 7px 7px 0 0; background: ${bar.color}; transform-origin: bottom; transform: scaleY(0); animation: tc-bar .7s cubic-bezier(.2,.8,.2,1) forwards ${bar.delay}; box-shadow: 0 0 18px ${bar.glow};"></div>
-            <span style="font-size: 11px; color: var(--c-dim); white-space: nowrap;">${bar.label}</span>
-          </div>`).join('')}
-        </div>
-      </div>
-      <p style="margin: 14px 2px 0; font-size: 13px; color: var(--c-dim); line-height: 1.6;">Thomas pulls the numbers and renders them on the canvas — no copy-pasting into a spreadsheet.</p>`;
-    }
-
     // ---------- Tools (AI settings), attachments (+), voice (mic) ----------
     function saveDials() { try { localStorage.setItem('thomas_dials', JSON.stringify(state.dials)); } catch (e) {} }
     const DIAL_FIELDS = [

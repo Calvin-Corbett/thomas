@@ -7,6 +7,17 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (design unification: chat.html gains 150 lines of headroom)
+
+- chat.html drops from 2998 to 2850 lines against the hard 3000 ceiling:
+  the four dead canvas-prototype functions (85 lines, zero callers) are
+  deleted; the build-badge <style> block lives in chat_shell.css with its
+  load-bearing measurement comments; and the THEMES / THEME_META data moved
+  to js/chat_themes.js (window.ThomasChatThemes), which documents that its
+  values mirror tokens.css. Verified live: five themes load, the real
+  switcher swaps palette and welcome copy, the build badge stays styled,
+  zero page errors; the full chat DOM test battery passes.
+
 ### Changed (design unification: companion and frontier converge)
 
 - Companion speaks the product language: the pre-unification blue/green era
