@@ -7,6 +7,22 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (a refusal carries its remedy, and Verified means what was checked)
+
+- A file-access POLICY refusal's remedy ("Raise the file-access level (e.g. to
+  'Your PC') to write here.") now reaches the user-facing result instead of
+  dying inside the dropped tool output — measured live: the Desktop-file ask
+  got a true boundary answer that never mentioned the lever the owner controls.
+  The worker also stops retrying the byte-identical refused call (a policy
+  refusal is deterministic; a different path starts fresh — no gate).
+- Chat deliverable wording scopes its claim to what ran: render-only proof
+  says "Done — renders · not checked against your ask", never a bare
+  "Verified" — measured live: an unwinnable generated game wore "Verified".
+  Announcements, task events, and the LLM announcement prompt all follow; a
+  server-authored `verification_label` rides every normalized delegation row
+  for the UI to render (handoff filed to the UI session). Max/exhaustive runs,
+  which ARE reviewed against the ask, get a label naming that review.
+
 ### Changed (design unification: chat.html gains 150 lines of headroom)
 
 - chat.html drops from 2998 to 2850 lines against the hard 3000 ceiling:

@@ -164,6 +164,43 @@ def resolve_write_roots(
     return roots
 
 
+# ── Refusal wording, shared with the detectors below so they can never drift ──
+# Each remedy names a lever the USER controls; refusal text that carries one
+# must reach the user verbatim (chat_delegation_result_policy threads it into
+# the final announcement). The system-dir refusal deliberately has no remedy:
+# no ladder level unlocks it.
+_REMEDY_OUTSIDE_SCOPE = "Raise the file-access level (e.g. to 'Your PC') to write here."
+_REMEDY_READ_ONLY = "Raise Thomas's file-access level to let it write files."
+_REFUSAL_SYSTEM_DIR_MARK = "never writable by Thomas at any access level"
+_REFUSAL_PREFIX = "BLOCKED:"
+
+
+def is_file_access_refusal(text: object) -> bool:
+    """True when *text* carries a refusal produced by THIS ladder.
+
+    Sight, not a gate: callers use this to recognise that a failure was
+    deterministic policy (the identical call will be refused identically) and
+    to surface the remedy — never to block a different attempt.
+    """
+    value = str(text or "")
+    if _REFUSAL_PREFIX not in value:
+        return False
+    return _REMEDY_OUTSIDE_SCOPE in value or _REMEDY_READ_ONLY in value or _REFUSAL_SYSTEM_DIR_MARK in value
+
+
+def file_access_refusal_remedy(text: object) -> str:
+    """The user-actionable remedy sentence inside a ladder refusal, or ''.
+
+    The remedy is the one thing the refusal knows that the user can act on;
+    a reply that reports the refusal without it strands the user.
+    """
+    value = str(text or "")
+    for sentence in (_REMEDY_OUTSIDE_SCOPE, _REMEDY_READ_ONLY):
+        if sentence in value:
+            return sentence
+    return ""
+
+
 def authorize_write(
     level: object,
     target: Path,
@@ -182,21 +219,17 @@ def authorize_write(
         if _path_within(target, deny):
             return (
                 False,
-                f"BLOCKED: '{target}' is an OS system directory — never writable by Thomas at any access level.",
+                f"{_REFUSAL_PREFIX} '{target}' is an OS system directory — {_REFUSAL_SYSTEM_DIR_MARK}.",
             )
 
     roots = resolve_write_roots(lvl, workspace_root=workspace_root, project_root=project_root, home_dir=home_dir)
     if roots is None:
-        return False, (
-            f"BLOCKED: file access is set to '{spec.ui_label}' (read-only). "
-            "Raise Thomas's file-access level to let it write files."
-        )
+        return False, (f"{_REFUSAL_PREFIX} file access is set to '{spec.ui_label}' (read-only). " + _REMEDY_READ_ONLY)
     if not roots:  # FULL — unrestricted apart from the system deny-list above
         return True, ""
     for root in roots:
         if _path_within(target, root):
             return True, ""
     return False, (
-        f"BLOCKED: '{target}' is outside what file access '{spec.ui_label}' allows. "
-        "Raise the file-access level (e.g. to 'Your PC') to write here."
+        f"{_REFUSAL_PREFIX} '{target}' is outside what file access '{spec.ui_label}' allows. " + _REMEDY_OUTSIDE_SCOPE
     )

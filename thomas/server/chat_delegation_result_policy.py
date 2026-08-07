@@ -2,7 +2,36 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
+from thomas.core.file_access import file_access_refusal_remedy
 from thomas.server.chat_delegation_deliverable import _worker_answer_text
+
+
+def result_with_policy_remedy(summary: object, policy_refusals: Sequence[str] | None) -> str:
+    """Carry a policy refusal's own remedy sentence into the composed result.
+
+    Measured (gauntlet g-desktopfile, live 2026-08-05): the file-access ladder
+    refused a Desktop write with text that literally contained the fix — "Raise
+    the file-access level (e.g. to 'Your PC') to write here." — but the reply
+    the user saw only said the environment "can only write inside its
+    workspace". The user-settable lever was known and withheld.
+
+    So: for every refusal the run hit, extract the remedy sentence the refusal
+    itself carries and append any the summary does not already state. Purely
+    additive wording — this can neither pass nor fail a run, and a refusal
+    without a remedy (the OS-system-dir one) adds nothing.
+    """
+    text = str(summary or "")
+    remedies: list[str] = []
+    for refusal in policy_refusals or []:
+        remedy = file_access_refusal_remedy(refusal)
+        if remedy and remedy not in remedies and remedy not in text:
+            remedies.append(remedy)
+    if not remedies:
+        return text
+    note = "A file write was refused by Thomas's file-access setting — a setting you control. " + " ".join(remedies)
+    return f"{text}\n\n{note}" if text else note
 
 
 def worker_text_is_confirmed_answer(
@@ -51,9 +80,7 @@ def worker_text_is_confirmed_answer(
     # The anti-rubber-stamp purpose is untouched, because it never rested on the
     # failure list. "I'll get started on that" with nothing run is still refused by
     # the answer-text check above and by the empty-succeeded_tools check below.
-    unrecovered = [
-        str(tool) for tool in (failed_tools or []) if str(tool) and str(tool) not in set(succeeded_tools)
-    ]
+    unrecovered = [str(tool) for tool in (failed_tools or []) if str(tool) and str(tool) not in set(succeeded_tools)]
     if unrecovered:
         # A tool that failed and never once worked is still a real gap. Widening this
         # to "any success anywhere excuses any failure" would also excuse a worker
@@ -63,4 +90,4 @@ def worker_text_is_confirmed_answer(
     return bool(succeeded_tools)
 
 
-__all__ = ["worker_text_is_confirmed_answer"]
+__all__ = ["result_with_policy_remedy", "worker_text_is_confirmed_answer"]

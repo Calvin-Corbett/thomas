@@ -6,6 +6,8 @@ import json
 import re
 from typing import Any
 
+from thomas.core.file_access import file_access_refusal_remedy, is_file_access_refusal
+
 _MAX_TOOL_RESULT_CHARS = 5_000
 _CODE_INSPECTION_TOOLS = frozenset(
     {
@@ -40,6 +42,8 @@ def is_inspection_tool(tool_name: str) -> bool:
     if not raw:
         return False
     return _CODE_TOOL_ALIASES.get(raw, raw) in _CODE_INSPECTION_TOOLS
+
+
 _SHELL_MUTATION_COMMAND_RE = re.compile(
     r"(?:^|[;&|]\s*|\s)"
     r"(?:(?:python(?:3)?|py|node|deno|bun|ruby|perl|cmd\s+/c|"
@@ -159,7 +163,29 @@ def _code_tool_action(name: str, args: dict[str, Any]) -> str:
 
 
 def _tool_result_with_recovery(tool_name: str, result_text: str) -> str:
-    """Add one concrete recovery instruction for a missing requested file."""
+    """Add one concrete recovery instruction for a deterministic failure.
+
+    Two deterministic shapes are recognised. A missing requested file (read it
+    again and it is still missing) and a file-access POLICY refusal (measured,
+    gauntlet g-desktopfile 2026-08-05: the worker retried the identical
+    ladder-refused Desktop write 6s later — policy refusals are not transient).
+    The note is sight for the model, never a gate: a DIFFERENT attempt — an
+    allowed path, or finishing with an honest answer — stays fully open.
+    """
+    if is_file_access_refusal(result_text):
+        remedy = file_access_refusal_remedy(result_text)
+        remedy_line = (
+            f" If no allowed location can satisfy the task, finish and repeat the refusal's remedy "
+            f"to the user verbatim: {remedy}"
+            if remedy
+            else " If no allowed location can satisfy the task, finish and report this refusal to the user honestly."
+        )
+        return (
+            f"{result_text}\n\nRecovery: this was refused by the file-access POLICY, not by a "
+            "transient error. The identical call will be refused identically every time — do not "
+            "retry it. Write to a location the current access level allows (e.g. inside your "
+            f"workspace) if that can satisfy the task.{remedy_line}"
+        )
     if tool_name.lower() != "fs.read_file" or "file not found" not in result_text.lower():
         return result_text
     return (
@@ -176,7 +202,16 @@ def _failed_tool_signature(tool_name: str, args: dict[str, Any], result_text: st
 
 
 def _record_failed_tool(counts: dict[str, int], tool_name: str, args: dict[str, Any], result_text: str) -> int:
-    """Count an exact failure across intervening successful inspection calls."""
+    """Count an exact failure across intervening successful inspection calls.
+
+    A file-access policy refusal is deterministic — the identical call gets the
+    identical refusal forever — so it counts double: with the loop's stability
+    stop at >= 3, the first refusal is surfaced (with its recovery note) and
+    the second IDENTICAL attempt stops the spin instead of the third. A
+    different attempt (other args, other tool) is a different signature with
+    its own fresh count, so trying an allowed path is never impeded.
+    """
     signature = _failed_tool_signature(tool_name, args, result_text)
-    counts[signature] = counts.get(signature, 0) + 1
+    increment = 2 if is_file_access_refusal(result_text) else 1
+    counts[signature] = counts.get(signature, 0) + increment
     return counts[signature]

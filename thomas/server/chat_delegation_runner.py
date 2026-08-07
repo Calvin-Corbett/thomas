@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from thomas.core import task_bot_runtime
+from thomas.core.file_access import is_file_access_refusal as _is_file_access_refusal
 from thomas.marketplace.specialists.reasoning_task_briefs import brief_scope as _brief_scope
 from thomas.server.chat_delegation_artifact_verification import _hidden_completion_review_passes
 from thomas.server.chat_delegation_deliverable import (
@@ -32,6 +33,9 @@ from thomas.server.chat_delegation_live_repo import (
     _live_repo_result_summary,
     _live_repo_workspace_mtimes,
     _with_live_repo_change_requirement,
+)
+from thomas.server.chat_delegation_result_policy import (
+    result_with_policy_remedy as _result_with_policy_remedy,
 )
 from thomas.server.chat_delegation_result_policy import (
     worker_text_is_confirmed_answer as _worker_text_is_confirmed_answer,
@@ -109,9 +113,7 @@ def _supervisor_worker_timeout_s(worker_kwargs: dict[str, Any], *, has_progress:
     return base
 
 
-async def _next_worker_event(
-    stream: Any, *, saw_event: bool, timeout_s: float | None = None
-) -> dict[str, Any] | None:
+async def _next_worker_event(stream: Any, *, saw_event: bool, timeout_s: float | None = None) -> dict[str, Any] | None:
     """Wait for the worker's next event, cancelling the stream if it never comes.
 
     `timeout_s` exists because this watchdog and `_supervisor_worker_timeout_s`
@@ -298,6 +300,7 @@ async def _finalize_worker_completion(
     bot: Any,
     specialist_id: str,
     repo_root: str | Path | None,
+    policy_refusals: list[str] | None = None,
 ) -> None:
     """Finalize a normal worker with honest evidence and proof artifacts."""
     # Verification scopes to THIS worker's brief: the multi-task context block
@@ -326,6 +329,11 @@ async def _finalize_worker_completion(
     # real recorded case from pass to fail.
     _exec_warnings += await asyncio.to_thread(subject_mismatch_warning, scope_prompt, work_dir, created)
     result_summary += _exec_warnings
+    # A file-access POLICY refusal carries the one thing the user can act on —
+    # its remedy sentence ("Raise the file-access level ..."). Measured
+    # (g-desktopfile 2026-08-05): the reply reported the refusal but withheld
+    # the remedy. Purely additive wording; it cannot pass or fail the run.
+    result_summary = _result_with_policy_remedy(result_summary, policy_refusals)
     verified_success = bool(created) or _worker_text_is_confirmed_answer(
         result_text_parts, prompt=scope_prompt, succeeded_tools=succeeded_tools, failed_tools=failed_tools
     )
@@ -472,6 +480,10 @@ async def _run_agent_worker(
     base_succeeded_tools: list[str] = []
     base_failed_tools: list[str] = []
     base_tool_outputs: dict[str, list[str]] = {}
+    # File-access POLICY refusal texts seen during preflight. Failed tool
+    # results are otherwise dropped, and with them the remedy sentence the
+    # refusal carries for the user.
+    base_policy_refusals: list[str] = []
     for event in preflight_events or []:
         event_type = str(event.get("type") or "")
         tool_name = str(event.get("name") or "tool")
@@ -483,6 +495,9 @@ async def _run_agent_worker(
             if event.get("ok") is False:
                 if tool_name not in base_failed_tools:
                     base_failed_tools.append(tool_name)
+                refusal_text = str(event.get("result_text") or "")
+                if _is_file_access_refusal(refusal_text) and refusal_text not in base_policy_refusals:
+                    base_policy_refusals.append(refusal_text)
                 progress = _tool_phrase(tool_name, failed=True)
             else:
                 if tool_name not in base_succeeded_tools:
@@ -506,6 +521,7 @@ async def _run_agent_worker(
         succeeded_tools = list(base_succeeded_tools)
         failed_tools = list(base_failed_tools)
         tool_outputs = {name: list(values) for name, values in base_tool_outputs.items()}
+        policy_refusals = list(base_policy_refusals)
         saw_event = False
         worker_runtime_received = False
         # Consecutive tool failures within THIS attempt: a worker that keeps
@@ -638,6 +654,9 @@ async def _run_agent_worker(
                     )
                     if not tool_ok:
                         consecutive_snags += 1
+                        refusal_text = str(event.get("result_text") or "")
+                        if _is_file_access_refusal(refusal_text) and refusal_text not in policy_refusals:
+                            policy_refusals.append(refusal_text)
                         record_issue(
                             surface="chat-worker",
                             kind="tool_failure",
@@ -702,6 +721,7 @@ async def _run_agent_worker(
                             bot,
                             specialist_id,
                             repo_root,
+                            policy_refusals=policy_refusals,
                         )
                     return
 
@@ -737,6 +757,7 @@ async def _run_agent_worker(
                     bot,
                     specialist_id,
                     repo_root,
+                    policy_refusals=policy_refusals,
                 )
             return
         except asyncio.CancelledError:
@@ -794,17 +815,19 @@ async def _run_agent_worker(
                 context={"execution_id": execution_id, "task": str(prompt or "")[:160], "attempts": str(max_attempts)},
                 repo_root=repo_root,
             )
+            # A run that dies after a policy refusal still owes the user the
+            # refusal's remedy sentence — the failure card is the only reply
+            # they will get.
+            failure_text = _result_with_policy_remedy(f"Background execution failed: {last_error}", policy_refusals)
             task_bot_runtime.fail_execution(
                 execution_id,
                 actor=bot.name,
-                summary=f"Background execution failed: {last_error}",
+                summary=failure_text,
                 blocker="provider_native_failed",
                 repo_root=repo_root,
             )
             record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
-            await emitter.failed(
-                record, specialist_id=specialist_id, bot=bot, text=f"Background execution failed: {last_error}"
-            )
+            await emitter.failed(record, specialist_id=specialist_id, bot=bot, text=failure_text)
             return
         finally:
             if event_stream is not None:

@@ -74,6 +74,21 @@ from thomas.server.worker_runtime import run_agent_worker_events
 log = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parents[2]
 
+# Measured (gauntlet g-desktopfile, live 2026-08-05): a Desktop write was
+# refused by the file-access ladder; the refusal text itself named the fix
+# ("Raise the file-access level (e.g. to 'Your PC') to write here.") but the
+# worker retried the identical write and its reply never mentioned the lever.
+# Prompt-level sight for both halves of that failure — nothing here blocks.
+_POLICY_REFUSAL_CLAUSE = (
+    "POLICY REFUSALS — a tool result starting with 'BLOCKED:' is a policy refusal, "
+    "not a transient error: the identical call will be refused identically every "
+    "time, so never retry it unchanged. If a genuinely different allowed approach "
+    "(e.g. a path inside your workspace) can satisfy the task, use it. When a "
+    "refusal's text includes a remedy the user controls (e.g. 'Raise the "
+    "file-access level'), repeat that exact remedy in your final answer so the "
+    "user knows the lever is theirs. "
+)
+
 
 def _sync_runner_legacy_globals() -> None:
     """Keep old chat_delegation monkeypatch surfaces effective after the module split."""
@@ -644,7 +659,8 @@ async def _start_agent_worker_delegation(
         "never ask for or embed secrets. Deliver the bridge so the user just plugs in "
         "their devices. Only report an honest blocker when even building the bridge is "
         "impossible, and say specifically what you built and what remains. "
-        "Do not address the user conversationally. For an artifact task, end with a "
+        + _POLICY_REFUSAL_CLAUSE
+        + "Do not address the user conversationally. For an artifact task, end with a "
         "one-line summary of what you built and the main file name(s). For an "
         "answer-only task, return the requested answer itself, not a readiness notice. "
         + quality_tier_clause(effort, autonomy_level)
@@ -672,7 +688,8 @@ async def _start_agent_worker_delegation(
             "If you cannot modify the live repo, create "
             f"`runtime/self_development/{execution_id}/SELF_DEVELOPMENT_REPORT.md` "
             "explaining the blocker, but do not say the requested fix is done. "
-            "Do not address the user conversationally. End with a one-line summary of "
+            + _POLICY_REFUSAL_CLAUSE
+            + "Do not address the user conversationally. End with a one-line summary of "
             "the live files changed and verification run, or the blocker encountered. "
             + quality_tier_clause(effort, autonomy_level)
         )
