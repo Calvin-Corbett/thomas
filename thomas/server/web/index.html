@@ -67,7 +67,6 @@
     var de = document.documentElement;
     de.dataset.thomasTheme = theme;
     de.dataset.theme = theme;
-    if (theme === 'nebula') document.body.classList.add('te-space-active');
 })();
 </script>
 <form id="settingsCredentialForm" class="hidden" aria-hidden="true">
@@ -863,11 +862,14 @@
 (function () {
     'use strict';
     function _shouldInjectGlobalSpace() {
+        /* The space belongs to the Nebula theme only (unified key; the old
+           'thomas_theme' key is retired and had an always-true default). */
         try {
-            var theme = String(window.localStorage.getItem('thomas_theme') || 'auto').toLowerCase();
-            return !theme || theme === 'auto' || theme === 'system';
+            var theme = String(window.localStorage.getItem('thomas_chat_theme') || 'nebula').toLowerCase();
+            return theme === 'nebula';
         } catch (_) {
-            return !document.body.classList.contains('te-theme-light') && !document.body.classList.contains('te-theme-dark');
+            var t = document.documentElement.dataset.thomasTheme || document.documentElement.dataset.theme || 'nebula';
+            return t === 'nebula';
         }
     }
     function _injectGlobalSpace() {

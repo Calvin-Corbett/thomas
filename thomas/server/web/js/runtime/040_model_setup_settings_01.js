@@ -30,19 +30,11 @@ function syncSpaceThemeState(theme) {
     const normalized = normalizeThemePreference(theme);
     const spaceApi = window.__teSpace;
     if (normalized === 'light' || normalized === 'dark') {
-        if (typeof spaceApi?.remove === 'function') {
-            spaceApi.remove();
-        } else {
-            document.body.classList.remove('te-space-active');
-        }
+        if (typeof spaceApi?.remove === 'function') spaceApi.remove();
         if (window.spaceCanvas) window.spaceCanvas.style.display = 'none';
         return;
     }
-    if (typeof spaceApi?.inject === 'function') {
-        spaceApi.inject();
-    } else {
-        document.body.classList.add('te-space-active');
-    }
+    if (typeof spaceApi?.inject === 'function') spaceApi.inject();
     if (window.spaceCanvas) window.spaceCanvas.style.display = '';
 }
 

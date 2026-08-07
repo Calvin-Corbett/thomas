@@ -7,6 +7,17 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (design unification: connect prompt extracted, dead theme relics gone)
+
+- The ChatGPT-connect prompt (OAuth nudge overlay) moved verbatim from
+  chat.html into js/chat_connect_prompt.js behind a factory that receives
+  page state; chat.html is down to 2746 lines (254 under the hard ceiling).
+- The write-only `te-space-active` class and the never-consumed
+  `te-theme-dark` fallback are gone, and the global-space injector gates on
+  the unified theme key (the retired `thomas_theme` key had an always-true
+  default, so the space injected regardless of theme). The space belongs to
+  Nebula only, driven by the real `__teSpace` API.
+
 ### Changed (design unification: radii and buttons land on the token scale)
 
 - The private near-scale radii (3px Forge chrome, 9px/7px/11px workbench,

@@ -32,7 +32,6 @@ window.__teSpace = (function tokenEconomySurfaceAdapter() {
     function remove() {
         const workspace = root();
         if (workspace) workspace.classList.remove('is-active');
-        document.body.classList.remove('te-space-active');
         const staleRoot = document.getElementById('te-space-root');
         if (staleRoot) staleRoot.remove();
         if (!active) return false;
