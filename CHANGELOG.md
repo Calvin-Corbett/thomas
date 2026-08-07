@@ -7,6 +7,8 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+- (landed) satellite restyle onto tokens -- details in the design wave-1 entry below.
+
 - (landed) tokens single-source + shared winner components -- details in the design wave-1 entry below.
 
 ### Fixed (design unification wave 1: one product, in every light)

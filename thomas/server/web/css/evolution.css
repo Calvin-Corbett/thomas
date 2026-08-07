@@ -71,7 +71,7 @@
     align-items: center;
     gap: 7px;
     margin-top: 9px;
-    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-family: var(--font-mono, ui-monospace, monospace);
     font-size: 11px;
     color: #6f7e92;
     letter-spacing: 0.2px;
@@ -94,7 +94,7 @@
     flex: 0 0 auto;
     padding: 5px 12px;
     border-radius: 3px;
-    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-family: var(--font-mono, ui-monospace, monospace);
     font-size: 11px;
     font-weight: 500;
     text-transform: uppercase;
@@ -157,7 +157,7 @@
     margin-top: 3px;
     font-size: 13px;
     color: #93a2b5;
-    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 .evo-hero-icon {
@@ -261,7 +261,7 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: #7f8da0;
-    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 /* ---- section titles ---- */
@@ -271,7 +271,7 @@
     text-transform: uppercase;
     letter-spacing: 0.6px;
     color: #93a2b5;
-    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 .evo-section-warn { color: #f0cf9a; }
@@ -340,7 +340,7 @@
     border: 1px solid rgba(140, 160, 180, 0.2);
     background: rgba(140, 160, 180, 0.07);
     color: #aab8c8;
-    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 .evo-expand-link {
@@ -361,7 +361,7 @@
 .evo-files {
     margin: 9px 0 0;
     padding: 0 0 0 18px;
-    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-family: var(--font-mono, ui-monospace, monospace);
     font-size: 12px;
     color: #93a2b5;
     line-height: 1.7;
@@ -413,7 +413,7 @@
     flex: 0 0 auto;
     font-size: 11px;
     color: #7f8da0;
-    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 /* ---- advanced drawer ---- */
@@ -429,7 +429,7 @@
     font-size: 13px;
     color: #93a2b5;
     list-style: none;
-    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 .evo-advanced > summary::before {
@@ -512,7 +512,7 @@
 
 .forge-hint {
     margin-left: auto;
-    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-family: var(--font-mono, ui-monospace, monospace);
     font-size: 11px;
     color: #6f7e92;
 }
@@ -595,15 +595,17 @@
     --fc-ink: var(--text-primary);
     --fc-ink-2: var(--text-secondary);
     --fc-ink-3: #8593a8;
-    /* accent + semantics (one accent hue; semantics reserved for meaning) */
-    --fc-accent: #7fb0ff;
-    --fc-accent-soft: rgba(127, 176, 255, 0.14);
-    --fc-mint: var(--accent-mint);
-    --fc-mint-soft: rgba(71, 215, 172, 0.13);
-    --fc-warn: #e9c07a;
-    --fc-warn-soft: rgba(233, 192, 122, 0.12);
-    --fc-danger: #f0867a;
-    --fc-danger-soft: rgba(224, 110, 95, 0.13);
+    /* accent + semantics: canonical Chat tokens (one accent hue; semantics
+       reserved for meaning). Soft tints derive from the same tokens so every
+       theme keeps the pairing coherent. */
+    --fc-accent: var(--c-accent);
+    --fc-accent-soft: var(--c-accent-soft);
+    --fc-mint: var(--c-success);
+    --fc-mint-soft: color-mix(in srgb, var(--c-success) 13%, transparent);
+    --fc-warn: var(--c-warn);
+    --fc-warn-soft: color-mix(in srgb, var(--c-warn) 12%, transparent);
+    --fc-danger: var(--c-danger);
+    --fc-danger-soft: color-mix(in srgb, var(--c-danger) 13%, transparent);
     /* diff semantics (colorblind-safe: always paired with a gutter sign + rail) */
     --fc-add-ink: #5fd38a;
     --fc-add-tint: rgba(63, 185, 80, 0.14);
@@ -643,8 +645,7 @@ body.te-theme-light .forge-code-wrap,
     --fc-ink: #14233b;
     --fc-ink-2: #3a4a63;
     --fc-ink-3: #5a6b85;
-    --fc-accent: #1f6feb;
-    --fc-accent-soft: rgba(31, 111, 235, 0.1);
+    /* --fc-accent inherits the canonical --c-accent, which already flips per theme. */
     --fc-add-ink: #1a7f37;
     --fc-add-tint: rgba(46, 160, 67, 0.12);
     --fc-add-word: rgba(46, 160, 67, 0.3);

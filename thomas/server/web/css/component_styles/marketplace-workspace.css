@@ -394,8 +394,8 @@
 }
 
 .module-item-btn:hover {
-    border-color: rgba(88, 166, 255, 0.58);
-    background: rgba(88, 166, 255, 0.16);
+    border-color: var(--c-accent-line);
+    background: var(--c-accent-soft);
     color: var(--text-primary);
 }
 
@@ -463,7 +463,7 @@
 
 .module-action-btn:hover {
     border-color: var(--module-accent);
-    background: rgba(88, 166, 255, 0.12);
+    background: var(--c-accent-soft);
     transform: translate3d(0, -1px, 0);
 }
 
@@ -488,8 +488,8 @@
 
 .module-filter-btn.active,
 .module-filter-btn:hover {
-    border-color: rgba(88, 166, 255, 0.6);
-    background: rgba(88, 166, 255, 0.18);
+    border-color: var(--c-accent-line);
+    background: var(--c-accent-soft);
 }
 
 .module-empty {
@@ -1060,7 +1060,7 @@
 }
 .mp-bubble:hover {
     border-color: var(--accent);
-    box-shadow: 0 8px 32px rgba(88, 166, 255, 0.08);
+    box-shadow: 0 8px 32px color-mix(in srgb, var(--c-accent) 8%, transparent);
     transform: translateY(-2px);
 }
 .mp-bubble-enabled {
@@ -1106,7 +1106,7 @@
 .mp-bubble-tag {
     font-size: 11px;
     padding: 2px 8px;
-    background: rgba(88, 166, 255, 0.08);
+    background: color-mix(in srgb, var(--c-accent) 8%, transparent);
     color: var(--accent);
     border-radius: var(--radius-sm);
 }
@@ -1136,7 +1136,7 @@
 .mp-bubble-action:hover {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(88, 166, 255, 0.06);
+    background: color-mix(in srgb, var(--c-accent) 6%, transparent);
 }
 
 /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ User Created badge ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
@@ -1451,7 +1451,7 @@
 #moduleWorkspace[data-mode="marketplace"] :is(.marketplace-identity,.marketplace-field-label) { display:none; }
 #moduleWorkspace[data-mode="marketplace"] .marketplace-identity-copy { display:grid;gap:1px;line-height:1.1; }
 #moduleWorkspace[data-mode="marketplace"] .marketplace-identity-copy strong { color:var(--c-text);font-size:14px;font-weight:800;letter-spacing:-.01em; }
-#moduleWorkspace[data-mode="marketplace"] :is(.marketplace-identity-copy span,.marketplace-field-label,.marketplace-selected-kicker,.marketplace-card-locus,.marketplace-shelf-head span,.marketplace-feature-copy>span) { color:var(--c-muted);font-family:var(--font-label,"Manrope",system-ui,sans-serif); }
+#moduleWorkspace[data-mode="marketplace"] :is(.marketplace-identity-copy span,.marketplace-field-label,.marketplace-selected-kicker,.marketplace-card-locus,.marketplace-shelf-head span,.marketplace-feature-copy>span) { color:var(--c-muted);font-family:var(--font-label,"Manrope",system-ui,sans-serif);font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase; }
 #moduleWorkspace[data-mode="marketplace"] .marketplace-search-wrap { display:grid;min-height:38px;padding:4px 10px;border:1px solid var(--c-border);border-radius:var(--r-card,14px);background:var(--c-surface);box-shadow:none; }
 #moduleWorkspace[data-mode="marketplace"] .marketplace-search-input { min-height:30px;width:100%;padding:0;border:0;border-radius:calc(var(--r-card,14px) - 4px);background:transparent;color:var(--c-text);font-family:inherit; }
 #moduleWorkspace[data-mode="marketplace"] .marketplace-search-input::placeholder { color:var(--c-muted); }
@@ -1459,6 +1459,10 @@
 #moduleWorkspace[data-mode="marketplace"] .marketplace-command-actions { display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap; }
 #moduleWorkspace[data-mode="marketplace"] :is(.marketplace-command-btn,.marketplace-secondary-btn,.marketplace-cta,.marketplace-filter-chip) { min-height:34px;padding:7px 11px!important;border:1px solid var(--c-border)!important;border-radius:calc(var(--r-card,14px) - 4px)!important;background:transparent!important;color:var(--c-dim)!important;font-family:var(--font-label,"Manrope",system-ui,sans-serif);font-size:12px!important;font-weight:650;letter-spacing:normal!important;text-transform:none;box-shadow:none!important;cursor:pointer; }
 #moduleWorkspace[data-mode="marketplace"] :is(.marketplace-command-btn,.marketplace-secondary-btn,.marketplace-cta,.marketplace-filter-chip):is(:hover,:focus-visible,.is-active) { border-color:var(--c-accent-line)!important;background:var(--c-accent-soft)!important;color:var(--c-text)!important;outline:none; }
+/* Primary actions (Install / Download ZIP / Sync Catalog) wear the token accent
+   button profile the Chat surface uses: filled var(--c-accent), 38px tall. */
+#moduleWorkspace[data-mode="marketplace"] :is(.marketplace-cta,.marketplace-command-btn-primary) { min-height:38px;border-color:var(--c-accent)!important;background:var(--c-accent)!important;color:var(--c-accent-ink)!important; }
+#moduleWorkspace[data-mode="marketplace"] :is(.marketplace-cta,.marketplace-command-btn-primary):is(:hover,:focus-visible) { border-color:color-mix(in srgb,var(--c-accent) 86%,var(--c-text))!important;background:color-mix(in srgb,var(--c-accent) 86%,var(--c-text))!important;color:var(--c-accent-ink)!important;box-shadow:0 0 14px var(--c-accent-soft)!important; }
 #moduleWorkspace[data-mode="marketplace"] .marketplace-filter-rail { display:flex;gap:8px;overflow-x:auto;padding:1px 0 4px;scrollbar-color:var(--c-border-2) transparent; }
 #moduleWorkspace[data-mode="marketplace"] .marketplace-filter-chip { flex:0 0 auto; }
 #moduleWorkspace[data-mode="marketplace"] .marketplace-filter-chip strong { color:var(--c-accent); }
@@ -1482,7 +1486,7 @@
 #moduleWorkspace[data-mode="marketplace"] .marketplace-card-grid { display:grid;grid-template-columns:minmax(0,1fr);gap:34px; }
 #moduleWorkspace[data-mode="marketplace"] .marketplace-feature-wrap { display:grid;grid-template-columns:minmax(240px,.72fr) minmax(360px,1.28fr);align-items:stretch;gap:14px;padding:14px 0 2px; }
 #moduleWorkspace[data-mode="marketplace"] .marketplace-feature-copy { display:flex;flex-direction:column;justify-content:center;padding:20px 10px 20px 0; }
-#moduleWorkspace[data-mode="marketplace"] .marketplace-feature-copy h2 { margin:6px 0 9px;color:var(--c-text);font-family:var(--font-head);font-size:clamp(25px,3vw,42px);line-height:1.02;letter-spacing:-.035em; }
+#moduleWorkspace[data-mode="marketplace"] .marketplace-feature-copy h2 { margin:6px 0 9px;color:var(--c-text);font-family:var(--font-head);font-size:clamp(19px,2vw,24px);font-weight:800;line-height:1.15;letter-spacing:-.02em; }
 #moduleWorkspace[data-mode="marketplace"] .marketplace-feature-copy p { margin:0;max-width:48ch;color:var(--c-dim);font-size:14px;line-height:1.6; }
 #moduleWorkspace[data-mode="marketplace"] .marketplace-shelf { display:grid;gap:12px;min-width:0; }
 #moduleWorkspace[data-mode="marketplace"] .marketplace-shelf-head { display:flex;align-items:end;justify-content:space-between;gap:12px; }

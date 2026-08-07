@@ -5,11 +5,13 @@
  * the composer-relevant sheets (after token_economy_space_theme.css) so plain,
  * normal-specificity selectors win on source order alone — NO !important wars.
  *
- * THE ONE COLOR RULE: every border, ring, separator and divider is ACHROMATIC
- * white-alpha — rgba(255,255,255,a) with EQUAL r/g/b channels. Zero hue. This is
- * the root-cause fix for the persistent "green line": a hued low-alpha hairline
- * on a near-black field reads green via simultaneous contrast. White-alpha
- * physically cannot tint, so the line cannot read green.
+ * COLOR CONTRACT: every color flows through the canonical Chat tokens
+ * (tokens.css --c-*). In the dark themes those separators resolve to achromatic
+ * white-alpha, which preserves the original "no green line" guarantee (a hued
+ * low-alpha hairline on a near-black field reads green via simultaneous
+ * contrast); in the light themes the same rules now actually theme instead of
+ * pinning a hardcoded near-black ramp. The single hue is var(--c-accent), and
+ * it is reserved for the send action and focus affordances.
  *
  * This file owns the composer LOOK only. The send/dispatch path, the 5 dials'
  * ids/handlers, autosize, attachments, voice and shortcuts all live in JS and
@@ -19,9 +21,9 @@
 /* --- Wrapper ------------------------------------------------------------- */
 .composer-container {
     background: linear-gradient(180deg,
-        rgba(10, 12, 16, 0) 0%,
-        rgba(10, 12, 16, 0.82) 44%,
-        rgba(10, 12, 16, 0.96) 100%);
+        transparent 0%,
+        color-mix(in srgb, var(--c-bg) 82%, transparent) 44%,
+        color-mix(in srgb, var(--c-bg) 96%, transparent) 100%);
     padding: clamp(10px, 1.4vw, 14px) clamp(12px, 2vw, 20px)
              calc(12px + env(safe-area-inset-bottom));
 }
@@ -38,29 +40,28 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-    background: #101216;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 4px;
+    background: var(--c-composer-bg);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-composer, 12px);
     padding: 12px 14px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    box-shadow: var(--c-shadow, 0 10px 30px rgba(0, 0, 0, 0.45));
     overflow: visible;
     transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 
-/* One outer ACHROMATIC focus ring — no inner frame, surface steps up a notch. */
+/* One outer focus ring — no inner frame, the border simply steps up. */
 .composer-box:focus-within {
-    background: #14161b;
-    border-color: rgba(255, 255, 255, 0.22);
+    border-color: var(--c-border-2);
     box-shadow:
-        0 0 0 2px rgba(255, 255, 255, 0.08),
-        0 10px 30px rgba(0, 0, 0, 0.45);
+        0 0 0 2px var(--c-accent-soft),
+        var(--c-shadow, 0 10px 30px rgba(0, 0, 0, 0.45));
 }
 
 /* When a dial inside the controls popover is focused, the box ring yields so
    only one ring is ever lit. */
 .composer-box:focus-within:has(.composer-control-select:focus) {
-    border-color: rgba(255, 255, 255, 0.14);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    border-color: var(--c-border);
+    box-shadow: var(--c-shadow, 0 10px 30px rgba(0, 0, 0, 0.45));
 }
 
 /* --- Input row ---------------------------------------------------------- */
@@ -81,8 +82,8 @@
     border: 0;
     outline: none;
     box-shadow: none;
-    color: #ececf1;
-    caret-color: #c8cdd3;
+    color: var(--c-text);
+    caret-color: var(--c-dim);
     font-family: inherit;
     font-size: 14px;
     line-height: 1.55;
@@ -95,7 +96,7 @@
 }
 
 .composer-textarea::placeholder {
-    color: rgba(236, 236, 241, 0.30);
+    color: var(--c-muted);
     font-style: normal;
     letter-spacing: 0.02em;
 }
@@ -109,16 +110,16 @@
 }
 
 /* Icon buttons — scoped to the composer so the global .btn-icon (sidebar/nav)
-   is undisturbed. Achromatic only. */
+   is undisturbed. Quiet until hovered. */
 .composer-box .btn-icon {
     width: 32px;
     height: 32px;
     min-width: 32px;
     min-height: 32px;
-    border-radius: 4px;
+    border-radius: 9px;
     border: 1px solid transparent;
     background: transparent;
-    color: rgba(236, 236, 241, 0.55);
+    color: var(--c-muted);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -128,22 +129,21 @@
 }
 
 .composer-box .btn-icon:hover {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.16);
-    color: #c8cdd3;
+    background: var(--c-hover);
+    border-color: var(--c-border);
+    color: var(--c-dim);
 }
 
 .composer-box .btn-icon i {
     font-size: 16px;
 }
 
-/* Active / open state on the controls + actions triggers (achromatic — was the
-   old blue rgba(88,166,255,0.2)). */
+/* Active / open state on the controls + actions triggers. */
 .composer-box #composerControlsBtn.active,
 .composer-box #attachBtn.active {
-    background: rgba(255, 255, 255, 0.14);
-    border-color: rgba(255, 255, 255, 0.16);
-    color: #e7e9ec;
+    background: var(--c-surface-2);
+    border-color: var(--c-border-2);
+    color: var(--c-text);
 }
 
 /* --- Send button — the single accent ------------------------------------ */
@@ -153,10 +153,10 @@
     height: 38px;
     min-width: 38px;
     min-height: 38px;
-    border-radius: 4px;
-    border: 1px solid #e7e9ec;
-    background: #e7e9ec;
-    color: #0b0f16;
+    border-radius: 10px;
+    border: 1px solid var(--c-accent);
+    background: var(--c-accent);
+    color: var(--c-accent-ink);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -170,9 +170,9 @@
 }
 
 .composer-box #sendBtn:hover:not(:disabled) {
-    background: #f4f5f6;
-    border-color: #f4f5f6;
-    box-shadow: 0 0 14px rgba(255, 255, 255, 0.16);
+    background: color-mix(in srgb, var(--c-accent) 86%, white);
+    border-color: color-mix(in srgb, var(--c-accent) 86%, white);
+    box-shadow: 0 0 14px var(--c-accent-soft);
 }
 
 .composer-box #sendBtn:disabled {
@@ -180,11 +180,11 @@
     cursor: not-allowed;
 }
 
-/* Send → Stop morph: transparent with a quiet achromatic outline. */
+/* Send → Stop morph: transparent with a quiet outline. */
 .composer-box #sendBtn.stop-state {
     background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.30);
-    color: #ececf1;
+    border: 1px solid var(--c-border-2);
+    color: var(--c-text);
     box-shadow: none;
 }
 
@@ -195,10 +195,10 @@
     align-items: center;
     gap: 4px;
     max-width: 188px;
-    border: 1px solid rgba(255, 255, 255, 0.22);
-    background: rgba(255, 255, 255, 0.05);
-    color: #ececf1;
-    border-radius: 4px;
+    border: 1px solid var(--c-border-2);
+    background: var(--c-surface);
+    color: var(--c-text);
+    border-radius: 9px;
     padding: 2px 6px 2px 8px;
     flex: 0 0 auto;
 }
@@ -219,9 +219,9 @@
     width: 16px;
     height: 16px;
     border: 0;
-    border-radius: 4px;
+    border-radius: 6px;
     background: transparent;
-    color: rgba(236, 236, 241, 0.6);
+    color: var(--c-muted);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -231,8 +231,8 @@
 }
 
 .composer-mode-chip-close:hover {
-    color: #ececf1;
-    background: rgba(255, 255, 255, 0.10);
+    color: var(--c-text);
+    background: var(--c-hover);
 }
 
 .composer-mode-chip-close i { font-size: 10px; }
@@ -248,7 +248,7 @@
     font-size: 10px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: rgba(255, 255, 255, 0.45);
+    color: var(--c-muted);
     overflow: hidden;
 }
 
@@ -259,13 +259,13 @@
     align-items: center;
     gap: 3px;
     padding: 1px 6px;
-    border-radius: 4px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 6px;
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
     font-size: 10px;
     font-weight: 600;
     letter-spacing: 0.04em;
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--c-dim);
     white-space: nowrap;
     line-height: 1.4;
 }
@@ -278,12 +278,10 @@
     z-index: 36;
     width: min(300px, calc(100vw - 24px));
     padding: 10px;
-    background: #14161b;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    border-radius: 4px;
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.05),
-        0 16px 36px rgba(0, 0, 0, 0.55);
+    background: var(--c-menu-bg, var(--c-composer-bg));
+    border: 1px solid var(--c-border-2);
+    border-radius: 12px;
+    box-shadow: var(--c-shadow, 0 16px 36px rgba(0, 0, 0, 0.55));
 }
 
 .composer-controls-popover.hidden { display: none; }
@@ -301,7 +299,7 @@
     gap: 8px;
     padding-bottom: 8px;
     margin-bottom: 2px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid var(--c-border);
 }
 
 .composer-controls-title {
@@ -309,12 +307,13 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.14em;
-    color: rgba(236, 236, 241, 0.55);
+    color: var(--c-muted);
+    font-family: var(--font-label, "Manrope", system-ui, sans-serif);
 }
 
 .composer-controls-model {
     font-size: 10px;
-    color: rgba(236, 236, 241, 0.45);
+    color: var(--c-muted);
     letter-spacing: 0.04em;
     white-space: nowrap;
     overflow: hidden;
@@ -333,12 +332,12 @@
 
 .composer-control-label {
     font-size: 12px;
-    color: rgba(236, 236, 241, 0.55);
+    color: var(--c-dim);
     white-space: nowrap;
 }
 
 .composer-control-row.is-active .composer-control-label {
-    color: rgba(236, 236, 241, 0.88);
+    color: var(--c-text);
 }
 
 .composer-control-select {
@@ -347,21 +346,21 @@
     max-width: 160px;
     padding: 5px 8px;
     font-size: 12px;
-    border-radius: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    background: #1d2127;
-    color: rgba(236, 236, 241, 0.86);
+    border-radius: 9px;
+    border: 1px solid var(--c-border);
+    background: var(--c-surface-2);
+    color: var(--c-text);
     cursor: pointer;
 }
 
 .composer-control-select:hover {
-    border-color: rgba(255, 255, 255, 0.24);
+    border-color: var(--c-border-2);
 }
 
 .composer-control-select:focus {
     outline: none;
-    border-color: rgba(255, 255, 255, 0.32);
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.10);
+    border-color: var(--c-accent-line);
+    box-shadow: 0 0 0 2px var(--c-accent-soft);
 }
 
 /* --- Actions menu popover ----------------------------------------------- */
@@ -376,10 +375,10 @@
     min-width: 0;
     width: min(260px, calc(100vw - 24px));
     padding: 8px;
-    background: #14161b;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    border-radius: 4px;
-    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55);
+    background: var(--c-menu-bg, var(--c-composer-bg));
+    border: 1px solid var(--c-border-2);
+    border-radius: 12px;
+    box-shadow: var(--c-shadow, 0 16px 36px rgba(0, 0, 0, 0.55));
 }
 
 .composer-action-popover.hidden { display: none; }
@@ -394,7 +393,7 @@
 }
 
 .composer-games-column {
-    border-left: 1px solid rgba(255, 255, 255, 0.12);
+    border-left: 1px solid var(--c-border);
     padding-left: 8px;
 }
 
@@ -404,13 +403,13 @@
     font-size: 9px;
     text-transform: uppercase;
     letter-spacing: 0.12em;
-    color: rgba(255, 255, 255, 0.45);
+    color: var(--c-muted);
     padding: 6px 8px 4px;
 }
 
 .composer-games-empty {
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.40);
+    color: var(--c-muted);
     line-height: 1.4;
     padding: 8px 10px;
 }
@@ -418,9 +417,9 @@
 .composer-action-btn,
 .composer-game-btn {
     border: 1px solid transparent;
-    border-radius: 4px;
+    border-radius: 9px;
     background: transparent;
-    color: rgba(236, 236, 241, 0.65);
+    color: var(--c-dim);
     text-align: left;
     font-size: 12px;
     letter-spacing: 0.02em;
@@ -436,9 +435,9 @@
 .composer-action-btn:hover,
 .composer-game-btn:hover,
 .composer-action-btn.active {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.16);
-    color: #c8cdd3;
+    background: var(--c-hover);
+    border-color: var(--c-border);
+    color: var(--c-text);
 }
 
 .composer-action-btn.has-submenu i {
@@ -465,7 +464,7 @@
     }
     .composer-games-column {
         border-left: none;
-        border-top: 1px solid rgba(255, 255, 255, 0.12);
+        border-top: 1px solid var(--c-border);
         padding-left: 0;
         padding-top: 8px;
     }
@@ -479,9 +478,9 @@
     position: absolute;
     inset: 0;
     z-index: 50;
-    background: rgba(255, 255, 255, 0.06);
-    border: 2px dashed rgba(255, 255, 255, 0.30);
-    border-radius: 4px;
+    background: var(--c-accent-soft);
+    border: 2px dashed var(--c-accent-line);
+    border-radius: var(--r-composer, 12px);
     align-items: center;
     justify-content: center;
     pointer-events: none;
@@ -492,7 +491,7 @@
 .composer-drop-overlay span {
     font-size: 14px;
     font-weight: 500;
-    color: rgba(236, 236, 241, 0.85);
+    color: var(--c-text);
 }
 
 /* --- Attachments preview ------------------------------------------------ */
@@ -506,12 +505,12 @@
 .attachments-preview:empty { display: none; }
 
 .attachment-chip {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 4px;
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: 9px;
     padding: 4px 8px;
     font-size: 12px;
-    color: rgba(236, 236, 241, 0.75);
+    color: var(--c-dim);
     display: flex;
     align-items: center;
     gap: 4px;
@@ -519,17 +518,17 @@
 
 .attachment-chip .remove-btn {
     cursor: pointer;
-    color: rgba(236, 236, 241, 0.5);
+    color: var(--c-muted);
 }
 
-.attachment-chip .remove-btn:hover { color: #ececf1; }
+.attachment-chip .remove-btn:hover { color: var(--c-text); }
 
 .attachment-chip-thumb {
     width: 22px;
     height: 22px;
-    border-radius: 4px;
+    border-radius: 6px;
     object-fit: cover;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid var(--c-border);
     flex-shrink: 0;
 }
 
@@ -537,38 +536,36 @@
 .assistant-suggestion-rail.hidden { display: none; }
 
 .assistant-suggestion-chip {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    color: rgba(236, 236, 241, 0.82);
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    color: var(--c-text);
 }
 
 .assistant-suggestion-chip:hover {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.20);
+    background: var(--c-hover);
+    border-color: var(--c-border-2);
 }
 
 .assistant-suggestion-dismiss {
-    color: rgba(236, 236, 241, 0.5);
+    color: var(--c-muted);
 }
 
-.assistant-suggestion-dismiss:hover { color: #ececf1; }
+.assistant-suggestion-dismiss:hover { color: var(--c-text); }
 
 /* --- Disclaimer --------------------------------------------------------- */
 .disclaimer {
     text-align: center;
-    color: rgba(255, 255, 255, 0.20);
+    color: var(--c-muted);
     font-size: 10px;
     letter-spacing: 0.04em;
     margin-top: 6px;
     font-weight: 400;
 }
 
-/* --- Dino game overlay (keep the open animation; recolor to achromatic) -- */
+/* --- Dino game overlay (keep the open animation; theme-quiet chrome) ----- */
 .composer-dino-shell {
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    background: linear-gradient(180deg, rgba(9, 11, 14, 0.88), rgba(7, 9, 12, 0.90));
-    box-shadow:
-        inset 0 0 0 1px rgba(255, 255, 255, 0.05),
-        0 16px 24px rgba(0, 0, 0, 0.30);
-    border-radius: 4px;
+    border: 1px solid var(--c-border-2);
+    background: color-mix(in srgb, var(--c-bg) 90%, transparent);
+    box-shadow: var(--c-shadow, 0 16px 24px rgba(0, 0, 0, 0.30));
+    border-radius: var(--r-card, 12px);
 }
