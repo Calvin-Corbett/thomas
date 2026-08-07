@@ -285,7 +285,7 @@
 .module-wb-inline-field input {
     width: 64px;
     border: 1px solid rgba(160, 193, 238, 0.22);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     background: rgba(8, 14, 23, 0.72);
     color: var(--text-primary);
     font-size: 11px;
@@ -344,7 +344,7 @@
     width: 100%;
     max-width: 100%;
     border: 1px solid rgba(160, 193, 238, 0.26);
-    border-radius: 9px;
+    border-radius: var(--radius-md);
     background: linear-gradient(180deg, rgba(7, 13, 22, 0.96), rgba(10, 16, 27, 0.96));
     touch-action: none;
     cursor: crosshair;
@@ -354,7 +354,7 @@
     width: 100%;
     min-height: 380px;
     border: 1px solid rgba(160, 193, 238, 0.26);
-    border-radius: 9px;
+    border-radius: var(--radius-md);
     overflow: hidden;
     background: linear-gradient(180deg, rgba(7, 13, 22, 0.98), rgba(10, 16, 27, 0.95));
 }
@@ -535,7 +535,7 @@
     width: 100%;
     min-height: 360px;
     border: 1px solid rgba(160, 193, 238, 0.24);
-    border-radius: 9px;
+    border-radius: var(--radius-md);
     background: rgba(9, 16, 26, 0.82);
 }
 
@@ -710,7 +710,7 @@
 
 .module-wb-gridstack-shell {
     border: 1px solid rgba(160, 193, 238, 0.24);
-    border-radius: 9px;
+    border-radius: var(--radius-md);
     background: rgba(8, 14, 23, 0.68);
     min-height: 360px;
     padding: 8px;
@@ -769,7 +769,7 @@
 
 .module-wb-preview-frame-wrap {
     border: 1px solid rgba(160, 193, 238, 0.24);
-    border-radius: 9px;
+    border-radius: var(--radius-md);
     background: rgba(8, 14, 23, 0.7);
     padding: 8px;
     display: grid;
@@ -806,7 +806,7 @@
 
 .module-wb-forge-card {
     border: 1px solid rgba(160, 193, 238, 0.22);
-    border-radius: 9px;
+    border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.02);
     padding: 8px;
     display: grid;

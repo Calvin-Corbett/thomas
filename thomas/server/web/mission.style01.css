@@ -70,7 +70,7 @@ h2 { font-size: 17px; letter-spacing: -.015em; }
 .quiet-button:hover, .icon-button:hover, .action-button:hover { background: var(--c-hover); border-color: var(--c-accent-line); }
 .primary-button:hover { transform: translateY(-1px); box-shadow: 0 8px 24px var(--c-accent-soft); }
 .quiet-button:disabled, .primary-button:disabled, .action-button:disabled { cursor: wait; opacity: .55; transform: none; }
-.icon-button { width: 34px; height: 34px; font-size: 21px; }
+.icon-button { width: 34px; height: 34px; font-size: 16px; }
 select, input, textarea {
   width: 100%; border: 1px solid var(--c-border-2); border-radius: 10px; background: var(--c-surface);
   color: var(--c-text); padding: 10px 11px; outline: none;

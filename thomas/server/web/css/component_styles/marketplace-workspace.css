@@ -1320,7 +1320,7 @@
     transform: translateX(0);
 }
 .sidebar-nav-plugin-btn i {
-    font-size: 15px;
+    font-size: 14px;
     width: 18px;
     text-align: center;
     flex-shrink: 0;
@@ -1367,7 +1367,7 @@
     padding: 6px;
 }
 .sidebar.collapsed .sidebar-nav-plugin-btn i {
-    font-size: 17px;
+    font-size: 14px;
 }
 .sidebar.collapsed .sidebar-plugin-divider,
 .sidebar.collapsed .sidebar-cc-divider {

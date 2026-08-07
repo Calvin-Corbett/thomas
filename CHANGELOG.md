@@ -7,6 +7,17 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (design unification: radii and buttons land on the token scale)
+
+- The private near-scale radii (3px Forge chrome, 9px/7px/11px workbench,
+  9px/6px module cards, 9px content panels and settings) land on the token
+  scale (`--radius-sm/md/lg`), `.evo-btn` adopts the shared button profile
+  (token padding, radius, font size, theme surfaces), oversized icon glyphs
+  (15-21px) come down to the 14-16px line, and the competing `.btn-primary`
+  copy in the chat-game modal uses the token paddings. Four orphaned
+  workflow-builder docs under static/ are deleted with the record updated
+  (the UI they documented no longer exists).
+
 ### Fixed (design unification: the interface stops speaking developer)
 
 - The onboarding wizard no longer shows exit codes and stderr ("Repair

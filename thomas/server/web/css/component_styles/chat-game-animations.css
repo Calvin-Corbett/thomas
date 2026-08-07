@@ -1263,7 +1263,7 @@ button.sidebar-toggle.sidebar-toggle i {
     color: #f7fbff;
     border: none;
     border-radius: var(--radius-sm);
-    padding: 9px 14px;
+    padding: var(--btn-pad-y) var(--btn-pad-x);
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;

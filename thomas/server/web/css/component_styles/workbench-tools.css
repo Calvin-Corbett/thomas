@@ -2,7 +2,7 @@
 .module-wb-color-chip {
     width: 22px;
     height: 22px;
-    border-radius: 7px;
+    border-radius: var(--radius-md);
     border: 1px solid rgba(160, 193, 238, 0.3);
     background: var(--chip, #7ab8ff);
     cursor: pointer;
@@ -32,7 +32,7 @@
 
 .module-wb-wave-stage {
     border: 1px solid rgba(160, 193, 238, 0.24);
-    border-radius: 9px;
+    border-radius: var(--radius-md);
     background: rgba(8, 14, 23, 0.72);
     min-height: 120px;
     padding: 8px;
@@ -40,7 +40,7 @@
 
 .module-wb-image-stage {
     border: 1px solid rgba(160, 193, 238, 0.24);
-    border-radius: 9px;
+    border-radius: var(--radius-md);
     background: rgba(8, 14, 23, 0.72);
     min-height: 140px;
     padding: 10px;
@@ -108,7 +108,7 @@
 .module-wb-monaco {
     min-height: 340px;
     border: 1px solid rgba(160, 193, 238, 0.24);
-    border-radius: 9px;
+    border-radius: var(--radius-md);
     overflow: hidden;
 }
 
@@ -154,7 +154,7 @@
 
 .module-wb-engine-tile {
     border: 1px solid rgba(116, 144, 178, 0.34);
-    border-radius: 11px;
+    border-radius: var(--radius-lg);
     background: rgba(12, 21, 35, 0.72);
     color: var(--text-secondary);
     padding: 10px;
@@ -178,7 +178,7 @@
 .module-wb-engine-mark {
     width: 28px;
     height: 28px;
-    border-radius: 7px;
+    border-radius: var(--radius-md);
     border: 1px solid rgba(138, 188, 247, 0.44);
     background: rgba(88, 166, 255, 0.12);
     color: #d9ecff;
@@ -269,7 +269,7 @@
 
 .module-wb-gs-chat-msg {
     border: 1px solid rgba(108, 139, 176, 0.3);
-    border-radius: 9px;
+    border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.02);
     padding: 7px 8px;
     display: grid;
@@ -458,7 +458,7 @@
 
 .module-wb-collapsible {
     border: 1px solid rgba(107, 139, 179, 0.32);
-    border-radius: 9px;
+    border-radius: var(--radius-md);
     background: rgba(10, 18, 31, 0.54);
     padding: 8px;
     display: grid;
@@ -489,7 +489,7 @@
 .module-wb-game-preview-wrap,
 .module-wb-game-unreal-wrap {
     border: 1px solid rgba(160, 193, 238, 0.22);
-    border-radius: 9px;
+    border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.02);
     padding: 8px;
     display: none;
@@ -527,7 +527,7 @@
 
 .module-wb-game-preview {
     border: 1px solid rgba(160, 193, 238, 0.24);
-    border-radius: 9px;
+    border-radius: var(--radius-md);
     background: rgba(8, 14, 23, 0.72);
     min-height: 260px;
     overflow: hidden;
@@ -542,7 +542,7 @@
 .module-wb-unreal-viewport {
     position: relative;
     border: 1px solid rgba(160, 193, 238, 0.24);
-    border-radius: 9px;
+    border-radius: var(--radius-md);
     background: rgba(8, 14, 23, 0.74);
     min-height: 260px;
     overflow: hidden;

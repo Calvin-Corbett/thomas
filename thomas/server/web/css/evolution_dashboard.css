@@ -93,7 +93,7 @@
 .evolution-status-pill {
     flex: 0 0 auto;
     padding: 5px 12px;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     font-family: var(--font-mono, ui-monospace, monospace);
     font-size: 11px;
     font-weight: 500;
@@ -132,7 +132,7 @@
 .evo-hero {
     border: 1px solid rgba(140, 160, 180, 0.16);
     border-left: 3px solid rgba(76, 200, 154, 0.7);
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     background: rgba(10, 15, 24, 0.66);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
@@ -208,12 +208,12 @@
 
 /* ---- buttons ---- */
 .evo-btn {
-    padding: 9px 16px;
-    border-radius: 3px;
-    border: 1px solid rgba(140, 160, 180, 0.28);
-    background: rgba(140, 160, 180, 0.06);
-    color: #d6dde6;
-    font-size: 13px;
+    padding: var(--btn-pad-y, 8px) var(--btn-pad-x, 14px);
+    border-radius: var(--btn-radius, 10px);
+    border: 1px solid var(--c-border-2);
+    background: var(--c-surface);
+    color: var(--c-text);
+    font-size: var(--btn-font-size, 12.5px);
     font-weight: 500;
     cursor: pointer;
     white-space: nowrap;
@@ -241,7 +241,7 @@
 
 .evo-counter {
     padding: 13px 15px;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     border: 1px solid rgba(140, 160, 180, 0.12);
     background: rgba(10, 15, 24, 0.55);
 }
@@ -293,7 +293,7 @@
 
 .evo-card {
     padding: 13px 15px;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     border: 1px solid rgba(140, 160, 180, 0.13);
     background: rgba(10, 15, 24, 0.6);
 }
@@ -336,7 +336,7 @@
     text-transform: lowercase;
     letter-spacing: 0.3px;
     padding: 3px 8px;
-    border-radius: 2px;
+    border-radius: var(--radius-sm);
     border: 1px solid rgba(140, 160, 180, 0.2);
     background: rgba(140, 160, 180, 0.07);
     color: #aab8c8;
@@ -381,7 +381,7 @@
     color: #6f7e92;
     font-size: 12px;
     border: 1px dashed rgba(140, 160, 180, 0.18);
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
 }
 
 /* ---- recently-done timeline ---- */
@@ -390,7 +390,7 @@
     align-items: center;
     gap: 10px;
     padding: 9px 12px;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     background: rgba(10, 15, 24, 0.45);
     font-size: 13px;
 }
@@ -419,7 +419,7 @@
 /* ---- advanced drawer ---- */
 .evo-advanced {
     border: 1px solid rgba(140, 160, 180, 0.13);
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     background: rgba(10, 15, 24, 0.5);
     padding: 12px 15px;
 }
@@ -457,7 +457,7 @@
 .evo-advanced-body select,
 .evo-advanced-body input {
     padding: 8px 10px;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     border: 1px solid rgba(140, 160, 180, 0.22);
     background: rgba(7, 12, 21, 0.9);
     color: #d6dde6;
@@ -491,7 +491,7 @@
 .forge-toggle {
     display: inline-flex;
     border: 1px solid rgba(140, 160, 180, 0.3);
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     overflow: hidden;
 }
 
@@ -541,7 +541,7 @@
     display: flex;
     flex-direction: column;
     border: 1px solid rgba(76, 200, 154, 0.22);
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     background: rgba(10, 15, 24, 0.6);
 }
 #forgeCode .evo-eng-transcript { flex: 1; min-height: 0; max-height: none; }
@@ -565,7 +565,7 @@
     flex-direction: column;
     gap: 9px;
     border: 0.5px solid rgba(140, 160, 180, 0.13);
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     background: rgba(10, 15, 24, 0.4);
     padding: 12px 14px;
 }

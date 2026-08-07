@@ -118,7 +118,7 @@
 
 .content-workflow-card {
     border: 1px solid rgba(160, 193, 238, 0.2);
-    border-radius: 9px;
+    border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.03);
     padding: 8px 9px;
     display: flex;
@@ -146,7 +146,7 @@
 
 .content-scheduler-shell {
     border: 1px solid rgba(160, 193, 238, 0.2);
-    border-radius: 9px;
+    border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.03);
     overflow-x: auto;
 }
@@ -240,7 +240,7 @@
 
 .content-tool-card {
     border: 1px solid rgba(160, 193, 238, 0.2);
-    border-radius: 9px;
+    border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.03);
     padding: 8px 9px;
 }
@@ -357,7 +357,7 @@
 
 .content-item-empty {
     border: 1px dashed rgba(160, 193, 238, 0.26);
-    border-radius: 9px;
+    border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.02);
     color: var(--text-muted);
     font-size: 12px;

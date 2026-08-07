@@ -484,7 +484,7 @@ textarea,
   min-height: 110px !important;
   padding: 10px 12px !important;
   border-color: var(--c-border-2) !important;
-  border-radius: 9px !important;
+  border-radius: var(--radius-md) !important;
   background: var(--c-control) !important;
   color: var(--c-text) !important;
   font-family: var(--font-mono) !important;
@@ -592,7 +592,7 @@ textarea:focus {
 button.btn {
   display: inline-flex;
   min-height: 38px;
-  padding: 9px 15px;
+  padding: var(--btn-pad-y) var(--btn-pad-x);
   align-items: center;
   justify-content: center;
   gap: 8px;
