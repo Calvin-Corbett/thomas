@@ -98,18 +98,24 @@ def test_chat_shell_defaults_to_a_usable_profile_case_insensitively() -> None:
 
 
 def test_root_chat_prompts_and_starts_native_chatgpt_oauth_recovery() -> None:
+    # The prompt module moved verbatim to js/chat_connect_prompt.js (a factory
+    # that receives page state); chat.html keeps the wiring and the call site.
     text = _read(CHAT_HTML_PATH)
+    module = _read(CHAT_HTML_PATH.parent / "js" / "chat_connect_prompt.js")
 
-    assert "function shouldPromptChatGPTConnection(assistantText) {" in text
-    assert "if (!isChatGPTOAuthProfile(state.profile)) return false;" in text
-    assert "/^(?:the )?chatgpt(?: oauth| model)? (?:is not|isn't) connected\\b/i" in text
+    assert '<script src="/static/js/chat_connect_prompt.js' in text
+    assert "window.ThomasChatConnectPrompt.create({ getProfile: () => state.profile, getProfiles: () => profilesData })" in text
     assert "await maybePromptChatGPTConnection(acc);" in text
-    assert "status.needs_login === true && status.logged_in !== true" in text
-    assert "overlay.id = 'tc-chatgpt-connect-prompt';" in text
-    assert "Connect ChatGPT to Thomas" in text
-    assert "Your ChatGPT or Codex app sign-in is separate from Thomas's local connection." in text
-    assert "fetch('/api/openai-codex/login', {" in text
-    assert "body: JSON.stringify({ profile: state.profile || 'openai_codex', timeout_s: 300 })" in text
+
+    assert "function shouldPromptChatGPTConnection(assistantText) {" in module
+    assert "if (!isChatGPTOAuthProfile(opts.getProfile())) return false;" in module
+    assert "/^(?:the )?chatgpt(?: oauth| model)? (?:is not|isn't) connected\\b/i" in module
+    assert "status.needs_login === true && status.logged_in !== true" in module
+    assert "overlay.id = 'tc-chatgpt-connect-prompt';" in module
+    assert "Connect ChatGPT to Thomas" in module
+    assert "Your ChatGPT or Codex app sign-in is separate from Thomas's local connection." in module
+    assert "fetch('/api/openai-codex/login', {" in module
+    assert "body: JSON.stringify({ profile: opts.getProfile() || 'openai_codex', timeout_s: 300 })" in module
 
 
 def test_root_chat_surfaces_gpt56_models_and_distinct_reasoning_efforts() -> None:

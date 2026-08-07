@@ -29,7 +29,7 @@
     /* Fully opaque: at 98% alpha the chat view behind ghosted through this
        overlay (bright bubbles were faintly readable across the Forge header). */
     background:
-        radial-gradient(circle at 84% 8%, rgba(76, 200, 154, 0.06), transparent 40%),
+        radial-gradient(circle at 84% 8%, color-mix(in srgb, var(--c-accent) 6%, transparent), transparent 40%),
         var(--c-bg);
 }
 
@@ -55,12 +55,12 @@
     font-size: 20px;
     font-weight: 600;
     letter-spacing: 0.2px;
-    color: #eef2f6;
+    color: var(--c-text);
 }
 
 .evo-sub {
     margin: 0;
-    color: #93a2b5;
+    color: var(--c-dim);
     font-size: 13px;
     line-height: 1.55;
     max-width: 660px;
@@ -73,7 +73,7 @@
     margin-top: 9px;
     font-family: var(--font-mono, ui-monospace, monospace);
     font-size: 11px;
-    color: #6f7e92;
+    color: var(--c-muted);
     letter-spacing: 0.2px;
 }
 
@@ -81,12 +81,12 @@
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: #5f6e82;
+    background: var(--c-muted);
     flex: 0 0 auto;
 }
 
 .evo-byline-dot.is-live {
-    background: #4cc89a;
+    background: var(--c-success);
     animation: evoPulse 1.6s ease-in-out infinite;
 }
 
@@ -99,28 +99,28 @@
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.6px;
-    border: 1px solid rgba(140, 160, 180, 0.35);
-    background: rgba(140, 160, 180, 0.08);
-    color: #aab8c8;
+    border: 1px solid var(--c-border-2);
+    background: var(--c-surface-2);
+    color: var(--c-dim);
 }
 
 .evolution-status-pill.is-running {
-    border-color: rgba(76, 200, 154, 0.5);
-    background: rgba(76, 200, 154, 0.12);
-    color: #7fe0bf;
+    border-color: color-mix(in srgb, var(--c-success) 50%, transparent);
+    background: color-mix(in srgb, var(--c-success) 12%, transparent);
+    color: var(--c-success);
     animation: evoPulse 1.8s ease-in-out infinite;
 }
 
 .evolution-status-pill.is-attention {
-    border-color: rgba(224, 175, 104, 0.55);
-    background: rgba(224, 175, 104, 0.13);
-    color: #f0cf9a;
+    border-color: color-mix(in srgb, var(--c-warn) 55%, transparent);
+    background: color-mix(in srgb, var(--c-warn) 13%, transparent);
+    color: var(--c-warn);
 }
 
 .evolution-status-pill.is-error {
-    border-color: rgba(247, 118, 142, 0.5);
-    background: rgba(247, 118, 142, 0.14);
-    color: #ffc2cd;
+    border-color: color-mix(in srgb, var(--c-danger) 50%, transparent);
+    background: color-mix(in srgb, var(--c-danger) 14%, transparent);
+    color: var(--c-danger);
 }
 
 @keyframes evoPulse {
@@ -130,10 +130,10 @@
 
 /* ---- hero status: the focal point ---- */
 .evo-hero {
-    border: 1px solid rgba(140, 160, 180, 0.16);
-    border-left: 3px solid rgba(76, 200, 154, 0.7);
+    border: 1px solid var(--c-border);
+    border-left: 3px solid color-mix(in srgb, var(--c-accent) 70%, transparent);
     border-radius: var(--radius-sm);
-    background: rgba(10, 15, 24, 0.66);
+    background: var(--c-composer-bg);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     padding: 18px 20px;
@@ -150,13 +150,13 @@
 .evo-hero-title {
     font-size: 16px;
     font-weight: 600;
-    color: #eef2f6;
+    color: var(--c-text);
 }
 
 .evo-hero-detail {
     margin-top: 3px;
     font-size: 13px;
-    color: #93a2b5;
+    color: var(--c-dim);
     font-family: var(--font-mono, ui-monospace, monospace);
 }
 
@@ -172,11 +172,11 @@
     font-weight: 700;
 }
 
-.evo-hero-icon.is-check { background: rgba(76, 200, 154, 0.16); color: #4cc89a; }
+.evo-hero-icon.is-check { background: color-mix(in srgb, var(--c-success) 16%, transparent); color: var(--c-success); }
 .evo-hero-icon.is-check::before { content: "\2713"; }
-.evo-hero-icon.is-wand { background: rgba(140, 160, 180, 0.16); color: #aab8c8; }
+.evo-hero-icon.is-wand { background: var(--c-surface-2); color: var(--c-dim); }
 .evo-hero-icon.is-wand::before { content: "\2726"; }
-.evo-hero-icon.is-warn { background: rgba(247, 118, 142, 0.16); color: #f7768e; }
+.evo-hero-icon.is-warn { background: color-mix(in srgb, var(--c-danger) 16%, transparent); color: var(--c-danger); }
 .evo-hero-icon.is-warn::before { content: "\0021"; }
 
 .evo-hero-spin {
@@ -184,8 +184,8 @@
     width: 24px;
     height: 24px;
     border-radius: 50%;
-    border: 2.5px solid rgba(76, 200, 154, 0.22);
-    border-top-color: #4cc89a;
+    border: 2.5px solid color-mix(in srgb, var(--c-success) 22%, transparent);
+    border-top-color: var(--c-success);
     animation: evoSpin 0.9s linear infinite;
 }
 
@@ -195,13 +195,13 @@
     margin-top: 11px;
     height: 5px;
     border-radius: 999px;
-    background: rgba(140, 160, 180, 0.16);
+    background: var(--c-surface-2);
     overflow: hidden;
 }
 
 .evo-progress-fill {
     height: 100%;
-    background: #4cc89a;
+    background: var(--c-success);
     border-radius: 999px;
     transition: width 0.4s ease;
 }
@@ -220,17 +220,17 @@
     transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
 }
 
-.evo-btn:hover { background: rgba(140, 160, 180, 0.14); border-color: rgba(140, 160, 180, 0.45); }
+.evo-btn:hover { background: var(--c-hover); border-color: var(--c-border-2); }
 .evo-btn:active { transform: translateY(1px); }
 .evo-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .evo-btn-primary {
-    border-color: rgba(76, 200, 154, 0.55);
-    background: rgba(76, 200, 154, 0.16);
-    color: #8fe7c8;
+    border-color: color-mix(in srgb, var(--c-accent) 55%, transparent);
+    background: var(--c-accent-soft);
+    color: var(--c-accent);
 }
 
-.evo-btn-primary:hover { background: rgba(76, 200, 154, 0.26); border-color: rgba(76, 200, 154, 0.7); }
+.evo-btn-primary:hover { background: color-mix(in srgb, var(--c-accent) 26%, transparent); border-color: color-mix(in srgb, var(--c-accent) 70%, transparent); }
 
 /* ---- stat tiles ---- */
 .evolution-counters {
@@ -242,25 +242,25 @@
 .evo-counter {
     padding: 13px 15px;
     border-radius: var(--radius-sm);
-    border: 1px solid rgba(140, 160, 180, 0.12);
-    background: rgba(10, 15, 24, 0.55);
+    border: 1px solid var(--c-border);
+    background: var(--c-surface);
 }
 
 .evo-counter-value {
     font-size: 24px;
     font-weight: 600;
     line-height: 1;
-    color: #eef2f6;
+    color: var(--c-text);
 }
 
-.evo-counter-value.is-warn { color: #f0cf9a; }
+.evo-counter-value.is-warn { color: var(--c-warn); }
 
 .evo-counter-label {
     margin-top: 6px;
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: #7f8da0;
+    color: var(--c-muted);
     font-family: var(--font-mono, ui-monospace, monospace);
 }
 
@@ -270,11 +270,11 @@
     font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 0.6px;
-    color: #93a2b5;
+    color: var(--c-dim);
     font-family: var(--font-mono, ui-monospace, monospace);
 }
 
-.evo-section-warn { color: #f0cf9a; }
+.evo-section-warn { color: var(--c-warn); }
 
 .evo-needs-wrap[hidden] { display: none; }
 
@@ -294,14 +294,14 @@
 .evo-card {
     padding: 13px 15px;
     border-radius: var(--radius-sm);
-    border: 1px solid rgba(140, 160, 180, 0.13);
-    background: rgba(10, 15, 24, 0.6);
+    border: 1px solid var(--c-border);
+    background: var(--c-surface);
 }
 
 .evo-card-warn {
-    border-color: rgba(224, 175, 104, 0.4);
-    border-left: 3px solid rgba(224, 175, 104, 0.7);
-    background: rgba(28, 22, 12, 0.5);
+    border-color: color-mix(in srgb, var(--c-warn) 40%, transparent);
+    border-left: 3px solid color-mix(in srgb, var(--c-warn) 70%, transparent);
+    background: color-mix(in srgb, var(--c-warn) 12%, transparent);
 }
 
 .evo-card-head {
@@ -315,18 +315,18 @@
     font-size: 14px;
     font-weight: 600;
     flex: 1;
-    color: #e4eaf1;
+    color: var(--c-text);
 }
 
 .evo-card-why {
     font-size: 12px;
-    color: #93a2b5;
+    color: var(--c-dim);
     line-height: 1.55;
 }
 
 .evo-safe-note {
     margin-top: 6px;
-    color: #7fc9aa;
+    color: var(--c-success);
 }
 
 .evo-kind {
@@ -337,9 +337,9 @@
     letter-spacing: 0.3px;
     padding: 3px 8px;
     border-radius: var(--radius-sm);
-    border: 1px solid rgba(140, 160, 180, 0.2);
-    background: rgba(140, 160, 180, 0.07);
-    color: #aab8c8;
+    border: 1px solid var(--c-border);
+    background: var(--c-surface);
+    color: var(--c-dim);
     font-family: var(--font-mono, ui-monospace, monospace);
 }
 
@@ -348,7 +348,7 @@
     padding: 0;
     border: none;
     background: none;
-    color: #79b8ff;
+    color: var(--c-accent);
     font-size: 12px;
     cursor: pointer;
     text-align: left;
@@ -363,7 +363,7 @@
     padding: 0 0 0 18px;
     font-family: var(--font-mono, ui-monospace, monospace);
     font-size: 12px;
-    color: #93a2b5;
+    color: var(--c-dim);
     line-height: 1.7;
 }
 
@@ -378,9 +378,9 @@
 .evo-empty {
     padding: 18px;
     text-align: center;
-    color: #6f7e92;
+    color: var(--c-muted);
     font-size: 12px;
-    border: 1px dashed rgba(140, 160, 180, 0.18);
+    border: 1px dashed var(--c-border);
     border-radius: var(--radius-sm);
 }
 
@@ -391,7 +391,7 @@
     gap: 10px;
     padding: 9px 12px;
     border-radius: var(--radius-sm);
-    background: rgba(10, 15, 24, 0.45);
+    background: var(--c-surface);
     font-size: 13px;
 }
 
@@ -400,41 +400,41 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #5f6e82;
+    background: var(--c-muted);
 }
 
-.evo-hist-dot.is-done { background: #4cc89a; }
-.evo-hist-dot.is-wait { background: #e0af68; }
-.evo-hist-dot.is-skip { background: #5f6e82; }
+.evo-hist-dot.is-done { background: var(--c-success); }
+.evo-hist-dot.is-wait { background: var(--c-warn); }
+.evo-hist-dot.is-skip { background: var(--c-muted); }
 
-.evo-hist-title { flex: 1; min-width: 0; color: #cdd6e0; }
+.evo-hist-title { flex: 1; min-width: 0; color: var(--c-text); }
 
 .evo-hist-tag {
     flex: 0 0 auto;
     font-size: 11px;
-    color: #7f8da0;
+    color: var(--c-muted);
     font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 /* ---- advanced drawer ---- */
 .evo-advanced {
-    border: 1px solid rgba(140, 160, 180, 0.13);
+    border: 1px solid var(--c-border);
     border-radius: var(--radius-sm);
-    background: rgba(10, 15, 24, 0.5);
+    background: var(--c-surface);
     padding: 12px 15px;
 }
 
 .evo-advanced > summary {
     cursor: pointer;
     font-size: 13px;
-    color: #93a2b5;
+    color: var(--c-dim);
     list-style: none;
     font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 .evo-advanced > summary::before {
     content: "\002B  ";
-    color: #6f7e92;
+    color: var(--c-muted);
 }
 
 .evo-advanced[open] > summary::before { content: "\2212  "; }
@@ -451,16 +451,16 @@
     flex-direction: column;
     gap: 5px;
     font-size: 12px;
-    color: #93a2b5;
+    color: var(--c-dim);
 }
 
 .evo-advanced-body select,
 .evo-advanced-body input {
     padding: 8px 10px;
     border-radius: var(--radius-sm);
-    border: 1px solid rgba(140, 160, 180, 0.22);
-    background: rgba(7, 12, 21, 0.9);
-    color: #d6dde6;
+    border: 1px solid var(--c-border-2);
+    background: var(--c-composer-bg);
+    color: var(--c-text);
     font-size: 13px;
 }
 
@@ -484,13 +484,13 @@
 .forge-brand {
     font-size: 20px;
     font-weight: 600;
-    color: #eef2f6;
+    color: var(--c-text);
     letter-spacing: 0.3px;
 }
 
 .forge-toggle {
     display: inline-flex;
-    border: 1px solid rgba(140, 160, 180, 0.3);
+    border: 1px solid var(--c-border-2);
     border-radius: var(--radius-sm);
     overflow: hidden;
 }
@@ -500,21 +500,21 @@
     font-size: 13px;
     font-weight: 500;
     background: transparent;
-    color: #93a2b5;
+    color: var(--c-dim);
     border: none;
-    border-left: 1px solid rgba(140, 160, 180, 0.2);
+    border-left: 1px solid var(--c-border);
     cursor: pointer;
 }
 
 .forge-tab:first-child { border-left: none; }
-.forge-tab.is-active { background: rgba(76, 200, 154, 0.16); color: #8fe7c8; }
-.forge-tab:hover:not(.is-active) { background: rgba(140, 160, 180, 0.08); }
+.forge-tab.is-active { background: var(--c-accent-soft); color: var(--c-accent); }
+.forge-tab:hover:not(.is-active) { background: var(--c-hover); }
 
 .forge-hint {
     margin-left: auto;
     font-family: var(--font-mono, ui-monospace, monospace);
     font-size: 11px;
-    color: #6f7e92;
+    color: var(--c-muted);
 }
 
 .forge-view.is-hidden { display: none; }
@@ -540,9 +540,9 @@
     margin: 0;
     display: flex;
     flex-direction: column;
-    border: 1px solid rgba(76, 200, 154, 0.22);
+    border: 1px solid color-mix(in srgb, var(--c-accent) 22%, transparent);
     border-radius: var(--radius-sm);
-    background: rgba(10, 15, 24, 0.6);
+    background: var(--c-composer-bg);
 }
 #forgeCode .evo-eng-transcript { flex: 1; min-height: 0; max-height: none; }
 /* The wrap clips its own children so the transcript and the changes panel stay
@@ -557,16 +557,16 @@
     font: inherit;
     transition: border-color 0.15s ease, background 0.15s ease;
 }
-.evo-counter-click:hover { border-color: rgba(76, 200, 154, 0.4); }
-.evo-counter-click.is-active { border-color: rgba(76, 200, 154, 0.6); background: rgba(76, 200, 154, 0.1); }
+.evo-counter-click:hover { border-color: var(--c-accent-line); }
+.evo-counter-click.is-active { border-color: color-mix(in srgb, var(--c-accent) 60%, transparent); background: var(--c-accent-soft); }
 
 .evo-tile-detail {
     display: flex;
     flex-direction: column;
     gap: 9px;
-    border: 0.5px solid rgba(140, 160, 180, 0.13);
+    border: 0.5px solid var(--c-border);
     border-radius: var(--radius-sm);
-    background: rgba(10, 15, 24, 0.4);
+    background: var(--c-surface);
     padding: 12px 14px;
 }
 .evo-tile-detail.is-hidden { display: none; }

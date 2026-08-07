@@ -141,11 +141,11 @@
 /* Composer Box */
 .composer-box {
     background:
-        linear-gradient(165deg, rgba(37, 43, 56, 0.92), rgba(29, 35, 47, 0.9));
+        linear-gradient(165deg, color-mix(in srgb, var(--c-composer-bg) 92%, var(--c-text)), var(--c-composer-bg));
     /* TRULY achromatic perimeter (white-alpha = zero hue) — a cool blue-gray
        border (B>R) over near-black still read green via simultaneous contrast,
        which is what kept the "green line" alive. White-alpha cannot. */
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--c-border);
     border-radius: 14px;
     padding: 6px 8px 5px;
     display: flex;
@@ -160,8 +160,8 @@
 /* Real :focus-within affordance — one outer ACHROMATIC ring (white-alpha, zero
    hue) so the always-on focus state can't read green on near-black. */
 .composer-box:focus-within {
-    border-color: rgba(255, 255, 255, 0.22);
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16), 0 8px 22px rgba(0, 0, 0, 0.28);
+    border-color: var(--c-border-2);
+    box-shadow: 0 0 0 1px var(--c-border-2), 0 8px 22px rgba(0, 0, 0, 0.28);
 }
 
 .composer-input-row {
@@ -195,8 +195,8 @@
     gap: 3px;
     padding: 1px 6px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
     font-size: 10px;
     font-weight: 600;
     letter-spacing: 0.04em;
@@ -211,8 +211,8 @@
     align-items: center;
     gap: 4px;
     max-width: 188px;
-    border: 1px solid rgba(88, 166, 255, 0.55);
-    background: linear-gradient(180deg, rgba(21, 32, 48, 0.92), rgba(15, 24, 36, 0.9));
+    border: 1px solid var(--c-accent-line);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--c-accent) 10%, var(--c-menu-bg)), var(--c-menu-bg));
     color: var(--text-primary);
     border-radius: 999px;
     padding: 1px 6px 1px 8px;
@@ -245,7 +245,7 @@
 
 .composer-mode-chip-close:hover {
     color: var(--text-primary);
-    background: rgba(88, 166, 255, 0.18);
+    background: var(--c-accent-soft);
 }
 
 .composer-mode-chip-close i {
@@ -282,7 +282,7 @@
     height: 26px;
     border-radius: 8px;
     border: 1px solid transparent;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--c-surface);
     color: var(--text-secondary);
     display: flex;
     align-items: center;
@@ -293,13 +293,13 @@
 }
 
 .btn-icon:hover {
-    background: rgba(125, 183, 255, 0.14);
-    border-color: rgba(125, 183, 255, 0.24);
+    background: var(--c-accent-soft);
+    border-color: color-mix(in srgb, var(--c-accent) 24%, transparent);
     color: var(--text-primary);
 }
 
 #attachBtn.active {
-    background: rgba(88, 166, 255, 0.2);
+    background: color-mix(in srgb, var(--c-accent) 20%, transparent);
     color: var(--text-primary);
 }
 
@@ -328,7 +328,7 @@
 }
 
 .icon-btn-shared:hover {
-    border-color: rgba(88, 166, 255, 0.25);
+    border-color: color-mix(in srgb, var(--c-accent) 25%, transparent);
     background: transparent;
     color: var(--text-secondary);
     opacity: 1;
@@ -345,7 +345,7 @@
 }
 
 .btn-icon.icon-btn-shared:hover {
-    border-color: rgba(88, 166, 255, 0.25);
+    border-color: color-mix(in srgb, var(--c-accent) 25%, transparent);
     background: transparent;
     color: var(--text-secondary);
     opacity: 1;
@@ -641,7 +641,7 @@
     gap: 0;
     border: 1px solid var(--border-light);
     border-radius: 12px;
-    background: linear-gradient(180deg, rgba(21, 27, 38, 0.97), rgba(14, 19, 29, 0.96));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--c-menu-bg) 94%, var(--c-text)), var(--c-menu-bg));
     box-shadow: 0 16px 36px rgba(0, 0, 0, 0.38);
     padding: 8px;
     z-index: 35;
@@ -659,7 +659,7 @@
 }
 
 .composer-games-column {
-    border-left: 1px solid rgba(165, 195, 236, 0.2);
+    border-left: 1px solid var(--c-border);
     padding-left: 8px;
 }
 
@@ -698,8 +698,8 @@
 .composer-action-btn:hover,
 .composer-game-btn:hover,
 .composer-action-btn.active {
-    background: rgba(88, 166, 255, 0.16);
-    border-color: rgba(88, 166, 255, 0.5);
+    background: var(--c-accent-soft);
+    border-color: var(--c-accent-line);
     color: var(--text-primary);
 }
 
@@ -722,7 +722,7 @@
     padding: 10px;
     border: 1px solid var(--border-light);
     border-radius: 12px;
-    background: linear-gradient(180deg, rgba(21, 27, 38, 0.97), rgba(14, 19, 29, 0.96));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--c-menu-bg) 94%, var(--c-text)), var(--c-menu-bg));
     box-shadow: 0 16px 36px rgba(0, 0, 0, 0.38);
 }
 
@@ -788,7 +788,7 @@
     font-size: 12px;
     border-radius: 7px;
     border: 1px solid var(--border-light);
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--c-surface);
     color: var(--text-primary);
     cursor: pointer;
 }
@@ -817,7 +817,7 @@
 
     .composer-games-column {
         border-left: none;
-        border-top: 1px solid rgba(165, 195, 236, 0.2);
+        border-top: 1px solid var(--c-border);
         padding-left: 0;
         padding-top: 8px;
     }
@@ -941,9 +941,9 @@
     align-items: center;
     gap: 6px;
     padding: 5px;
-    border: 1px solid rgba(164, 198, 238, 0.28);
+    border: 1px solid var(--c-border-2);
     border-radius: 10px;
-    background: rgba(12, 17, 26, 0.88);
+    background: var(--c-composer-bg);
     box-shadow: 0 14px 30px rgba(0, 0, 0, 0.34);
     backdrop-filter: blur(12px);
 }
@@ -953,18 +953,18 @@
     height: 32px;
     display: inline-grid;
     place-items: center;
-    border: 1px solid rgba(174, 207, 246, 0.28);
+    border: 1px solid var(--c-border-2);
     border-radius: 8px;
-    color: #edf6ff;
-    background: rgba(32, 44, 61, 0.82);
+    color: var(--c-text);
+    background: var(--c-surface-2);
     cursor: pointer;
     transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
 
 .chat-game-control-btn:hover,
 .chat-game-control-btn:focus-visible {
-    background: rgba(80, 141, 219, 0.74);
-    border-color: rgba(198, 225, 255, 0.62);
+    background: color-mix(in srgb, var(--c-accent) 74%, transparent);
+    border-color: color-mix(in srgb, var(--c-accent) 62%, transparent);
     outline: none;
     transform: translateY(-1px);
 }
@@ -1115,7 +1115,7 @@
     display: inline-flex;
     align-items: baseline;
     gap: 6px;
-    color: #edf6ff;
+    color: var(--c-text);
     text-shadow: 0 4px 12px rgba(0, 0, 0, 0.52);
     transform: translate3d(0, 0, 0);
     transition: left 0.26s ease, transform 0.26s ease, opacity 0.2s ease;
@@ -1126,7 +1126,7 @@
     font-size: 10px;
     letter-spacing: 0.09em;
     text-transform: uppercase;
-    color: rgba(227, 241, 255, 0.78);
+    color: var(--c-dim);
 }
 
 .chat-game-score-line strong {
@@ -1192,7 +1192,7 @@
     font-size: 14px;
     font-weight: 700;
     letter-spacing: 0.06em;
-    color: #edf6ff;
+    color: var(--c-text);
     text-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
     opacity: 0;
     transition: opacity 0.18s ease, transform 0.2s ease;

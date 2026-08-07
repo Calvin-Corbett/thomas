@@ -50,7 +50,7 @@
     width: 12px;
     height: 12px;
     border: 2px solid var(--border-light);
-    border-top-color: var(--accent-primary, #58a6ff);
+    border-top-color: var(--c-accent);
     border-radius: 50%;
     animation: toolSpin 0.6s linear infinite;
 }
@@ -64,8 +64,8 @@
     position: absolute;
     inset: 0;
     z-index: 50;
-    background: rgba(88, 166, 255, 0.08);
-    border: 2px dashed var(--accent-primary, #58a6ff);
+    background: var(--c-accent-soft);
+    border: 2px dashed var(--c-accent);
     border-radius: var(--radius-sm);
     align-items: center;
     justify-content: center;
@@ -77,7 +77,7 @@
 .composer-drop-overlay span {
     font-size: 14px;
     font-weight: 500;
-    color: var(--accent-primary, #58a6ff);
+    color: var(--c-accent);
 }
 
 /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Slash Command Palette ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
@@ -113,7 +113,7 @@
 }
 .slash-palette-item .slash-cmd {
     font-weight: 600;
-    color: var(--accent-primary, #58a6ff);
+    color: var(--c-accent);
     font-size: 13px;
     min-width: 80px;
 }
@@ -139,13 +139,13 @@
     padding: 5px 10px;
     font-size: 13px;
     color: var(--text-primary);
-    background: var(--bg-primary);
+    background: var(--c-surface);
     border: 1px solid var(--border-light);
     border-radius: var(--radius-sm);
     outline: none;
 }
 .chat-search-bar input:focus {
-    border-color: var(--accent-primary, #58a6ff);
+    border-color: var(--c-accent);
 }
 .chat-search-bar .search-nav-btn {
     background: none;
@@ -172,8 +172,8 @@
     margin: 10px 16px 0;
     padding: 12px 14px;
     border-radius: 16px;
-    border: 1px solid rgba(148, 180, 226, 0.22);
-    background: linear-gradient(180deg, rgba(11, 17, 28, 0.92), rgba(9, 14, 24, 0.82));
+    border: 1px solid var(--c-border);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--c-bg) 92%, transparent), color-mix(in srgb, var(--c-bg) 82%, transparent));
     box-shadow: 0 16px 34px rgba(3, 9, 18, 0.18);
 }
 .task-continuity-panel.hidden {
@@ -203,8 +203,8 @@
     min-width: 84px;
     padding: 2px 8px;
     border-radius: 999px;
-    border: 1px solid rgba(147, 159, 184, 0.38);
-    background: rgba(100, 112, 138, 0.28);
+    border: 1px solid var(--c-border-2);
+    background: var(--c-surface-2);
     color: var(--text-primary);
     font-size: 11px;
     font-weight: 600;
@@ -212,12 +212,12 @@
     letter-spacing: 0.03em;
 }
 .task-continuity-status.is-complete {
-    border-color: rgba(70, 197, 132, 0.55);
-    background: rgba(50, 165, 110, 0.3);
+    border-color: color-mix(in srgb, var(--c-success) 55%, transparent);
+    background: color-mix(in srgb, var(--c-success) 14%, transparent);
 }
 .task-continuity-status.is-blocked {
-    border-color: rgba(245, 132, 132, 0.58);
-    background: rgba(188, 75, 75, 0.34);
+    border-color: color-mix(in srgb, var(--c-danger) 58%, transparent);
+    background: color-mix(in srgb, var(--c-danger) 14%, transparent);
 }
 .task-continuity-actions {
     display: inline-flex;
@@ -231,7 +231,7 @@
     height: 28px;
     border-radius: 10px;
     border: 1px solid var(--border-light);
-    background: rgba(18, 24, 38, 0.48);
+    background: color-mix(in srgb, var(--c-bg) 48%, transparent);
 }
 .task-continuity-panel.is-collapsed {
     gap: 6px;
@@ -310,8 +310,8 @@
     gap: 7px;
     padding: 9px 10px;
     border-radius: 12px;
-    border: 1px solid rgba(148, 180, 226, 0.18);
-    background: rgba(7, 13, 24, 0.46);
+    border: 1px solid var(--c-border);
+    background: color-mix(in srgb, var(--c-bg) 46%, transparent);
 }
 .task-continuity-runtime-head {
     display: flex;
@@ -326,39 +326,39 @@
     min-width: 62px;
     padding: 2px 8px;
     border-radius: 999px;
-    border: 1px solid rgba(147, 159, 184, 0.34);
-    background: rgba(100, 112, 138, 0.22);
-    color: #dce9f7;
+    border: 1px solid var(--c-border-2);
+    background: var(--c-surface-2);
+    color: var(--c-text);
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
 }
 .task-continuity-runtime-pill.state-live {
-    border-color: rgba(102, 225, 180, 0.34);
-    background: rgba(26, 60, 47, 0.56);
-    color: #b8f1d8;
+    border-color: color-mix(in srgb, var(--c-success) 34%, transparent);
+    background: color-mix(in srgb, var(--c-success) 14%, transparent);
+    color: var(--c-success);
 }
 .task-continuity-runtime-pill.state-quiet,
 .task-continuity-runtime-pill.state-starting {
-    border-color: rgba(167, 201, 246, 0.32);
-    background: rgba(13, 21, 36, 0.7);
-    color: #dbe9ff;
+    border-color: var(--c-border-2);
+    background: color-mix(in srgb, var(--c-bg) 70%, transparent);
+    color: var(--c-text);
 }
 .task-continuity-runtime-pill.state-stalled {
-    border-color: rgba(255, 140, 140, 0.48);
-    background: rgba(69, 27, 27, 0.68);
-    color: #ffc0c0;
+    border-color: color-mix(in srgb, var(--c-danger) 48%, transparent);
+    background: color-mix(in srgb, var(--c-danger) 14%, transparent);
+    color: var(--c-danger);
 }
 .task-continuity-runtime-pill.state-idle {
-    border-color: rgba(147, 159, 184, 0.28);
-    background: rgba(75, 84, 104, 0.18);
+    border-color: var(--c-border);
+    background: var(--c-surface);
     color: var(--text-muted);
 }
 .task-continuity-runtime-label {
     min-width: 0;
     font-size: 12px;
-    color: #ecf5ff;
+    color: var(--c-text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -368,14 +368,14 @@
     height: 8px;
     border-radius: 999px;
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--c-surface-2);
 }
 .task-continuity-runtime-rail > span {
     display: block;
     height: 100%;
     width: 0;
     border-radius: inherit;
-    background: linear-gradient(90deg, #58a6ff, #6dd7b8);
+    background: linear-gradient(90deg, var(--c-accent), var(--c-success));
     transition: width 180ms ease;
 }
 .task-continuity-runtime-rail.is-indeterminate > span {
@@ -407,11 +407,11 @@
     gap: 2px;
     padding: 6px 8px;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--c-surface);
 }
 .task-continuity-runtime-list strong {
     font-size: 11px;
-    color: #eef6ff;
+    color: var(--c-text);
 }
 .task-continuity-runtime-list span {
     font-size: 10px;
@@ -423,8 +423,8 @@
     gap: 8px;
     padding: 10px 12px;
     border-radius: 12px;
-    border: 1px solid rgba(148, 180, 226, 0.16);
-    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--c-border);
+    background: var(--c-surface);
 }
 .task-definition-head {
     display: flex;
@@ -471,16 +471,16 @@
     line-height: 1.5;
     padding: 8px 10px;
     border-radius: 10px;
-    background: rgba(91, 110, 145, 0.14);
+    background: var(--c-surface-2);
     color: var(--text-secondary);
 }
 .task-definition-eval.is-passed {
-    background: rgba(50, 165, 110, 0.18);
-    color: #c8f2dd;
+    background: color-mix(in srgb, var(--c-success) 14%, transparent);
+    color: var(--c-success);
 }
 .task-definition-eval.is-failed {
-    background: rgba(188, 75, 75, 0.2);
-    color: #ffd3d3;
+    background: color-mix(in srgb, var(--c-danger) 14%, transparent);
+    color: var(--c-danger);
 }
 .message-task-strip {
     display: grid;
@@ -488,8 +488,8 @@
     margin-top: 10px;
     padding: 10px 12px;
     border-radius: 14px;
-    border: 1px solid rgba(120, 152, 198, 0.18);
-    background: linear-gradient(180deg, rgba(11, 17, 28, 0.94), rgba(9, 14, 24, 0.76));
+    border: 1px solid var(--c-border);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--c-bg) 94%, transparent), color-mix(in srgb, var(--c-bg) 76%, transparent));
     box-shadow: 0 14px 24px rgba(3, 8, 16, 0.22);
 }
 .message-task-strip.hidden {
@@ -508,12 +508,12 @@
     min-width: 104px;
     padding: 4px 10px;
     border-radius: 999px;
-    border: 1px solid rgba(140, 176, 230, 0.24);
-    background: rgba(18, 26, 42, 0.88);
+    border: 1px solid var(--c-border-2);
+    background: var(--c-composer-bg);
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.02em;
-    color: #eef6ff;
+    color: var(--c-text);
 }
 .message-task-strip-badge.tone-stopped {
     border-color: rgba(214, 186, 118, 0.42);
@@ -522,23 +522,23 @@
 }
 
 .message-task-strip-badge.tone-running {
-    border-color: rgba(96, 183, 255, 0.34);
-    background: rgba(18, 45, 74, 0.68);
+    border-color: var(--c-accent-line);
+    background: var(--c-accent-soft);
 }
 .message-task-strip-badge.tone-starting,
 .message-task-strip-badge.tone-quiet {
-    border-color: rgba(162, 190, 236, 0.28);
-    background: rgba(18, 26, 42, 0.88);
+    border-color: var(--c-border-2);
+    background: var(--c-composer-bg);
 }
 .message-task-strip-badge.tone-completed {
-    border-color: rgba(94, 214, 166, 0.4);
-    background: rgba(16, 56, 44, 0.7);
-    color: #cbf7e5;
+    border-color: color-mix(in srgb, var(--c-success) 40%, transparent);
+    background: color-mix(in srgb, var(--c-success) 14%, transparent);
+    color: var(--c-success);
 }
 .message-task-strip-badge.tone-failed {
-    border-color: rgba(255, 138, 138, 0.44);
-    background: rgba(73, 24, 24, 0.74);
-    color: #ffd7d7;
+    border-color: color-mix(in srgb, var(--c-danger) 44%, transparent);
+    background: color-mix(in srgb, var(--c-danger) 14%, transparent);
+    color: var(--c-danger);
 }
 .message-task-strip-elapsed {
     font-size: 11px;
@@ -549,9 +549,9 @@
     margin-left: auto;
     padding: 4px 10px;
     border-radius: 999px;
-    border: 1px solid rgba(136, 176, 232, 0.24);
-    background: rgba(17, 25, 40, 0.7);
-    color: #eef6ff;
+    border: 1px solid var(--c-border-2);
+    background: color-mix(in srgb, var(--c-bg) 70%, transparent);
+    color: var(--c-text);
     font-size: 11px;
     cursor: pointer;
 }
@@ -584,14 +584,14 @@
     gap: 8px;
     padding: 6px 8px;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--c-surface);
     font-size: 11px;
     color: var(--text-muted);
 }
 .message-task-strip-checkpoints time {
     flex-shrink: 0;
     font-variant-numeric: tabular-nums;
-    color: rgba(224, 234, 252, 0.6);
+    color: var(--c-dim);
 }
 #chatAgentPresence,
 .chat-agent-presence-layer,
@@ -676,12 +676,12 @@ body.te-nav-chat #officeScene .office-agent {
 }
 .chat-agent-presence-ring {
     border-radius: 50%;
-    border: 1px solid rgba(88, 166, 255, 0.42);
-    box-shadow: 0 0 16px rgba(88, 166, 255, 0.28);
+    border: 1px solid var(--c-accent-line);
+    box-shadow: 0 0 16px color-mix(in srgb, var(--c-accent) 28%, transparent);
 }
 .chat-agent-presence-ring.ring-inner {
     inset: 4px;
-    border-color: rgba(109, 215, 184, 0.5);
+    border-color: color-mix(in srgb, var(--c-success) 50%, transparent);
 }
 .chat-agent-presence-core {
     left: 50%;
@@ -691,7 +691,7 @@ body.te-nav-chat #officeScene .office-agent {
     inset: auto;
     transform: translate(-50%, -50%);
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.92), rgba(88, 166, 255, 0.1) 72%, rgba(88, 166, 255, 0) 100%);
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.92), color-mix(in srgb, var(--c-accent) 10%, transparent) 72%, transparent 100%);
     filter: blur(0.5px);
 }
 .chat-agent-presence-bot-wrap {
@@ -720,24 +720,24 @@ body.te-nav-chat #officeScene .office-agent {
     min-width: 72px;
     padding: 3px 8px;
     border-radius: 999px;
-    border: 1px solid rgba(136, 176, 232, 0.24);
-    background: rgba(10, 18, 30, 0.92);
+    border: 1px solid var(--c-border-2);
+    background: var(--c-composer-bg);
     box-shadow: 0 8px 18px rgba(4, 9, 16, 0.28);
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.02em;
     white-space: nowrap;
-    color: #eef6ff;
+    color: var(--c-text);
 }
 .chat-agent-presence[data-state="completed"] .chat-agent-presence-status-pill {
-    border-color: rgba(94, 214, 166, 0.44);
-    background: rgba(16, 56, 44, 0.88);
-    color: #cbf7e5;
+    border-color: color-mix(in srgb, var(--c-success) 44%, transparent);
+    background: color-mix(in srgb, var(--c-success) 14%, transparent);
+    color: var(--c-success);
 }
 .chat-agent-presence[data-state="failed"] .chat-agent-presence-status-pill {
-    border-color: rgba(255, 138, 138, 0.44);
-    background: rgba(73, 24, 24, 0.9);
-    color: #ffd7d7;
+    border-color: color-mix(in srgb, var(--c-danger) 44%, transparent);
+    background: color-mix(in srgb, var(--c-danger) 14%, transparent);
+    color: var(--c-danger);
 }
 .chat-agent-presence-bubble {
     position: absolute;
@@ -747,8 +747,8 @@ body.te-nav-chat #officeScene .office-agent {
     max-width: min(260px, calc(100vw - 36px));
     padding: 10px 12px;
     border-radius: 14px;
-    border: 1px solid rgba(136, 176, 232, 0.22);
-    background: linear-gradient(180deg, rgba(8, 14, 24, 0.96), rgba(8, 13, 22, 0.88));
+    border: 1px solid var(--c-border-2);
+    background: var(--c-menu-bg);
     box-shadow: 0 18px 30px rgba(3, 8, 16, 0.3);
     opacity: 0;
     transform: translate(-50%, -8px) scale(0.95);
@@ -766,7 +766,7 @@ body.te-nav-chat #officeScene .office-agent {
     display: block;
     margin-bottom: 4px;
     font-size: 11px;
-    color: #eef6ff;
+    color: var(--c-text);
 }
 .chat-agent-presence-bubble p {
     margin: 0;
@@ -786,9 +786,9 @@ body.te-nav-chat #officeScene .office-agent {
 .chat-agent-presence-bubble-meta button {
     padding: 4px 8px;
     border-radius: 999px;
-    border: 1px solid rgba(136, 176, 232, 0.24);
-    background: rgba(17, 25, 40, 0.7);
-    color: #eef6ff;
+    border: 1px solid var(--c-border-2);
+    background: color-mix(in srgb, var(--c-bg) 70%, transparent);
+    color: var(--c-text);
     font-size: 10px;
     cursor: pointer;
 }
@@ -910,7 +910,7 @@ body.te-nav-chat #officeScene .office-agent {
 }
 .chat-robot-world-bot.is-primary .chat-robot-agent,
 .chat-robot-world-bot.is-primary .office-pixel-agent {
-    filter: drop-shadow(0 7px 12px rgba(27, 118, 255, 0.18));
+    filter: drop-shadow(0 7px 12px color-mix(in srgb, var(--c-accent) 18%, transparent));
 }
 .chat-robot-world-label {
     position: absolute;
@@ -919,9 +919,9 @@ body.te-nav-chat #officeScene .office-agent {
     transform: translateX(-50%);
     padding: 2px 7px;
     border-radius: 999px;
-    border: 1px solid rgba(137, 176, 231, 0.18);
-    background: rgba(8, 14, 24, 0.82);
-    color: rgba(232, 242, 255, 0.88);
+    border: 1px solid var(--c-border);
+    background: color-mix(in srgb, var(--c-bg) 82%, transparent);
+    color: var(--c-text);
     font-size: 9px;
     font-weight: 700;
     letter-spacing: 0.03em;
@@ -1090,10 +1090,10 @@ body.te-nav-chat #officeScene .office-agent {
     transform: translateX(-50%);
     max-width: 220px;
     padding: 5px 8px;
-    border: 1px solid rgba(136, 176, 232, 0.24);
+    border: 1px solid var(--c-border-2);
     border-radius: 12px;
-    background: rgba(8, 14, 24, 0.9);
-    color: rgba(235, 244, 255, 0.94);
+    background: var(--c-composer-bg);
+    color: var(--c-text);
     font-size: 10px;
     line-height: 1.35;
     white-space: normal;
@@ -1112,8 +1112,8 @@ body.te-nav-chat #officeScene .office-agent {
     max-width: min(270px, calc(100vw - 36px));
     padding: 10px 12px;
     border-radius: 14px;
-    border: 1px solid rgba(136, 176, 232, 0.22);
-    background: linear-gradient(180deg, rgba(8, 14, 24, 0.96), rgba(8, 13, 22, 0.88));
+    border: 1px solid var(--c-border-2);
+    background: var(--c-menu-bg);
     box-shadow: 0 18px 30px rgba(3, 8, 16, 0.3);
     opacity: 0;
     transform: translate(-50%, 8px) scale(0.96);
@@ -1131,7 +1131,7 @@ body.te-nav-chat #officeScene .office-agent {
     display: block;
     margin-bottom: 4px;
     font-size: 11px;
-    color: #eef6ff;
+    color: var(--c-text);
 }
 .chat-robot-world-bubble p {
     margin: 0;
@@ -1151,9 +1151,9 @@ body.te-nav-chat #officeScene .office-agent {
 .chat-robot-world-bubble-meta button {
     padding: 4px 8px;
     border-radius: 999px;
-    border: 1px solid rgba(136, 176, 232, 0.24);
-    background: rgba(17, 25, 40, 0.7);
-    color: #eef6ff;
+    border: 1px solid var(--c-border-2);
+    background: color-mix(in srgb, var(--c-bg) 70%, transparent);
+    color: var(--c-text);
     font-size: 10px;
     cursor: pointer;
 }
@@ -1184,9 +1184,9 @@ body.te-nav-chat #officeScene .office-agent {
     animation: chatRobotWorldPerch 1.6s ease-in-out infinite;
 }
 .chat-robot-world-actor.is-terminal .chat-robot-world-label {
-    border-color: rgba(94, 214, 166, 0.3);
-    background: rgba(16, 56, 44, 0.78);
-    color: #cbf7e5;
+    border-color: color-mix(in srgb, var(--c-success) 30%, transparent);
+    background: color-mix(in srgb, var(--c-success) 14%, transparent);
+    color: var(--c-success);
 }
 .app-layout.motion-balanced .chat-robot-world-route.route-lift,
 .app-layout.motion-balanced .chat-robot-world-route.route-magic,
@@ -1194,13 +1194,13 @@ body.te-nav-chat #officeScene .office-agent {
     display: none;
 }
 .chat-robot-world-actor.is-helper.is-terminal .chat-robot-world-label {
-    background: rgba(17, 25, 40, 0.74);
-    color: rgba(232, 242, 255, 0.88);
+    background: color-mix(in srgb, var(--c-bg) 74%, transparent);
+    color: var(--c-text);
 }
 .chat-robot-world-actor.is-helper .chat-robot-world-label {
-    border-color: rgba(113, 206, 255, 0.28);
-    background: rgba(9, 23, 36, 0.84);
-    color: #dbf6ff;
+    border-color: color-mix(in srgb, var(--c-accent) 28%, transparent);
+    background: color-mix(in srgb, var(--c-bg) 84%, transparent);
+    color: var(--c-text);
 }
 @keyframes chatRobotWorldBob {
     0%, 100% { transform: scale(0.92) translateY(0); }
@@ -1221,7 +1221,7 @@ body.te-nav-chat #officeScene .office-agent {
     50% { transform: scale(0.92) translateY(-1px); }
 }
 .message-row.search-highlight .message-content {
-    outline: 2px solid var(--accent-primary, #58a6ff);
+    outline: 2px solid var(--c-accent);
     outline-offset: 2px;
     border-radius: var(--radius-sm);
 }
@@ -1234,7 +1234,7 @@ body.te-nav-chat #officeScene .office-agent {
     top: 0;
     bottom: 0;
     width: 3px;
-    background: var(--accent-primary, #58a6ff);
+    background: var(--c-accent);
     border-radius: 2px;
 }
 
@@ -1309,9 +1309,9 @@ body.te-nav-chat #officeScene .office-agent {
     gap: 8px;
     margin-top: 2px;
     padding: 6px 10px;
-    border: 1px solid rgba(154, 216, 255, 0.24);
+    border: 1px solid color-mix(in srgb, var(--c-accent) 24%, transparent);
     border-radius: 8px;
-    background: rgba(10, 18, 30, 0.62);
+    background: color-mix(in srgb, var(--c-bg) 62%, transparent);
     box-shadow: 0 8px 20px rgba(2, 6, 23, 0.14);
 }
 .assistant-inline-thinking-copy {
@@ -1325,15 +1325,15 @@ body.te-nav-chat #officeScene .office-agent {
     font-weight: 700;
     letter-spacing: .04em;
     text-transform: uppercase;
-    color: rgba(154, 216, 255, 0.84);
+    color: var(--c-accent);
 }
 .assistant-inline-thinking-status .assistant-work-status-text,
 .assistant-inline-thinking-status .chat-robot-saying {
-    color: rgba(233, 240, 255, 0.82);
+    color: var(--c-dim);
 }
 .assistant-inline-thinking-status .assistant-work-status-timer,
 .assistant-inline-thinking-status .chat-robot-timer {
-    color: rgba(233, 240, 255, 0.42);
+    color: var(--c-muted);
 }
 .assistant-work-status-text.saying-fade {
     opacity: 0;
@@ -1434,11 +1434,11 @@ body.te-nav-chat #officeScene .office-agent {
 }
 .chat-robot-status-inline .chat-robot-saying {
     font-size: 12px;
-    color: rgba(233, 240, 255, 0.78);
+    color: var(--c-dim);
     font-style: normal;
 }
 .chat-robot-status-inline .chat-robot-timer {
     font-size: 10px;
-    color: rgba(233, 240, 255, 0.42);
+    color: var(--c-muted);
 }
 

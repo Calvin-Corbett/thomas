@@ -37,10 +37,10 @@
     grid-template-rows: minmax(0, 1fr);
     grid-template-areas: "stage dock";
     background:
-        radial-gradient(circle at 14% 14%, rgba(255, 141, 87, 0.16), rgba(255, 141, 87, 0) 38%),
-        radial-gradient(circle at 82% 22%, rgba(94, 204, 255, 0.18), rgba(94, 204, 255, 0) 42%),
-        linear-gradient(180deg, rgba(10, 18, 31, 0.92), rgba(10, 18, 31, 0.9));
-    border: 1px solid rgba(168, 205, 246, 0.24);
+        radial-gradient(circle at 14% 14%, color-mix(in srgb, var(--c-warn) 16%, transparent), transparent 38%),
+        radial-gradient(circle at 82% 22%, color-mix(in srgb, var(--c-accent) 18%, transparent), transparent 42%),
+        linear-gradient(180deg, color-mix(in srgb, var(--c-bg) 92%, transparent), color-mix(in srgb, var(--c-bg) 90%, transparent));
+    border: 1px solid var(--c-border-2);
     border-radius: 18px;
     box-shadow: 0 18px 42px rgba(5, 10, 18, 0.34);
     backdrop-filter: blur(10px);
@@ -101,9 +101,9 @@
 }
 
 .office-panel {
-    border: 1px solid rgba(168, 201, 247, 0.2);
+    border: 1px solid var(--c-border);
     border-radius: var(--radius-md);
-    background: rgba(12, 20, 34, 0.74);
+    background: var(--c-composer-bg);
     box-shadow: inset 0 0 0 1px rgba(203, 228, 255, 0.06);
     padding: 11px;
     display: flex;
@@ -129,9 +129,9 @@
 }
 
 .office-task-item {
-    border: 1px solid rgba(166, 198, 244, 0.18);
+    border: 1px solid var(--c-border);
     border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--c-surface);
     padding: 7px 8px;
     font-size: 12px;
     color: var(--text-secondary);
@@ -163,9 +163,9 @@
 .office-field input,
 .office-field select {
     width: 100%;
-    border: 1px solid rgba(166, 198, 244, 0.22);
+    border: 1px solid var(--c-border);
     border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--c-surface);
     color: var(--text-primary);
     padding: 7px 8px;
     font-size: 12px;
@@ -177,9 +177,9 @@
 }
 
 .office-chatbar {
-    border: 1px solid rgba(168, 201, 247, 0.2);
+    border: 1px solid var(--c-border);
     border-radius: var(--radius-lg);
-    background: rgba(10, 16, 27, 0.76);
+    background: var(--c-composer-bg);
     backdrop-filter: blur(6px);
     padding: 9px;
     display: flex;
@@ -208,9 +208,9 @@
 
 .office-chat-row input {
     flex: 1;
-    border: 1px solid rgba(166, 198, 244, 0.24);
+    border: 1px solid var(--c-border-2);
     border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--c-surface);
     color: var(--text-primary);
     padding: 8px 10px;
     font-size: 13px;
@@ -238,9 +238,9 @@
     overflow-x: hidden;
     background:
         radial-gradient(circle at 18% 12%, var(--c-accent-soft), transparent 38%),
-        radial-gradient(circle at 84% 18%, rgba(71, 215, 172, 0.16), rgba(71, 215, 172, 0) 42%),
-        radial-gradient(circle at 52% 86%, rgba(255, 189, 111, 0.1), rgba(255, 189, 111, 0) 34%),
-        linear-gradient(180deg, rgba(6, 11, 21, 0.97), rgba(7, 13, 23, 0.97));
+        radial-gradient(circle at 84% 18%, color-mix(in srgb, var(--c-success) 16%, transparent), transparent 42%),
+        radial-gradient(circle at 52% 86%, color-mix(in srgb, var(--c-warn) 10%, transparent), transparent 34%),
+        linear-gradient(180deg, color-mix(in srgb, var(--c-bg) 97%, transparent), color-mix(in srgb, var(--c-bg) 97%, transparent));
 }
 
 .mission-shell {
@@ -285,38 +285,38 @@
     align-items: center;
     gap: 6px;
     border-radius: 999px;
-    border: 1px solid rgba(167, 201, 246, 0.28);
-    background: rgba(13, 21, 36, 0.7);
+    border: 1px solid var(--c-border-2);
+    background: var(--c-composer-bg);
     padding: 5px 10px;
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: #dbe9ff;
+    color: var(--c-text);
 }
 
 .mission-meta-pill.ok {
-    border-color: rgba(102, 225, 180, 0.34);
-    background: rgba(26, 60, 47, 0.56);
-    color: #b8f1d8;
+    border-color: color-mix(in srgb, var(--c-success) 34%, transparent);
+    background: color-mix(in srgb, var(--c-success) 14%, transparent);
+    color: var(--c-success);
 }
 
 .mission-meta-pill.warn {
-    border-color: rgba(255, 198, 112, 0.44);
-    background: rgba(62, 46, 23, 0.66);
-    color: #ffe0a8;
+    border-color: color-mix(in srgb, var(--c-warn) 44%, transparent);
+    background: color-mix(in srgb, var(--c-warn) 14%, transparent);
+    color: var(--c-warn);
 }
 
 .mission-meta-pill.danger {
-    border-color: rgba(255, 140, 140, 0.48);
-    background: rgba(69, 27, 27, 0.68);
-    color: #ffc0c0;
+    border-color: color-mix(in srgb, var(--c-danger) 48%, transparent);
+    background: color-mix(in srgb, var(--c-danger) 14%, transparent);
+    color: var(--c-danger);
 }
 
 .mission-meta-pill.neutral {
-    border-color: rgba(167, 201, 246, 0.32);
-    background: rgba(13, 21, 36, 0.7);
-    color: #dbe9ff;
+    border-color: var(--c-border-2);
+    background: var(--c-composer-bg);
+    color: var(--c-text);
 }
 
 .mission-meta-text {
@@ -335,10 +335,10 @@
 }
 
 .mission-runtime-panel {
-    border: 1px solid rgba(166, 198, 244, 0.24);
+    border: 1px solid var(--c-border-2);
     border-radius: 16px;
     background:
-        linear-gradient(160deg, rgba(15, 26, 42, 0.92), rgba(8, 14, 25, 0.9));
+        linear-gradient(160deg, color-mix(in srgb, var(--c-menu-bg) 92%, transparent), color-mix(in srgb, var(--c-menu-bg) 90%, transparent));
     box-shadow:
         inset 0 0 0 1px rgba(194, 221, 255, 0.05),
         0 16px 34px rgba(3, 9, 18, 0.22);
@@ -382,7 +382,7 @@
 .mission-runtime-copy strong {
     font-size: 20px;
     line-height: 1.15;
-    color: #f3f9ff;
+    color: var(--c-text);
 }
 .mission-runtime-copy p {
     margin: 0;
@@ -411,14 +411,14 @@
     height: 10px;
     border-radius: 999px;
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--c-surface-2);
 }
 .mission-runtime-progress-rail > span {
     display: block;
     height: 100%;
     width: 0;
     border-radius: inherit;
-    background: linear-gradient(90deg, #58a6ff, #6dd7b8);
+    background: linear-gradient(90deg, var(--c-accent), var(--c-success));
     transition: width 180ms ease;
 }
 .mission-runtime-progress-rail.is-indeterminate > span {
@@ -453,9 +453,9 @@
     gap: 8px;
 }
 .mission-runtime-task {
-    border: 1px solid rgba(160, 193, 238, 0.18);
+    border: 1px solid var(--c-border);
     border-radius: 12px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--c-surface);
     padding: 8px 9px;
     display: flex;
     flex-direction: column;
@@ -470,7 +470,7 @@
 .mission-runtime-task-head strong {
     min-width: 0;
     font-size: 12px;
-    color: #eff6ff;
+    color: var(--c-text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -480,19 +480,19 @@
     color: var(--text-muted);
 }
 .mission-runtime-empty {
-    border: 1px dashed rgba(160, 193, 238, 0.24);
+    border: 1px dashed var(--c-border-2);
     border-radius: 12px;
     padding: 10px 12px;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--c-surface);
     font-size: 12px;
     color: var(--text-secondary);
 }
 
 .mission-ops-card {
-    border: 1px solid rgba(166, 198, 244, 0.24);
+    border: 1px solid var(--c-border-2);
     border-radius: 12px;
     background:
-        linear-gradient(165deg, rgba(16, 28, 45, 0.88), rgba(11, 18, 31, 0.84));
+        linear-gradient(165deg, color-mix(in srgb, var(--c-menu-bg) 88%, transparent), color-mix(in srgb, var(--c-menu-bg) 84%, transparent));
     box-shadow:
         inset 0 0 0 1px rgba(194, 221, 255, 0.04),
         0 10px 22px rgba(0, 0, 0, 0.16);
@@ -511,7 +511,7 @@
 
 .mission-ops-card strong {
     font-size: 14px;
-    color: #f2f8ff;
+    color: var(--c-text);
     line-height: 1.3;
 }
 
@@ -528,10 +528,10 @@
 }
 
 .mission-kpi-card {
-    border: 1px solid rgba(168, 201, 247, 0.22);
+    border: 1px solid var(--c-border);
     border-radius: 12px;
     background:
-        linear-gradient(170deg, rgba(17, 27, 43, 0.86), rgba(11, 18, 31, 0.84));
+        linear-gradient(170deg, color-mix(in srgb, var(--c-menu-bg) 86%, transparent), color-mix(in srgb, var(--c-menu-bg) 84%, transparent));
     box-shadow: inset 0 0 0 1px rgba(200, 224, 255, 0.05);
     padding: 10px 11px;
     display: flex;
@@ -549,7 +549,7 @@
 .mission-kpi-card strong {
     font-size: 24px;
     line-height: 1;
-    color: #edf5ff;
+    color: var(--c-text);
     font-variant-numeric: tabular-nums;
 }
 
@@ -568,9 +568,9 @@
 }
 
 .mission-panel {
-    border: 1px solid rgba(168, 201, 247, 0.24);
+    border: 1px solid var(--c-border-2);
     border-radius: 12px;
-    background: rgba(11, 19, 33, 0.76);
+    background: var(--c-composer-bg);
     box-shadow: inset 0 0 0 1px rgba(198, 223, 255, 0.05);
     min-height: 0;
     padding: 10px;
@@ -581,7 +581,7 @@
 }
 
 .mission-panel:hover {
-    border-color: rgba(132, 190, 255, 0.42);
+    border-color: var(--c-accent-line);
     box-shadow:
         inset 0 0 0 1px rgba(198, 223, 255, 0.09),
         0 8px 20px rgba(4, 10, 21, 0.22);
@@ -608,7 +608,7 @@
     font-size: 13px;
     letter-spacing: 0.03em;
     text-transform: uppercase;
-    color: #ecf5ff;
+    color: var(--c-text);
 }
 
 .mission-panel-meta {
@@ -646,9 +646,9 @@
 }
 
 .mission-item {
-    border: 1px solid rgba(160, 193, 238, 0.2);
+    border: 1px solid var(--c-border);
     border-radius: 9px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--c-surface);
     padding: 8px 9px;
     display: flex;
     flex-direction: column;
@@ -664,7 +664,7 @@
 
 .mission-item-title {
     font-size: 12px;
-    color: #eff6ff;
+    color: var(--c-text);
     font-weight: 600;
     line-height: 1.35;
 }
@@ -679,38 +679,38 @@
     display: inline-flex;
     align-items: center;
     border-radius: 999px;
-    border: 1px solid rgba(164, 198, 244, 0.3);
+    border: 1px solid var(--c-border-2);
     padding: 2px 7px;
     font-size: 10px;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: #dbe9ff;
-    background: rgba(13, 20, 33, 0.78);
+    color: var(--c-text);
+    background: var(--c-composer-bg);
 }
 
 .mission-pill.status-running,
 .mission-pill.status-active {
-    border-color: rgba(120, 196, 255, 0.4);
-    color: #c8e8ff;
+    border-color: var(--c-accent-line);
+    color: var(--c-accent);
 }
 
 .mission-pill.status-queued,
 .mission-pill.status-pending {
-    border-color: rgba(196, 216, 241, 0.35);
-    color: #dce8f6;
+    border-color: var(--c-border-2);
+    color: var(--c-dim);
 }
 
 .mission-pill.status-awaiting_approval,
 .mission-pill.status-blocked {
-    border-color: rgba(255, 194, 113, 0.48);
-    color: #ffe2b3;
+    border-color: color-mix(in srgb, var(--c-warn) 48%, transparent);
+    color: var(--c-warn);
 }
 
 .mission-pill.status-failed,
 .mission-pill.status-cancelled,
 .mission-pill.status-dead {
-    border-color: rgba(255, 140, 140, 0.48);
-    color: #ffc8c8;
+    border-color: color-mix(in srgb, var(--c-danger) 48%, transparent);
+    color: var(--c-danger);
 }
 
 .mission-item-summary {
@@ -730,9 +730,9 @@
 }
 
 .mission-item-empty {
-    border: 1px dashed rgba(160, 193, 238, 0.26);
+    border: 1px dashed var(--c-border-2);
     border-radius: 9px;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--c-surface);
     color: var(--text-muted);
     font-size: 12px;
     padding: 11px;
@@ -762,15 +762,15 @@
     align-items: baseline;
     gap: 5px;
     border-radius: 999px;
-    border: 1px solid rgba(165, 199, 242, 0.28);
-    background: rgba(13, 21, 35, 0.7);
+    border: 1px solid var(--c-border-2);
+    background: var(--c-composer-bg);
     padding: 4px 10px;
     font-size: 11px;
-    color: #dbe9ff;
+    color: var(--c-text);
 }
 
 .mission-job-summary-pill strong {
-    color: #f0f7ff;
+    color: var(--c-text);
     font-variant-numeric: tabular-nums;
 }
 
@@ -795,10 +795,10 @@
 }
 
 .mission-template-btn {
-    border: 1px solid rgba(164, 198, 244, 0.28);
+    border: 1px solid var(--c-border-2);
     border-radius: 999px;
-    background: rgba(10, 18, 31, 0.72);
-    color: #dde9fa;
+    background: var(--c-composer-bg);
+    color: var(--c-dim);
     padding: 5px 9px;
     font-size: 11px;
     letter-spacing: 0.03em;
@@ -809,7 +809,7 @@
 .mission-template-btn:hover {
     border-color: var(--c-accent-line);
     background: var(--c-accent-soft);
-    color: #f3f9ff;
+    color: var(--c-text);
 }
 
 .mission-field {
@@ -830,9 +830,9 @@
 .mission-field textarea,
 .mission-field select {
     width: 100%;
-    border: 1px solid rgba(166, 198, 244, 0.24);
+    border: 1px solid var(--c-border-2);
     border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--c-surface);
     color: var(--text-primary);
     padding: 8px 9px;
     font-size: 12px;
@@ -860,10 +860,10 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    border: 1px solid rgba(164, 198, 244, 0.24);
+    border: 1px solid var(--c-border-2);
     border-radius: 999px;
     padding: 4px 8px;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--c-surface);
     color: var(--text-secondary);
     font-size: 11px;
 }
@@ -890,10 +890,10 @@
 }
 
 .mission-room-row {
-    border: 1px solid rgba(160, 193, 238, 0.2);
+    border: 1px solid var(--c-border);
     border-radius: 9px;
     padding: 8px 9px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--c-surface);
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -909,7 +909,7 @@
 .mission-room-name {
     font-size: 12px;
     font-weight: 600;
-    color: #eaf3ff;
+    color: var(--c-text);
 }
 
 .mission-room-count {
@@ -921,7 +921,7 @@
     width: 100%;
     height: 6px;
     border-radius: 999px;
-    background: rgba(156, 188, 233, 0.18);
+    background: var(--c-surface-2);
     overflow: hidden;
 }
 

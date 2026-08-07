@@ -37,7 +37,7 @@
 .settings-nav-panel {
     border: 1px solid var(--border-light);
     border-radius: var(--radius-lg);
-    background: linear-gradient(165deg, rgba(37, 43, 56, 0.62), rgba(31, 36, 49, 0.56));
+    background: linear-gradient(165deg, color-mix(in srgb, var(--c-menu-bg) 62%, transparent), color-mix(in srgb, var(--c-menu-bg) 56%, transparent));
     min-height: 0;
     display: flex;
     flex-direction: column;
@@ -51,7 +51,7 @@
 .settings-nav-search {
     border: 1px solid var(--border-light);
     border-radius: var(--radius-sm);
-    background: rgba(25, 30, 39, 0.74);
+    background: var(--c-composer-bg);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -89,7 +89,7 @@
 .settings-nav-link {
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--c-surface);
     color: var(--text-secondary);
     text-align: left;
     font-size: 12px;
@@ -104,14 +104,14 @@
 }
 
 .settings-nav-link:hover {
-    border-color: rgba(88, 166, 255, 0.5);
-    background: rgba(88, 166, 255, 0.14);
+    border-color: var(--c-accent-line);
+    background: var(--c-accent-soft);
     color: var(--text-primary);
 }
 
 .settings-nav-link.active {
-    border-color: rgba(88, 166, 255, 0.82);
-    background: rgba(88, 166, 255, 0.22);
+    border-color: color-mix(in srgb, var(--c-accent) 82%, transparent);
+    background: color-mix(in srgb, var(--c-accent) 22%, transparent);
     color: var(--text-primary);
 }
 
@@ -146,13 +146,13 @@
     bottom: 0;
     z-index: 6;
     backdrop-filter: blur(12px);
-    background: rgba(17, 20, 26, 0.86);
+    background: var(--c-composer-bg);
 }
 
 .settings-section {
     border: 1px solid var(--border-light);
     border-radius: var(--radius-lg);
-    background: linear-gradient(165deg, rgba(37, 43, 56, 0.9), rgba(31, 36, 49, 0.84));
+    background: linear-gradient(165deg, color-mix(in srgb, var(--c-menu-bg) 90%, transparent), color-mix(in srgb, var(--c-menu-bg) 84%, transparent));
     padding: 14px;
 }
 
@@ -273,7 +273,7 @@
 
 .settings-mini-btn.danger {
     color: var(--danger-ink);
-    border-color: rgba(255, 120, 120, 0.4);
+    border-color: var(--danger-line);
 }
 
 .settings-suite-content .settings-advanced-only {
@@ -328,14 +328,14 @@
 }
 
 .debug-dock-tabs::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.18);
+    background: var(--c-scroll-thumb);
     border-radius: 999px;
 }
 
 .debug-tab-btn {
     border: 1px solid var(--border-light);
     border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--c-surface);
     color: var(--text-secondary);
     cursor: pointer;
     font-size: 11px;
@@ -349,19 +349,19 @@
 }
 
 .debug-tab-btn:hover {
-    border-color: rgba(88, 166, 255, 0.5);
-    background: rgba(88, 166, 255, 0.14);
+    border-color: var(--c-accent-line);
+    background: var(--c-accent-soft);
     color: var(--text-primary);
 }
 
 .debug-tab-btn.active {
-    border-color: rgba(88, 166, 255, 0.74);
-    background: rgba(88, 166, 255, 0.2);
+    border-color: color-mix(in srgb, var(--c-accent) 74%, transparent);
+    background: color-mix(in srgb, var(--c-accent) 20%, transparent);
     color: var(--text-primary);
 }
 
 .debug-tab-btn:focus-visible {
-    outline: 2px solid rgba(88, 166, 255, 0.65);
+    outline: 2px solid var(--c-accent-line);
     outline-offset: 1px;
 }
 
@@ -396,7 +396,7 @@
 .debug-block {
     border: 1px solid var(--border-light);
     border-radius: var(--radius-md);
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--c-surface);
     padding: 10px;
     display: flex;
     flex-direction: column;
@@ -420,7 +420,7 @@
 .debug-kv {
     border: 1px solid var(--border-light);
     border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--c-surface);
     padding: 7px 8px;
     display: flex;
     align-items: center;
@@ -465,13 +465,13 @@
     color: var(--text-muted);
     font-size: 12px;
     padding: 8px;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--c-surface);
 }
 
 .debug-event-item {
     border: 1px solid var(--border-light);
     border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--c-surface);
     padding: 7px 8px;
     display: flex;
     flex-direction: column;
@@ -516,7 +516,7 @@
 .debug-console-item {
     border: 1px solid var(--border-light);
     border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--c-surface);
     padding: 7px 8px;
     display: flex;
     flex-direction: column;
@@ -566,7 +566,7 @@
 .debug-summary-pill {
     border: 1px solid var(--border-light);
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--c-surface);
     color: var(--text-secondary);
     font-size: 11px;
     padding: 4px 10px;
@@ -595,7 +595,7 @@
 .debug-network-item {
     border: 1px solid var(--border-light);
     border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--c-surface);
     padding: 7px 8px;
     display: flex;
     flex-direction: column;
@@ -650,7 +650,7 @@
 .debug-chip {
     border: 1px solid var(--border-light);
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--c-surface);
     color: var(--text-secondary);
     font-size: 10px;
     letter-spacing: 0.35px;
@@ -667,7 +667,7 @@
 .debug-item-card {
     border: 1px solid var(--border-light);
     border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--c-surface);
     padding: 8px;
     display: flex;
     flex-direction: column;
@@ -703,13 +703,13 @@
     text-transform: uppercase;
     letter-spacing: 0.4px;
     color: var(--text-secondary);
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--c-surface);
 }
 
 .debug-item-pill.ok {
     color: var(--accent-mint);
-    border-color: rgba(71, 215, 172, 0.45);
-    background: rgba(71, 215, 172, 0.12);
+    border-color: color-mix(in srgb, var(--c-success) 45%, transparent);
+    background: color-mix(in srgb, var(--c-success) 12%, transparent);
 }
 
 .debug-item-pill.warn {
@@ -731,12 +731,12 @@
     font-size: 12px;
     color: var(--text-secondary);
     line-height: 1.4;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--c-surface);
 }
 
 .debug-system-status.ok {
-    border-color: rgba(71, 215, 172, 0.45);
-    background: rgba(71, 215, 172, 0.12);
+    border-color: color-mix(in srgb, var(--c-success) 45%, transparent);
+    background: color-mix(in srgb, var(--c-success) 12%, transparent);
     color: var(--text-primary);
 }
 
@@ -766,7 +766,7 @@
     width: 100%;
     height: 8px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--c-surface-2);
     overflow: hidden;
 }
 

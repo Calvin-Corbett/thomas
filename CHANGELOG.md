@@ -7,6 +7,23 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (design unification: 888 hardcoded colors follow the theme)
+
+- The last dark-anchored classic components render legibly under light and
+  sandstone: 888 hardcoded inks and surfaces across 10 CSS files (content
+  panels, tool-call chips, module cards, office workspace chrome,
+  marketplace, Evolve dashboard, settings panel, delegation badges,
+  composer overlays, workbench tools) and the 3 frontier panels (which now
+  hoist their injected styles onto --c-* vars with their old literals as
+  fallbacks) moved onto the canonical tokens. Deliberate exceptions are
+  each justified in the sweep trail: drop shadows stay dark in every theme,
+  the drawing/3D/node-graph canvases and the pixel-robot sprite palette
+  stay fixed art, and the test-pinned tone-stopped chip is byte-identical.
+  Also fixed: the 7 uses of an undefined --accent-primary (fallback always
+  won) and the undefined --bg-primary on the chat search field. The OAuth
+  recovery contract reads the extracted chat_connect_prompt.js. Verified by
+  screenshot: Marketplace and Forge fully light under the light theme.
+
 ### Fixed (the Desktop write is judged by the real ladder, and the remedy always arrives)
 
 - Live re-verification caught the remedy fix not firing: the write never

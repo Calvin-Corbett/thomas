@@ -37,16 +37,16 @@
    * dark workspace shell and on a light one without guessing at either.
    */
   var CSS = [
-    '.rtp-root{--rtp-accent:#14b8a6;--rtp-line:rgba(128,128,128,.30);--rtp-fill:rgba(128,128,128,.10);',
-    'font:13px/1.35 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:inherit;',
+    '.rtp-root{--rtp-accent:var(--c-accent,#14b8a6);--rtp-line:rgba(128,128,128,.30);--rtp-fill:rgba(128,128,128,.10);',
+    'font:13px/1.35 var(--font-sans, ui-sans-serif, system-ui, sans-serif);color:inherit;',
     'background:var(--rtp-fill);border:1px solid var(--rtp-line);',
     'border-radius:10px;padding:10px 12px;box-sizing:border-box;display:block}',
     '.rtp-root *{box-sizing:border-box}',
     '.rtp-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}',
     '.rtp-title{font-size:11px;letter-spacing:.10em;text-transform:uppercase;opacity:.62;font-weight:600}',
     '.rtp-dot{width:7px;height:7px;border-radius:50%;background:var(--rtp-accent);flex:0 0 auto}',
-    '.rtp-dot[data-state="stale"]{background:#f59e0b}',
-    '.rtp-dot[data-state="error"]{background:#ef4444}',
+    '.rtp-dot[data-state="stale"]{background:var(--c-warn,#f59e0b)}',
+    '.rtp-dot[data-state="error"]{background:var(--c-danger,#ef4444)}',
     '.rtp-status{margin-left:auto;font-size:11px;opacity:.62}',
     '.rtp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px}',
     '.rtp-cell{background:var(--rtp-fill);border:1px solid var(--rtp-line);',
@@ -62,9 +62,9 @@
     '.rtp-foot label{font-size:10px;letter-spacing:.08em;text-transform:uppercase;opacity:.62}',
     '.rtp-foot input{width:74px;background:transparent;border:1px solid var(--rtp-line);',
     'border-radius:6px;color:inherit;padding:3px 6px;font:inherit;font-size:12px}',
-    '.rtp-foot button{background:rgba(20,184,166,.14);border:1px solid rgba(20,184,166,.45);color:var(--rtp-accent);',
+    '.rtp-foot button{background:color-mix(in srgb, var(--rtp-accent) 14%, transparent);border:1px solid color-mix(in srgb, var(--rtp-accent) 45%, transparent);color:var(--rtp-accent);',
     'border-radius:6px;padding:3px 10px;font:inherit;font-size:12px;cursor:pointer}',
-    '.rtp-foot button:hover{background:rgba(20,184,166,.26)}'
+    '.rtp-foot button:hover{background:color-mix(in srgb, var(--rtp-accent) 26%, transparent)}'
   ].join('');
 
   function injectStyles(doc) {

@@ -9,7 +9,7 @@
     font-size: 12px;
     letter-spacing: 0.03em;
     text-transform: uppercase;
-    color: #edf6ff;
+    color: var(--c-text);
 }
 
 .module-special-card p {
@@ -28,19 +28,19 @@
 .module-special-card li {
     font-size: 11px;
     line-height: 1.35;
-    color: #d6e7ff;
+    color: var(--c-text);
 }
 
 .module-special-card.ok {
-    border-color: rgba(108, 226, 171, 0.32);
+    border-color: color-mix(in srgb, var(--c-success) 32%, transparent);
 }
 
 .module-special-card.warn {
-    border-color: rgba(255, 194, 113, 0.4);
+    border-color: color-mix(in srgb, var(--c-warn) 40%, transparent);
 }
 
 .module-special-card.error {
-    border-color: rgba(255, 132, 144, 0.42);
+    border-color: color-mix(in srgb, var(--c-danger) 42%, transparent);
 }
 
 .module-workbench {
@@ -48,8 +48,8 @@
     border-radius: 12px;
     background:
         radial-gradient(circle at 116% -14%, var(--module-panel-tint), transparent 58%),
-        rgba(11, 19, 33, 0.78);
-    box-shadow: inset 0 0 0 1px rgba(198, 223, 255, 0.05);
+        var(--c-composer-bg);
+    box-shadow: inset 0 0 0 1px var(--c-border);
     padding: 10px;
     display: grid;
     gap: 10px;
@@ -65,7 +65,7 @@
     font-size: 12px;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: #edf6ff;
+    color: var(--c-text);
 }
 
 .module-wb-header p {
@@ -75,12 +75,12 @@
 }
 
 .module-wb-operator-note {
-    border: 1px solid rgba(125, 180, 255, 0.22);
+    border: 1px solid color-mix(in srgb, var(--c-accent) 22%, transparent);
     border-radius: 10px;
     padding: 8px 10px;
     background:
-        radial-gradient(circle at 0% 0%, rgba(60, 126, 235, 0.2), transparent 45%),
-        rgba(8, 15, 28, 0.72);
+        radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--c-accent) 20%, transparent), transparent 45%),
+        var(--c-composer-bg);
     display: grid;
     gap: 3px;
 }
@@ -89,7 +89,7 @@
     font-size: 11px;
     letter-spacing: 0.05em;
     text-transform: uppercase;
-    color: #d6e9ff;
+    color: var(--c-text);
 }
 
 .module-wb-operator-note p {
@@ -171,8 +171,8 @@
 .module-wb-studio-stage,
 .module-wb-studio-inspector {
     background:
-        linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)),
-        radial-gradient(circle at 12% -20%, rgba(88, 166, 255, 0.16), transparent 58%);
+        linear-gradient(160deg, var(--c-surface-2), var(--c-surface)),
+        radial-gradient(circle at 12% -20%, var(--c-accent-soft), transparent 58%);
 }
 
 .module-wb-studio-filter-grid {
@@ -186,9 +186,9 @@
 }
 
 .module-wb-studio-chip {
-    border: 1px solid rgba(160, 193, 238, 0.26);
+    border: 1px solid var(--c-border-2);
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--c-surface);
     color: var(--text-secondary);
     font-size: 10px;
     text-transform: uppercase;
@@ -200,14 +200,14 @@
 }
 
 .module-wb-studio-chip strong {
-    color: #edf6ff;
+    color: var(--c-text);
     font-size: 11px;
 }
 
 .module-wb-studio-control-grid {
-    border: 1px solid rgba(160, 193, 238, 0.22);
+    border: 1px solid var(--c-border);
     border-radius: 10px;
-    background: rgba(8, 14, 24, 0.56);
+    background: color-mix(in srgb, var(--c-bg) 56%, transparent);
     padding: 8px;
     display: grid;
     gap: 7px;
@@ -242,9 +242,9 @@
 }
 
 .module-wb-tool-btn {
-    border: 1px solid rgba(160, 193, 238, 0.28);
+    border: 1px solid var(--c-border-2);
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--c-surface);
     color: var(--text-secondary);
     font-size: 11px;
     letter-spacing: 0.02em;
@@ -259,8 +259,8 @@
 .module-wb-tool-btn.active,
 .module-wb-tool-btn:hover {
     border-color: var(--module-accent);
-    background: rgba(88, 166, 255, 0.16);
-    color: #eff7ff;
+    background: var(--c-accent-soft);
+    color: var(--c-text);
 }
 
 .module-wb-toolbar-actions {
@@ -271,9 +271,9 @@
 }
 
 .module-wb-inline-field {
-    border: 1px solid rgba(160, 193, 238, 0.26);
+    border: 1px solid var(--c-border-2);
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--c-surface);
     color: var(--text-secondary);
     font-size: 11px;
     padding: 5px 8px;
@@ -284,9 +284,9 @@
 
 .module-wb-inline-field input {
     width: 64px;
-    border: 1px solid rgba(160, 193, 238, 0.22);
+    border: 1px solid var(--c-border);
     border-radius: var(--radius-md);
-    background: rgba(8, 14, 23, 0.72);
+    background: var(--c-composer-bg);
     color: var(--text-primary);
     font-size: 11px;
     padding: 3px 4px;
@@ -305,9 +305,9 @@
 .module-wb-stage-card,
 .module-wb-side-card,
 .module-wb-inspector-card {
-    border: 1px solid rgba(160, 193, 238, 0.24);
+    border: 1px solid var(--c-border-2);
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--c-surface);
     padding: 9px;
     display: grid;
     gap: 8px;
@@ -325,7 +325,7 @@
     font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: #ecf6ff;
+    color: var(--c-text);
 }
 
 .module-wb-stage-meta {
@@ -343,7 +343,7 @@
 .module-wb-canvas-lab3d {
     width: 100%;
     max-width: 100%;
-    border: 1px solid rgba(160, 193, 238, 0.26);
+    border: 1px solid var(--c-border-2);
     border-radius: var(--radius-md);
     background: linear-gradient(180deg, rgba(7, 13, 22, 0.96), rgba(10, 16, 27, 0.96));
     touch-action: none;
@@ -353,16 +353,16 @@
 .module-wb-3d-stage {
     width: 100%;
     min-height: 380px;
-    border: 1px solid rgba(160, 193, 238, 0.26);
+    border: 1px solid var(--c-border-2);
     border-radius: var(--radius-md);
     overflow: hidden;
     background: linear-gradient(180deg, rgba(7, 13, 22, 0.98), rgba(10, 16, 27, 0.95));
 }
 
 .module-wb-loader {
-    border: 1px dashed rgba(160, 193, 238, 0.35);
+    border: 1px dashed var(--c-border-2);
     border-radius: 10px;
-    background: rgba(14, 24, 40, 0.56);
+    background: color-mix(in srgb, var(--c-bg) 56%, transparent);
     min-height: 200px;
     display: grid;
     place-content: center;
@@ -372,7 +372,7 @@
 }
 
 .module-wb-loader strong {
-    color: #edf6ff;
+    color: var(--c-text);
     font-size: 14px;
 }
 
@@ -389,7 +389,7 @@
     font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: #ecf6ff;
+    color: var(--c-text);
 }
 
 .module-wb-field-grid {
@@ -421,9 +421,9 @@
 .module-wb-inline-form input,
 .module-wb-inline-form select,
 .module-wb-inline-form textarea {
-    border: 1px solid rgba(160, 193, 238, 0.26);
+    border: 1px solid var(--c-border-2);
     border-radius: 8px;
-    background: rgba(8, 14, 23, 0.75);
+    background: var(--c-composer-bg);
     color: var(--text-primary);
     font-size: 12px;
     padding: 6px 8px;
@@ -442,9 +442,9 @@
 }
 
 .module-wb-project-panel {
-    border: 1px solid rgba(160, 193, 238, 0.2);
+    border: 1px solid var(--c-border);
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--c-surface);
     padding: 7px;
     display: grid;
     gap: 6px;
@@ -455,7 +455,7 @@
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: #e8f4ff;
+    color: var(--c-text);
 }
 
 .module-wb-project-form {
@@ -488,9 +488,9 @@
 }
 
 .module-wb-metrics > div {
-    border: 1px solid rgba(160, 193, 238, 0.22);
+    border: 1px solid var(--c-border);
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--c-surface);
     padding: 7px;
     display: grid;
     gap: 2px;
@@ -505,13 +505,13 @@
 
 .module-wb-metrics strong {
     font-size: 12px;
-    color: #edf6ff;
+    color: var(--c-text);
 }
 
 .module-wb-ghost {
-    border: 1px dashed rgba(160, 193, 238, 0.26);
+    border: 1px dashed var(--c-border-2);
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--c-surface);
     color: var(--text-muted);
     font-size: 11px;
     padding: 8px;
@@ -534,16 +534,16 @@
 .module-wb-flow-canvas {
     width: 100%;
     min-height: 360px;
-    border: 1px solid rgba(160, 193, 238, 0.24);
+    border: 1px solid var(--c-border-2);
     border-radius: var(--radius-md);
     background: rgba(9, 16, 26, 0.82);
 }
 
 .module-wb-list-item,
 .module-wb-asset-row {
-    border: 1px solid rgba(160, 193, 238, 0.22);
+    border: 1px solid var(--c-border);
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--c-surface);
     padding: 7px 8px;
     display: grid;
     gap: 4px;
@@ -553,13 +553,13 @@
 .module-wb-list-item.selected,
 .module-wb-asset-row.selected {
     border-color: var(--module-accent);
-    background: rgba(88, 166, 255, 0.14);
+    background: var(--c-accent-soft);
 }
 
 .module-wb-list-item strong,
 .module-wb-asset-row strong {
     font-size: 12px;
-    color: #edf6ff;
+    color: var(--c-text);
 }
 
 .module-wb-list-item span,
@@ -575,9 +575,9 @@
 }
 
 .module-wb-log-item {
-    border: 1px solid rgba(160, 193, 238, 0.2);
+    border: 1px solid var(--c-border);
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--c-surface);
     padding: 7px 8px;
     display: grid;
     gap: 3px;
@@ -595,21 +595,21 @@
 }
 
 .module-wb-log-item.ok {
-    border-color: rgba(108, 226, 171, 0.35);
+    border-color: color-mix(in srgb, var(--c-success) 35%, transparent);
 }
 
 .module-wb-log-item.warn {
-    border-color: rgba(255, 194, 113, 0.46);
+    border-color: color-mix(in srgb, var(--c-warn) 46%, transparent);
 }
 
 .module-wb-log-item.error {
-    border-color: rgba(255, 132, 144, 0.44);
+    border-color: color-mix(in srgb, var(--c-danger) 44%, transparent);
 }
 
 .module-wb-run-report {
     display: grid;
     gap: 8px;
-    border-top: 1px solid rgba(160, 193, 238, 0.2);
+    border-top: 1px solid var(--c-border);
     padding-top: 8px;
 }
 
@@ -619,9 +619,9 @@
 }
 
 .module-wb-oss-stack {
-    border: 1px solid rgba(160, 193, 238, 0.22);
+    border: 1px solid var(--c-border);
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--c-surface);
     padding: 9px;
     display: grid;
     gap: 8px;
@@ -632,7 +632,7 @@
     font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: #ecf6ff;
+    color: var(--c-text);
 }
 
 .module-wb-oss-list {
@@ -641,9 +641,9 @@
 }
 
 .module-wb-oss-item {
-    border: 1px solid rgba(160, 193, 238, 0.2);
+    border: 1px solid var(--c-border);
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--c-surface);
     padding: 8px;
     display: grid;
     gap: 6px;
@@ -658,7 +658,7 @@
 
 .module-wb-oss-head strong {
     font-size: 12px;
-    color: #eef7ff;
+    color: var(--c-text);
 }
 
 .module-wb-oss-head span {
@@ -676,9 +676,9 @@
 }
 
 .module-wb-palette-btn {
-    border: 1px solid rgba(160, 193, 238, 0.24);
+    border: 1px solid var(--c-border-2);
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--c-surface);
     color: var(--text-primary);
     text-align: left;
     padding: 7px 8px;
@@ -699,7 +699,7 @@
 
 .module-wb-palette-btn:hover {
     border-color: var(--module-accent);
-    background: rgba(88, 166, 255, 0.14);
+    background: var(--c-accent-soft);
 }
 
 .module-wb-device-switch {
@@ -709,15 +709,15 @@
 }
 
 .module-wb-gridstack-shell {
-    border: 1px solid rgba(160, 193, 238, 0.24);
+    border: 1px solid var(--c-border-2);
     border-radius: var(--radius-md);
-    background: rgba(8, 14, 23, 0.68);
+    background: color-mix(in srgb, var(--c-bg) 68%, transparent);
     min-height: 360px;
     padding: 8px;
 }
 
 .module-wb-gridstack-shell.mobile-mode {
-    border-color: rgba(111, 214, 179, 0.55);
+    border-color: color-mix(in srgb, var(--c-success) 55%, transparent);
 }
 
 .module-wb-gridstack {
@@ -725,9 +725,9 @@
 }
 
 .module-wb-gridstack .grid-stack-item-content {
-    border: 1px solid rgba(160, 193, 238, 0.24);
+    border: 1px solid var(--c-border-2);
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--c-surface);
     color: var(--text-primary);
     display: grid;
     place-items: stretch;
@@ -736,7 +736,7 @@
 
 .module-wb-gridstack .grid-stack-item.selected .grid-stack-item-content {
     border-color: var(--module-accent);
-    box-shadow: inset 0 0 0 1px rgba(88, 166, 255, 0.36);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-accent) 36%, transparent);
 }
 
 .module-wb-app-widget {
@@ -749,7 +749,7 @@
 }
 
 .module-wb-app-widget strong {
-    color: #edf6ff;
+    color: var(--c-text);
     font-size: 12px;
 }
 
@@ -760,7 +760,7 @@
 }
 
 .module-wb-app-list.mobile-mode .module-wb-list-item {
-    border-left: 3px solid rgba(71, 215, 172, 0.52);
+    border-left: 3px solid color-mix(in srgb, var(--c-success) 52%, transparent);
 }
 
 .module-wb-preview-card {
@@ -768,9 +768,9 @@
 }
 
 .module-wb-preview-frame-wrap {
-    border: 1px solid rgba(160, 193, 238, 0.24);
+    border: 1px solid var(--c-border-2);
     border-radius: var(--radius-md);
-    background: rgba(8, 14, 23, 0.7);
+    background: color-mix(in srgb, var(--c-bg) 70%, transparent);
     padding: 8px;
     display: grid;
     gap: 7px;
@@ -779,9 +779,9 @@
 .module-wb-preview-frame {
     width: 100%;
     min-height: 360px;
-    border: 1px solid rgba(160, 193, 238, 0.22);
+    border: 1px solid var(--c-border);
     border-radius: 8px;
-    background: rgba(7, 13, 21, 0.92);
+    background: color-mix(in srgb, var(--c-bg) 92%, transparent);
 }
 
 .module-wb-range {
@@ -789,9 +789,9 @@
 }
 
 .module-wb-file-pick {
-    border: 1px dashed rgba(160, 193, 238, 0.3);
+    border: 1px dashed var(--c-border-2);
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--c-surface);
     color: var(--text-secondary);
     font-size: 11px;
     padding: 8px;
@@ -805,9 +805,9 @@
 }
 
 .module-wb-forge-card {
-    border: 1px solid rgba(160, 193, 238, 0.22);
+    border: 1px solid var(--c-border);
     border-radius: var(--radius-md);
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--c-surface);
     padding: 8px;
     display: grid;
     gap: 7px;
@@ -818,13 +818,13 @@
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: #ecf6ff;
+    color: var(--c-text);
 }
 
 .module-wb-forge-card [data-studio-forge-tool].active {
     border-color: var(--module-accent);
-    background: rgba(88, 166, 255, 0.18);
-    color: #eff7ff;
+    background: var(--c-accent-soft);
+    color: var(--c-text);
 }
 
 .module-wb-color-palette {

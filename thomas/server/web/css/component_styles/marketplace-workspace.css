@@ -1,6 +1,6 @@
 /* Marketplace and library workspace presentation. */
 .module-workspace[data-mode="infinite"] .module-item-card {
-    border-left: 3px solid rgba(123, 214, 199, 0.56);
+    border-left: 3px solid color-mix(in srgb, var(--c-success) 56%, transparent);
 }
 
 .module-panel-wide {
@@ -19,7 +19,7 @@
     font-size: 13px;
     letter-spacing: 0.03em;
     text-transform: uppercase;
-    color: #ecf5ff;
+    color: var(--c-text);
 }
 
 .module-panel-meta {
@@ -52,12 +52,12 @@
     justify-content: space-between;
     gap: 12px;
     padding: 0 0 10px;
-    border-bottom: 1px solid rgba(160, 193, 238, 0.2);
+    border-bottom: 1px solid var(--c-border);
 }
 
 .module-marketplace-toolbar-copy h4 {
     margin: 0 0 4px;
-    color: #d9e9ff;
+    color: var(--c-text);
     font-size: 13px;
     letter-spacing: 0.02em;
 }
@@ -81,9 +81,9 @@
     position: relative;
     display: inline-flex;
     align-items: center;
-    border: 1px solid rgba(160, 193, 238, 0.28);
+    border: 1px solid var(--c-border-2);
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--c-surface);
     padding: 0 10px;
     gap: 6px;
 }
@@ -113,7 +113,7 @@
     border-radius: 10px;
     padding: 4px 8px;
     background: transparent;
-    border-color: rgba(160, 193, 238, 0.25);
+    border-color: var(--c-border-2);
 }
 
 .module-marketplace-description {
@@ -142,7 +142,7 @@
 .module-marketplace-meta-line .module-marketplace-meta-bit::after {
     content: '\2022';
     font-size: 8px;
-    color: rgba(160, 193, 238, 0.28);
+    color: var(--c-muted);
 }
 
 .module-marketplace-meta-line .module-marketplace-meta-bit:last-child::after {
@@ -160,7 +160,7 @@
 .module-marketplace-chip {
     border: none;
     background: transparent;
-    color: #dbe9ff;
+    color: var(--c-dim);
     padding: 0;
     font-size: 10px;
     position: relative;
@@ -172,7 +172,7 @@
     position: absolute;
     left: 0;
     top: -0.1em;
-    color: rgba(160, 193, 238, 0.4);
+    color: var(--c-muted);
 }
 
 .module-marketplace-stats {
@@ -194,13 +194,13 @@
 .module-marketplace-stats span + span::before {
     content: '\2022';
     margin-right: 14px;
-    color: rgba(160, 193, 238, 0.35);
+    color: var(--c-muted);
 }
 
 .module-marketplace-stream {
     display: grid;
     gap: 0;
-    border-top: 1px solid rgba(160, 193, 238, 0.1);
+    border-top: 1px solid var(--c-border);
     padding-top: 8px;
 }
 
@@ -210,27 +210,27 @@
     gap: 14px;
     align-items: start;
     padding: 12px 2px 12px 8px;
-    border-bottom: 1px dashed rgba(160, 193, 238, 0.18);
+    border-bottom: 1px dashed var(--c-border);
     position: relative;
     transition: background 0.14s ease, border-color 0.14s ease;
 }
 
 .module-marketplace-item.ok {
-    border-left: 1px solid rgba(108, 226, 171, 0.24);
+    border-left: 1px solid color-mix(in srgb, var(--c-success) 24%, transparent);
 }
 
 .module-marketplace-item.warn {
-    border-left: 1px solid rgba(255, 194, 113, 0.22);
+    border-left: 1px solid color-mix(in srgb, var(--c-warn) 22%, transparent);
 }
 
 .module-marketplace-item.error,
 .module-marketplace-item.done {
-    border-left: 1px solid rgba(255, 132, 144, 0.22);
+    border-left: 1px solid color-mix(in srgb, var(--c-danger) 22%, transparent);
 }
 
 .module-marketplace-item:hover {
-    background: rgba(255, 255, 255, 0.01);
-    border-bottom-color: rgba(160, 193, 238, 0.28);
+    background: var(--c-hover);
+    border-bottom-color: var(--c-border-2);
 }
 
 .module-marketplace-item-main {
@@ -248,7 +248,7 @@
 
 .module-marketplace-title {
     margin: 0;
-    color: #ecf4ff;
+    color: var(--c-text);
     font-size: 12px;
     line-height: 1.2;
 }
@@ -290,9 +290,9 @@
 
 .module-marketplace-status {
     border-radius: 999px;
-    border: 1px solid rgba(164, 198, 244, 0.3);
+    border: 1px solid var(--c-border-2);
     background: transparent;
-    color: #dbe9ff;
+    color: var(--c-dim);
     padding: 2px 8px;
     font-size: 10px;
     letter-spacing: 0.04em;
@@ -303,34 +303,34 @@
 .module-item-badge.tone-ok,
 .module-marketplace-status.ok,
 .module-marketplace-item.ok .module-marketplace-status {
-    border-color: rgba(108, 226, 171, 0.36);
-    color: #bbf4db;
+    border-color: color-mix(in srgb, var(--c-success) 36%, transparent);
+    color: var(--c-success);
 }
 
 .module-item-badge.tone-warn,
 .module-marketplace-status.warn,
 .module-marketplace-item.warn .module-marketplace-status {
-    border-color: rgba(255, 194, 113, 0.45);
-    color: #ffe2b3;
+    border-color: color-mix(in srgb, var(--c-warn) 45%, transparent);
+    color: var(--c-warn);
 }
 
 .module-item-badge.tone-error,
 .module-marketplace-status.error,
 .module-marketplace-item.error .module-marketplace-status {
-    border-color: rgba(255, 132, 144, 0.42);
-    color: #ffd1d8;
+    border-color: color-mix(in srgb, var(--c-danger) 42%, transparent);
+    color: var(--c-danger);
 }
 
 .module-item-badge.tone-done,
 .module-marketplace-status.done,
 .module-marketplace-item.done .module-marketplace-status {
-    border-color: rgba(108, 226, 171, 0.36);
-    color: #bbf4db;
+    border-color: color-mix(in srgb, var(--c-success) 36%, transparent);
+    color: var(--c-success);
 }
 
 .module-marketplace-shell .module-marketplace-inline-btn,
 .module-marketplace-shell .module-item-btn:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--c-surface);
 }
 
 .module-marketplace-empty {
@@ -340,14 +340,14 @@
 }
 
 .module-marketplace-empty strong {
-    color: #dbe9ff;
+    color: var(--c-text);
     font-weight: 600;
 }
 
 .module-item-card {
-    border: 1px solid rgba(160, 193, 238, 0.2);
+    border: 1px solid var(--c-border);
     border-radius: 9px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--c-surface);
     padding: 8px 9px;
     display: grid;
     gap: 6px;
@@ -363,7 +363,7 @@
 .module-item-title {
     margin: 0;
     font-size: 12px;
-    color: #eef6ff;
+    color: var(--c-text);
 }
 
 .module-item-meta {
@@ -381,9 +381,9 @@
 }
 
 .module-item-btn {
-    border: 1px solid rgba(160, 193, 238, 0.26);
+    border: 1px solid var(--c-border-2);
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--c-surface);
     color: var(--text-secondary);
     font-size: 10px;
     letter-spacing: 0.03em;
@@ -403,9 +403,9 @@
     display: inline-flex;
     align-items: center;
     border-radius: 999px;
-    border: 1px solid rgba(164, 198, 244, 0.3);
-    background: rgba(13, 20, 33, 0.78);
-    color: #dbe9ff;
+    border: 1px solid var(--c-border-2);
+    background: color-mix(in srgb, var(--c-bg) 78%, transparent);
+    color: var(--c-dim);
     padding: 2px 7px;
     font-size: 10px;
     letter-spacing: 0.04em;
@@ -413,23 +413,23 @@
 }
 
 .module-item-badge.ok {
-    border-color: rgba(108, 226, 171, 0.36);
-    color: #bbf4db;
+    border-color: color-mix(in srgb, var(--c-success) 36%, transparent);
+    color: var(--c-success);
 }
 
 .module-item-badge.warn {
-    border-color: rgba(255, 194, 113, 0.45);
-    color: #ffe2b3;
+    border-color: color-mix(in srgb, var(--c-warn) 45%, transparent);
+    color: var(--c-warn);
 }
 
 .module-item-badge.error {
-    border-color: rgba(255, 132, 144, 0.42);
-    color: #ffd1d8;
+    border-color: color-mix(in srgb, var(--c-danger) 42%, transparent);
+    color: var(--c-danger);
 }
 
 .module-item-badge.done {
-    border-color: rgba(108, 226, 171, 0.36);
-    color: #bbf4db;
+    border-color: color-mix(in srgb, var(--c-success) 36%, transparent);
+    color: var(--c-success);
 }
 
 .module-actions-grid {
@@ -439,9 +439,9 @@
 }
 
 .module-action-btn {
-    border: 1px solid rgba(160, 193, 238, 0.24);
+    border: 1px solid var(--c-border-2);
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--c-surface);
     color: var(--text-primary);
     text-align: left;
     padding: 9px 10px;
@@ -453,7 +453,7 @@
 
 .module-action-btn strong {
     font-size: 12px;
-    color: #eff6ff;
+    color: var(--c-text);
 }
 
 .module-action-btn span {
@@ -475,10 +475,10 @@
 }
 
 .module-filter-btn {
-    border: 1px solid rgba(164, 198, 244, 0.3);
+    border: 1px solid var(--c-border-2);
     border-radius: 999px;
-    background: rgba(13, 20, 33, 0.78);
-    color: #dbe9ff;
+    background: color-mix(in srgb, var(--c-bg) 78%, transparent);
+    color: var(--c-dim);
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -493,9 +493,9 @@
 }
 
 .module-empty {
-    border: 1px dashed rgba(160, 193, 238, 0.26);
+    border: 1px dashed var(--c-border-2);
     border-radius: 9px;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--c-surface);
     color: var(--text-muted);
     font-size: 12px;
     padding: 11px;
@@ -950,7 +950,7 @@
     padding: 0 0 10px;
     margin-bottom: 2px;
     backdrop-filter: blur(14px);
-    background: linear-gradient(180deg, rgba(8, 14, 24, 0.96), rgba(8, 14, 24, 0.88) 78%, rgba(8, 14, 24, 0));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--c-bg) 96%, transparent), color-mix(in srgb, var(--c-bg) 88%, transparent) 78%, transparent);
 }
 
 /* My Stuff Mode Overrides */
@@ -1068,7 +1068,7 @@
 }
 .mp-bubble-enabled:hover {
     border-color: var(--accent-mint);
-    box-shadow: 0 8px 32px rgba(71, 215, 172, 0.10);
+    box-shadow: 0 8px 32px color-mix(in srgb, var(--c-success) 10%, transparent);
 }
 .mp-bubble-body {
     flex: 1;
@@ -1153,7 +1153,7 @@
     padding: var(--btn-pad-y) 10px;
     border-radius: var(--btn-radius);
     border: 1px solid var(--accent-mint);
-    background: rgba(71, 215, 172, 0.08);
+    background: color-mix(in srgb, var(--c-success) 8%, transparent);
     color: var(--accent-mint);
     font-size: var(--btn-font-size);
     font-weight: 600;
@@ -1165,7 +1165,7 @@
     line-height: var(--btn-line-height);
 }
 .mp-creator-btn:hover {
-    background: rgba(71, 215, 172, 0.18);
+    background: color-mix(in srgb, var(--c-success) 18%, transparent);
 }
 .mp-creator-btn svg {
     flex-shrink: 0;
@@ -1232,7 +1232,7 @@
     transition: background 0.15s;
 }
 .mp-creator-close:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--c-hover);
     color: var(--text-primary);
 }
 .mp-creator-hint {
@@ -1252,7 +1252,7 @@
     padding: 10px 14px;
     border-radius: var(--radius-md);
     border: 1px solid var(--border-light);
-    background: rgba(8, 14, 23, 0.6);
+    background: var(--c-composer-bg);
     color: var(--text-primary);
     font-size: 14px;
     font-family: var(--font-sans);
@@ -1275,13 +1275,13 @@
     justify-content: center;
     border-radius: var(--radius-md);
     border: 1px solid var(--accent-mint);
-    background: rgba(71, 215, 172, 0.12);
+    background: color-mix(in srgb, var(--c-success) 12%, transparent);
     color: var(--accent-mint);
     cursor: pointer;
     transition: background 0.2s;
 }
 .mp-creator-send:hover {
-    background: rgba(71, 215, 172, 0.24);
+    background: color-mix(in srgb, var(--c-success) 24%, transparent);
 }
 
 /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Plugin Sidebar Buttons ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
@@ -1294,7 +1294,7 @@
 .sidebar-plugin-section .sidebar-plugin-divider {
     margin: 4px 2px 2px;
     padding-top: 6px;
-    border-top: 1px solid rgba(162, 191, 233, 0.18);
+    border-top: 1px solid var(--c-border);
     font-size: 9.5px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -1328,14 +1328,14 @@
     opacity: 0.75;
 }
 .sidebar-nav-plugin-btn:hover {
-    background: rgba(162, 191, 233, 0.10);
+    background: var(--c-hover);
     color: var(--text-primary, #e2e8f0);
 }
 .sidebar-nav-plugin-btn:hover i {
     opacity: 1;
 }
 .sidebar-nav-plugin-btn.active {
-    background: rgba(71, 215, 172, 0.12);
+    background: color-mix(in srgb, var(--c-success) 12%, transparent);
     color: var(--accent-mint, #47d7ac);
 }
 .sidebar-nav-plugin-btn.active i {
@@ -1380,7 +1380,7 @@
 .sidebar-plugin-section .sidebar-cc-divider {
     margin: 4px 2px 2px;
     padding-top: 6px;
-    border-top: 1px solid rgba(162, 191, 233, 0.18);
+    border-top: 1px solid var(--c-border);
     font-size: 9.5px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
