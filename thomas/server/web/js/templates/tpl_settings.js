@@ -110,8 +110,10 @@
 <label for="settingTheme">Theme</label>
 <select id="settingTheme" class="setup-fluid-select">
 <option value="auto">Nebula Core (Standard)</option>
-<option value="light">Light</option>
 <option value="dark">Dark</option>
+<option value="light">Light</option>
+<option value="aurora">Aurora</option>
+<option value="sandstone">Sandstone</option>
 </select>
 </div>
 <div class="form-group">

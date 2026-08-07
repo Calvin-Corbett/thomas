@@ -75,7 +75,8 @@ window.addEventListener('thomas:themechange', () => { try { applyTheme(); } catc
     el._thomasUnifiedBound = true;
     el.addEventListener('change', () => {
         const v = safeString(el.value).toLowerCase();
-        const unified = v === 'light' ? 'light' : (v === 'dark' ? 'dark' : 'nebula');
+        const known = new Set(['nebula', 'light', 'dark', 'aurora', 'sandstone']);
+        const unified = known.has(v) ? v : 'nebula';
         if (window.ThomasWorkspaceShell && window.ThomasWorkspaceShell.applyTheme) {
             window.ThomasWorkspaceShell.applyTheme(unified);
         } else { applyTheme(); }
@@ -1049,7 +1050,7 @@ function applyUiStatePatchEvent(evt) {
     const themeRaw = safeString(settings.theme).toLowerCase();
     if (themeRaw) {
         const themeValue = themeRaw === 'system' ? 'auto' : themeRaw;
-        if (settingTheme && new Set(['auto', 'light', 'dark']).has(themeValue)) {
+        if (settingTheme && new Set(['auto', 'nebula', 'light', 'dark', 'aurora', 'sandstone']).has(themeValue)) {
             settingTheme.value = themeValue;
         }
     }
@@ -1198,7 +1199,17 @@ async function loadSettings() {
         if (settingsSections) settingsSections.scrollTop = 0;
         updateSettingsSectionNavVisibility();
 
-        if (settingTheme) settingTheme.value = safeString(appearance.theme) || 'auto';
+        if (settingTheme) {
+            /* Reflect the LIVE unified theme, not the possibly stale 3-value
+               server preference - a user who picked Aurora in the chat shell
+               should see Aurora here. */
+            const liveTheme = safeString(document.documentElement.dataset.thomasTheme
+                || document.documentElement.dataset.theme).toLowerCase();
+            const known = new Set(['nebula', 'light', 'dark', 'aurora', 'sandstone']);
+            settingTheme.value = known.has(liveTheme)
+                ? (liveTheme === 'nebula' ? 'auto' : liveTheme)
+                : (safeString(appearance.theme) || 'auto');
+        }
         applyTheme(safeString(appearance.theme) || 'auto');
         const autonomyDefaultLevel = safeString(autonomy.default_level) || 'L1';
         if (settingAutonomy) settingAutonomy.value = autonomyDefaultLevel;

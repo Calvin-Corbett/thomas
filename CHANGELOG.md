@@ -7,6 +7,16 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (design unification: the classic theme control speaks all five themes)
+
+- The classic settings Theme dropdown offers Nebula Core, Dark, Light,
+  Aurora, and Sandstone instead of flattening the five-theme system to
+  three values; it reflects the LIVE unified theme when the modal opens (a
+  user who picked Aurora in the chat shell sees Aurora, not "auto") and
+  applies the choice through the unified engine immediately. Verified
+  live: an aurora boot shows aurora selected, and choosing Sandstone
+  flips the page on the spot.
+
 ### Changed (design unification: the chat shell derives its themes from tokens.css)
 
 - js/chat_themes.js no longer hand-mirrors the token values: at load time it
