@@ -7,6 +7,21 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (the Desktop write is judged by the real ladder, and the remedy always arrives)
+
+- Live re-verification caught the remedy fix not firing: the write never
+  reached the file-access ladder — the agent loop's path sanitizer rejected
+  absolute paths outright ("absolute paths are not allowed"), so the remedy
+  producer never ran and the advertised remedy would have been FALSE (raising
+  the level could not pass the sanitizer). Absolute paths in the non-benchmark
+  lane are now judged by `authorize_write` itself: allowed passes through,
+  refused returns the ladder's BLOCKED sentence with the truthful remedy,
+  verbatim. And the chat announcement deterministically appends the remedy to
+  every failed note, so the sentence the user reads carries it even when the
+  model's own words drop it. Tests built from the LIVE recorded shapes
+  (`tests/test_a_desktop_write_refusal_reaches_the_live_chat_reply.py`, 11
+  red-first), 103 neighbors green.
+
 ### Changed (design unification: connect prompt extracted, dead theme relics gone)
 
 - The ChatGPT-connect prompt (OAuth nudge overlay) moved verbatim from

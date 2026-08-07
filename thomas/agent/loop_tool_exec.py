@@ -21,6 +21,7 @@ from thomas.agent.loop_tool_paths import (
 )
 from thomas.benchmarks.benchmark_lane import audit_benchmark_event, get_benchmark_context
 from thomas.core.events import AgentEvent, EventType
+from thomas.core.file_access import is_file_access_refusal
 
 try:
     from thomas.agent.verification import format_verification_feedback, verify_after_tool
@@ -261,9 +262,24 @@ async def execute_tools(
                 and _declares_a_path_parameter(getattr(loop, "tools", None), name),
                 sandbox_root=sandbox_root,
                 benchmark_root=benchmark_root if is_write_tool_call else None,
+                # Absolute WRITE targets are judged by the file-access ladder
+                # (the authority fs.write_file itself consults), so a refused
+                # Desktop write carries the ladder's remedy sentence instead of
+                # a bare "absolute paths are not allowed" (measured live,
+                # exec-c3adbfcfa341 2026-08-07). Benchmark lane and non-write
+                # tools keep the old blanket rejection.
+                file_access=(
+                    getattr(getattr(loop.config, "tools", None), "file_access", None)
+                    if is_write_tool_call and benchmark_root is None
+                    else None
+                ),
             )
             if path_error is not None:
-                msg = f"Invalid file path argument for write tool {name}: {path_error}"
+                msg = (
+                    path_error
+                    if is_file_access_refusal(path_error)
+                    else f"Invalid file path argument for write tool {name}: {path_error}"
+                )
                 if is_write_tool_call:
                     audit_benchmark_event(
                         benchmark_context,

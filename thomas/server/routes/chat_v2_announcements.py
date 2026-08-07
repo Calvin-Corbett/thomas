@@ -36,6 +36,8 @@ from aiohttp import web
 from thomas.agent.response_tone import strip_sandbox_links
 from thomas.chat.conversation import ConversationManager
 from thomas.chat.session_store import SessionMeta, SessionStore
+from thomas.core.file_access import file_access_refusal_remedy
+from thomas.server.chat_delegation_result_policy import result_with_policy_remedy
 from thomas.server.routes.chat_v2_keys import (
     APP_ANNOUNCE_LOCKS,
     APP_SESSION_LLM_CACHE,
@@ -129,6 +131,25 @@ async def _generate_note(llm: Any, system: str, user: str, timeout_s: float = 30
     except (AttributeError, RuntimeError, OSError, TypeError, ValueError) as exc:
         log.debug("announce note generation failed: %s", exc, exc_info=True)
     return "".join(parts).strip()
+
+
+def _failed_note_with_policy_remedy(note: str, summary: str) -> str:
+    """Keep a file-access refusal's remedy in the sentence the user reads.
+
+    Measured live (exec-c3adbfcfa341, 2026-08-07 08:50): a refused Desktop
+    write ended with the reply "I can try again if you provide a permitted
+    folder path" — improvised, with no mention that a user-settable file-access
+    level exists. The note here is model-authored from ``summary[:300]`` and
+    asked to be "one or two short sentences", so a remedy threaded into the
+    stored summary dies twice before the chat bubble: truncated away, then
+    paraphrased away.
+
+    So the remedy the summary carries is guaranteed deterministically: if the
+    note already says it, nothing changes; otherwise it is appended. Additive
+    only — the model's own sentence is kept, and a summary with no remedy
+    changes nothing.
+    """
+    return result_with_policy_remedy(note, [str(summary or "")])
 
 
 async def handle_announce_delegation(request: web.Request) -> web.Response:
@@ -254,6 +275,17 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
             bits.append(f"What you were doing: {task_title[:240]}.")
             if summary and failed:
                 bits.append(f"Failure: {summary[:300]}.")
+                # The 300-char cap can chop the file-access remedy off the end
+                # of the summary, so hand the model the lever explicitly. The
+                # deterministic guarantee lives below (_failed_note_with_policy_remedy);
+                # this only helps the sentence read as one thought.
+                remedy = file_access_refusal_remedy(summary)
+                if remedy:
+                    bits.append(
+                        "The failure was a file-access POLICY refusal and the user "
+                        "controls the setting. Include this exact sentence in your "
+                        f"reply: {remedy}"
+                    )
             # A device-action ask that yields ANY control script (.ps1/.sh/.py/…)
             # is a built bridge — the physical action did NOT happen. Requiring
             # ALL artifacts to be scripts wrongly cleared the flag when the real
@@ -347,6 +379,12 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
                 name.casefold() in note.casefold() for name in artifact_names
             ):
                 note = note.rstrip() + " Ready: " + ", ".join(f"`{n}`" for n in artifact_names) + "."
+        if failed:
+            # A refused write's remedy sentence must survive into the sentence
+            # the user actually reads — the LLM above is asked for "one or two
+            # short sentences" from a truncated summary and reliably drops it
+            # (measured live, exec-c3adbfcfa341 2026-08-07). Additive only.
+            note = _failed_note_with_policy_remedy(note, summary)
         # Drop any broken sandbox/local-path links the model inlined; the real
         # deliverable is attached below as an artifact card. (Same hygiene as the
         # classic AgentLoop and the V2 orchestrator reply paths.)

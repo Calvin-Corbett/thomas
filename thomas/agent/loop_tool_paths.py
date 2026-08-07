@@ -16,6 +16,12 @@ import re
 from pathlib import Path
 from typing import Any
 
+from thomas.core.file_access import authorize_write, is_file_access_refusal
+
+# Same anchor filesystem.WriteFileTool uses for its own ladder check, so the
+# sanitizer and the tool can never disagree about where "the project" is.
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 _WRITE_TOOL_PATH_KEYS = (
     "path",
     "file",
@@ -67,7 +73,26 @@ def _validate_filesystem_path(
     *,
     sandbox_root: Path | None = None,
     benchmark_root: Path | None = None,
+    file_access: int | None = None,
 ) -> tuple[str | None, str | None]:
+    """(validated_path, error) for one path argument.
+
+    ``file_access`` threads the file-access LADDER level in for absolute paths.
+    Measured live (exec-c3adbfcfa341, 2026-08-07 08:50): a chat worker's Desktop
+    write died here as "absolute paths are not allowed" BEFORE ``fs.write_file``
+    could run its own ladder check — even though the tool documents "absolute
+    paths are taken as-is (the ladder ... decides if they're allowed)". The
+    ladder's refusal carries the one sentence the user can act on ("Raise the
+    file-access level ..."), and this guard starved it, so the user was told
+    the command failed with no mention of the setting they control.
+
+    With a level provided, absolute paths are judged by ``authorize_write`` —
+    what the ladder allows passes (the tool re-checks identically), and what it
+    refuses returns the ladder's own refusal text verbatim so the remedy
+    reaches the run. Without a level (``None``) behavior is unchanged: absolute
+    paths are rejected outright, keeping the benchmark lane and legacy callers
+    byte-identical.
+    """
     if path_value is None:
         return None, "missing path value"
 
@@ -91,12 +116,22 @@ def _validate_filesystem_path(
         return None, "path cannot contain control characters"
 
     if os.path.isabs(path_text) or path_text.startswith(("/", "\\")):
-        if benchmark_root is None:
+        if benchmark_root is None and file_access is None:
             return None, "absolute paths are not allowed"
         try:
             resolved = Path(path_text).expanduser().resolve()
         except OSError as exc:
             return None, f"absolute path could not be resolved: {exc}"
+        if benchmark_root is None:
+            allowed, reason = authorize_write(
+                file_access,
+                resolved,
+                workspace_root=sandbox_root,
+                project_root=_PROJECT_ROOT,
+            )
+            if not allowed:
+                return None, reason
+            return str(resolved), None
         try:
             common = Path(os.path.commonpath([str(benchmark_root.resolve()), str(resolved)]))
         except ValueError:
@@ -145,6 +180,7 @@ def _sanitize_write_tool_path(
     require_path: bool = True,
     sandbox_root: Path | None = None,
     benchmark_root: Path | None = None,
+    file_access: int | None = None,
 ) -> tuple[str | None, str | None]:
     if not isinstance(args, dict):
         return None, "tool arguments must be an object"
@@ -163,8 +199,15 @@ def _sanitize_write_tool_path(
             path_value,
             sandbox_root=sandbox_root,
             benchmark_root=benchmark_root,
+            file_access=file_access,
         )
         if error is not None:
+            if is_file_access_refusal(error):
+                # A ladder refusal is a complete sentence for the model AND the
+                # user (it starts with 'BLOCKED:' and may carry the user's
+                # remedy). Wrapping it as "invalid path: ..." buried both the
+                # shape the worker prompt names and the sentence the user needs.
+                return None, error
             return None, f"invalid {key}: {error}"
         args[key] = checked_path
         if validated_path is None:
