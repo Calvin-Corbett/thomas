@@ -7,6 +7,21 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (design unification: companion and frontier converge)
+
+- Companion speaks the product language: the pre-unification blue/green era
+  paint (Website-Lock stage gradient, green active tab, #58a6ff bubbles,
+  hardcoded pink error colors, white-alpha grid) becomes canonical tokens -
+  accent tabs, chat-language bubbles (`--c-user-bg` / `--c-surface-2`),
+  semantic danger colors, theme-hairline grid, `--r-card` radii. The PWA
+  theme-color meta reports the canonical `#070912`, and the model button no
+  longer ships with a literal 'loading...' label.
+- Frontier (/static/frontier.html) links tokens.css and aliases its
+  instrument-sheet vocabulary (--sheet/--card/--ink/--signal/--live) onto
+  the canonical set with a pre-paint unified-theme snippet, so the CAP
+  panels page follows all five themes instead of its own light/dark pair;
+  the graph-paper signature stays, on per-theme hairlines.
+
 ### Fixed (design unification: one theme authority)
 
 - The classic shell ran THREE theme systems at once; now it runs one. The

@@ -4,32 +4,33 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agent Operations — Thomas</title>
+<link rel="stylesheet" href="/static/css/tokens.css">
+<script>
+  /* Apply the unified theme before first paint (mission.html pattern). */
+  (function () {
+    var theme = 'nebula';
+    try { theme = String(localStorage.getItem('thomas_chat_theme') || 'nebula').toLowerCase(); } catch (e) {}
+    var de = document.documentElement;
+    de.dataset.thomasTheme = theme;
+    de.dataset.theme = theme;
+  })();
+</script>
 <style>
+  /* Frontier's instrument-sheet vocabulary, aliased onto the shared token
+     set - the page follows all five themes instead of its own light/dark
+     pair. The graph-paper signature stays. */
   :root {
-    --sheet: #f7f8fa;
-    --grid: #e2e6ee;
-    --card: #ffffff;
-    --ink: #16203a;
-    --ink-soft: #5a6683;
-    --rule: #dbe1ec;
-    --signal: #b5730b;
-    --signal-soft: #fdf3e0;
-    --live: #1d7a5f;
-    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
-    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --sheet: #10141d;
-      --grid: #1a2130;
-      --card: #161c28;
-      --ink: #e6ebf5;
-      --ink-soft: #96a2bd;
-      --rule: #26304180;
-      --signal: #eab04a;
-      --signal-soft: #2a2113;
-      --live: #4cc79b;
-    }
+    --sheet: var(--c-bg);
+    --grid: color-mix(in srgb, var(--c-border) 55%, transparent);
+    --card: var(--c-menu-bg);
+    --ink: var(--c-text);
+    --ink-soft: var(--c-dim);
+    --rule: var(--c-border);
+    --signal: var(--c-warn);
+    --signal-soft: color-mix(in srgb, var(--c-warn) 14%, transparent);
+    --live: var(--c-success);
+    --mono: var(--font-mono);
+    --sans: var(--font-sans);
   }
 
   * { box-sizing: border-box; }
