@@ -12,6 +12,61 @@ from typing import Any
 
 _OPTIONAL_ENRICHMENT_TOOLS = {"create_skill", "skills.create", "skill.create"}
 
+_VERIFIED_PROOF_STATUSES = {"verified", "attached"}
+# The one phrase every render-only label must carry. Existence/render
+# verification never reads the ask (`_hidden_completion_review_passes` opens
+# with `del prompt`), so the words shown to the user must say so.
+SCOPE_NOT_CHECKED_AGAINST_ASK = "not checked against your ask"
+
+
+def verification_scope_label(
+    proof_status: str,
+    *,
+    artifact_names: list[str] | None = None,
+    summary: str = "",
+    runtime_profile: dict[str, Any] | None = None,
+) -> str:
+    """A user-facing label whose claim is scoped to what verification RAN.
+
+    Measured (gauntlet g-fieldgoal, live 2026-08-05): the chat deliverable card
+    read "Done / Verified retro-field-goal.html" while the delivered game was
+    mathematically unwinnable. The verification behind that word checked that
+    files exist, are non-empty, and (for HTML) render — it never read the ask.
+    "Verified", bare, is read by a person as "it works".
+
+    So the label states the checked facts and nothing more:
+
+    * render-only proof on a web file  -> "Done — renders · not checked against
+      your ask"
+    * non-web files                    -> "Done — files delivered · not checked
+      against your ask"
+    * a run whose own summary carries a ⚠ warning must not claim it renders;
+      the label points at the concern instead of hiding it
+    * a Max/exhaustive run really was graded against the ask by fresh automated
+      reviewers, so its label names that review rather than falsely denying it
+
+    This function only WORDS a verdict that was already reached; it can neither
+    pass nor fail a run, and returns "" for anything not proof-verified.
+    """
+
+    status = str(proof_status or "").strip().lower()
+    if status not in _VERIFIED_PROOF_STATUSES:
+        return ""
+    names = [str(name).strip() for name in (artifact_names or []) if str(name).strip()]
+    profile = str((runtime_profile or {}).get("requested_profile") or "").strip().lower()
+    flagged = "⚠" in str(summary or "")
+    if profile in {"max", "exhaustive"}:
+        label = "Done — passed automated quality review against your ask"
+    else:
+        if flagged or not any(name.lower().endswith((".html", ".htm")) for name in names):
+            checked = "files delivered"
+        else:
+            checked = "renders"
+        label = f"Done — {checked} · {SCOPE_NOT_CHECKED_AGAINST_ASK}"
+    if flagged:
+        label += " · a check flagged a concern (see note)"
+    return label
+
 
 def _hidden_completion_review_passes(
     prompt: str,
@@ -87,4 +142,8 @@ def _hidden_completion_review_passes(
     return bool(review.passed)
 
 
-__all__ = ["_hidden_completion_review_passes"]
+__all__ = [
+    "SCOPE_NOT_CHECKED_AGAINST_ASK",
+    "_hidden_completion_review_passes",
+    "verification_scope_label",
+]

@@ -8,6 +8,7 @@ from urllib.parse import quote
 
 from thomas.core import task_bot_runtime
 from thomas.core.action_receipt import delegated_action_receipt
+from thomas.server.chat_delegation_artifact_verification import verification_scope_label
 from thomas.server.chat_delegation_worker_config import TASK_MANAGER_BACKEND
 
 log = logging.getLogger(__name__)
@@ -155,6 +156,22 @@ def _normalize_record(payload: dict[str, Any] | None) -> dict[str, Any]:
         "artifact_name": artifact_name,
         "artifact_kind": artifact_kind,
         "artifacts": artifacts,
+        # Server-authored wording for the deliverable card. The client used to
+        # invent "Verified <name>" from the artifact list, which read as "it
+        # works" when only existence/render checks ran (gauntlet g-fieldgoal:
+        # an unwinnable game shipped under that word). This label scopes its
+        # claim to what verification actually did; the UI should render it
+        # instead of composing its own "Verified" string.
+        "verification_label": (
+            verification_scope_label(
+                proof_status,
+                artifact_names=[str(item.get("name") or "") for item in artifacts],
+                summary=summary,
+                runtime_profile=runtime_profile,
+            )
+            if reviewed_success
+            else ""
+        ),
         "bot_id": bot_id,
         "bot_name": bot_name,
         "runtime_profile": dict(runtime_profile),

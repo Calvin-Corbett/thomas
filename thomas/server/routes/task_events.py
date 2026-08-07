@@ -123,7 +123,10 @@ def _runtime_status_message(row: dict[str, Any]) -> str:
         "claimed": f"Task claimed{owner_text}: {summary}",
         "executing": f"Task running{owner_text}: {summary}",
         "awaiting_proof": f"Task awaiting proof{owner_text}: {summary}",
-        "verified": f"Task verified{owner_text}: {summary}",
+        # "verified" here means the proof's automatic file checks passed — the
+        # ask itself was not separately judged. A bare "Task verified" reads as
+        # "it works" (gauntlet g-fieldgoal), so the words name what ran.
+        "verified": f"Task passed automatic checks{owner_text}: {summary}",
         "completed": f"Task complete{owner_text}: {summary}",
         "blocked": f"Task blocked{owner_text}: {blocker or summary}",
         "failed": f"Task failed{owner_text}: {blocker or summary}",

@@ -7,6 +7,8 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+- (landed) Verified-label scoping -- details in the refusal/Verified entry below.
+
 ### Fixed (a refusal carries its remedy, and Verified means what was checked)
 
 - A file-access POLICY refusal's remedy ("Raise the file-access level (e.g. to

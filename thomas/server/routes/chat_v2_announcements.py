@@ -266,7 +266,12 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
                 and any(_SCRIPT_ARTIFACT_RE.search(name or "") for name in artifact_names)
             )
             if artifact_names and not failed:
-                bits.append("Its complete verified artifact list is: " + ", ".join(artifact_names) + ".")
+                bits.append("The complete list of files it produced is: " + ", ".join(artifact_names) + ".")
+                bits.append(
+                    "Automatic checks confirmed those files exist and open; the content was "
+                    "NOT separately checked against the user's exact request, so do not claim "
+                    "the result was verified or tested beyond that."
+                )
                 bits.append(
                     "Mention every artifact in that list and no other deliverable. "
                     "Never claim a sibling item is missing. Refer to each file by name only — do "
@@ -319,17 +324,25 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
             # Naming the files is still worth having, so it is APPENDED when the note
             # mentions none of them. Adding a fact is not the same as overruling the
             # sentence, and the artifact cards are attached below regardless.
+            # The template must not outclaim the checks. "I have a verified
+            # result ready" shipped an unwinnable game (gauntlet g-fieldgoal):
+            # what actually ran was existence/render verification, which never
+            # reads the ask, so the fallback names exactly that and no more.
             if not note:
                 if failed:
                     note = f"I couldn't finish {task_title}. I can take another run at it."
                 elif artifact_names:
                     note = (
-                        f"I have a verified result ready for {task_title}: "
+                        f"Done — {task_title}: "
                         + ", ".join(f"`{name}`" for name in artifact_names)
-                        + "."
+                        + ". The files exist and open; I didn't separately check them "
+                        "against your exact ask."
                     )
                 else:
-                    note = f"I have a verified result ready for {task_title}."
+                    note = (
+                        f"Done — {task_title}. Automatic checks passed; I didn't "
+                        "separately check the result against your exact ask."
+                    )
             elif artifact_names and not any(
                 name.casefold() in note.casefold() for name in artifact_names
             ):
