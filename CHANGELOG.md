@@ -7,6 +7,19 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (design unification: the light themes reach WCAG AA)
+
+- A computed contrast audit of the token pairs found the light and
+  sandstone themes failing AA for muted text (2.81 / 2.74 - timestamps and
+  metadata below even large-text threshold) and sitting under 4.5 for
+  accent text. Minimal nudges: light muted alpha .46 to .62 (4.52), light
+  accent #2f6bff to #2b62f3 (5.07), sandstone muted alpha .48 to .66
+  (4.61), sandstone accent #c0603c to #b05233 (4.76 both as text on the
+  sheet AND as the ink-on-accent button pair). Accent-soft/line tints
+  follow their new hues. One edit in tokens.css propagated everywhere via
+  the runtime derivation - zero drift warnings; dark-theme values are
+  untouched.
+
 ### Fixed (design unification: keyboard focus is always visible)
 
 - One accent-colored :focus-visible ring in tokens.css covers every page.
