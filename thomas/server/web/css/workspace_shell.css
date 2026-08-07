@@ -119,6 +119,4 @@ html.tcw-embed .module-workspace:is(
   50% { opacity: .55; transform: scale(.92); }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
-}
+/* The global reduced-motion guard lives in tokens.css (linked first everywhere). */

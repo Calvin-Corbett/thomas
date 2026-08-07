@@ -332,3 +332,16 @@ body {
     white-space: nowrap;
     border-width: 0;
 }
+
+/* Reduced motion: honored on every page (chat's living worlds included -
+   their animations are inline styles, so only an !important rule can stop
+   them). Iteration count 1 + near-zero duration freezes each animation at
+   its resolved end state. */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+    }
+}

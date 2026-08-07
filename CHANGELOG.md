@@ -7,6 +7,17 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (design unification: reduced motion is honored everywhere)
+
+- The prefers-reduced-motion guard lived only in workspace_shell.css, which
+  the chat shell never loads - so reduced-motion users still got the full
+  160s nebula drift, twinkling stars, and flying bots. The global guard now
+  lives in tokens.css (linked first on every page; !important is required
+  because the world animations are inline styles) and the duplicate left
+  workspace_shell.css. Measured: with reduced motion requested every
+  animation resolves to .01ms; without it the worlds keep their full
+  durations.
+
 ### Fixed (design unification: the robot messenger follows the theme)
 
 - The robot alert bubble (server-restart notices and other robot-delivered
