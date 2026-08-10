@@ -7,6 +7,21 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (chat: the send path comes back from the dead)
+
+- Every chat message since c4a6cf07 (Aug 7) rendered its user bubble and
+  then went silent: the connect-prompt extraction collaterally deleted the
+  `let _pendingCanvasIntent` declaration while `streamReal` still read it,
+  so the send threw a ReferenceError before the fetch ever fired. Found by
+  an organic UI pass (three unanswered bubbles), fixed by restoring the
+  declaration; the sidebar's own history corroborated the outage window -
+  the newest chats all predated the break.
+- Uncaught page errors now feed the issue ledger the way deliberate
+  friction already did (capped at 5 per page load). The self-review
+  reported a clean 24h window while the primary surface was completely
+  dead - a class of failure that deliberate-friction telemetry can never
+  see, and this closes it.
+
 ### Added (marketplace: Agent Plugins land as the unverified community tier)
 
 - Thomas now imports Agent Plugins (the agent-plugins.org 1.0.0 open

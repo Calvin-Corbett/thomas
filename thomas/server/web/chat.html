@@ -1171,6 +1171,18 @@
     function reportFriction(kind, message) {
       try { fetch('/api/issues', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ surface: 'chat-ui', kind: 'friction', message: kind + ': ' + String(message || '').slice(0, 200), context: { session: state.sessionId || '' } }) }); } catch (e) {}
     }
+    // Uncaught page errors feed the same ledger: a broken send path took the
+    // whole surface down for days while the self-review saw nothing, because
+    // only deliberate friction was reported. Capped so a render-loop error
+    // cannot flood the ledger.
+    let _jsErrorsReported = 0;
+    function reportPageError(message) {
+      if (_jsErrorsReported >= 5) return;
+      _jsErrorsReported += 1;
+      reportFriction('js_error', message);
+    }
+    window.addEventListener('error', (e) => reportPageError(e.message || 'unknown error'));
+    window.addEventListener('unhandledrejection', (e) => reportPageError(String((e.reason && e.reason.message) || e.reason || 'unhandled rejection')));
     async function editMessageFrom(idx) {
       if (state.streaming) return;
       const m = state.messages[idx];
@@ -1836,6 +1848,7 @@
     // ChatGPT-connect prompt: lives in js/chat_connect_prompt.js; page state
     // (active profile, loaded profiles) flows in through the factory.
     const { maybePromptChatGPTConnection } = window.ThomasChatConnectPrompt.create({ getProfile: () => state.profile, getProfiles: () => profilesData });
+    let _pendingCanvasIntent = false; // set on send(): does THIS turn want a renderable result?
     async function streamReal(text) {
       const base = { role: 'assistant', text: '', model: state.modelLabel || '', streaming: true, activity: { thinking: '', steps: [], expanded: false, artifact: null, wantsCanvas: _pendingCanvasIntent } };
       _pendingCanvasIntent = false;
