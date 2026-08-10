@@ -7,6 +7,18 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Added (app: Thomas opens as himself, not as a browser tab)
+
+- `scripts/thomas_app.py` installs Thomas as a real desktop app: a Desktop
+  and Start Menu shortcut wearing his own face that makes sure the engine is
+  up (starting it hidden if it is not) and opens Thomas in an app-style
+  window — no tabs, no address bar, no search engine, no other site's
+  chrome. The window uses its OWN browser profile directory so it carries
+  Thomas's taskbar identity instead of docking under the everyday browser.
+  `scripts/make_thomas_icon.py` draws the icon from the brand mark the app
+  itself wears — the two eyes in an accent block — at every icon size, so
+  the shortcut and the UI agree.
+
 ### Removed (web: the dead module tree and its unreferenced static pages)
 
 - 134 files under `js/modules/` and `js/src/runtime_modules/` plus 30
