@@ -244,23 +244,21 @@
    run summary used to be cut mid-sentence ("so this task is unfinish") with the
    drawer sitting on top of it.
 
-   The composer mirrors this exactly -- see the reading-column block in
-   unified_code_mode.css, which reads the same two custom properties.
+   So the drawer no longer touches the LAYOUT at all. Shrinking the layout is
+   what re-centres the column, and re-centring is the slide. The clearance is a
+   cap on the reading column's own width instead -- `--tc-code-col-reserve` in
+   unified_code_mode.css -- so the column keeps its left edge and simply stops
+   at the drawer. Measured after, left edge with the drawer open vs closed:
 
-   Above 720px only: below that breakpoint the drawer is deliberately
-   `min(420px, 94vw)` with its resize handle hidden -- a near-full-width overlay,
-   where reserving that much would leave the transcript no room at all. */
-@media (min-width: 721px) {
-  .tc-code-panel.is-drawer-open .tc-code-layout {
-    padding-inline: min(var(--tc-code-drawer-width, 360px), 92vw);
-  }
-  /* The viewer is the one panel that IS wide enough to need the room, so it
-     wins outright: it takes the right side and gives the left back. Source
-     order matters -- this must stay after the drawer rule above. */
-  .tc-code-panel.is-viewer-open.is-drawer-open .tc-code-layout {
-    padding-inline: 0 var(--tc-code-viewer-width, min(760px, 62vw));
-  }
-}
+     1920  716 / 716   (768px wide either way -- nothing moves at all)
+     1440  476 / 476   (768 -> 660, stops 24px short of the drawer)
+     1100  306 / 306   (768 -> 490)
+      900  304 / 304   (572 -> 292)
+
+   Symmetric padding was tried first and is the wrong tool: it holds the centre
+   still but pays the reserve twice, and at 900px it left a 12px column.
+
+   The composer follows the same two properties, so the two cannot disagree. */
 /* Full-bleed across Thomas, for a page that wants the whole screen. */
 .tc-code-viewer.is-full { width: 100%; border-left: 0; }
 @keyframes tc-code-viewer-in { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
@@ -405,7 +403,16 @@
    768px column in the middle of the page. The transcript now spans the full
    width and its children center themselves. */
 .tc-code-transcript { width: 100% !important; }
-.tc-code-transcript > * { width: min(100%, 768px); margin-left: auto !important; margin-right: auto !important; }
+/* Geometry from the shared reading-column block in unified_code_mode.css --
+   the composer, which is not in this subtree, computes its box from the same
+   three properties. With no side panel open `--tc-code-col-inset` IS the
+   centring this rule used to do by hand; with one open it is what stops the
+   column sliding. */
+.tc-code-transcript > * {
+  width: var(--tc-code-col-width, min(100%, 768px));
+  margin-left: var(--tc-code-col-inset, auto) !important;
+  margin-right: auto !important;
+}
 .tc-code-transcript::-webkit-scrollbar { width: 9px; }
 .tc-code-transcript::-webkit-scrollbar-track { background: transparent; }
 .tc-code-transcript::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .12); border-radius: 999px; }
@@ -590,3 +597,10 @@
 .tc-code-rec.is-primary:hover { filter: brightness(1.08); }
 .tc-code-rec.is-type { background: transparent; border-style: dashed; color: var(--c-dim); font-weight: 600; }
 .tc-code-rec.is-type:hover { color: var(--c-text); }
+
+/* An error the run recovered from is a failed attempt, not an alarm. */
+.tc-code-attempt-note {
+  margin: 10px 0 2px;
+  font-size: 12px;
+  color: var(--c-muted);
+}

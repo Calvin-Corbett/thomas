@@ -288,7 +288,20 @@ html, body { margin: 0; padding: 0; height: 100%; }
 #tc-thread { padding: 28px 0 48px; }
 @media (max-width: 1080px) {
   /* Under the rail's own width the centred boxes would touch the column
-     edges, so both take the SAME inset and still agree with each other. */
+     edges, so both take the SAME inset and still agree with each other.
+     NOT FIXED, MEASURED: this branch is the one place the two can still part.
+     Above 1080 the rail's left edge is a viewport calculation, so the scroll
+     box's width cannot move it and the edges match to 0.00px. Here the rail
+     falls back to auto margins, so the thread centres inside the SCROLL box
+     and the composer inside the full column -- identical while scrollbars are
+     overlays (measured on this machine: 0.00 / 0.00 at 1000x380 with the
+     thread scrolling), but on a browser with classic space-taking scrollbars
+     the composer's right edge sits one scrollbar-width outside the messages
+     (simulated: 0.00 left, -15px right). `scrollbar-gutter: stable` was tried
+     and is a bad trade -- it MAKES a gutter where this machine has none, so a
+     case that measured exact becomes 10px out. The honest fix is to feed the
+     measured gutter to the composer as a custom property, which is a script,
+     not a rule. */
   #tc-thread, #tc-composer-rail { padding-left: 20px; padding-right: 20px; }
 }
 

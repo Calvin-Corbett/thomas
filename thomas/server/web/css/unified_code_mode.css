@@ -366,46 +366,80 @@
    number moves them together or neither of them moves.
 
    Scoped to `[data-surface-mode="code"]` throughout -- Chat and Work keep
-   `.tc-rail`'s viewport anchor, which is right for them. */
-#tc-shell[data-surface-mode="code"] { --tc-code-gutter: 24px; }
+   `.tc-rail`'s viewport anchor, which is right for them.
+
+   THREE properties, and every box in Code is built from them:
+
+     --tc-code-col-inset    how far in from the surface edge the column starts.
+                            With nothing open this is plain centring; the point
+                            is that it does not depend on what is open, so a
+                            panel appearing cannot move the left edge.
+     --tc-code-col-reserve  room a side panel needs on the RIGHT that the
+                            container has not already given up.
+     --tc-code-col-width    what is left, capped at the ideal reading measure.
+
+   `100%` inside them resolves against whichever element uses them, which is
+   the whole trick: the transcript and the composer sit in different subtrees,
+   and this is what makes "the same box" a single expression instead of two
+   that have to be kept in step by hand. It only holds because both containers
+   are the surface box with the same side padding -- hence --tc-code-gutter,
+   forced onto the composer's wrapper below. */
+#tc-shell[data-surface-mode="code"] {
+  --tc-code-gutter: 24px;
+  --tc-code-col-ideal: 768px;
+  --tc-code-col-reserve: 0px;
+  --tc-code-col-inset: max(0px, calc((100% - var(--tc-code-col-ideal)) / 2));
+  --tc-code-col-width: min(
+    var(--tc-code-col-ideal),
+    calc(100% - var(--tc-code-col-inset) - var(--tc-code-col-reserve))
+  );
+}
 
 /* The composer is the shell's, not the panel's: it sits below the mode surface
    and no class on `.tc-code-panel` can reach it. `[data-code-side]` on the
    shell is the whole channel, written by unified_code_mode.js on every render.
-   Matching the transcript's gutter is what puts the two centres on the same
-   pixel; matching the reserve is what keeps them there. */
+
+   `!important` because the wrapper carries `padding: 6px 18px 18px` INLINE,
+   which outranks any stylesheet rule without it -- the first attempt at this
+   set 24px here, changed nothing, and the composer stayed 18px out. Only the
+   sides are overridden, so the inline top and bottom survive. */
 #tc-shell[data-surface-mode="code"] [data-ui-id="chat.composer"] {
-  padding-left: var(--tc-code-gutter);
-  padding-right: var(--tc-code-gutter);
+  padding-left: var(--tc-code-gutter) !important;
+  padding-right: var(--tc-code-gutter) !important;
 }
 
 /* `.tc-rail` anchors the composer to a VIEWPORT position with `!important` --
    deliberate in Chat, where the Canvas shrinks the column from the right. In
-   Code the column is centred in the mode surface instead, so the anchor has to
-   be overridden at the same weight or the composer keeps sitting 18px to the
-   right of the conversation directly above it. */
+   Code the column takes its place from the mode surface instead, so the anchor
+   has to be overridden at the same weight or the composer keeps sitting 18px
+   to the right of the conversation directly above it. */
 #tc-shell[data-surface-mode="code"] [data-ui-id="chat.composer"] > .tc-rail {
-  margin-left: auto !important;
+  width: var(--tc-code-col-width);
+  margin-left: var(--tc-code-col-inset) !important;
   margin-right: auto !important;
 }
 
+/* Activity: the drawer overlays, so nothing gives up container width and the
+   column keeps its inset. Only its WIDTH is capped, and only far enough to
+   stop at the drawer -- at 1920 the cap is never reached, which is the owner's
+   "that menu isn't wide enough to need that" made literal.
+   Above 720px only: below that the drawer is `min(420px, 94vw)` with its
+   resize handle hidden, a near-full-width overlay, and reserving that much
+   would leave no column at all. */
 @media (min-width: 721px) {
-  /* Activity: symmetric, so the column's centre cannot move. Mirrors
-     `.is-drawer-open .tc-code-layout` in unified_code_activity.css, which
-     carries the measurements. Below 721px neither reserves anything -- the
-     drawer is a near-full-width overlay there. */
-  #tc-shell[data-surface-mode="code"][data-code-side="activity"] [data-ui-id="chat.composer"] {
-    padding-left: calc(var(--tc-code-gutter) + min(var(--tc-code-drawer-width, 360px), 92vw));
-    padding-right: calc(var(--tc-code-gutter) + min(var(--tc-code-drawer-width, 360px), 92vw));
+  #tc-shell[data-surface-mode="code"][data-code-side="activity"] {
+    --tc-code-col-reserve: calc(var(--tc-code-gutter) + min(var(--tc-code-drawer-width, 360px), 92vw));
   }
 }
 
-/* The viewer IS wide enough to need the room, so the column moves and narrows
-   -- and the composer does exactly the same thing, at every width. No media
-   query: `--tc-code-viewer-width` already floors itself so the reading column
-   survives on a narrow window. */
+/* The viewer IS wide enough to need the room. It takes its share off the
+   container instead -- `padding-right` on the layout for the transcript, the
+   same padding on the wrapper for the composer -- so the column re-centres in
+   what is left and keeps a readable measure rather than being squeezed against
+   an anchor it no longer has room for. The reserve above stays at 0 here or
+   the space would be charged twice. */
 #tc-shell[data-surface-mode="code"][data-code-side="viewer"] [data-ui-id="chat.composer"] {
-  padding-right: calc(var(--tc-code-gutter) + var(--tc-code-viewer-width, min(760px, 62vw)));
+  padding-right: calc(var(--tc-code-gutter) + var(--tc-code-viewer-width, min(760px, 62vw))) !important;
 }
 
 @media (max-width: 720px) {

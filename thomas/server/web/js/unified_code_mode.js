@@ -498,6 +498,30 @@
   }
 
 
+  // The composer is NOT inside the Code panel. It is the shell's one composer,
+  // parked below the mode surface, so no class on `.tc-code-panel` can reach
+  // it -- which is exactly why it stood still while the Activity drawer slid
+  // the conversation out from under it (measured: chat 716..1484 -> 576..1344,
+  // composer 734..1502 both times).
+  //
+  // These two values on the shell are the entire channel between the panel and
+  // the composer: which side panel is reserving room, and how wide the drawer
+  // currently is. unified_code_mode.css reads both and gives the composer the
+  // same box as the transcript.
+  //
+  // The drawer width lives HERE and nowhere else. It used to be written into
+  // the panel's inline style, which the composer cannot see; the panel inherits
+  // it from the shell instead, so there is one writer and no second copy to
+  // drift.
+  function publishColumnState(viewerReserving) {
+    const shell = document.getElementById('tc-shell');
+    if (!shell) return;
+    const side = viewerReserving ? 'viewer' : (state.drawerOpen ? 'activity' : '');
+    if (side) shell.dataset.codeSide = side;
+    else delete shell.dataset.codeSide;
+    shell.style.setProperty('--tc-code-drawer-width', `${clampDrawerWidth(state.drawerWidth)}px`);
+  }
+
   function render() {
     if (!adapterActive) return;
     const root = surface(); if (!root) return;
@@ -673,7 +697,8 @@
     // layout nobody can see.
     const viewerOpen = Boolean(state.viewer && state.viewer.file);
     const viewerFull = Boolean(state.viewer && state.viewer.full);
-    root.innerHTML = `<div class="tc-code-panel${state.drawerOpen ? ' is-drawer-open' : ''}${viewerOpen && !viewerFull ? ' is-viewer-open' : ''}" style="--tc-code-drawer-width:${clampDrawerWidth(state.drawerWidth)}px">
+    publishColumnState(viewerOpen && !viewerFull);
+    root.innerHTML = `<div class="tc-code-panel${state.drawerOpen ? ' is-drawer-open' : ''}${viewerOpen && !viewerFull ? ' is-viewer-open' : ''}">
       <header class="tc-code-context" data-ui-id="code.context" data-ui-label="Code activity bar" data-ui-policy="move"><button data-code-results-jump type="button" aria-expanded="${state.drawerOpen ? 'true' : 'false'}"><i class="ph ph-sidebar-simple"></i> Activity <small>${statusLabels[state.runStatus] || 'Ready'}</small>${state.running && state.runStartedAt ? '<small class="tc-code-head-elapsed" data-code-elapsed-top>0s</small>' : ''}${hasResults ? '<span class="tc-code-activity-count" aria-hidden="true"></span>' : ''}</button></header>
       <button class="tc-code-jump-badge" data-code-jump-bottom type="button" hidden><i class="ph ph-arrow-down" aria-hidden="true"></i> Scroll to the bottom</button>
       <div class="tc-code-layout">
@@ -686,10 +711,12 @@
     root.querySelector('[data-code-results-jump]')?.addEventListener('click', () => { state.drawerOpen = !state.drawerOpen; render(); });
     root.querySelector('[data-code-drawer-close]')?.addEventListener('click', () => { state.drawerOpen = false; render(); });
     const resizeHandle = root.querySelector('.tc-code-drawer-resize');
-    const panel = root.querySelector('.tc-code-panel');
     const setDrawerWidth = width => {
       state.drawerWidth = clampDrawerWidth(width);
-      panel?.style.setProperty('--tc-code-drawer-width', `${state.drawerWidth}px`);
+      // Onto the SHELL, which the panel and the composer both inherit from, so
+      // a drag resizes the drawer and re-reserves the composer's room in the
+      // same frame. Writing it to the panel only moved the drawer.
+      publishColumnState(Boolean(state.viewer && state.viewer.file && !state.viewer.full));
       resizeHandle?.setAttribute('aria-valuenow', String(state.drawerWidth));
     };
     const saveDrawerWidth = () => {
@@ -1579,6 +1606,14 @@
 
   async function leave() {
     adapterActive = false;
+    // Hand the composer back to Chat's own rail. The CSS is scoped to
+    // `[data-surface-mode="code"]` so a leftover flag would be inert, but a
+    // stale attribute is a lie about what is on screen.
+    const shell = document.getElementById('tc-shell');
+    if (shell) {
+      delete shell.dataset.codeSide;
+      shell.style.removeProperty('--tc-code-drawer-width');
+    }
     codeProjects().updateProjectButton();
   }
 

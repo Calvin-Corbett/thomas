@@ -7,6 +7,16 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (code: the composer tracks the conversation through every panel)
+
+- Follow-up polish on the mode surfaces: the composer now resizes with the
+  conversation column in every panel state rather than keeping its own
+  width, and the Activity drawer's own chrome no longer nudges the thread.
+  Verified at 1920px across all three modes - Chat thread and composer both
+  x=716/768, Code content column unmoved at x=716 with the drawer open and
+  closed, Work rendering, zero page errors.
+
+
 ### Changed (chat: the title stops eating the room, and the columns line up)
 
 - The per-chat title was a full-width bubble spending vertical space on one

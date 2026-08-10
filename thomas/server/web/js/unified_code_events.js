@@ -628,6 +628,15 @@
       }
       const interleaved = interleavedActivityHtml(activityEvents, true);
       const resultCount = (turn.artifacts || []).filter(artifact => !isInternalResultPath(artifact.file)).length;
+      // An error the run RECOVERED from is a failed attempt, not an issue.
+      // The old collapsed activity block carried that framing; the inline feed
+      // shows the red rows on their own, so without this line a successful run
+      // reads as alarming. Same wording, same honesty rule (guarded by
+      // test_a_failed_run_still_shows_the_answer_it_produced).
+      const technicalEvents = activityEvents.filter(isTechnicalEvent);
+      const recoveredNote = technicalEvents.some(event => eventFailed(event))
+        ? `<div class="tc-code-attempt-note">${esc(technicalSummary(technicalEvents, turn.ok === true))}</div>`
+        : '';
       // The turn ends in a CLOSING SECTION the owner can feel (2026-08-10):
       // activity first, then the verdict and the change list, then a labelled
       // horizontal rule — "this is the end of the reply" — and below it only
@@ -638,7 +647,7 @@
         : '';
       const closingLabel = turn.ok ? 'Work completed' : (wasStopped ? 'Stopped here' : 'Run ended');
       const closing = `<div class="tc-code-closing"><span class="tc-code-closing-label">${esc(closingLabel)}</span></div>`;
-      return `<article class="tc-code-turn is-agent"><div class="tc-code-message-head"><span class="tc-code-avatar is-anvil" aria-hidden="true">${window.ThomasIcons ? window.ThomasIcons.face('build', 15) : ANVIL_SVG}</span><strong>Thomas</strong><small>${esc(turn.model || 'Code')}</small><button class="tc-code-copy" data-code-copy-reply type="button" aria-label="Copy Thomas reply"><i class="ph ph-copy"></i></button></div><div class="tc-code-turn-body">${interleaved}${codeResults().runReportHtml(turn.report)}${changesBlock}${closing}${replySection}${codeResults().artifactCardsHtml(turn, turn.run_id || turn.ts || '0')}</div></article>`;
+      return `<article class="tc-code-turn is-agent"><div class="tc-code-message-head"><span class="tc-code-avatar is-anvil" aria-hidden="true">${window.ThomasIcons ? window.ThomasIcons.face('build', 15) : ANVIL_SVG}</span><strong>Thomas</strong><small>${esc(turn.model || 'Code')}</small><button class="tc-code-copy" data-code-copy-reply type="button" aria-label="Copy Thomas reply"><i class="ph ph-copy"></i></button></div><div class="tc-code-turn-body">${interleaved}${recoveredNote}${codeResults().runReportHtml(turn.report)}${changesBlock}${closing}${replySection}${codeResults().artifactCardsHtml(turn, turn.run_id || turn.ts || '0')}</div></article>`;
     }
 
     // Thomas writes markdown in his Code replies -- 16 of 17 real replies carry it

@@ -1297,7 +1297,15 @@
       const open = state.surfaceMode === 'chat' && state.activeChat
         ? chatList.find(c => c.id === state.activeChat)
         : null;
-      const name = open ? String(open.title || '').trim() : '';
+      // The sidebar's own name wins. A chat's readable name (a rename the owner
+      // typed, or the short one the title service wrote back) lives in the
+      // history overlay, NOT in chatList — reading chatList alone would put the
+      // raw first prompt in the top bar while the row beside it said something
+      // else, and two names for one chat is worse than none.
+      const named = open && window.ThomasSidebarHistory && window.ThomasSidebarHistory.displayTitle
+        ? String(window.ThomasSidebarHistory.displayTitle(open.id) || '').trim()
+        : '';
+      const name = named || (open ? String(open.title || '').trim() : '');
       chatTitleEl.textContent = name;
       // The full name on hover: the element ellipsises, so the tooltip is the
       // only place a truncated name stays readable.
