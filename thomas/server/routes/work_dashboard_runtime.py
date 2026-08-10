@@ -13,8 +13,14 @@ from __future__ import annotations
 import json
 import logging
 import re
+import sqlite3
 from pathlib import Path
 from typing import Any
+
+# A work_store lookup that fails because the job is absent or unreadable.
+# The store arrives injected (typed Any), so its concrete error class cannot
+# be named here; these are the shapes "not found / not readable" takes.
+_WORK_STORE_FAULTS = (LookupError, ValueError, TypeError, AttributeError, OSError, sqlite3.Error)
 
 log = logging.getLogger(__name__)
 
@@ -411,10 +417,70 @@ def register_work_dashboard_routes(
         automation, mission = await deploy_automation(app_id, job_id, automation_id, workflow=workflow)
         return ok(status=202, action=action, workflow=workflow, automation=automation, mission=mission)
 
+    async def ui_redesign(request: web.Request) -> web.Response:
+        """Change only what the user pointed at — see ui_redesign_runtime."""
+        guard(request)
+        from thomas.server.routes.ui_redesign_runtime import redesign_from_selection
+
+        try:
+            body = await request.json()
+        except (ValueError, TypeError):
+            body = {}
+        body = body if isinstance(body, dict) else {}
+        context = body.get("context") if isinstance(body.get("context"), dict) else {}
+        app_id = str(context.get("app_id") or "").strip()
+        job_id = str(context.get("job_id") or "").strip()
+        job_context: dict[str, Any] | None = None
+        if app_id and job_id:
+            # A missing job is not fatal: layout edits still work everywhere,
+            # and the spec channel reports itself unavailable instead.
+            try:
+                job_context = {
+                    "job": work_store.get_job(app_id, job_id),
+                    "workflows": work_store.list_workflows(app_id, job_id),
+                }
+            except _WORK_STORE_FAULTS as exc:
+                # The store is injected, so its concrete error type is not
+                # knowable here — but "this job is not there / not readable"
+                # is exactly this set. Anything else is a bug and must
+                # surface rather than be logged as a missing job.
+                log.info("UI redesign: no job context for %s/%s: %s", app_id, job_id, exc)
+                job_context = None
+        profile = _resolve_profile(str(body.get("profile") or "").strip())
+        plan, error = await redesign_from_selection(root, profile, body, job_context=job_context)
+        if plan is None:
+            status = 503 if "no model" in error else 400 if "nothing was selected" in error or "no instruction" in error else 502
+            return web.json_response({"ok": False, "error": error, "code": "redesign_failed"}, status=status)
+        spec = (plan.get("dashboard") or {}).get("dashboard")
+        # Persist ONLY when the diff says something actually moved. Writing an
+        # identical spec back would let "changed 0" render as a save.
+        if spec and (plan.get("dashboard") or {}).get("changed"):
+            saved = work_store.update_job_dashboard(app_id, job_id, spec)
+            plan["dashboard"]["dashboard"] = saved
+        # The brief for going deeper. The BROWSER opens the Code thread with it,
+        # because it already holds the session — a self-directed HTTP call from
+        # here would mean forwarding cookies to ourselves to reach a handler in
+        # another module's closure.
+        from thomas.server.routes.ui_redesign_runtime import code_thread_prompt
+
+        instruction = str(plan.get("instruction") or "").strip()
+        targets = list(plan.get("targets") or [])
+        return ok(
+            layout=plan.get("layout") or [],
+            dashboard=plan.get("dashboard") or {"changed": 0, "applied": []},
+            unsupported=plan.get("unsupported") or [],
+            code_thread={
+                "title": f"Redesign: {instruction}"[:70],
+                "project_root": str(root),
+                "prompt": code_thread_prompt(instruction, targets, str(body.get("workspace") or "chat")),
+            } if instruction and targets else None,
+        )
+
     app.router.add_post(
         "/api/work/apps/{app_id}/jobs/{job_id}/dashboard/design",
         expected_errors(dashboard_design),
     )
+    app.router.add_post("/api/ui/redesign", expected_errors(ui_redesign))
     app.router.add_post(
         "/api/work/apps/{app_id}/jobs/{job_id}/dashboard/actions/{action_id}/run",
         expected_errors(dashboard_action_run),

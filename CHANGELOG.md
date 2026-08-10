@@ -7,6 +7,15 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (work + chat: one composer, and threads that name themselves)
+
+- Work mode converges on a single composer instead of a second input with
+  its own rules, the work dashboard runtime backs it, and the mode shell
+  routes both. `routes/chat_titles_runtime.py` gives a thread a real title
+  from its own content rather than a truncated first message.
+  `task_bot_records.py` / `task_bot_states.py` split the task-bot's records
+  and state machine out of the runtime so each has one job.
+
 ### Added (code: Thomas playtests what he builds, and you watch him do it)
 
 - `thomas/server/game_playtest.py` is a real perception→decision→action

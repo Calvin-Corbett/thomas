@@ -23,6 +23,10 @@
       saved: clone(slot.saved || {}), draft: clone(slot.draft || slot.saved || {}),
       history: Array.isArray(slot.history) ? clone(slot.history).slice(-20) : [],
       future: Array.isArray(slot.future) ? clone(slot.future).slice(-20) : [],
+      // Carried through deliberately: this list is rebuilt from a fixed set of
+      // fields, and leaving `versions` out silently discarded the per-element
+      // undo stack on the very next ensureSlot call.
+      versions: slot.versions && typeof slot.versions === "object" ? clone(slot.versions) : {},
       dirty: Boolean(slot.dirty), updatedAt: String(slot.updatedAt || "")
     };
   }
@@ -151,13 +155,116 @@
       const rect = node.getBoundingClientRect(); authoredSizes.set(node, { width: rect.width, height: rect.height });
     }
   }
+  // Visual properties a Redesign instruction is allowed to set. Geometry
+  // stays in x/y/width/height; this covers "make it blue", "bigger text",
+  // "less padding". Anything outside the list is dropped rather than
+  // guessed at, so a bad model answer can't smuggle in arbitrary CSS.
+  const STYLE_PROPS = new Set([
+    "color", "background", "backgroundColor", "borderColor", "borderRadius", "borderWidth", "borderStyle",
+    "fontSize", "fontWeight", "fontStyle", "letterSpacing", "lineHeight", "textAlign", "textTransform",
+    "padding", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+    "margin", "marginTop", "marginRight", "marginBottom", "marginLeft",
+    "gap", "opacity", "boxShadow", "outline", "flexDirection", "justifyContent", "alignItems",
+    "gridTemplateColumns", "order", "textDecoration"
+  ]);
+  function safeStyleValue(value) {
+    const text = String(value == null ? "" : value).trim();
+    if (!text || text.length > 160) return "";
+    // No url()/expression()/@import, and no escaping the declaration.
+    if (/url\s*\(|expression\s*\(|@import|[;{}<>]/i.test(text)) return "";
+    return text;
+  }
+  function cleanStyle(value) {
+    const out = {};
+    Object.entries(value && typeof value === "object" ? value : {}).forEach(([key, raw]) => {
+      const prop = String(key).replace(/-([a-z])/g, (_, char) => char.toUpperCase());
+      if (!STYLE_PROPS.has(prop)) return;
+      const safe = safeStyleValue(raw);
+      if (safe) out[prop] = safe;
+    });
+    return out;
+  }
+  // Undoing a style must RESTORE what the author wrote, not blank it out.
+  // chat.html styles most of its shell inline, so clearing font-size on the
+  // welcome heading deleted its authored clamp() and shrank it permanently.
+  // Remember each property's prior inline value the first time we touch it.
+  //
+  // Redesign styles are written with !important. An explicit "make this
+  // square" from the user has to beat the stylesheet, and parts of the shell
+  // (the .hv-* pills) carry !important rules that otherwise silently win over
+  // an inline style — the change would land in the style attribute and never
+  // show up on screen.
+  const styleBases = new WeakMap();
+  function kebab(prop) { return String(prop).replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`); }
+  function rememberStyle(node, prop) {
+    let base = styleBases.get(node);
+    if (!base) { base = {}; styleBases.set(node, base); }
+    const name = kebab(prop);
+    if (!Object.prototype.hasOwnProperty.call(base, prop)) {
+      base[prop] = { value: node.style.getPropertyValue(name) || "", priority: node.style.getPropertyPriority(name) || "" };
+    }
+    return base;
+  }
+  function writeStyle(node, prop, value) {
+    rememberStyle(node, prop);
+    node.style.setProperty(kebab(prop), value, "important");
+  }
+  function restoreStyle(node, prop) {
+    const base = styleBases.get(node); const name = kebab(prop);
+    const saved = base && Object.prototype.hasOwnProperty.call(base, prop) ? base[prop] : null;
+    node.style.removeProperty(name);
+    if (saved && saved.value) node.style.setProperty(name, saved.value, saved.priority);
+  }
+  // Icons are a class swap, not a style: chat_shell.css maps `.ph-<name>` to a
+  // literal glyph. The original name is parked on the node so a reset puts the
+  // authored icon back rather than leaving whatever was tried last.
+  function currentIcon(node) {
+    const match = String(node.className || "").match(/\bph-[a-z0-9-]+\b/);
+    return match ? match[0] : "";
+  }
+  function applyIcon(node, item) {
+    const wanted = String(item.icon || "").trim();
+    if (!/^ph-[a-z0-9-]+$/.test(wanted)) { clearIcon(node); return; }
+    const present = currentIcon(node);
+    if (!node.dataset.uiIconBase) node.dataset.uiIconBase = present || "(none)";
+    if (present === wanted) return;
+    if (present) node.classList.remove(present);
+    node.classList.add(wanted);
+  }
+  function clearIcon(node) {
+    const base = String(node.dataset.uiIconBase || "");
+    if (!base) return;
+    const present = currentIcon(node);
+    if (present) node.classList.remove(present);
+    if (base !== "(none)") node.classList.add(base);
+    delete node.dataset.uiIconBase;
+  }
+  function clearStyle(node) {
+    String(node.dataset.uiStyled || "").split(",").filter(Boolean).forEach((prop) => restoreStyle(node, prop));
+    delete node.dataset.uiStyled;
+    if (node.dataset.uiHidden) { restoreStyle(node, "display"); delete node.dataset.uiHidden; }
+    clearIcon(node);
+  }
+  function applyStyle(node, item) {
+    const style = cleanStyle(item.style);
+    const keys = Object.keys(style);
+    const previous = String(node.dataset.uiStyled || "").split(",").filter(Boolean);
+    previous.filter((prop) => !style[prop]).forEach((prop) => restoreStyle(node, prop));
+    keys.forEach((prop) => writeStyle(node, prop, style[prop]));
+    if (keys.length) node.dataset.uiStyled = keys.join(","); else delete node.dataset.uiStyled;
+    if (item.hidden === true) { writeStyle(node, "display", "none"); node.dataset.uiHidden = "true"; }
+    else if (node.dataset.uiHidden) { restoreStyle(node, "display"); delete node.dataset.uiHidden; }
+    if (item.icon) applyIcon(node, item); else clearIcon(node);
+  }
   function applyNode(node, map) {
     rememberBase(node);
     const id = identity(node); const item = id && (map || currentMap())[id]; const base = bases.get(node);
     if (!item) {
       node.style.translate = base.translate; node.style.width = base.width; node.style.height = base.height; node.style.zIndex = base.zIndex; node.style.position = base.position;
+      clearStyle(node);
       delete node.dataset.uiLayoutApplied; delete node.dataset.uiLocked; return;
     }
+    applyStyle(node, item);
     node.style.translate = `${Number(item.x) || 0}px ${Number(item.y) || 0}px`;
     node.style.width = Number.isFinite(item.width) ? `${item.width}px` : base.width;
     node.style.height = Number.isFinite(item.height) ? `${item.height}px` : base.height;
@@ -166,10 +273,83 @@
     node.dataset.uiLayoutApplied = "true";
     if (item.locked) node.dataset.uiLocked = "true"; else delete node.dataset.uiLocked;
   }
+  // A minted address is "<region id>~~<path inside that region>", produced by
+  // the Redesign selector for an element that has no data-ui-id of its own.
+  // It lets any element on screen carry a saved style without borrowing its
+  // container's identity — and it survives re-renders, which Work does
+  // constantly, because the path is resolved fresh on every apply.
+  const SYNTH = "~~";
+  function resolveSynthetic(key, scope) {
+    const cut = key.indexOf(SYNTH);
+    if (cut < 0) return null;
+    const ownerId = key.slice(0, cut), path = key.slice(cut + SYNTH.length);
+    if (!ownerId || !path) return null;
+    const owner = Array.from((scope || document).querySelectorAll("[data-ui-id]")).find((node) => identity(node) === ownerId);
+    if (!owner) return null;
+    try { return owner.querySelector(path); } catch (_) { return null; }
+  }
+  function applySyntheticNode(node, item, key) {
+    rememberBase(node);
+    applyStyle(node, item);
+    if (Number.isFinite(item.width)) node.style.width = `${item.width}px`;
+    if (Number.isFinite(item.height)) node.style.height = `${item.height}px`;
+    node.dataset.uiSynth = key;
+  }
   function applyAll(root) {
     const scope = root || document; const map = currentMap();
     if (scope instanceof Element && scope.matches("[data-ui-id]")) applyNode(scope, map);
     scope.querySelectorAll("[data-ui-id]").forEach((node) => applyNode(node, map));
+    // Drop styling from elements whose minted entry has since been removed,
+    // otherwise a reset would leave the last look burned in.
+    const container = scope instanceof Element ? scope : document;
+    container.querySelectorAll("[data-ui-synth]").forEach((node) => {
+      if (map[node.dataset.uiSynth]) return;
+      clearStyle(node); node.style.width = ""; node.style.height = ""; delete node.dataset.uiSynth;
+    });
+    Object.keys(map).forEach((key) => {
+      if (key.indexOf(SYNTH) < 0) return;
+      const node = resolveSynthetic(key, container);
+      if (node) applySyntheticNode(node, map[key], key);
+    });
+  }
+  // Per-element version stack. The slot-level history/future pair is for the
+  // editor's undo of a whole draft; this is what lets ONE element be rolled
+  // back later, long after other things have been changed around it.
+  const MAX_VERSIONS = 12;
+  function versionsFor(slot, id) {
+    if (!slot.versions || typeof slot.versions !== "object") slot.versions = {};
+    if (!Array.isArray(slot.versions[id])) slot.versions[id] = [];
+    return slot.versions[id];
+  }
+  function pushVersion(id) {
+    if (!id) return;
+    const book = read(); const slot = ensureSlot(book, currentPoint());
+    const stack = versionsFor(slot, id);
+    const previous = clone((editing ? slot.draft : slot.saved)[id] || null);
+    stack.push(previous);
+    if (stack.length > MAX_VERSIONS) stack.shift();
+    write(book);
+  }
+  function versionCount(id) {
+    const slot = ensureSlot(read(), currentPoint());
+    return versionsFor(slot, id).length;
+  }
+  // Roll ONE element back one step. Returns true when something moved, so the
+  // caller can report honestly instead of claiming a revert that did nothing.
+  function revert(id) {
+    if (!id) return false;
+    const book = read(); const slot = ensureSlot(book, currentPoint());
+    const stack = versionsFor(slot, id);
+    if (!stack.length) return false;
+    const previous = stack.pop();
+    const target = editing ? slot.draft : slot.saved;
+    const before = JSON.stringify(target[id] || null);
+    if (previous == null) delete target[id]; else target[id] = clone(previous);
+    if (!editing) slot.draft = clone(slot.saved);
+    slot.updatedAt = new Date().toISOString();
+    write(book);
+    applyAll();
+    return before !== JSON.stringify(previous);
   }
   function exportBook() { return clone(read()); }
   function validate(root) {
@@ -180,7 +360,7 @@
     return { valid: duplicates.length === 0, duplicates };
   }
 
-  window.ThomasUiLayout = { BREAKPOINTS, applyAll, applyNode, beginDraft, breakpoint, cancelDraft, commitDraft, currentMap, currentPoint, exportBook, get, identity, isDirty, policy, redoPrevious, remove, replaceMap, resetBreakpoint, restorePrevious, savedAt, set, validate, workspace };
+  window.ThomasUiLayout = { BREAKPOINTS, applyAll, applyNode, beginDraft, breakpoint, cancelDraft, cleanStyle, commitDraft, currentMap, currentPoint, exportBook, get, identity, isDirty, policy, pushVersion, redoPrevious, remove, replaceMap, resetBreakpoint, restorePrevious, revert, savedAt, set, validate, versionCount, workspace };
   const start = () => {
     applyAll(); let applyFrame = 0;
     const queueApply = () => { if (applyFrame) return; applyFrame = requestAnimationFrame(() => { applyFrame = 0; applyAll(); }); };

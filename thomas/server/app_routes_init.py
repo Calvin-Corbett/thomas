@@ -1298,6 +1298,16 @@ def _setup_routes_and_handlers(
     app.router.add_put("/api/chats/{chat_id}", api_chat_put)
     app.router.add_delete("/api/chats/{chat_id}", api_chat_delete)
 
+    # Readable sidebar names. The stored title is the first 60 characters of
+    # whatever was typed first, which reads as a wall of prompts. Optional:
+    # nicer names are not worth taking every other route down with them.
+    try:
+        from thomas.server.routes.chat_titles_runtime import register_chat_title_routes
+
+        register_chat_title_routes(app, guard=_require_api_access, root=Path(__file__).resolve().parents[2])
+    except (ImportError, ModuleNotFoundError) as exc:
+        log.warning("Chat title route unavailable (%s); the sidebar keeps its stored names.", exc)
+
     async def static_compat(request: web.Request) -> web.StreamResponse:
         """Serve both modern shell assets and legacy module files under /static/."""
         raw_path = str(request.match_info.get("path", "") or "").replace("\\", "/").lstrip("/")

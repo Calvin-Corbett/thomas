@@ -197,6 +197,15 @@ def _build_tools(config: AppConfig) -> ToolRegistry:
     register_diff_tools(registry, sandbox)
     register_ssh_tools(registry)
 
+    # Thomas can put the user into Redesign mode himself when they say they do
+    # not like how something looks, instead of explaining where settings live.
+    try:
+        from thomas.tools.ui_redesign import register_ui_redesign_tools
+
+        register_ui_redesign_tools(registry)
+    except ImportError:
+        pass
+
     # Investigation tools — registered only if investigation DB has cases
     try:
         from thomas.tools.investigation import register_investigation_tools

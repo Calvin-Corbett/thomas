@@ -38,6 +38,19 @@
   box-shadow: 0 0 10px var(--c-accent);
 }
 
+/* Drawn face icons, so they need a box rather than a font size. */
+.tc-mode-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+}
+
+.tc-mode-icon svg {
+  display: block;
+}
+
 .tc-mode-button:hover {
   color: var(--c-text);
   background: var(--c-hover);

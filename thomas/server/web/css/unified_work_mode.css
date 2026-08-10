@@ -261,46 +261,28 @@
   font-size: 12px;
   animation: tc-work-pulse 1.3s ease-in-out infinite;
 }
-.tc-work-composer {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  margin-top: 12px;
-  padding: 8px 8px 8px 14px;
-  border: 1px solid var(--c-border);
-  border-radius: 16px;
-  background: var(--c-surface-2, rgba(255, 255, 255, 0.03));
-}
-.tc-work-composer:focus-within {
-  border-color: var(--c-accent-line);
-}
-.tc-work-composer textarea {
-  flex: 1;
-  min-width: 0;
-  min-height: 22px;
-  max-height: 160px;
-  resize: none;
-  border: 0;
-  background: transparent;
-  color: var(--c-text);
-  font: 14px/1.5 inherit;
-  outline: none;
-}
-.tc-work-composer-send {
-  flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
+/* Work has no composer of its own any more — .tc-work-composer and its
+   send button were deleted with the second composer. Typing happens in the
+   one shell composer at the bottom of the window, for every mode. */
+
+.tc-work-collapse-chat {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
-  border: 0;
-  border-radius: 50%;
-  background: var(--c-accent);
-  color: var(--c-accent-ink);
+  border: 1px solid var(--c-border);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--c-muted);
   cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
 }
-.tc-work-composer-send:disabled {
-  opacity: 0.6;
-  cursor: default;
+.tc-work-collapse-chat:hover,
+.tc-work-collapse-chat:focus-visible {
+  color: var(--c-text);
+  border-color: var(--c-accent-line);
+  background: var(--c-accent-soft);
 }
 .tc-work-job-layout {
   display: grid;

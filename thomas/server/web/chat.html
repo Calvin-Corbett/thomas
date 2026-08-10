@@ -28,6 +28,9 @@
   <link rel="stylesheet" href="/static/css/unified_work_mode.css?v=__THOMAS_WEB_BUILD__">
   <link rel="stylesheet" href="/static/css/unified_work_details.css?v=__THOMAS_WEB_BUILD__">
   <link rel="stylesheet" href="/static/css/ui_edit_mode.css?v=__THOMAS_WEB_BUILD__">
+  <link rel="stylesheet" href="/static/css/ui_redesign.css?v=__THOMAS_WEB_BUILD__">
+  <link rel="stylesheet" href="/static/css/mode_peek.css?v=__THOMAS_WEB_BUILD__">
+  <link rel="stylesheet" href="/static/css/sidebar_history.css?v=__THOMAS_WEB_BUILD__">
   <link rel="stylesheet" href="/static/css/workspace_chat_drawer.css?v=__THOMAS_WEB_BUILD__">
   <link rel="stylesheet" href="/static/css/chat_shell.css?v=__THOMAS_WEB_BUILD__">
 </head>
@@ -171,38 +174,55 @@
 
     <!-- ===================== SIDEBAR ===================== -->
     <aside class="tc-sidebar" data-ui-id="chat.sidebar" data-ui-label="Chat sidebar" data-ui-policy="move resize" data-ui-constraints="minWidth=220;minHeight=420;maxWidth=420" style="position: relative; z-index: 2; flex: 0 0 auto; width: 280px; display: flex; flex-direction: column; background: var(--c-sidebar); border-right: 1px solid var(--c-border); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); transition: margin-left 0.28s cubic-bezier(.4,0,.2,1); margin-left: var(--sidebar-margin, 0);">
-      <div style="display: flex; align-items: center; justify-content: space-between; padding: 18px 16px 14px;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="width: 30px; height: 30px; border-radius: 9px; background: var(--c-accent); display: grid; place-items: center; box-shadow: 0 0 18px var(--c-accent-soft); flex: 0 0 auto;">
-            <span style="display: flex; gap: 4px;">
-              <span style="width: 5px; height: 6px; border-radius: 1px; background: var(--c-accent-ink);"></span>
-              <span style="width: 5px; height: 6px; border-radius: 1px; background: var(--c-accent-ink);"></span>
-            </span>
+      <div style="display: flex; align-items: center; gap: 10px; padding: 18px 16px 14px;">
+        <!-- The Thomas brand mark. The anvil belongs to Code, not here. -->
+        <span style="width: 30px; height: 30px; border-radius: 9px; background: var(--c-accent); display: grid; place-items: center; box-shadow: 0 0 18px var(--c-accent-soft); flex: 0 0 auto;">
+          <span style="display: flex; gap: 4px;">
+            <span style="width: 5px; height: 6px; border-radius: 1px; background: var(--c-accent-ink);"></span>
+            <span style="width: 5px; height: 6px; border-radius: 1px; background: var(--c-accent-ink);"></span>
           </span>
-          <span style="font-weight: 800; font-size: 18px; letter-spacing: -0.01em;">Thomas</span>
-        </div>
-        <button id="tc-newchat-top" class="hv-icon" title="New chat" data-ui-id="chat.action.new-top" data-ui-label="New chat" data-ui-policy="control" style="width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--c-border); background: transparent; color: var(--c-dim); display: grid; place-items: center; cursor: pointer; transition: all .15s;">
-          <i class="ph ph-pencil-simple-line" style="font-size: 17px;"></i>
-        </button>
+        </span>
+        <span style="font-weight: 800; font-size: 18px; letter-spacing: -0.01em;">Thomas</span>
       </div>
 
       <div style="padding: 0 12px 12px;">
         <div id="tc-mode-switch" role="tablist" aria-label="Thomas mode" data-ui-id="chat.mode-switch" data-ui-label="Chat Code Work switch" data-ui-policy="move">
-          <button type="button" class="tc-mode-button is-active" role="tab" aria-selected="true" tabindex="0" data-thomas-mode="chat"><i class="ph ph-chats-circle" aria-hidden="true"></i><span>Chat</span></button>
-          <button type="button" class="tc-mode-button" role="tab" aria-selected="false" tabindex="-1" data-thomas-mode="code"><i class="ph ph-code" aria-hidden="true"></i><span>Code</span></button>
-          <button type="button" class="tc-mode-button" role="tab" aria-selected="false" tabindex="-1" data-thomas-mode="work"><i class="ph ph-briefcase" aria-hidden="true"></i><span>Work</span></button>
+          <!-- Chat, Build and Work are the same Thomas head wearing a different
+               tool. The head with two eyes IS the Thomas mark, so the three read
+               as aspects of one thing rather than three unrelated tabs.
+               data-thomas-mode stays "code": it is the adapter's id, not a label. -->
+          <button type="button" class="tc-mode-button is-active" role="tab" aria-selected="true" tabindex="0" data-thomas-mode="chat"><span class="tc-mode-icon" data-thomas-icon="chat" aria-hidden="true"></span><span>Chat</span></button>
+          <button type="button" class="tc-mode-button" role="tab" aria-selected="false" tabindex="-1" data-thomas-mode="code"><span class="tc-mode-icon" data-thomas-icon="build" aria-hidden="true"></span><span>Build</span></button>
+          <button type="button" class="tc-mode-button" role="tab" aria-selected="false" tabindex="-1" data-thomas-mode="work"><span class="tc-mode-icon" data-thomas-icon="work" aria-hidden="true"></span><span>Work</span></button>
         </div>
+        <!-- Starting something new is ONE control now, and it sits above the
+             search box: you create far more often than you search. -->
+        <button id="tc-newchat" class="hv-newchat" data-ui-id="chat.action.new" data-ui-label="New chat button" data-ui-policy="control" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; height: 30px; padding: 0 11px; margin-bottom: 8px; border-radius: 9px; border: 1px dashed var(--c-border-2); background: transparent; color: var(--c-text); font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: all .15s;">
+          <span data-thomas-icon="plus" data-thomas-icon-size="14" aria-hidden="true" style="display: grid; place-items: center;"></span> New chat
+        </button>
         <label style="display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-radius: 10px; background: var(--c-surface); border: 1px solid var(--c-border); cursor: text;">
-          <i class="ph ph-magnifying-glass" style="font-size: 15px; color: var(--c-muted);"></i>
+          <span data-thomas-icon="search" data-thomas-icon-size="15" aria-hidden="true" style="display: grid; place-items: center; color: var(--c-muted);"></span>
           <input id="tc-search" placeholder="Search chats" style="flex: 1; min-width: 0; background: transparent; border: 0; outline: none; color: var(--c-text); font-family: inherit; font-size: 13.5px;" />
         </label>
       </div>
 
       <nav style="flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 4px 12px 12px;">
-        <button id="tc-newchat" class="hv-newchat" data-ui-id="chat.action.new" data-ui-label="New chat button" data-ui-policy="control" style="flex: 0 0 auto; width: 100%; display: flex; align-items: center; gap: 9px; padding: 9px 11px; margin-bottom: 8px; border-radius: 10px; border: 1px dashed var(--c-border-2); background: transparent; color: var(--c-text); font-family: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: all .15s;">
-          <i class="ph ph-plus" style="font-size: 15px;"></i> New chat
-        </button>
-        <div id="tc-history-label" style="flex: 0 0 auto; font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--c-muted); padding: 10px 6px 6px;">Recent chats</div>
+        <!-- The list collapses: the side panel carries workspaces too, and a
+             long history used to bury them. -->
+        <div class="tc-history-head" style="flex: 0 0 auto; display: flex; align-items: center; gap: 4px; padding: 10px 2px 6px;">
+          <!-- A drawn chevron, not the "\2304" glyph the icon map falls back
+               on, which renders as a thin stray mark. -->
+          <button id="tc-history-collapse" class="hv-icon" aria-expanded="true" aria-controls="tc-chats" title="Collapse the list" style="width: 18px; height: 18px; display: grid; place-items: center; border: 0; border-radius: 5px; background: transparent; color: var(--c-muted); cursor: pointer; transition: all .14s;">
+            <svg id="tc-history-collapse-icon" viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transition: transform .16s ease;"><path d="M3.5 6 L8 10.5 L12.5 6"/></svg>
+          </button>
+          <div id="tc-history-label" style="flex: 1; min-width: 0; font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--c-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Recent chats</div>
+          <!-- Names the sort it is currently using. A bare icon here was a
+               control nobody could read — and the funnel glyph was missing from
+               the icon map, so it rendered as a literal dot. -->
+          <button id="tc-history-filter" class="hv-icon" title="Sort and filter" aria-haspopup="menu" aria-expanded="false" style="flex: 0 0 auto; display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 7px; border: 1px solid var(--c-border); border-radius: 6px; background: transparent; color: var(--c-dim); font-family: inherit; font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; cursor: pointer; transition: all .14s;">
+            <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M2 3.5h12M4.5 8h7M6.75 12.5h2.5"/></svg><span id="tc-history-sort-label">Recent</span>
+          </button>
+        </div>
         <div id="tc-chats" class="tc-scroll" data-ui-id="chat.history" data-ui-label="Recent chats" data-ui-policy="move resize" data-ui-constraints="minWidth=180;minHeight=60" style="flex: 1 1 auto; min-height: 60px; overflow-y: auto;"></div>
         <div style="flex: 0 0 auto; font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--c-muted); padding: 14px 6px 6px; border-top: 1px solid var(--c-border); margin-top: 6px;">Workspaces</div>
         <div id="tc-workspaces" data-ui-id="chat.workspaces" data-ui-label="Workspaces" data-ui-policy="move resize" data-ui-constraints="minWidth=180;minHeight=120" style="flex: 0 0 auto; max-height: 42%; overflow-y: auto;" class="tc-scroll"></div>
@@ -210,7 +230,7 @@
 
       <div style="padding: 10px 12px; border-top: 1px solid var(--c-border);">
         <button id="tc-settings" class="hv-soft" data-ui-id="chat.action.settings" data-ui-label="Settings button" data-ui-policy="control" style="width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--c-dim); font-family: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; transition: all .14s;">
-          <i class="ph ph-gear-six" style="font-size: 17px;"></i> Settings
+          <span data-thomas-icon="settings" data-thomas-icon-size="17" aria-hidden="true" style="display: grid; place-items: center;"></span> Settings
         </button>
       </div>
     </aside>
@@ -246,6 +266,12 @@
         <div style="flex: 1;"></div>
         <button id="tc-canvas-btn" class="hv-surface" title="Open Thomas Canvas" data-ui-id="chat.action.canvas" data-ui-label="Canvas button" data-ui-policy="control" style="display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--c-accent-line); background: var(--c-accent-soft); color: var(--c-text); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;">
           <i id="tc-primary-action-icon" class="ph ph-chalkboard-simple" style="font-size: 16px; color: var(--c-accent);"></i><span id="tc-primary-action-label">Canvas</span>
+        </button>
+        <!-- Redesign with AI is a permanent, every-page control, not a Work
+             dashboard footer button. Press it, point at anything on screen,
+             lock the selection in, then say what should change. -->
+        <button id="tc-redesign-btn" class="hv-pill" title="Redesign with AI — select anything on screen and tell Thomas what to change" aria-pressed="false" data-ui-id="chat.action.redesign" data-ui-label="Redesign with AI" data-ui-policy="control" style="display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-dim); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;">
+          <i class="ph ph-sparkle" style="font-size: 16px;"></i><span>Redesign</span>
         </button>
         <div style="position: relative;" data-theme-switch="1">
           <button id="tc-theme-btn" class="hv-pill" title="Switch theme" data-ui-id="chat.action.theme" data-ui-label="Theme switcher" data-ui-policy="control" style="display: flex; align-items: center; gap: 9px; padding: 7px 11px 7px 9px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;">
@@ -283,6 +309,12 @@
             <!-- THREAD -->
             <div id="tc-thread" class="tc-rail" style="display: none; max-width: 768px; margin: 0 auto; padding: 28px 24px 48px; flex-direction: column; gap: 28px;"></div>
           </div>
+
+          <!-- Peek strip. The one place a mode may show conversation next to
+               the composer. It sits here, above the single composer, so a
+               second composer can never come back: there is nowhere to put
+               one. Work fills it; other modes leave it empty. -->
+          <div id="tc-mode-peek" class="tc-mode-peek" data-ui-id="chat.mode.peek" data-ui-label="Conversation peek" data-ui-policy="control" hidden></div>
 
           <!-- composer -->
           <div data-ui-id="chat.composer" data-ui-label="Message composer" data-ui-policy="move resize" data-ui-constraints="minWidth=320;minHeight=90" style="flex: 0 0 auto; padding: 6px 18px 18px;">
@@ -365,6 +397,14 @@
   <script src="/static/js/unified_code_projects.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/unified_code_events.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/unified_code_mode.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/thomas_icons.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/mode_peek.js?v=__THOMAS_WEB_BUILD__"></script>
+  <!-- Before the mode adapters: they call into it while rendering their rows. -->
+  <script src="/static/js/sidebar_history.js?v=__THOMAS_WEB_BUILD__"></script>
+  <!-- Redesign loads before the Work adapter: the adapter registers its job
+       context with it at module scope. -->
+  <script src="/static/js/ui_redesign_target.js?v=__THOMAS_WEB_BUILD__"></script>
+  <script src="/static/js/ui_redesign_select.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/unified_work_support.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/unified_work_mode.js?v=__THOMAS_WEB_BUILD__"></script>
   <script src="/static/js/workspace_chat_transport.js?v=__THOMAS_WEB_BUILD__"></script>
@@ -898,7 +938,12 @@
     function renderChats() {
       const query = String(state.search || '').trim().toLowerCase();
       const wrap = document.getElementById('tc-chats');
-      if (window.ThomasUnifiedModes && window.ThomasUnifiedModes.renderHistory(wrap, query)) return;
+      // Code and Work render their own rows; decorate them the same way so the
+      // hover card, right-click menu and sorting are not Chat-only features.
+      if (window.ThomasUnifiedModes && window.ThomasUnifiedModes.renderHistory(wrap, query)) {
+        if (window.ThomasSidebarHistory) window.ThomasSidebarHistory.decorate(wrap);
+        return;
+      }
       const chats = query
         ? chatList.filter(c => (String(c.title || '') + '\n' + String(c.preview || '')).toLowerCase().includes(query))
         : chatList;
@@ -907,20 +952,28 @@
         wrap.innerHTML = `<div data-chat-empty style="padding:12px 10px;color:var(--c-muted);font-size:12px;line-height:1.5;">${query ? 'No matching chats.' : 'No chats yet.'}</div>`;
         return;
       }
+      const history = window.ThomasSidebarHistory;
       chats.forEach(c => {
         const sel = c.id === state.activeChat;
         const b = document.createElement('button');
         b.className = 'hv-soft';
         b.style.cssText = `width: 100%; text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 9px 11px; margin-bottom: 2px; border-radius: 10px; border: 1px solid transparent; background: ${sel ? 'var(--c-surface-2)' : 'transparent'}; color: var(--c-text); font-family: inherit; cursor: pointer; transition: all .14s;`;
-        const date = fmtChatDate(c.updatedAt);
-        b.innerHTML = `<span style="display: flex; align-items: baseline; gap: 8px;">
-            <span style="flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: ${sel ? '1' : '0.92'};">${esc(c.title)}</span>
-            ${date ? `<span style="flex-shrink: 0; font-size: 11px; color: var(--c-muted);">${esc(date)}</span>` : ''}
-          </span>
-          <span style="font-size: 11.5px; color: var(--c-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${esc(c.preview)}</span>`;
+        // Identity the shared decorator needs for sorting, pinning, renaming,
+        // the hover card and the right-click menu.
+        b.dataset.historyId = c.id;
+        b.dataset.historyTitle = c.title;
+        b.dataset.historyTime = String(c.updatedAt || 0);
+        b.dataset.historyMode = 'chat';
+        // A run belongs to the chat it was started in, so only THAT row gets
+        // the dot — the mode tab alone could not say which chat was busy.
+        const running = sel && state.streaming;
+        b.innerHTML = history
+          ? history.rowHtml({ title: c.title, preview: c.preview, time: c.updatedAt, running })
+          : `<span class="tc-history-line"><span class="tc-history-name" data-history-name>${esc(c.title)}</span></span><span class="tc-history-preview">${esc(c.preview)}</span>`;
         b.addEventListener('click', () => selectChat(c.id));
         wrap.appendChild(b);
       });
+      if (history) history.decorate(wrap);
     }
     // Workspaces keep their OWN existing UI — open them in the preserved SPA,
     // Bounded standalone routes avoid the full classic runtime. Compatible
@@ -999,16 +1052,18 @@
     window.addEventListener('thomas:ui-ai-edit-request', stageUiAiEdit);
     function renderWorkspaces() {
       const workspaces = [
-        // Code and Work are first-class modes above search. Do not duplicate their
+        // Build and Work are first-class modes above search. Do not duplicate their
         // legacy Forge/Workforce entry points in this secondary workspace list.
-        { icon: 'ph-crosshair-simple', label: 'Mission Control', mode: 'mission' },
-        { icon: 'ph-buildings',        label: 'Virtual Office',  mode: 'office' },
-        { icon: 'ph-pencil-ruler',     label: 'Canvas',          mode: 'app_builder' },
-        { icon: 'ph-cards',            label: 'Library',         mode: 'my_stuff' },
-        { icon: 'ph-broadcast',        label: 'Channels',        mode: 'channels' },
-        { icon: 'ph-coins',            label: 'Token Economy',   mode: 'token_economy' },
-        { icon: 'ph-storefront',       label: 'Marketplace',     mode: 'marketplace' },
-        { icon: 'ph-chart-line-up',    label: 'Paper Trading',   mode: 'paper_trading' },
+        // Icons are drawn (ThomasIcons); the ph-* names here were Unicode
+        // stand-ins — Library rendered as "▤", Mission Control as "⊕".
+        { icon: 'mission',  label: 'Mission Control', mode: 'mission' },
+        { icon: 'office',   label: 'Virtual Office',  mode: 'office' },
+        { icon: 'canvas',   label: 'Canvas',          mode: 'app_builder' },
+        { icon: 'library',  label: 'Library',         mode: 'my_stuff' },
+        { icon: 'channels', label: 'Channels',        mode: 'channels' },
+        { icon: 'tokens',   label: 'Token Economy',   mode: 'token_economy' },
+        { icon: 'market',   label: 'Marketplace',     mode: 'marketplace' },
+        { icon: 'trading',  label: 'Paper Trading',   mode: 'paper_trading' },
       ];
       const wrap = document.getElementById('tc-workspaces');
       wrap.innerHTML = '';
@@ -1016,7 +1071,8 @@
         const b = document.createElement('button');
         b.className = 'hv-soft';
         b.style.cssText = `width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 11px; margin-bottom: 1px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--c-dim); font-family: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; transition: all .14s;`;
-        b.innerHTML = `<i class="ph ${w.icon}" style="font-size: 16px;"></i> ${esc(w.label)}`;
+        const mark = window.ThomasIcons ? window.ThomasIcons.glyph(w.icon, 17) : '';
+        b.innerHTML = `${mark}<span>${esc(w.label)}</span>`;
         b.addEventListener('click', () => openWorkspace(w.mode));
         wrap.appendChild(b);
       });
@@ -1901,6 +1957,10 @@
               const c = String(evt.text || ''); if (c) { const a = state.messages[idx].activity; a.thinking += c; if (!sawText) a.expanded = true; renderActivity(idx); scrollEnd(); }
             } else if (type === 'tool_start') {
               addToolStep(idx, evt.name); scrollEnd();
+              // Thomas arming Redesign mode. The structured capability replaces
+              // the natural-language UI control that was removed: the shell acts
+              // on the tool NAME, never on anything he says in prose.
+              if (evt.name === 'ui.redesign' && window.ThomasRedesign) window.ThomasRedesign.start();
             } else if (type === 'tool_result') {
               finishToolStep(idx, evt.ok !== false);
             } else if (type === 'model_runtime') {
@@ -2491,8 +2551,10 @@
       else { send(); }
     });
     document.getElementById('tc-search').addEventListener('input', e => { state.search = e.target.value; renderChats(); });
+    // Renaming, pinning, archiving or deleting a row re-renders through the
+    // owner of the list rather than the decorator patching the DOM behind it.
+    if (window.ThomasSidebarHistory) window.ThomasSidebarHistory.onRefresh(renderChats);
     document.getElementById('tc-newchat').addEventListener('click', newChat);
-    document.getElementById('tc-newchat-top').addEventListener('click', newChat);
     document.getElementById('tc-sidebar-toggle').addEventListener('click', toggleSidebar);
     document.getElementById('tc-settings').addEventListener('click', () => openWorkspace('settings'));
     // In Chat this button is the Canvas toggle — it opens the inline panel where

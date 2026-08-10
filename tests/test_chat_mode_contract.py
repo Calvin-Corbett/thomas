@@ -421,8 +421,12 @@ global.document = {
     type: '',
     className: '',
     innerHTML: '',
-    classList: { add: () => {} },
+    // Real elements always carry `dataset`; the renderers tag rows with
+    // data-history-* so the shared sidebar decorator can sort and act on them.
+    dataset: {},
+    classList: { add: () => {}, toggle: () => {}, contains: () => false },
     addEventListener: () => {},
+    querySelector: () => null,
   }),
 };
 global.localStorage = { getItem: () => 'C:\\Repos\\Chosen\\' };

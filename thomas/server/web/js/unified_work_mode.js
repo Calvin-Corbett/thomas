@@ -4,7 +4,7 @@
   const state = {
     apps: [], accounts: [], connectors: [], activeApp: null, jobs: [], activeJob: null,
     messages: [], bindings: [], skills: [], automations: [], activity: [], workflows: [], activeWorkflowId: '',
-    stage: 'home', onboardingPhase: 'goal_discovery', onboardingWorkflowId: '', onboardingSelectionUserTurn: 0, running: false, actionBusy: false, formDirty: false, editing: false, editingAutomationId: '', creatingJobInApp: false, sessionId: '', error: '', dashTab: '',
+    stage: 'home', onboardingPhase: 'goal_discovery', onboardingWorkflowId: '', onboardingSelectionUserTurn: 0, running: false, actionBusy: false, formDirty: false, editing: false, editingAutomationId: '', creatingJobInApp: false, sessionId: '', error: '', dashTab: '', dashTabBeforeChat: '',
     structuredOnboardingState: { phase: 'goal_discovery', confirmed_goal: '', workflows: [], selected_workflow_id: '', selected_workflow_configured: false },
   };
   let reconcileTimer = null;
@@ -162,6 +162,10 @@
     dashboardHtml,
     activityHtml,
     workflowRailHtml,
+    workflowsSetupHtml,
+    peekRows,
+    jobTabs,
+    activeJobTab,
     jobHtml,
     provisionOnboardedJob,
   } = window.ThomasWorkSupport.create({
@@ -190,6 +194,52 @@
     state.error = '';
     render();
     host().renderHistory && host().renderHistory();
+  }
+
+  const peek = () => window.ThomasModePeek || null;
+
+  // Onboarding is conversation-first — a two-line strip would make it
+  // unreadable, so it always shows the full transcript and the bump has
+  // nothing to open. Inside a job the strip is the default and Chat is a
+  // real tab you expand into.
+  function chatIsExpanded() {
+    if (state.stage === 'onboarding') return true;
+    return state.stage === 'job' && !!state.activeJob && activeJobTab() === 'chat';
+  }
+
+  function syncPeek() {
+    const api = peek();
+    if (!api) return;
+    if (state.stage !== 'job' || !state.activeJob) { api.clear(); return; }
+    api.set({
+      visible: true,
+      expanded: chatIsExpanded(),
+      rows: peekRows(),
+      busy: state.running,
+      label: 'Chat',
+      hint: 'No messages in this job yet — say something below.',
+    });
+  }
+
+  // The peek grows into the Chat tab and shrinks back to whichever
+  // dashboard tab you left. Measuring happens either side of the re-render,
+  // so the animation always matches the real box it lands in.
+  function setChatExpanded(next) {
+    if (state.stage !== 'job' || !state.activeJob) return;
+    const api = peek();
+    const wantExpanded = Boolean(next);
+    if (wantExpanded === chatIsExpanded()) return;
+    if (wantExpanded) {
+      const from = activeJobTab();
+      if (from !== 'chat') state.dashTabBeforeChat = from;
+      if (api) api.transition(() => { state.dashTab = 'chat'; render(); }, () => document.getElementById('tc-work-conversation'));
+      else { state.dashTab = 'chat'; render(); }
+      return;
+    }
+    const tabs = jobTabs().map(tab => tab.id).filter(id => id !== 'chat');
+    const back = tabs.includes(state.dashTabBeforeChat) ? state.dashTabBeforeChat : (tabs[0] || 'setup');
+    state.dashTab = back;
+    render();
   }
 
   function render() {
@@ -242,23 +292,10 @@
       if (holder && cols) { const tr = document.createElement('tr'); tr.innerHTML = Array.from({ length: cols }, () => '<td contenteditable="true" spellcheck="false"></td>').join(''); holder.appendChild(tr); }
     }));
     root.querySelectorAll('[data-work-sheet-save]').forEach(button => button.addEventListener('click', () => { void safely(() => saveSheet(button.dataset.workSheetSave)); }));
-    const composer = root.querySelector('#tc-work-composer');
-    if (composer) {
-      const field = composer.querySelector('textarea');
-      const submitComposer = () => {
-        const value = field ? field.value : '';
-        if (!String(value || '').trim() || state.running) return;
-        if (field) field.value = '';
-        void send(value);
-      };
-      composer.addEventListener('submit', event => { event.preventDefault(); submitComposer(); });
-      if (field) {
-        // Enter sends, Shift+Enter is a newline; grow with content like main chat.
-        field.addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submitComposer(); } });
-        field.addEventListener('input', () => { field.style.height = 'auto'; field.style.height = Math.min(field.scrollHeight, 160) + 'px'; });
-        if (!state.running && document.activeElement !== field) { try { field.focus({ preventScroll: true }); } catch (e) { field.focus(); } }
-      }
-    }
+    // No composer here. Work types into the one shell composer, and the
+    // caret in the conversation header is the same control as the bump.
+    root.querySelector('[data-work-collapse-chat]')?.addEventListener('click', () => setChatExpanded(false));
+    syncPeek();
     root.querySelectorAll('form input, form textarea, form select').forEach(element => {
       element.addEventListener('input', () => { state.formDirty = true; });
       element.addEventListener('change', () => { state.formDirty = true; });
@@ -285,10 +322,20 @@
     apps.forEach(app => {
       const heading = document.createElement('button'); heading.className = 'tc-work-history-app'; heading.innerHTML = `<span>${esc(app.name)}</span><small>${esc(app.status)}</small>`; heading.addEventListener('click', () => { void safely(() => openApp(app.id)); }); root.appendChild(heading);
       Object.values(app.jobs || {}).filter(job => job.status !== 'archived' && (!term || `${job.name} ${job.goal}`.toLowerCase().includes(term))).forEach(job => {
-        const button = document.createElement('button'); button.className = 'hv-soft tc-mode-history-row tc-work-history-job'; if (state.activeJob && job.id === state.activeJob.id) button.classList.add('is-active');
-        button.innerHTML = `<span>${esc(job.name)}</span><small>${esc(job.status)} · ${Number((job.history || {}).message_count || 0)} messages</small>`; button.addEventListener('click', () => { void safely(() => openJob(app.id, job.id)); }); root.appendChild(button);
+        const button = document.createElement('button'); button.className = 'hv-soft tc-mode-history-row tc-work-history-job';
+        const active = state.activeJob && job.id === state.activeJob.id;
+        if (active) button.classList.add('is-active');
+        const touched = Date.parse((job.history || {}).last_message_at || job.updated_at || '') || 0;
+        button.dataset.historyId = `${app.id}:${job.id}`;
+        button.dataset.historyTitle = job.name;
+        button.dataset.historyTime = String(touched);
+        button.dataset.historyCreated = String(Date.parse(job.created_at || '') || touched);
+        button.dataset.historyMode = 'work';
+        button.innerHTML = `<span class="tc-history-line"><span class="tc-history-name" data-history-name>${esc(job.name)}</span>${active && state.running ? '<span class="tc-history-dot" title="Running now" aria-label="Running now"></span>' : ''}</span><span class="tc-history-preview">${esc(job.status)} · ${Number((job.history || {}).message_count || 0)} messages</span><span class="tc-history-meta" data-history-meta hidden></span>`;
+        button.addEventListener('click', () => { void safely(() => openJob(app.id, job.id)); }); root.appendChild(button);
       });
     });
+    if (window.ThomasSidebarHistory) window.ThomasSidebarHistory.decorate(root);
   }
 
   async function openApp(id) {
@@ -516,8 +563,9 @@
 
   async function send(message) {
     const text = String(message || '').trim(); if (!text || state.running) return;
-    // Typing to the job always shows the conversation: flip to the Chat tab.
-    if (state.stage === 'job') state.dashTab = 'chat';
+    // Typing NO LONGER throws you into the Chat tab. Chatting while looking
+    // at the data is the point of the peek strip — the reply lands there,
+    // above the composer, and the dashboard you were reading stays put.
     // Typing on the Work board starts onboarding with this text as the first
     // message. This must happen BEFORE the running flag is raised: the old
     // re-entrant send() hit its own running guard and silently dropped the
@@ -751,12 +799,15 @@
     adapterActive = false;
     clearTimeout(reconcileTimer);
     reconcileTimer = null;
+    // The strip belongs to Work; Chat and Code get their own surfaces back.
+    if (peek()) peek().clear();
   }
 
   async function enter() {
     adapterActive = true;
     clearTimeout(reconcileTimer);
     reconcileTimer = null;
+    if (peek()) peek().onToggle(setChatExpanded);
     render();
     await refresh();
     if (state.stage === 'job' && state.activeApp && state.activeJob) {
@@ -765,4 +816,25 @@
   }
 
   modes().registerAdapter('work', { enter, leave, refresh, renderHistory, newConversation, send, stop, isBusy: () => state.running });
+
+  // Tell Redesign which job the user is looking at, so a selected metric can
+  // be patched in the SAVED spec and not merely restyled. Guarded on
+  // adapterActive: in Chat or Code there is no job, and claiming one would
+  // point spec edits at whatever job happened to be open last.
+  if (window.ThomasRedesign) {
+    window.ThomasRedesign.provideContext(() => (adapterActive && state.stage === 'job' && state.activeApp && state.activeJob
+      ? { mode: 'work', app_id: state.activeApp.id, job_id: state.activeJob.id, tab: activeJobTab() }
+      : { mode: modes().mode() }));
+  }
+
+  // A spec patch landed server-side: take the authoritative dashboard back
+  // rather than guessing what it now looks like. Guarded because this module
+  // is also loaded into a bare VM context by the lifecycle tests, where
+  // `window` is a plain object with no event target.
+  if (typeof window.addEventListener === 'function') window.addEventListener('thomas:work-dashboard-updated', event => {
+    const next = (event.detail || {}).dashboard;
+    if (!adapterActive || !state.activeJob || !next || typeof next !== 'object') return;
+    state.activeJob.dashboard = next;
+    render();
+  });
 })();

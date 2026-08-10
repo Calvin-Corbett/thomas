@@ -34,6 +34,21 @@
    this was measured in the live UI (`ph-corners-in` computed to content "•").
    A name missing from this map is invisible rather than broken, so it has to
    be checked by looking. */
+/* Added 2026-08-10 with the sidebar rework. Every one of these was rendering
+   as the bare "\2022" bullet — the filter control was literally a dot next to
+   the list heading, which is unreadable as a control. */
+.ph-funnel-simple::before, .ph-funnel::before { content: "\25BD"; }
+.ph-push-pin::before { content: "\2691"; }
+.ph-archive::before { content: "\25A4"; }
+.ph-cursor-click::before { content: "\2316"; }
+.ph-hammer::before { content: "\2692"; }
+.ph-dot::before { content: "\00B7"; }
+/* Found by the contract test that walks every ph- name the shell references.
+   These four were already rendering as dots before the sidebar work. */
+.ph-chat-circle::before { content: "\2261"; }
+.ph-flow-arrow::before { content: "\2933"; }
+.ph-activity::before { content: "\223F"; }
+.ph-tray::before { content: "\25F1"; }
 .ph-corners-out::before { content: "\26F6"; }
 .ph-corners-in::before { content: "\2921"; }
 .ph-browser::before { content: "\25A3"; }

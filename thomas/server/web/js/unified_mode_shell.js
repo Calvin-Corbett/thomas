@@ -3,7 +3,9 @@
 
   const MODES = {
     chat: { label: 'Chat', history: 'Recent chats', search: 'Search chats', create: 'New chat', prompt: 'Message Thomas…' },
-    code: { label: 'Code', history: 'Code tasks', search: 'Search code tasks', create: 'New code task', prompt: 'Ask Thomas to build, debug, or test…' },
+    // Named "Build" to the user; the key stays `code` because it is the adapter
+    // id, the surface-mode attribute and half the API's vocabulary.
+    code: { label: 'Build', history: 'Builds', search: 'Search builds', create: 'New build', prompt: 'Ask Thomas to build, debug, or test…' },
     work: { label: 'Work', history: 'Jobs', search: 'Search jobs', create: 'Create job', prompt: 'Describe the job or message this job…' },
   };
   const runtime = {
@@ -35,12 +37,13 @@
     const historyLabel = byId('tc-history-label');
     const search = byId('tc-search');
     const create = byId('tc-newchat');
-    const createTop = byId('tc-newchat-top');
     const input = byId('tc-input');
     if (historyLabel) historyLabel.textContent = cfg.history;
     if (search) search.placeholder = cfg.search;
-    if (create) create.innerHTML = `<i class="ph ph-plus" aria-hidden="true"></i> ${cfg.create}`;
-    if (createTop) createTop.title = cfg.create;
+    // One create control, above the search box. The pencil that used to sit in
+    // the sidebar header did exactly the same thing.
+    const plus = window.ThomasIcons ? window.ThomasIcons.glyph('plus', 14) : '';
+    if (create) create.innerHTML = `<span aria-hidden="true" style="display:grid;place-items:center">${plus}</span> ${cfg.create}`;
     if (input) input.placeholder = cfg.prompt;
   }
 
