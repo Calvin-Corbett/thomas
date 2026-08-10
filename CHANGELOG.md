@@ -7,6 +7,15 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Removed (web: the dead module tree and its unreferenced static pages)
+
+- 134 files under `js/modules/` and `js/src/runtime_modules/` plus 30
+  unreferenced pages under `web/static/` are deleted. Nothing loaded them —
+  no `<script>` in chat.html or index.html names any of them — and the
+  runtime the app actually uses lives in `js/runtime/`. They were the
+  residue of the old monolith split and read as live code to anyone
+  searching the tree.
+
 ### Changed (work + chat: one composer, and threads that name themselves)
 
 - Work mode converges on a single composer instead of a second input with
