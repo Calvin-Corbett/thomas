@@ -157,3 +157,54 @@ def test_a_steered_run_is_recorded_as_steering_not_failed(tmp_path: Path) -> Non
     assert result["outcome"] == "stopped"
     saved = forge_code_store.load_conversation(repo, conversation["id"])
     assert "steering" in saved["turns"][-1]["reason"].lower()
+
+
+def test_a_crash_after_partial_files_is_failed_not_completed(tmp_path: Path, monkeypatch: Any) -> None:
+    # The tarot-game shape (2026-08-10): a one-pass build wrote a design doc,
+    # then its next model call crashed on a dead LLM route. "Files changed"
+    # filed it as COMPLETED, so a crash was presented as a finished
+    # deliverable. The engine's own terminal error event must outrank the
+    # changed-file count.
+    repo = _new_repo(tmp_path)
+    conversation = forge_code_store.new_conversation(repo)
+    transcript = repo / "transcript.txt"
+    transcript.write_text(
+        '{"fc":"tool_result","name":"fs.write_file","text":"wrote DESIGN.md","is_error":false}\n'
+        '{"fc":"error","text":"Lost the connection to openai_codex mid-run"}\n'
+        '{"fc":"error","text":"agent loop exited 1","is_error":true}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(forge_code_git, "project_delta_since", lambda *_args: ["DESIGN.md"])
+
+    result = _record(repo, conversation["id"], transcript, _ExitedProcess(1), {})
+
+    assert result["ok"] is False
+    assert result["outcome"] == "failed"
+    reason = forge_code_store.load_conversation(repo, conversation["id"])["turns"][-1]["reason"]
+    assert "crashed" in reason.lower()
+    # The partial work is still named so Keep/Revert has a subject, and the
+    # root cause (not the generic loop-exit) is surfaced.
+    assert "1 file(s)" in reason
+    assert "connection" in reason.lower()
+
+
+def test_a_clean_cli_success_at_exit_1_is_not_misread_as_a_crash(tmp_path: Path, monkeypatch: Any) -> None:
+    # The guard against over-correction: the Claude CLI exits 1 on runs whose
+    # files landed and work, and its terminal event is is_error:false. That
+    # must still record COMPLETED -- the crash detector keys on the engine's
+    # OWN error verdict, not the exit code.
+    repo = _new_repo(tmp_path)
+    conversation = forge_code_store.new_conversation(repo)
+    transcript = repo / "transcript.txt"
+    transcript.write_text(
+        '{"fc":"error","text":"a transient tool retry"}\n'
+        '{"fc":"tool_result","name":"fs.write_file","text":"wrote index.html","is_error":false}\n'
+        '{"fc":"meta","text":"dispatched via claude CLI (1 file(s) changed; engine checks passed)","is_error":false}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(forge_code_git, "project_delta_since", lambda *_args: ["index.html"])
+
+    result = _record(repo, conversation["id"], transcript, _ExitedProcess(1), {})
+
+    assert result["ok"] is True
+    assert result["outcome"] == "completed"

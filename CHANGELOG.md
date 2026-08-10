@@ -7,6 +7,26 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (code: a crashed build is never filed as completed)
+
+- A Code run that crashed mid-build (dead LLM route, protocol error) but had
+  already written a file was recorded `outcome: completed` because "1 file
+  changed" outranked everything - so a design document got presented to the
+  owner as a finished game, twice in one task (2026-08-10). The recorder now
+  reads the engine's OWN terminal verdict from the transcript: a run whose
+  final forge event is an error is `failed` with the root cause surfaced
+  ("the run crashed before finishing — ..."), and any files it wrote are
+  still named so Keep/Revert has a subject. A Claude-CLI success at exit 1
+  (terminal event `is_error: false`) is untouched - the detector keys on the
+  engine's error flag, not the exit code. Pinned by two tests in
+  `test_a_run_is_judged_by_its_work_not_its_exit_code.py`.
+- The mid-run connection-loss message stopped lying about the cause. Every
+  provider used to get `Cannot connect to LLM at {base_url}. Is Ollama
+  running?` - but hosted profiles (ChatGPT/Codex) have no base_url, so a
+  dropped connection surfaced as `at .` with advice to start Ollama, wrong
+  in every part. It now names the actual provider and only mentions Ollama
+  for a genuine localhost endpoint.
+
 ### Fixed (chat: the send path comes back from the dead)
 
 - Every chat message since c4a6cf07 (Aug 7) rendered its user bubble and

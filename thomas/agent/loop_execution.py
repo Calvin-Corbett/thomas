@@ -83,6 +83,25 @@ _TPM_WINDOW_SECONDS = 60.0
 _TPM_WAIT_SLICE_SECONDS = 20.0
 
 
+def _connection_error_message(llm: Any) -> str:
+    """Name the provider that actually dropped the connection.
+
+    The old template printed ``Cannot connect to LLM at {base_url}. Is Ollama
+    running?`` for every provider — but hosted profiles (ChatGPT/Codex) have
+    no base_url, so a network blip mid-run surfaced as ``at .`` with advice
+    to start Ollama: a diagnosis that was wrong in every part. The Ollama
+    hint belongs only to a local endpoint."""
+    cfg = getattr(llm, "config", None)
+    base_url = str(getattr(cfg, "base_url", "") or "").strip()
+    provider = str(getattr(cfg, "provider", "") or "").strip()
+    model = str(getattr(cfg, "model", "") or "").strip()
+    target = base_url or provider or model or "the configured model provider"
+    message = f"Lost the connection to {target} mid-run (network drop or expired login)."
+    if base_url and ("localhost" in base_url or "127.0.0.1" in base_url):
+        message += " If this is a local Ollama endpoint, check: ollama serve"
+    return message
+
+
 async def _agent_loop_run(
     self: AgentLoop,
     prompt: Any,
@@ -600,16 +619,14 @@ async def _agent_loop_run(
                 continue
             # Detect connection errors and give a helpful message
             if "connect" in error_msg.lower() or "refused" in error_msg.lower():
-                base_url = self.llm.config.base_url
-                error_msg = f"Cannot connect to LLM at {base_url}. Is Ollama running? Try: ollama serve"
+                error_msg = _connection_error_message(self.llm)
             yield AgentEvent.agent_error(error_msg, iteration=iteration)
             state.error = error_msg
             state.finished = True
             break
 
         except (httpx_ConnectError, ConnectionError, OSError):
-            base_url = self.llm.config.base_url
-            error_msg = f"Cannot connect to LLM at {base_url}. Is Ollama running? Try: ollama serve"
+            error_msg = _connection_error_message(self.llm)
             yield AgentEvent.agent_error(error_msg, iteration=iteration)
             state.error = error_msg
             state.finished = True

@@ -588,6 +588,45 @@ def _finalize_code_run(app: web.Application, run_id: str, *, ok: bool, reason: s
         log.warning("Code run not finalized (run store write failed): %s", exc)
 
 
+def _terminal_engine_error(transcript_text: str) -> str:
+    """The engine's own final verdict, read from the transcript's tail.
+
+    Every engine run ends with one forge event whose ``is_error`` reflects the
+    engine's judgment (forge_code_runner emits it from the dispatch result):
+    a Claude CLI run whose files landed ends ``is_error: false`` even at exit
+    1, while a crashed agent loop (dead LLM route, protocol error) ends
+    ``is_error: true``. When the final event is an error, return the most
+    specific cause among the terminal error events; otherwise return "".
+    Changed files must not outrank THIS signal — a crash that wrote some
+    files first is still a crash, and filing it "completed" is how a design
+    doc got presented as a finished game (2026-08-10, twice in one task).
+    """
+    causes: list[str] = []
+    for line in reversed(transcript_text.strip().splitlines()[-12:]):
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if "fc" not in event:
+            continue
+        if not causes and not (event.get("fc") == "error" or event.get("is_error") is True):
+            return ""  # final engine event is not an error: engine says ok
+        if event.get("fc") == "error" or event.get("is_error") is True:
+            text = str(event.get("text") or "").strip()
+            if text:
+                causes.append(text)
+            continue
+        break  # ran past the terminal error cluster
+    if not causes:
+        return ""
+    # The cluster reads newest-first; the oldest error in it names the root
+    # cause (e.g. the dead LLM route), the newest is the generic loop exit.
+    return causes[-1][:220]
+
+
 async def _drain_and_record(
     proc: Any,
     transcript: Path,
@@ -637,8 +676,15 @@ async def _drain_and_record(
             and not interrupted
             and _confirmed_conversation_reply(text, require_final=rc != 0)
         )
+        crash_cause = _terminal_engine_error(text)
         noop = run_capture_confirmed and rc == 0 and not changed and not conversation_reply and not interrupted
-        ok = run_capture_confirmed and rc is not None and not interrupted and (bool(changed) or conversation_reply)
+        ok = (
+            run_capture_confirmed
+            and rc is not None
+            and not interrupted
+            and not crash_cause
+            and (bool(changed) or conversation_reply)
+        )
         if not run_capture_confirmed or rc is None:
             reason = "process output or exit could not be confirmed"
             outcome = "failed"
@@ -649,6 +695,15 @@ async def _drain_and_record(
                 # The interrupted work is still named, so Keep/Revert has a
                 # subject rather than a mystery.
                 reason += f" — {len(changed)} file(s) had already changed"
+        elif crash_cause:
+            # The engine itself declared the run dead. Files that landed first
+            # are named (they are real work worth keeping), but a crash is
+            # never "completed" — that filing is how a crashed one-pass build
+            # got presented as a finished deliverable.
+            outcome = "failed"
+            reason = f"the run crashed before finishing — {crash_cause}"
+            if changed:
+                reason += f"; {len(changed)} file(s) had changed by then"
         elif conversation_reply:
             reason = "Thomas replied without changing files"
             outcome = "conversation"
