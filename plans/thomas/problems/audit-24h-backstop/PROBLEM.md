@@ -139,3 +139,33 @@
 - step: `Surface parity gate`
 - exit_code: `1`
 - command: `'C:\Users\corbe\Thomas\.venv\Scripts\python.exe' scripts/forge/gates/surface_parity.py`
+### 2026-07-27T17:35:45+00:00 - auto_checks: Surface parity gate
+
+- runner: `auto_checks`
+- step: `Surface parity gate`
+- exit_code: `1`
+- command: `'C:\Users\corbe\Thomas\.venv\Scripts\python.exe' scripts/forge/gates/surface_parity.py`
+### 2026-07-31T16:09:58+00:00 - auto_checks: Surface parity gate
+
+- runner: `auto_checks`
+- step: `Surface parity gate`
+- exit_code: `1`
+- command: `'C:\Users\corbe\AppData\Local\Programs\Python\Python312\python.exe' scripts/forge/gates/surface_parity.py`
+### 2026-07-31T16:09:58+00:00 - auto_checks: Surface parity gate
+
+- runner: `auto_checks`
+- step: `Surface parity gate`
+- exit_code: `1`
+- command: `'C:\Users\corbe\AppData\Local\Programs\Python\Python312\python.exe' scripts/forge/gates/surface_parity.py`
+### 2026-07-31T20:51:02+00:00 - auto_checks: Surface parity gate
+
+- runner: `auto_checks`
+- step: `Surface parity gate`
+- exit_code: `1`
+- command: `'C:\Users\corbe\AppData\Local\Programs\Python\Python312\python.exe' scripts/forge/gates/surface_parity.py`
+### 2026-07-31T20:51:02+00:00 - auto_checks: Surface parity gate
+
+- runner: `auto_checks`
+- step: `Surface parity gate`
+- exit_code: `1`
+- command: `'C:\Users\corbe\AppData\Local\Programs\Python\Python312\python.exe' scripts/forge/gates/surface_parity.py`

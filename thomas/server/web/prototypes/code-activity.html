@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thomas Code — activity feed prototype v3</title>
+<style>
+  :root {
+    --c-bg: #070912;
+    --c-sidebar: #0a0c17;
+    --c-surface: rgba(255, 255, 255, .04);
+    --c-surface-2: rgba(255, 255, 255, .08);
+    --c-border: rgba(255, 255, 255, .10);
+    --c-text: #eef0fb;
+    --c-dim: rgba(238, 240, 251, .66);
+    --c-muted: rgba(238, 240, 251, .42);
+    --c-accent: #8b8cff;
+    --c-accent-ink: #0a0b16;
+    --c-menu-bg: #15142b;
+    --font-head: "Manrope", system-ui, sans-serif;
+    --r-card: 14px;
+    --ok: #7fd8a6;
+    --bad: #ff8f8f;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { font-family: var(--font-head); color: var(--c-text); background: var(--c-bg); display: flex; overflow: hidden; }
+
+  /* ================= sidebar ================= */
+  .sidebar {
+    width: 258px; flex: none; height: 100vh;
+    background: var(--c-sidebar);
+    border-right: 1px solid var(--c-border);
+    display: flex; flex-direction: column;
+    padding: 16px 14px;
+    gap: 4px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 2px 6px 14px; }
+  .brand .logo { width: 30px; height: 30px; border-radius: 9px; background: var(--c-accent); display: grid; place-items: center; }
+  .brand .logo span { width: 14px; height: 10px; border-radius: 3px; background: var(--c-accent-ink); display: block; position: relative; }
+  .brand .logo span::before, .brand .logo span::after { content: ""; position: absolute; top: 3px; width: 3px; height: 3px; border-radius: 50%; background: var(--c-accent); }
+  .brand .logo span::before { left: 2.5px; } .brand .logo span::after { right: 2.5px; }
+  .brand b { font-size: 16px; letter-spacing: .08em; }
+  .mode-switch { display: flex; gap: 4px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 11px; padding: 4px; margin-bottom: 12px; }
+  .mode-switch button { all: unset; flex: 1; text-align: center; font-size: 13px; font-weight: 700; color: var(--c-muted); padding: 6px 0; border-radius: 8px; cursor: pointer; }
+  .mode-switch button.active { background: var(--c-surface-2); color: var(--c-text); position: relative; }
+  .mode-switch button.active::after { content: ""; position: absolute; top: 5px; right: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--c-accent); }
+  .search { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 10px; color: var(--c-muted); font-size: 13px; padding: 8px 12px; margin-bottom: 8px; }
+  .newtask { border: 1px dashed var(--c-border); border-radius: 10px; color: var(--c-dim); font-size: 13px; font-weight: 700; padding: 9px 12px; margin-bottom: 14px; }
+  .sechead { font-size: 10.5px; letter-spacing: .14em; color: var(--c-muted); font-weight: 800; padding: 8px 6px 6px; text-transform: uppercase; }
+  .tasks { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+  .tasks a { color: var(--c-dim); font-size: 12.5px; padding: 6px 8px; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none; }
+  .tasks a.active { background: rgba(139, 140, 255, .12); border: 1px solid rgba(139, 140, 255, .30); color: var(--c-text); font-weight: 700; }
+  .workspaces { margin-top: auto; display: flex; flex-direction: column; gap: 2px; }
+  .workspaces a { display: flex; gap: 9px; align-items: center; color: var(--c-dim); font-size: 13px; padding: 6px 8px; border-radius: 8px; text-decoration: none; }
+  .workspaces a i { width: 14px; height: 14px; border: 1.6px solid var(--c-muted); border-radius: 4px; display: inline-block; }
+  .settings { display: flex; gap: 9px; align-items: center; color: var(--c-dim); font-size: 13px; padding: 12px 8px 2px; }
+
+  /* ================= main ================= */
+  .main { flex: 1; height: 100vh; position: relative; display: flex; flex-direction: column; overflow: hidden;
+    background:
+      radial-gradient(1100px 560px at 88% -8%, rgba(139, 140, 255, .09), transparent 60%),
+      radial-gradient(2px 2px at 20% 30%, rgba(255,255,255,.25), transparent 50%),
+      radial-gradient(1.5px 1.5px at 70% 60%, rgba(255,255,255,.18), transparent 50%),
+      radial-gradient(2px 2px at 45% 80%, rgba(255,255,255,.14), transparent 50%),
+      radial-gradient(1.5px 1.5px at 85% 40%, rgba(255,255,255,.2), transparent 50%),
+      var(--c-bg);
+  }
+  .main::after { /* the planet */
+    content: ""; position: absolute; right: -140px; bottom: -180px; width: 430px; height: 430px;
+    border-radius: 50%; z-index: 0; pointer-events: none;
+    background: radial-gradient(circle at 32% 28%, #6d6fd6 0%, #4a4ba8 35%, #23244f 75%, #14152e 100%);
+    box-shadow: 0 0 120px rgba(139, 140, 255, .18);
+  }
+  .mainbar { display: flex; align-items: center; gap: 12px; padding: 14px 22px; z-index: 2; }
+  .pill-btn { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; padding: 7px 14px; border-radius: 10px; background: var(--c-surface); border: 1px solid var(--c-border); color: var(--c-text); }
+  .pill-btn .dot-model { width: 7px; height: 7px; border-radius: 50%; background: var(--c-accent); }
+  .pill-btn .caret { color: var(--c-muted); font-size: 10px; }
+  .proto-tag { font-size: 10.5px; letter-spacing: .13em; text-transform: uppercase; color: var(--c-muted); border: 1px dashed var(--c-border); padding: 4px 10px; border-radius: 999px; }
+  .theme-pill { margin-left: auto; }
+  .status-pill {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 700; padding: 7px 14px; border-radius: 999px;
+    background: rgba(21, 20, 43, .85); border: 1px solid var(--c-border);
+  }
+  .status-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c-accent); animation: pulse 1.6s ease-in-out infinite; }
+  .status-pill.done .dot { background: var(--ok); animation: none; }
+  .status-pill.bad .dot { background: var(--bad); animation: none; }
+  .status-pill .timer { color: var(--c-dim); font-variant-numeric: tabular-nums; font-weight: 600; }
+  .status-pill .sofar { color: var(--c-muted); font-weight: 600; font-size: 12px; border-left: 1px solid var(--c-border); padding-left: 8px; }
+  @keyframes pulse { 50% { opacity: .35; } }
+
+  .scroll { flex: 1; overflow-y: auto; z-index: 1; }
+  .rail-wrap { max-width: 800px; margin: 0 auto; padding: 12px 24px 40px; }
+
+  .user-msg {
+    margin-left: auto; max-width: 82%;
+    background: linear-gradient(180deg, rgba(139, 140, 255, .16), rgba(139, 140, 255, .10));
+    border: 1px solid rgba(139, 140, 255, .25);
+    border-radius: 18px 18px 6px 18px;
+    padding: 14px 18px; font-size: 15px; line-height: 1.5;
+    width: fit-content;
+  }
+  .thomas-head { display: flex; align-items: center; gap: 10px; margin: 30px 0 10px; }
+  .anvil-badge {
+    width: 34px; height: 34px; border-radius: 10px; flex: none;
+    display: grid; place-items: center;
+    background: linear-gradient(160deg, rgba(139, 140, 255, .28), rgba(139, 140, 255, .10));
+    border: 1px solid rgba(139, 140, 255, .35);
+  }
+  .anvil-badge svg { width: 19px; height: 19px; fill: var(--c-text); }
+  .thomas-head .name { font-weight: 800; font-size: 15px; }
+  .thomas-head .mode { color: var(--c-muted); font-size: 13px; font-weight: 600; }
+  .thomas-head .inline-state { color: var(--c-dim); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+  .plan { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 20px; }
+  .plan .chip { font-size: 12px; font-weight: 700; color: var(--c-muted); border: 1px solid var(--c-border); border-radius: 999px; padding: 5px 12px; transition: all .3s; }
+  .plan .chip.now { color: var(--c-text); border-color: rgba(139, 140, 255, .5); background: rgba(139, 140, 255, .10); }
+  .plan .chip.done { color: var(--ok); border-color: rgba(127, 216, 166, .35); }
+  .plan .chip.done::before { content: "\2713\00a0"; }
+
+  .step { margin: 0 0 26px; opacity: 0; transform: translateY(8px); transition: opacity .5s, transform .5s; }
+  .step.on { opacity: 1; transform: none; }
+  .step .say { font-size: 15px; line-height: 1.62; max-width: 680px; display: flex; gap: 10px; align-items: baseline; }
+  .step .say .text { flex: 1; }
+  .step .say .lead { color: var(--c-accent); font-weight: 700; }
+  .step .say .stamp { flex: none; color: var(--c-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+  .receipts { margin: 10px 0 0 14px; padding-left: 20px; border-left: 2px solid rgba(139, 140, 255, .30); display: flex; flex-direction: column; gap: 6px; }
+  .receipt { border: 1px solid var(--c-border); background: rgba(10, 12, 23, .55); border-radius: 10px; overflow: hidden; max-width: 640px; }
+  .receipt > button { all: unset; display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; cursor: pointer; font-family: inherit; font-size: 13px; color: var(--c-dim); }
+  .receipt > button:hover { background: var(--c-surface-2); color: var(--c-text); }
+  .receipt .glyph { width: 15px; height: 15px; flex: none; fill: var(--c-muted); }
+  .receipt .verb { font-weight: 700; color: var(--c-text); flex: none; }
+  .receipt .what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .receipt .delta { color: var(--c-muted); font-size: 12px; flex: none; }
+  .receipt .chev { margin-left: auto; flex: none; transition: transform .2s; color: var(--c-muted); font-size: 11px; }
+  .receipt.open .chev { transform: rotate(180deg); }
+  .receipt .body { display: none; border-top: 1px solid var(--c-border); }
+  .receipt.open .body { display: block; }
+  .receipt .body pre { padding: 12px 14px; font-size: 12px; line-height: 1.6; color: var(--c-dim); font-family: ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+  .receipt.okline > button .verb { color: var(--ok); }
+
+  /* ---- done card, with the artifact thumbnail (best of both) ---- */
+  .done-card {
+    margin: 6px 0 0; max-width: 680px;
+    border: 1px solid rgba(139, 140, 255, .35);
+    background: linear-gradient(170deg, rgba(139, 140, 255, .13), rgba(21, 20, 43, .65));
+    border-radius: var(--r-card);
+    padding: 16px 18px;
+    backdrop-filter: blur(6px);
+  }
+  .done-card.bad { border-color: rgba(255, 143, 143, .4); background: linear-gradient(170deg, rgba(255, 143, 143, .10), rgba(21, 20, 43, .55)); }
+  .done-card .kicker { font-size: 11px; letter-spacing: .16em; font-weight: 800; color: var(--c-accent); text-transform: uppercase; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .done-card.bad .kicker { color: var(--bad); }
+  .done-card .kicker svg { width: 14px; height: 14px; fill: currentColor; }
+  .done-hero { display: flex; gap: 16px; align-items: stretch; }
+  .thumb {
+    flex: none; width: 168px; border-radius: 11px; overflow: hidden; cursor: pointer;
+    border: 1px solid rgba(139, 140, 255, .4);
+    background: #0b0d1a; position: relative;
+    transition: transform .15s, box-shadow .15s;
+  }
+  .thumb:hover { transform: scale(1.03); box-shadow: 0 6px 26px rgba(139, 140, 255, .25); }
+  .thumb .mini {
+    position: absolute; inset: 0; padding: 14px 10px;
+    display: flex; flex-direction: column; align-items: center; gap: 7px;
+    background: radial-gradient(120px 80px at 50% 12%, rgba(139, 140, 255, .16), transparent 70%);
+  }
+  .thumb .mini .t { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--c-dim); font-weight: 800; text-align: center; }
+  .thumb .mini .cb { width: 34px; height: 52px; border-radius: 5px; border: 1.5px solid rgba(139, 140, 255, .55); background: repeating-linear-gradient(45deg, rgba(139, 140, 255, .14) 0 5px, transparent 5px 10px); }
+  .thumb .mini .door { width: 100%; font-size: 9.5px; font-weight: 700; color: var(--c-text); background: rgba(139, 140, 255, .14); border: 1px solid rgba(139, 140, 255, .3); border-radius: 6px; padding: 4px 0; text-align: center; }
+  .thumb .mini .door.ghost { background: transparent; color: var(--c-dim); }
+  .thumb .live { position: absolute; top: 7px; right: 7px; font-size: 8.5px; font-weight: 800; letter-spacing: .1em; color: var(--ok); background: rgba(10, 12, 23, .8); border: 1px solid rgba(127, 216, 166, .4); padding: 2px 6px; border-radius: 999px; }
+  .thumb .zoom { position: absolute; bottom: 7px; right: 7px; font-size: 10px; color: var(--c-dim); background: rgba(10, 12, 23, .8); border: 1px solid var(--c-border); padding: 2px 7px; border-radius: 999px; }
+  .done-copy { flex: 1; min-width: 0; }
+  .done-copy h3 { font-size: 17px; margin-bottom: 6px; }
+  .done-copy p { font-size: 13.5px; line-height: 1.6; color: var(--c-dim); }
+  .done-copy .honest { margin-top: 8px; font-size: 12.5px; color: var(--c-muted); }
+  .done-card .actions { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .done-card .actions button { border-radius: 9px; font-weight: 700; font-size: 13px; padding: 8px 15px; cursor: pointer; font-family: inherit; background: transparent; color: var(--c-text); border: 1px solid var(--c-border); }
+  .done-card .actions button:hover { background: var(--c-surface-2); }
+  .done-card .actions .primary { background: var(--c-accent); color: var(--c-accent-ink); border: 0; font-weight: 800; }
+  .done-card .actions .primary:hover { filter: brightness(1.1); }
+  .done-card .footerline { margin-top: 12px; font-size: 12px; color: var(--c-muted); font-variant-numeric: tabular-nums; }
+
+  .changes { display: none; margin-top: 12px; border-top: 1px solid var(--c-border); padding-top: 12px; }
+  .changes.open { display: block; }
+  .changes .change { margin-bottom: 4px; border: 1px solid var(--c-border); border-radius: 10px; background: rgba(7, 9, 18, .4); overflow: hidden; }
+  .changes .change > button { all: unset; display: flex; gap: 10px; align-items: baseline; width: 100%; padding: 9px 12px; cursor: pointer; font-family: inherit; font-size: 13px; }
+  .changes .change > button:hover { background: var(--c-surface-2); }
+  .changes .change .cfile { font-weight: 700; flex: none; }
+  /* the overflow fix: the description column truncates, the delta never leaves the bubble */
+  .changes .change .cwhat { color: var(--c-dim); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .changes .change .cdelta { flex: none; color: var(--c-muted); font-size: 12px; max-width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .changes .change .cbody { display: none; border-top: 1px solid var(--c-border); }
+  .changes .change.open .cbody { display: block; }
+  .changes .change .cbody pre { padding: 10px 13px; font-size: 12px; line-height: 1.6; color: var(--c-dim); font-family: ui-monospace, Consolas, monospace; white-space: pre-wrap; }
+
+  /* ---- composer ---- */
+  .composer-zone { z-index: 2; padding: 10px 24px 14px; }
+  .replay-row { max-width: 760px; margin: 0 auto 10px; display: flex; gap: 8px; align-items: center; }
+  .replay-row button { background: rgba(21, 20, 43, .8); border: 1px solid var(--c-border); color: var(--c-dim); border-radius: 999px; padding: 6px 14px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
+  .replay-row button:hover { color: var(--c-text); background: var(--c-surface-2); }
+  .replay-row .crash { border-color: rgba(255, 143, 143, .35); }
+  .replay-row .crash:hover { color: var(--bad); }
+  .composer { max-width: 760px; margin: 0 auto; background: rgba(13, 15, 28, .9); border: 1px solid var(--c-border); border-radius: 16px; padding: 12px 14px; backdrop-filter: blur(8px); }
+  .composer .hint { color: var(--c-muted); font-size: 14.5px; padding: 2px 4px 12px; }
+  .composer .row { display: flex; align-items: center; gap: 8px; }
+  .composer .chipbtn { display: flex; align-items: center; gap: 6px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-dim); font-size: 12.5px; font-weight: 700; border-radius: 9px; padding: 6px 11px; }
+  .composer .send { margin-left: auto; width: 36px; height: 36px; border-radius: 10px; background: var(--c-accent); display: grid; place-items: center; color: var(--c-accent-ink); font-weight: 900; }
+  .statusline { position: absolute; right: 14px; bottom: 6px; z-index: 2; font-size: 10.5px; color: var(--c-muted); font-family: ui-monospace, monospace; }
+
+  /* ---- side panel ---- */
+  .game-panel { position: fixed; top: 0; right: -420px; width: 400px; height: 100vh; z-index: 20; background: var(--c-menu-bg); border-left: 1px solid var(--c-border); transition: right .35s cubic-bezier(.2, .8, .2, 1); display: flex; flex-direction: column; }
+  .game-panel.open { right: 0; box-shadow: -30px 0 60px rgba(0, 0, 0, .5); }
+  .game-panel header { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--c-border); }
+  .game-panel header strong { font-size: 14px; }
+  .game-panel header button { all: unset; margin-left: auto; cursor: pointer; color: var(--c-muted); font-size: 16px; padding: 4px 8px; }
+  .game-panel header button:hover { color: var(--c-text); }
+  .game-panel .stage { flex: 1; margin: 16px; border-radius: 12px; border: 1px solid var(--c-border); background: radial-gradient(300px 200px at 50% 20%, rgba(139, 140, 255, .12), transparent 70%), #0b0d1a; display: grid; place-items: center; text-align: center; padding: 20px; }
+  .game-panel .stage .cardback { width: 90px; height: 140px; border-radius: 10px; margin: 0 auto 16px; border: 2px solid rgba(139, 140, 255, .5); background: repeating-linear-gradient(45deg, rgba(139, 140, 255, .12) 0 8px, transparent 8px 16px), rgba(139, 140, 255, .06); }
+  .game-panel .stage p { color: var(--c-dim); font-size: 13px; line-height: 1.6; }
+
+  .toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px); background: var(--c-menu-bg); border: 1px solid var(--c-border); color: var(--c-text); padding: 10px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; opacity: 0; transition: all .3s; z-index: 30; pointer-events: none; }
+  .toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="brand"><span class="logo"><span></span></span><b>Thomas</b></div>
+  <div class="mode-switch">
+    <button>&#9776; Chat</button>
+    <button class="active">&lt;&gt; Code</button>
+    <button>&#128188; Work</button>
+  </div>
+  <div class="search">&#128269;&nbsp; Search code tasks</div>
+  <div class="newtask">+&nbsp; New code task</div>
+  <div class="sechead">Code tasks</div>
+  <div class="tasks">
+    <a class="active"># MASTER PROMPT — Build a Tarot Ga…</a>
+    <a>create counter.html - one small page w…</a>
+    <a>get thios game oppen for em to test</a>
+    <a>make pong</a>
+    <a>Build gate-a.html: a page with 25 haiku…</a>
+    <a>Build longlist.html: a page listing 80 ins…</a>
+  </div>
+  <div class="workspaces">
+    <div class="sechead">Workspaces</div>
+    <a><i></i>Mission Control</a>
+    <a><i></i>Virtual Office</a>
+    <a><i></i>Canvas</a>
+    <a><i></i>Library</a>
+    <a><i></i>Marketplace</a>
+    <a><i></i>Paper Trading</a>
+  </div>
+  <div class="settings">&#9881;&nbsp; Settings</div>
+</aside>
+
+<div class="main">
+  <div class="mainbar">
+    <div class="pill-btn"><span class="dot-model"></span> GPT-5.6 Sol <span class="caret">&#9660;</span></div>
+    <span class="proto-tag">Prototype v3 — not built yet</span>
+    <div class="theme-pill pill-btn" style="margin-left:auto;">&#9680; Nebula Core <span class="caret">&#9660;</span></div>
+    <div class="status-pill" id="pill">
+      <span class="dot"></span>
+      <span id="pill-word">Working</span>
+      <span class="timer" id="pill-timer">0:00</span>
+      <span class="sofar" id="pill-sofar">0 files</span>
+    </div>
+  </div>
+
+  <div class="scroll" id="scroll">
+    <div class="rail-wrap">
+      <div class="user-msg">oh no i meant for this to be a rougue lite game. keep this game on the main menu for getting a reading but make an actual game too</div>
+
+      <div class="thomas-head">
+        <div class="anvil-badge">
+          <svg viewBox="0 0 256 256"><path d="M240 60h-92a12 12 0 0 0 0 24h6.6c-4 24.5-22.8 44-47 48.6C82.9 137.4 64 121.4 64 96V84h12a12 12 0 0 0 0-24H24a12 12 0 0 0 0 24h16v12c0 34.6 24.7 58.5 56 63.4v10.2c0 11-4.7 21.4-13 28.6l-18.9 16.5A12 12 0 0 0 72 236h112a12 12 0 0 0 7.9-21.1L173 198.4a38.2 38.2 0 0 1-13-28.6v-10.6c37.5-6 66.2-35 70.7-71.2H240a12 12 0 0 0 0-24Z"/></svg>
+        </div>
+        <span class="name">Thomas</span>
+        <span class="mode">Code</span>
+        <span class="inline-state" id="inline-state">· working, 0:00</span>
+      </div>
+
+      <div class="plan" id="plan"></div>
+      <div id="feed"></div>
+    </div>
+  </div>
+
+  <div class="composer-zone">
+    <div class="replay-row">
+      <button onclick="play(false)">&#8635;&nbsp; Replay the run</button>
+      <button class="crash" onclick="play(true)">&#9888;&nbsp; Replay as a crash</button>
+    </div>
+    <div class="composer">
+      <div class="hint">Ask Thomas to build, debug, or test&hellip;</div>
+      <div class="row">
+        <span class="chipbtn">+</span>
+        <span class="chipbtn">&#9776; Tools</span>
+        <span class="chipbtn">&#9634; tarot card &#9662;</span>
+        <span class="send">&#8593;</span>
+      </div>
+    </div>
+  </div>
+  <div class="statusline">:8899 &middot; prototype &middot; not wired to the runtime</div>
+</div>
+
+<div class="game-panel" id="game-panel">
+  <header>
+    <div class="anvil-badge" style="width:26px;height:26px;border-radius:8px;"><svg viewBox="0 0 256 256" style="width:14px;height:14px;fill:var(--c-text);"><path d="M240 60h-92a12 12 0 0 0 0 24h6.6c-4 24.5-22.8 44-47 48.6C82.9 137.4 64 121.4 64 96V84h12a12 12 0 0 0 0-24H24a12 12 0 0 0 0 24h16v12c0 34.6 24.7 58.5 56 63.4v10.2c0 11-4.7 21.4-13 28.6l-18.9 16.5A12 12 0 0 0 72 236h112a12 12 0 0 0 7.9-21.1L173 198.4a38.2 38.2 0 0 1-13-28.6v-10.6c37.5-6 66.2-35 70.7-71.2H240a12 12 0 0 0 0-24Z"/></svg></div>
+    <strong>Lantern &amp; Thread</strong>
+    <button onclick="togglePanel(false)" title="Close">&#10005;</button>
+  </header>
+  <div class="stage">
+    <div>
+      <div class="cardback"></div>
+      <p><b>Game preview</b><br>In the real build, this panel is the live <code>index.html</code> — you play it right here beside the chat, and Thomas keeps working while you do.</p>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const FILE_GLYPH = '<svg class="glyph" viewBox="0 0 256 256"><path d="M213.7 82.3l-56-56A8 8 0 0 0 152 24H56a16 16 0 0 0-16 16v176a16 16 0 0 0 16 16h144a16 16 0 0 0 16-16V88a8 8 0 0 0-2.3-5.7ZM160 51.3 188.7 80H160ZM200 216H56V40h88v48a8 8 0 0 0 8 8h48Z"/></svg>';
+const EDIT_GLYPH = '<svg class="glyph" viewBox="0 0 256 256"><path d="M227.3 73.4 182.6 28.7a16 16 0 0 0-22.6 0L36.7 152A15.9 15.9 0 0 0 32 163.3V208a16 16 0 0 0 16 16h44.7a15.9 15.9 0 0 0 11.3-4.7L227.3 96a16 16 0 0 0 0-22.6ZM92.7 208H48v-44.7l88-88L180.7 120ZM192 108.7 147.3 64l24-24L216 84.7Z"/></svg>';
+const CHECK_GLYPH = '<svg class="glyph" viewBox="0 0 256 256"><path d="M232.5 80.5 107.2 205.8a12 12 0 0 1-17 0L23.5 139a12 12 0 0 1 17-17l58.2 58.2L215.5 63.5a12 12 0 0 1 17 17Z"/></svg>';
+const ANVIL_SM = '<svg viewBox="0 0 256 256"><path d="M240 60h-92a12 12 0 0 0 0 24h6.6c-4 24.5-22.8 44-47 48.6C82.9 137.4 64 121.4 64 96V84h12a12 12 0 0 0 0-24H24a12 12 0 0 0 0 24h16v12c0 34.6 24.7 58.5 56 63.4v10.2c0 11-4.7 21.4-13 28.6l-18.9 16.5A12 12 0 0 0 72 236h112a12 12 0 0 0 7.9-21.1L173 198.4a38.2 38.2 0 0 1-13-28.6v-10.6c37.5-6 66.2-35 70.7-71.2H240a12 12 0 0 0 0-24Z"/></svg>';
+
+const PLAN = ['Read the deck', 'Menu doors', 'Run loop + reversal', 'Check it'];
+
+const SCRIPT = [
+  { t: 800, plan: 0, files: '0 files', say: '<span class="lead">On it.</span> Keeping the reading exactly where it is — the roguelite gets its own door on the main menu. First I\'m reading how the deck is stored, so the game can fight with the same 78 real cards instead of a copy.',
+    receipts: [
+      { glyph: FILE_GLYPH, verb: 'Read', what: 'index.html — the deck data', delta: 'lines 1240–1420',
+        body: 'const DECK = buildDeck();\n// 22 majors + 4 suits x 14 ranks = 78 cards\n// each card: name, arcana, suit, upright, reversed, element' },
+    ] },
+  { t: 4200, plan: 1, files: '0 files', say: 'Good news — the whole deck lives in one <b>buildDeck()</b> function, so the game can draw from it directly. The plan: suits become four damage types, number cards are your power curve, court cards are allies, and the 22 majors are rare one-run relics.',
+    receipts: [
+      { glyph: FILE_GLYPH, verb: 'Read', what: 'index.html — shuffle and reveal logic', delta: 'lines 1400–1460',
+        body: 'function revealCards() {\n  const slots = [...elements["cards-layout"].querySelectorAll(".card-slot")];\n  slots.forEach((slot, index) => window.setTimeout(() =>\n    slot.classList.add("is-revealed"), 180 + index * 145));\n}' },
+    ] },
+  { t: 8600, plan: 2, files: '1 file · +476 lines', say: 'Building the main-menu split now — <b>Get a reading</b> stays as-is, and a new <b>Descend</b> door starts a run. This is the big edit; the run loop is most of it.',
+    receipts: [
+      { glyph: EDIT_GLYPH, verb: 'Edited', what: 'index.html — main menu, two doors', delta: '+64 lines',
+        body: '<section id="menu">\n  <button data-door="reading">Get a reading</button>\n  <button data-door="descend">Descend</button>  <!-- new -->\n</section>' },
+      { glyph: EDIT_GLYPH, verb: 'Edited', what: 'index.html — the run loop (draw, fight, relics)', delta: '+412 lines',
+        body: 'function startRun() {\n  state.hp = 30; state.floor = 1;\n  state.hand = drawFromDeck(5);   // the SAME 78-card deck\n  ...\n}' },
+    ] },
+  { t: 13200, plan: 3, files: '1 file · +476 lines', say: 'Wiring reversal as a real mechanic — a reversed card costs 1 less but has a 20% chance to backfire. Now checking the whole page still loads clean, reading mode included…',
+    receipts: [
+      { glyph: CHECK_GLYPH, verb: 'Checked', what: 'page loads, both doors open, no errors', delta: 'passed', ok: true,
+        body: 'load index.html .......... OK\nopen door: reading ....... OK (unchanged)\nopen door: descend ....... OK (new run starts)\nconsole errors ........... none' },
+    ] },
+  { t: 17400, done: true },
+];
+
+const CHANGES = [
+  { file: 'Main menu', what: 'added the Descend door — reading untouched', delta: '+64 lines',
+    body: '<section id="menu">\n  <button data-door="reading">Get a reading</button>\n  <button data-door="descend">Descend</button>\n</section>' },
+  { file: 'Run loop', what: 'draw a hand, fight floors, suits deal 4 damage types', delta: '+412 lines',
+    body: 'function startRun() {\n  state.hp = 30; state.floor = 1;\n  state.hand = drawFromDeck(5);\n}' },
+  { file: 'Reversal mechanic', what: 'reversed cards cost 1 less, 20% backfire chance', delta: 'in run loop',
+    body: 'function playCard(card) {\n  const cost = card.reversed ? card.cost - 1 : card.cost;\n  if (card.reversed && rng() < 0.2) backfire(card);\n}' },
+  { file: 'Majors as relics', what: 'the 22 majors are one-run relics — draw one, keep it all run', delta: 'in run loop',
+    body: 'if (card.arcana === "Major") {\n  state.relics.push(card);   // permanent for this run\n}' },
+];
+
+const THUMB_HTML = `
+  <div class="thumb" onclick="togglePanel(true)" title="Open the game">
+    <div class="mini">
+      <div class="t">Lantern &amp; Thread</div>
+      <div class="cb"></div>
+      <div class="door">Get a reading</div>
+      <div class="door ghost">Descend &nbsp;&#9733;</div>
+    </div>
+    <span class="live">LIVE</span>
+    <span class="zoom">&#8599; open</span>
+  </div>`;
+
+const feed = document.getElementById('feed');
+const planEl = document.getElementById('plan');
+const pill = document.getElementById('pill');
+const pillWord = document.getElementById('pill-word');
+const pillTimer = document.getElementById('pill-timer');
+const pillSofar = document.getElementById('pill-sofar');
+const inlineState = document.getElementById('inline-state');
+const scroller = document.getElementById('scroll');
+let timers = [], clockStart = 0, clockHandle = null;
+
+function fmt(s) { return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+function tick() {
+  const s = Math.floor((Date.now() - clockStart) / 1000);
+  pillTimer.textContent = fmt(s);
+  inlineState.textContent = '· working, ' + fmt(s);
+}
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('on');
+  setTimeout(() => t.classList.remove('on'), 2600);
+}
+function togglePanel(open) { document.getElementById('game-panel').classList.toggle('open', open); }
+function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+function scrollEnd() { scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' }); }
+
+function receiptNode(r) {
+  const div = document.createElement('div');
+  div.className = 'receipt' + (r.ok ? ' okline' : '');
+  div.innerHTML = `
+    <button>${r.glyph}<span class="verb">${r.verb}</span><span class="what">${r.what}</span><span class="delta">${r.delta}</span><span class="chev">&#9660;</span></button>
+    <div class="body"><pre>${esc(r.body)}</pre></div>`;
+  div.querySelector('button').addEventListener('click', () => div.classList.toggle('open'));
+  return div;
+}
+
+function renderPlan(activeIdx, doneUpTo) {
+  planEl.innerHTML = '';
+  PLAN.forEach((label, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'chip' + (i < doneUpTo ? ' done' : i === activeIdx ? ' now' : '');
+    chip.textContent = label;
+    planEl.appendChild(chip);
+  });
+}
+
+function doneCard(crashed, seconds) {
+  const wrap = document.createElement('div');
+  wrap.className = 'step';
+  if (crashed) {
+    wrap.innerHTML = `
+      <div class="done-card bad">
+        <div class="kicker"><svg viewBox="0 0 256 256"><path d="M128 24a104 104 0 1 0 104 104A104.2 104.2 0 0 0 128 24Zm-8 56a8 8 0 0 1 16 0v56a8 8 0 0 1-16 0Zm8 104a12 12 0 1 1 12-12 12 12 0 0 1-12 12Z"/></svg> The run crashed</div>
+        <div class="done-copy">
+          <h3>It didn't finish — here's exactly where it died</h3>
+          <p>Lost the connection to ChatGPT mid-run (your login needs a refresh). The main-menu edit had already landed — <b>that work is kept</b>, nothing is lost.</p>
+          <p class="honest">What was done: the two doors. What wasn't: the run loop and the check. No pretending otherwise.</p>
+        </div>
+        <div class="actions">
+          <button class="primary" onclick="toast('In the real build: the run resumes from where it died')">Pick it back up</button>
+          <button onclick="toast('In the real build: shows the kept partial work')">See what landed</button>
+        </div>
+        <div class="footerline">Crashed at 0:09 &middot; 1 file kept &middot; +64 lines</div>
+      </div>`;
+  } else {
+    wrap.innerHTML = `
+      <div class="done-card">
+        <div class="kicker">${ANVIL_SM} Thomas made this</div>
+        <div class="done-hero">
+          ${THUMB_HTML}
+          <div class="done-copy">
+            <h3>Lantern &amp; Thread — now with a roguelite run</h3>
+            <p>Two doors on the main menu: <b>Get a reading</b> (untouched) and <b>Descend</b> — draw from the same 78 cards, suits deal four damage types, majors are one-run relics, reversed cards are cheaper but risky.</p>
+            <p class="honest">Passed 2 automatic checks. What I could not check: whether the run FEELS good — balance needs your hands on it.</p>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="primary" onclick="togglePanel(true)">Open in chat</button>
+          <button onclick="toast('In the real build: opens the game in its own browser window')">Open in separate window</button>
+          <button onclick="toast('In the real build: downloads index.html')">Download</button>
+          <button onclick="this.closest('.done-card').querySelector('.changes').classList.toggle('open')">See every change</button>
+        </div>
+        <div class="changes">
+          ${CHANGES.map((c, i) => `
+            <div class="change">
+              <button data-chg="${i}"><span class="cfile">${c.file}</span><span class="cwhat">${c.what}</span><span class="cdelta">${c.delta}</span></button>
+              <div class="cbody"><pre>${esc(c.body)}</pre></div>
+            </div>`).join('')}
+        </div>
+        <div class="footerline">Finished in ${fmt(seconds)} &middot; 1 file &middot; +476 lines &middot; 2 checks passed</div>
+      </div>`;
+    wrap.querySelectorAll('.change > button').forEach(b =>
+      b.addEventListener('click', () => b.parentElement.classList.toggle('open')));
+  }
+  return wrap;
+}
+
+function play(crash) {
+  feed.innerHTML = '';
+  togglePanel(false);
+  timers.forEach(clearTimeout); timers = [];
+  if (clockHandle) clearInterval(clockHandle);
+  clockStart = Date.now();
+  clockHandle = setInterval(tick, 250);
+  pill.className = 'status-pill';
+  pillWord.textContent = 'Working';
+  pillSofar.textContent = '0 files';
+  renderPlan(0, 0);
+  tick();
+
+  const script = crash ? SCRIPT.slice(0, 3).concat([{ t: 9400, crashed: true }]) : SCRIPT;
+
+  for (const step of script) {
+    timers.push(setTimeout(() => {
+      if (step.done || step.crashed) {
+        clearInterval(clockHandle);
+        const s = Math.floor((Date.now() - clockStart) / 1000);
+        pill.classList.add(step.crashed ? 'bad' : 'done');
+        pillWord.textContent = step.crashed ? 'Crashed' : 'Done';
+        pillTimer.textContent = fmt(s);
+        inlineState.textContent = step.crashed ? '· crashed at ' + fmt(s) : '· finished in ' + fmt(s);
+        renderPlan(-1, step.crashed ? 2 : PLAN.length);
+        const card = doneCard(!!step.crashed, s);
+        feed.appendChild(card);
+        requestAnimationFrame(() => card.classList.add('on'));
+        scrollEnd();
+        return;
+      }
+      renderPlan(step.plan, step.plan);
+      pillSofar.textContent = step.files;
+      const el = document.createElement('div');
+      el.className = 'step';
+      el.innerHTML = `<div class="say"><span class="text">${step.say}</span><span class="stamp">${fmt(Math.round(step.t / 1000))}</span></div>`;
+      if (step.receipts) {
+        const rc = document.createElement('div');
+        rc.className = 'receipts';
+        for (const r of step.receipts) rc.appendChild(receiptNode(r));
+        el.appendChild(rc);
+      }
+      feed.appendChild(el);
+      requestAnimationFrame(() => el.classList.add('on'));
+      scrollEnd();
+    }, step.t));
+  }
+}
+play(false);
+</script>
+</body>
+</html>
