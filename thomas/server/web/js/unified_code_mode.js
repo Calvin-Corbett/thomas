@@ -2,6 +2,9 @@
   'use strict';
 
   const MAX_LIVE_EVENTS = 120;
+  // Code-Thomas wears the anvil — he builds (owner, 2026-08-10). Same glyph
+  // as the events module's turn avatar; Chat keeps its own star.
+  const CODE_ANVIL_SVG = '<svg viewBox="0 0 256 256" aria-hidden="true"><path d="M240 60h-92a12 12 0 0 0 0 24h6.6c-4 24.5-22.8 44-47 48.6C82.9 137.4 64 121.4 64 96V84h12a12 12 0 0 0 0-24H24a12 12 0 0 0 0 24h16v12c0 34.6 24.7 58.5 56 63.4v10.2c0 11-4.7 21.4-13 28.6l-18.9 16.5A12 12 0 0 0 72 236h112a12 12 0 0 0 7.9-21.1L173 198.4a38.2 38.2 0 0 1-13-28.6v-10.6c37.5-6 66.2-35 70.7-71.2H240a12 12 0 0 0 0-24Z"/></svg>';
   // Show the FULL running action feed (Codex-style: every reply/update lands
   // inline as it happens). Collapsing to 4 visible notes hid the run from the
   // owner — his words: "as it's going down in the chat, it's replying,
@@ -160,6 +163,7 @@
     eventLabel, annotateTerminalEvent, eventType, isTechnicalEvent, refreshElapsed, eventHtml,
     finalReplyEvent, progressEvents, failureSummary, turnHtml, replyHtml,
     elapsedLabel, narrativeActivityHtml, technicalActivityHtml, transcriptEvents, flagExpectedProbe,
+    interleavedActivityHtml,
   } = window.ThomasCodeEvents.create({
     MAX_VISIBLE_PROGRESS_EVENTS, MAX_PROGRESS_EVENT_CHARS, NARRATIVE_EVENT_KINDS, state, esc,
     codeResults, surface, isInternalResultPath, safely, pushLiveEvent, render, send,
@@ -269,9 +273,12 @@
   }
 
   function trimLiveEventDom(list) {
-    const finalEvent = finalReplyEvent(state.liveEvents);
-    const narrativeCount = progressEvents(state.liveEvents, finalEvent).filter(event => !isTechnicalEvent(event)).length;
-    while (list.children.length > narrativeCount || list.children.length > MAX_LIVE_EVENTS) list.firstElementChild.remove();
+    // Trim ONLY against the ring bound. This used to trim down to the count of
+    // narrative events, which was written for the old feed where the list held
+    // narrative rows only — with receipts streaming inline it deleted the run's
+    // history off the top while the reader watched (owner: "I can't see stuff
+    // 7 messages ago").
+    while (list.children.length > MAX_LIVE_EVENTS) list.firstElementChild.remove();
   }
 
   function appendLiveEvent(event, replaceLast) {
@@ -296,8 +303,27 @@
       if (nearBottom && nextTranscript) nextTranscript.scrollTop = nextTranscript.scrollHeight;
       return;
     }
-    if (replaceLast && list.lastElementChild) list.lastElementChild.outerHTML = eventHtml(state.liveEvents[state.liveEvents.length - 1], false);
-    else list.insertAdjacentHTML('beforeend', eventHtml(event, false));
+    if (replaceLast && list.lastElementChild) {
+      // A merged say-delta replaces the say it merged into. If the last child
+      // is a receipt cluster instead (a tool ran mid-sentence), the cheap swap
+      // would clobber the cluster — rebuild instead.
+      if (list.lastElementChild.classList.contains('tc-code-receipts')) { render(); return; }
+      list.lastElementChild.outerHTML = eventHtml(state.liveEvents[state.liveEvents.length - 1], false);
+    } else if (isTechnicalEvent(event)) {
+      // The incremental path must build the SAME structure the full render
+      // builds: receipts live inside a railed cluster under the last thing
+      // Thomas said, and the rail breaks when he talks. Without this, every
+      // streamed receipt landed bare (no rail) until the next full render
+      // rebuilt the thread (owner: "the line on the left isn't there").
+      let cluster = list.lastElementChild;
+      if (!cluster || !cluster.classList.contains('tc-code-receipts')) {
+        list.insertAdjacentHTML('beforeend', '<div class="tc-code-receipts"></div>');
+        cluster = list.lastElementChild;
+      }
+      cluster.insertAdjacentHTML('beforeend', eventHtml(event, false));
+    } else {
+      list.insertAdjacentHTML('beforeend', eventHtml(event, false));
+    }
     trimLiveEventDom(list);
     if (nearBottom && transcript) transcript.scrollTop = transcript.scrollHeight;
   }
@@ -430,6 +456,11 @@
       // finishRun documents: its durable turn just landed in a conversation the
       // reader is looking at, so land the viewport on it too.
       if (durable) scrollTranscriptToNewest();
+      // Thomas tests his own work before handing it over: a durable build that
+      // produced a playable page gets auto-playtested, and the verdict +
+      // recommendations land in the chat. Only for a real build (files
+      // changed) so an explain/answer run is never tested.
+      if (durable) void safely(() => maybeAutoPlaytest(), 'Could not start the automatic playtest.');
       return durable;
     }
     openStream();
@@ -459,7 +490,7 @@
       <span class="tc-code-starter-text">${esc(s.text.length > 96 ? `${s.text.slice(0, 96).trim()}…` : s.text)}</span>
     </button>`).join('');
     return `<div class="tc-code-empty">
-      <span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span>
+      <span class="tc-code-avatar is-anvil" aria-hidden="true">${window.ThomasIcons ? window.ThomasIcons.face('build', 15) : CODE_ANVIL_SVG}</span>
       <strong>What should we make?</strong>
       <span class="tc-code-empty-intro">Describe the outcome in the composer below. Keep using this same conversation for changes, tests, and review.</span>
       <div class="tc-code-starters">${cards}</div>
@@ -480,7 +511,7 @@
     // right next to the narrative updates instead of being hidden in a collapsed
     // "Show details" block. (Owner: "he doesn't output stuff in the chat, he
     // outputs it in the activity thing on the side.")
-    const liveNarrative = liveActivityEvents.map(event => eventHtml(event, false)).join('');
+    const liveNarrative = interleavedActivityHtml(liveActivityEvents, false);
     const liveErrors = state.liveEvents.filter(event => eventType(event) === 'error');
     // The live half of the never-suppress rule (the durable half lives in
     // turnHtml): a failed run that nevertheless produced a final answer used to
@@ -537,7 +568,7 @@
       //
       // `state.running` is the same condition the steer form already uses to hide
       // itself on stop, so the two now agree instead of disagreeing.
-      ? `<article class="tc-code-turn is-agent${state.running ? ' is-live' : ''}" data-code-live-turn><div class="tc-code-message-head"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>Thomas</strong><small>Code</small></div><div class="tc-code-turn-body"><div id="tc-code-live-events" aria-live="polite">${liveNarrative}</div><div id="tc-code-live-technical">${liveTechnical}</div>${liveReply}</div></article>`
+      ? `<article class="tc-code-turn is-agent${state.running ? ' is-live' : ''}" data-code-live-turn><div class="tc-code-message-head"><span class="tc-code-avatar is-anvil" aria-hidden="true">${window.ThomasIcons ? window.ThomasIcons.face('build', 15) : CODE_ANVIL_SVG}</span><strong>Thomas</strong><small>Code</small>${state.running && state.runStartedAt ? '<small class="tc-code-head-elapsed" data-code-elapsed-top>0s</small>' : ''}</div><div class="tc-code-turn-body"><div id="tc-code-live-events" aria-live="polite">${liveNarrative}</div><div id="tc-code-live-technical">${liveTechnical}</div>${liveReply}</div></article>`
       : '<div id="tc-code-live-events" hidden></div><div id="tc-code-live-technical" hidden></div>';
     const visibleChanges = state.changes.filter(change => !isInternalResultPath(change.file));
     const changeRows = visibleChanges.map(change => `<article class="tc-code-change"><header><strong>${esc(change.file)}</strong><span><button data-code-keep="${esc(change.file)}">Keep</button><button data-code-revert="${esc(change.file)}">Revert</button></span></header><details><summary>View ${change.untracked ? 'new file' : 'diff'}</summary><pre>${esc(change.diff || (change.untracked ? 'New file' : 'No textual diff'))}</pre></details></article>`).join('');
@@ -643,9 +674,10 @@
     const viewerOpen = Boolean(state.viewer && state.viewer.file);
     const viewerFull = Boolean(state.viewer && state.viewer.full);
     root.innerHTML = `<div class="tc-code-panel${state.drawerOpen ? ' is-drawer-open' : ''}${viewerOpen && !viewerFull ? ' is-viewer-open' : ''}" style="--tc-code-drawer-width:${clampDrawerWidth(state.drawerWidth)}px">
-      <header class="tc-code-context" data-ui-id="code.context" data-ui-label="Code activity bar" data-ui-policy="move"><button data-code-results-jump type="button" aria-expanded="${state.drawerOpen ? 'true' : 'false'}"><i class="ph ph-sidebar-simple"></i> Activity <small>${statusLabels[state.runStatus] || 'Ready'}</small>${hasResults ? '<span class="tc-code-activity-count" aria-hidden="true"></span>' : ''}</button></header>
+      <header class="tc-code-context" data-ui-id="code.context" data-ui-label="Code activity bar" data-ui-policy="move"><button data-code-results-jump type="button" aria-expanded="${state.drawerOpen ? 'true' : 'false'}"><i class="ph ph-sidebar-simple"></i> Activity <small>${statusLabels[state.runStatus] || 'Ready'}</small>${state.running && state.runStartedAt ? '<small class="tc-code-head-elapsed" data-code-elapsed-top>0s</small>' : ''}${hasResults ? '<span class="tc-code-activity-count" aria-hidden="true"></span>' : ''}</button></header>
+      <button class="tc-code-jump-badge" data-code-jump-bottom type="button" hidden><i class="ph ph-arrow-down" aria-hidden="true"></i> Scroll to the bottom</button>
       <div class="tc-code-layout">
-        <section class="tc-code-transcript" aria-label="Code conversation" data-ui-id="code.transcript" data-ui-label="Code conversation" data-ui-policy="move resize" data-ui-constraints="minWidth=320;minHeight=200">${historyAsk}<div id="tc-code-turns">${turns.map(turnHtml).join('') || (hasLiveTurn || pendingUserTurn ? '' : emptyStateHtml())}</div>${pendingUserTurn}${liveTurn}</section>
+        <section class="tc-code-transcript" aria-label="Code conversation" data-ui-id="code.transcript" data-ui-label="Code conversation" data-ui-policy="move resize" data-ui-constraints="minWidth=320;minHeight=200">${historyAsk}<div id="tc-code-turns">${turns.map(turnHtml).join('') || (hasLiveTurn || pendingUserTurn ? '' : emptyStateHtml())}</div>${pendingUserTurn}${liveTurn}${codeResults().playtestChatCardHtml()}</section>
         <aside class="tc-code-actions" aria-label="Code activity" aria-hidden="${state.drawerOpen ? 'false' : 'true'}"${state.drawerOpen ? '' : ' inert'} data-ui-id="code.activity" data-ui-label="Code activity drawer" data-ui-policy="move resize" data-ui-constraints="minWidth=280;minHeight=240;maxWidth=520"><section class="tc-code-rail-section" data-ui-id="code.outputs" data-ui-label="Outputs" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=120"><div class="tc-code-section-title">Outputs</div>${approval}${preview}${artifactRows}${changesTitle}${changeRows || (!preview && !artifactRows ? '<p class="tc-code-rail-empty">Previews, changed files, and proof will appear here without interrupting the conversation.</p>' : '')}${changeRows && !state.running ? `<button id="tc-code-checkpoint" class="tc-code-checkpoint" data-ui-id="code.action.checkpoint" data-ui-label="Checkpoint changes" data-ui-policy="protected" title="Commit these changes on a thomas-code/ branch">Checkpoint — commit these changes</button>` : ''}</section><section class="tc-code-rail-section tc-code-tree" data-ui-id="code.files" data-ui-label="Project files" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=120"><div class="tc-code-tree-head"><div class="tc-code-section-title">Files · ${esc(state.treePath || '/')}</div>${state.treePath ? '<button id="tc-code-tree-up">Up</button>' : ''}</div><ul>${treeRows || `<li class="tc-code-muted">${esc(filesEmptyMessage)}</li>`}</ul></section><form id="tc-code-steer-form" class="tc-code-steer" ${state.running ? '' : 'hidden'} data-ui-id="code.steer" data-ui-label="Steer Thomas" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=80"><label for="tc-code-steer">Steer Thomas</label><input id="tc-code-steer" name="message" required placeholder="Change direction…" ${state.steeringBusy ? 'disabled' : ''}><button ${state.steeringBusy ? 'disabled' : ''}>${state.steeringBusy ? 'Confirming…' : 'Apply'}</button><button type="button" id="tc-code-stop" data-ui-id="code.action.stop" data-ui-label="Stop this run" data-ui-policy="protected" title="Stop this run" ${state.steeringBusy ? 'disabled' : ''}>Stop</button></form></aside>
       </div>${codeResults().viewerHtml()}</div>`;
     const activityDrawer = root.querySelector('.tc-code-actions');
@@ -756,6 +788,20 @@
       input.focus();
       try { input.setSelectionRange(input.value.length, input.value.length); } catch (error) { /* not a text input */ }
     }));
+    // Playtest recommendation buttons: a click starts a real fix run with the
+    // exact instruction Thomas recommended; "or tell Thomas…" focuses the
+    // composer. Either way the verdict card is cleared once acted on.
+    root.querySelectorAll('[data-code-playtest-rec]').forEach(button => button.addEventListener('click', () => {
+      const prompt = button.dataset.codePlaytestRec || '';
+      state.playtestResult = null;
+      render();
+      if (prompt) void safely(() => send(prompt, state.lastContext || {}), 'Could not start the fix.');
+    }));
+    root.querySelector('[data-code-playtest-type]')?.addEventListener('click', () => {
+      state.playtestResult = null;
+      render();
+      document.getElementById('tc-input')?.focus();
+    });
     root.querySelector('#tc-code-steer-form')?.addEventListener('submit', event => { event.preventDefault(); void safely(() => steer(new FormData(event.currentTarget).get('message')), 'Could not steer the Code task.'); });
     root.querySelector('#tc-code-stop')?.addEventListener('click', () => { void safely(() => stopRun(), 'Could not stop the Code run.'); });
     root.querySelector('#tc-code-checkpoint')?.addEventListener('click', () => { void safely(() => checkpointChanges(), 'Could not checkpoint the changes.'); });
@@ -804,13 +850,31 @@
         ? 'Code tasks could not be loaded.'
         : 'Loading code tasks…';
     root.innerHTML = rows.length ? '' : `<div class="tc-mode-empty">${emptyMessage}</div>`;
+    const history = window.ThomasSidebarHistory;
     rows.forEach(row => {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'tc-mode-history-row';
-      button.innerHTML = `<span>${esc(row.title || 'Untitled task')}</span>`;
-      if (row.id === state.activeId) button.classList.add('is-active');
+      const title = row.title || 'Untitled task';
+      // Last TOUCHED, not last opened: the moment the task last did something.
+      // These arrive as ISO strings, so Number() would quietly yield NaN and
+      // every row would sort as epoch zero.
+      const stamp = Date.parse(row.updated_at || row.updatedAt || '') || 0;
+      const created = Date.parse(row.created_at || '') || stamp;
+      const active = row.id === state.activeId;
+      button.dataset.historyId = String(row.id || '');
+      button.dataset.historyTitle = title;
+      button.dataset.historyTime = String(stamp);
+      button.dataset.historyCreated = String(created);
+      button.dataset.historyMode = 'code';
+      // Per-task activity. The Code tab showed A run was live; the list never
+      // said WHICH task it belonged to.
+      button.innerHTML = history
+        ? history.rowHtml({ title, time: stamp, running: active && state.running })
+        : `<span>${esc(title)}</span>`;
+      if (active) button.classList.add('is-active');
       // Rows stay clickable while a run is live — switching parks the run.
       button.addEventListener('click', () => { void safely(() => loadConversation(row.id), 'Could not open that Code task.'); }); root.appendChild(button);
     });
+    if (history) history.decorate(root);
   }
 
   async function loadConversation(id, options) {
@@ -950,6 +1014,21 @@
     await Promise.all([refresh(), loadTree('', { token, deferRender: true })]);
     render();
     return true;
+  }
+
+  // After a durable build, auto-playtest the playable page it produced. Picks
+  // the newest turn's html artifact; only fires for a real build (files
+  // changed) so answers and no-ops are never tested.
+  function maybeAutoPlaytest() {
+    const turns = state.conversation && Array.isArray(state.conversation.turns) ? state.conversation.turns : [];
+    const last = [...turns].reverse().find(t => t.role === 'agent');
+    if (!last || !last.ok) return;
+    const changed = (last.changed_files || []).filter(f => !isInternalResultPath(f));
+    if (!changed.length) return;
+    const artifacts = (last.artifacts || []).filter(a => a && a.file && !isInternalResultPath(a.file));
+    const playable = artifacts.find(a => /\.x?html?$/i.test(String(a.file)));
+    if (!playable) return;
+    codeResults().autoPlaytest(String(playable.file));
   }
 
   async function send(message, context, options) {
@@ -1417,6 +1496,29 @@
   }
 
   if (window.setInterval) window.setInterval(refreshElapsed, 1000);
+  // Jump-to-latest: the button shows whenever the transcript is scrolled away
+  // from the newest content, and one click returns there (owner, 2026-08-10:
+  // "there is no scroll-to-bottom so I have to drag the scroll thing").
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('click', event => {
+      const hit = event.target instanceof Element ? event.target.closest('[data-code-jump-bottom]') : null;
+      if (hit) {
+        // Hide NOW - the visibility interval re-shows it if the jump
+        // genuinely did not land. A third late jump absorbs thumbnails
+        // that hydrate and grow the transcript after the first two.
+        hit.hidden = true;
+        scrollTranscriptToNewest();
+        window.setTimeout(scrollTranscriptToNewest, 450);
+      }
+    });
+    if (window.setInterval) window.setInterval(() => {
+      const root = surface(); if (!root) return;
+      const jump = root.querySelector('[data-code-jump-bottom]'); if (!jump) return;
+      const transcript = transcriptScroller(root); if (!transcript) return;
+      const away = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight > 220;
+      jump.hidden = !away;
+    }, 700);
+  }
   try {
     // Migration (v2, 2026-07-19): earlier sessions auto-stored the Thomas source
     // repo as the Code project, so every new conversation silently edited the
@@ -1539,6 +1641,16 @@
     stop: () => { void safely(() => stopRun(), 'Could not stop the Code task.'); },
     isBusy: () => state.running || Boolean(state.finishing),
   });
+
+  // Redesign hands a change off to Code by opening the thread it just created.
+  // Exposed here because this module owns Code conversations; the alternative
+  // was a full page reload through the ?forge_code= deep link.
+  window.ThomasCodeMode = {
+    openConversation: async (cid) => {
+      await modes().setMode('code');
+      return safely(() => loadConversation(cid), 'Could not open that Code task.');
+    },
+  };
 
   // A deliverable's deep link is minted as `/?forge_code=<cid>` in
   // thomas/forge/anvil/forge_code_deliverables.py, and until now nothing on `/`

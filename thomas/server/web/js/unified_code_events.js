@@ -19,6 +19,10 @@
       codeResults, surface, isInternalResultPath, safely, pushLiveEvent, render, send,
     } = deps;
 
+    // Code-Thomas wears the anvil — he builds (owner, 2026-08-10). Chat keeps
+    // its own avatar; this badge is Code mode's only.
+    const ANVIL_SVG = '<svg viewBox="0 0 256 256" aria-hidden="true"><path d="M240 60h-92a12 12 0 0 0 0 24h6.6c-4 24.5-22.8 44-47 48.6C82.9 137.4 64 121.4 64 96V84h12a12 12 0 0 0 0-24H24a12 12 0 0 0 0 24h16v12c0 34.6 24.7 58.5 56 63.4v10.2c0 11-4.7 21.4-13 28.6l-18.9 16.5A12 12 0 0 0 72 236h112a12 12 0 0 0 7.9-21.1L173 198.4a38.2 38.2 0 0 1-13-28.6v-10.6c37.5-6 66.2-35 70.7-71.2H240a12 12 0 0 0 0-24Z"/></svg>';
+
     function eventLabel(event) {
       const type = String(event.type || event.fc || 'activity').replace(/_/g, ' ');
       return String(event.text || event.message || event.name || event.tool || event.error || type);
@@ -123,11 +127,16 @@
         if (kind === 'tool') return 'Ran terminal command';
         return event.is_error === true ? 'Terminal check failed' : 'Read terminal result';
       }
-      if (kind === 'tool') return `Used ${event.name || 'a project tool'}`;
+      if (kind === 'tool') return humanToolHeading(event.name, `Used ${event.name || 'a project tool'}`);
       // The same overloading the comment below describes: a tool that returned an
-      // error is a failed tool CALL, not a failed check. The tool's own name is
-      // present on most of these and says more than the word "technical" did.
-      if (event.is_error === true) return event.name ? `${event.name} failed` : 'Tool call failed';
+      // error is a failed tool CALL, not a failed check. The verb is humanized
+      // the same way successful rows are — "shell.exec failed" told the owner
+      // nothing across five repeats; "A terminal command failed" reads.
+      if (event.is_error === true) {
+        const humanized = event.name ? humanToolHeading(event.name, '') : '';
+        if (humanized) return `${humanized} — it failed`;
+        return event.name ? `${event.name} failed` : 'Tool call failed';
+      }
       // Neither of these is a check, and both used to say they were.
       //
       // `tool_result` read "Checked tool result" on every row. Measured on one
@@ -146,7 +155,27 @@
       // `pushLiveEvent({ type: 'meta', text: 'Kept index.html.' })` -- so keeping
       // or reverting a file announced itself as a verification of it.
       if (kind === 'meta') return 'Workspace update';
-      return event.name ? `Result from ${event.name}` : 'Tool result';
+      return event.name ? humanToolHeading(event.name, `Result from ${event.name}`) : 'Tool result';
+    }
+
+    // "Result from fs.read_file" tells a non-technical reader nothing (owner,
+    // 2026-08-10). The tool's own name still appears in the expanded body;
+    // the ROW says what happened in words a person uses.
+    const TOOL_HEADINGS = [
+      [/fs[._-]?read/i, 'Read a file'],
+      [/fs[._-]?write/i, 'Wrote a file'],
+      [/fs[._-]?(list|dir)/i, 'Looked in a folder'],
+      [/fs[._-]?(delete|remove)/i, 'Removed a file'],
+      [/project_structure/i, 'Looked at the project layout'],
+      [/search|grep|find/i, 'Searched the code'],
+      [/diff/i, 'Compared changes'],
+      [/shell|terminal|bash|powershell|cmd/i, 'Ran a terminal command'],
+      [/http|fetch|web|download/i, 'Fetched from the web'],
+      [/image|render|screenshot/i, 'Made an image'],
+    ];
+    function humanToolHeading(name, fallback) {
+      const match = TOOL_HEADINGS.find(([pattern]) => pattern.test(String(name || '')));
+      return match ? match[1] : fallback;
     }
 
     function groupedTechnicalEvents(events) {
@@ -215,20 +244,83 @@
     function refreshElapsed() {
       const label = surface()?.querySelector('[data-code-elapsed]');
       if (label && state.running && state.runStartedAt) label.textContent = `Working · ${elapsedLabel(state.runStartedAt)}`;
+      // The Activity pill up top AND the live turn head carry the same clock
+      // (owner: "working up top needs the timer for how long next to it").
+      if (state.running && state.runStartedAt) {
+        const clock = elapsedLabel(state.runStartedAt);
+        surface()?.querySelectorAll('[data-code-elapsed-top]').forEach(node => { node.textContent = clock; });
+      }
     }
 
-    function eventHtml(event, saved) {
+    function eventHtml(event, saved, count) {
       const kind = eventType(event);
       if (isTechnicalEvent(event)) {
+        // The prototype contract (owner, 2026-08-10): a receipt is ONE line a
+        // non-technical reader can parse — humanized verb, first line of the
+        // result, a chevron — and the full output lives behind the click,
+        // expanding inline (the page scrolls; no box-in-a-box).
         const failed = eventFailed(event, kind);
         const heading = technicalHeading(event, kind);
-        return `<div class="tc-code-technical${failed ? ' is-error' : ''}" data-code-kind="${esc(kind)}"${saved ? ' data-saved="true"' : ''}><i class="ph ${failed ? 'ph-warning' : 'ph-check-circle'}"></i><div><strong>${esc(heading)}</strong><code>${esc(eventLabel(event))}</code></div></div>`;
+        const label = eventLabel(event);
+        const preview = label.split('\n')[0].trim().slice(0, 96);
+        const times = Number(count) > 1 ? `<span class="tc-code-receipt-count">×${Number(count)}</span>` : '';
+        return `<details class="tc-code-receipt${failed ? ' is-error' : ''}" data-code-kind="${esc(kind)}"${saved ? ' data-saved="true"' : ''}><summary><i class="ph ${failed ? 'ph-warning' : 'ph-check-circle'}"></i><strong>${esc(heading)}</strong>${times}<span class="tc-code-receipt-preview">${esc(preview)}</span><i class="ph ph-caret-down tc-code-receipt-chev"></i></summary><pre>${esc(label)}</pre></details>`;
       }
       const label = eventLabel(event);
+      if (kind === 'say' || kind === 'final') {
+        // Thomas's own words ARE the feed — full text, no kind chip, no
+        // truncation. Everything else hangs off these sentences.
+        return `<div class="tc-code-say" data-code-kind="${esc(kind)}"${event.delta ? ' data-code-delta="true"' : ''}${saved ? ' data-saved="true"' : ''}>${progressHtml(label)}</div>`;
+      }
       const content = label.length <= MAX_PROGRESS_EVENT_CHARS
         ? `<span>${progressHtml(label)}</span>`
         : `<span>${progressHtml(`${label.slice(0, 360).trimEnd()}…`)}</span><details class="tc-code-progress-full"><summary>Show full update</summary><span>${progressHtml(label)}</span></details>`;
       return `<div class="tc-code-event is-${esc(kind)}" data-code-kind="${esc(kind)}"${event.delta ? ' data-code-delta="true"' : ''}${saved ? ' data-saved="true"' : ''}><strong>${esc(eventKind(event))}</strong>${content}</div>`;
+    }
+
+    function interleavedActivityHtml(events, saved) {
+      // Chronological truth, prototype layout: narration sits at the left
+      // edge, consecutive receipts cluster on a railed vertical UNDER the
+      // sentence they back up, and the rail breaks whenever Thomas talks.
+      // Runs read the same file dozens of times back to back — consecutive
+      // receipts with the same row face merge into one row with a count, and
+      // a cluster longer than eight rows folds its middle behind one line.
+      const MAX_OPEN_RECEIPTS = 8;
+      const parts = [];
+      let cluster = [];
+      const receiptKey = event => {
+        const kind = eventType(event);
+        return `${technicalHeading(event, kind)} ${eventFailed(event, kind) ? 1 : 0} ${eventLabel(event).split('\n')[0].trim().slice(0, 96)}`;
+      };
+      const flush = () => {
+        if (!cluster.length) return;
+        const merged = [];
+        cluster.forEach(event => {
+          const key = receiptKey(event);
+          const last = merged[merged.length - 1];
+          if (last && last.key === key) { last.count += 1; return; }
+          merged.push({ key, event, count: 1 });
+        });
+        const rows = merged.map(entry => eventHtml(entry.event, saved, entry.count));
+        let body;
+        if (rows.length > MAX_OPEN_RECEIPTS) {
+          const hidden = rows.slice(3, rows.length - 2);
+          body = rows.slice(0, 3).join('')
+            + `<details class="tc-code-receipts-more"><summary>${hidden.length} more steps</summary>${hidden.join('')}</details>`
+            + rows.slice(rows.length - 2).join('');
+        } else {
+          body = rows.join('');
+        }
+        parts.push(`<div class="tc-code-receipts">${body}</div>`);
+        cluster = [];
+      };
+      events.forEach(event => {
+        if (isTechnicalEvent(event)) { cluster.push(event); return; }
+        flush();
+        parts.push(eventHtml(event, saved));
+      });
+      flush();
+      return parts.join('');
     }
 
     function finalReplyEvent(events, turn) {
@@ -534,10 +626,19 @@
           ? `<div class="tc-code-reply">${replyHtml(answer)}</div><div class="tc-code-reply is-error">${replyHtml(failure)}</div>`
           : `<div class="tc-code-reply is-error">${replyHtml(failure)}</div>`;
       }
-      const narrative = narrativeActivityHtml(activityEvents, true);
-      const technicalEvents = activityEvents.filter(isTechnicalEvent);
+      const interleaved = interleavedActivityHtml(activityEvents, true);
       const resultCount = (turn.artifacts || []).filter(artifact => !isInternalResultPath(artifact.file)).length;
-      return `<article class="tc-code-turn is-agent"><div class="tc-code-message-head"><span class="tc-code-avatar" aria-hidden="true"><i class="ph ph-robot"></i></span><strong>Thomas</strong><small>${esc(turn.model || 'Code')}</small><button class="tc-code-copy" data-code-copy-reply type="button" aria-label="Copy Thomas reply"><i class="ph ph-copy"></i></button></div><div class="tc-code-turn-body">${narrative}${technicalActivityHtml(technicalEvents, true, turn.ok === true)}${replySection}${codeResults().artifactCardsHtml(turn, turn.run_id || turn.ts || '0')}${codeResults().runReportHtml(turn.report)}${changedCount ? `<div class="tc-code-result-note"><span><i class="ph ph-files"></i>${changedCount} file${changedCount === 1 ? '' : 's'} changed</span></div>` : ''}</div></article>`;
+      // The turn ends in a CLOSING SECTION the owner can feel (2026-08-10):
+      // activity first, then the verdict and the change list, then a labelled
+      // horizontal rule — "this is the end of the reply" — and below it only
+      // the final words and the deliverable.
+      const changedList = (turn.changed_files || []).filter(file => !isInternalResultPath(file));
+      const changesBlock = changedList.length
+        ? `<details class="tc-code-artifact-changes"><summary>See every change · ${changedList.length} file${changedList.length === 1 ? '' : 's'}</summary><div>${changedList.map(file => `<span class="tc-code-change-row"><i class="ph ph-file-text" aria-hidden="true"></i>${esc(String(file))}</span>`).join('')}</div></details>`
+        : '';
+      const closingLabel = turn.ok ? 'Work completed' : (wasStopped ? 'Stopped here' : 'Run ended');
+      const closing = `<div class="tc-code-closing"><span class="tc-code-closing-label">${esc(closingLabel)}</span></div>`;
+      return `<article class="tc-code-turn is-agent"><div class="tc-code-message-head"><span class="tc-code-avatar is-anvil" aria-hidden="true">${window.ThomasIcons ? window.ThomasIcons.face('build', 15) : ANVIL_SVG}</span><strong>Thomas</strong><small>${esc(turn.model || 'Code')}</small><button class="tc-code-copy" data-code-copy-reply type="button" aria-label="Copy Thomas reply"><i class="ph ph-copy"></i></button></div><div class="tc-code-turn-body">${interleaved}${codeResults().runReportHtml(turn.report)}${changesBlock}${closing}${replySection}${codeResults().artifactCardsHtml(turn, turn.run_id || turn.ts || '0')}</div></article>`;
     }
 
     // Thomas writes markdown in his Code replies -- 16 of 17 real replies carry it
@@ -577,7 +678,7 @@
       eventLabel, annotateTerminalEvent, eventType, isTechnicalEvent, refreshElapsed,
       eventHtml, finalReplyEvent, progressEvents, failureSummary, turnHtml, replyHtml,
       elapsedLabel, narrativeActivityHtml, technicalActivityHtml, transcriptEvents,
-      flagExpectedProbe,
+      flagExpectedProbe, interleavedActivityHtml,
     };
   }
 

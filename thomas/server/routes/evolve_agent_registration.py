@@ -31,6 +31,7 @@ def register_evolve_agent_handler_map(app: web.Application, handlers: dict[str, 
         ("POST", "/api/evolve/agent/checkpoint", "checkpoint"),
         ("GET", "/api/evolve/agent/artifact-content/{capability}/{cid}/{tail:.*}", "artifact_content"),
         ("GET", "/api/evolve/agent/artifact/{cid}/{tail:.*}", "artifact"),
+        ("GET", "/api/evolve/agent/playtest/stream", "playtest_stream"),
     )
     for method, path, name in routes:
         app.router.add_route(method, path, handlers[name])

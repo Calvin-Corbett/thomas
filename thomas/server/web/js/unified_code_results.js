@@ -242,9 +242,19 @@
       : '';
 
     const glyph = tone === 'is-bad' ? 'ph-warning-circle' : (tone === 'is-warn' ? 'ph-warning' : (tone === 'is-unknown' ? 'ph-info' : 'ph-check-circle'));
+    // The facts render as STRUCTURED CELLS, not a raw dot-joined sentence
+    // (owner, 2026-08-10: "organize the information, not just raw text
+    // output" / "the passed-2-automatic-checks at the bottom i don't like").
+    // A fact that leads with a number becomes a tile with the number large;
+    // prose facts stay a quiet chip. Same honest wording, readable shape.
+    const factTile = fact => {
+      const m = /^([\d/]+)\s+(.*)$/.exec(fact);
+      if (m) return `<span class="tc-code-stat"><b>${esc(m[1])}</b><i>${esc(m[2])}</i></span>`;
+      return `<span class="tc-code-stat is-prose"><i>${esc(fact)}</i></span>`;
+    };
     return `<details class="tc-code-saved-activity tc-code-run-report ${tone}${riskCount ? ' has-issues' : ''}" data-saved="true">
       <summary>
-        <span class="tc-code-verdict"><i class="ph ${glyph}" aria-hidden="true"></i><span class="tc-code-verdict-text"><strong>${esc(verdict)}</strong><small>${esc(facts.join(' · '))}</small>${uncheckedLine}</span></span>
+        <span class="tc-code-verdict"><i class="ph ${glyph}" aria-hidden="true"></i><span class="tc-code-verdict-text"><strong>${esc(verdict)}</strong><span class="tc-code-stats">${facts.map(factTile).join('')}</span>${uncheckedLine}</span></span>
         <span class="tc-code-verdict-more">Show details</span>
       </summary>
       <div class="tc-code-technical-log">${sections}</div>
@@ -327,6 +337,14 @@
       const openTab = (playable && openUrl)
         ? `<a class="tc-code-artifact-pop" href="${esc(openUrl)}" target="_blank" rel="noopener noreferrer" title="Open ${esc(file)} in a new tab" aria-label="Open ${esc(file)} in a new tab"><i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>`
         : '';
+      // The combined card the owner asked for (2026-08-10): thumbnail plus a
+      // REAL action row in plain words — Open in chat, Open in separate
+      // window, Download — instead of two unlabeled icons.
+      const actions = `<div class="tc-code-artifact-actions">
+        <button class="tc-code-artifact-act is-primary" data-code-open-artifact="${esc(file)}" data-code-artifact-slot="${esc(slot)}" type="button">Open in chat</button>
+        ${(playable && openUrl) ? `<a class="tc-code-artifact-act" href="${esc(openUrl)}" target="_blank" rel="noopener noreferrer">Open in separate window</a>` : ''}
+        <button class="tc-code-artifact-act" data-code-save-artifact="${esc(file)}" type="button">Download</button>
+      </div>`;
       return `<div class="tc-code-artifact">
         <div class="tc-code-artifact-row">
           <button class="tc-code-artifact-open" data-code-open-artifact="${esc(file)}" data-code-artifact-slot="${esc(slot)}" type="button" aria-expanded="${open ? 'true' : 'false'}">
@@ -335,10 +353,12 @@
               <span class="tc-code-artifact-name">${esc(file)}</span>
               <span class="tc-code-artifact-verb">${hint}</span>
             </span>
-          </button>${openTab}${save}
-        </div>${expanded}
+          </button>
+        </div>${actions}${expanded}
       </div>`;
     }).join('');
+    // "See every change" now renders ABOVE the closing rule (turnHtml owns
+    // it) — the card below the line carries only the deliverable itself.
     return `<div class="tc-code-artifacts"><div class="tc-code-artifacts-head">${items.length === 1 ? 'Thomas made this' : `Thomas made ${items.length} things`}</div>${rows}</div>`;
   }
 
@@ -496,11 +516,67 @@
     return `/api/evolve/agent/artifact/${encodeURIComponent(state.activeId)}/${String(file).split('/').map(encodeURIComponent).join('/')}`;
   }
 
+  // WATCH Thomas play: the live game footage is the star. Frames stream from
+  // the server-side playtest browser; the caption says what Thomas just did;
+  // the verdict lands at the end. (owner, 2026-08-10: he wants to see it play,
+  // not read about it.)
+  function renderPlaytestPanel() {
+    // The viewer shows only the LIVE footage while Thomas tests; the verdict
+    // and its recommendation buttons render in the main chat (playtestChatCard).
+    const frame = state.viewerPlayFrame;
+    const caption = state.viewerPlayCaption || '';
+    const see = state.viewerPlaySee || '';
+    if (!state.viewerPlaying && !frame) return '';
+    const img = frame
+      ? `<img class="tc-code-playtest-frame" alt="Thomas testing" src="data:image/png;base64,${frame}">`
+      : `<div class="tc-code-playtest-frame is-empty">Opening it…</div>`;
+    return `<div class="tc-code-playtest is-live">
+      <div class="tc-code-playtest-stage">
+        ${img}
+        <div class="tc-code-playtest-hud">
+          <span class="tc-code-playtest-badge"><span class="tc-code-playtest-pulse"></span>Thomas is testing</span>
+          ${caption ? `<span class="tc-code-playtest-move">${esc(caption)}</span>` : ''}
+        </div>
+        ${see ? `<div class="tc-code-playtest-see">${esc(see)}</div>` : ''}
+      </div>
+    </div>`;
+  }
+
+  // The verdict as a card in the MAIN CHAT: what Thomas found, then 1-3
+  // recommendation buttons he generated, then "or tell Thomas what to do".
+  // Clicking a recommendation starts a real fix run; the free-type row just
+  // focuses the composer. (owner, 2026-08-10)
+  function playtestChatCardHtml() {
+    const result = state.playtestResult;
+    if (!result || !result.report) return '';
+    const report = result.report;
+    const bugs = Array.isArray(report.bugs) ? report.bugs.filter(Boolean) : [];
+    const recs = (Array.isArray(report.recommendations) ? report.recommendations : [])
+      .filter(r => r && r.label && r.prompt).slice(0, 3);
+    const tone = report.works === false ? 'is-bad' : (report.difficulty && /too (hard|easy)/i.test(String(report.difficulty)) ? 'is-warn' : 'is-good');
+    const recButtons = recs.map((r, i) => `<button class="tc-code-rec${i === 0 ? ' is-primary' : ''}" type="button" data-code-playtest-rec="${esc(String(r.prompt))}">${esc(String(r.label))}</button>`).join('');
+    return `<article class="tc-code-turn is-agent tc-code-playtest-card ${tone}">
+      <div class="tc-code-message-head"><span class="tc-code-avatar is-anvil" aria-hidden="true"><svg viewBox="0 0 256 256" aria-hidden="true"><path d="M240 60h-92a12 12 0 0 0 0 24h6.6c-4 24.5-22.8 44-47 48.6C82.9 137.4 64 121.4 64 96V84h12a12 12 0 0 0 0-24H24a12 12 0 0 0 0 24h16v12c0 34.6 24.7 58.5 56 63.4v10.2c0 11-4.7 21.4-13 28.6l-18.9 16.5A12 12 0 0 0 72 236h112a12 12 0 0 0 7.9-21.1L173 198.4a38.2 38.2 0 0 1-13-28.6v-10.6c37.5-6 66.2-35 70.7-71.2H240a12 12 0 0 0 0-24Z"/></svg></span><strong>Thomas</strong><small>tested it</small></div>
+      <div class="tc-code-turn-body">
+        <div class="tc-code-playtest-verdictline">${esc(String(report.summary || report.verdict || 'Tested it.'))}</div>
+        <div class="tc-code-playtest-facts">
+          ${report.difficulty && report.difficulty !== 'n/a' ? `<span class="tc-code-stat"><b>${esc(String(report.difficulty))}</b><i>difficulty</i></span>` : ''}
+          ${report.fun ? `<span class="tc-code-stat is-prose"><i>${esc(String(report.fun))}</i></span>` : ''}
+          ${bugs.length ? `<span class="tc-code-stat"><b>${bugs.length}</b><i>bug${bugs.length === 1 ? '' : 's'}</i></span>` : ''}
+        </div>
+        ${recs.length ? `<div class="tc-code-rec-head">What do you want to do?</div><div class="tc-code-recs">${recButtons}<button class="tc-code-rec is-type" type="button" data-code-playtest-type="1">or tell Thomas…</button></div>` : ''}
+      </div>
+    </article>`;
+  }
+
   function viewerHtml() {
     const open = state.viewer && state.viewer.file;
     if (!open) return '';
     const file = String(state.viewer.file);
-    const doc = (state.artifactDocs && state.artifactDocs[file]) || artifactUrlFor(file);
+    const docBase = (state.artifactDocs && state.artifactDocs[file]) || artifactUrlFor(file);
+    const doc = state.viewerPlaying && (/^https?:/i.test(String(docBase)) || String(docBase).startsWith('/'))
+      ? `${docBase}${String(docBase).includes('?') ? '&' : '?'}thomas_play=1`
+      : docBase;
     const full = !!state.viewer.full;
     // One visible line when the page asks for the network: this embedded frame
     // is served connect-src 'self', so the app's fetches fail HERE by design
@@ -518,6 +594,7 @@
       <header class="tc-code-viewer-head">
         <div class="tc-code-viewer-title"><i class="ph ph-browser" aria-hidden="true"></i><strong>${esc(file)}</strong></div>
         <div class="tc-code-viewer-tools">
+          <button type="button" data-code-viewer-play aria-pressed="${state.viewerPlaying ? 'true' : 'false'}" title="${state.viewerPlaying ? 'Stop the test' : 'Let Thomas test it'}" aria-label="${state.viewerPlaying ? 'Stop the test' : 'Let Thomas test it'}"${state.viewerPlaying ? ' class="is-playing"' : ''}><svg viewBox="0 0 256 256" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M176 100a12 12 0 1 1-12 12 12 12 0 0 1 12-12Zm28 20a12 12 0 1 0 12 12 12 12 0 0 0-12-12ZM104 116H92v-12a8 8 0 0 0-16 0v12H64a8 8 0 0 0 0 16h12v12a8 8 0 0 0 16 0v-12h12a8 8 0 0 0 0-16Zm141.9 60.9a36 36 0 0 1-53.4 6.3l-.4-.4-30.7-28.8H94.6l-30.7 28.8-.4.4A36 36 0 0 1 4 156.4a35 35 0 0 1 .8-4.4L27.4 61A44 44 0 0 1 70.2 28h115.6A44 44 0 0 1 228.6 61l22.6 91a35 35 0 0 1 .8 4.4 35.7 35.7 0 0 1-6.1 20.5ZM185.8 132a28 28 0 0 0 27.2-21.3l.1-.5A28 28 0 0 0 185.8 76H70.2A28 28 0 0 0 43 97.7l-22.6 91A20 20 0 0 0 20 156.4a19.9 19.9 0 0 0 33.9 11.7L86.3 137a8 8 0 0 1 5.5-2.2h72.4a8 8 0 0 1 5.5 2.2l32.4 30.4A20 20 0 0 0 236 156.4a19.6 19.6 0 0 0-.4-3.9Z"/></svg></button>
           <button type="button" data-code-viewer-full aria-pressed="${full ? 'true' : 'false'}" title="${full ? 'Shrink back beside the chat' : 'Expand to fill Thomas'}" aria-label="${full ? 'Shrink back beside the chat' : 'Expand to fill Thomas'}"><i class="ph ${full ? 'ph-corners-in' : 'ph-corners-out'}" aria-hidden="true"></i></button>
           <a href="${esc(artifactUrlFor(file))}" target="_blank" rel="noopener noreferrer" title="Open in a new browser tab" aria-label="Open in a new browser tab"><i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>
           <button type="button" data-code-viewer-close title="Close" aria-label="Close"><i class="ph ph-x" aria-hidden="true"></i></button>
@@ -582,7 +659,7 @@
            previews (:184, :212) either -- a 168px tabindex="-1" picture must not be
            able to fill the screen or touch the clipboard.
            Guard: tests/test_a_generated_app_can_copy_and_go_fullscreen.py -->
-      ${netNotice}
+      ${netNotice}${(state.viewerPlaying || state.viewerPlayFrame) ? renderPlaytestPanel() : ''}${state.viewerPlayNote ? `<div class="tc-code-viewer-netnote" style="display:flex;align-items:center;gap:.5em;padding:.4em .9em;font-size:.8125em;opacity:.85;"><svg viewBox="0 0 256 256" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M176 100a12 12 0 1 1-12 12 12 12 0 0 1 12-12Zm28 20a12 12 0 1 0 12 12 12 12 0 0 0-12-12ZM104 116H92v-12a8 8 0 0 0-16 0v12H64a8 8 0 0 0 0 16h12v12a8 8 0 0 0 16 0v-12h12a8 8 0 0 0 0-16Zm141.9 60.9a36 36 0 0 1-53.4 6.3l-.4-.4-30.7-28.8H94.6l-30.7 28.8-.4.4A36 36 0 0 1 4 156.4a35 35 0 0 1 .8-4.4L27.4 61A44 44 0 0 1 70.2 28h115.6A44 44 0 0 1 228.6 61l22.6 91a35 35 0 0 1 .8 4.4 35.7 35.7 0 0 1-6.1 20.5ZM185.8 132a28 28 0 0 0 27.2-21.3l.1-.5A28 28 0 0 0 185.8 76H70.2A28 28 0 0 0 43 97.7l-22.6 91A20 20 0 0 0 20 156.4a19.9 19.9 0 0 0 33.9 11.7L86.3 137a8 8 0 0 1 5.5-2.2h72.4a8 8 0 0 1 5.5 2.2l32.4 30.4A20 20 0 0 0 236 156.4a19.6 19.6 0 0 0-.4-3.9Z"/></svg><span>${esc(state.viewerPlayNote)}</span></div>` : ''}
       <div class="tc-code-viewer-stage"><iframe title="${esc(file)}" sandbox="allow-scripts allow-forms allow-modals allow-pointer-lock allow-downloads allow-same-origin" allow="fullscreen; clipboard-write" src="${esc(doc)}"></iframe></div>
     </aside>`;
   }
@@ -591,17 +668,118 @@
     state.viewer = { file: String(file), full: !!(state.viewer && state.viewer.full) };
   }
 
+  // Thomas tests his own work before it's yours: after a build that produced a
+  // playable page, open it and start the playtest automatically (owner,
+  // 2026-08-10: "he could have easily caught this... why not before he
+  // delivers it"). The verdict + recommendations land in the chat.
+  function autoPlaytest(file) {
+    const name = String(file || '');
+    if (!name || !/\.x?html?$/i.test(name) || !state.activeId) return false;
+    state.playtestResult = null;
+    openViewer(name);
+    render();
+    startViewerPlay();
+    return true;
+  }
+
   function bindViewer(root, render) {
     const viewer = root.querySelector('.tc-code-viewer');
     if (!viewer) return;
-    viewer.querySelector('[data-code-viewer-close]')?.addEventListener('click', () => { state.viewer = null; render(); });
+    viewer.querySelector('[data-code-viewer-close]')?.addEventListener('click', () => { stopViewerPlay(); state.viewerPlayNote = ''; state.viewer = null; render(); });
     viewer.querySelector('[data-code-viewer-full]')?.addEventListener('click', () => {
       state.viewer = { ...(state.viewer || {}), full: !(state.viewer && state.viewer.full) };
       render();
     });
+    viewer.querySelector('[data-code-viewer-play]')?.addEventListener('click', () => {
+      if (state.viewerPlaying) stopViewerPlay(); else startViewerPlay();
+      render();
+    });
+  }
+
+  // "Let Thomas play while you watch" (owner, 2026-08-10). Thomas ACTUALLY
+  // playtests: a server-side headless browser plays the game while a vision
+  // model decides each move (thomas/server/game_playtest.py). This opens the
+  // event stream and renders what Thomas sees, does, and concludes — live.
+  function stopViewerPlay() {
+    if (state.viewerPlaySource) { try { state.viewerPlaySource.close(); } catch (error) { /* already closed */ } }
+    state.viewerPlaySource = null;
+    state.viewerPlaying = false;
+  }
+
+  function startViewerPlay() {
+    stopViewerPlay();
+    const file = String((state.viewer && state.viewer.file) || '');
+    if (!file || !state.activeId) {
+      state.viewerPlayNote = 'Open a game first, then Thomas can play it.';
+      return;
+    }
+    state.viewerPlaying = true;
+    state.viewerPlayLog = [];
+    state.viewerPlayNote = 'Thomas is opening the game to play it…';
+    const url = `/api/evolve/agent/playtest/stream?conversation_id=${encodeURIComponent(state.activeId)}&file=${encodeURIComponent(file)}`;
+    let source;
+    try { source = new EventSource(url); } catch (error) { state.viewerPlaying = false; state.viewerPlayNote = 'Could not start the playtest.'; return; }
+    state.viewerPlaySource = source;
+    let hasPanel = false;
+    source.onmessage = (event) => {
+      let payload = {};
+      try { payload = JSON.parse(event.data); } catch (error) { return; }
+      const kind = String(payload.kind || '');
+      if (kind === 'report') {
+        // The verdict belongs in the MAIN CHAT, not the side window (owner,
+        // 2026-08-10): the run's result, with recommendation buttons the user
+        // can act on. The viewer goes back to showing the game.
+        state.playtestResult = { report: payload.data || {}, file: String((state.viewer && state.viewer.file) || ''), at: 1 };
+        state.viewerPlayReport = null;
+        state.viewerPlayFrame = '';
+        state.viewerPlayNote = '';
+        stopViewerPlay();
+        render();
+        return;
+      }
+      if (kind === 'end') { stopViewerPlay(); render(); return; }
+      if (kind === 'error') { state.viewerPlayNote = String(payload.text || 'Playtest error.'); stopViewerPlay(); render(); return; }
+      if (kind === 'frame') {
+        const data = payload.data || {};
+        state.viewerPlayFrame = String(data.image || state.viewerPlayFrame || '');
+        state.viewerPlayCaption = String(payload.text || state.viewerPlayCaption || '');
+        if (data.see) state.viewerPlaySee = String(data.see);
+        state.viewerPlayNote = '';
+        // Update the live image in place — a full render every ~160ms would
+        // rebuild the DOM and flicker. Only render() once to create the panel.
+        const img = document.querySelector('.tc-code-playtest-frame');
+        if (img && img.tagName === 'IMG') {
+          img.src = `data:image/png;base64,${state.viewerPlayFrame}`;
+          const move = document.querySelector('.tc-code-playtest-move');
+          if (move) move.textContent = state.viewerPlayCaption;
+          const see = document.querySelector('.tc-code-playtest-see');
+          if (see && state.viewerPlaySee) see.textContent = state.viewerPlaySee;
+          hasPanel = true;
+        } else if (!hasPanel) {
+          hasPanel = true;
+          render();
+        }
+        return;
+      }
+      // observation / action / note: keep the caption fresh.
+      if (kind === 'action' || kind === 'observation' || kind === 'note') {
+        if (payload.text) state.viewerPlayCaption = String(payload.text);
+        if (kind === 'observation' && payload.text) state.viewerPlaySee = String(payload.text);
+      }
+    };
+    source.onerror = () => {
+      // The stream ends by closing; only surface an error if nothing arrived.
+      if (!state.viewerPlayLog || !state.viewerPlayLog.length) {
+        state.viewerPlayNote = 'The playtest could not start (the game or the model was unavailable).';
+      }
+      stopViewerPlay();
+      render();
+    };
   }
 
   window.ThomasCodeResults = {
+    playtestChatCardHtml,
+    autoPlaytest,
     artifactCardsHtml,
     artifactHtml,
     bindViewer,

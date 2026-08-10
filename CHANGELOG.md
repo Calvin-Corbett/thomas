@@ -7,6 +7,37 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Added (code: Thomas playtests what he builds, and you watch him do it)
+
+- `thomas/server/game_playtest.py` is a real perception→decision→action
+  loop: a headless Chrome driven over the DevTools Protocol (the same
+  browser the smoke check already uses — no new dependency) plays the
+  deliverable while a VISION model looks at each frame and decides the next
+  move. Nothing is scripted to one game; it reads whatever is on screen, so
+  it works for anything that plays by looking and pressing. Live frames
+  stream to the viewer over SSE so the owner WATCHES it play, and the run
+  ends in a verdict — does it work, is it any good, difficulty, bugs — with
+  1-3 recommendation buttons Thomas wrote from what he saw. Clicking one
+  starts the fix; "or tell Thomas…" hands the composer back. A build that
+  produces a playable page is now tested automatically before it is handed
+  over, which is where the "too hard" verdict should have been caught.
+  Speed: `detail: low` frames plus low reasoning effort halve the decision
+  latency (5.6s → ~2.7s), and a DOM-aware smart click recovers the button
+  precision the downscaled frame loses.
+
+### Changed (code: the run reads as a story, not a wall of tool output)
+
+- The Code turn is narration-first: Thomas's own words lead, and the tool
+  receipts hang under the sentence they back up on a rail that BREAKS when
+  he talks. A receipt is one humanized line ("Read a file", never
+  `Result from fs.read_file`) that expands inline — the page scrolls, never
+  a box inside a box — with repeats merged (×N) and long clusters folded.
+  The turn ends in a labelled closing rule with the verdict as stat cells
+  and the deliverable below it, carrying Open in chat / Open in separate
+  window / Download / See every change. A live elapsed clock rides the
+  Activity pill, and "Scroll to the bottom" appears above the composer only
+  when you are away from the newest content.
+
 ### Added (ui: point at the interface and ask Thomas to change it)
 
 - The Redesign flow lets the owner select a real element in Thomas's own UI

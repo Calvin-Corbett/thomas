@@ -473,7 +473,8 @@ class DeliverablePreviewService:
                 raise web.HTTPNotFound(text="preview capability expired or invalid")
             tail = self._safe_tail(request, grant)
             self._target(grant, tail)
-            response = web.HTTPFound(location="/" + "/".join(quote(part, safe="") for part in Path(tail).parts))
+            location = "/" + "/".join(quote(part, safe="") for part in Path(tail).parts)
+            response = web.HTTPFound(location=location)
             response.headers.update(
                 {
                     "Cache-Control": "private, no-store, max-age=0",

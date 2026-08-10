@@ -1569,11 +1569,105 @@ def build_evolve_agent_handlers(
             return web.json_response({"ok": False, "error": str(exc)}, status=409)
         return web.json_response({"ok": True, **result, "files": files})
 
+    async def playtest_stream(request: web.Request) -> web.StreamResponse:
+        """Stream Thomas actually playtesting a built game (SSE).
+
+        A server-side headless browser plays the game while a vision model
+        decides each move; the events (what Thomas sees, plays, notes, and
+        concludes) stream to the viewer. Honest failure: if the browser or the
+        model is unavailable, that arrives as an error event, not silence.
+        """
+        require_api_access(request)
+        import asyncio as _asyncio
+        import contextlib as _contextlib
+        import json as _json
+
+        from thomas.core.config import load_config
+        from thomas.core.llm import LLMError
+        from thomas.core.llm_client import LLMClient
+        from thomas.server.app_keys import APP_SECRETS
+        from thomas.server.game_playtest import CdpError, PlaytestEvent, playtest_game
+        from thomas.server.openai_codex_oauth import ensure_openai_codex_access_token
+
+        # Every fault a playtest can actually hit, named. Anything outside this
+        # set is a bug and must surface, not be swallowed into an event.
+        _PLAYTEST_FAULTS = (CdpError, LLMError, OSError, RuntimeError, ValueError, TypeError, KeyError)
+
+        cid = str(request.query.get("conversation_id") or "").strip()
+        rel = str(request.query.get("file") or "index.html").strip()
+        if not cid or ".." in rel.replace("\\", "/").split("/"):
+            raise web.HTTPBadRequest(text="conversation_id and a safe file are required")
+        try:
+            project_root = _project_for_conversation(cid)
+        except forge_code_projects.ForgeCodeProjectError as exc:
+            raise web.HTTPConflict(text=str(exc)) from exc
+        game_path = (project_root / rel).resolve()
+        if not (game_path == project_root or project_root in game_path.parents) or not game_path.is_file():
+            raise web.HTTPNotFound(text="game file not found")
+
+        response = web.StreamResponse(
+            headers={"Content-Type": "text/event-stream", "Cache-Control": "no-store", "X-Accel-Buffering": "no"}
+        )
+        await response.prepare(request)
+
+        queue: _asyncio.Queue[PlaytestEvent | None] = _asyncio.Queue()
+
+        async def sink(event: PlaytestEvent) -> None:
+            await queue.put(event)
+
+        async def drive() -> None:
+            llm = None
+            try:
+                secret_store = app.get(APP_SECRETS)
+                token = await ensure_openai_codex_access_token("openai_codex", secret_store=secret_store) if secret_store else ""
+                if not token:
+                    await queue.put(PlaytestEvent("error", "Thomas needs the ChatGPT login connected to playtest — reconnect it in settings."))
+                    return
+                config = load_config(project_root / "thomas.toml")
+                model_cfg = config.get_model("openai_codex")
+                model_cfg.api_key = token
+                # Per-move "what's my next move" needs speed, not deep
+                # reasoning — low effort roughly halves the decision latency
+                # (measured 5.6s -> ~2.7s). The final report is a separate call
+                # that keeps the model's default effort.
+                model_cfg.reasoning_effort = "low"
+                llm = LLMClient(model_cfg, fallback_configs=[], failover_enabled=False)
+                title = game_path.stem.replace("_", " ").replace("-", " ").title()
+                await playtest_game(game_url=game_path.as_uri(), llm=llm, game_title=title, on_event=sink, max_moves=10)
+            except _PLAYTEST_FAULTS as exc:
+                # Named faults only: the browser refusing to drive (CdpError),
+                # the model failing (LLMError), the login/config being wrong,
+                # or the OS denying the browser. CancelledError is deliberately
+                # NOT caught — a cancelled stream must stay cancelled.
+                log.info("Playtest stopped: %s", exc)
+                await queue.put(PlaytestEvent("error", f"The playtest stopped: {exc}"))
+            finally:
+                if llm is not None:
+                    with _contextlib.suppress(OSError, RuntimeError):
+                        await llm.close()
+                await queue.put(None)
+
+        task = _asyncio.create_task(drive())
+        try:
+            while True:
+                event = await queue.get()
+                if event is None:
+                    await response.write(b"data: {\"kind\": \"end\"}\n\n")
+                    break
+                payload = _json.dumps({"kind": event.kind, "text": event.text, "data": event.data}, ensure_ascii=False)
+                await response.write(f"data: {payload}\n\n".encode())
+        finally:
+            task.cancel()
+            with _contextlib.suppress(Exception):
+                await task
+        return response
+
     return {
         "send": send,
         "approve": approve,
         "steer": steer,
         "stream": stream,
+        "playtest_stream": playtest_stream,
         "status": status,
         "stop": stop,
         "checkpoint": checkpoint,
