@@ -1,0 +1,255 @@
+/* Sidebar history rows — shared by Chat, Code and Work.
+   The renderers produce the rows; this styles them identically so a chat, a
+   code task and a job all behave the same under the cursor. */
+
+.tc-history-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tc-history-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The second line holds BOTH the preview and the last-touched time, stacked in
+   a fixed-height box that cross-fades. Showing the time used to insert a line
+   on hover, which changed the row's height — during a fast scroll that meant
+   rows reflowing under the cursor and appearing to overlap. Opacity cannot
+   move anything. */
+.tc-history-sub {
+  position: relative;
+  height: 16px;
+  overflow: hidden;
+}
+
+.tc-history-preview,
+.tc-history-meta {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--c-muted);
+  transition: opacity .12s ease;
+}
+
+.tc-history-preview {
+  font-size: 11.5px;
+  line-height: 16px;
+}
+
+.tc-history-meta {
+  font-size: 10.5px;
+  line-height: 16px;
+  letter-spacing: 0.02em;
+  opacity: 0;
+}
+
+/* CSS-only, so no pointer handler runs per row while the list is moving. */
+[data-history-id]:hover .tc-history-preview {
+  opacity: 0;
+}
+
+[data-history-id]:hover .tc-history-meta {
+  opacity: 1;
+}
+
+/* Per-row running dot. The mode tabs had an activity indicator but individual
+   chats and code tasks did not, so a background run was invisible in the list. */
+.tc-history-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c-accent);
+  box-shadow: 0 0 0 3px var(--c-accent-soft);
+  animation: tc-history-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes tc-history-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.tc-history-pin {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--c-accent);
+}
+
+[data-history-id].is-archived {
+  opacity: 0.55;
+}
+
+/* Date headings. When the list is ordered by a date it reads as days:
+   a small marker, then that day's threads under it. */
+.tc-history-day {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 9px 4px 4px;
+  margin-top: 2px;
+  color: var(--c-muted);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  /* Must be OPAQUE. --c-sidebar is rgba(...,0.72), so a sticky heading painted
+     with it let rows scroll straight through and read as overlapping. Layering
+     the translucent sidebar tint over the opaque page colour reproduces the
+     sidebar's apparent shade with no transparency left. */
+  background: linear-gradient(var(--c-sidebar), var(--c-sidebar)), var(--c-bg);
+  pointer-events: none;
+}
+
+.tc-history-day:first-child {
+  margin-top: 0;
+  padding-top: 2px;
+}
+
+.tc-history-menu-gap {
+  width: 15px;
+  flex: 0 0 auto;
+}
+
+/* Full-title tooltip — only shown when the name is genuinely cut off. */
+.tc-history-tip {
+  position: fixed;
+  z-index: 2147483100;
+  max-width: 320px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #05060c;
+  color: #f2f4ff;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  overflow-wrap: anywhere;
+}
+
+.tc-history-tip[hidden] {
+  display: none;
+}
+
+/* Right-click menu, and the sort/filter menu. */
+.tc-history-menu {
+  position: fixed;
+  z-index: 2147483200;
+  min-width: 208px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--c-border-2, rgba(255, 255, 255, 0.17));
+  background: var(--c-menu-bg, #15142b);
+  color: var(--c-text, #eef0fb);
+  font-family: var(--font-sans, system-ui, sans-serif);
+  box-shadow: var(--c-shadow, 0 18px 50px rgba(2, 4, 12, 0.55));
+}
+
+.tc-history-menu-title {
+  padding: 6px 9px 8px;
+  color: var(--c-muted, rgba(238, 240, 251, 0.42));
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tc-history-menu button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--c-dim, rgba(238, 240, 251, 0.66));
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background .12s, color .12s;
+}
+
+.tc-history-menu button small {
+  margin-left: auto;
+  color: var(--c-muted, rgba(238, 240, 251, 0.42));
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+.tc-history-menu button i {
+  font-size: 15px;
+}
+
+.tc-history-menu button:hover,
+.tc-history-menu button:focus-visible {
+  background: var(--c-hover, rgba(255, 255, 255, 0.06));
+  color: var(--c-text, #eef0fb);
+  outline: none;
+}
+
+.tc-history-menu button.is-on {
+  color: var(--c-text, #eef0fb);
+}
+
+.tc-history-menu button.is-danger:hover {
+  background: rgba(255, 122, 122, 0.14);
+  color: #ff9a9a;
+}
+
+.tc-history-menu-sep {
+  height: 1px;
+  margin: 5px 4px;
+  background: var(--c-border, rgba(255, 255, 255, 0.1));
+}
+
+.tc-history-menu-note {
+  padding: 6px 9px 4px;
+  color: var(--c-muted, rgba(238, 240, 251, 0.42));
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+/* Workspace rows and Settings now carry drawn icons; keep them from stretching
+   inside their flex row. */
+#tc-workspaces svg,
+#tc-settings svg {
+  flex: 0 0 auto;
+  display: block;
+}
+
+#tc-workspaces button > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#tc-history-collapse:hover,
+#tc-history-filter:hover {
+  color: var(--c-text);
+  background: var(--c-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tc-history-dot {
+    animation: none;
+  }
+}

@@ -7,6 +7,17 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Added (ui: one icon system, and the sidebar says what each task is doing)
+
+- `thomas/server/web/js/thomas_icons.js` gives Thomas one drawn identity
+  instead of a font glyph per surface: FACES (Thomas doing a thing — the
+  build face is a forge hammer caught mid-swing) and GLYPHS, hydrated from
+  `data-thomas-icon`. `sidebar_history.js` + `sidebar_history.css` turn a
+  flat task list into rows that carry their own last-touched time and a
+  live running marker, so the list says WHICH task is working rather than
+  only that something is. `mode_peek.js` + `mode_peek.css` let a mode be
+  previewed without leaving the one you are in.
+
 ### Fixed (code: a crashed build is never filed as completed)
 
 - A Code run that crashed mid-build (dead LLM route, protocol error) but had

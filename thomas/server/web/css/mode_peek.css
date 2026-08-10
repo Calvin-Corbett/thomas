@@ -1,0 +1,136 @@
+/* Peek strip — the minimal conversation that sits over a dashboard.
+   Deliberately small: two clamped lines of the last exchange. Reading the
+   thread is the Chat tab's job, and the bump is how you get there. */
+
+.tc-mode-peek {
+  position: relative;
+  flex: 0 0 auto;
+  padding: 0 18px;
+}
+
+.tc-mode-peek[hidden] {
+  display: none;
+}
+
+.tc-peek-rows {
+  max-width: 768px;
+  margin: 0 auto;
+  max-height: 116px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 2px 12px;
+  /* Fades into whatever is behind it, so the strip reads as "there is more
+     above" rather than as a box that got cut off. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 26px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 26px);
+}
+
+.tc-mode-peek[data-expanded="true"] .tc-peek-rows {
+  max-height: 0;
+  padding: 0;
+}
+
+.tc-peek-row {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  min-width: 0;
+}
+
+.tc-peek-who {
+  flex: 0 0 auto;
+  font: 800 9.5px var(--font-label, var(--font-sans));
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+
+.tc-peek-row.is-thomas .tc-peek-who {
+  color: var(--c-accent);
+}
+
+.tc-peek-row.is-system .tc-peek-who {
+  color: #e6b455;
+}
+
+.tc-peek-row p {
+  margin: 0;
+  min-width: 0;
+  color: var(--c-dim);
+  font-size: 13px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tc-peek-row.is-user p {
+  color: var(--c-text);
+}
+
+.tc-peek-status,
+.tc-peek-hint {
+  color: var(--c-muted);
+  font-size: 12px;
+}
+
+.tc-peek-status {
+  animation: tc-peek-pulse 1.3s ease-in-out infinite;
+}
+
+@keyframes tc-peek-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+/* The bump. Straddles the seam between the strip and the composer so it
+   reads as a tab attached to the composer, which is what it acts like. */
+.tc-peek-bump {
+  position: absolute;
+  left: 50%;
+  bottom: -11px;
+  z-index: 3;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 12px;
+  border: 1px solid var(--c-border-2);
+  border-radius: 999px;
+  background: var(--c-composer-bg, var(--c-surface));
+  color: var(--c-dim);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: color .15s, border-color .15s, background .15s;
+}
+
+.tc-peek-bump:hover,
+.tc-peek-bump:focus-visible {
+  color: var(--c-text);
+  border-color: var(--c-accent-line);
+  background: var(--c-accent-soft);
+}
+
+.tc-peek-bump i {
+  font-size: 12px;
+  transition: transform .2s var(--ease-out, ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tc-peek-bump i {
+    transition: none;
+  }
+  .tc-peek-status {
+    animation: none;
+    opacity: 0.7;
+  }
+}
