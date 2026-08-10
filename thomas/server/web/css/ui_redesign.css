@@ -1,0 +1,345 @@
+/* Redesign with AI — the point-at-anything selection layer.
+   The overlay never eats pointer events except on the bar itself; the
+   swallowing of page clicks is done in JS so it can be precise about it. */
+
+.tr-root {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+}
+
+.tr-root[hidden] {
+  display: none;
+}
+
+/* A hammer, not a crosshair. You are building, and the pointer should say so
+   the moment the mode turns on — especially when Thomas turned it on for you
+   and you did not press the button yourself. Inline SVG so it needs no asset
+   and cannot 404. */
+html.tr-selecting,
+html.tr-selecting * {
+  /* A blacksmith's hammer, drawn by looking at it rendered rather than by
+     imagining it. Two earlier attempts read as a pickaxe and then as a flag on
+     a pole — the giveaway is a thin head and a thin handle. What works is a
+     CHUNKY head with the handle clearly passing through it, tilted, with a
+     small wedge peen. Detail finer than this is lost at 32px anyway.
+     Hotspot sits on the striking face, so you hit what you point at. */
+  cursor:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><g transform="rotate(-20 16 16)"><g stroke="%23000" stroke-width="3.6" stroke-linejoin="round" stroke-linecap="round" fill="%23000"><path d="M4 4h20l4 3v2l-4 3H4Z"/><path d="M13.4 15h5.6v13a2.8 2.8 0 0 1-5.6 0Z"/></g><g fill="%23fff"><path d="M4 4h20l4 3v2l-4 3H4Z"/><path d="M13.4 15h5.6v13a2.8 2.8 0 0 1-5.6 0Z"/></g></g></svg>') 3 14,
+    crosshair !important;
+}
+
+html.tr-selecting [data-redesign-ui],
+html.tr-selecting [data-redesign-ui] * {
+  cursor: default !important;
+}
+
+/* Says what mode you are in, in words, for anyone who did not press the
+   button — screen readers included, via the banner's role="status". */
+.tr-banner {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border: 1px solid var(--c-accent-line, rgba(139, 140, 255, 0.45));
+  border-radius: 999px;
+  background: var(--c-menu-bg, #15142b);
+  color: var(--c-text, #eef0fb);
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 12.5px;
+  font-weight: 600;
+  box-shadow: var(--c-shadow, 0 18px 50px rgba(2, 4, 12, 0.55));
+}
+
+.tr-banner i {
+  font-size: 15px;
+  color: var(--c-accent, #8b8cff);
+}
+
+.tr-banner small {
+  color: var(--c-muted, rgba(238, 240, 251, 0.42));
+  font-weight: 500;
+}
+
+.tr-thread {
+  margin: 10px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--c-dim, rgba(238, 240, 251, 0.66));
+  font-size: 11.5px;
+}
+
+.tr-thread i {
+  color: var(--c-accent, #8b8cff);
+}
+
+/* Hover and selection boxes */
+.tr-hover,
+.tr-mark {
+  position: fixed;
+  pointer-events: none;
+  border-radius: 8px;
+}
+
+.tr-hover {
+  border: 1.5px dashed var(--c-accent, #8b8cff);
+  background: color-mix(in srgb, var(--c-accent, #8b8cff) 10%, transparent);
+  transition: none;
+}
+
+.tr-hover.is-picked {
+  border-style: solid;
+}
+
+.tr-hover span {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  margin-bottom: 4px;
+  max-width: 260px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--c-accent, #8b8cff);
+  color: var(--c-accent-ink, #0a0b16);
+  font: 700 10.5px var(--font-label, system-ui, sans-serif);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tr-mark {
+  border: 2px solid var(--c-accent, #8b8cff);
+  background: color-mix(in srgb, var(--c-accent, #8b8cff) 14%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--c-accent, #8b8cff) 40%, transparent);
+}
+
+.tr-mark b {
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--c-accent, #8b8cff);
+  color: var(--c-accent-ink, #0a0b16);
+  font: 800 11px var(--font-label, system-ui, sans-serif);
+}
+
+/* The bar */
+.tr-bar {
+  position: absolute;
+  right: 22px;
+  bottom: 22px;
+  width: min(360px, calc(100vw - 44px));
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--c-border-2, rgba(255, 255, 255, 0.17));
+  border-radius: 16px;
+  background: var(--c-menu-bg, #15142b);
+  color: var(--c-text, #eef0fb);
+  font-family: var(--font-sans, system-ui, sans-serif);
+  box-shadow: var(--c-shadow, 0 18px 50px rgba(2, 4, 12, 0.55));
+}
+
+.tr-bar header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.tr-bar header i {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  font-size: 17px;
+  color: var(--c-accent, #8b8cff);
+}
+
+.tr-bar header strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.tr-bar header small {
+  display: block;
+  margin-top: 3px;
+  color: var(--c-muted, rgba(238, 240, 251, 0.42));
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.tr-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 108px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.tr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 4px 3px 5px;
+  border: 1px solid var(--c-border, rgba(255, 255, 255, 0.1));
+  border-radius: 8px;
+  background: var(--c-surface, rgba(255, 255, 255, 0.04));
+  font-size: 11.5px;
+  overflow: hidden;
+}
+
+.tr-chip b {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--c-accent-soft, rgba(139, 140, 255, 0.16));
+  color: var(--c-accent, #8b8cff);
+  font-size: 9.5px;
+  font-weight: 800;
+}
+
+.tr-chip button {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--c-muted, rgba(238, 240, 251, 0.42));
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tr-chip button:hover {
+  color: #ff7a7a;
+}
+
+.tr-input {
+  width: 100%;
+  resize: none;
+  padding: 9px 10px;
+  border: 1px solid var(--c-border-2, rgba(255, 255, 255, 0.17));
+  border-radius: 10px;
+  background: var(--c-surface, rgba(255, 255, 255, 0.04));
+  color: inherit;
+  font: 13px/1.5 inherit;
+  outline: none;
+}
+
+.tr-input:focus {
+  border-color: var(--c-accent-line, rgba(139, 140, 255, 0.45));
+}
+
+.tr-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.tr-actions button {
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--c-border, rgba(255, 255, 255, 0.1));
+  border-radius: 9px;
+  background: transparent;
+  color: var(--c-dim, rgba(238, 240, 251, 0.66));
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .14s;
+}
+
+.tr-actions button:hover:not(:disabled) {
+  color: var(--c-text, #eef0fb);
+  border-color: var(--c-border-2, rgba(255, 255, 255, 0.17));
+}
+
+.tr-actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.tr-actions .tr-undo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tr-actions .tr-primary {
+  margin-right: auto;
+  border-color: transparent;
+  background: var(--c-accent, #8b8cff);
+  color: var(--c-accent-ink, #0a0b16);
+}
+
+.tr-error {
+  margin: 0;
+  color: #ff9a9a;
+  font-size: 11.5px;
+}
+
+/* Result — honest about what did and did not happen */
+.tr-result strong {
+  display: block;
+  font-size: 13px;
+}
+
+.tr-result .tr-good {
+  color: var(--c-accent, #8b8cff);
+}
+
+.tr-result .tr-bad {
+  color: #e6b455;
+}
+
+.tr-blocked {
+  margin: 8px 0 0;
+  padding-left: 16px;
+  color: var(--c-dim, rgba(238, 240, 251, 0.66));
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.tr-blocked b {
+  color: var(--c-text, #eef0fb);
+}
+
+.tr-note {
+  margin: 8px 0 0;
+  color: var(--c-muted, rgba(238, 240, 251, 0.42));
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+#tc-redesign-btn.is-active {
+  border-color: var(--c-accent-line);
+  background: var(--c-accent-soft);
+  color: var(--c-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tr-actions button {
+    transition: none;
+  }
+}

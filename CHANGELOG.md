@@ -7,6 +7,16 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Added (ui: point at the interface and ask Thomas to change it)
+
+- The Redesign flow lets the owner select a real element in Thomas's own UI
+  and hand it to Code as a task: `thomas/tools/ui_redesign.py` resolves the
+  selector to the source that draws it, `routes/ui_redesign_runtime.py`
+  serves the handoff, and `ui_redesign_select.js` / `ui_redesign_target.js`
+  / `ui_redesign.css` own the picking. The created thread opens in place
+  through `window.ThomasCodeMode.openConversation` rather than a page
+  reload. Guarded by client, runtime, and tool contract tests.
+
 ### Added (ui: one icon system, and the sidebar says what each task is doing)
 
 - `thomas/server/web/js/thomas_icons.js` gives Thomas one drawn identity
