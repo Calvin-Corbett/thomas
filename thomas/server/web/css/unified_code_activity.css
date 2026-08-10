@@ -192,8 +192,13 @@
    Deliberately NOT a percentage: a custom property's `%` resolves against
    whatever element consumes it, so `calc(100% - 420px)` would mean the panel in
    one rule and the layout in the other. Viewport units mean the same thing in
-   both places, which is the entire point of sharing the value. */
-.tc-code-panel { --tc-code-viewer-width: min(760px, max(360px, calc(100vw - 700px))); }
+   both places, which is the entire point of sharing the value.
+
+   Declared on the SHELL rather than the panel since 2026-08-10: the composer is
+   not inside the Code panel -- it is the shell's one composer, below the mode
+   surface -- and it now has to reserve the same room the transcript does. A
+   value only two elements can both see is a value they cannot disagree about. */
+#tc-shell[data-surface-mode="code"] { --tc-code-viewer-width: min(760px, max(360px, calc(100vw - 700px))); }
 
 .tc-code-viewer {
   position: absolute;
@@ -217,28 +222,43 @@
    so the drawer keeps its own width and only the shared row gets narrower. */
 .tc-code-panel.is-viewer-open .tc-code-layout { padding-right: var(--tc-code-viewer-width, min(760px, 62vw)); }
 
-/* The Activity drawer needs the same treatment the viewer above already gets.
-   It did not have it, so the layout reserved NOTHING for it and the drawer sat
-   on top of the transcript. Measured with the drawer open, transcript right edge
-   against drawer left edge:
+/* The Activity drawer needs clearance too -- but NOT the viewer's treatment.
+   It reserved on the right only, which is a one-sided squeeze, and a centred
+   column re-centres in whatever is left. Measured at 1920 with a task open, the
+   moment the Activity button was pressed:
 
-     1920 -> -176px (clear, and only by luck: the turn is 720px and centred)
-     1440 -> +64px  of content underneath
-     1100 -> +234px of content underneath
+     chat column   716..1484  ->  576..1344   (slid 140px left)
+     composer      734..1502  ->  734..1502   (did not move at all)
 
-   At 1100 the run summary was cut mid-sentence -- "so this task is unfinish" --
-   the deliverable card was clipped through its middle, and the verdict card ran
-   under the panel. `padding-right` computed as 0px at every one of those widths.
+   So pressing Activity yanked the conversation out from under the composer.
+   Owner, 2026-08-10: "pressing the activity button should [not] slide the chat
+   -- that menu isn't wide enough to need that, it can just open and the chat
+   stays where it is."
 
-   Uses the same custom property the drawer's own width comes from, so a resized
-   drawer keeps its clearance instead of drifting out of step with it.
+   Reserved on BOTH sides instead. Symmetric padding cannot move a centred
+   column's centre, so at any width where the column still fits, opening the
+   drawer changes nothing -- measured 716..1484 open and closed at 1920 with a
+   280px drawer, and it stays put up to a 360px one. Where the column genuinely
+   would not fit it narrows around its own centre rather than sliding, which is
+   what the earlier right-only rule was really trying to prevent: at 1440 the
+   run summary used to be cut mid-sentence ("so this task is unfinish") with the
+   drawer sitting on top of it.
+
+   The composer mirrors this exactly -- see the reading-column block in
+   unified_code_mode.css, which reads the same two custom properties.
 
    Above 720px only: below that breakpoint the drawer is deliberately
    `min(420px, 94vw)` with its resize handle hidden -- a near-full-width overlay,
    where reserving that much would leave the transcript no room at all. */
 @media (min-width: 721px) {
   .tc-code-panel.is-drawer-open .tc-code-layout {
-    padding-right: min(var(--tc-code-drawer-width, 360px), 92vw);
+    padding-inline: min(var(--tc-code-drawer-width, 360px), 92vw);
+  }
+  /* The viewer is the one panel that IS wide enough to need the room, so it
+     wins outright: it takes the right side and gives the left back. Source
+     order matters -- this must stay after the drawer rule above. */
+  .tc-code-panel.is-viewer-open.is-drawer-open .tc-code-layout {
+    padding-inline: 0 var(--tc-code-viewer-width, min(760px, 62vw));
   }
 }
 /* Full-bleed across Thomas, for a page that wants the whole screen. */

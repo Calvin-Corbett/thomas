@@ -62,7 +62,7 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  padding: 52px 24px 86px;
+  padding: 52px var(--tc-code-gutter, 24px) 86px;
   scrollbar-width: thin;
   scrollbar-color: var(--c-border-2) transparent;
 }
@@ -344,9 +344,74 @@
 .tc-code-reply { white-space: pre-wrap; overflow-wrap: anywhere; }
 .tc-code-reply.is-error { color: var(--c-danger, #ffb0b0); }
 
+/* ==== One reading column, two consumers (owner redline, 2026-08-10) =======
+   The conversation and the composer are the same column of text. They only
+   read as one surface if they agree on their box in EVERY state, and they did
+   not. Measured at 1920 with a task open, chat column vs composer:
+
+     drawer closed   716..1484   vs   734..1502     18px apart
+     drawer open     576..1344   vs   734..1502    158px apart
+
+   Two separate causes. The 18px is structural: the composer's wrapper carries
+   18px of side padding and the transcript carries 24px, so each centred
+   correctly inside a box the other did not have. The 158px is the Activity
+   drawer reserving room on the layout and re-centring the transcript while the
+   composer, which lives outside the Code panel entirely, stayed put.
+
+   Owner: "when side panels move and stuff the composer should shrink exactly
+   the same size as the chat."
+
+   So both now take their box from the same two numbers: `--tc-code-gutter`,
+   the side padding, and a reserve driven by whichever side panel is open. One
+   number moves them together or neither of them moves.
+
+   Scoped to `[data-surface-mode="code"]` throughout -- Chat and Work keep
+   `.tc-rail`'s viewport anchor, which is right for them. */
+#tc-shell[data-surface-mode="code"] { --tc-code-gutter: 24px; }
+
+/* The composer is the shell's, not the panel's: it sits below the mode surface
+   and no class on `.tc-code-panel` can reach it. `[data-code-side]` on the
+   shell is the whole channel, written by unified_code_mode.js on every render.
+   Matching the transcript's gutter is what puts the two centres on the same
+   pixel; matching the reserve is what keeps them there. */
+#tc-shell[data-surface-mode="code"] [data-ui-id="chat.composer"] {
+  padding-left: var(--tc-code-gutter);
+  padding-right: var(--tc-code-gutter);
+}
+
+/* `.tc-rail` anchors the composer to a VIEWPORT position with `!important` --
+   deliberate in Chat, where the Canvas shrinks the column from the right. In
+   Code the column is centred in the mode surface instead, so the anchor has to
+   be overridden at the same weight or the composer keeps sitting 18px to the
+   right of the conversation directly above it. */
+#tc-shell[data-surface-mode="code"] [data-ui-id="chat.composer"] > .tc-rail {
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+@media (min-width: 721px) {
+  /* Activity: symmetric, so the column's centre cannot move. Mirrors
+     `.is-drawer-open .tc-code-layout` in unified_code_activity.css, which
+     carries the measurements. Below 721px neither reserves anything -- the
+     drawer is a near-full-width overlay there. */
+  #tc-shell[data-surface-mode="code"][data-code-side="activity"] [data-ui-id="chat.composer"] {
+    padding-left: calc(var(--tc-code-gutter) + min(var(--tc-code-drawer-width, 360px), 92vw));
+    padding-right: calc(var(--tc-code-gutter) + min(var(--tc-code-drawer-width, 360px), 92vw));
+  }
+}
+
+/* The viewer IS wide enough to need the room, so the column moves and narrows
+   -- and the composer does exactly the same thing, at every width. No media
+   query: `--tc-code-viewer-width` already floors itself so the reading column
+   survives on a narrow window. */
+#tc-shell[data-surface-mode="code"][data-code-side="viewer"] [data-ui-id="chat.composer"] {
+  padding-right: calc(var(--tc-code-gutter) + var(--tc-code-viewer-width, min(760px, 62vw)));
+}
+
 @media (max-width: 720px) {
+  #tc-shell[data-surface-mode="code"] { --tc-code-gutter: 16px; }
   .tc-code-context { top: 10px; right: 10px; }
-  .tc-code-transcript { padding: 52px 16px 72px; }
+  .tc-code-transcript { padding: 52px var(--tc-code-gutter, 16px) 72px; }
   .tc-code-actions { width: min(420px, 94vw); }
   .tc-code-drawer-resize { display: none; }
   .tc-code-turn.is-user { max-width: 90%; }

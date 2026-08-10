@@ -237,7 +237,10 @@
 
     <!-- ===================== MAIN ===================== -->
     <main data-ui-id="chat.main" data-ui-label="Chat workspace" data-ui-policy="root protected" style="position: relative; z-index: 1; flex: 1; min-width: 0; display: flex; flex-direction: column;">
-      <header data-ui-id="chat.topbar" data-ui-label="Top toolbar" data-ui-policy="move resize" data-ui-constraints="minWidth=360;minHeight=50" style="flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--c-border);">
+      <!-- position: relative anchors the centred chat title below; the pills
+           stay a plain flex row and the title never becomes a flex item, so it
+           cannot push them around no matter how long the name is. -->
+      <header data-ui-id="chat.topbar" data-ui-label="Top toolbar" data-ui-policy="move resize" data-ui-constraints="minWidth=360;minHeight=50" style="position: relative; flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--c-border);">
         <button id="tc-sidebar-toggle" class="hv-icon" title="Toggle sidebar" style="width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--c-border); background: transparent; color: var(--c-dim); display: grid; place-items: center; cursor: pointer; transition: all .15s;">
           <i class="ph ph-sidebar-simple" style="font-size: 17px;"></i>
         </button>
@@ -263,6 +266,13 @@
             <div id="tc-model-options"></div>
           </div>
         </div>
+        <!-- The conversation's own name, on the model row, centred. Its only
+             other home would be a heading above the thread, and a full-width
+             heading there eats the reading area it exists to name. Absolutely
+             centred and ellipsised: long names truncate, the pills never move.
+             Empty and hidden until a named conversation is open, so a new chat
+             shows nothing rather than a placeholder that claims a name. -->
+        <div id="tc-chat-title" data-ui-id="chat.title" data-ui-label="Chat title" data-ui-policy="control" hidden></div>
         <div style="flex: 1;"></div>
         <button id="tc-canvas-btn" class="hv-surface" title="Open Thomas Canvas" data-ui-id="chat.action.canvas" data-ui-label="Canvas button" data-ui-policy="control" style="display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--c-accent-line); background: var(--c-accent-soft); color: var(--c-text); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;">
           <i id="tc-primary-action-icon" class="ph ph-chalkboard-simple" style="font-size: 16px; color: var(--c-accent);"></i><span id="tc-primary-action-label">Canvas</span>
@@ -307,7 +317,11 @@
             </div>
 
             <!-- THREAD -->
-            <div id="tc-thread" class="tc-rail" style="display: none; max-width: 768px; margin: 0 auto; padding: 28px 24px 48px; flex-direction: column; gap: 28px;"></div>
+            <!-- Vertical padding only. The horizontal inset used to live here
+                 (24px) while the composer's inset lived on ITS wrapper (18px),
+                 so the two columns sat on different edges. Both are now plain
+                 .tc-rail boxes and chat_shell.css owns the one shared inset. -->
+            <div id="tc-thread" class="tc-rail" style="display: none; max-width: 768px; margin: 0 auto; flex-direction: column; gap: 28px;"></div>
           </div>
 
           <!-- Peek strip. The one place a mode may show conversation next to
@@ -317,8 +331,8 @@
           <div id="tc-mode-peek" class="tc-mode-peek" data-ui-id="chat.mode.peek" data-ui-label="Conversation peek" data-ui-policy="control" hidden></div>
 
           <!-- composer -->
-          <div data-ui-id="chat.composer" data-ui-label="Message composer" data-ui-policy="move resize" data-ui-constraints="minWidth=320;minHeight=90" style="flex: 0 0 auto; padding: 6px 18px 18px;">
-            <div class="tc-rail" style="max-width: 768px; margin: 0 auto;">
+          <div data-ui-id="chat.composer" data-ui-label="Message composer" data-ui-policy="move resize" data-ui-constraints="minWidth=320;minHeight=90" style="flex: 0 0 auto; padding: 6px 0 18px;">
+            <div id="tc-composer-rail" class="tc-rail" style="max-width: 768px; margin: 0 auto;">
               <div style="position: relative; display: flex; flex-direction: column; gap: 8px; background: var(--c-composer-bg); border: 1px solid var(--c-border-2); border-radius: var(--r-composer); padding: 12px 14px; box-shadow: var(--c-shadow); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); overflow: visible;">
                 <div style="position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--composer-accent, transparent);"></div>
                 <div id="tc-attach-row" style="display: none; flex-wrap: wrap; gap: 8px; padding: 2px 2px 0;"></div>
@@ -938,6 +952,10 @@
     function renderChats() {
       const query = String(state.search || '').trim().toLowerCase();
       const wrap = document.getElementById('tc-chats');
+      // The top-bar name rides the same refresh as the list: a chat that gets
+      // renamed, or one whose server-side title lands after the first reply,
+      // updates in both places from one call.
+      syncChatTitle();
       // Code and Work render their own rows; decorate them the same way so the
       // hover card, right-click menu and sorting are not Chat-only features.
       if (window.ThomasUnifiedModes && window.ThomasUnifiedModes.renderHistory(wrap, query)) {
@@ -1267,10 +1285,30 @@
       const ref = msgRefs[idx]; if (!ref) return;
       ref.bubbleEl.innerHTML = bubbleInner(state.messages[idx]);
     }
+    // ---------- The open conversation's name, in the top bar ----------
+    // Chat mode only: Build and Work name their own surfaces, and borrowing
+    // this slot for them would put a chat's name over a build's transcript.
+    // Nothing is shown when there is no named conversation open — an empty
+    // string beats a placeholder, which would be a claim about a chat that
+    // does not exist yet.
+    const chatTitleEl = document.getElementById('tc-chat-title');
+    function syncChatTitle() {
+      if (!chatTitleEl) return;
+      const open = state.surfaceMode === 'chat' && state.activeChat
+        ? chatList.find(c => c.id === state.activeChat)
+        : null;
+      const name = open ? String(open.title || '').trim() : '';
+      chatTitleEl.textContent = name;
+      // The full name on hover: the element ellipsises, so the tooltip is the
+      // only place a truncated name stays readable.
+      if (name) chatTitleEl.title = name; else chatTitleEl.removeAttribute('title');
+      chatTitleEl.hidden = !name;
+    }
     function syncView() {
       const hasMsgs = state.messages.length > 0;
       welcomeEl.style.display = hasMsgs ? 'none' : 'flex';
       threadEl.style.display = hasMsgs ? 'flex' : 'none';
+      syncChatTitle();
     }
 
     // ---------- Composer dynamic state (send button) ----------

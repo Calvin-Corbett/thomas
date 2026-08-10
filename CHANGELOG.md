@@ -7,6 +7,18 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (chat: the title stops eating the room, and the columns line up)
+
+- The per-chat title was a full-width bubble spending vertical space on one
+  line of text; it moves into the row that already holds the model pill,
+  centred and truncating, so the conversation gets the room back. The
+  message column and the composer now share one geometry — measured at
+  1920px, both sit at x=716 and 768 wide (they disagreed before).
+- Opening the Activity drawer no longer slides the conversation sideways.
+  The drawer is not wide enough to earn that, so it opens beside a chat that
+  stays exactly where it was: measured with the drawer open, the content
+  column and the composer both hold x=716 / 768 wide, unchanged from closed.
+
 ### Added (release: a push is not finished until the record agrees)
 
 - Thomas had a gated way to COMMIT and no gated way to PUSH, so code reached

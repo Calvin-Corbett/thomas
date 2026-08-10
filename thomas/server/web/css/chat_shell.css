@@ -237,6 +237,61 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .tc-markdown th { background: var(--c-surface-2); color: var(--c-text); font-weight: 750; }
 .tc-markdown td { background: var(--c-surface); }
 
+/* The open conversation's name, centred on the model row.
+   Absolutely positioned inside the top bar (which carries position: relative)
+   so it is NOT a flex item: the sidebar toggle, the model pill and the
+   Canvas/Redesign/theme pills keep the exact positions they had, whatever the
+   name's length. It truncates instead of wrapping, and never grows into the
+   pills — max-width is capped well inside the free space between the two
+   groups, measured at 1920/1440/1280 (see the step-down below).
+   pointer-events: none keeps the row's real controls clickable through it. */
+#tc-chat-title {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  /* The cap is measured, not guessed. The row's centre is at
+     (280 + 100vw) / 2 and the right-hand pill group starts at
+     100vw - 400px, so a TRULY centred box has (100vw / 2 - 540px) of room on
+     that side — the right runs out first because that group is the wider of
+     the two. Twice that, less a ~30px breathing gap, is `100vw - 1140px`;
+     380px is where a chat name stops needing more. */
+  max-width: min(380px, calc(100vw - 1140px));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  color: var(--c-dim);
+  font-family: var(--font-label, inherit);
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  pointer-events: none;
+}
+#tc-chat-title[hidden] { display: none; }
+/* Below this the formula above leaves under ~100px, which is an ellipsis with
+   a word in front of it rather than a name, so the row stands down entirely —
+   the sidebar still shows which conversation is open. Stated plainly: this is
+   the cost of a TRUE centre. The centre of this row is also the centre of the
+   reading column (both land on the same x), which is why the title is pinned
+   to it instead of floating in the free space between the pill groups. */
+@media (max-width: 1240px) { #tc-chat-title { display: none; } }
+
+/* ONE reading column: the thread's messages and the composer card sit on the
+   same left and right edges.
+   Both are .tc-rail boxes, so the rail alone decides the column — neither adds
+   a horizontal inset of its own any more. Before this, the thread carried
+   24px of its own padding and the composer's WRAPPER carried 18px, which put
+   the two columns on different edges: measured at 1920 the message column ran
+   740..1460 and the composer card 734..1502 — 6px out on the left, 42px on the
+   right. */
+#tc-thread { padding: 28px 0 48px; }
+@media (max-width: 1080px) {
+  /* Under the rail's own width the centred boxes would touch the column
+     edges, so both take the SAME inset and still agree with each other. */
+  #tc-thread, #tc-composer-rail { padding-left: 20px; padding-right: 20px; }
+}
+
 /* Chat content "rail": its left edge is anchored to a VIEWPORT-relative
    position (not the column's width), so when the Canvas opens and the chat
    column shrinks from the right, the composer/thread DON'T slide — they only
