@@ -7,6 +7,21 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Added (release: a push is not finished until the record agrees)
+
+- Thomas had a gated way to COMMIT and no gated way to PUSH, so code reached
+  GitHub while the release record stayed behind and nothing objected — the
+  repository ended up telling three stories at once: code at 0.19.25, newest
+  release notes at 0.19.22, latest published Release at 0.16.11.
+  `scripts/forge/gates/release_sync_gate.py` checks the four records a
+  release-engineering team expects to agree — the code is pushed, the
+  version owns a dated CHANGELOG section, an annotated tag exists, and a
+  GitHub Release is published — and names each drift with the command that
+  fixes it. `scripts/crew/brief/push.py` is the sanctioned push path: it
+  pushes, then runs that gate and says plainly whether the push is a
+  finished release or just a branch push. Neither edits the release record;
+  cutting a release is a decision, and the version files are protected.
+
 ### Added (app: Thomas opens as himself, not as a browser tab)
 
 - `scripts/thomas_app.py` installs Thomas as a real desktop app: a Desktop
