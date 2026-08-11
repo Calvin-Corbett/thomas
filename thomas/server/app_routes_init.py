@@ -1282,6 +1282,25 @@ def _setup_routes_and_handlers(
 
     app.router.add_get("/my-stuff", my_stuff_page)
     app.router.add_get("/my-stuff/", my_stuff_page)
+
+    async def agent_ops_page(request: web.Request) -> web.StreamResponse:
+        """The Agent Operations console -- six frontier surfaces that had no door.
+
+        `frontier.html` and its six panels were finished and are registered by
+        the server on every boot ("Frontier surfaces registered: CAP-040, ..."),
+        but nothing in the product ever linked to them, so the only way in was to
+        hand-type /static/frontier.html. Finished code with no caller looks
+        exactly like dead code from the outside -- an audit had it on the delete
+        list. Giving it a route and a sidebar entry is what tells the difference.
+        """
+        _ = request
+        page = (web_dir / "frontier.html").resolve()
+        if not page.is_relative_to(web_dir.resolve()) or not page.is_file():
+            raise web.HTTPNotFound()
+        return web.FileResponse(page, headers={"Cache-Control": "no-store"})
+
+    app.router.add_get("/agent-ops", agent_ops_page)
+    app.router.add_get("/agent-ops/", agent_ops_page)
     app.router.add_get("/my_stuff", my_stuff_page)
     app.router.add_get("/my_stuff/", my_stuff_page)
 

@@ -1008,6 +1008,11 @@
       mission: '/mission?embed=1',
       my_stuff: '/my-stuff?embed=1',
       settings: '/settings?embed=1',
+      // Agent Operations: six frontier surfaces the server has been registering
+      // on every boot with nothing in the product linking to them. It goes in
+      // the MODERN list, not through /classic -- the page styles itself from
+      // tokens.css alone and carries none of the legacy component CSS.
+      agent_ops: '/agent-ops?embed=1',
     };
     const CLASSIC_WORKSPACE_ROUTE = '/classic?embed=1';
     function workspaceFrame(mode) {
@@ -1083,6 +1088,7 @@
         // Icons are drawn (ThomasIcons); the ph-* names here were Unicode
         // stand-ins — Library rendered as "▤", Mission Control as "⊕".
         { icon: 'mission',  label: 'Mission Control', mode: 'mission' },
+        { icon: 'search',   label: 'Agent Ops',       mode: 'agent_ops' },
         { icon: 'office',   label: 'Virtual Office',  mode: 'office' },
         { icon: 'canvas',   label: 'Canvas',          mode: 'app_builder' },
         { icon: 'library',  label: 'Library',         mode: 'my_stuff' },

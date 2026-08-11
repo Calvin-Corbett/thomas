@@ -5,6 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agent Operations — Thomas</title>
 <link rel="stylesheet" href="/static/css/tokens.css">
+<style>
+  /* Embedded as a workspace (?embed=1): the shell already shows the product
+     name and the workspace title, so this page's own masthead would be a
+     second, competing header. Hide it and let the surfaces fill the frame.
+     Same contract the legacy workspace page uses, so both behave alike. */
+  html.tcw-embed body .masthead { display: none !important; }
+  html.tcw-embed, html.tcw-embed body { background: transparent !important; }
+</style>
+<script>
+  (function () {
+    try {
+      if (new URLSearchParams(window.location.search).get('embed') === '1') {
+        document.documentElement.classList.add('tcw-embed');
+      }
+    } catch (e) {}
+  })();
+</script>
 <script>
   /* Apply the unified theme before first paint (mission.html pattern). */
   (function () {

@@ -55,8 +55,22 @@
     return body ? svg(body, size || 16) : '';
   }
 
+  const _warnedGlyphs = new Set();
   function glyph(name, size) {
-    const body = GLYPHS[String(name || '').toLowerCase()];
+    const key = String(name || '').toLowerCase();
+    const body = GLYPHS[key];
+    // An unknown name used to return '' and nothing else happened: the control
+    // rendered with no icon at all and looked like a deliberate text-only
+    // button. A sidebar entry shipped that way, and the only reason it was
+    // caught was someone comparing its markup against a neighbour's. Say so,
+    // once per name, so the next typo is visible instead of merely invisible.
+    if (!body && key && !_warnedGlyphs.has(key)) {
+      _warnedGlyphs.add(key);
+      const known = Object.keys(GLYPHS).join(', ');
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn(`[ThomasIcons] no glyph named "${key}" - the control will render with no icon. Known glyphs: ${known}`);
+      }
+    }
     return body ? svg(body, size || 17) : '';
   }
 

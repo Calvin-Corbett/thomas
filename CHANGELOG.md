@@ -64,6 +64,44 @@ Versioning: Semantic Versioning.
   they were meant to be. Identical at runtime, but the raw bytes made grep,
   ripgrep and diff classify the file as binary and refuse to show its contents.
 
+### Added (the Agent Operations console gets a door)
+
+- Six frontier surfaces -- steer a running agent (CAP-040), live run telemetry
+  (CAP-137), worktree progress (CAP-139), source annotations (CAP-147), mention
+  context (CAP-148), pull request review (CAP-149) -- were finished, styled and
+  registered by the server on **every boot**, with nothing in the product
+  linking to them. The only way in was to hand-type `/static/frontier.html`.
+  `/agent-ops` now serves the console and an **Agent Ops** entry sits under
+  Mission Control. It joins the MODERN workspace route table rather than
+  `/classic`: the page styles itself from `tokens.css` alone and carries none of
+  the legacy component CSS. `frontier.html` hides its own masthead under
+  `?embed=1` so the shell does not show two headers.
+- Worth recording because it nearly went the other way: a legacy audit had this
+  cluster on the **delete** list, since finished code with no caller is
+  indistinguishable from dead code -- both have zero callers. The tell was that
+  the server announces these surfaces at startup, which nothing abandoned does.
+
+### Fixed (an unknown icon name rendered nothing, silently)
+
+- `ThomasIcons.glyph()` returned an empty string for a name it did not know and
+  said nothing, so the control rendered with no icon and looked like a
+  deliberate text-only button. The Agent Ops entry above shipped that way for a
+  few minutes -- `build` is a FACE, not a GLYPH -- and was caught only by
+  comparing its markup against a neighbouring button. It now warns once per
+  unknown name and lists the eleven it knows.
+
+### Fixed (opening a workspace renamed your chats)
+
+- The modern shell hosts the six legacy workspaces by loading the whole old
+  application into an iframe with `embed=1` and hiding its chat surface with
+  CSS. Hidden is not absent: the old onboarding module still booted and called
+  `persistActiveChat`, which PUTs `/api/chats/<id>` with a title derived from
+  the messages it can see. Inside the frame there is no conversation, so that
+  title derived to `Chat <id-prefix>` or `Untitled chat` -- and a real chat was
+  renamed by the act of opening a workspace. A page with no composer and no
+  transcript no longer writes chat state. Verified both directions: embedded
+  makes zero write attempts, standalone still saves with a real derived title.
+
 ### Added (Thomas can be installed as an app in his own right)
 
 - `thomas.webmanifest`, `thomas-icon.svg` and a maskable variant, linked from
