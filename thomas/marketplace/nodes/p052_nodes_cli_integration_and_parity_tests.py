@@ -193,7 +193,12 @@ def normalize_nodes_path(nodes_path: str | None) -> str:
         return p
 
     # Discovery attempts (safe if modules are absent).
-    for module_name in ("thomas.server.routes.core_aiohttp", "thomas.cli.parity_commands"):
+    # `thomas.server.routes.core_aiohttp` used to head this list. It was
+    # measured returning an empty set even while it existed -- this scan only
+    # collects strings containing "node"/"device", and that module's route table
+    # was private, so dir() never saw it. The module has since been deleted, so
+    # the entry is now impossible as well as useless.
+    for module_name in ("thomas.cli.parity_commands",):
         discovered = _pick_best_path(_discover_route_strings(module_name))
         if discovered:
             return discovered

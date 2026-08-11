@@ -114,49 +114,6 @@ async function applyOnboardingCompletion({ skippedInterview = false } = {}) {
     });
 }
 
-function buildSetupSafetyMessage() {
-    return [
-        'Fair concern. Setup is designed to be explicit and user-controlled:',
-        withAgentName('- No silent installs: {{agent}} only runs dependency installs after your approval.'),
-        '- Dependency step shows why each tool is needed and where it comes from.',
-        '- You can choose the lowest-download path: Manual API Key.',
-        '- Safe defaults keep command approval on so actions stay supervised.',
-    ].join('\n');
-}
-
-function showSetupSafetySuggestions() {
-    setAssistantSuggestions({
-        title: 'Setup safety',
-        context: 'setup_safety',
-        dismissible: false,
-        options: [
-            {
-                label: 'Run Easy Setup',
-                kind: 'action',
-                tone: 'primary',
-                onChoose: async () => {
-                    ensureChatVisible();
-                    await openEasySetup({ source: 'safety_suggestion', force: false, restart: false });
-                },
-            },
-            {
-                label: 'Use lowest-download setup',
-                kind: 'action',
-                onChoose: async () => {
-                    ensureChatVisible();
-                    await openEasySetup({ source: 'safety_suggestion', force: false, restart: true });
-                    handleEasySetupPathSelect('manual');
-                },
-            },
-            {
-                label: 'Show exact downloads',
-                kind: 'option',
-                send_prompt: withAgentName('Show exactly what {{agent}} installs in each setup path and why each dependency is required.'),
-            },
-        ],
-    });
-}
-
 async function submitOnboardingInterviewAnswer(question, value) {
     const index = Number(easySetupState.interviewIndex);
     easySetupState.interviewAnswers[question.id] = value;

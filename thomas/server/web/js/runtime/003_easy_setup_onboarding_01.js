@@ -164,33 +164,6 @@ function chatTaskStableHash(inputRaw) {
     return hash >>> 0;
 }
 
-function chatAgentPresenceViewportBounds() {
-    const sidebarRect = sidebar instanceof HTMLElement ? sidebar.getBoundingClientRect() : null;
-    const composerRect = composerContainer instanceof HTMLElement ? composerContainer.getBoundingClientRect() : null;
-    const left = Math.max(CHAT_AGENT_PRESENCE_FLOAT_PAD_X, Math.round((sidebarRect?.right || 0) + 10));
-    const right = Math.max(left + 120, Math.round(window.innerWidth - CHAT_AGENT_PRESENCE_FLOAT_PAD_X - 84));
-    const top = CHAT_AGENT_PRESENCE_FLOAT_PAD_TOP;
-    const bottomLimit = composerRect ? composerRect.top - 78 : (window.innerHeight - CHAT_AGENT_PRESENCE_FLOAT_PAD_BOTTOM);
-    const bottom = Math.max(top + 120, Math.round(bottomLimit));
-    return {
-        left,
-        top,
-        width: Math.max(120, right - left),
-        height: Math.max(120, bottom - top),
-    };
-}
-
-function chatAgentPresencePoint(activityId, indexHint = 0) {
-    const bounds = chatAgentPresenceViewportBounds();
-    const seed = chatTaskStableHash(`${activityId}|${indexHint}`);
-    const xRatio = ((seed % 997) / 997);
-    const yRatio = (((Math.floor(seed / 997) % 991)) / 991);
-    return {
-        x: Math.round(bounds.left + (Math.max(0, bounds.width - 88) * xRatio)),
-        y: Math.round(bounds.top + (Math.max(0, bounds.height - 104) * yRatio)),
-    };
-}
-
 function chatTaskCheckpointText(textRaw) {
     const clean = safeString(textRaw).replace(/\s+/g, ' ').trim();
     return clean.length > 180 ? `${clean.slice(0, 177)}...` : clean;
@@ -666,12 +639,6 @@ function chatAgentPresenceSyncRootVisibility() {
     removeChatAgentPresenceUi();
 }
 
-function chatAgentPresenceRemove(activityId, { immediate = false } = {}) {
-    void immediate;
-    chatAgentPresenceStateByActivityId.delete(safeString(activityId));
-    removeChatAgentPresenceUi();
-}
-
 function removeChatAgentPresenceUi() {
     if (chatRobotWorldRaf) {
         window.cancelAnimationFrame(chatRobotWorldRaf);
@@ -693,22 +660,9 @@ function chatWorldEnsureUi() {
     return null;
 }
 
-function chatAgentPresenceShouldBeVisible() {
-    return false;
-}
-
-function chatAgentPresenceSetOfficeContext(activityId, context = {}) {
-    void activityId;
-    void context;
-}
-
 function openOfficeForTaskContext(context = {}) {
     void context;
     setSidebarNavMode('office');
-}
-
-function chatAgentPresenceRender(state) {
-    void state;
 }
 
 function chatAgentPresenceUpsert(activityId, patch = {}) {
@@ -1172,14 +1126,6 @@ function chatPhysicsWorldActorMetrics(state) {
         };
 }
 
-function chatPhysicsColorToInt(colorRaw, fallback = 0x9ad8ff) {
-    const color = safeString(colorRaw).trim();
-    if (!color) return fallback;
-    const normalized = color.startsWith('#') ? color.slice(1) : color;
-    if (!/^[0-9a-f]{6}$/i.test(normalized)) return fallback;
-    return Number.parseInt(normalized, 16);
-}
-
 function chatPhysicsWorldStateSignature(bounds, graph) {
     return JSON.stringify({
         width: Math.round(Number(bounds?.width || 0)),
@@ -1264,11 +1210,6 @@ function chatPhysicsWorldEnsureVisualLayer(worldState) {
     graphics.setDepth(30);
     worldState.visualLayer = { graphics };
     return worldState.visualLayer;
-}
-
-function chatPhysicsWorldDrawTraversalProp(graphics, placement) {
-    void graphics;
-    void placement;
 }
 
 function chatPhysicsWorldRenderVisualLayer(worldState, bounds, graph, actors = []) {

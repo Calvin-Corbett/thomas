@@ -74,67 +74,12 @@
     50%      { transform: translateX(-1px) translateY(-1px); }
     66%      { transform: translateX(1px) translateY(0); }
     82%      { transform: translateX(0) translateY(-1px); }
-}
-
-
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Robot Exit (startled jump LEFT Ã¢â€ â€™ tumble fall) Ã¢â€â‚¬Ã¢â€â‚¬ */
-.robot-exit-run {
-    position: absolute !important;
-    z-index: 10;
-    pointer-events: none;
-    transform-origin: center 76%;
-    animation: chatRobotExitWalk 0.3s cubic-bezier(0.22, 0.8, 0.24, 1) forwards,
-               chatRobotExitFall 0.56s cubic-bezier(0.55, 0, 1, 0.45) 0.3s forwards;
-}
-.robot-exit-run::before {
-    content: '';
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 38px;
-    height: 38px;
-    transform: translate(-50%, -50%) scale(0);
-    border-radius: 50%;
-    opacity: 0;
-    background:
-        radial-gradient(circle at center, rgba(134, 225, 255, 0.46) 0 30%, rgba(134, 225, 255, 0.12) 31% 52%, transparent 53%),
-        radial-gradient(circle at center, transparent 57%, rgba(134, 225, 255, 0.82) 59% 64%, transparent 66%);
-    filter: drop-shadow(0 0 12px rgba(104, 196, 255, 0.5));
-    animation: chatRobotExitPortal 0.86s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-.robot-exit-run::after {
-    display: none !important;
-}
-.robot-exit-run .office-agent-leg-left,
-.robot-exit-run .office-agent-leg-right,
-.robot-exit-run .agent-leg-left,
-.robot-exit-run .agent-leg-right {
-    animation: chatRobotLegWalk 0.18s linear infinite alternate;
-}
-.robot-exit-run .office-agent-leg-right,
-.robot-exit-run .agent-leg-right {
-    animation-delay: 0.09s;
-}
-@keyframes chatRobotExitWalk {
-    0%   { transform: translateY(0) scale(1); opacity: 1; }
     45%  { transform: translateY(-6px) scale(1.03); opacity: 1; }
     100% { transform: translateY(-2px) scale(0.98); opacity: 1; }
 }
-@keyframes chatRobotExitFall {
-    0%   { transform: translateY(-2px) scale(0.98); opacity: 1; }
-    38%  { transform: translateY(2px) scale(0.82); opacity: 1; }
-    100% { transform: translateY(0) scale(0.12); opacity: 0; }
-}
-@keyframes chatRobotExitPortal {
-    0%   { transform: translate(-50%, -50%) scale(0) rotate(0deg); opacity: 0; }
-    26%  { transform: translate(-50%, -50%) scale(1.05) rotate(120deg); opacity: 1; }
-    64%  { transform: translate(-50%, -50%) scale(1) rotate(260deg); opacity: 1; }
-    100% { transform: translate(-50%, -50%) scale(0.32) rotate(360deg); opacity: 0; }
-}
-@keyframes chatRobotLegWalk {
-    0%   { transform: rotate(-5deg); }
-    100% { transform: rotate(5deg); }
-}
+
+
+
 
 .chat-robot-landed {
     display: block;

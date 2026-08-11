@@ -1145,26 +1145,42 @@ slop area in Thomas to date.
 
 Yes — once you trace which endpoint actually fires for which feature.
 
-**The two endpoints:**
+**There is one chat engine, reachable at two paths.**
 
-| Endpoint | Where registered | What calls it |
+Corrected 2026-08-11. This section previously described two live engines,
+"V1 (legacy)" and "V2 (canonical)", with the UI split between them. That has not
+been true for some time, and the repository already contained the proof: the
+test `test_nothing_in_thomas_calls_register_chat_routes` asserts that V1's
+registration function is called from nowhere, and it passes.
+
+| Endpoint | Where registered | Handler |
 |---|---|---|
-| `POST /api/chat` (V1, legacy) | `chat_aiohttp_handlers.py:register_chat_routes` (called from `app_routes_init.py:373`) | Chat-game features — `runtime/011_chat_games_02.js:1093` |
-| `POST /api/v2/chat` (V2, canonical) | `chat_v2.py:register_chat_v2_routes` (called from `app_routes_init.py:746`) | Main chat surface — `runtime/013_actions_interactions_02.js:12` |
+| `POST /api/v2/chat` | `chat_v2_registration.py` | `_handle_chat_v2_turn` |
+| `POST /api/chat` | `chat_v2_registration.py` (same module) | `_handle_chat_v2_turn` |
 
-**The JS endpoint selection** is gated on `window.__THOMAS_CHAT_V2__`,
-which is **never set anywhere in production code** (only in tests). So
-in production it's `undefined`, and the two JS callsites short-circuit
-in opposite directions:
+Both paths are registered by the V2 module and reach the same handler —
+verified by inspecting the live router, not by reading the source. `/api/chat`
+is kept as an alias so older callers keep working; it is not a second engine.
 
-- `runtime/011_chat_games_02.js:1093` — `window.__THOMAS_CHAT_V2__ ? '/api/v2/chat' : '/api/chat'` → `undefined` is falsy → **defaults to V1**.
-- `runtime/013_actions_interactions_02.js:12` — `window.__THOMAS_CHAT_V2__ === false ? '/api/chat' : '/api/v2/chat'` → `undefined !== false` → **defaults to V2**.
+`app_routes_init.py` also registers `/api/chat` and `/api/v2/chat` to an
+`api_chat_unavailable` handler, but only inside the failure path taken when V2
+registration raises. In a healthy boot those never bind.
 
-**This is intentional.** The main chat surface (V2) supports the
-unified task-manager flow; the chat-game side feature is older and
-hasn't been migrated. But the inconsistent defaults are easy to break
-if anyone ever sets the flag globally — half the UI flips, half
-doesn't.
+**On `window.__THOMAS_CHAT_V2__`:** the flag is never set in production code,
+and the two JS callsites short-circuit in opposite directions on it — one
+defaulting to `/api/chat`, the other to `/api/v2/chat`. Because both paths now
+resolve to the same handler, that inconsistency no longer changes behaviour. It
+is dead weight rather than a live hazard, and the flag can go whenever someone
+is in those files.
+
+The V1 implementation (`chat_aiohttp.py` and its siblings) was removed in this
+release; nothing had called it.
+
+Historical note, kept because it explains the shape above: the split was real
+once. The main chat surface moved to the unified task-manager flow first, and
+the chat-game side feature stayed on the older endpoint until that endpoint
+became an alias for the same handler. Nothing needs migrating now; only the
+flag and the two opposite defaults remain as scar tissue.
 
 **The live path for a normal chat message:**
 
@@ -5069,7 +5085,6 @@ Major uncovered surfaces:
   - `codex_aiohttp.py` — codex integration
   - `companion_device_release_aiohttp.py`,
     `companion_runtime.py` — companion runtime + release
-  - `core_aiohttp.py` — core API
   - `discord_channels_aiohttp.py`,
     `discord_channels_support.py` — Discord integration
   - `engine_actions_aiohttp.py` — engine actions

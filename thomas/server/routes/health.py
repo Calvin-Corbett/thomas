@@ -19,15 +19,6 @@ from thomas.server.app_keys import APP_CONFIG
 
 log = logging.getLogger(__name__)
 
-# Placeholder for storing boot time across the app lifecycle
-_BOOT_TIME: float | None = None
-
-
-def set_boot_time(boot_time: float) -> None:
-    """Set the boot time for uptime calculation."""
-    global _BOOT_TIME
-    _BOOT_TIME = boot_time
-
 
 async def api_health_ready(request: web.Request) -> web.Response:
     """GET /health/ready - Readiness check with dependency verification.
@@ -79,7 +70,11 @@ async def api_health_ready(request: web.Request) -> web.Response:
             all_ok = False
         else:
             checks["llm"] = "ok"
-    except Exception as e:
+    # Same set the database check above already names. This block reads
+    # cfg.models and its length, so a missing attribute, a wrong type, a bad key
+    # or a config-import failure are the realistic faults; anything outside them
+    # is a bug that should surface rather than be reported as a soft check error.
+    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as e:
         llm_error = str(e)
         checks["llm"] = f"error: {llm_error}"
         all_ok = False
@@ -95,7 +90,9 @@ async def api_health_ready(request: web.Request) -> web.Response:
             static_error = f"Directory not found or not a directory: {static_dir}"
             checks["static_files"] = f"failed: {static_error}"
             all_ok = False
-    except Exception as e:
+    # Only a filesystem probe: exists() and is_dir(). OSError covers permission
+    # and path faults; ValueError is the Windows answer to a malformed path.
+    except (OSError, ValueError, RuntimeError) as e:
         static_error = str(e)
         checks["static_files"] = f"error: {static_error}"
         all_ok = False

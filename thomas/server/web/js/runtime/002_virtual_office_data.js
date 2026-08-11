@@ -295,13 +295,6 @@ function describeToolName(toolName) {
 }
 
 const CHAT_THINKING_UI_STORAGE_KEY = 'thomas.ui.show_thinking.v1';
-function isThinkingUiEnabled() {
-    try {
-        return window.localStorage.getItem(CHAT_THINKING_UI_STORAGE_KEY) === '1';
-    } catch (_) {
-        return false;
-    }
-}
 const CHAT_THINKING_UI_ENABLED = false;
 
 /**
@@ -383,64 +376,8 @@ const CHAT_ROBOT_EXIT_FALL_MAX = 1400;
 let _lastRobotAnim = '';
 let _lastComposerOffset = 0;
 let _composerOffsetRaf = 0;
-function _pickRobotAnimation() {
-    let pick;
-    do {
-        pick = CHAT_ROBOT_ANIMATIONS[Math.floor(Math.random() * CHAT_ROBOT_ANIMATIONS.length)];
-    } while (pick === _lastRobotAnim && CHAT_ROBOT_ANIMATIONS.length > 1);
-    _lastRobotAnim = pick;
-    return pick;
-}
-
-function _applyRobotIdleAnimation(target) {
-    if (!(target instanceof HTMLElement)) return '';
-    CHAT_ROBOT_ANIMATIONS.forEach((anim) => target.classList.remove('chat-robot-anim-' + anim));
-    const idleAnim = _pickRobotAnimation();
-    target.dataset.idleAnim = idleAnim;
-    target.classList.add('chat-robot-anim-' + idleAnim);
-    return idleAnim;
-}
-
-function _createLandedRobotElement() {
-    const landed = document.createElement('div');
-    landed.className = 'chat-robot-landed pixel-agent pixel-agent-blue';
-    landed.innerHTML = `
-        <span class="agent-head office-agent-head">
-            <span class="agent-eye office-agent-eye office-agent-eye-left agent-eye-left"></span>
-            <span class="agent-eye office-agent-eye office-agent-eye-right agent-eye-right"></span>
-        </span>
-        <span class="agent-body office-agent-body"></span>
-        <span class="agent-leg office-agent-leg office-agent-leg-left agent-leg-left"></span>
-        <span class="agent-leg office-agent-leg office-agent-leg-right agent-leg-right"></span>
-    `;
-    return landed;
-}
-
-function _ensureRobotDock() {
-    return chatWorldEnsureDock();
-}
-
 function _positionRobotDock() {
     return null;
-}
-
-function _asLandedRobotElement(sourceNode = null) {
-    const landed = sourceNode instanceof HTMLElement ? sourceNode : _createLandedRobotElement();
-    landed.classList.remove('chat-robot-agent', 'chat-robot-enter', 'robot-exit-run');
-    CHAT_ROBOT_ANIMATIONS.forEach((anim) => landed.classList.remove('chat-robot-anim-' + anim));
-    landed.classList.add('chat-robot-landed');
-    landed.removeAttribute('data-idle-anim');
-    landed.style.position = '';
-    landed.style.top = '';
-    landed.style.left = '';
-    landed.style.zIndex = '';
-    landed.style.filter = '';
-    landed.style.animation = '';
-    landed.style.transform = '';
-    landed.style.opacity = '';
-    landed.style.pointerEvents = '';
-    _applyRobotIdleAnimation(landed);
-    return landed;
 }
 
 function _landRobotAtComposerDock(sourceNode = null) {
@@ -478,18 +415,6 @@ function _createRobotStatus(category) {
 function _updateThinkingDisplay(container, text) {
     void container;
     void text;
-}
-
-/**
- * Create a post-stream "Thought for X.Xs" collapsed summary that replaces the robot status.
- * Shows accumulated thinking/reasoning text like Claude and ChatGPT.
- * Returns the summary element or null if no thinking data was available.
- */
-function _createThinkingSummary(elapsedMs, capturedThinkingText, capturedToolCards) {
-    void elapsedMs;
-    void capturedThinkingText;
-    void capturedToolCards;
-    return null;
 }
 
 function chatMessageTimestampText(valueRaw) {
@@ -1056,17 +981,6 @@ function highlightMissionRuntimeHero() {
             panel.classList.remove('is-focused');
         }, 1800);
     });
-}
-
-function openMissionControlFromChatPresence(sessionIdOverride = '') {
-    const resolvedSessionId = safeString(sessionIdOverride || missionPreferredSessionId());
-    if (resolvedSessionId) {
-        taskContinuityLatestSessionId = resolvedSessionId;
-    }
-    ensureSettingsUiClosed();
-    setSidebarNavMode('mission');
-    highlightMissionRuntimeHero();
-    void missionRefresh({ force: true, silent: true });
 }
 
 function ensureTaskContinuityRuntimeUi() {

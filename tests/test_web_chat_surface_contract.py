@@ -137,7 +137,11 @@ def test_robot_surface_uses_shared_frame_and_teleport_contract() -> None:
     assert "height: 29px;" in portal_css
 
     assert ".chat-robot-anim-lifting {" in dock_css
-    assert "@keyframes chatRobotExitPortal" in dock_css
+    # chatRobotExitPortal / chatRobotExitFall / chatRobotLegWalk were removed with
+    # the dead presence layer: their only trigger was `.robot-exit-run`, emitted
+    # solely by _asLandedRobotElement(), which had no caller. No CSS rule
+    # referenced the keyframes any more, so they animated nothing.
+    assert "@keyframes chatRobotExitPortal" not in dock_css
     assert ".chat-robot-landed {" in dock_css
     assert "width: 31px;" in dock_css
     assert "height: 29px;" in dock_css

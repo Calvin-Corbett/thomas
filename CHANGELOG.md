@@ -64,6 +64,33 @@ Versioning: Semantic Versioning.
   they were meant to be. Identical at runtime, but the raw bytes made grep,
   ripgrep and diff classify the file as binary and refuse to show its contents.
 
+### Removed (1,829 lines of front-end code nothing could reach)
+
+- The chat presence layer (the robot that walked around the chat): every entry
+  point was a constant -- `chatWorldEnsureUi()` returned null,
+  `chatAgentPresenceShouldBeVisible()` returned false, `chatTaskRobotAgentMarkup()`
+  returned the empty string. 633 lines.
+- Two abandoned Marketplace designs (`mp-bubble*`, `mp-creator*`, and an older
+  `module-marketplace-item/toolbar/chip*` look) -- 52 classes emitted by nothing.
+  606 lines. The `-shell`/`-search`/`-stream` classes are live and were kept.
+- Builder Mode (112), an Appsmith/Budibase export path (138), Virtual Office
+  dynamic room creation (95), the old sidebar's Rename Agent button (71),
+  orphaned GridStack styling (77), a setup safety screen (43), a superseded
+  per-space draft agent layer (27), `paintPricingLegacy` (15), and three
+  identical marketplace-catalog shims (12).
+- **Kept after being proven reachable**, each having been on the delete list:
+  the Content Hub workspace (no button in any HTML, but `normalizeNavMode()`
+  accepts `content`, so `?nav=content`, a stored nav mode, or
+  `window.setSidebarNavMode('content')` all reach it -- loaded live, it renders
+  with real data); `officeNearestHallId` (used by the saved-data restore path);
+  and three stylesheets an audit called dead that in fact style live Virtual
+  Office agents, live chat messages, and live tool-call cards -- only the
+  never-emitted rules inside them were removed.
+- `tests/test_settings_respect_stored_builder_mode.py` was repointed: it grepped
+  the source for `loadStoredBuilderMode`, a function nothing called, so it passed
+  while testing nothing. It now exercises the handler that actually applies
+  `advanced-mode`, which is what its name claims.
+
 ### Security (gateway auth was enforced on 1 of 27 gateway routes)
 
 - **`gateway_auth_policy_middleware` was never installed.** The module that

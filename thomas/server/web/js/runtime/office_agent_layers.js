@@ -127,33 +127,6 @@ function officeDraftResolveAgentElementOverlaps(layer) {
     });
 }
 
-function officePopulateDraftAgentLayer(layer, space, state, now = performance.now(), agentsOverride = null) {
-    if (!(layer instanceof HTMLElement)) return;
-    const agents = Array.isArray(agentsOverride) ? agentsOverride : officeDraftAgentsForSpace(space);
-    const elementMap = officeDraftLayerElementMap(layer);
-    const seen = new Set();
-    agents.forEach((agent, index) => {
-        const agentId = safeString(agent?.id);
-        if (!agentId) return;
-        seen.add(agentId);
-        let el = elementMap.get(agentId);
-        if (!(el instanceof HTMLElement) || !layer.contains(el)) {
-            el = officeDraftCreateAgentElement(space, agent, index, agents.length, state, { skipInitialUpdate: true });
-            elementMap.set(agentId, el);
-            layer.appendChild(el);
-        }
-        el.dataset.officeDraftSpaceId = safeString(space.id);
-        officeDraftUpdateAgentElement(el, space, agent, index, agents.length, state, now);
-    });
-    Array.from(elementMap.entries()).forEach(([agentId, node]) => {
-        if (!seen.has(agentId)) {
-            if (node instanceof HTMLElement) node.remove();
-            elementMap.delete(agentId);
-        }
-    });
-    officeDraftResolveAgentElementOverlaps(layer);
-}
-
 function officePopulateDraftGlobalAgentLayer(layer, state, now = performance.now(), assignmentsOverride = null, renderSource = 'direct') {
     if (!(layer instanceof HTMLElement) || !officeState) return;
     const currentNow = Number(now) || performance.now();

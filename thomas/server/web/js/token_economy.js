@@ -649,21 +649,6 @@
         }).join('')}</div>`;
     }
 
-    function paintPricingLegacy() {
-        const el = $('[data-te-pricing]', _s.el);
-        if (!el || !_s.pricing) { if (el) el.innerHTML = ''; return; }
-        const entries = Object.entries(_s.pricing);
-        if (!entries.length) { el.innerHTML = ''; return; }
-        el.innerHTML = `<div class="te-rate-grid">` +
-            `<span class="te-rh">model</span><span class="te-rh">in $/1M</span><span class="te-rh">out $/1M</span>` +
-            entries.slice(0, 10).map(([name, p]) => {
-                const inP = +(p?.prompt_per_1m || p?.input_per_1m || 0);
-                const outP = +(p?.completion_per_1m || p?.output_per_1m || 0);
-                return `<span class="te-rn">${esc(shortModel(name))}</span><span class="te-rv">${inP ? '$' + inP.toFixed(2) : '—'}</span><span class="te-rv">${outP ? '$' + outP.toFixed(2) : '—'}</span>`;
-            }).join('') +
-            '</div>';
-    }
-
     function paintPricing() {
         const el = $('[data-te-pricing]', _s.el);
         if (!el) return;

@@ -271,26 +271,6 @@ function chatRobotWorldSyncRootVisibility() {
     chatAgentPresenceSyncRootVisibility();
 }
 
-function chatRobotWorldLatestTaskState() {
-    const states = [...chatTaskStripStateByMessageId.values()]
-        .filter(Boolean)
-        .sort((a, b) => Number(b?.startedAt || b?.endedAt || 0) - Number(a?.startedAt || a?.endedAt || 0));
-    return states.find((item) => !chatTaskIsTerminal(item?.status))
-        || states.find((item) => Date.now() - Number(item?.endedAt || 0) < CHAT_PRIMARY_ROBOT_LINGER_MS)
-        || null;
-}
-
-function chatRobotWorldSyncPrimaryFromTasks() {
-    const primary = chatRobotWorldEnsurePrimaryState();
-    primary.name = resolveAgentName(currentPreferences) || DEFAULT_AGENT_NAME;
-    primary.officeAgentName = primary.name;
-    primary.status = 'idle';
-    primary.summary = 'Standing by.';
-    primary.taskText = '';
-    primary.taskSpeechAt = 0;
-    chatRobotWorldRenderActor(primary);
-}
-
 function chatRobotWorldRenderActor(state, graph = null) {
     if (!state?.element) return;
     const bounds = chatRobotWorldBounds();
@@ -629,21 +609,6 @@ function chatRobotWorldRemoveHelper(activityId, { immediate = false } = {}) {
     chatRobotWorldSetSpeech(state, safeString(state.status) === 'failed' ? 'Task failed.' : 'Helper complete.', 1800);
 }
 
-function chatWorldRemoveHelperPublic(activityId, { immediate = false } = {}) {
-    chatRobotWorldRemoveHelper(activityId, { immediate });
-}
-
-function chatWorldRemoveAllHelpers() {
-    chatAgentPresenceStateByActivityId.forEach((_, activityId) => {
-        chatRobotWorldRemoveHelper(activityId, { immediate: true });
-    });
-    chatWorldSyncRootVisibility();
-}
-
-function chatWorldRenderPresence(state) {
-    chatRobotWorldRenderActor(state);
-}
-
 function chatRobotWorldEnsureLoop() {
     if (chatRobotWorldRaf) return;
     const step = (now) => {
@@ -889,121 +854,6 @@ function chatWorldUpsertPresence(activityId, patch = {}) {
     chatWorldSyncRootVisibility();
     chatRobotWorldEnsureLoop();
     return state;
-}
-
-function chatWorldSetOfficeContext(activityId, context = {}) {
-    const key = safeString(activityId);
-    const state = key === safeString(chatPrimaryPresenceState?.activityId)
-        ? chatPrimaryPresenceState
-        : chatAgentPresenceStateByActivityId.get(key);
-    if (!state) return;
-    state.officeTaskId = safeString(context.taskId || state.officeTaskId);
-    state.officeAgentId = safeString(context.agentId || state.officeAgentId);
-    state.officeAgentName = safeString(context.agentName || state.officeAgentName || state.name || DEFAULT_AGENT_NAME);
-}
-
-function chatWorldTaskRuntimeTick() {
-    chatTaskStripStateByMessageId.forEach((state, messageId) => {
-        if (!state) return;
-        renderMessageTaskStrip(messageId);
-    });
-    chatRobotWorldSyncPrimaryFromTasks();
-    chatAgentPresenceStateByActivityId.forEach((state) => {
-        chatRobotWorldRenderActor(state);
-    });
-    chatTaskRuntimeStopIfIdle();
-}
-
-function chatWorldTaskRuntimeStopIfIdle() {
-    const hasLiveStrip = [...chatTaskStripStateByMessageId.values()].some((state) => state && !chatTaskIsTerminal(state.status));
-    if (hasLiveStrip || chatAgentPresenceStateByActivityId.size > 0) return;
-    if (chatTaskRuntimeTimer) {
-        window.clearInterval(chatTaskRuntimeTimer);
-        chatTaskRuntimeTimer = 0;
-    }
-}
-
-function chatWorldSetPresence(activity) {
-    chatRobotWorldEnsurePrimaryState();
-    if (!chatRobotWorldShouldBeVisible()) {
-        chatWorldSyncRootVisibility();
-        return;
-    }
-    const sessionId = safeString(activity?.sessionId || taskContinuityLatestSessionId || activeChatId);
-      const liveRows = Array.isArray(activity?.agents)
-          ? activity.agents.filter((item) => delegationRowIsRenderableLive(item))
-          : [];
-    const nextIds = new Set();
-    liveRows.forEach((row) => {
-        const activityId = safeString(row?.execution_id || row?.task_id || row?.bot_id || row?.bot_name || row?.agent_id || row?.specialist_id);
-        if (!activityId) return;
-        nextIds.add(activityId);
-        const identity = officeResolveAgentIdentity(
-            row?.bot_name || row?.bot_id || row?.agent_id || row?.specialist_id,
-            activityId,
-        );
-        chatAgentPresenceUpsert(activityId, {
-            sessionId,
-            bubbleId: chatTaskMessageBySessionId.get(sessionId) || '',
-            name: identity.name,
-            status: safeString(row?.state || row?.status || 'running'),
-            taskText: safeString(row?.summary || row?.last_progress || row?.task || row?.current_task),
-            summary: safeString(row?.summary || row?.last_progress || row?.task || row?.current_task),
-            startedAt: missionToEpoch(safeString(row?.created_at || row?.updated_at)) || Date.now(),
-            color: identity.color || '#7cd6ff',
-            costume: identity.costume || 'visor',
-            tint: identity.tint || 'blue',
-            identitySource: identity.source || 'seed',
-            officeAgentName: identity.name,
-            officeAgentId: identity.id,
-        });
-    });
-    [...chatAgentPresenceStateByActivityId.entries()].forEach(([activityId, state]) => {
-        const stateSessionId = safeString(state?.sessionId);
-        if (sessionId && stateSessionId && stateSessionId !== sessionId) {
-            chatRobotWorldRemoveHelper(activityId);
-            return;
-        }
-        if (!nextIds.has(activityId)) {
-            chatRobotWorldRemoveHelper(activityId);
-        }
-    });
-    chatRobotWorldSyncPrimaryFromTasks();
-    chatWorldSyncRootVisibility();
-    chatRobotWorldEnsureLoop();
-}
-
-function chatWorldEnsureDock() {
-    return chatWorldEnsureUi();
-}
-
-function chatWorldPositionDock() {
-    chatWorldSyncRootVisibility();
-    return chatWorldEnsureUi();
-}
-
-function chatWorldLandAtDock(sourceNode = null) {
-    void sourceNode;
-    const primary = chatRobotWorldEnsurePrimaryState();
-    primary.status = chatTaskIsTerminal(primary.status) ? 'idle' : primary.status;
-    primary.summary = safeString(primary.summary) || 'Standing by.';
-    if (!primary.modeUntil) {
-        chatRobotWorldRetarget(primary);
-    }
-    chatRobotWorldRenderActor(primary);
-    chatWorldSyncRootVisibility();
-    chatRobotWorldEnsureLoop();
-}
-
-function chatWorldPortalOutLanded() {
-    const primary = chatRobotWorldEnsurePrimaryState();
-    primary.status = safeString(primary.status) || 'idle';
-    primary.summary = safeString(primary.summary) || 'Standing by.';
-    primary.mode = 'inspect';
-    primary.modeUntil = Date.now() + 1800;
-    chatRobotWorldSetSpeech(primary, 'Standing by on the floor.', 1800);
-    chatRobotWorldRenderActor(primary);
-    return Promise.resolve();
 }
 
 function ensureMissionRuntimeHero() {

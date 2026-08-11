@@ -32,13 +32,14 @@ def test_runtime_copy_keeps_simple_then_expandable_shell() -> None:
     index_html = _read_text("thomas/server/web/index.html")
     app_loader = _read_text("thomas/server/web/js/app.js")
     model_setup_runtime = _read_text("thomas/server/web/js/runtime/045_model_setup_settings_06.js")
-    assert "Build And Extend" in model_setup_runtime
-    assert "Show Builder Controls" in model_setup_runtime
-    assert "welcomeReadinessStatus" in model_setup_runtime
-    assert "welcomeReadinessPills" in model_setup_runtime
+    # Builder Mode was deleted: setBuilderMode() had no caller, and the four
+    # elements it drove (welcomeReadinessPills / welcomeSupportCopy /
+    # welcomeReadinessStatus / welcomeBuilderModeBtn) exist in no page. The
+    # settings "advanced-mode" toggle is driven independently by
+    # 039_module_rendering_dispatch_02.js and is unaffected.
+    assert "setBuilderMode" not in model_setup_runtime
+    assert "welcomeReadinessPills" not in model_setup_runtime
     assert "Run Easy Setup" in runtime
-    assert "thomas.builder_mode.enabled" in runtime
-    assert "Builder Controls" in runtime
     assert "Current Task" in runtime
     assert "data-agent-placeholder-template" in runtime
     assert "Find past chats" in index_html
@@ -56,10 +57,13 @@ def test_runtime_copy_keeps_simple_then_expandable_shell() -> None:
     assert "Provider API key" in model_setup_runtime
 
 
-def test_settings_respect_stored_builder_mode() -> None:
-    appearance_runtime = _read_text("thomas/server/web/js/runtime/045_model_setup_settings_06.js")
-    assert "loadStoredBuilderMode" in appearance_runtime
-    assert "settingsSuite.classList.toggle('advanced-mode', builderModeEnabled);" in appearance_runtime
+def test_settings_advanced_toggle_drives_advanced_mode() -> None:
+    # This used to assert that 045_model_setup_settings_06.js mentioned
+    # loadStoredBuilderMode -- a string check over code nothing called. The
+    # advanced-mode class is actually applied by the settings toggle handler,
+    # which is what this now pins.
+    dispatch_runtime = _read_text("thomas/server/web/js/runtime/039_module_rendering_dispatch_02.js")
+    assert "settingsSuite.classList.toggle('advanced-mode', settingsAdvancedToggle.checked);" in dispatch_runtime
 
 
 def test_dashboard_description_matches_default_mode_story() -> None:

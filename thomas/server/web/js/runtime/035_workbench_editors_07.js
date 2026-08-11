@@ -481,18 +481,6 @@ function moduleRenderSpecialCards(cardsRaw) {
     moduleSpecialGrid.appendChild(frag);
 }
 
-function moduleRenderMarketplaceCatalogV2(container) {
-    return moduleRenderMarketplaceSurface(container);
-}
-
-function moduleRenderMarketplaceCatalog(container) {
-    return moduleRenderMarketplaceSurface(container);
-}
-
-function moduleRenderMarketplaceCatalogV3(container) {
-    return moduleRenderMarketplaceSurface(container);
-}
-
 const MODULE_SPECIAL_SURFACE_CONFIGS = Object.freeze({
     my_stuff: Object.freeze({
         title: 'Project Board',

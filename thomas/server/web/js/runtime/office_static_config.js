@@ -123,20 +123,6 @@ const OFFICE_AMBIENT_DECOR = [
     { type: 'floor-art', x: 49.2, y: 49.4, w: 7.4, h: 3.4 },
     { type: 'lounge-rug', x: 33, y: 61.8, w: 26, h: 17.5 },
 ];
-const OFFICE_DYNAMIC_ROOM_SLOTS = [
-    { x: 46, y: 84, w: 9, h: 5 },
-    { x: 56, y: 84, w: 9, h: 5 },
-    { x: 66, y: 84, w: 9, h: 5 },
-    { x: 76, y: 84, w: 9, h: 5 },
-    { x: 46, y: 90, w: 9, h: 5 },
-    { x: 56, y: 90, w: 9, h: 5 },
-    { x: 66, y: 90, w: 9, h: 5 },
-    { x: 76, y: 90, w: 9, h: 5 },
-    { x: 46, y: 95, w: 9, h: 5 },
-    { x: 56, y: 95, w: 9, h: 5 },
-    { x: 66, y: 95, w: 9, h: 5 },
-    { x: 76, y: 95, w: 9, h: 5 },
-];
 const OFFICE_EXPLICIT_ROOM_IDS = Object.freeze({
     planning: 'room-planning',
     engineering: 'room-engineering',

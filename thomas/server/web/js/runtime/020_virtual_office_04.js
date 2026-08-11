@@ -524,26 +524,6 @@ function officeNearestHallId(doorX, doorY) {
     return bestId;
 }
 
-function officeDynamicRoomSlotByIndex(index) {
-    const baseSlot = OFFICE_DYNAMIC_ROOM_SLOTS[index];
-    if (baseSlot) return { ...baseSlot };
-
-    const generatedIndex = Math.max(0, index - OFFICE_DYNAMIC_ROOM_SLOTS.length);
-    const roomW = 6.6;
-    const roomH = 6.6;
-    const gapX = 0.8;
-    const gapY = 0.8;
-    const cols = 4;
-    const row = Math.floor(generatedIndex / cols);
-    const col = generatedIndex % cols;
-    const x = 46 + (col * (roomW + gapX));
-    const y = 84 + (row * (roomH + gapY));
-    if ((x + roomW) >= 96 || (y + roomH) >= 99.6) {
-        return null;
-    }
-    return { x, y, w: roomW, h: roomH };
-}
-
 function officePlanRunawayExit(agent) {
     const exits = [
         { hallId: 'hall-west', x: OFFICE_RUNAWAY_EXIT_MARGIN, y: 48 },
@@ -569,66 +549,6 @@ function officePlanRunawayExit(agent) {
         })
         .sort((a, b) => a.score - b.score);
     return ranked[0] || exits[0];
-}
-
-function officeCreateDynamicRoom(taskText) {
-    if (!officeState) return officeRoomById('room-planning');
-    if (officeState.dynamicRoomBySlug.size >= OFFICE_MAX_DYNAMIC_ROOMS) {
-        return officeRoomById('room-planning') || officeState.rooms[0];
-    }
-
-    const baseTitle = officeTaskTitle(taskText);
-    const labelRoot = baseTitle
-        .replace(/[^a-zA-Z0-9\s-]/g, '')
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .join(' ');
-    const label = labelRoot ? `${labelRoot} Pod` : `Task Pod ${officeState.dynamicIndex + 1}`;
-    const slot = officeDynamicRoomSlotByIndex(officeState.dynamicIndex);
-    if (!slot) {
-        return officeRoomById('room-planning') || officeState.rooms[0];
-    }
-    const roomId = `room-dynamic-${officeState.dynamicIndex + 1}`;
-    officeState.dynamicIndex += 1;
-    const doorY = slot.y >= 70 ? slot.y : slot.y + slot.h;
-    const doorX = slot.x + (slot.w / 2);
-    const hallId = officeNearestHallId(doorX, doorY);
-
-    const room = {
-        id: roomId,
-        label,
-        meta: 'Auto-generated feature room',
-        x: slot.x,
-        y: slot.y,
-        w: slot.w,
-        h: slot.h,
-        kind: 'work',
-        theme: 'dynamic',
-        doorX,
-        doorY,
-        hallId,
-        dynamic: true,
-    };
-    officeState.rooms.push(room);
-    officeState.roomById.set(room.id, room);
-    officeState.dynamicRoomBySlug.set(
-        officeTaskTitle(taskText)
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '')
-            .slice(0, 42),
-        room.id,
-    );
-    officeRefreshNavGraph();
-    officeRecalculateMapSize({ preserveZoom: true, rerender: true });
-    officePersistLayoutState();
-    officeBusEmit('room.dynamic_created', {
-        roomId: room.id,
-        label: room.label,
-        theme: room.theme,
-    });
-    return room;
 }
 
 function officeResolveExplicitRoom(roomRefRaw) {
