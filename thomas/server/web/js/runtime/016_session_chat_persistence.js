@@ -116,6 +116,24 @@ function buildPersistedChatPayload() {
 }
 
 async function persistActiveChat({ quiet = true } = {}) {
+    // EMBEDDED AS A WORKSPACE: never write chat state.
+    //
+    // The modern shell hosts the old workspaces (Virtual Office, Canvas,
+    // Channels, Token Economy, Marketplace, Paper Trading) by loading this whole
+    // application into an iframe with ?embed=1, then hiding its chat surface
+    // with CSS. Hidden is not the same as absent: the old onboarding module
+    // still boots and calls persistActiveChat, which PUTs /api/chats/<id> with
+    // `title: deriveChatTitleFromMessages(...)`. Inside the frame there is no
+    // conversation, so that title derives to "Chat <id-prefix>" or "Untitled
+    // chat" -- and the owner's real chat was silently renamed by the act of
+    // opening a workspace.
+    //
+    // A page with no composer and no transcript cannot legitimately own chat
+    // state, so it does not get to write any.
+    if (typeof document !== 'undefined' && document.documentElement
+        && document.documentElement.classList.contains('tcw-embed')) {
+        return false;
+    }
     const payload = buildPersistedChatPayload();
     if (!payload) return false;
     activeChatId = safeString(payload.id);
