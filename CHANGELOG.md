@@ -7,6 +7,75 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed (the suite could not run, and the gate could not tell)
+
+- **The whole test suite died during collection, before a single test ran.**
+  `tests/prompt_pack/test_p127_gateway_restart_command.py` switched the asyncio
+  event-loop policy at import time. pytest imports every module into one
+  process, so that was not a module-scoped decision -- it was a process-wide
+  one, and `prompt_pack/` is imported before the rest alphabetically. Every
+  Playwright launch collected afterwards then failed with `NotImplementedError`,
+  because a SelectorEventLoop cannot spawn the subprocess its node transport
+  needs. 15,315 tests were collected and then discarded over 8. The policy
+  change is now a module-scoped fixture that restores the previous policy.
+- The browser-availability probe in
+  `tests/test_the_run_report_verdict_tells_the_truth.py` caught only
+  `PlaywrightError`, so the one failure mode it met on Windows escaped and took
+  collection down with it. A probe whose contract is "answer yes or no" must
+  never raise; it now also catches `NotImplementedError` and `OSError`.
+- **The release gate could report records it never read.** With
+  `--no-remote-calls` it printed "pushed, cut, tagged, and published" while
+  checking none of those four. It now tracks each record as read or unread,
+  names only the ones it actually read, and reports the rest as unverified
+  rather than passing. It also confirms the tag exists ON THE REMOTE and points
+  at code this branch contains -- a local-only tag is invisible to everyone
+  else -- and distinguishes an unauthenticated `gh` from a genuinely absent
+  Release instead of reporting both as missing.
+
+### Fixed (the merge from public main was resurrecting deleted code)
+
+- **A permission check with a known bypass came back from the dead.** Merging
+  `origin/main` into `dev` re-added `is_globally_approved` to
+  `thomas/agent/skills_policy.py` -- 80 lines added, none removed -- along with
+  the substring match on "approve risky skills" and the negation regex that had
+  been bolted on to patch it. Both were deleted on purpose in `40505ad9`,
+  because a permission check that reads the user's prose has no correct
+  version: the sentence "I do NOT approve risky skills" contains the phrase and
+  was read as approval. Dev's deletion wins.
+- **The Code API was silently unregistered.** The same merge left two copies of
+  `_register_evolve_loop_routes` in `thomas/server/app_routes_init.py`. Python
+  keeps the later definition, and the survivor was public main's older copy,
+  which does not register the directed Code surface -- so all 22
+  `/api/evolve/agent/*` routes vanished, including send, stream, stop,
+  conversations, changes, artifacts and playtest. Both copies are valid Python,
+  so nothing flagged it: the file parses, ruff passes, and there are no conflict
+  markers. The route count read 677 where it should read 699.
+- The plain-language `evolve chat` surface -- `thomas/forge/anvil/evolve_chat.py`,
+  the `evolve chat` CLI command, and `/api/evolve/loop/chat`, which shells out to
+  the CLI with `--interpret-only` -- was likewise resurrected after `69bbbab0`
+  removed it with the rest of the prompt classifiers. Removed again.
+- Lesson recorded for the next merge from an older branch: **a deletion is the
+  one intent a three-way merge cannot infer.** It sees only that one side lacks
+  lines the other has, and helpfully restores them, in a region with no conflict
+  where no reviewer looks. The guard that caught all of this was a test
+  asserting a file MUST NOT exist, not a human reading 82 files.
+- Two literal NUL bytes in `thomas/server/web/js/unified_code_events.js` (a
+  delimiter written as an escape that became a raw byte) are now the `\0` escape
+  they were meant to be. Identical at runtime, but the raw bytes made grep,
+  ripgrep and diff classify the file as binary and refuse to show its contents.
+
+### Changed (architecture: forge stops reaching into preferences)
+
+- `thomas/forge/anvil/forge_code_settings.py` no longer imports
+  `thomas.preferences`, which forge is not permitted to depend on and which had
+  been failing `test_dependency_direction` in CI. It passed the preference
+  database path explicitly to `resolve_effective_model`, which already falls
+  back to exactly that path itself, so the import bought a forbidden dependency
+  in exchange for an identical value. Verified identical: both call shapes
+  resolve to the same profile and model.
+
+## [0.19.25] - 2026-08-10
+
 ### Changed (code: the composer tracks the conversation through every panel)
 
 - Follow-up polish on the mode surfaces: the composer now resizes with the
@@ -1778,7 +1847,7 @@ Versioning: Semantic Versioning.
 ### Added (The model menu says whose account is answering)
 
 - `/api/openai-codex/status?profile=<name>` has always returned `logged_in`, `email` and `plan_type`. The unified shell read **none of it**. The old Model Setup modal showed it through `model_settings_dropdown.js` — 18.8 KB the new shell never loads, because it targets `#modelSetupModal`, an element that no longer exists. So `4 ready` was the only signal a provider was usable, and nothing said whose account was being spent.
-- The menu now heads with the signed-in address and plan — `calvinandaustin31@gmail.com` / `pro · signed in` — verified on screen at 1920×1080.
+- The menu now heads with the signed-in address and plan — verified on screen at 1920×1080.
 - **Hides rather than guesses.** A failed lookup shows nothing; claiming "signed out" because a fetch was rejected would be a worse lie than silence. And the lookup is cached per profile, since the menu re-renders on every open and every accordion toggle.
 - **The guard needed two corrections of its own, both caught by reverting.** `refreshAccountLine\(\)` also matched the function *definition*, so it passed with the call commented out. And a bare `.catch(` check passed with the handler deleted, because the search window reached into the next function's `.catch(() => {})` — a neighbour's error handling standing in for the one under test. Five separate regressions are now each caught: commenting out the call, dropping the element, reading the wrong field, removing the cache guard, and removing failure handling.
 
@@ -2466,14 +2535,14 @@ Both faults surfaced from one organic Code task — *"read sales.csv and draw a 
 ### Fixed (Code could still be told to work inside Thomas's own source folder)
 
 - **`send` calls this a HARD SAFETY NET, applies it on two of its three branches, and skipped the one every "continue this task" goes through.** The two guarded branches are the ones that *choose* a folder: a conversation id with nothing behind it, and a brand-new conversation. The third takes the project root straight from the stored conversation and never checked it. So the net stopped a new task from being aimed at the checkout and did nothing about a task already aimed there.
-- **Reachable now, not in theory.** Measured against the running server: of 164 Code conversations, **20 resolve to `C:\Users\corbe\Thomas`**, three of them with real turns. One is `create notes.txt with three short bullet points about safe driving` — and `notes.txt` is sitting untracked in the repository root, which is where that task put it. Asking the changes endpoint what it would offer for that conversation returns `notes.txt`. Revert is `git checkout -- <file>`, and `revert_file` deletes a file that git reports as untracked, so continuing one of those tasks edited the product source and its Revert button removed files from it.
+- **Reachable now, not in theory.** Measured against the running server: of 164 Code conversations, **20 resolve to the product repository root**, three of them with real turns. One is `create notes.txt with three short bullet points about safe driving` — and `notes.txt` is sitting untracked in the repository root, which is where that task put it. Asking the changes endpoint what it would offer for that conversation returns `notes.txt`. Revert is `git checkout -- <file>`, and `revert_file` deletes a file that git reports as untracked, so continuing one of those tasks edited the product source and its Revert button removed files from it.
 - `thomas/server/routes/evolve_agent_routes.py` now applies the same check on that branch. It **refuses** rather than substituting a different folder, unlike the new-task branches: those are picking a folder and may be handed another one, whereas this conversation already has a folder and the check immediately above it returns 409 `project_change_requires_new_conversation` precisely to stop that folder moving. Silently relocating the run here would have broken that rule while enforcing this one. The refusal is 409 `project_is_thomas_source` and names the folder.
 - Verified against a live server on 127.0.0.1:8901 with the real conversation, not a fixture: `POST /api/evolve/agent/send` for `fc_20260721T162916_3cf46e` returns 409 `project_is_thomas_source`, `started` absent, no `run_id`. Before the change the same request launched a Code agent with `cwd` set to the Thomas checkout.
 - `tests/test_code_never_runs_in_thomas_own_source.py` pins both directions. The guard test fails against the old code with `AssertionError: Code launched against <...>\thomas-source` — confirmed before the fix was written, not after. The companion test drives the identical continue-an-existing-conversation branch for an ordinary project and asserts the run still launches with that project as its working directory, so the guard cannot be satisfied by refusing everything.
 
 ### Fixed (60% of the Code history could not be opened, and the chip reported it as someone else's project)
 
-- **The Code sidebar listed 108 tasks; 65 of them answered HTTP 404 when clicked.** Measured against the live server, not a fixture: every one of the 108 rows was fetched by id, and 65 failed. All 65 live in `~/.thomas/code_scratch`. The cause is that two endpoints disagreed about where a conversation is. `conversations_list` never asks the registry — it walks the known roots and reads the conversation files it finds, so it sees everything. `conversation_get`, and everything else addressed by id, resolved through `conversation_project()`, which reads the project registry and falls back to the catalog root when there is no row. 65 of these conversations have no row: they were written straight into the drawer by paths that never called `bind_conversation`. So the list offered them and the open sent them to `C:\Users\corbe\Thomas`, where those files are not.
+- **The Code sidebar listed 108 tasks; 65 of them answered HTTP 404 when clicked.** Measured against the live server, not a fixture: every one of the 108 rows was fetched by id, and 65 failed. All 65 live in `~/.thomas/code_scratch`. The cause is that two endpoints disagreed about where a conversation is. `conversations_list` never asks the registry — it walks the known roots and reads the conversation files it finds, so it sees everything. `conversation_get`, and everything else addressed by id, resolved through `conversation_project()`, which reads the project registry and falls back to the catalog root when there is no row. 65 of these conversations have no row: they were written straight into the drawer by paths that never called `bind_conversation`. So the list offered them and the open sent them to the product repository root, where those files are not.
 - `_load_conversation` in `thomas/server/routes/evolve_agent_routes.py` now looks where the list looked: the registry binding first, then the same `conversation_roots` walk. `_project_for_conversation` is defined in terms of it, so rename, delete, changes, tree and file-preview resolve identically — previously all of those acted on the catalog root, which meant renaming and deleting those 65 tasks silently did nothing, and sending a message into one started a **brand-new project** that could not see its own history. Re-measured after the change: 108 of 108 open, and the project root the open returns matches the one the list reported, for every row.
 - **The chip was reporting that failure honestly.** Two independent browser checks had disagreed about the same feature; both were right. Clicking 16 sidebar tasks and reading the chip after each: 14 opens 404'd, so no load ever happened and the chip went on describing whatever was open before — twice "A new folder for this task" (nothing had opened yet), twelve times **another conversation's project name**. Whichever row you clicked first decided which wrong answer you saw. Two previous passes hunted this inside `projectDisplayLabel()`; the cause was never in that function, and both were reverted.
 - **A second, independent defect: `state.projectLabel` was one loose value, not a property of a project.** It was set when a project was picked and never cleared, so it printed that one name over every conversation opened afterwards. Proven rather than argued: the stored label was seeded with a marker string, and two conversations in two *different* projects both displayed the marker while their own tooltips showed their real, differing paths — the chip's name and its path contradicting each other on screen. Names are now filed per folder (`rememberProjectName`/`knownProjectName` in `thomas/server/web/js/unified_code_mode.js`, keyed on a normalised path so `C:\x` and `c:/x/` are one project), so a name can only appear over the folder it belongs to.
@@ -2554,7 +2623,7 @@ Both faults surfaced from one organic Code task — *"read sales.csv and draw a 
 
 - **Picking one of your own project folders in Code mode used to do nothing.** The menu closed, the selected-project chip never changed, and the only explanation went to a log file. The reason was a hard rule that a project must already have version history — and the refusal even said that for your own folders "Thomas asks first". Nothing anywhere asked; that prompt had never been built. **117 of 121 projects in the library were unopenable.**
 - Thomas now asks, on screen, the moment you pick such a folder: **Set up history** so its edits can be undone, or **Work without undo**. Choosing to work without undo never creates anything in your folder.
-- **A second, hidden wall sat behind the first.** Git refuses to read a repository whose folder belongs to a different Windows account — "detected dubious ownership" — and the entire `F:\DevHub` drive carries an account ID from a previous Windows installation. Projects there could not be inspected, could not be given history, and could not be opened, with no message explaining why. Thomas now names that exact folder as trusted for the single git command it runs, which touches no global git settings and is never a blanket "trust everything".
+- **A second, hidden wall sat behind the first.** Git refuses to read a repository whose folder belongs to a different Windows account — "detected dubious ownership" — and an entire external projects drive carried an account ID from a previous Windows installation. Projects there could not be inspected, could not be given history, and could not be opened, with no message explaining why. Thomas now names that exact folder as trusted for the single git command it runs, which touches no global git settings and is never a blanket "trust everything".
 
 ### Changed (Thomas decides what you meant — not a keyword list)
 
@@ -3052,7 +3121,6 @@ Both faults surfaced from one organic Code task — *"read sales.csv and draw a 
 - Work-mode user message bubbles were centered mid-column instead of right-aligned: the base `.tc-work-message` used `margin: 0 auto` and the `is-user` rule only reset `margin-left`, leaving both sides `auto`. User bubbles now right-align, Thomas left.
 - Multi-deliverable chat asks joined by "and"/"also" (e.g. "make a game and also a graph") produced one worker that built only the first item. The operator prompt now instructs one `send_task` per distinct deliverable; a single multi-attribute deliverable stays one task. (Complements the per-worker brief fix in 0.19.0.)
 
-## [Unreleased]
 ## [0.19.1] - 2026-07-21
 
 ### Added

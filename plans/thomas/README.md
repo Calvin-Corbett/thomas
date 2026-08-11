@@ -1,7 +1,6 @@
 # Thomas Plan Workspace (active)
 
 - `plans/thomas/tasks/ui-modernization-20260721/PLAN.md` - completed local eight-workspace corrective implementation, resident-specialist contract, and shared UI Edit Mode proof; awaiting isolated owner testing before integration.
-- `plans/thomas/problems/ui-modernization-20260721/PROBLEM.md` - legacy shell, theme, runtime-load, and editability problem definition.
 - `plans/thomas/tasks/thomas-coherence-passage-2026-07-12/PLAN.md` - canonical governed-operator migration across V2 chat, action, delegation, memory, and proof.
 
 - `plans/thomas/WORKBOARD.md` — active execution board.
