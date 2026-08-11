@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="512" height="512" role="img" aria-label="Thomas">
+  <!-- Maskable variant. The OS crops a maskable icon to its own shape (circle,
+       squircle, rounded square), keeping only the central 80% safe zone -- so
+       this one is full-bleed with no corner radius of its own, and the eyes sit
+       well inside x/y 10..90. Shipping only the rounded version would let the
+       platform round an already-rounded block and clip the corners twice. -->
+  <rect width="100" height="100" fill="#8b8cff"/>
+  <rect x="34" y="40" width="13" height="20" rx="3.5" fill="#0a0b16"/>
+  <rect x="53" y="40" width="13" height="20" rx="3.5" fill="#0a0b16"/>
+</svg>

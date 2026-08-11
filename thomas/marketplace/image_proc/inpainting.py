@@ -8,7 +8,6 @@ texture synthesis (Efros-Leung), and PatchMatch for fast nearest neighbors.
 from __future__ import annotations
 
 import numpy as np
-from scipy.ndimage import convolve
 
 from ._exceptions import ImageProcessingError
 from ._types import Image, InpaintMask
@@ -127,6 +126,8 @@ class Inpainter:
         Returns:
             Inpainted image.
         """
+        from scipy.ndimage import convolve
+
         if mask.data.shape != (image.height, image.width):
             raise ImageProcessingError("Mask dimensions must match image")
 
@@ -270,6 +271,8 @@ class Inpainter:
         img_obj: Image,
     ) -> dict:
         """Compute priority for boundary pixels (confidence and data terms)."""
+        from scipy.ndimage import convolve
+
         priorities = {}
         half_patch = self.patch_size // 2
 

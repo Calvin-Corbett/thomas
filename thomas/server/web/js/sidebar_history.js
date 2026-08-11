@@ -360,9 +360,17 @@
   // that clearly need it — batched into ONE request for a whole page of rows,
   // only for rows that look raw, only once each, and cached in the overlay so
   // it never costs anything again. A user rename always wins.
+  // ONE batch per page load. Writing titles triggers a refresh, which
+  // re-decorates, which used to start the next batch — with 476 rows that
+  // marched through the whole history twelve at a time and made 88 model calls
+  // in four minutes. `titledThisSession` stopped a row being named twice; it
+  // did nothing to stop the list being walked end to end. A hard budget does.
   const RAW_MIN_LENGTH = 34;
+  const BATCH_SIZE = 12;
+  const SESSION_BUDGET = 12;
   const titledThisSession = new Set();
   let titleRunning = false;
+  let titleBudget = SESSION_BUDGET;
 
   function looksRaw(text) {
     const value = String(text || '').trim();
@@ -372,17 +380,27 @@
     return /^[#`>\-*\d]|^(please|can you|i want|i need|make|build|create|fix|write|add|help)\b/i.test(value);
   }
 
+  // Rows the user can actually see. Naming what is scrolled far out of view is
+  // spending real money on something nobody is looking at.
+  function onScreen(row, wrap) {
+    const box = wrap.getBoundingClientRect();
+    const rect = row.getBoundingClientRect();
+    return rect.bottom > box.top - 40 && rect.top < box.bottom + 40;
+  }
+
   async function titleRawRows(wrap) {
-    if (titleRunning) return;
+    if (titleRunning || titleBudget <= 0) return;
     const marks = overlay();
     const pending = rowsIn(wrap)
       .filter(row => !row.hidden)
       .filter(row => !(marks[row.dataset.historyId] || {}).title)
       .filter(row => !titledThisSession.has(row.dataset.historyId))
       .filter(row => looksRaw(row.dataset.historyTitle))
-      .slice(0, 12);
+      .filter(row => onScreen(row, wrap))
+      .slice(0, Math.min(BATCH_SIZE, titleBudget));
     if (!pending.length) return;
     titleRunning = true;
+    titleBudget -= pending.length;
     pending.forEach(row => titledThisSession.add(row.dataset.historyId));
     try {
       const response = await fetch('/api/chats/title', {

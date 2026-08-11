@@ -35,6 +35,20 @@ if ([string]::IsNullOrWhiteSpace($DeepLink) -and $RemainingArgs) {
   }
 }
 
+function Test-PortListening([int]$P) {
+  # Get-NetTCPConnection costs ~1s per call on Windows 11 and this runs once per
+  # readiness poll. The .NET listener table answers the same question in ~3ms.
+  # A failure falls through to $false, matching the -ErrorAction SilentlyContinue
+  # the cmdlet calls this replaced used to carry.
+  try {
+    $listeners = [System.Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners()
+  } catch {
+    return $false
+  }
+  foreach ($l in $listeners) { if ($l.Port -eq $P) { return $true } }
+  return $false
+}
+
 function Invoke-NativeCore {
   param(
     [Parameter(Mandatory = $true)][string]$Exe,
@@ -300,18 +314,14 @@ function Ensure-Installed {
     return
   }
 
-  # Ensure the editable package is present.
-  $show = Invoke-NativeQuiet $VenvPy @("-m", "pip", "show", "thomas-ai")
-  if ($show -ne 0) {
-    $code = Invoke-Native $VenvPy @("-m", "pip", "install", "-e", ".[server]", "--disable-pip-version-check")
-    if ($code -ne 0) { throw "[thomas] pip install failed (exit $code)" }
-  }
+  # No `pip show thomas-ai` probe here: the import probe above already proves the
+  # environment is installed, and pip show spent a whole subprocess (~0.8s on
+  # every launch) confirming what that import implies.
 }
 
 function Find-FreePort([int]$Preferred) {
   for ($p = $Preferred; $p -le ($Preferred + 25); $p++) {
-    $inUse = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue
-    if (-not $inUse) { return $p }
+    if (-not (Test-PortListening $p)) { return $p }
   }
   return 0
 }
@@ -339,7 +349,7 @@ function Get-ThomasBootHealth {
 
   $listening = $false
   try {
-    $listening = [bool](Get-NetTCPConnection -LocalPort $P -State Listen -ErrorAction SilentlyContinue)
+    $listening = [bool](Test-PortListening $P)
   } catch { }
 
   $probeSpecs = @(
@@ -595,8 +605,11 @@ function Invoke-BootDoctor {
   }
 
   Write-Host ("[thomas] Boot Doctor report: {0}" -f $report)
+  # Never throw a Notepad window in the owner's face. Thomas is an app, and an
+  # app that fails to start does not open a text editor about it. The path is
+  # written above for anyone who wants the detail.
   if (-not $recovered) {
-    try { Start-Process notepad.exe $report | Out-Null } catch { }
+    Write-Host "[thomas] Boot did not recover. The report path above has the detail."
   }
 
   return [pscustomobject]@{
@@ -653,7 +666,9 @@ function Open-BootDoctorRescue {
       "--reason", $Reason,
       "--startup-context", $contextPath,
       "--relaunch"
-    ) -WorkingDirectory $Root -PassThru
+      # Hidden: a rescue is Thomas's business, not a console the owner must
+      # watch. Without this a PowerShell window pops up on every rescue.
+    ) -WorkingDirectory $Root -WindowStyle Hidden -PassThru
   } catch {
     Write-Host ("[thomas] WARNING: unable to launch Boot Doctor rescue window: {0}" -f $_.Exception.Message)
   }
@@ -719,6 +734,15 @@ function Stop-ThomasServerOnPort([int]$P) {
       }
     }
   } catch { }
+
+  # Cheap check first. Get-NetTCPConnection stays below because killing the old
+  # server needs its OwningProcess, which the .NET listener table does not carry
+  # - but on the common path (nothing listening on this port) we now answer in
+  # ~3ms instead of paying ~1s for a connection object we would throw away.
+  if (-not (Test-PortListening $P)) {
+    if ($stoppedAny) { Start-Sleep -Milliseconds 500 }
+    return $stoppedAny
+  }
 
   $listeners = Get-NetTCPConnection -LocalPort $P -State Listen -ErrorAction SilentlyContinue
   if (-not $listeners) {
@@ -840,8 +864,7 @@ function Ensure-OllamaRunning {
     return
   }
 
-  $listening = Get-NetTCPConnection -LocalPort 11434 -State Listen -ErrorAction SilentlyContinue
-  if ($listening) { return }
+  if (Test-PortListening 11434) { return }
 
   Write-Host "[thomas] Starting Ollama (for local model endpoint on :11434)..."
   try {
@@ -888,10 +911,17 @@ if ($FreePort -ne $Port) {
 }
 
 # Show what version we're about to start so the user can confirm it's current.
+# Read the literal out of thomas/__init__.py rather than booting a Python
+# interpreter for one string; importing the package to print its version cost
+# roughly a second of the launch every single time.
 $startingVersion = ""
 try {
-  $vOut = & $VenvPy -c "from thomas import __version__; print(__version__)" 2>$null
-  if ($vOut) { $startingVersion = $vOut.Trim() }
+  $initPath = Join-Path $Root "thomas\__init__.py"
+  if (Test-Path $initPath) {
+    $initText = [System.IO.File]::ReadAllText($initPath, [System.Text.Encoding]::UTF8)
+    $m = [regex]::Match($initText, '(?m)^__version__\s*=\s*["'']([^"'']+)["'']')
+    if ($m.Success) { $startingVersion = $m.Groups[1].Value.Trim() }
+  }
 } catch { }
 if (-not $startingVersion) { $startingVersion = "unknown" }
 

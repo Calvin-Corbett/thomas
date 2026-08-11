@@ -44,7 +44,12 @@ from aiohttp import web
 from thomas.server.routes.deliverable_aiohttp import DeliverablePreviewService
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-ARTIFACT_ROUTE = REPO_ROOT / "thomas" / "server" / "routes" / "evolve_agent_routes.py"
+# The artifact route left evolve_agent_routes.py when that module was split for
+# the 1500-line ceiling (2026-08-10), carrying its Content-Security-Policy with
+# it unchanged. The old module declares no CSP now, so a guard still reading it
+# would pass against an empty file -- which is exactly how a header this test
+# exists to protect would go missing unnoticed.
+ARTIFACT_ROUTE = REPO_ROOT / "thomas" / "server" / "routes" / "evolve_agent_artifact_routes.py"
 
 
 def _csp(*, top_level: bool) -> str:

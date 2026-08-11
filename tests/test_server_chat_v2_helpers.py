@@ -664,7 +664,13 @@ async def test_announce_delegation_persists_model_note_and_marks_reported(monkey
     assert resp.text is not None
     assert "All set" in resp.text
     assert "report.html" in resp.text
-    assert _FakeLLM.prompts and "complete verified artifact list is: report.html" in _FakeLLM.prompts[0]
+    # The prompt still hands the model the complete artifact list; only the
+    # wording moved. 904c07bc ("Verified means what was checked") stopped the
+    # prompt from calling a render-only artifact list a verified one, and
+    # test_a_render_only_check_is_not_announced_as_bare_verified.py now guards
+    # that the old wording never returns. What is asserted here is unchanged:
+    # the model is told every artifact by name.
+    assert _FakeLLM.prompts and "complete list of files it produced is: report.html" in _FakeLLM.prompts[0]
     assert store.saved is not None
     saved_sid, saved_conversation, _meta, force = store.saved
     assert saved_sid == "sess-1"

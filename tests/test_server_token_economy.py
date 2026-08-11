@@ -84,7 +84,13 @@ class TestForegroundTokenEconomyPolicy(unittest.TestCase):
         )
 
         self.assertEqual(applied, "max")
-        self.assertEqual(foreground_policy.quality.max_agent_iterations, 25)
+        # 25 was the old "max" ration. cd0203a7 ("no pass limits -- the model stops
+        # when it is done, not when a counter says so") made every level resolve to the
+        # same 400-pass runaway guard, so the foreground copy now carries the guard.
+        # The number is updated rather than dropped for a reason: while it read 25 this
+        # line failed first and the two assertions below -- the isolation this test is
+        # NAMED for, and the receipt metadata -- never ran at all.
+        self.assertEqual(foreground_policy.quality.max_agent_iterations, 400)
         self.assertEqual(worker_policy.quality.max_agent_iterations, 0)
         self.assertEqual(metadata, {"requested": "max", "applied": "max"})
 
@@ -181,7 +187,12 @@ class TestServerTokenEconomy(AioHTTPTestCase):
         self.assertEqual(str(route.get("mode") or ""), "fast")
         self.assertEqual(_FakeOrchestratorBrainTokenEconomy.last_mode, "fast")
         self.assertEqual(_FakeOrchestratorBrainTokenEconomy.last_token_economy, "max")
-        self.assertEqual(_FakeOrchestratorBrainTokenEconomy.last_max_iterations, 25)
+        # 25 was the old "max" ration; cd0203a7 replaced the rations with one 400-pass
+        # runaway guard. The budget the name promises is still raised -- from the 10
+        # this app is configured with, up to the guard -- it is just no longer raised
+        # ABOVE the other levels. While this read 25 it failed first and hid the three
+        # receipt assertions below.
+        self.assertEqual(_FakeOrchestratorBrainTokenEconomy.last_max_iterations, 400)
         self.assertEqual((route.get("token_economy") or {}).get("applied"), "max")
         done = [e for e in events if e.get("type") == "done"][0]
         self.assertEqual((done.get("token_economy") or {}).get("applied"), "max")
@@ -190,7 +201,10 @@ class TestServerTokenEconomy(AioHTTPTestCase):
             "max",
         )
 
-    async def test_cheap_profile_keeps_mode_and_lower_iteration_budget(self):
+    async def test_cheap_profile_keeps_mode_and_stamps_its_receipt(self):
+        # Renamed from ..._and_lower_iteration_budget. There is no lower budget to
+        # assert since cd0203a7: cheap gets the same 400-pass runaway guard as max, and
+        # a name promising otherwise is the same stale ration in prose.
         sid = await self._new_session_id()
         with patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeOrchestratorBrainTokenEconomy):
             resp = await self.client.post(
@@ -211,7 +225,10 @@ class TestServerTokenEconomy(AioHTTPTestCase):
         self.assertEqual(str(route.get("mode") or ""), "thinking")
         self.assertEqual(_FakeOrchestratorBrainTokenEconomy.last_mode, "thinking")
         self.assertEqual(_FakeOrchestratorBrainTokenEconomy.last_token_economy, "cheap")
-        self.assertEqual(_FakeOrchestratorBrainTokenEconomy.last_max_iterations, 3)
+        # 3 was the old "cheap" ration; cd0203a7 removed it. Cheap now means a cheaper
+        # step (no auto-repair retries, a leaner build-quality brief), not fewer steps.
+        # While this read 3 it failed first and hid the receipt assertion below.
+        self.assertEqual(_FakeOrchestratorBrainTokenEconomy.last_max_iterations, 400)
         done = [e for e in events if e.get("type") == "done"][0]
         self.assertEqual((done.get("token_economy") or {}).get("applied"), "cheap")
 
@@ -236,7 +253,11 @@ class TestServerTokenEconomy(AioHTTPTestCase):
         self.assertEqual(str(route.get("mode") or ""), "auto")
         self.assertEqual(_FakeOrchestratorBrainTokenEconomy.last_mode, "auto")
         self.assertEqual(_FakeOrchestratorBrainTokenEconomy.last_token_economy, "optimal")
-        self.assertEqual(_FakeOrchestratorBrainTokenEconomy.last_max_iterations, 10)
+        # 10 was this app's configured max_agent_iterations passed straight through by
+        # the old 1.0x "optimal" ration. Since cd0203a7 the configured base is only an
+        # input to the runaway guard, and the guard is what the turn runs with. While
+        # this read 10 it failed first and hid the receipt assertion below.
+        self.assertEqual(_FakeOrchestratorBrainTokenEconomy.last_max_iterations, 400)
         done = [e for e in events if e.get("type") == "done"][0]
         self.assertEqual((done.get("token_economy") or {}).get("applied"), "optimal")
 
@@ -289,7 +310,10 @@ class TestServerTokenEconomy(AioHTTPTestCase):
         self.assertEqual(done.get("token_economy"), expected)
         self.assertEqual((done.get("token_report") or {}).get("token_economy"), expected)
         self.assertEqual(_FakeOrchestratorBrainTokenEconomy.last_token_economy, "optimal")
-        self.assertEqual(_FakeOrchestratorBrainTokenEconomy.last_max_iterations, 10)
+        # 10 was the configured base under the old "optimal" ration; cd0203a7 made the
+        # runaway guard the effective budget. This line sits after the receipt
+        # assertions, so unlike its siblings it was hiding nothing.
+        self.assertEqual(_FakeOrchestratorBrainTokenEconomy.last_max_iterations, 400)
 
     async def test_prose_that_used_to_skip_the_model_still_gets_balanced_receipts(self):
         """Prose the retired classifiers answered without a model now routes to the

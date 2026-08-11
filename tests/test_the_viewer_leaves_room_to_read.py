@@ -33,6 +33,15 @@ ACTIVITY_CSS = (
 
 VIEWER_WIDTH_VAR = "--tc-code-viewer-width"
 
+# The declaration moved up one element on 2026-08-10 (c82622aa): the composer is
+# the shell's, not the panel's, so both readers now inherit the width from
+# `#tc-shell[data-surface-mode="code"]` instead of `.tc-code-panel`. Same file,
+# same value, one element higher -- but a pattern pinned to the panel matched
+# nothing and returned "", and an empty string satisfies none of the checks
+# below by reading them, only by never reaching them. Either owner is accepted
+# so the guard survives the value moving back.
+WIDTH_OWNER = r"(?:\.tc-code-panel\b(?![.\w-])|#tc-shell\[data-surface-mode=\"code\"\](?!\s*[\[.\w]))"
+
 
 def _css() -> str:
     """Comments stripped first -- the comment above the rule quotes the selector
@@ -77,7 +86,7 @@ def test_the_width_accounts_for_the_sidebar_and_leaves_a_reading_column() -> Non
     window.
     """
 
-    value = _declaration(r"\.tc-code-panel\b(?![.\w-])", VIEWER_WIDTH_VAR)
+    value = _declaration(WIDTH_OWNER, VIEWER_WIDTH_VAR)
     assert value, f"{VIEWER_WIDTH_VAR} is not defined on the panel"
 
     assert "calc(" in value and "100vw" in value, (

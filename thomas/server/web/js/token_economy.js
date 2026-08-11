@@ -36,26 +36,32 @@
 
     const STALE = 15_000;
 
+    // What the dial still changes -- and only that. This table used to carry a pass
+    // multiplier (0.3× / 1.0× / 2.5×, rendered as the topbar badge) and a pass ration
+    // (1–3 / 3–15 / 8–32). Commit cd0203a7 set every multiplier to 1.0 and replaced
+    // the rations with one 400-pass runaway guard, so the badge advertised a 2.5× that
+    // does not exist and the matrix printed one identical number beside three buttons
+    // offering three different budgets. Passes, context, tool caps, overhead and
+    // skills are the same at every level now: what is identical is read live and shown
+    // once, never repeated per level as if the dial moved it.
+    // retries -- token_economy.py apply_token_economy_policy(): cheap forces
+    //   max_auto_retries to 0, max clamps it into 2–3, optimal keeps the configured
+    //   value (AppConfig ships 1). brief -- deliverable.py quality_tier_clause().
     const MODE_SPECS = {
         cheap: {
-            mul: '0.3×', name: 'Cheap', tag: 'ECON',
-            passes: '1–3', budget: '250K', retries: '0',
-            overhead: 'Minimal', skills: 'Off',
-            desc: 'Single-shot. No retries, no overhead.',
+            name: 'Cheap', tag: 'ECON', retries: '0', brief: 'quick',
+            desc: 'Cheaper steps, not fewer. No auto-repair attempt after a failed check.',
         },
         optimal: {
-            mul: '1.0×', name: 'Optimal', tag: 'STD',
-            passes: '3–15', budget: '650K', retries: '1',
-            overhead: 'Balanced', skills: 'Explicit',
-            desc: 'Default runtime. Balanced effort.',
+            name: 'Optimal', tag: 'STD', retries: '1', brief: 'standard',
+            desc: 'Default runtime. Auto-repair follows the configured retry count.',
         },
         max: {
-            mul: '2.5×', name: 'Max', tag: 'MAX',
-            passes: '8–32', budget: '∞', retries: '2–3',
-            overhead: 'Full', skills: 'Auto',
-            desc: 'Full suite. Maximum capability.',
+            name: 'Max', tag: 'MAX', retries: '2–3', brief: 'thorough',
+            desc: 'Most persistent. At least two auto-repair attempts before handing work back.',
         },
     };
+    const RETRY_NOTE = 'Auto-repair: cheap forces 0, max forces 2–3, optimal follows configured quality.max_auto_retries.';
 
     const MODEL_COLORS = [
         '#58a6ff', '#47d7ac', '#ffbf47', '#ff6b6b', '#c084fc',
@@ -329,7 +335,7 @@
                 <span class="te-hero-dollar" data-te-hdollar>TOK</span><span class="te-hero-whole" data-te-hwhole>0</span><span class="te-hero-frac" data-te-hfrac> used</span>
             </div>
             <div class="te-hero-sub"><span data-te-hcalls>0</span> calls <span class="te-hero-pipe">/</span> <span data-te-htokens>0</span> tokens</div>
-            <div class="te-burnstrip" data-te-burnstrip aria-label="Daily token budget progress">
+            <div class="te-burnstrip" data-te-burnstrip aria-label="Today's tokens against the busiest day in the window">
                 <div class="te-burnstrip-fill" data-te-burnfill></div>
                 <div class="te-burnstrip-marker" data-te-burnmark></div>
             </div>
@@ -413,7 +419,7 @@
         const el = $('[data-te-topmode]', _s.el);
         if (!el) return;
         const active = MODE_SPECS[_s.economy] || MODE_SPECS.optimal;
-        el.textContent = active.mul + ' ' + active.name.toUpperCase();
+        el.textContent = active.name.toUpperCase();
     }
 
     function paintHero() {
@@ -444,9 +450,11 @@
         }
 
         if (burnfill) {
-            const defaultBudget = { cheap: 250000, optimal: 650000, max: 2000000 };
-            const budget = +(_s.profile?.hard_budget || defaultBudget[_s.economy] || defaultBudget.optimal);
-            burnfill.style.width = pct(totalTokens, budget) + '%';
+            // Same invented ladder as the context meter, keyed by economy level. There
+            // is no daily token budget in Thomas to put in its place, so the bar reads
+            // against the busiest day already loaded -- live data, and what it says.
+            const peak = Math.max(0, ...(_s.history || []).map(r => +((r?.tokens || {}).total ?? r?.total_tokens) || 0));
+            burnfill.style.width = (peak > 0 ? pct(totalTokens, peak) : 0) + '%';
         }
 
         if (burnmark) {
@@ -514,7 +522,7 @@
                 const m = MODE_SPECS[id];
                 const active = _s.economy === id;
                 return `<button class="te-switch-opt${active ? ' active' : ''}" data-mode="${id}" data-ui-id="token-economy.economy-mode" data-ui-instance-key="${id}" data-ui-group="token-economy.policy" data-ui-group-policy="protected-controls" data-ui-label="${m.name} economy policy" data-ui-policy="protected">` +
-                    `<span class="te-sw-mul">${m.mul}</span>` +
+                    `<span class="te-sw-mul">${m.name}</span>` +
                     `<span class="te-sw-name">${m.tag}</span></button>`;
             }).join('') +
             `</div>`;
@@ -523,35 +531,39 @@
         if (mLabel) mLabel.textContent = active.name.toLowerCase();
 
         if (readout) {
+            // Only the first grid moves with the switch. The second is live profile
+            // data under a heading that says so: a fixed row in a policy panel reads
+            // as a promise the dial cannot keep.
             const p = _s.profile;
-            const passes = p?.pass_range ? p.pass_range[0] + '–' + p.pass_range[1] : active.passes;
-            const budget = p ? (p.hard_budget ? tok(p.hard_budget) : '∞') : active.budget;
-            const skills = p?.skills_mode || active.skills;
-
+            const row = (k, v) => (v ? `<span>${esc(k)}</span><span>${esc(v)}</span>` : '');
             readout.innerHTML =
                 `<span class="te-ro-desc">${esc(active.desc)}</span>` +
+                `<div class="te-ro-grid">${row('auto-repair', active.retries)}${row('build brief', active.brief)}</div>` +
+                `<span class="te-ro-desc">${esc(RETRY_NOTE)}</span><span class="te-ro-desc">Identical at every level:</span>` +
                 `<div class="te-ro-grid">` +
-                `<span>passes</span><span>${esc(passes)}</span>` +
-                `<span>budget</span><span>${esc(budget)}</span>` +
-                `<span>retries</span><span>${esc(active.retries)}</span>` +
-                `<span>overhead</span><span>${esc(active.overhead)}</span>` +
-                `<span>skills</span><span>${esc(skills)}</span>` +
+                row('runaway guard', p?.pass_range ? p.pass_range[1] + ' passes' : '') +
+                row('context', p?.context_budget ? tok(p.context_budget) : '') +
+                row('skills', p?.skills_mode || '') +
                 `</div>`;
         }
     }
 
     function paintBudget() {
+        const meter = $('[data-te-ctxmeter]', _s.el);
         const fill = $('[data-te-ctxfill]', _s.el);
         const val = $('[data-te-ctxval]', _s.el);
         if (!fill) return;
-        const s = _s.session || {};
-        const used = +(s.tokens?.total) || 0;
-        const budgets = { cheap: 250000, optimal: 650000, max: 2000000 };
-        const budget = _s.economy === 'max' ? 2000000 : (budgets[_s.economy] || 650000);
+        // A 250K/650K/2M ladder was hardcoded here per level, plus an "∞" only Max was
+        // shown. None of it is real: hard_budget is unset at every level and context
+        // follows the run mode. Live figure, or no meter at all.
+        const budget = +(_s.profile?.hard_budget || _s.profile?.context_budget || 0);
+        if (meter) meter.style.display = budget > 0 ? '' : 'none';
+        if (!budget) return;
+        const used = +((_s.session || {}).tokens?.total) || 0;
         const p = pct(used, budget);
         fill.style.width = p + '%';
         fill.className = 'te-ctx-fill' + (p > 85 ? ' te-ctx-danger' : p > 60 ? ' te-ctx-warn' : '');
-        if (val) val.textContent = tok(used) + ' / ' + (_s.economy === 'max' ? '∞' : tok(budget));
+        if (val) val.textContent = tok(used) + ' / ' + tok(budget);
     }
 
     function paintModels() {
@@ -682,18 +694,23 @@
             `<span>token budget</span><span>${esc(budget)}</span>` +
             `</div></div>`;
 
+        // The third column was "passes" straight off pass_range. Every row returns the
+        // same guard, so it printed one identical number against three profiles that
+        // look like three budgets. Auto-repair is what really differs; the guard is
+        // stated once below, from live data.
         const grid = visibleRows.length ? `<div class="te-rate-grid te-profile-grid">` +
-            `<span class="te-rh">profile</span><span class="te-rh">budget</span><span class="te-rh">passes</span>` +
+            `<span class="te-rh">profile</span><span class="te-rh">context</span><span class="te-rh">auto-repair</span>` +
             visibleRows.slice(0, 6).map((r) => {
                 const econ = r.economy_level || 'optimal';
                 const active = econ === activeEconomy && +r.autonomy_level === activeAutonomy;
                 const b = r.hard_budget ? tok(r.hard_budget) : (r.context_budget ? tok(r.context_budget) : 'open');
-                const passes = Array.isArray(r.pass_range) ? r.pass_range.join('-') : (r.pass_range || '?');
-                return `<span class="te-rn${active ? ' active' : ''}" data-ui-id="token-economy.profile" data-ui-instance-key="${esc(uiKey(String(r.autonomy_level) + '-' + econ))}" data-ui-group="token-economy.profile-matrix" data-ui-group-policy="managed-collection" data-ui-label="${esc(econ)} runtime profile" data-ui-policy="protected">${esc(econ.toUpperCase())}</span><span class="te-rv">${esc(b)}</span><span class="te-rv">${esc(String(passes))}</span>`;
+                const retries = (MODE_SPECS[econ] || {}).retries || '—';
+                return `<span class="te-rn${active ? ' active' : ''}" data-ui-id="token-economy.profile" data-ui-instance-key="${esc(uiKey(String(r.autonomy_level) + '-' + econ))}" data-ui-group="token-economy.profile-matrix" data-ui-group-policy="managed-collection" data-ui-label="${esc(econ)} runtime profile" data-ui-policy="protected">${esc(econ.toUpperCase())}</span><span class="te-rv">${esc(b)}</span><span class="te-rv">${esc(retries)}</span>`;
             }).join('') +
             '</div>' : '';
-
-        el.innerHTML = activeLine + grid;
+        const guard = visibleRows.find((r) => Array.isArray(r.pass_range));
+        const guardLine = guard ? `<span class="te-ro-desc">Runaway guard: ${esc(String(guard.pass_range[1]))} passes at every profile. A run ends when the model stops, not on a counter.</span>` : '';
+        el.innerHTML = activeLine + grid + guardLine;
     }
 
     function pushFeed(d) {

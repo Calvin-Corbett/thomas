@@ -21,6 +21,14 @@
   let isInternalResultPath = null;
   let lifecycle = null;
   let render = null;
+  // Two more collaborators arrived with the workspace readers at the bottom of
+  // this file: the live feed a failed read reports into, and the one wrapper
+  // that turns a rejected promise into a reported error instead of an unhandled
+  // rejection. Injected like the rest -- there is one of each, in
+  // unified_code_mode.js, never a second copy here.
+  let pushLiveEvent = null;
+  let safely = null;
+  let recordPreferenceWarning = null;
 
   function configure(deps) {
     state = deps.state;
@@ -28,6 +36,9 @@
     isInternalResultPath = deps.isInternalResultPath;
     lifecycle = deps.lifecycle;
     render = deps.render;
+    pushLiveEvent = deps.pushLiveEvent;
+    safely = deps.safely;
+    recordPreferenceWarning = deps.recordPreferenceWarning;
   }
 
   // Did the engine SKIP this check rather than run it? Matched on the engine's
@@ -248,9 +259,13 @@
     // A fact that leads with a number becomes a tile with the number large;
     // prose facts stay a quiet chip. Same honest wording, readable shape.
     const factTile = fact => {
+      // The tile splits "3 open risks" into a big number and a small label, so
+      // the phrase no longer exists as contiguous text. Carry the whole fact as
+      // the accessible name: a screen reader (and anything reading the markup)
+      // gets the sentence back, and the tile keeps its shape.
       const m = /^([\d/]+)\s+(.*)$/.exec(fact);
-      if (m) return `<span class="tc-code-stat"><b>${esc(m[1])}</b><i>${esc(m[2])}</i></span>`;
-      return `<span class="tc-code-stat is-prose"><i>${esc(fact)}</i></span>`;
+      if (m) return `<span class="tc-code-stat" title="${esc(fact)}" aria-label="${esc(fact)}"><b>${esc(m[1])}</b><i>${esc(m[2])}</i></span>`;
+      return `<span class="tc-code-stat is-prose" title="${esc(fact)}" aria-label="${esc(fact)}"><i>${esc(fact)}</i></span>`;
     };
     return `<details class="tc-code-saved-activity tc-code-run-report ${tone}${riskCount ? ' has-issues' : ''}" data-saved="true">
       <summary>
@@ -777,7 +792,251 @@
     };
   }
 
+  // -------------------------------------------------------------------------
+  // How much room the side surfaces take, and who has to be told.
+  //
+  // Both of them live in this file -- the viewer above, and the activity drawer
+  // whose Outputs section is filled by the readers above -- and they share one
+  // channel to the rest of the page, so the geometry is written once, here,
+  // rather than twice on either side of a module boundary.
+
+  const clampDrawerWidth = value => Math.max(280, Math.min(520, value));
+
+  // The composer is NOT inside the Code panel. It is the shell's one composer,
+  // parked below the mode surface, so no class on `.tc-code-panel` can reach
+  // it -- which is exactly why it stood still while the Activity drawer slid
+  // the conversation out from under it (measured: chat 716..1484 -> 576..1344,
+  // composer 734..1502 both times).
+  //
+  // These two values on the shell are the entire channel between the panel and
+  // the composer: which side panel is reserving room, and how wide the drawer
+  // currently is. unified_code_mode.css reads both and gives the composer the
+  // same box as the transcript.
+  //
+  // The drawer width lives HERE and nowhere else. It used to be written into
+  // the panel's inline style, which the composer cannot see; the panel inherits
+  // it from the shell instead, so there is one writer and no second copy to
+  // drift.
+  function publishColumnState(viewerReserving) {
+    const shell = document.getElementById('tc-shell');
+    if (!shell) return;
+    // This is presentation only, and it also runs under the Node contract
+    // harness whose DOM stub implements neither `dataset` nor `style`. Guard
+    // the properties, not just the element: `if (!shell) return` passes there
+    // and the next line threw on `undefined.setProperty`, taking the whole
+    // lifecycle contract down with it.
+    const side = viewerReserving ? 'viewer' : (state.drawerOpen ? 'activity' : '');
+    if (shell.dataset) {
+      if (side) shell.dataset.codeSide = side;
+      else delete shell.dataset.codeSide;
+    }
+    if (shell.style && typeof shell.style.setProperty === 'function') {
+      shell.style.setProperty('--tc-code-drawer-width', `${clampDrawerWidth(state.drawerWidth)}px`);
+    }
+  }
+
+  // Drag or arrow-key the separator unified_code_mode.js renders at the head of
+  // the drawer. Called once per render, on the freshly built handle.
+  function bindDrawerResize(root) {
+    const resizeHandle = root.querySelector('.tc-code-drawer-resize');
+    const setDrawerWidth = width => {
+      state.drawerWidth = clampDrawerWidth(width);
+      // Onto the SHELL, which the panel and the composer both inherit from, so
+      // a drag resizes the drawer and re-reserves the composer's room in the
+      // same frame. Writing it to the panel only moved the drawer.
+      publishColumnState(Boolean(state.viewer && state.viewer.file && !state.viewer.full));
+      // Also on the panel itself. The shell var is what the composer inherits
+      // from, but the panel carrying its own width keeps the drawer's current
+      // size readable from the element it belongs to (and the Node contract
+      // harness, whose shell stub has no style, can still see it).
+      root.querySelector('.tc-code-panel')?.style?.setProperty?.('--tc-code-drawer-width', `${state.drawerWidth}px`);
+      resizeHandle?.setAttribute('aria-valuenow', String(state.drawerWidth));
+    };
+    const saveDrawerWidth = () => {
+      try { localStorage.setItem('thomas_code_drawer_width', String(state.drawerWidth)); }
+      catch (error) { recordPreferenceWarning(error, 'The activity drawer width could not be saved.'); }
+    };
+    resizeHandle?.addEventListener('pointerdown', event => {
+      event.preventDefault();
+      resizeHandle.setPointerCapture?.(event.pointerId);
+      const move = moveEvent => { setDrawerWidth(window.innerWidth - moveEvent.clientX); };
+      const done = () => {
+        resizeHandle.removeEventListener('pointermove', move);
+        resizeHandle.removeEventListener('pointerup', done);
+        resizeHandle.removeEventListener('pointercancel', done);
+        saveDrawerWidth();
+      };
+      resizeHandle.addEventListener('pointermove', move);
+      resizeHandle.addEventListener('pointerup', done);
+      resizeHandle.addEventListener('pointercancel', done);
+    });
+    resizeHandle?.addEventListener('keydown', event => {
+      const widths = { ArrowLeft: state.drawerWidth + 16, ArrowRight: state.drawerWidth - 16, Home: 280, End: 520, PageUp: state.drawerWidth + 48, PageDown: state.drawerWidth - 48 };
+      if (!(event.key in widths)) return;
+      event.preventDefault();
+      setDrawerWidth(widths[event.key]);
+      saveDrawerWidth();
+    });
+  }
+
+  // The width this browser last dragged the drawer to, restored at load.
+  function restoreDrawerWidth() {
+    try {
+      const savedDrawerWidth = Number(localStorage.getItem('thomas_code_drawer_width'));
+      if (Number.isFinite(savedDrawerWidth)) state.drawerWidth = clampDrawerWidth(savedDrawerWidth);
+    } catch (error) { recordPreferenceWarning(error, 'The saved activity drawer width could not be loaded.'); }
+  }
+
+  // -------------------------------------------------------------------------
+  // The workspace the results are read out of: the changed files, the project
+  // tree, the file preview, and the checkpoint that turns kept changes into a
+  // real commit.
+  //
+  // They arrived here 2026-08-10, when unified_code_mode.js was 1749 lines
+  // against the same 1500-line ceiling that split this file off in the first
+  // place. The boundary is the one already drawn above: everything here reads
+  // what a run PRODUCED and hands it to the drawer, and nothing here owns the
+  // run, the stream, or the state machine. They were the last readers in that
+  // file still doing this job -- `loadFile` already called into this module for
+  // the inlined preview, and `maybeAutoPlaytest` already called `autoPlaytest`
+  // below.
+  //
+  // Every one of them is still CALLED from unified_code_mode.js, which keeps
+  // the surface, its bindings, and the error wording it passes to `safely`.
+
+  async function loadChanges(options) {
+    const token = (options && options.token) || lifecycle().contextToken(state);
+    if (!token.id) return false;
+    const response = await fetch(`/api/evolve/agent/changes?cid=${encodeURIComponent(token.id)}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `Changes could not be loaded (${response.status})`);
+    if (!lifecycle().contextMatches(state, token)) return false;
+    state.changes = Array.isArray(data.changed) ? data.changed : [];
+    if (!(options && options.deferRender)) render();
+    return true;
+  }
+
+  async function loadTree(path, options) {
+    const token = (options && options.token) || lifecycle().contextToken(state);
+    if (!token.id) return false;
+    const query = path ? `?path=${encodeURIComponent(path)}` : '';
+    const response = await fetch(`/api/evolve/agent/conversations/${encodeURIComponent(token.id)}/tree${query}`);
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || `Project files could not be loaded (${response.status})`);
+    if (!lifecycle().contextMatches(state, token)) return false;
+    state.tree = Array.isArray(data.entries) ? data.entries : [];
+    state.treeLoaded = true;
+    state.treePath = String(data.path || '');
+    if (!(options && options.deferRender)) render();
+    return true;
+  }
+
+  async function loadFile(path) {
+    const token = lifecycle().contextToken(state);
+    if (!token.id) return false;
+    const response = await fetch(`/api/evolve/agent/conversations/${encodeURIComponent(token.id)}/file?path=${encodeURIComponent(path)}`);
+    const data = await response.json();
+    if (!lifecycle().contextMatches(state, token)) return false;
+    if (!response.ok || !data.ok) pushLiveEvent({ type: 'error', text: data.error || 'File preview failed.' });
+    else {
+      if (/\.x?html?$/i.test(String(path))) {
+        try { data.content = await inlineLocalAssets(token.id, String(data.content || ''), String(path)); }
+        catch (e) { /* preview the page as-is rather than not at all */ }
+        if (!lifecycle().contextMatches(state, token)) return false;
+      }
+      state.filePreview = data;
+    }
+    render();
+    return response.ok && data.ok;
+  }
+
+  // Codex-parity checkpoint: turn kept changes into a real commit on a
+  // thomas-code/ branch; if the project has a remote, the branch is PR-ready.
+  async function checkpointChanges() {
+    if (state.running || state.finishing) return false;
+    const title = String((state.conversation && state.conversation.title) || 'code changes').slice(0, 60);
+    const response = await fetch('/api/evolve/agent/checkpoint', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversation_id: state.activeId, message: `Thomas Code: ${title}` }) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Checkpoint failed.');
+    const where = data.remote ? ` Push it to open a PR on ${data.remote}.` : '';
+    pushLiveEvent({ type: 'insight', text: `Checkpointed ${data.files.length} file(s) as ${data.commit} on ${data.branch}.${where}` });
+    render();
+    return true;
+  }
+
+  // After a durable build, auto-playtest the playable page it produced. Picks
+  // the newest turn's html artifact; only fires for a real build (files
+  // changed) so answers and no-ops are never tested.
+  function maybeAutoPlaytest() {
+    const turns = state.conversation && Array.isArray(state.conversation.turns) ? state.conversation.turns : [];
+    const last = [...turns].reverse().find(t => t.role === 'agent');
+    if (!last || !last.ok) return;
+    const changed = (last.changed_files || []).filter(f => !isInternalResultPath(f));
+    if (!changed.length) return;
+    const artifacts = (last.artifacts || []).filter(a => a && a.file && !isInternalResultPath(a.file));
+    const playable = artifacts.find(a => /\.x?html?$/i.test(String(a.file)));
+    if (!playable) return;
+    autoPlaytest(String(playable.file));
+  }
+
+  // The two artifact controls a rendered turn carries. Bound here, beside the
+  // cards `artifactCardsHtml` stamps them into, for the same reason `bindViewer`
+  // is: the markup and the click that answers it belong to one module.
+  //
+  // Kept LAST before the exports on purpose. The guard that a result opens in
+  // the conversation rather than being pushed to the side panel
+  // (test_code_presents_what_it_made.py) reads everything from the
+  // `[data-code-open-artifact]` selector to the next `});` and requires no
+  // drawer state in it; anything appended after this that touches
+  // `state.drawerOpen` would be read as part of this handler.
+  function bindArtifactActions(root) {
+    root.querySelectorAll('[data-code-open-artifact]').forEach(button => button.addEventListener('click', () => {
+      // Opens IN THE CONVERSATION. Sending the result to a side panel is still
+      // telling someone where to go and look; Chat puts a deliverable in the
+      // thread and Code is meant to be Chat that builds rather than dispatches.
+      const file = button.dataset.codeOpenArtifact;
+      const slot = button.dataset.codeArtifactSlot || file;
+      state.artifactOpen = state.artifactOpen || {};
+      state.artifactOpen[slot] = true;
+      // Opens BESIDE the conversation rather than inside it. The card stays a
+      // snapshot you can read at a glance; the real thing gets the height of
+      // the window, and from there it can fill Thomas or leave for its own tab.
+      openViewer(file);
+      render();
+      // Fetch the previewable copy after the panel is up, then redraw so the
+      // frame swaps from the plain artifact URL to the asset-inlined document.
+      void safely(async () => { await ensureArtifactDoc(file); render(); }, 'That result could not be opened.');
+    }));
+    root.querySelectorAll('[data-code-save-artifact]').forEach(button => button.addEventListener('click', () => {
+      // Saved from the file Thomas actually wrote, read through the same
+      // validated endpoint. Not the inlined preview copy, which carries
+      // dependencies folded in for display only.
+      const file = button.dataset.codeSaveArtifact;
+      void safely(async () => {
+        const token = lifecycle().contextToken(state);
+        if (!token.id) return false;
+        const content = await readProjectFile(token.id, file);
+        if (content === null) throw new Error('could not read ' + file);
+        const url = URL.createObjectURL(new Blob([content], { type: 'application/octet-stream' }));
+        const a = document.createElement('a');
+        a.href = url; a.download = file.split('/').pop();
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+        return true;
+      }, 'That result could not be downloaded.');
+    }));
+  }
+
   window.ThomasCodeResults = {
+    bindArtifactActions,
+    bindDrawerResize,
+    publishColumnState,
+    restoreDrawerWidth,
+    checkpointChanges,
+    loadChanges,
+    loadFile,
+    loadTree,
+    maybeAutoPlaytest,
     playtestChatCardHtml,
     autoPlaytest,
     artifactCardsHtml,

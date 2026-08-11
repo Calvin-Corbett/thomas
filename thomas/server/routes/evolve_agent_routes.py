@@ -1,10 +1,28 @@
-"""Directed Evolve-agent HTTP API for Thomas's live self-builder."""
+"""Directed Evolve-agent HTTP API for Thomas's live self-builder.
+
+This module owns ONE job: starting a Code run and driving it while it lives --
+the launch checks, the subprocess, the transcript stream, steering, stopping,
+and the per-conversation run registry that lets several runs exist at once.
+
+Everything a run is looked at THROUGH was moved to siblings, because it served
+a different question and the file had grown past the 1500-line ceiling the
+architecture gate enforces:
+
+* ``evolve_agent_watch_routes``        -- the live SSE feed and the status snapshot
+* ``evolve_agent_conversation_routes`` -- the sidebar and the file browser
+* ``evolve_agent_workspace_routes``    -- changes, revert, keep, checkpoint, deliverables
+* ``evolve_agent_artifact_routes``     -- serving one built file, under capability and CSP
+* ``evolve_agent_playtest_routes``     -- Thomas playing a game it built
+* ``evolve_agent_run_state``           -- the app-state keys and the run registry
+
+They are built here and their handlers merged into one map, so registration is
+unchanged: ``evolve_agent_registration`` still resolves every route by name out
+of a single dict.
+"""
 
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import hmac
 import json
 import logging
 import os
@@ -18,13 +36,11 @@ from typing import Any
 
 from aiohttp import web
 
-from thomas.forge.anvil import (
-    forge_code_deliverables,
-    forge_code_git,
-    forge_code_projects,
-    forge_code_store,
-    forge_code_tree,
-)
+from thomas.forge.anvil import forge_code_git, forge_code_projects, forge_code_store
+
+# The SSE line decoder and payload translator moved with `stream` into
+# evolve_agent_watch_routes; they stay importable from here because callers and
+# tests have always reached them at this path.
 from thomas.forge.anvil.forge_code_http_stream import (
     IncrementalLineDecoder as _IncrementalLineDecoder,
 )
@@ -32,43 +48,64 @@ from thomas.forge.anvil.forge_code_http_stream import line_to_sse_payload as _li
 from thomas.forge.anvil.forge_code_settings import ForgeCodeSettings, ForgeCodeSettingsError
 from thomas.server.app_keys import APP_DELIVERABLE_PREVIEW_SERVICE, APP_RUN_STORE_ENABLED, APP_RUN_STORE_MODULE
 
+from .evolve_agent_artifact_routes import build_evolve_agent_artifact_handlers
+from .evolve_agent_conversation_routes import build_evolve_agent_conversation_handlers
 from .evolve_agent_http_support import (
     attachment_goal_note,
-    conversation_artifact_allowlist,
     git_status_unavailable_response,
     prepare_code_oauth_credential,
     stage_code_attachments,
     validate_active_run_request,
 )
+from .evolve_agent_playtest_routes import build_evolve_agent_playtest_handlers
 from .evolve_agent_registration import register_evolve_agent_handler_map
+
+# The keys are re-exported: they moved below the route modules so a sibling can
+# read the same run state without importing this module back, and callers
+# (including tests) that have always found them here still do.
+from .evolve_agent_run_state import (
+    APP_EVOLVE_AGENT_APPROVALS,
+    APP_EVOLVE_AGENT_CONVO,
+    APP_EVOLVE_AGENT_DRAIN,
+    APP_EVOLVE_AGENT_LOCK,
+    APP_EVOLVE_AGENT_MODEL,
+    APP_EVOLVE_AGENT_PROJECT,
+    APP_EVOLVE_AGENT_RUNS,
+    APP_EVOLVE_AGENT_SESSION,
+    APP_EVOLVE_AGENT_SETTINGS,
+    APP_EVOLVE_AGENT_SNAPSHOT,
+    APP_EVOLVE_AGENT_TASK,
+    prune_runs,
+    runs,
+    slot_active,
+    slot_for_run_id,
+    slot_running,
+)
 from .evolve_agent_runtime import (
     _action_receipt,
     _agent_dir,
     _agent_launch,
     _attach_code_activity_release,
-    _authorize_conversation_revert,
     _await_recording,
     _code_action_hash,
-    _conversation_changed_files,
     _default_repo_root,
     _delete_action_receipt,
     _drain,
     _drain_and_record,
-    _finish_approval_execution,
     _kill_tree,
     _mark_steer_requested,
     _mark_stop_requested,
     _recording_active,
-    _recording_status,
     _release_code_activity_lease,
     _release_code_start_gate,
     _request_id,
     _run_replay_available,
     _save_action_receipt,
-    _sse_frame,
     _terminate_process,
     _transcript_path,
 )
+from .evolve_agent_watch_routes import build_evolve_agent_watch_handlers
+from .evolve_agent_workspace_routes import build_evolve_agent_workspace_handlers
 
 log = logging.getLogger(__name__)
 
@@ -174,42 +211,6 @@ def _chosen_project(requested: Any, *, picked: bool = False) -> Any:
     return requested
 
 
-def _friendly_project_error(exc: Exception, requested_root: Any = None) -> str:
-    """Turn an internal validator message into something a person can act on.
-
-    These strings go straight to the screen. The raw ones are written for whoever
-    is reading the traceback -- "project_root must be inside a git repository"
-    names an internal argument and a tool the reader may not use, states a rule
-    without a reason, and offers no way forward. Someone who just wanted to open
-    their own folder is simply stopped.
-    """
-    raw = str(exc)
-    name = ""
-    if requested_root:
-        try:
-            name = Path(str(requested_root)).name
-        except (OSError, ValueError):
-            name = ""
-    where = f'"{name}"' if name else "That folder"
-
-    if "must be inside a git repository" in raw:
-        return (
-            f"{where} doesn't have version history yet, so Thomas can't undo its own edits there. "
-            "Thomas sets this up automatically for folders it created. For your own folders it "
-            "asks first, so nothing is added to your files without you knowing."
-        )
-    if "does not exist" in raw:
-        return f"{where} isn't there any more. It may have been moved, renamed, or deleted."
-    if "must be a directory" in raw:
-        return f"{where} is a file, not a folder. Pick the folder that contains your project."
-    if "could not be inspected" in raw:
-        return f"Thomas couldn't read {where}. It may be on a drive that's disconnected, or permission is denied."
-    if "could not be prepared for editing" in raw:
-        return f"Thomas couldn't get {where} ready to edit. The folder may be read-only."
-    if "unavailable repository root" in raw or "not a directory" in raw:
-        return f"{where} looks like a broken project folder. Try picking it again, or choose a different one."
-    return f"Thomas can't open {where} right now."
-
 # What a page may pull in while it runs. Keeping the preview to web assets
 # means previewing a page cannot serve source or secrets from the project.
 _PREVIEWABLE_SUFFIXES = {
@@ -246,18 +247,6 @@ def _preview_allowlist(root: Path) -> set[str]:
             allowed.add(rel.as_posix())
     return allowed
 
-APP_EVOLVE_AGENT_TASK = "evolve_agent_task"
-APP_EVOLVE_AGENT_DRAIN = "evolve_agent_drain"
-APP_EVOLVE_AGENT_SESSION = "evolve_agent_session"
-APP_EVOLVE_AGENT_CONVO = "evolve_agent_convo"
-APP_EVOLVE_AGENT_SNAPSHOT = "evolve_agent_snapshot"
-APP_EVOLVE_AGENT_MODEL = "evolve_agent_model"
-APP_EVOLVE_AGENT_PROJECT = "evolve_agent_project"
-APP_EVOLVE_AGENT_SETTINGS = "evolve_agent_settings"
-APP_EVOLVE_AGENT_APPROVALS = "evolve_agent_approvals"
-APP_EVOLVE_AGENT_LOCK = "evolve_agent_lock"
-# Per-conversation run registry: dict[conversation_id -> {"session": ..., "drain": ...}].
-APP_EVOLVE_AGENT_RUNS = "evolve_agent_runs"
 # How many Code runs may execute concurrently across conversations.
 # Raised from the old hard cap of 3 and made live-configurable via
 # THOMAS_MAX_CONCURRENT_CODE_RUNS so a user can run as many different Code
@@ -295,8 +284,6 @@ def build_evolve_agent_handlers(
         app[APP_EVOLVE_AGENT_APPROVALS] = {}
     if APP_EVOLVE_AGENT_LOCK not in app:
         app[APP_EVOLVE_AGENT_LOCK] = asyncio.Lock()
-    artifact_capability_secret = secrets.token_bytes(32)
-    artifact_capability_ttl_seconds = 3600
 
     def _root() -> Path:
         return Path(root_resolver())
@@ -339,36 +326,23 @@ def build_evolve_agent_handlers(
         return proc is not None and proc.returncode is None
 
     # ── Per-conversation run registry (parallel Code runs, Codex-style) ──
-    # Each conversation gets its own slot {session, drain}; the legacy single
-    # keys keep mirroring the MOST RECENT run so existing consumers still work.
+    # The rules live in evolve_agent_run_state so the watch handlers read the
+    # registry the same way this module writes it; these are the app-bound
+    # spellings the launch path uses.
     def _runs() -> dict[str, dict[str, Any]]:
-        runs = app.get(APP_EVOLVE_AGENT_RUNS)
-        if not isinstance(runs, dict):
-            runs = {}
-            app[APP_EVOLVE_AGENT_RUNS] = runs
-        return runs
+        return runs(app)
 
     def _slot_running(slot: dict[str, Any] | None) -> bool:
-        proc = ((slot or {}).get("session") or {}).get("proc")
-        return proc is not None and proc.returncode is None
+        return slot_running(slot)
 
     def _slot_active(slot: dict[str, Any] | None) -> bool:
-        return _slot_running(slot) or _recording_active((slot or {}).get("drain"))
+        return slot_active(slot)
 
     def _prune_runs() -> dict[str, dict[str, Any]]:
-        runs = _runs()
-        for key in [key for key, slot in runs.items() if not _slot_active(slot)]:
-            runs.pop(key, None)
-        return runs
+        return prune_runs(app)
 
     def _slot_for_run_id(run_id: str) -> dict[str, Any] | None:
-        wanted = str(run_id or "").strip()
-        if not wanted:
-            return None
-        for slot in _runs().values():
-            if str((slot.get("session") or {}).get("run_id") or "") == wanted:
-                return slot
-        return None
+        return slot_for_run_id(app, run_id)
 
     def _track_process(
         proc: Any,
@@ -874,147 +848,6 @@ def build_evolve_agent_handlers(
             {"ok": True, "stop_requested": True, "restart_required": True, "message": message}, status=202
         )
 
-    async def stream(request: web.Request) -> web.StreamResponse:
-        require_api_access(request)
-        session = dict(app.get(APP_EVOLVE_AGENT_SESSION) or {})
-        run_id = str(session.get("run_id") or "legacy")
-        recording = app.get(APP_EVOLVE_AGENT_DRAIN)
-        wanted = str(request.query.get("run_id") or "").strip()
-        if wanted and wanted != run_id:
-            # Any REGISTERED run can be streamed, not just the most recent one.
-            slot = _slot_for_run_id(wanted)
-            if slot is None:
-                return web.json_response(
-                    {"ok": False, "error": "that Code run is not active", "code": "run_not_active"}, status=409
-                )
-            session = dict(slot.get("session") or {})
-            run_id = wanted
-            recording = slot.get("drain")
-        try:
-            cursor = max(0, int(request.query.get("cursor") or 0))
-        except ValueError:
-            return web.json_response({"ok": False, "error": "invalid stream cursor"}, status=400)
-        transcript = Path(session.get("transcript") or _transcript_path(_root()))
-        proc = session.get("proc") or app.get(APP_EVOLVE_AGENT_TASK)
-        resp = web.StreamResponse(
-            status=200,
-            headers={
-                "Content-Type": "text/event-stream",
-                "Cache-Control": "no-cache, no-transform",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            },
-        )
-        await resp.prepare(request)
-        pos = 0
-        sequence = 0
-        linedec = _IncrementalLineDecoder()
-
-        async def _emit_line(line: str) -> None:
-            nonlocal sequence
-            payload = _line_to_sse_payload(line)
-            if payload:
-                sequence += 1
-                if sequence > cursor:
-                    await resp.write(_sse_frame(payload, run_id, sequence))
-
-        try:
-            while not (request.transport is None or request.transport.is_closing()):
-                chunk = b""
-                if transcript.exists():
-                    with open(transcript, "rb") as fh:
-                        fh.seek(pos)
-                        chunk = fh.read()
-                        pos = fh.tell()
-                if chunk:
-                    for line in linedec.feed(chunk):
-                        await _emit_line(line)
-                    # Data was flowing — loop again IMMEDIATELY (no poll delay) to
-                    await asyncio.sleep(0)
-                    continue
-                if proc is None or proc.returncode is not None:
-                    persistence = await _await_recording(recording)
-                    # Final drain: the child may have flushed its last lines after
-                    # our read above but before we noticed it exited — pick them up.
-                    if transcript.exists():
-                        with open(transcript, "rb") as fh:
-                            fh.seek(pos)
-                            tail = fh.read()
-                            pos = fh.tell()
-                        if tail:
-                            for line in linedec.feed(tail):
-                                await _emit_line(line)
-                    for line in linedec.flush():
-                        await _emit_line(line)
-                    sequence += 1
-                    if sequence > cursor:
-                        await resp.write(
-                            _sse_frame(
-                                {
-                                    "type": "done",
-                                    **persistence,
-                                    "conversation_id": session.get("conversation_id")
-                                    or app.get(APP_EVOLVE_AGENT_CONVO)
-                                    or "",
-                                    "project_root": session.get("project_root")
-                                    or app.get(APP_EVOLVE_AGENT_PROJECT)
-                                    or "",
-                                    "settings": session.get("settings") or app.get(APP_EVOLVE_AGENT_SETTINGS) or {},
-                                },
-                                run_id,
-                                sequence,
-                            )
-                        )
-                    break
-                await asyncio.sleep(0.05)
-        except (ConnectionResetError, asyncio.CancelledError, RuntimeError):
-            pass
-        return resp
-
-    def _status_payload(sess: dict[str, Any], drain: Any, *, running: bool) -> dict[str, Any]:
-        return {
-            "ok": True,
-            "running": running,
-            **_recording_status(drain),
-            "run_id": sess.get("run_id") or "",
-            "generation": sess.get("generation") or 0,
-            "session": {
-                "message": sess.get("message", ""),
-                "started_at": sess.get("started_at"),
-                "project_root": sess.get("project_root", ""),
-                # Lets a reloaded page reattach to the running run's conversation.
-                "conversation_id": sess.get("conversation_id", ""),
-            },
-            "settings": sess.get("settings") or app.get(APP_EVOLVE_AGENT_SETTINGS) or {},
-        }
-
-    async def status(request: web.Request) -> web.Response:
-        require_api_access(request)
-        # Per-slot resolution: ?conversation_id= or ?run_id= answers for THAT
-        # run; default keeps the legacy most-recent shape plus a runs[] list.
-        wanted_cid = str(request.query.get("conversation_id") or "").strip()
-        wanted_run = str(request.query.get("run_id") or "").strip()
-        if wanted_cid or wanted_run:
-            slot = _runs().get(wanted_cid) if wanted_cid else _slot_for_run_id(wanted_run)
-            sess = (slot or {}).get("session") or {}
-            return web.json_response(_status_payload(sess, (slot or {}).get("drain"), running=_slot_running(slot)))
-        sess = app.get(APP_EVOLVE_AGENT_SESSION) or {}
-        payload = _status_payload(sess, app.get(APP_EVOLVE_AGENT_DRAIN), running=_running())
-        payload["runs"] = [
-            {
-                "run_id": str((slot.get("session") or {}).get("run_id") or ""),
-                "conversation_id": str((slot.get("session") or {}).get("conversation_id") or ""),
-                "project_root": str((slot.get("session") or {}).get("project_root") or ""),
-                "started_at": (slot.get("session") or {}).get("started_at"),
-                "message": str((slot.get("session") or {}).get("message") or "")[:120],
-                "running": _slot_running(slot),
-                "recording": _recording_active(slot.get("drain")),
-            }
-            for slot in _runs().values()
-            if _slot_active(slot)
-        ]
-        return web.json_response(payload)
-
     async def stop(request: web.Request) -> web.Response:
         require_api_access(request)
         try:
@@ -1047,226 +880,6 @@ def build_evolve_agent_handlers(
             200 if receipt["termination_confirmed"] else 202 if receipt["state"] == "termination_pending" else 409
         )
         return web.json_response(receipt, status=status_code)
-
-    async def deliverables_list(request: web.Request) -> web.Response:
-        """List real, openable Forge Code build outputs for the My Stuff surface.
-
-        Walks the same roots ``conversations_list`` walks, for the same reason:
-        a run records its deliverable in the PROJECT it worked in, and every
-        task now gets its own folder. Reading the catalog root alone returned an
-        empty list -- measured live, 0 returned while 16 sat across 4 project
-        roots -- and an empty list reads as "nothing has been built".
-        """
-        require_api_access(request)
-        catalog_root = _root()
-        return web.json_response(
-            {
-                "ok": True,
-                "deliverables": forge_code_deliverables.list_deliverables_across(
-                    catalog_root,
-                    forge_code_projects.conversation_roots(catalog_root),
-                ),
-            }
-        )
-
-    async def conversations_list(request: web.Request) -> web.Response:
-        require_api_access(request)
-        catalog_root = _root()
-        by_id: dict[str, dict[str, Any]] = {}
-        for project_root in forge_code_projects.conversation_roots(catalog_root):
-            for summary in forge_code_store.list_conversations(project_root):
-                cid = str(summary.get("id") or "")
-                if not cid or cid in by_id:
-                    continue
-                metadata = forge_code_projects.conversation_metadata(catalog_root, cid) or {}
-                enriched = dict(summary)
-                enriched["project_root"] = str(metadata.get("project_root") or project_root)
-                enriched["settings"] = metadata.get("settings") or {}
-                by_id[cid] = enriched
-        summaries = sorted(by_id.values(), key=lambda row: str(row.get("updated_at") or ""), reverse=True)
-        return web.json_response(
-            {
-                "ok": True,
-                "conversations": summaries,
-                "days": forge_code_store.group_by_day(summaries),
-            }
-        )
-
-    async def conversation_get(request: web.Request) -> web.Response:
-        require_api_access(request)
-        cid = request.match_info.get("cid", "")
-        try:
-            project_root, conv = _load_conversation(cid)
-        except forge_code_projects.ForgeCodeProjectError as exc:
-            return web.json_response({"ok": False, "error": str(exc), "code": "project_unavailable"}, status=409)
-        if conv is None:
-            return web.json_response({"ok": False, "error": "not found"}, status=404)
-        metadata = forge_code_projects.conversation_metadata(_root(), cid) or {}
-        enriched = dict(conv)
-        enriched["project_root"] = str(project_root)
-        enriched["settings"] = metadata.get("settings") or {}
-        return web.json_response({"ok": True, "conversation": enriched})
-
-    async def conversation_new(request: web.Request) -> web.Response:
-        require_api_access(request)
-        try:
-            body = await request.json()
-        except Exception:  # noqa: BLE001 - missing/invalid body -> treat as empty
-            body = {}
-        title = str((body or {}).get("title") or "").strip()
-        source = (body or {}).get("source_evolve_item")
-        if not isinstance(source, dict):
-            source = None
-        requested_root = _chosen_project(
-            (body or {}).get("project_root"),
-            picked=str((body or {}).get("project_choice") or "").strip().lower() == "picked",
-        )
-        # "setup" | "without" | "" -- the answer to the history question, absent
-        # until the person has actually been asked.
-        history_choice = str((body or {}).get("history_choice") or "").strip().lower()
-        if history_choice not in ("setup", "without"):
-            history_choice = ""
-        try:
-            # Everything Thomas builds lands in ~/.thomas/workspaces/<exec-id>,
-            # which is never a git repo -- so every app Thomas made for the user
-            # was unopenable until now. Prepare Thomas's own folders on demand.
-            # Folders outside ~/.thomas belong to the user and are left alone.
-            loop = asyncio.get_running_loop()
-            new_project_name = str((body or {}).get("new_project_name") or "").strip()
-            if new_project_name and not requested_root:
-                # A NEW project gets its own folder. Sending nothing used to mean
-                # "share the one scratch repo", which is how the user's pacman,
-                # star-catcher and museum all ended up in Thomas's working
-                # directory together, overwriting one another's index.html.
-                requested_root = str(
-                    await loop.run_in_executor(None, forge_code_projects.create_named_project, new_project_name)
-                )
-            if requested_root:
-                await loop.run_in_executor(None, forge_code_projects.ensure_git_repo, requested_root)
-                if history_choice == "setup":
-                    await loop.run_in_executor(None, forge_code_projects.initialize_history, requested_root)
-                project_root = forge_code_projects.validate_project_root(
-                    requested_root,
-                    fallback=_root(),
-                    allow_without_history=(history_choice == "without"),
-                )
-            else:
-                # Nothing was chosen, so this task gets its OWN folder instead of
-                # the shared drawer. Resolved only in this branch, so a request
-                # that names its project never pays for creating one it will not
-                # use. It shells out to git, so it runs off the loop.
-                project_root = await loop.run_in_executor(None, _new_task_project_root, _root(), title)
-            settings = ForgeCodeSettings.from_payload(body if isinstance(body, dict) else {})
-        except forge_code_projects.ForgeCodeHistoryRequired as exc:
-            # A question, not a dead end. The previous message promised Thomas
-            # "asks first" for your own folders and then never asked, which left
-            # 117 of this user's 121 projects unopenable.
-            name = Path(str(exc.project_path)).name or "That folder"
-            return web.json_response(
-                {
-                    "ok": False,
-                    "code": "history_choice_required",
-                    "needs_history_choice": True,
-                    "project_root": str(exc.project_path),
-                    "project_name": name,
-                    "error": (
-                        f'"{name}" has no version history, so Thomas cannot undo its own edits there. '
-                        "Set up history so changes can be reverted, or work without undo."
-                    ),
-                    "choices": [
-                        {"id": "setup", "label": "Set up history", "recommended": True},
-                        {"id": "without", "label": "Work without undo"},
-                    ],
-                },
-                status=409,
-            )
-        except (forge_code_projects.ForgeCodeProjectError, ForgeCodeSettingsError) as exc:
-            return web.json_response(
-                {
-                    "ok": False,
-                    "error": _friendly_project_error(exc, requested_root),
-                    "detail": str(exc),
-                    "code": "invalid_code_configuration",
-                },
-                status=400,
-            )
-        conv = forge_code_store.new_conversation(
-            project_root,
-            title=title or None,
-            source_evolve_item=source or None,
-        )
-        report = settings.capability_report()
-        forge_code_projects.bind_conversation(
-            _root(),
-            conv["id"],
-            project_root,
-            settings=report,
-            allow_without_history=(history_choice == "without"),
-        )
-        enriched = dict(conv)
-        enriched["project_root"] = str(project_root)
-        enriched["settings"] = report
-        return web.json_response({"ok": True, "conversation": enriched})
-
-    async def conversation_rename(request: web.Request) -> web.Response:
-        require_api_access(request)
-        cid = request.match_info.get("cid", "")
-        try:
-            body = await request.json()
-        except Exception:  # noqa: BLE001 - missing/invalid body -> treat as empty
-            body = {}
-        title = str((body or {}).get("title") or "").strip()
-        if not title:
-            return web.json_response({"ok": False, "error": "empty title"}, status=400)
-        try:
-            project_root = _project_for_conversation(cid)
-        except forge_code_projects.ForgeCodeProjectError as exc:
-            return web.json_response({"ok": False, "error": str(exc), "code": "project_unavailable"}, status=409)
-        conv = forge_code_store.rename_conversation(project_root, cid, title)
-        if conv is None:
-            return web.json_response({"ok": False, "error": "not found"}, status=404)
-        return web.json_response({"ok": True, "conversation": conv})
-
-    async def conversation_delete(request: web.Request) -> web.Response:
-        require_api_access(request)
-        cid = request.match_info.get("cid", "")
-        try:
-            project_root = _project_for_conversation(cid)
-        except forge_code_projects.ForgeCodeProjectError as exc:
-            return web.json_response({"ok": False, "error": str(exc), "code": "project_unavailable"}, status=409)
-        removed = forge_code_store.delete_conversation(project_root, cid)
-        if not removed:
-            return web.json_response({"ok": False, "error": "not found"}, status=404)
-        forge_code_projects.forget_conversation(_root(), cid)
-        return web.json_response({"ok": True, "deleted": True, "id": cid})
-
-    async def conversation_tree(request: web.Request) -> web.Response:
-        require_api_access(request)
-        cid = request.match_info.get("cid", "")
-        try:
-            project_root, conv = _load_conversation(cid)
-            if conv is None:
-                return web.json_response({"ok": False, "error": "not found"}, status=404)
-            tree = forge_code_tree.list_project_tree(
-                project_root,
-                request.query.get("path", ""),
-                limit=int(request.query.get("limit", "250")),
-            )
-        except (forge_code_projects.ForgeCodeProjectError, forge_code_tree.ForgeCodeTreeError, ValueError) as exc:
-            return web.json_response({"ok": False, "error": str(exc), "code": "invalid_tree_path"}, status=400)
-        return web.json_response({"ok": True, **tree})
-
-    async def conversation_file(request: web.Request) -> web.Response:
-        require_api_access(request)
-        cid = request.match_info.get("cid", "")
-        try:
-            project_root, conv = _load_conversation(cid)
-            if conv is None:
-                return web.json_response({"ok": False, "error": "not found"}, status=404)
-            result = forge_code_tree.read_project_file(project_root, request.query.get("path", ""))
-        except (forge_code_projects.ForgeCodeProjectError, forge_code_tree.ForgeCodeTreeError) as exc:
-            return web.json_response({"ok": False, "error": str(exc), "code": "invalid_file_path"}, status=400)
-        return web.json_response({"ok": True, **result})
 
     async def conversation_preview(request: web.Request) -> web.Response:
         """An isolated loopback origin that can actually SERVE the project.
@@ -1331,361 +944,60 @@ def build_evolve_agent_handlers(
             return web.json_response({"ok": False, "error": str(exc)}, status=503)
         return web.json_response({"ok": True, "url": url, "path": tail})
 
-    async def changes(request: web.Request) -> web.Response:
-        require_api_access(request)
-        # SCOPE to the active conversation's OWN build output, not the whole dirty
-        # tree. The set of files this run wrote is recorded per agent turn
-        # (changed_files); we intersect it with what git STILL reports as dirty so
-        # a file that was reverted/committed drops out -- the diffs stay REAL, just
-        # narrowed to this run's set. With no conversation context we fall back to
-        # the full dirty tree (prior behavior) rather than show nothing.
-        cid = request.query.get("cid") or app.get(APP_EVOLVE_AGENT_CONVO) or ""
-        try:
-            root = _project_for_conversation(str(cid)) if cid else Path(app.get(APP_EVOLVE_AGENT_PROJECT) or _root())
-        except forge_code_projects.ForgeCodeProjectError as exc:
-            return web.json_response({"ok": False, "error": str(exc), "code": "project_unavailable"}, status=409)
-        conv = forge_code_store.load_conversation(root, str(cid)) if cid else None
-        scoped = _conversation_changed_files(conv)
-        try:
-            dirty = forge_code_git.changed_files(root)
-        except forge_code_git.ForgeCodeGitError as exc:
-            return git_status_unavailable_response(exc)
-        if scoped is not None:
-            files = [f for f in dirty if f in scoped]
-        else:
-            files = dirty
-        try:
-            out = forge_code_git.change_evidence(root, files)
-        except forge_code_git.ForgeCodeGitError as exc:
-            return git_status_unavailable_response(exc)
-        return web.json_response({"ok": True, "changed": out})
-
-    async def revert(request: web.Request) -> web.Response:
-        require_api_access(request)
-        try:
-            body = await request.json()
-        except Exception:  # noqa: BLE001 - missing/invalid body -> treat as empty
-            body = {}
-        file = str((body or {}).get("file") or "").strip()
-        if not file:
-            return web.json_response({"ok": False, "error": "no file"}, status=400)
-        cid = str((body or {}).get("conversation_id") or app.get(APP_EVOLVE_AGENT_CONVO) or "")
-        if not cid:
-            return web.json_response(
-                {"ok": False, "error": "conversation_id is required", "code": "conversation_required"}, status=400
-            )
-        approval_id = str((body or {}).get("approval_id") or "").strip()
-        request_id = _request_id(body if isinstance(body, dict) else {}, fallback=approval_id)
-        scope = {"conversation_id": cid, "file": file.replace("\\", "/"), "approval_id": approval_id}
-        replay = _action_receipt(_root(), "revert", request_id)
-        if replay is not None:
-            if replay.get("scope") != scope:
-                return web.json_response(
-                    {"ok": False, "error": "request_id belongs to another revert", "code": "idempotency_conflict"},
-                    status=409,
-                )
-            return web.json_response({**(replay.get("result") or {}), "replayed": True})
-        try:
-            root, conversation = _load_conversation(cid)
-        except forge_code_projects.ForgeCodeProjectError as exc:
-            return web.json_response({"ok": False, "error": str(exc), "code": "project_unavailable"}, status=409)
-        if conversation is None:
-            return web.json_response({"ok": False, "error": "not found", "code": "conversation_not_found"}, status=404)
-        metadata = forge_code_projects.conversation_metadata(_root(), cid)
-        approvals = app[APP_EVOLVE_AGENT_APPROVALS]
-        approval = approvals.get(approval_id)
-        if isinstance(approval, dict) and approval.get("state") == "consumed" and approval.get("operation") == scope:
-            return web.json_response({**(approval.get("result") or {}), "replayed": True})
-        file, error, status_code = _authorize_conversation_revert(
-            root=root,
-            conversation_id=cid,
-            file=file,
-            conversation=conversation,
-            metadata=metadata,
-            approvals=approvals,
-            approval_id=approval_id,
-        )
-        if error is not None:
-            return web.json_response(error, status=status_code)
-        result = None
-        try:
-            result = forge_code_git.revert_file(root, file)
-            scope["file"] = file
-            approval = approvals.get(approval_id)
-            if isinstance(approval, dict):
-                approval.update({"operation": scope, "result": result})
-            _save_action_receipt(_root(), "revert", request_id, {"scope": scope, "result": result})
-            return web.json_response(result)
-        finally:
-            approval = approvals.get(approval_id)
-            _finish_approval_execution(approval, succeeded=isinstance(result, dict) and result.get("ok") is True)
-
-    async def keep(request: web.Request) -> web.Response:
-        require_api_access(request)
-        try:
-            body = await request.json()
-        except Exception:  # noqa: BLE001 - missing/invalid body -> treat as empty
-            body = {}
-        file = str((body or {}).get("file") or "").strip()
-        if not file:
-            return web.json_response({"ok": False, "error": "no file"}, status=400)
-        # Keep is a deliberate no-op on disk: the change already lives in the
-        # working tree, so "keep" just acknowledges it and leaves it untouched.
-        cid = str((body or {}).get("conversation_id") or app.get(APP_EVOLVE_AGENT_CONVO) or "")
-        try:
-            root = _project_for_conversation(cid) if cid else Path(app.get(APP_EVOLVE_AGENT_PROJECT) or _root())
-        except forge_code_projects.ForgeCodeProjectError as exc:
-            return web.json_response({"ok": False, "error": str(exc), "code": "project_unavailable"}, status=409)
-        return web.json_response({"ok": True, "kept": True, "file": file, "project_root": str(root)})
-
-    def _artifact_capability(cid: str, bucket: int | None = None) -> str:
-        current_bucket = int(time.time() // artifact_capability_ttl_seconds) if bucket is None else bucket
-        payload = f"{cid}:{current_bucket}".encode()
-        return hmac.new(artifact_capability_secret, payload, hashlib.sha256).hexdigest()
-
-    def _valid_artifact_capability(cid: str, capability: str) -> bool:
-        current_bucket = int(time.time() // artifact_capability_ttl_seconds)
-        return any(
-            hmac.compare_digest(capability, _artifact_capability(cid, bucket))
-            for bucket in (current_bucket, current_bucket - 1)
-        )
-
-    def _artifact_scope(cid: str, tail: str) -> tuple[Path, Path, set[str]]:
-        try:
-            root = _project_for_conversation(cid)
-        except forge_code_projects.ForgeCodeProjectError as exc:
-            raise web.HTTPNotFound(text=str(exc)) from exc
-        tail = str(tail or "").strip()
-        if not tail:
-            raise web.HTTPNotFound(text="no artifact path")
-        rel = tail.replace("\\", "/")
-        allowed = conversation_artifact_allowlist(root, forge_code_store.load_conversation(root, str(cid)))
-        if rel not in allowed:
-            raise web.HTTPNotFound(text="not an artifact of this build")
-        root_resolved = root.resolve()
-        target = (root_resolved / rel).resolve()
-        if not target.is_file() or not target.is_relative_to(root_resolved):
-            raise web.HTTPNotFound(text="artifact file not found")
-        return root_resolved, target, allowed
-
-    def _artifact_file_response(cid: str, tail: str) -> web.FileResponse:
-        _root_resolved, target, _allowed = _artifact_scope(cid, tail)
-        response = web.FileResponse(target)
-        # 'unsafe-eval' for the same reason the deliverable preview grants it:
-        # the browser smoke that CERTIFIES these pages already allows it, so
-        # without it this route is stricter than the check the page passed, and
-        # a verified build breaks the instant the owner opens it. A calculator
-        # evaluating a typed expression is the ordinary case, and it failed here
-        # with `EvalError` while verification reported `completed`.
-        #
-        # 'unsafe-inline' is already granted, so a page can run any JavaScript
-        # it likes by writing it out; refusing to evaluate a STRING removes no
-        # capability. What actually contains the page is untouched and is
-        # stricter here than in the preview: default-src 'none', connect-src
-        # 'none' (no network at all), form-action 'none', base-uri 'none'.
-        #
-        # connect-src 'none' STAYS even though the standalone preview tab now
-        # allows outbound https/wss (deliverable_aiohttp._apply_headers,
-        # measured w2-code-network / w2-code-impossible). This response never
-        # serves that tab: HTML routed through `artifact` 302s to the preview
-        # service, so what reaches here is downloads, non-HTML assets, and the
-        # capability route's decorative frames beside the chat -- surfaces
-        # where a silent network block is announced by the visible notice in
-        # unified_code_results.js, not fixed by widening a boundary nothing
-        # interactive runs on.
-        response.headers["Content-Security-Policy"] = (
-            "sandbox allow-scripts; default-src 'none'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; "
-            "style-src 'self' 'unsafe-inline' data:; img-src 'self' data:; font-src 'self' data:; "
-            "media-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'"
-        )
-        response.headers["Cross-Origin-Resource-Policy"] = "same-site"
-        response.headers["Referrer-Policy"] = "no-referrer"
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        return response
-
-    async def artifact(request: web.Request) -> web.StreamResponse:
-        """Enter an isolated preview origin or download one verified artifact."""
-        require_api_access(request)
-        cid = str(request.match_info.get("cid", "") or "")
-        tail = str(request.match_info.get("tail", "") or "")
-        if Path(tail).suffix.lower() not in {".html", ".htm"}:
-            return _artifact_file_response(cid, tail)
-        root, _target, allowed = _artifact_scope(cid, tail)
-        preview_service = app.get(APP_DELIVERABLE_PREVIEW_SERVICE)
-        if preview_service is None:
-            raise web.HTTPServiceUnavailable(text="Code preview service is not ready")
-        try:
-            location = await preview_service.preview_directory_url(
-                subject_id=f"code:{cid}",
-                workspace=root,
-                tail=tail,
-                allowed_files=allowed,
-            )
-        except (FileNotFoundError, RuntimeError):
-            raise web.HTTPServiceUnavailable(text="Code preview service is not ready") from None
-        raise web.HTTPFound(
-            location=location,
-            headers={"Cache-Control": "private, no-store, max-age=0", "Pragma": "no-cache", "Expires": "0"},
-        )
-
-    async def artifact_content(request: web.Request) -> web.StreamResponse:
-        """Serve one artifact only when its expiring conversation capability is valid."""
-        require_api_access(request)
-        cid = str(request.match_info.get("cid", "") or "")
-        capability = str(request.match_info.get("capability", "") or "")
-        if not _valid_artifact_capability(cid, capability):
-            raise web.HTTPNotFound(text="preview capability expired or invalid")
-        response = _artifact_file_response(cid, str(request.match_info.get("tail", "") or ""))
-        response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
-        response.headers["Cache-Control"] = "private, no-store, max-age=0"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
-        return response
-
-    async def checkpoint(request: web.Request) -> web.Response:
-        """Codex-parity checkpoint: commit the conversation's kept changes on a
-        new thomas-code/ branch; include a PR-ready remote URL when one exists."""
-        require_api_access(request)
-        if _running():
-            return web.json_response({"ok": False, "error": "wait for the run to finish first"}, status=409)
-        try:
-            body = await request.json()
-        except Exception:  # noqa: BLE001 - missing/invalid body -> treat as empty
-            body = {}
-        cid = str((body or {}).get("conversation_id") or "").strip()
-        message = str((body or {}).get("message") or "").strip() or "Thomas Code checkpoint"
-        if not cid:
-            return web.json_response({"ok": False, "error": "conversation_id required"}, status=400)
-        try:
-            project_root = _project_for_conversation(cid)
-        except forge_code_projects.ForgeCodeProjectError as exc:
-            return web.json_response({"ok": False, "error": str(exc), "code": "project_unavailable"}, status=409)
-        # The user's work only — never Thomas's internal conversation metadata.
-        files = [f for f in forge_code_git.changed_files(project_root) if not f.startswith(".thomas/")]
-        try:
-            result = forge_code_git.checkpoint(project_root, files, message)
-        except forge_code_git.ForgeCodeGitError as exc:
-            return web.json_response({"ok": False, "error": str(exc)}, status=409)
-        return web.json_response({"ok": True, **result, "files": files})
-
-    async def playtest_stream(request: web.Request) -> web.StreamResponse:
-        """Stream Thomas actually playtesting a built game (SSE).
-
-        A server-side headless browser plays the game while a vision model
-        decides each move; the events (what Thomas sees, plays, notes, and
-        concludes) stream to the viewer. Honest failure: if the browser or the
-        model is unavailable, that arrives as an error event, not silence.
-        """
-        require_api_access(request)
-        import asyncio as _asyncio
-        import contextlib as _contextlib
-        import json as _json
-
-        from thomas.core.config import load_config
-        from thomas.core.llm import LLMError
-        from thomas.core.llm_client import LLMClient
-        from thomas.server.app_keys import APP_SECRETS
-        from thomas.server.game_playtest import CdpError, PlaytestEvent, playtest_game
-        from thomas.server.openai_codex_oauth import ensure_openai_codex_access_token
-
-        # Every fault a playtest can actually hit, named. Anything outside this
-        # set is a bug and must surface, not be swallowed into an event.
-        _PLAYTEST_FAULTS = (CdpError, LLMError, OSError, RuntimeError, ValueError, TypeError, KeyError)
-
-        cid = str(request.query.get("conversation_id") or "").strip()
-        rel = str(request.query.get("file") or "index.html").strip()
-        if not cid or ".." in rel.replace("\\", "/").split("/"):
-            raise web.HTTPBadRequest(text="conversation_id and a safe file are required")
-        try:
-            project_root = _project_for_conversation(cid)
-        except forge_code_projects.ForgeCodeProjectError as exc:
-            raise web.HTTPConflict(text=str(exc)) from exc
-        game_path = (project_root / rel).resolve()
-        if not (game_path == project_root or project_root in game_path.parents) or not game_path.is_file():
-            raise web.HTTPNotFound(text="game file not found")
-
-        response = web.StreamResponse(
-            headers={"Content-Type": "text/event-stream", "Cache-Control": "no-store", "X-Accel-Buffering": "no"}
-        )
-        await response.prepare(request)
-
-        queue: _asyncio.Queue[PlaytestEvent | None] = _asyncio.Queue()
-
-        async def sink(event: PlaytestEvent) -> None:
-            await queue.put(event)
-
-        async def drive() -> None:
-            llm = None
-            try:
-                secret_store = app.get(APP_SECRETS)
-                token = await ensure_openai_codex_access_token("openai_codex", secret_store=secret_store) if secret_store else ""
-                if not token:
-                    await queue.put(PlaytestEvent("error", "Thomas needs the ChatGPT login connected to playtest — reconnect it in settings."))
-                    return
-                config = load_config(project_root / "thomas.toml")
-                model_cfg = config.get_model("openai_codex")
-                model_cfg.api_key = token
-                # Per-move "what's my next move" needs speed, not deep
-                # reasoning — low effort roughly halves the decision latency
-                # (measured 5.6s -> ~2.7s). The final report is a separate call
-                # that keeps the model's default effort.
-                model_cfg.reasoning_effort = "low"
-                llm = LLMClient(model_cfg, fallback_configs=[], failover_enabled=False)
-                title = game_path.stem.replace("_", " ").replace("-", " ").title()
-                await playtest_game(game_url=game_path.as_uri(), llm=llm, game_title=title, on_event=sink, max_moves=10)
-            except _PLAYTEST_FAULTS as exc:
-                # Named faults only: the browser refusing to drive (CdpError),
-                # the model failing (LLMError), the login/config being wrong,
-                # or the OS denying the browser. CancelledError is deliberately
-                # NOT caught — a cancelled stream must stay cancelled.
-                log.info("Playtest stopped: %s", exc)
-                await queue.put(PlaytestEvent("error", f"The playtest stopped: {exc}"))
-            finally:
-                if llm is not None:
-                    with _contextlib.suppress(OSError, RuntimeError):
-                        await llm.close()
-                await queue.put(None)
-
-        task = _asyncio.create_task(drive())
-        try:
-            while True:
-                event = await queue.get()
-                if event is None:
-                    await response.write(b"data: {\"kind\": \"end\"}\n\n")
-                    break
-                payload = _json.dumps({"kind": event.kind, "text": event.text, "data": event.data}, ensure_ascii=False)
-                await response.write(f"data: {payload}\n\n".encode())
-        finally:
-            task.cancel()
-            with _contextlib.suppress(Exception):
-                await task
-        return response
-
-    return {
+    # The siblings are built with the SAME resolvers this module uses, passed in
+    # rather than re-derived, so every Code route still agrees about where a
+    # conversation lives and whether a run is in flight. Their handlers join one
+    # map because registration looks routes up by name in a single dict.
+    handlers: dict[str, Any] = {
         "send": send,
         "approve": approve,
         "steer": steer,
-        "stream": stream,
-        "playtest_stream": playtest_stream,
-        "status": status,
         "stop": stop,
-        "checkpoint": checkpoint,
-        "deliverables_list": deliverables_list,
-        "conversations_list": conversations_list,
-        "conversation_get": conversation_get,
-        "conversation_new": conversation_new,
-        "conversation_rename": conversation_rename,
-        "conversation_delete": conversation_delete,
-        "conversation_tree": conversation_tree,
-        "conversation_file": conversation_file,
         "conversation_preview": conversation_preview,
-        "changes": changes,
-        "revert": revert,
-        "keep": keep,
-        "artifact": artifact,
-        "artifact_content": artifact_content,
     }
+    handlers.update(
+        build_evolve_agent_watch_handlers(
+            app,
+            require_api_access=require_api_access,
+            catalog_root=_root,
+            running=_running,
+        )
+    )
+    handlers.update(
+        build_evolve_agent_conversation_handlers(
+            require_api_access=require_api_access,
+            catalog_root=_root,
+            load_conversation=_load_conversation,
+            project_for_conversation=_project_for_conversation,
+            chosen_project=_chosen_project,
+            new_task_project_root=_new_task_project_root,
+        )
+    )
+    handlers.update(
+        build_evolve_agent_workspace_handlers(
+            app,
+            require_api_access=require_api_access,
+            catalog_root=_root,
+            load_conversation=_load_conversation,
+            project_for_conversation=_project_for_conversation,
+            running=_running,
+        )
+    )
+    handlers.update(
+        build_evolve_agent_artifact_handlers(
+            app,
+            require_api_access=require_api_access,
+            project_for_conversation=_project_for_conversation,
+        )
+    )
+    handlers.update(
+        build_evolve_agent_playtest_handlers(
+            app,
+            require_api_access=require_api_access,
+            project_for_conversation=_project_for_conversation,
+        )
+    )
+    return handlers
 
 
 

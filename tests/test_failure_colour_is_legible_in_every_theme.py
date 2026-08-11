@@ -23,7 +23,16 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-CHAT_HTML = Path(__file__).resolve().parents[1] / "thomas" / "server" / "web" / "chat.html"
+WEB = Path(__file__).resolve().parents[1] / "thomas" / "server" / "web"
+# The THEMES object moved out of chat.html into a sibling module when the theme
+# data was pulled from the inline script (2026-08-06 design unification).
+# chat.html now only reads it back: `const THEMES = window.ThomasChatThemes.THEMES`.
+# Both files are read, so the guard survives the value moving back or being
+# split across the two -- a parser pointed at one file alone found nothing and
+# happily reported no unreadable themes.
+CHAT_HTML = WEB / "chat.html"
+CHAT_THEMES_JS = WEB / "js" / "chat_themes.js"
+THEME_SOURCES = (CHAT_HTML, CHAT_THEMES_JS)
 
 # 4.5:1 is the AA floor for body text. The verdict text and the run summary use
 # this colour, not just the icon, so the stricter figure is the right one.
@@ -45,9 +54,9 @@ def _ratio(a: str, b: str) -> float:
 
 
 def _themes() -> dict[str, dict[str, str]]:
-    """Each theme's token map, read from the THEMES object in chat.html."""
+    """Each theme's token map, read from the THEMES object wherever it lives."""
 
-    text = CHAT_HTML.read_text(encoding="utf-8")
+    text = "\n".join(path.read_text(encoding="utf-8") for path in THEME_SOURCES)
     out: dict[str, dict[str, str]] = {}
     for match in re.finditer(r"^\s*(\w+): \{ name:.*?\n\s*vars: \{(.*?)\} \},", text, re.S | re.M):
         name, body = match.group(1), match.group(2)
@@ -57,7 +66,7 @@ def _themes() -> dict[str, dict[str, str]]:
 
 def test_every_theme_defines_a_failure_colour() -> None:
     themes = _themes()
-    assert themes, "no themes could be read from chat.html"
+    assert themes, "no themes could be read from " + ", ".join(p.name for p in THEME_SOURCES)
     assert len(themes) >= 5, f"expected the five worlds, found {sorted(themes)}"
 
     for token in ("--c-danger", "--c-warn"):

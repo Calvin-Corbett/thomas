@@ -125,18 +125,18 @@ def _configured_default_model() -> str:
         from thomas.core.model_resolution import resolve_effective_model
 
         cfg = load_config()
-        try:
-            from thomas.preferences.store import get_db_path
-
-            db_path: str | None = get_db_path()
-        except _resolution_errors:
-            log.warning("preference store unavailable while resolving the default Code model", exc_info=True)
-            db_path = None
         profile, model_id = resolve_effective_model(
             cfg,
             env_profile=str(os.environ.get("THOMAS_DEFAULT_MODEL", "")).strip(),
             user_id="default",
-            db_path=db_path,
+            # db_path is left unset ON PURPOSE. resolve_effective_model already
+            # falls back to preferences_store.get_db_path() itself
+            # (`db_path or preferences_store.get_db_path()`), so reading the path
+            # here only bought forge an import of thomas.preferences -- a
+            # dependency the architecture does not allow forge to have -- in
+            # exchange for the identical value. Storage that cannot be read still
+            # degrades to "no default" and the honest refusal, as documented above.
+            db_path=None,
         )
         if str(model_id or "").strip():
             return str(model_id).strip()

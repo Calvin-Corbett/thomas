@@ -64,6 +64,96 @@ Versioning: Semantic Versioning.
   they were meant to be. Identical at runtime, but the raw bytes made grep,
   ripgrep and diff classify the file as binary and refuse to show its contents.
 
+### Added (Thomas can be installed as an app in his own right)
+
+- `thomas.webmanifest`, `thomas-icon.svg` and a maskable variant, linked from
+  `chat.html`. Without a manifest, `msedge --app=` runs under EDGE's app
+  identity, so Windows groups the window with Edge and pins Edge's icon --
+  which is what the owner saw on his taskbar. With one, Thomas installs as his
+  own app: own name, own icon, own taskbar slot, `display: standalone` so there
+  is no tab strip or address bar. The maskable icon is full-bleed with the eyes
+  inside the central safe zone, because the OS applies its own corner radius and
+  a pre-rounded block would be clipped twice.
+
+### Fixed (Code mode reported a JSON syntax error instead of the real fault)
+
+- `Code history could not be refreshed: Unexpected non-whitespace character
+  after JSON at position 3` was the entire Code API being unregistered.
+  aiohttp answers an unregistered route with the plain text `404: Not Found`,
+  and `JSON.parse` on that reads `404` as a number then chokes on the colon --
+  at position 3, every time. The message named the parser instead of the
+  problem. `refresh()` now reads the body as text first and, on a 404, says the
+  Code API did not register and that restarting the server reloads its routes.
+  The underlying registration bug is fixed separately in this release; a server
+  started before that fix still needs a restart.
+
+### Fixed (the context trimmer misreported how much it threw away)
+
+- **The model was told it had lost 2 messages when it had lost 23**, and the
+  sentence recording the real number was deleted in the same step.
+  `_build_messages` trims twice -- once for the route's soft history cap, then
+  again for the model's context window -- and the second pass treated the first
+  pass's `[22 earlier messages trimmed to fit context window]` marker as
+  ordinary middle content. It dropped that marker and wrote a fresh one counting
+  only the messages IT had removed. `trim_messages_to_budget` now absorbs a
+  dropped marker's recorded count instead of counting it as a single lost
+  message, so the number stays true whichever order the stages run in. The
+  returned message list is unchanged in length; only the number is corrected.
+  Same shape as the compaction bug fixed in `1d8a26b8`, one layer further down.
+
+### Fixed (guards that had gone blind after their subject moved)
+
+- `test_build_identity` read `chat.html` for the build badge's style rules, which
+  `248c0d93` moved verbatim into `css/chat_shell.css`; it now reads both, and
+  parses 6 real `#tc-build-badge` rules instead of none.
+- `test_ci_runner` pinned five run-report sections after `e40e11e2` added a
+  sixth (`outcome`, which lets the verdict card tell an answered question from a
+  build). That commit updated the identical pinned tuple in `test_run_report.py`
+  and missed this copy. Added the section and kept the check as equality, so a
+  seventh undocumented section still fails.
+- Two escaping guards on the run report were reading `evolve_agent_routes.py`
+  for a Content-Security-Policy that moved to `evolve_agent_artifact_routes.py`
+  during the size split. The header is unchanged and still enforced
+  (`default-src 'none'`, `connect-src 'none'`, sandboxed); the tests were
+  matching an empty file and would have passed while protecting nothing.
+
+### Fixed (the ChatGPT reconnect prompt could never appear)
+
+- **The overlay that asks you to reconnect ChatGPT had never once been shown.**
+  `js/chat_connect_prompt.js` was extracted from `chat.html` with the note that
+  "page state comes in through the factory options so the module owns no globals
+  of its own" -- but one bare global came with it. `shell.appendChild(overlay)`
+  referred to a `const` declared inside `chat.html`'s IIFE and invisible from the
+  module, so every attempt to show the prompt threw `ReferenceError`.
+- Nothing reported it, because the throw happened inside a `try` written to
+  guard the *status lookup*, whose own comment reads "a status lookup failure
+  must not falsely tell a signed-in user to reconnect". A fault in our own
+  rendering was therefore filed as a network problem and swallowed. The try now
+  wraps the fetch alone; the container arrives through the factory like the rest
+  of the page state, with a `document.body` fallback so a missed wiring degrades
+  instead of disappearing.
+- Verified in a live browser rather than by reading the diff: with the status
+  endpoint stubbed to `needs_login`, the call now returns true, the overlay is in
+  the DOM parented to `#tc-shell`, computes `display: flex`, and carries its
+  Connect button. Before the fix that path could not complete.
+
+### Removed (two CDN loaders nothing called)
+
+- `moduleWorkbenchLoadGridStack` and `moduleWorkbenchLoadMonaco` are gone from
+  `js/runtime/027_module_system_command_center_03.js`, taking four third-party
+  CDN URLs with them (`gridstack@12.4.2` css + js, `monaco-editor@0.55.1`
+  loader + `vs` base path). Neither function had a single caller: the GridStack
+  App Builder was removed earlier, and the dev editor uses Ace, keeping only a
+  leftover `data-dev-monaco` class name. Dead code that loads executable
+  third-party script into the app origin is pure liability -- the first future
+  caller would have silently reintroduced a live CDN dependency.
+- Still outstanding, and the reason this is only a partial fix: `index.html` and
+  `companion.html` load `unpkg.com/@phosphor-icons/web` with **no version at
+  all**, and `index.html` loads `marked@12`, a floating major range -- both
+  without an `integrity` attribute, on a page the chat shell embeds
+  same-origin. Vendoring those locally would close the supply-chain hole and
+  make the desktop app work offline.
+
 ### Changed (architecture: forge stops reaching into preferences)
 
 - `thomas/forge/anvil/forge_code_settings.py` no longer imports

@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
 from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
+from thomas.marketplace.observability.task_ledger import ENV_TASK_LEDGER_DB_PATH
 from thomas.server.app import create_app
 from thomas.server.app_keys import APP_TASK_LEDGER
 
@@ -63,9 +66,26 @@ class TestTaskLedgerV2PublicContract(AioHTTPTestCase):
     def setUp(self) -> None:
         super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        # The temp memory root below does NOT isolate the ledger on its own.
+        # `resolve_task_ledger_db_path` treats `config.memory.root_path` as the
+        # *default* root and lets THOMAS_TASK_LEDGER_DB_PATH outrank it, and
+        # `load_config()` writes that variable straight into os.environ and
+        # leaves it there. So as soon as any earlier test in the process loads a
+        # config, every app built here quietly shares ONE database -- the real
+        # user data dir's -- and these fixed session ids carry the turns of every
+        # previous run. That is why the history assertions saw ten rows instead
+        # of two when the file ran alongside the rest of the suite, and passed
+        # when it ran alone. Point the documented override at this test's own
+        # directory so the ledger it reads is the one it just wrote.
+        self._prior_ledger_db = os.environ.get(ENV_TASK_LEDGER_DB_PATH)
+        os.environ[ENV_TASK_LEDGER_DB_PATH] = str(Path(self._tmpdir.name) / ".thomas" / "task_ledger.sqlite3")
 
     def tearDown(self) -> None:
         try:
+            if self._prior_ledger_db is None:
+                os.environ.pop(ENV_TASK_LEDGER_DB_PATH, None)
+            else:
+                os.environ[ENV_TASK_LEDGER_DB_PATH] = self._prior_ledger_db
             self._tmpdir.cleanup()
         finally:
             super().tearDown()

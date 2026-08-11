@@ -476,7 +476,14 @@ def test_code_history_replays_persisted_run_activity() -> None:
     assert "JSON.parse(line)" in text
     assert "parsed && parsed.fc" in text
     assert "const events = transcriptEvents(turn)" in text
-    assert "technicalActivityHtml(technicalEvents, true, turn.ok === true)" in text
+    # OWNER REDLINE 2026-08-10: a saved turn no longer renders its evidence as
+    # one collapsed block after the narrative. Receipts are interleaved with
+    # the sentences they back up, and the run-outcome framing is kept by the
+    # recovered-attempt note. The property this pins -- a persisted turn
+    # replays its recorded activity, with the ok/failed distinction intact --
+    # is unchanged, so it is asserted against the current renderers.
+    assert "interleavedActivityHtml(activityEvents, true)" in text
+    assert "technicalSummary(technicalEvents, turn.ok === true)" in text
     assert "tc-code-saved-activity" in text
     assert 'data-saved="true"' in text
 

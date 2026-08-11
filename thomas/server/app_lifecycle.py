@@ -17,6 +17,7 @@ from typing import Any
 
 from thomas.core.config import AppConfig
 from thomas.server.app_keys import (
+    APP_BOOT_DURATION,
     APP_CRASH_COUNT,
     APP_DELIVERABLE_PREVIEW_SERVICE,
     APP_DIAGNOSTICS,
@@ -108,7 +109,9 @@ async def serve_async(
 
     # ── Startup summary ──
     diag = app.get(APP_DIAGNOSTICS, {})
-    boot_dur = app.get("APP_BOOT_DURATION", 0)
+    # The plain string "APP_BOOT_DURATION" never matched the web.AppKey the value
+    # is stored under, so this always fell back to 0 and every boot claimed 0.0s.
+    boot_dur = app.get(APP_BOOT_DURATION, 0.0)
     ok_features = [k for k, v in diag.items() if v]
     bad_features = [k for k, v in diag.items() if not v]
     print(f"[thomas] Server booted in {boot_dur:.1f}s")

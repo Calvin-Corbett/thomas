@@ -43,23 +43,43 @@ class TestEffortDial(unittest.TestCase):
         # bad autonomy value falls back to the default tier behavior.
         self.assertEqual(te.effective_effort("diligent", "oops"), "optimal")
 
-    def test_estimate_passes_monotonic(self):
-        _lo_b, hi_b = te.estimate_passes("brisk", 3)
-        _lo_d, hi_d = te.estimate_passes("diligent", 3)
-        _lo_e, hi_e = te.estimate_passes("exhaustive", 3)
-        self.assertLess(hi_b, hi_d)
-        self.assertLess(hi_d, hi_e)
+    def test_estimate_passes_is_the_same_runaway_guard_at_every_effort(self):
+        """Effort no longer rations passes, so the estimate cannot be monotonic.
+
+        This test asserted 3 < 15 < 32 and was named ``..._monotonic`` until cd0203a7
+        ("no pass limits -- the model stops when it is done, not when a counter says
+        so") deleted the per-level rations. The same commit met this exact shape in
+        test_agent_worker_parity and answered it by turning ``assertLess`` into
+        ``assertEqual``; that is what happens here. Equality is the stronger guard now:
+        a ladder of any size reappearing between the three efforts fails it.
+        """
+        lo_b, hi_b = te.estimate_passes("brisk", 3)
+        lo_d, hi_d = te.estimate_passes("diligent", 3)
+        lo_e, hi_e = te.estimate_passes("exhaustive", 3)
+        self.assertEqual((lo_b, hi_b), (lo_d, hi_d))
+        self.assertEqual((lo_d, hi_d), (lo_e, hi_e))
+        # The one number left is the runaway guard, deliberately far above any real
+        # task. token_economy.py's own comment says to lower reasoning effort instead.
+        self.assertEqual(hi_e, 400)
 
     def test_compute_max_passes_tolerates_missing_config_value(self):
+        # 10 / 25 / 3 were the old per-level rations. cd0203a7 removed the rationing
+        # and left one 400-pass runaway guard at every level, so a missing or
+        # unparseable config value now lands on the guard instead of on a small
+        # number. What this test is actually for is unchanged and still asserted
+        # below: bad config must be tolerated, not raised on.
         self.assertEqual(te.coerce_base_iterations(None), 10)
         self.assertEqual(te.coerce_base_iterations(0), 10)
-        self.assertEqual(te.compute_max_passes("optimal", None), 10)
-        self.assertEqual(te.compute_max_passes("max", None), 25)
-        self.assertEqual(te.compute_max_passes("cheap", "not-a-number"), 3)
+        self.assertEqual(te.compute_max_passes("optimal", None), 400)
+        self.assertEqual(te.compute_max_passes("max", None), 400)
+        self.assertEqual(te.compute_max_passes("cheap", "not-a-number"), 400)
 
     def test_runtime_profile_tolerates_missing_config_value(self):
+        # 30 was base_iterations x3 under the old "max" ration. Since cd0203a7 the
+        # economy pass count is the 400 runaway guard, and L4's extended-iterations
+        # boost only ever raises the count, so the profile resolves to the guard.
         profile = resolve_runtime_profile(autonomy_level=4, economy_level="max", base_iterations=None)
-        self.assertEqual(profile.effective_max_iterations, 30)
+        self.assertEqual(profile.effective_max_iterations, 400)
 
     def test_cost_scales_with_team(self):
         _lo1, hi1 = te.estimate_token_cost("exhaustive", 3, team_size=1)

@@ -3,7 +3,13 @@
  * It left because that file was 1808 lines against a 1500-line ceiling, and this
  * is the one part of it with a boundary you can state in a sentence: everything
  * that turns a run's event stream into HTML, and nothing that talks to the
- * server or owns the run. Twelve names go in, eleven come back.
+ * server or owns the run. Twelve names go in, eleven came back.
+ *
+ * The 2026-08-10 pass added the two remaining pieces of transcript CHROME that
+ * had stayed behind: the empty state's starter cards (what the transcript shows
+ * with no turns in it) and the copy-reply action that belongs to the button
+ * turnHtml already stamps on every Thomas turn. Same boundary, same direction:
+ * markup and the clipboard, still no server and still no run.
  *
  * `codeResults` and `surface` arrive as accessors, not values, for the same
  * reason unified_code_mode.js reaches its own siblings that way -- captured once,
@@ -22,6 +28,8 @@
     // Code-Thomas wears the anvil — he builds (owner, 2026-08-10). Chat keeps
     // its own avatar; this badge is Code mode's only.
     const ANVIL_SVG = '<svg viewBox="0 0 256 256" aria-hidden="true"><path d="M240 60h-92a12 12 0 0 0 0 24h6.6c-4 24.5-22.8 44-47 48.6C82.9 137.4 64 121.4 64 96V84h12a12 12 0 0 0 0-24H24a12 12 0 0 0 0 24h16v12c0 34.6 24.7 58.5 56 63.4v10.2c0 11-4.7 21.4-13 28.6l-18.9 16.5A12 12 0 0 0 72 236h112a12 12 0 0 0 7.9-21.1L173 198.4a38.2 38.2 0 0 1-13-28.6v-10.6c37.5-6 66.2-35 70.7-71.2H240a12 12 0 0 0 0-24Z"/></svg>';
+
+    function _safe(value) { return typeof value === 'string' ? value.trim() : ''; }
 
     function eventLabel(event) {
       const type = String(event.type || event.fc || 'activity').replace(/_/g, ' ');
@@ -189,7 +197,7 @@
         const key = `${kind}\u0000${failed ? '1' : '0'}\u0000${heading}\u0000${label}`;
         const existing = byKey.get(key);
         if (existing) { existing.count += 1; return; }
-        const group = { kind, heading, label, failed, count: 1 };
+        const group = { kind, heading, label, failed, count: 1, name: _safe(event.name) };
         groups.push(group);
         byKey.set(key, group);
       });
@@ -261,15 +269,31 @@
         // expanding inline (the page scrolls; no box-in-a-box).
         const failed = eventFailed(event, kind);
         const heading = technicalHeading(event, kind);
-        const label = eventLabel(event);
-        const preview = label.split('\n')[0].trim().slice(0, 96);
+        // eventLabel is called directly rather than through a shared `label`
+        // const: raw tool output must be ESCAPED here, while prose below is
+        // rendered as inline markdown, and tests/test_the_run_report_escapes_
+        // what_thomas_wrote.py reads this branch on its own to confirm the two
+        // never swap. A shared const hides the escaper from that check.
+        const preview = eventLabel(event).split('\n')[0].trim().slice(0, 96);
         const times = Number(count) > 1 ? `<span class="tc-code-receipt-count">×${Number(count)}</span>` : '';
-        return `<details class="tc-code-receipt${failed ? ' is-error' : ''}" data-code-kind="${esc(kind)}"${saved ? ' data-saved="true"' : ''}><summary><i class="ph ${failed ? 'ph-warning' : 'ph-check-circle'}"></i><strong>${esc(heading)}</strong>${times}<span class="tc-code-receipt-preview">${esc(preview)}</span><i class="ph ph-caret-down tc-code-receipt-chev"></i></summary><pre>${esc(label)}</pre></details>`;
+        // The ROW speaks human ("Wrote a file"), because the raw tool id told
+        // the owner nothing. The tool that produced it is not thrown away:
+        // it rides the row as data + tooltip and heads the expanded body, so
+        // "which tool did this" stays answerable without cluttering the line.
+        const toolName = _safe(event.name);
+        const toolAttr = toolName ? ` data-code-tool="${esc(toolName)}" title="${esc(toolName)}"` : '';
+        const toolLine = toolName ? `<span class="tc-code-receipt-tool">${esc(toolName)}</span>` : '';
+        return `<details class="tc-code-receipt tc-code-technical${failed ? ' is-error' : ''}" data-code-kind="${esc(kind)}"${toolAttr}${saved ? ' data-saved="true"' : ''}><summary><i class="ph ${failed ? 'ph-warning' : 'ph-check-circle'}"></i><strong>${esc(heading)}</strong>${times}<span class="tc-code-receipt-preview">${esc(preview)}</span><i class="ph ph-caret-down tc-code-receipt-chev"></i></summary>${toolLine}<pre>${esc(eventLabel(event))}</pre></details>`;
       }
       const label = eventLabel(event);
       if (kind === 'say' || kind === 'final') {
-        // Thomas's own words ARE the feed — full text, no kind chip, no
-        // truncation. Everything else hangs off these sentences.
+        // Thomas's own words ARE the feed: no kind chip, full text, prominent.
+        // A note past the char cap still folds behind one disclosure so a
+        // single monster paragraph cannot swamp the run - normal speech is far
+        // under the cap and never folds.
+        if (label.length > MAX_PROGRESS_EVENT_CHARS) {
+          return `<div class="tc-code-say" data-code-kind="${esc(kind)}"${saved ? ' data-saved="true"' : ''}>${progressHtml(`${label.slice(0, 360).trimEnd()}…`)}<details class="tc-code-progress-full"><summary>Show full update</summary><span>${progressHtml(label)}</span></details></div>`;
+        }
         return `<div class="tc-code-say" data-code-kind="${esc(kind)}"${event.delta ? ' data-code-delta="true"' : ''}${saved ? ' data-saved="true"' : ''}>${progressHtml(label)}</div>`;
       }
       const content = label.length <= MAX_PROGRESS_EVENT_CHARS
@@ -290,7 +314,7 @@
       let cluster = [];
       const receiptKey = event => {
         const kind = eventType(event);
-        return `${technicalHeading(event, kind)} ${eventFailed(event, kind) ? 1 : 0} ${eventLabel(event).split('\n')[0].trim().slice(0, 96)}`;
+        return `${technicalHeading(event, kind)}\0${eventFailed(event, kind) ? 1 : 0}\0${eventLabel(event).split('\n')[0].trim().slice(0, 96)}`;
       };
       const flush = () => {
         if (!cluster.length) return;
@@ -425,7 +449,11 @@
       const groups = groupedTechnicalEvents(events);
       const rows = groups.map(group => {
         const count = group.count > 1 ? `<span class="tc-code-tech-count">×${group.count}</span>` : '';
-        return `<div class="tc-code-technical${group.failed ? ' is-error' : ''}" data-code-kind="${esc(group.kind)}"><i class="ph ${group.failed ? 'ph-warning' : 'ph-check-circle'}"></i><div><strong>${esc(group.heading)}${count}</strong><code>${esc(group.label)}</code></div></div>`;
+        // Human heading, tool still named (owner redline 2026-08-10): the
+        // reader gets "Wrote a file", and "which tool" stays answerable.
+        const tool = group.name ? ` data-code-tool="${esc(group.name)}" title="${esc(group.name)}"` : '';
+        const toolTag = group.name ? `<span class="tc-code-receipt-tool">${esc(group.name)}</span>` : '';
+        return `<div class="tc-code-technical${group.failed ? ' is-error' : ''}" data-code-kind="${esc(group.kind)}"${tool}><i class="ph ${group.failed ? 'ph-warning' : 'ph-check-circle'}"></i><div><strong>${esc(group.heading)}${count}</strong>${toolTag}<code>${esc(group.label)}</code></div></div>`;
       }).join('');
       const issueCount = events.filter(event => eventFailed(event)).length;
       // The warning icon and the has-issues tint belong to runs that FAILED.
@@ -682,12 +710,82 @@
       return esc(text);
     }
 
+    // A blank Code surface used to be one line of encouragement above 700px of
+    // empty space -- measured on a 1920x1080 screen, the hero sat at the top and
+    // nothing else occupied the view down to the composer. It told you to
+    // describe an outcome without showing what a good one looks like.
+    //
+    // These fill the composer rather than sending. A starter is a suggestion, and
+    // a click that silently spends a model call on a prompt nobody read is a
+    // worse surprise than one extra keystroke. The click handler lives with the
+    // rest of the surface's bindings in unified_code_mode.js; what a starter
+    // SAYS is transcript content, which is this file's job.
+    const CODE_STARTERS = [
+      { icon: 'ph-play-circle', title: 'A small game', text: 'Build a playable Minesweeper in index.html. A 9x9 grid with 10 mines, left click reveals, right click flags, and a mine counter. Plain HTML/CSS/JS.' },
+      { icon: 'ph-chart-bar', title: 'A chart from data', text: 'Build report.html that reads sales.csv from the same folder and draws a bar chart of revenue per region on a canvas, with the grand total shown as text.' },
+      { icon: 'ph-app-window', title: 'A little tool', text: 'Build a habit tracker in index.html: a seven day grid, click a day to toggle it done, a current streak count, and it remembers what I ticked after a reload.' },
+      { icon: 'ph-wrench', title: 'Work on my code', text: 'Look at the project I have selected, tell me what it does, and suggest the three changes that would improve it most.' },
+    ];
+
+    function emptyStateHtml() {
+      const cards = CODE_STARTERS.map(s => `<button class="tc-code-starter" type="button" data-code-starter="${esc(s.text)}">
+      <i class="ph ${s.icon}" aria-hidden="true"></i>
+      <span class="tc-code-starter-title">${esc(s.title)}</span>
+      <span class="tc-code-starter-text">${esc(s.text.length > 96 ? `${s.text.slice(0, 96).trim()}…` : s.text)}</span>
+    </button>`).join('');
+      return `<div class="tc-code-empty">
+      <span class="tc-code-avatar is-anvil" aria-hidden="true">${window.ThomasIcons ? window.ThomasIcons.face('build', 15) : ANVIL_SVG}</span>
+      <strong>What should we make?</strong>
+      <span class="tc-code-empty-intro">Describe the outcome in the composer below. Keep using this same conversation for changes, tests, and review.</span>
+      <div class="tc-code-starters">${cards}</div>
+    </div>`;
+    }
+
+    // The copy button turnHtml stamps on every Thomas turn, and what happens when
+    // it is pressed. Both halves live here so the label the button reverts to
+    // ("Copy reply") is written once, beside the markup that first sets it.
+    //
+    // The textarea path is the fallback for a browser (or an insecure origin)
+    // with no async clipboard; execCommand is deprecated and still the only
+    // thing that works there.
+    async function copyReplyText(text, button) {
+      const value = String(text || '');
+      let copied = false;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(value);
+          copied = true;
+        }
+      } catch (_error) { copied = false; }
+      if (!copied) {
+        const area = document.createElement('textarea');
+        area.value = value;
+        area.setAttribute('readonly', '');
+        area.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+        document.body.appendChild(area);
+        area.select();
+        try { copied = document.execCommand('copy'); } catch (_error) { copied = false; }
+        area.remove();
+      }
+      if (button) {
+        const icon = button.querySelector('i');
+        button.title = copied ? 'Copied' : 'Copy failed';
+        button.setAttribute('aria-label', button.title);
+        if (icon && copied) icon.className = 'ph ph-check';
+        setTimeout(() => {
+          button.title = 'Copy reply';
+          button.setAttribute('aria-label', 'Copy reply');
+          if (icon) icon.className = 'ph ph-copy';
+        }, 1400);
+      }
+      return copied;
+    }
 
     return {
       eventLabel, annotateTerminalEvent, eventType, isTechnicalEvent, refreshElapsed,
       eventHtml, finalReplyEvent, progressEvents, failureSummary, turnHtml, replyHtml,
       elapsedLabel, narrativeActivityHtml, technicalActivityHtml, transcriptEvents,
-      flagExpectedProbe, interleavedActivityHtml,
+      flagExpectedProbe, interleavedActivityHtml, emptyStateHtml, copyReplyText,
     };
   }
 

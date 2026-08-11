@@ -19,19 +19,25 @@
     }
     async function maybePromptChatGPTConnection(assistantText) {
       if (!shouldPromptChatGPTConnection(assistantText)) return false;
+      let needsLogin = false;
+      // The try guards the STATUS LOOKUP and nothing else. It used to wrap the
+      // overlay call too, so a ReferenceError while building the prompt was
+      // caught here and read as "the lookup failed" -- the prompt could never
+      // appear and nothing ever said why. A fault in our own rendering must
+      // surface, not disguise itself as a network problem.
       try {
         const response = await fetch('/api/openai-codex/status?profile=' + encodeURIComponent(opts.getProfile()), { cache: 'no-store' });
         const status = await response.json();
         // Natural-language output is never authoritative auth state. Only a
         // fresh, typed status response may open the reconnect prompt.
-        if (response.ok && status && status.needs_login === true && status.logged_in !== true) {
-          showChatGPTConnectionPrompt();
-          return true;
-        }
+        needsLogin = !!(response.ok && status && status.needs_login === true && status.logged_in !== true);
       } catch (error) {
         // A status lookup failure must not falsely tell a signed-in user to reconnect.
+        return false;
       }
-      return false;
+      if (!needsLogin) return false;
+      showChatGPTConnectionPrompt();
+      return true;
     }
     function closeChatGPTConnectionPrompt() {
       const overlay = document.getElementById('tc-chatgpt-connect-prompt');
@@ -61,7 +67,13 @@
           <button id="tc-chatgpt-connect-start" type="button" style="padding:9px 14px;border:1px solid var(--c-accent-line);border-radius:10px;background:var(--c-accent);color:var(--c-accent-ink);font:700 13px var(--font-sans);cursor:pointer;">Connect ChatGPT</button>
         </div>
       </section>`;
-      shell.appendChild(overlay);
+      // `shell` was left behind as a bare global when this module was extracted
+      // "verbatim" from chat.html, where it is a const inside the page IIFE and
+      // therefore invisible here. Every attempt to show the prompt threw
+      // ReferenceError. The container now arrives through the factory, like the
+      // rest of the page state this module borrows.
+      const host = (typeof opts.getShell === 'function' && opts.getShell()) || document.body;
+      host.appendChild(overlay);
       overlay.addEventListener('click', e => { if (e.target === overlay) closeChatGPTConnectionPrompt(); });
       overlay.querySelector('#tc-chatgpt-connect-close').addEventListener('click', closeChatGPTConnectionPrompt);
       overlay.querySelector('#tc-chatgpt-connect-later').addEventListener('click', closeChatGPTConnectionPrompt);

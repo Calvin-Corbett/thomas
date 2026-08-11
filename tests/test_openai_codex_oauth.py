@@ -331,9 +331,7 @@ def test_ensure_recovers_once_from_rejected_stale_refresh_with_ready_local_pair(
         raise OpenAICodexOAuthError("Token refresh failed with HTTP 401.", status_code=401)
 
     with patch("thomas.server.openai_codex_oauth.refresh_openai_codex_token", rejected_refresh):
-        access_token = __import__("asyncio").run(
-            ensure_openai_codex_access_token("openai_codex", secret_store=store)
-        )
+        access_token = __import__("asyncio").run(ensure_openai_codex_access_token("openai_codex", secret_store=store))
 
     assert refresh_attempts == 1
     assert access_token == current["access_token"]
@@ -489,11 +487,25 @@ class TestOpenAICodexRoutes(AioHTTPTestCase):
 
 
 def test_chat_shell_scopes_oauth_status_and_login_to_selected_profile() -> None:
-    # The live surface for this contract is chat.html. (It used to be asserted
-    # against model_settings_dropdown.js, which no page loaded; that file is
-    # deleted.) Status lookups and login must both carry the selected profile,
-    # or a multi-profile setup reads/creates tokens for the wrong account.
-    text = (Path(__file__).parents[1] / "thomas/server/web/chat.html").read_text(encoding="utf-8")
+    # The live surface for this contract is the chat shell. (It used to be
+    # asserted against model_settings_dropdown.js, which no page loaded; that
+    # file is deleted.) Status lookups and login must both carry the selected
+    # profile, or a multi-profile setup reads/creates tokens for the wrong
+    # account.
+    #
+    # There are still exactly two status call sites, but c4a6cf07 moved one of
+    # them -- the ChatGPT-connect overlay, with the login POST -- verbatim into
+    # js/chat_connect_prompt.js, a factory that takes the page's selected
+    # profile as `opts.getProfile`. So the same two call sites are now checked
+    # one per file, and the wiring between them is checked too: a factory handed
+    # anything other than `state.profile` would scope both requests to the wrong
+    # account while each file still read correctly on its own.
+    web = Path(__file__).parents[1] / "thomas/server/web"
+    shell = (web / "chat.html").read_text(encoding="utf-8")
+    prompt = (web / "js/chat_connect_prompt.js").read_text(encoding="utf-8")
 
-    assert text.count("'/api/openai-codex/status?profile=' + encodeURIComponent(state.profile)") == 2
-    assert "body: JSON.stringify({ profile: state.profile || 'openai_codex', timeout_s: 300 })" in text
+    assert shell.count("'/api/openai-codex/status?profile=' + encodeURIComponent(state.profile)") == 1
+    assert prompt.count("'/api/openai-codex/status?profile=' + encodeURIComponent(opts.getProfile())") == 1
+    assert "body: JSON.stringify({ profile: opts.getProfile() || 'openai_codex', timeout_s: 300 })" in prompt
+    assert "window.ThomasChatConnectPrompt.create({ getProfile: () => state.profile" in shell
+    assert 'src="/static/js/chat_connect_prompt.js' in shell, "an unloaded module scopes nothing"

@@ -11,7 +11,17 @@ import pytest
 from thomas.core import build_info as build_info_module
 from thomas.core.build_info import build_info, build_label
 
-CHAT_HTML = Path(__file__).resolve().parent.parent / "thomas" / "server" / "web" / "chat.html"
+WEB = Path(__file__).resolve().parent.parent / "thomas" / "server" / "web"
+CHAT_HTML = WEB / "chat.html"
+# The badge's style block moved verbatim out of chat.html's inline <style> into
+# css/chat_shell.css when the page was cut back under its line ceiling (commit
+# 248c0d93, "without behavior change" -- the rules are byte-identical). The
+# markup still lives in chat.html. Both files are read for the STYLE rules, so
+# the guard survives the block moving back or being split across the two: a
+# check pointed at one file alone stopped seeing the rules it was written to
+# protect and would have passed just as happily if they had been deleted.
+CHAT_SHELL_CSS = WEB / "css" / "chat_shell.css"
+BADGE_STYLE_SOURCES = (CHAT_HTML, CHAT_SHELL_CSS)
 
 
 @pytest.fixture(autouse=True)
@@ -102,13 +112,14 @@ def test_the_badge_is_not_styled_inline() -> None:
     changed colour. Measured in the browser -- data-dirty was set while the text
     stayed muted.
     """
-    text = CHAT_HTML.read_text(encoding="utf-8")
-    badge = re.search(r"<button id=\"tc-build-badge\"[^>]*>", text)
+    markup = CHAT_HTML.read_text(encoding="utf-8")
+    styles = "\n".join(path.read_text(encoding="utf-8") for path in BADGE_STYLE_SOURCES)
+    badge = re.search(r"<button id=\"tc-build-badge\"[^>]*>", markup)
 
     assert badge, "the build badge is missing from the chat UI"
     assert "style=" not in badge.group(0), "inline style would outrank the state rules"
-    assert '#tc-build-badge[data-dirty="1"]' in text
-    assert "#tc-build-badge:hover" in text
+    assert '#tc-build-badge[data-dirty="1"]' in styles
+    assert "#tc-build-badge:hover" in styles
 
 
 def test_the_badge_reports_the_commit_and_the_port() -> None:

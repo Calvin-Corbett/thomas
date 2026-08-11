@@ -8,8 +8,6 @@ PNG filtering, and compression quality metrics (PSNR, SSIM, MS-SSIM).
 from __future__ import annotations
 
 import numpy as np
-from scipy.fftpack import dctn, idctn
-from scipy.ndimage import gaussian_filter
 
 from ._exceptions import CompressionError
 from ._types import Image
@@ -71,6 +69,8 @@ class CompressionCodec:
         Raises:
             CompressionError: If compression fails.
         """
+        from scipy.fftpack import dctn
+
         self.quality_factor = np.clip(quality, 1, 100)
 
         img_float = image.to_float32()
@@ -138,6 +138,8 @@ class CompressionCodec:
         Raises:
             CompressionError: If decompression fails.
         """
+        from scipy.fftpack import idctn
+
         try:
             compressed_blocks = np.frombuffer(data, dtype=object)
 
@@ -463,6 +465,8 @@ class CompressionCodec:
         Returns:
             SSIM in [0, 1].
         """
+        from scipy.ndimage import gaussian_filter
+
         c1, c2 = 0.01**2, 0.03**2
 
         # Convert to grayscale if needed and compute in float64 for stability.

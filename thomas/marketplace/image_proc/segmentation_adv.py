@@ -8,8 +8,6 @@ and semantic edge detection.
 from __future__ import annotations
 
 import numpy as np
-from scipy.ndimage import gaussian_filter
-from scipy.signal import convolve2d
 
 from ._exceptions import AlgorithmError, SegmentationError
 from ._types import Image
@@ -309,6 +307,9 @@ class AdvancedSegmentation:
         Returns:
             (edge_map, edge_magnitude) normalized to [0, 1].
         """
+        from scipy.ndimage import gaussian_filter
+        from scipy.signal import convolve2d
+
         img_float = image.to_float32()
 
         if img_float.channels > 1:

@@ -1212,18 +1212,6 @@ def _setup_routes_and_handlers(
         except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
             log.warning("Work routes unavailable: %s", e)
 
-    def _register_evolve_loop_routes(app_ref: web.Application) -> None:
-        """Register the self-recursive evolve loop dashboard API."""
-        if not callable(_require_api_access):
-            log.warning("Evolve loop routes unavailable: missing API access guard")
-            return
-        try:
-            from thomas.server.routes.evolve_loop_routes import register_evolve_loop_routes
-
-            register_evolve_loop_routes(app_ref, require_api_access=_require_api_access)
-        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
-            log.warning("Evolve loop routes unavailable: %s", e)
-
     _register_chat_v2_routes(app, config)
     _register_mission_routes(app, config)
     _register_work_routes(app)

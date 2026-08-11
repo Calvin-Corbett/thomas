@@ -49,6 +49,7 @@
 .ph-flow-arrow::before { content: "\2933"; }
 .ph-activity::before { content: "\223F"; }
 .ph-tray::before { content: "\25F1"; }
+.ph-arrow-down::before { content: "\2193"; }
 .ph-corners-out::before { content: "\26F6"; }
 .ph-corners-in::before { content: "\2921"; }
 .ph-browser::before { content: "\25A3"; }

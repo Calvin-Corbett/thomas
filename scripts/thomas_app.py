@@ -65,9 +65,13 @@ End Function
 
 If Not EngineUp() Then
     shell.Run Chr(34) & "{launch_vbs}" & Chr(34), 0, False
-    For attempt = 1 To 90
-        WScript.Sleep 1000
+    ' Look before sleeping. The old loop slept a full second before its first
+    ' re-check, so an engine that came up quickly still cost the user that
+    ' second. 360 x 250ms holds the same ~90s ceiling while noticing readiness
+    ' four times sooner.
+    For attempt = 1 To 360
         If EngineUp() Then Exit For
+        WScript.Sleep 250
     Next
 End If
 

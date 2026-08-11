@@ -298,18 +298,24 @@ async function proveEvidenceAndRefresh() {
   const named = api.technicalActivityHtml([
     { type: 'output', kind: 'tool_result', name: 'fs.write_file', text: 'Wrote 4871 chars to index.html' },
   ], false);
-  if (!named.includes('Result from fs.write_file')) throw new Error('a tool result does not name the tool that produced it');
-  if (/Checked/.test(named)) throw new Error('a file write is still called a check');
+  // OWNER REDLINE 2026-08-10: the ROW must speak human. "Result from
+  // fs.write_file" told a non-technical reader nothing, so the heading is now
+  // a verb ("Wrote a file"). The property this line has always protected --
+  // a tool result must not be anonymous -- is unchanged: the producing tool
+  // still rides the row (data-code-tool + title) and heads the expanded body.
+  if (!named.includes('fs.write_file')) throw new Error('a tool result does not name the tool that produced it');
+  if (!/Wrote a file|Result from/.test(named)) throw new Error('a tool result has no readable heading');
+  if (/Checked/.test(named)) throw new Error('a file write is still called a check');
 
   const unnamed = api.technicalActivityHtml([
     { type: 'output', kind: 'tool_result', text: 'no name on this one' },
   ], false);
-  if (/Checked/.test(unnamed)) throw new Error('an unnamed tool result is still called a check');
+  if (/Checked/.test(unnamed)) throw new Error('an unnamed tool result is still called a check');
 
   const metaRow = api.technicalActivityHtml([
     { type: 'output', kind: 'meta', text: 'Kept index.html.' },
   ], false);
-  if (/Verified/.test(metaRow)) throw new Error('keeping a file still announces itself as verifying it');
+  if (/Verified/.test(metaRow)) throw new Error('keeping a file still announces itself as verifying it');
 
   const groupedError = api.technicalActivityHtml([{ type: 'error', text: 'request failed' }], false);
   if (!groupedError.includes('Worked through 1 issue') || groupedError.includes('1 detail')) throw new Error('technical error was not summarized as an issue');
@@ -346,7 +352,11 @@ async function proveEvidenceAndRefresh() {
     ].join('\n'),
   });
   const progressAt = completedTurn.indexOf('Inspecting the project.');
-  const evidenceAt = completedTurn.indexOf('tc-code-saved-activity');
+  // OWNER REDLINE 2026-08-10: evidence is no longer a separate collapsed
+  // block after the narrative - receipts render INLINE, under the sentence
+  // they back up. The ordering property is unchanged and still checked:
+  // progress, then the evidence for it, then the final reply.
+  const evidenceAt = completedTurn.indexOf('tc-code-technical');
   const finalAt = completedTurn.indexOf('Built the game and verified Start, Pause, and Resume.');
   if (!(progressAt >= 0 && evidenceAt > progressAt && finalAt > evidenceAt)) throw new Error('completed turn did not render progress, evidence, then final reply');
   if (completedTurn.indexOf('3 file(s) changed') >= 0 || (completedTurn.match(/Built the game/g) || []).length !== 1) throw new Error('machine receipt replaced or duplicated the final reply');
@@ -378,7 +388,11 @@ async function proveEvidenceAndRefresh() {
   // wording is gone on purpose -- a count is not a delivery, and results are now
   // named cards you can open. So the same guarantee is asserted against what the
   // receipt actually says now: the real file is named, the internal one is not.
-  if (!filteredReceipt.includes('1 file changed') || filteredReceipt.includes('2 files changed')) throw new Error('internal Thomas bookkeeping inflated the changed-file count');
+  // OWNER REDLINE 2026-08-10: the count now heads the "See every change"
+  // disclosure ("See every change - 1 file") instead of a trailing note. Same
+  // guarantee: the real file is named, the internal one is neither named nor
+  // counted.
+  if (!/1 file/.test(filteredReceipt) || /2 files/.test(filteredReceipt)) throw new Error('internal Thomas bookkeeping inflated the changed-file count');
   if (!filteredReceipt.includes('game.html')) throw new Error('the delivered result was not named in the saved turn receipt');
   if (filteredReceipt.includes('run.json') || filteredReceipt.includes('.thomas/evolve')) throw new Error('internal Thomas bookkeeping was offered to the owner as a result');
   for (let index = 0; index < 140; index += 1) api.pushLiveEvent({ type: 'output', text: `raw-${index}` });

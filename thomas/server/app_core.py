@@ -109,6 +109,12 @@ def _secret_store_root(config: AppConfig) -> Path:
 
 def create_app(config: AppConfig | None = None):
     """Create and configure the aiohttp application with all routes and middleware."""
+    # Start the clock on the first line of create_app, not partway down it. The
+    # reported duration has to cover tool-registry construction and optional-tool
+    # registration, because that is where the boot seconds actually go; timing
+    # from after that phase described a boot the user never experienced.
+    _boot_start = time.time()
+
     from aiohttp import web
 
     if config is None:
@@ -161,6 +167,11 @@ def create_app(config: AppConfig | None = None):
     app[APP_RUNTIME_GUARD_STATE] = _runtime_guard_boot_state(config)
     app[APP_RUNTIME_GUARD_TASK] = None
     try:
+        # This refresh stays: it is what populates state["current"] and
+        # state["status"], which /api/models reads long before the periodic
+        # refresher first fires ~45s later. It no longer re-runs git, though -
+        # boot_state just collected that snapshot, so app_runtime_guard reuses it
+        # for this one call. See _runtime_guard_refresh.
         _runtime_guard_refresh(app)
     except (OSError, KeyError, ValueError) as runtime_guard_exc:
         log.warning("Runtime guard initialization failed: %s", runtime_guard_exc)
@@ -172,7 +183,6 @@ def create_app(config: AppConfig | None = None):
 
     # Startup diagnostics
     _diagnostics: dict[str, bool] = {}
-    _boot_start = time.time()
     _diagnostics["runtime_guard"] = bool(app.get(APP_RUNTIME_GUARD_STATE))
 
     # Optional: durable per-session task ledger

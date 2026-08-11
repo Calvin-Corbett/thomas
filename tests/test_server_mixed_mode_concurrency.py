@@ -25,7 +25,12 @@ async def _fake_process_message(self, session_id, conversation, prompt, dispatch
     text = f"{mode.upper()}_CONCURRENT_OK"
     conversation = conversation.append_message("user", prompt).append_message("assistant", text)
     self.llm.session_usage.add(TokenUsage(prompt_tokens=3, completion_tokens=2, total_tokens=5))
-    await dispatcher.emit({"type": "route", "route": {"path": "general"}, "mode": mode})
+    # This stub must NOT emit a route event. The canonical one is emitted by the
+    # chat_v2 route layer itself (dispatcher.emit_route), and the real
+    # OrchestratorBrain.process_message emits none -- the orchestrator package
+    # contains no route emitter at all. A stub that fabricates a second one made
+    # every stream carry two route events, so the count assertion below was
+    # measuring the stub instead of the server.
     await asyncio.sleep(0.01)
     await dispatcher.emit_text(text)
     await dispatcher.emit_done(session_id=session_id, conversation_version=conversation.version)

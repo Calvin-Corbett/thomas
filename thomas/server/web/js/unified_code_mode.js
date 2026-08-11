@@ -31,7 +31,6 @@
   };
   let adapterActive = false;
   const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-  const clampDrawerWidth = value => Math.max(280, Math.min(520, value));
   const modes = () => window.ThomasUnifiedModes;
   const lifecycle = () => window.ThomasCodeLifecycle;
   // Siblings loaded ahead of this file by chat.html. Reached through accessors
@@ -67,41 +66,30 @@
   // Hand the siblings the collaborators this file owns. One state object, one
   // escaper, one render -- injected rather than re-declared, so a split can
   // never become two copies that drift (the failure AGENTS.md calls out).
-  codeResults().configure({ state, esc, isInternalResultPath, lifecycle, render });
+  codeResults().configure({ state, esc, isInternalResultPath, lifecycle, render, pushLiveEvent, safely, recordPreferenceWarning });
   codeProjects().configure({ state });
 
-  async function copyReplyText(text, button) {
-    const value = String(text || '');
-    let copied = false;
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(value);
-        copied = true;
-      }
-    } catch (_error) { copied = false; }
-    if (!copied) {
-      const area = document.createElement('textarea');
-      area.value = value;
-      area.setAttribute('readonly', '');
-      area.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
-      document.body.appendChild(area);
-      area.select();
-      try { copied = document.execCommand('copy'); } catch (_error) { copied = false; }
-      area.remove();
-    }
-    if (button) {
-      const icon = button.querySelector('i');
-      button.title = copied ? 'Copied' : 'Copy failed';
-      button.setAttribute('aria-label', button.title);
-      if (icon && copied) icon.className = 'ph ph-check';
-      setTimeout(() => {
-        button.title = 'Copy reply';
-        button.setAttribute('aria-label', 'Copy reply');
-        if (icon) icon.className = 'ph ph-copy';
-      }, 1400);
-    }
-    return copied;
-  }
+  // The workspace readers live in the results module, beside the drawer content
+  // they fill. Bound to local names here so the call sites below read exactly as
+  // they did when the functions were declared in this file -- and so the pair
+  // stays one import list rather than a scattering of `codeResults().` calls.
+  const {
+    loadChanges, loadTree, loadFile, checkpointChanges, maybeAutoPlaytest,
+  } = codeResults();
+
+  // Which folder and which task this surface is pointed at -- creating a task,
+  // picking its folder, switching away from one, and reattaching to a run that
+  // is still going. That module owns the project chip and the surface snapshot
+  // those answers are read from; this file owns the stream, the renderer and
+  // the error reporting they need, and hands them over here. Everything below
+  // calls them by the same names they had when they lived in this file.
+  const {
+    adoptOrphanRun, bindHistoryChoice, canSwitchContext, clearContextState, historyAskHtml,
+    newConversation, pickProject, reattachRunFor, restoreProjectPreference,
+  } = codeProjects().createTaskSession({
+    closeSource, esc, finishBusy, host, lifecycle, loadConversation, loadTree, openStream,
+    pushLiveEvent, recordError, recordPreferenceWarning, refresh, render, safely,
+  });
 
   // One predicate for "what state did this run finish in", for BOTH the run you
   // are watching and the run that had already finished when `/send` answered.
@@ -163,7 +151,7 @@
     eventLabel, annotateTerminalEvent, eventType, isTechnicalEvent, refreshElapsed, eventHtml,
     finalReplyEvent, progressEvents, failureSummary, turnHtml, replyHtml,
     elapsedLabel, narrativeActivityHtml, technicalActivityHtml, transcriptEvents, flagExpectedProbe,
-    interleavedActivityHtml,
+    interleavedActivityHtml, emptyStateHtml, copyReplyText,
   } = window.ThomasCodeEvents.create({
     MAX_VISIBLE_PROGRESS_EVENTS, MAX_PROGRESS_EVENT_CHARS, NARRATIVE_EVENT_KINDS, state, esc,
     codeResults, surface, isInternalResultPath, safely, pushLiveEvent, render, send,
@@ -334,70 +322,6 @@
     if (source) source.close();
   }
 
-  // Parallel runs (Codex-style): switching away from a RUNNING conversation
-  // parks it — the backend keeps working, and opening that conversation again
-  // reattaches via its run_id + cursor (same machinery as reload-resume).
-  function parkActiveRun() {
-    if (!state.running || !state.activeId || !state.runId) return;
-    state.parkedRuns = state.parkedRuns || {};
-    state.parkedRuns[state.activeId] = { runId: state.runId, startedAt: state.runStartedAt || Date.now(), cursor: state.eventCursor || 0 };
-    closeSource();
-    state.running = false;
-    host().setBusy && host().setBusy(false);
-  }
-
-  function canSwitchContext() {
-    if (!state.approvalBusy && !state.steeringBusy && !state.finishing) {
-      // A live run no longer blocks switching — it parks and keeps running.
-      if (state.running) {
-        if (!state.runId) {
-          recordError(null, 'Wait for this Code task to start before switching.');
-          return false;
-        }
-        parkActiveRun();
-      }
-      return true;
-    }
-    recordError(null, 'Finish the pending Code approval or steering update before switching.');
-    return false;
-  }
-
-  function clearContextState() {
-    closeSource();
-    // Cleared BEFORE finishBusy, which repaints the project chip: leaving the
-    // outgoing conversation's id in place made that repaint describe a task
-    // that is already gone. At this point nothing is bound, and the chip has to
-    // be allowed to say so.
-    state.activeId = '';
-    state.conversation = null;
-    finishBusy();
-    state.liveEvents = [];
-    // The echoed message belongs to the conversation it was typed into. The
-    // render only suppresses it once the SAME text appears in `turns`, so
-    // carrying it across a switch would print it into somebody else's
-    // transcript, where nothing would ever match it and it would simply stay.
-    state.pendingUserText = '';
-    state.changes = [];
-    state.tree = [];
-    state.treeLoaded = false;
-    state.treePath = '';
-    state.artifacts = [];
-    state.artifactDocs = {};
-    state.previewBase = null;
-    state.artifactOpen = {};
-    state.filePreview = null;
-    state.pendingApproval = null;
-    state.pendingRequest = null;
-    state.approvalBusy = false;
-    state.steeringBusy = false;
-    state.terminalTool = '';
-    state.runProof = null;
-    state.runId = '';
-    state.eventCursor = 0;
-    state.retryRequest = null;
-    state.runStatus = 'ready';
-  }
-
   function replacePendingApproval(data, request) {
     const retry = { ...request };
     delete retry.approval_id;
@@ -466,60 +390,6 @@
     openStream();
     await refresh();
     return true;
-  }
-
-  // A blank Code surface used to be one line of encouragement above 700px of
-  // empty space -- measured on a 1920x1080 screen, the hero sat at the top and
-  // nothing else occupied the view down to the composer. It told you to
-  // describe an outcome without showing what a good one looks like.
-  //
-  // These fill the composer rather than sending. A starter is a suggestion, and
-  // a click that silently spends a model call on a prompt nobody read is a
-  // worse surprise than one extra keystroke.
-  const CODE_STARTERS = [
-    { icon: 'ph-play-circle', title: 'A small game', text: 'Build a playable Minesweeper in index.html. A 9x9 grid with 10 mines, left click reveals, right click flags, and a mine counter. Plain HTML/CSS/JS.' },
-    { icon: 'ph-chart-bar', title: 'A chart from data', text: 'Build report.html that reads sales.csv from the same folder and draws a bar chart of revenue per region on a canvas, with the grand total shown as text.' },
-    { icon: 'ph-app-window', title: 'A little tool', text: 'Build a habit tracker in index.html: a seven day grid, click a day to toggle it done, a current streak count, and it remembers what I ticked after a reload.' },
-    { icon: 'ph-wrench', title: 'Work on my code', text: 'Look at the project I have selected, tell me what it does, and suggest the three changes that would improve it most.' },
-  ];
-
-  function emptyStateHtml() {
-    const cards = CODE_STARTERS.map(s => `<button class="tc-code-starter" type="button" data-code-starter="${esc(s.text)}">
-      <i class="ph ${s.icon}" aria-hidden="true"></i>
-      <span class="tc-code-starter-title">${esc(s.title)}</span>
-      <span class="tc-code-starter-text">${esc(s.text.length > 96 ? `${s.text.slice(0, 96).trim()}…` : s.text)}</span>
-    </button>`).join('');
-    return `<div class="tc-code-empty">
-      <span class="tc-code-avatar is-anvil" aria-hidden="true">${window.ThomasIcons ? window.ThomasIcons.face('build', 15) : CODE_ANVIL_SVG}</span>
-      <strong>What should we make?</strong>
-      <span class="tc-code-empty-intro">Describe the outcome in the composer below. Keep using this same conversation for changes, tests, and review.</span>
-      <div class="tc-code-starters">${cards}</div>
-    </div>`;
-  }
-
-
-  // The composer is NOT inside the Code panel. It is the shell's one composer,
-  // parked below the mode surface, so no class on `.tc-code-panel` can reach
-  // it -- which is exactly why it stood still while the Activity drawer slid
-  // the conversation out from under it (measured: chat 716..1484 -> 576..1344,
-  // composer 734..1502 both times).
-  //
-  // These two values on the shell are the entire channel between the panel and
-  // the composer: which side panel is reserving room, and how wide the drawer
-  // currently is. unified_code_mode.css reads both and gives the composer the
-  // same box as the transcript.
-  //
-  // The drawer width lives HERE and nowhere else. It used to be written into
-  // the panel's inline style, which the composer cannot see; the panel inherits
-  // it from the shell instead, so there is one writer and no second copy to
-  // drift.
-  function publishColumnState(viewerReserving) {
-    const shell = document.getElementById('tc-shell');
-    if (!shell) return;
-    const side = viewerReserving ? 'viewer' : (state.drawerOpen ? 'activity' : '');
-    if (side) shell.dataset.codeSide = side;
-    else delete shell.dataset.codeSide;
-    shell.style.setProperty('--tc-code-drawer-width', `${clampDrawerWidth(state.drawerWidth)}px`);
   }
 
   function render() {
@@ -663,10 +533,9 @@
     // there because `preview` is a `const` on the line above this one.
     const changesTitle = (preview || artifactRows) && changeRows
       ? '<div class="tc-code-section-title">Changed files</div>' : '';
-    // The history question. Same shape as the approval prompt above, because it
-    // is the same kind of moment: Thomas needs an answer before it can act, and
-    // the answer belongs on screen rather than in a log file.
-    const historyAsk = state.pendingHistoryChoice ? `<section class="tc-code-approval" role="alert"><strong>${esc(state.pendingHistoryChoice.projectName || 'This folder')} has no version history</strong><p>${esc(state.pendingHistoryChoice.message)}</p><div><button data-code-history-setup ${state.historyChoiceBusy ? 'disabled' : ''}>${state.historyChoiceBusy ? 'Working...' : 'Set up history'}</button><button data-code-history-without ${state.historyChoiceBusy ? 'disabled' : ''}>Work without undo</button><button data-code-history-cancel ${state.historyChoiceBusy ? 'disabled' : ''}>Cancel</button></div></section>` : '';
+    // The history question -- raised by newConversation's 409 branch, asked and
+    // answered in the projects module beside it.
+    const historyAsk = historyAskHtml();
     const projectLabel = state.projectRoot ? codeProjects().projectDisplayLabel() : 'Choose a project';
     // An empty file list has three different causes and used to name only one:
     // it always read "Choose a project beside Tools to browse its files."
@@ -697,7 +566,7 @@
     // layout nobody can see.
     const viewerOpen = Boolean(state.viewer && state.viewer.file);
     const viewerFull = Boolean(state.viewer && state.viewer.full);
-    publishColumnState(viewerOpen && !viewerFull);
+    codeResults().publishColumnState(viewerOpen && !viewerFull);
     root.innerHTML = `<div class="tc-code-panel${state.drawerOpen ? ' is-drawer-open' : ''}${viewerOpen && !viewerFull ? ' is-viewer-open' : ''}">
       <header class="tc-code-context" data-ui-id="code.context" data-ui-label="Code activity bar" data-ui-policy="move"><button data-code-results-jump type="button" aria-expanded="${state.drawerOpen ? 'true' : 'false'}"><i class="ph ph-sidebar-simple"></i> Activity <small>${statusLabels[state.runStatus] || 'Ready'}</small>${state.running && state.runStartedAt ? '<small class="tc-code-head-elapsed" data-code-elapsed-top>0s</small>' : ''}${hasResults ? '<span class="tc-code-activity-count" aria-hidden="true"></span>' : ''}</button></header>
       <button class="tc-code-jump-badge" data-code-jump-bottom type="button" hidden><i class="ph ph-arrow-down" aria-hidden="true"></i> Scroll to the bottom</button>
@@ -710,100 +579,16 @@
     activityDrawer?.insertAdjacentHTML('afterbegin', `<div class="tc-code-drawer-resize" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize activity drawer" aria-valuemin="280" aria-valuemax="520" aria-valuenow="${state.drawerWidth}"></div><header class="tc-code-drawer-head"><div><strong>Activity</strong><small>${esc(projectLabel)}</small></div><button data-code-drawer-close type="button" aria-label="Close activity"><i class="ph ph-x"></i></button></header>`);
     root.querySelector('[data-code-results-jump]')?.addEventListener('click', () => { state.drawerOpen = !state.drawerOpen; render(); });
     root.querySelector('[data-code-drawer-close]')?.addEventListener('click', () => { state.drawerOpen = false; render(); });
-    const resizeHandle = root.querySelector('.tc-code-drawer-resize');
-    const setDrawerWidth = width => {
-      state.drawerWidth = clampDrawerWidth(width);
-      // Onto the SHELL, which the panel and the composer both inherit from, so
-      // a drag resizes the drawer and re-reserves the composer's room in the
-      // same frame. Writing it to the panel only moved the drawer.
-      publishColumnState(Boolean(state.viewer && state.viewer.file && !state.viewer.full));
-      resizeHandle?.setAttribute('aria-valuenow', String(state.drawerWidth));
-    };
-    const saveDrawerWidth = () => {
-      try { localStorage.setItem('thomas_code_drawer_width', String(state.drawerWidth)); }
-      catch (error) { recordPreferenceWarning(error, 'The activity drawer width could not be saved.'); }
-    };
-    resizeHandle?.addEventListener('pointerdown', event => {
-      event.preventDefault();
-      resizeHandle.setPointerCapture?.(event.pointerId);
-      const move = moveEvent => { setDrawerWidth(window.innerWidth - moveEvent.clientX); };
-      const done = () => {
-        resizeHandle.removeEventListener('pointermove', move);
-        resizeHandle.removeEventListener('pointerup', done);
-        resizeHandle.removeEventListener('pointercancel', done);
-        saveDrawerWidth();
-      };
-      resizeHandle.addEventListener('pointermove', move);
-      resizeHandle.addEventListener('pointerup', done);
-      resizeHandle.addEventListener('pointercancel', done);
-    });
-    resizeHandle?.addEventListener('keydown', event => {
-      const widths = { ArrowLeft: state.drawerWidth + 16, ArrowRight: state.drawerWidth - 16, Home: 280, End: 520, PageUp: state.drawerWidth + 48, PageDown: state.drawerWidth - 48 };
-      if (!(event.key in widths)) return;
-      event.preventDefault();
-      setDrawerWidth(widths[event.key]);
-      saveDrawerWidth();
-    });
+    codeResults().bindDrawerResize(root);
     root.querySelector('#tc-code-tree-up')?.addEventListener('click', () => { const parts = state.treePath.split('/'); parts.pop(); void safely(() => loadTree(parts.join('/')), 'Could not open that folder.'); });
     root.querySelectorAll('[data-code-tree-dir]').forEach(button => button.addEventListener('click', () => { void safely(() => loadTree(button.dataset.codeTreeDir), 'Could not open that folder.'); }));
     root.querySelectorAll('[data-code-tree-file]').forEach(button => button.addEventListener('click', () => { void safely(() => loadFile(button.dataset.codeTreeFile), 'Could not preview that file.'); }));
     root.querySelector('[data-code-file-close]')?.addEventListener('click', () => { state.filePreview = null; render(); });
     root.querySelector('[data-code-preview-toggle]')?.addEventListener('click', () => { state.filePreviewRendered = state.filePreviewRendered === false; render(); });
-    root.querySelectorAll('[data-code-open-artifact]').forEach(button => button.addEventListener('click', () => {
-      // Opens IN THE CONVERSATION. Sending the result to a side panel is still
-      // telling someone where to go and look; Chat puts a deliverable in the
-      // thread and Code is meant to be Chat that builds rather than dispatches.
-      const file = button.dataset.codeOpenArtifact;
-      const slot = button.dataset.codeArtifactSlot || file;
-      state.artifactOpen = state.artifactOpen || {};
-      state.artifactOpen[slot] = true;
-      // Opens BESIDE the conversation rather than inside it. The card stays a
-      // snapshot you can read at a glance; the real thing gets the height of
-      // the window, and from there it can fill Thomas or leave for its own tab.
-      codeResults().openViewer(file);
-      render();
-      // Fetch the previewable copy after the panel is up, then redraw so the
-      // frame swaps from the plain artifact URL to the asset-inlined document.
-      void safely(async () => { await codeResults().ensureArtifactDoc(file); render(); }, 'That result could not be opened.');
-    }));
-    root.querySelectorAll('[data-code-save-artifact]').forEach(button => button.addEventListener('click', () => {
-      // Saved from the file Thomas actually wrote, read through the same
-      // validated endpoint. Not the inlined preview copy, which carries
-      // dependencies folded in for display only.
-      const file = button.dataset.codeSaveArtifact;
-      void safely(async () => {
-        const token = lifecycle().contextToken(state);
-        if (!token.id) return false;
-        const content = await codeResults().readProjectFile(token.id, file);
-        if (content === null) throw new Error('could not read ' + file);
-        const url = URL.createObjectURL(new Blob([content], { type: 'application/octet-stream' }));
-        const a = document.createElement('a');
-        a.href = url; a.download = file.split('/').pop();
-        document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 30000);
-        return true;
-      }, 'That result could not be downloaded.');
-    }));
+    codeResults().bindArtifactActions(root);
     root.querySelector('[data-code-approve]')?.addEventListener('click', () => { void safely(approvePending, 'Approval could not be completed.'); });
     root.querySelector('[data-code-approval-cancel]')?.addEventListener('click', () => { state.pendingApproval = null; state.pendingRequest = null; state.runStatus = 'stopped'; pushLiveEvent({ type: 'stopped', text: 'Approval cancelled. No Code action was run.' }); render(); });
-    const answerHistory = (choice) => {
-      const ask = state.pendingHistoryChoice;
-      if (!ask || state.historyChoiceBusy) return;
-      state.historyChoiceBusy = true;
-      render();
-      void safely(async () => {
-        try {
-          const ok = await newConversation(ask.projectRoot, ask.projectLabel, { historyChoice: choice });
-          if (ok) pushLiveEvent({ type: 'planning', text: choice === 'setup' ? `Version history set up in ${ask.projectName}. Thomas can undo its edits here.` : `Opened ${ask.projectName} without undo. Thomas cannot revert its own edits in this folder.` });
-        } finally {
-          state.historyChoiceBusy = false;
-          render();
-        }
-      }, 'That folder could not be opened.');
-    };
-    root.querySelector('[data-code-history-setup]')?.addEventListener('click', () => answerHistory('setup'));
-    root.querySelector('[data-code-history-without]')?.addEventListener('click', () => answerHistory('without'));
-    root.querySelector('[data-code-history-cancel]')?.addEventListener('click', () => { state.pendingHistoryChoice = null; state.historyChoiceBusy = false; render(); });
+    bindHistoryChoice(root);
     // A starter loads the composer and hands the cursor over. It deliberately
     // does NOT send: the text is a suggestion to edit, and a click that quietly
     // spends a model call on a prompt nobody read is the worse surprise.
@@ -842,10 +627,33 @@
     codeProjects().updateProjectButton();
   }
 
+  // An error body is rarely JSON. aiohttp answers an unregistered route with the
+  // plain text "404: Not Found", and `response.json()` on that throws
+  // "Unexpected non-whitespace character after JSON at position 3" -- it parses
+  // 404 as a number and chokes on the colon. The owner saw exactly that string
+  // and it told him nothing: the real fault was that Code's entire API had
+  // failed to register. Report the situation, not the syntax error.
+  async function readJson(response, what) {
+    // The Node contract harness stubs a response that can only answer json();
+    // a real browser response can do both. Prefer text() so a non-JSON error
+    // body is readable, and fall back where text() does not exist.
+    if (typeof response.text !== 'function') return response.json();
+    const body = await response.text();
+    try {
+      return JSON.parse(body);
+    } catch (parseError) {
+      const detail = body.trim().slice(0, 120) || '(empty response)';
+      if (response.status === 404) {
+        throw new Error(`${what} is not available on this server (404). Thomas answered "${detail}" instead of data -- the Code API did not register. Restarting the server reloads its routes.`);
+      }
+      throw new Error(`${what} answered ${response.status} with something that is not data: "${detail}"`);
+    }
+  }
+
   async function refresh(options) {
     try {
       const response = await fetch('/api/evolve/agent/conversations');
-      const data = await response.json();
+      const data = await readJson(response, 'Code history');
       if (!response.ok || !Array.isArray(data.conversations)) throw new Error(data.error || `Code history could not be refreshed (${response.status})`);
       state.conversations = data.conversations;
       state.historyLoadState = 'loaded';
@@ -942,120 +750,6 @@
       if (!state.running) startNextQueued();
     }
     return true;
-  }
-
-  // Reattach to THIS conversation's still-running run (parked earlier or found
-  // on the server) — the per-conversation half of reload-resume.
-  async function reattachRunFor(cid) {
-    if (state.running || state.finishing || state.activeId !== cid) return false;
-    const parked = (state.parkedRuns || {})[cid];
-    let status;
-    try {
-      const response = await fetch(`/api/evolve/agent/status?conversation_id=${encodeURIComponent(cid)}`);
-      status = await response.json();
-    } catch (error) { return false; }
-    if (state.activeId !== cid) return false;
-    if (!status || status.running !== true || !status.run_id) {
-      if (parked) delete state.parkedRuns[cid];
-      return false;
-    }
-    lifecycle().adoptRunIdentity(state, status.run_id);
-    if (parked && parked.runId === status.run_id && parked.cursor) state.eventCursor = parked.cursor;
-    if (parked) delete state.parkedRuns[cid];
-    state.running = true;
-    state.runStatus = 'working';
-    const startedRaw = (status.session || {}).started_at;
-    state.runStartedAt = (parked && parked.startedAt) || (Number(startedRaw) ? Number(startedRaw) * 1000 : Date.parse(String(startedRaw || ''))) || Date.now();
-    host().setBusy && host().setBusy(true);
-    pushLiveEvent({ type: 'disconnected', text: 'Reattached — this task kept running in the background.' });
-    render();
-    openStream();
-    return true;
-  }
-
-  async function newConversation(projectRoot, projectLabel, options) {
-    if (!canSwitchContext()) return false;
-    const epoch = state.contextEpoch + 1;
-    state.contextEpoch = epoch;
-    const context = host().getContext ? host().getContext() : {};
-    const historyChoice = String((options && options.historyChoice) || '').trim();
-    const newProjectName = String((options && options.newProjectName) || '').trim();
-    // Inherit only a root somebody PICKED, never the folder of whatever
-    // conversation happened to be on screen. state.projectRoot follows every
-    // open, so inheriting it bound each new task into the previous task's
-    // folder -- measured 2026-08-05: task B built inside task A, and A's run
-    // report listed B's page as its own output.
-    const explicitPick = projectRoot != null || Boolean(newProjectName);
-    const requestedRoot = String(projectRoot == null ? state.chosenProjectRoot : projectRoot).trim();
-    // `picked` tells the server this root is a real choice. A root restored
-    // from localStorage travels WITHOUT it, so a leftover task folder saved by
-    // an older session is declined server-side and the task gets its own.
-    const pickFlag = requestedRoot && (explicitPick || state.chosenProjectPicked) ? 'picked' : undefined;
-    const response = await fetch('/api/evolve/agent/conversations/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_root: requestedRoot || undefined, project_choice: pickFlag, history_choice: historyChoice || undefined, new_project_name: newProjectName || undefined, ...lifecycle().requestSettings(context) }) });
-    const data = await response.json();
-    // A folder with no version history is a QUESTION, not a failure. Throwing
-    // here is what made 117 of this user's 121 projects unopenable: the menu
-    // closed, the chip never changed, and the only explanation went to a log.
-    if (response.status === 409 && data && data.needs_history_choice) {
-      state.pendingHistoryChoice = {
-        projectRoot: String(data.project_root || requestedRoot),
-        projectName: String(data.project_name || ''),
-        message: String(data.error || ''),
-        projectLabel: String(projectLabel || ''),
-      };
-      state.historyChoiceBusy = false;
-      render();
-      return false;
-    }
-    if (!response.ok || !data.ok) throw new Error(data.error || 'Could not create Code task.');
-    state.pendingHistoryChoice = null;
-    if (epoch !== state.contextEpoch) return false;
-    clearContextState();
-    state.activeId = data.conversation.id;
-    state.conversation = data.conversation;
-    state.projectRoot = data.conversation.project_root || requestedRoot;
-    codeProjects().rememberProjectName(state.projectRoot, projectLabel);
-    codeProjects().updateProjectButton();
-    if (explicitPick) {
-      // Only a real pick becomes the sticky default for future tasks -- and
-      // only real picks reach localStorage, so a task-born folder can no
-      // longer install itself as every later session's destination.
-      state.chosenProjectRoot = state.projectRoot;
-      state.chosenProjectPicked = true;
-      try {
-        localStorage.setItem('thomas_code_project_root', state.chosenProjectRoot);
-        localStorage.setItem('thomas_code_project_label', codeProjects().knownProjectName(state.chosenProjectRoot));
-      } catch (error) { recordError(error, 'Project selection could not be saved for the next session.'); }
-    } else if (requestedRoot && codeProjects().projectNameKey(state.projectRoot) !== codeProjects().projectNameKey(requestedRoot)) {
-      // The server declined the restored root (a leftover task folder from an
-      // older session). Stop offering it, or every new task pays the same
-      // round-trip to be told the same thing.
-      state.chosenProjectRoot = '';
-      state.chosenProjectPicked = false;
-      try {
-        localStorage.removeItem('thomas_code_project_root');
-        localStorage.removeItem('thomas_code_project_label');
-      } catch (error) { recordPreferenceWarning(error, 'The declined project root could not be cleared.'); }
-    }
-    const token = lifecycle().contextToken(state);
-    await Promise.all([refresh(), loadTree('', { token, deferRender: true })]);
-    render();
-    return true;
-  }
-
-  // After a durable build, auto-playtest the playable page it produced. Picks
-  // the newest turn's html artifact; only fires for a real build (files
-  // changed) so answers and no-ops are never tested.
-  function maybeAutoPlaytest() {
-    const turns = state.conversation && Array.isArray(state.conversation.turns) ? state.conversation.turns : [];
-    const last = [...turns].reverse().find(t => t.role === 'agent');
-    if (!last || !last.ok) return;
-    const changed = (last.changed_files || []).filter(f => !isInternalResultPath(f));
-    if (!changed.length) return;
-    const artifacts = (last.artifacts || []).filter(a => a && a.file && !isInternalResultPath(a.file));
-    const playable = artifacts.find(a => /\.x?html?$/i.test(String(a.file)));
-    if (!playable) return;
-    codeResults().autoPlaytest(String(playable.file));
   }
 
   async function send(message, context, options) {
@@ -1264,19 +958,6 @@
     // automatically the moment this run's result is durable.
     startNextQueued();
   }
-  // Codex-parity checkpoint: turn kept changes into a real commit on a
-  // thomas-code/ branch; if the project has a remote, the branch is PR-ready.
-  async function checkpointChanges() {
-    if (state.running || state.finishing) return false;
-    const title = String((state.conversation && state.conversation.title) || 'code changes').slice(0, 60);
-    const response = await fetch('/api/evolve/agent/checkpoint', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversation_id: state.activeId, message: `Thomas Code: ${title}` }) });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data.ok) throw new Error(data.error || 'Checkpoint failed.');
-    const where = data.remote ? ` Push it to open a PR on ${data.remote}.` : '';
-    pushLiveEvent({ type: 'insight', text: `Checkpointed ${data.files.length} file(s) as ${data.commit} on ${data.branch}.${where}` });
-    render();
-    return true;
-  }
   function startNextQueued() {
     if (!state.queuedSends || !state.queuedSends.length) return;
     // Never drain while something is live: send() would re-queue the entry,
@@ -1308,49 +989,6 @@
     pushLiveEvent({ type: 'planning', text: `Starting your queued task as its own conversation: ${orphan.message.slice(0, 80)}` });
     render();
     void safely(() => send(orphan.message, orphan.context), 'The queued Code task failed to start.');
-  }
-  async function loadChanges(options) {
-    const token = (options && options.token) || lifecycle().contextToken(state);
-    if (!token.id) return false;
-    const response = await fetch(`/api/evolve/agent/changes?cid=${encodeURIComponent(token.id)}`);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `Changes could not be loaded (${response.status})`);
-    if (!lifecycle().contextMatches(state, token)) return false;
-    state.changes = Array.isArray(data.changed) ? data.changed : [];
-    if (!(options && options.deferRender)) render();
-    return true;
-  }
-  async function loadTree(path, options) {
-    const token = (options && options.token) || lifecycle().contextToken(state);
-    if (!token.id) return false;
-    const query = path ? `?path=${encodeURIComponent(path)}` : '';
-    const response = await fetch(`/api/evolve/agent/conversations/${encodeURIComponent(token.id)}/tree${query}`);
-    const data = await response.json();
-    if (!response.ok || !data.ok) throw new Error(data.error || `Project files could not be loaded (${response.status})`);
-    if (!lifecycle().contextMatches(state, token)) return false;
-    state.tree = Array.isArray(data.entries) ? data.entries : [];
-    state.treeLoaded = true;
-    state.treePath = String(data.path || '');
-    if (!(options && options.deferRender)) render();
-    return true;
-  }
-  async function loadFile(path) {
-    const token = lifecycle().contextToken(state);
-    if (!token.id) return false;
-    const response = await fetch(`/api/evolve/agent/conversations/${encodeURIComponent(token.id)}/file?path=${encodeURIComponent(path)}`);
-    const data = await response.json();
-    if (!lifecycle().contextMatches(state, token)) return false;
-    if (!response.ok || !data.ok) pushLiveEvent({ type: 'error', text: data.error || 'File preview failed.' });
-    else {
-      if (/\.x?html?$/i.test(String(path))) {
-        try { data.content = await codeResults().inlineLocalAssets(token.id, String(data.content || ''), String(path)); }
-        catch (e) { /* preview the page as-is rather than not at all */ }
-        if (!lifecycle().contextMatches(state, token)) return false;
-      }
-      state.filePreview = data;
-    }
-    render();
-    return response.ok && data.ok;
   }
   async function changeAction(action, file, approvalId, options) {
     const token = lifecycle().contextToken(state);
@@ -1546,63 +1184,8 @@
       jump.hidden = !away;
     }, 700);
   }
-  try {
-    // Migration (v2, 2026-07-19): earlier sessions auto-stored the Thomas source
-    // repo as the Code project, so every new conversation silently edited the
-    // product tree. The v1 migration cleared it once, but a later run re-saved
-    // the repo path (scratch resolved into the repo when the server runs from
-    // it). v2 re-clears, and we additionally refuse a stored root that looks
-    // like the running server's own source checkout. The server also rejects
-    // it as a hard safety net.
-    if (localStorage.getItem('thomas_code_project_migrated') !== 'v2') {
-      localStorage.removeItem('thomas_code_project_root');
-      localStorage.setItem('thomas_code_project_migrated', 'v2');
-    }
-    const _storedRoot = localStorage.getItem('thomas_code_project_root') || '';
-    // Heuristic client guard: a path ending in the Thomas package folder is the
-    // source repo — never use it as a scratch Code project.
-    state.projectRoot = /[\\/](thomas|thomas-dev)[\\/]?$/i.test(_storedRoot) ? '' : _storedRoot;
-    if (!state.projectRoot && _storedRoot) { try { localStorage.removeItem('thomas_code_project_root'); } catch (e) {} }
-    // Restored, not picked: it goes to the server WITHOUT the pick flag, so a
-    // leftover task folder saved by an older session heals itself on the next
-    // task instead of collecting every build this browser ever starts.
-    state.chosenProjectRoot = state.projectRoot;
-    state.chosenProjectPicked = false;
-    // Restore the human name alongside the path, or a returning user is back to
-    // reading "exec-25fb7d1499a6" off the chip. Filed against the PATH it names,
-    // never held as "the current label": as a single loose value it outlived the
-    // project it belonged to and was then printed over every conversation opened
-    // afterwards (measured: the chip read one project's name while its own
-    // tooltip showed a different project's path).
-    codeProjects().rememberProjectName(state.projectRoot, localStorage.getItem('thomas_code_project_label') || '');
-  }
-  catch (error) { recordError(error, 'The saved Code project could not be loaded.'); }
-  try {
-    const savedDrawerWidth = Number(localStorage.getItem('thomas_code_drawer_width'));
-    if (Number.isFinite(savedDrawerWidth)) state.drawerWidth = clampDrawerWidth(savedDrawerWidth);
-  } catch (error) { recordPreferenceWarning(error, 'The saved activity drawer width could not be loaded.'); }
-
-  async function pickProject() {
-    if (!canSwitchContext()) return false;
-    const response = await fetch('/api/local/projects/pick-folder', { method: 'POST' });
-    const contentType = String(response.headers?.get?.('content-type') || '').toLowerCase();
-    let data = {};
-    let responseText = '';
-    if (contentType && !contentType.includes('json') && typeof response.text === 'function') {
-      responseText = String(await response.text() || '').trim();
-      if (response.ok) throw new Error(`Thomas returned an unreadable folder-picker response (${response.status})`);
-    } else {
-      try { data = await response.json(); }
-      catch (error) {
-        if (response.ok) throw new Error(`Thomas returned an unreadable folder-picker response (${response.status})`);
-        recordPreferenceWarning(error, 'The folder picker returned a non-JSON error response.');
-      }
-    }
-    if (!response.ok || data.ok === false) throw new Error(data.error || responseText || `Folder picker failed (${response.status})`);
-    if (data.cancelled === true) return false;
-    if (!data.path) throw new Error('Thomas returned a folder-picker response without a project path.');
-    return newConversation(data.path);
-  }
+  restoreProjectPreference();
+  codeResults().restoreDrawerWidth();
 
   async function leave() {
     adapterActive = false;
@@ -1615,51 +1198,6 @@
       shell.style.removeProperty('--tc-code-drawer-width');
     }
     codeProjects().updateProjectButton();
-  }
-
-  // Reload-resume (Codex parity): a Code run in progress must survive a page
-  // reload — on entering Code mode, reattach to the backend's running run
-  // instead of showing a dead surface while the agent keeps working.
-  async function adoptOrphanRun() {
-    if (state.running || state.finishing) return false;
-    let status;
-    try {
-      const response = await fetch('/api/evolve/agent/status');
-      status = await response.json();
-    } catch (error) { return false; }
-    if (!status || status.running !== true || !status.run_id) return false;
-    const session = status.session && typeof status.session === 'object' ? status.session : {};
-    const cid = String(session.conversation_id || '');
-    // Adopt ONLY a run this browser was actually on. Blanket adoption turned
-    // every fresh session into an attachment to whatever run happened to be
-    // live -- and a new task typed into that "fresh" composer then queued into
-    // the adopted conversation, ran in its project, and overwrote its
-    // deliverable (measured twice, 2026-08-05/06: a countdown ask replaced a
-    // finished Bitcoin dashboard; wave-3 isolation reproduced it from a clean
-    // profile). The stored last-surface snapshot is the evidence of "was on
-    // it": a same-browser reload carries it and reattaches exactly as before;
-    // a genuinely fresh session carries nothing and stays fresh -- the live
-    // run remains visible in the sidebar and status, one click away.
-    if (cid) {
-      let wasHere = false;
-      try {
-        const stored = JSON.parse(localStorage.getItem('thomas.lastSurface') || 'null');
-        wasHere = Boolean(stored && String(stored.codeConversationId || '') === cid);
-      } catch (error) { wasHere = false; }
-      if (!wasHere && state.activeId !== cid) return false;
-    }
-    if (cid && state.activeId !== cid) {
-      try { await loadConversation(cid); } catch (error) {}
-    }
-    lifecycle().adoptRunIdentity(state, status.run_id);
-    state.running = true;
-    state.runStatus = 'working';
-    if (!state.runStartedAt) state.runStartedAt = Date.parse(String(session.started_at || '')) || Date.now();
-    host().setBusy && host().setBusy(true);
-    pushLiveEvent({ type: 'disconnected', text: 'Reattached — Thomas kept working through the reload.' });
-    render();
-    openStream();
-    return true;
   }
 
   modes().registerAdapter('code', {

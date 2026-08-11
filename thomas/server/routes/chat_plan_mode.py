@@ -16,7 +16,6 @@ from thomas.agent.execution_plan import (
     plan_to_payload,
 )
 from thomas.agent.loop import AgentLoop
-from thomas.cli.repl_slash import list_slash_specs
 from thomas.core.events import EventType
 
 SendEventFn = Callable[[dict[str, Any]], Awaitable[None]]
@@ -40,6 +39,11 @@ def normalize_plan_action(raw: Any) -> str:
 
 
 def serialize_web_slash_specs() -> list[dict[str, Any]]:
+    # Imported here, not at module scope: thomas.cli.repl_slash pulls in
+    # prompt_toolkit (~580ms), and the web server was paying that on every boot
+    # for a CLI dependency only this one function needs.
+    from thomas.cli.repl_slash import list_slash_specs
+
     specs: list[dict[str, Any]] = []
     for spec in list_slash_specs():
         command = str(getattr(spec, "command", "") or "").strip().lower()

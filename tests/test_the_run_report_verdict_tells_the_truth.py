@@ -105,8 +105,14 @@ def _browser_ok() -> bool:
     try:
         with sync_playwright() as p:
             p.chromium.launch(headless=True).close()
-    except PlaywrightError:
+    except (PlaywrightError, NotImplementedError, OSError):
         # No browser binary installed, or it cannot start in this environment.
+        # NotImplementedError is the Windows case: playwright drives its node
+        # transport with asyncio subprocesses, which a SelectorEventLoop cannot
+        # spawn. This probe exists to SKIP when the browser is unusable, so it
+        # must survive every way the launch can fail -- catching only
+        # PlaywrightError let that one escape at import time and killed
+        # collection for the whole suite, not just these eight tests.
         return False
     return True
 

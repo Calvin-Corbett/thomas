@@ -38,7 +38,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SMOKE_ASSETS = REPO_ROOT / "thomas" / "forge" / "anvil" / "web_artifact_smoke_assets.py"
 PREVIEW = REPO_ROOT / "thomas" / "server" / "routes" / "deliverable_aiohttp.py"
-ARTIFACT_ROUTE = REPO_ROOT / "thomas" / "server" / "routes" / "evolve_agent_routes.py"
+# The artifact route left evolve_agent_routes.py when that module was split for
+# the 1500-line ceiling (2026-08-10). It took its Content-Security-Policy with
+# it, unchanged; only the address moved. The old module now declares no CSP at
+# all, so pointing here is what keeps this guard looking at the real header
+# rather than passing against an empty file.
+ARTIFACT_ROUTE = REPO_ROOT / "thomas" / "server" / "routes" / "evolve_agent_artifact_routes.py"
 
 _SCRIPT_SRC_RE = re.compile(r"script-src(?P<sources>[^;\"']*(?:['\"][^;]*?)*?)(?=;|\"|')")
 

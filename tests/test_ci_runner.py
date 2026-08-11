@@ -210,8 +210,14 @@ def test_machine_readable_result_has_required_fields_and_reparses(tmp_path: Path
     for field_name in REQUIRED_RESULT_FIELDS:
         assert field_name in payload, f"missing required field {field_name}"
 
-    # The embedded machine-readable report keeps all five CAP-141 sections.
+    # The embedded machine-readable report keeps all five CAP-141 sections, plus
+    # `outcome` -- the recorded outcome word rides on the report so the verdict
+    # card can tell an answer or a stop apart from a build before it grades one
+    # (commit e40e11e2). That commit updated the identical tuple in
+    # tests/test_run_report.py (REPORT_SECTIONS) and missed this copy. Kept as an
+    # equality so a seventh, undocumented section still fails here.
     assert set(payload["report"]) == {
+        "outcome",
         "attempts",
         "validations",
         "open_risks",

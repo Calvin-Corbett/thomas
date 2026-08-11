@@ -20,9 +20,44 @@ from pathlib import Path
 ROUTES = Path(__file__).resolve().parent.parent / "thomas" / "server" / "routes" / "evolve_agent_routes.py"
 
 
-def _preview_body() -> str:
+def _definition(marker: str) -> str:
+    """One definition's source: its own line, plus every line indented under it.
+
+    The old reader split on the NEXT `\\n    async def `, which stopped working
+    the moment `conversation_preview` became the last nested handler in the
+    module -- the "body" then ran to the end of the file. Reading by indentation
+    cannot silently over- or under-match like that.
+    """
     text = ROUTES.read_text(encoding="utf-8")
-    return text.split("async def conversation_preview", 1)[1].split("\n    async def ", 1)[0]
+    start = text.index(marker)  # ValueError, loudly, if the definition is gone
+    line_start = text.rfind("\n", 0, start) + 1
+    indent = start - line_start
+    lines = text[line_start:].splitlines()
+    body = [lines[0]]
+    for line in lines[1:]:
+        if line.strip() and len(line) - len(line.lstrip()) <= indent:
+            break
+        body.append(line)
+    return "\n".join(body)
+
+
+def _preview_body() -> str:
+    """The route handler."""
+    return _definition("async def conversation_preview")
+
+
+def _allowlist_body() -> str:
+    """The walk itself, which is where the pruning lives.
+
+    952df618 lifted it out of the route into a module-level `_preview_allowlist`
+    (with its excluded-directory set beside it) so it could run in a worker
+    thread and prune in place; the route now just awaits it. The checks below
+    follow the logic to where it moved -- they assert exactly what they always
+    asserted, about the code that now performs it.
+    """
+    text = ROUTES.read_text(encoding="utf-8")
+    pruned = text[text.index("_PREVIEW_PRUNED_DIRS = {") :].splitlines()[0]
+    return pruned + "\n" + _definition("def _preview_allowlist")
 
 
 def test_the_hidden_directory_filter_runs_on_the_relative_path() -> None:
@@ -47,8 +82,7 @@ def test_a_project_under_a_dot_directory_still_lists_its_files(tmp_path) -> None
     allowed = {
         p.relative_to(root).as_posix()
         for p in root.rglob("*")
-        if p.is_file()
-        and not any(part in {".git", "node_modules", ".thomas"} for part in p.relative_to(root).parts)
+        if p.is_file() and not any(part in {".git", "node_modules", ".thomas"} for part in p.relative_to(root).parts)
     }
 
     assert allowed == {"index.html", "trey-depth-renderer.js", "assets/tile.png"}
@@ -56,8 +90,9 @@ def test_a_project_under_a_dot_directory_still_lists_its_files(tmp_path) -> None
 
 def test_version_control_inside_the_project_is_still_excluded() -> None:
     """Fixing the location bug must not start serving the project's git objects."""
-    body = _preview_body()
+    body = _allowlist_body()
 
+    assert body.strip(), "an empty slice would pass every check below while guarding nothing"
     assert ".git" in body and "node_modules" in body
 
 
@@ -98,7 +133,7 @@ def test_the_resolved_target_must_stay_inside_the_project() -> None:
 def test_the_allowlist_does_not_depend_on_which_file_was_requested() -> None:
     """Two files of one project must produce the same allowlist, or the service
     treats them as different apps and gives each its own short-lived origin."""
-    body = _preview_body()
-    allowlist = body.split("allowed = set()", 1)[1].split("if not allowed", 1)[0]
+    allowlist = _allowlist_body()
 
+    assert allowlist.strip(), "an empty slice would pass the check below while guarding nothing"
     assert "tail" not in allowlist, "the allowlist must describe the project, not the request"

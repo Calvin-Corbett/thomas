@@ -8,7 +8,6 @@ miniature effect, and cross-processing.
 from __future__ import annotations
 
 import numpy as np
-from scipy.ndimage import gaussian_filter
 
 from ._types import Image
 
@@ -90,6 +89,8 @@ class EffectsProcessor:
         Returns:
             Image with tilt-shift applied.
         """
+        from scipy.ndimage import gaussian_filter
+
         img_float = image.to_float32()
         h = img_float.height
 
@@ -217,6 +218,8 @@ class EffectsProcessor:
         Returns:
             Image with film grain.
         """
+        from scipy.ndimage import gaussian_filter
+
         img_float = image.to_float32()
 
         # Generate grain at different scales

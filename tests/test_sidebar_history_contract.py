@@ -182,12 +182,26 @@ def test_titles_are_generated_only_where_they_are_needed() -> None:
     history = _read("js/sidebar_history.js")
 
     assert "function looksRaw(" in history
-    # One request for a page of rows, once per row, cached in the overlay.
-    assert ".slice(0, 12)" in history
     assert "titledThisSession" in history
     assert "/api/chats/title" in history
     # A name the user typed always wins over a generated one.
     assert "if ((overlay()[id] || {}).title) return;" in history
+
+
+def test_titling_has_a_hard_budget_and_cannot_walk_the_whole_history() -> None:
+    history = _read("js/sidebar_history.js")
+
+    # Writing titles refreshes the list, which re-decorates, which started the
+    # next batch. With 476 rows that made 88 model calls in four minutes on the
+    # user's account. A per-row guard does not bound this; a budget does.
+    assert "SESSION_BUDGET" in history
+    assert "let titleBudget = SESSION_BUDGET;" in history
+    assert "if (titleRunning || titleBudget <= 0) return;" in history
+    assert "titleBudget -= pending.length;" in history
+    assert "Math.min(BATCH_SIZE, titleBudget)" in history
+    # And only rows that are actually on screen are worth paying to name.
+    assert "function onScreen(" in history
+    assert "onScreen(row, wrap)" in history
 
 
 def test_a_generated_title_is_a_name_not_a_sentence() -> None:
