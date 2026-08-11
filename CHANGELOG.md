@@ -64,6 +64,60 @@ Versioning: Semantic Versioning.
   they were meant to be. Identical at runtime, but the raw bytes made grep,
   ripgrep and diff classify the file as binary and refuse to show its contents.
 
+### Security (gateway auth was enforced on 1 of 27 gateway routes)
+
+- **`gateway_auth_policy_middleware` was never installed.** The module that
+  defines it, `p136_gateway_auth_policy_enforcement`, was missing from both the
+  import list and the registration tuple in
+  `thomas/server/routes/gateway/__init__.py` -- it was not merely unregistered,
+  it was never imported. So `app.middlewares` never contained it, and
+  `gateway_auth_mode` was honoured on exactly one route: `/gateway/restart`,
+  which hand-rolls its own check by importing p136 directly.
+- Probed on a live server with `THOMAS_GATEWAY_AUTH_MODE=token` and a
+  deliberately WRONG bearer token: `GET /v1/gateway/state` returned **200 with
+  gateway state**, and `POST /gateway/logs/filter` **reached its handler**. Only
+  `/gateway/restart` returned 401.
+- The misconfiguration was undetectable from outside, because the two endpoints
+  an operator would use to confirm the policy had taken effect are p136's own --
+  so they returned 404 -- while `docs/ops/GATEWAY_SECURITY_RUNBOOK.md` instructs
+  operators to "keep `gateway_auth_mode` enabled for gateway routes".
+- `/v1/gateway` has also been added to the enforced prefixes. Wiring the
+  middleware alone still left four live gateway routes outside the policy,
+  because the matcher only knew `/gateway` and `/ws`.
+- After the fix, same probe: `/v1/gateway/state`, `/gateway/logs/filter` and
+  `/gateway/restart` all return **401**, and `/gateway/auth/policy` still answers
+  because it is deliberately exempt. With auth **disabled** -- the default -- all
+  four reach their handlers exactly as before, so the change is inert until the
+  policy is switched on.
+- **Reported, not silently changed:** `/v1/chat/completions` and `/v1/responses`
+  are also outside gateway auth. They are the OpenAI-compatible surface and the
+  likeliest thing to be exposed remotely, but whether they should answer to this
+  policy or carry their own is a product decision, not an oversight to patch.
+
+### Removed (a second server package that could not be imported)
+
+- `server/` at the repository root -- 12 files, 1,909 lines -- is gone. It was a
+  FastAPI + SQLAlchemy stack duplicating the workspace/permissions system that
+  `thomas/server/` (aiohttp) already provides, and it **could not be imported at
+  all**: `server/workspace/models.py:12` does `from server.db.base import Base`
+  and `server/db/` does not exist in the repository. It had no top-level
+  `__init__.py`, so it was importable only as a namespace package while the
+  working directory happened to be on `sys.path`.
+- `web-ui/` -- 3 TypeScript files, 147 lines, no `package.json`, no `tsconfig`,
+  no build configuration of any kind. It was the only caller of that dead
+  permissions API.
+- `tests/test_workspace_rbac_multi_tenant.py` was **kept, not deleted**. Its two
+  imports now point at `thomas/server/workspace/`, which is byte-identical to
+  the copy that was removed and is the code that actually ships -- so a test of
+  dead code became coverage of live code instead of being lost with its subject.
+- Checked before removal, since a wrong deletion here costs a feature: no
+  reference in any GitHub workflow, `MANIFEST.in`, or the `pyproject.toml`
+  packaging list; the `p127` gateway module CI exercises resolves to
+  `thomas/server/routes/gateway/`, not the stale root copy. Route count
+  unchanged at 702 across the deletion.
+- Still stale and left alone: `docs/MIGRATION_NOTES_workspace_rbac_multi_tenant.md`
+  documents `python -m server.workspace.migrate_schema`, now a dead command.
+
 ### Added (the Agent Operations console gets a door)
 
 - Six frontier surfaces -- steer a running agent (CAP-040), live run telemetry
