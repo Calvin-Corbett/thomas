@@ -2,6 +2,33 @@
 // moduleUiEditorProjectFromFiles + shell-plugin bootstrap) was removed 2026-06-16 —
 // replaced by the UI Studio coordinate canvas (runtime/048_ui_studio_canvas.js).
 // The Comfy Studio helpers below are RETAINED — used by chat (013) and studio mode.
+
+// RETAINED from the removed UI Editor: the shell-plugin bootstrap URL guard.
+// The importer surfaces in runtime/043 still call it on every plugin URL, so the
+// host allowlist is the only thing standing between a pasted URL and a fetched
+// bootstrap. Keep it defined here even though the rest of the editor is gone.
+const MODULE_UI_EDITOR_PLUGIN_BOOTSTRAP_ALLOWLIST = [
+    'raw.githubusercontent.com',
+];
+
+function moduleUiEditorNormalizeShellPluginBootstrapSource(urlRaw) {
+    const source = moduleUiEditorNormalizeGitHubRawUrl(urlRaw);
+    if (!source) return { ok: false, reason: 'Missing plugin URL.' };
+    if (!/^(https?):\/\//i.test(source)) {
+        return { ok: false, reason: 'Plugin URL must use http or https.' };
+    }
+    try {
+        const parsed = new URL(source);
+        const host = safeString(parsed.hostname).toLowerCase();
+        if (!MODULE_UI_EDITOR_PLUGIN_BOOTSTRAP_ALLOWLIST.includes(host)) {
+            return { ok: false, reason: 'Plugin URL host is not allowlisted.' };
+        }
+        return { ok: true, source };
+    } catch (_error) {
+        return { ok: false, reason: 'Invalid plugin URL.' };
+    }
+}
+
 function moduleStudioEnsureComfyStyles() {
     if (document.getElementById(MODULE_STUDIO_COMFY_STYLE_ID)) return;
     const style = document.createElement('style');

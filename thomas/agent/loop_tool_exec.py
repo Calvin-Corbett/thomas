@@ -258,8 +258,7 @@ async def execute_tools(
                 )
             validated_path, path_error = _sanitize_write_tool_path(
                 args,
-                require_path=is_write_tool_call
-                and _declares_a_path_parameter(getattr(loop, "tools", None), name),
+                require_path=is_write_tool_call and _declares_a_path_parameter(getattr(loop, "tools", None), name),
                 sandbox_root=sandbox_root,
                 benchmark_root=benchmark_root if is_write_tool_call else None,
                 # Absolute WRITE targets are judged by the file-access ladder

@@ -7,6 +7,9 @@ from aiohttp import ClientError
 
 pytest.importorskip("aiohttp.pytest_plugin")
 
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 
 async def _drain_response(resp) -> None:
     try:

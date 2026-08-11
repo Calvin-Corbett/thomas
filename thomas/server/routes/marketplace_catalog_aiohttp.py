@@ -325,9 +325,7 @@ def _build_orphan_installed_row(installed: dict[str, Any], *, store_url: str, ch
         "installable": False,
         "installed": True,
         "verified": installed.get("verified") is not False,
-        "agent_plugin": installed.get("agent_plugin")
-        if isinstance(installed.get("agent_plugin"), dict)
-        else None,
+        "agent_plugin": installed.get("agent_plugin") if isinstance(installed.get("agent_plugin"), dict) else None,
         "enabled": bool(installed.get("enabled")),
         "workspace_id": _safe_string(installed.get("workspace_id")),
         "download_url": "",

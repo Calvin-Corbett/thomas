@@ -40,7 +40,7 @@ def _resolve_model_profile_name(config: AppConfig, profile_name: str | None) -> 
 
         return _resolver(config, profile_name)
     except (KeyError, RuntimeError, TypeError, ValueError):
-        # Broad catch: resolver failures fall back to the legacy local lookup to preserve CLI startup.
+        # Resolver failures fall back to the legacy local lookup to preserve CLI startup.
         logging.getLogger(__name__).exception("Model profile resolver failed; using local fallback.")
         requested = str(profile_name or "").strip()
         if not requested:
@@ -274,7 +274,7 @@ def _build_memory(config: AppConfig):
         logging.getLogger(__name__).warning("Memory engine import failed; continuing without memory.")
         return None
     except (OSError, RuntimeError, TypeError, ValueError):
-        # Broad catch: memory is optional for CLI chat and should not prevent command startup.
+        # Memory is optional for CLI chat and should not prevent command startup.
         logging.getLogger(__name__).exception("Memory engine failed to start; continuing without memory.")
         return None
 
@@ -286,7 +286,7 @@ def _build_library(config: AppConfig):
 
         return ResearchLibrary(default_library_root(config))
     except (OSError, RuntimeError, TypeError, ValueError):
-        # Broad catch: library support is optional and CLI commands can continue without it.
+        # Library support is optional and CLI commands can continue without it.
         logging.getLogger(__name__).exception("Library init failed; continuing without library support.")
         return None
 
@@ -613,7 +613,7 @@ def chat(
             user_id="default",
         )
     except (KeyError, RuntimeError, TypeError, ValueError):
-        # Broad catch: model resolution fallback preserves legacy CLI behavior when runtime resolution fails.
+        # Model resolution fallback preserves legacy CLI behavior when runtime resolution fails.
         log.exception("Effective model resolution failed; falling back to configured default.")
         resolved_profile = ""
         resolved_model_id = ""

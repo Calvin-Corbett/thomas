@@ -3,6 +3,40 @@
   "catalogSource":"extensions/catalog.json",
   "packs":[
     {
+      "id":"paper-trading",
+      "name":"Paper Trading",
+      "version":"1.0.0",
+      "category":"finance",
+      "target":"desktop",
+      "mode":"paper_trading",
+      "entrypoint":"hooks.py",
+      "capabilities":[
+        "paper_trading.market_data",
+        "paper_trading.proposals",
+        "paper_trading.execution",
+        "paper_trading.journal",
+        "healthcheck"
+      ],
+      "description":"Propose, approve, and execute simulated stock/ETF trades on a free Alpaca paper account, with a thesis-and-score learning loop.",
+      "categories":[
+        "finance",
+        "automation"
+      ],
+      "tags":[
+        "finance",
+        "trading",
+        "paper",
+        "command_center",
+        "workspace",
+        "official"
+      ],
+      "marketplace_type":"command_center",
+      "requires":[],
+      "left_nav_behavior":"workspace",
+      "default_nav_section":"command_centers",
+      "default_nav_order":530
+    },
+    {
       "id":"life-manager",
       "name":"Life Manager",
       "version":"1.0.0",
@@ -7814,5 +7848,124 @@
       "default_nav_order":560
     }
   ],
-  "hostedPlugins":[]
+  "hostedPlugins":[
+    {
+      "id":"life-manager",
+      "bundleBase64":"UEsDBBQAAAAIAExXcVwUgU265wAAAFYCAAAVAAAAbGlmZS1tYW5hZ2VyL2hvb2tzLnB51ZDBSgMxEIbveYq5bQutD1BQWGwPolUPehIJ42ZSgruZMJkVF/HdzWpXRKz35vj/XzLzxQt3YK3vtReyFkKXWBQwRlbUwDEb40dGhxTiburrOBhzW59f2os1nELVBk/LDiPuSCqzvVnfX23sdb3dTKX9Wf6RGuPIwxN5LmsocztLOLSMbgUuNPqQVRbj1Mc5LM9+RSsD5ThULO+O1XQXWODtff5dn2TSMgb7VmcVvSrFXAxtwua5WsBe5wDesaMCjdsfIF6wDSUkV7A76ekLEyo/Gz/pvSR6JTlSx8RZbRJuKOd/RD8AUEsDBBQAAAAIACVhcVw6wpq98gEAAPkEAAAaAAAAbGlmZS1tYW5hZ2VyL21hbmlmZXN0Lmpzb26NVMtu2zAQvPsrCJ8j1QmQHvoN7S23ohBW5EpaiCIZklIqBPn38iVXSpyiJ8M7y92Z4VCvJ8bOJM7f2FlSh9UECnq057tYN3LuSTWfwQomjMj3gLAfe0SQMxLW5vOOBa0jrSJ4X1/qS65y8Nhru8aysVrM3NNCfj2ghC7gP0OF3egKNZi9nsDH8aHwK531YHv0ca5AN3pt8shJC9zENQdxEdkpP4KovF2NJpUmDlqPrjaFpZlbSW5AW077IZBxle464gTyfdNm0VNqy+hISuyoNvkeCi+wI/rgLsfGryad5XoK9ETDA6/rFaDjlowvJj9Z4CMTQHJlHtzo7liQowQwXMKp8HeAluJvGMR6DdIxUkwrZJkZK0tYXlLnLW5uPXmZFezH/mOe1Bxk1ZF1nr1oOzoTtJR5xDNdM1TBH1/xAflYXAFDya3UfzuRHEzYKskfMrK/vzqJ35JyQDLxm1DWchNK0vY56/8/naVy4/pC9WrNVrgm6LrM4vNM9r3UzZKq03MQdHwHEjsfXFyaFgdYSNto5HFViE4Hs8xtDvkWoSNN97FXW4Fx3uPDpYTDdvmqXjO79GyawU8ybcX2Swg6/q5Tpai8xunDN+PvxGZ7tjRN8TuyYBT4lpcO8PD4NYIlodQr8LNN/W0wRKI4n95OfwBQSwMEFAAAAAgATFdxXD/LKBn4AAAAigEAABYAAABsaWZlLW1hbmFnZXIvUkVBRE1FLm1kTY8xTgNBDEX7OYUlChrCAeioAAm6XMAZezfWzoxXtpMot8e7pKAbz3//+/sJvmVi+MGBM1sp/ycQBwRiX0JXWNtllgGTGhzP2tFfS/kKkOGBrTlMph3ivLlt4VgbVn4BJPoLIakYTNB4isPAKwSeUh4EHmqcUGv5TAaa1hzuW7QQ75lYQ678WAydu9odTDWyxDH1ScwDjBujcxpru2Tvt1IOcERffK8dSnh/dripLfvmlc11YEvlQOoJv888CEGCe3ISZ6Ct0QaHdM6vQXrbyE88STyYisSj/mFV+9o4REfeMW/kh2J7gKvpnLc6hGFdZMy7ZWiwl19QSwMEFAAAAAgATFdxXBc3P8MCDAAA+TEAABcAAABsaWZlLW1hbmFnZXIvd2ViL2FwcC5qc91abXPbNhL+7l+B6HIhOSdTzuTT+UUe13Yv7iVOpnY/eTwxTEISY4pgSSiJ6uq/d3cBkKBISbaTtDPpTCoT2F3sLnYfLF4imZWKlYorwQ7Y/RZjipd35S67uu7DBx+LLOb2a8JvE1X1jSVPzcdib2srIkmFGJVG0EQU8gIEA00so9lUZCocC3WaCvzzp/lZ7HsVjRf0zdhvklKt4bAkmkHrt4GlJtJMZMYGnopGs6CtGzgsSW3JW6H4BkuQxLVkA0tN5FiygaeiqS3ZwGFJNIOY5mp+Cf9PIUbWcBEdzqWwxLUnfpbFdIMnkMT1xAaWmsjxxAaeiqb2xAYOS4IMGOOjWRapRGZMlBHPxWs1Tf1PPJ2JgCK+EGpWZOxCFUk21h3szz+Z5wXQyVhYCPBLJPzBi8G4z7wXfJrvtfr2dV+q2l1D3TXu6Orprt9nsqPT053/evVf6NvbWmxt8XKeRawypxC/z0Spfill5s+KtM9kju2UyQttm03vMoc/ECv4Z54oNhIqmmieexp1IngsCsj5e3YURSKHlPF4nqdJxFHk4COM4fVZGIa+GSQ0LOgqHG3R1+qHoSHA7wXobZVQ4ouqFLAahdjqE1UqFMv5PJU8JgOwLRkxHykCo6Yq5uYv5tD+cvHuPMx5UQpNvEcUCwa6R5MOei0bKLb0PxzlWaWRvKtGmxTyM8vEZ3ZaFLLwjYRQ4BfaTSZhqPyqZ4KNeJKK2CMNFnVoGUaaw2r2olRm4rRKP1+PSrr4iMdhI4VZAj7kWSTkiL2+fPvGtpvAD6zO2te8UEmU4nxXSRIVoiaHTNQUnnGW+QyjlJflOZ8iq8aGbVplvCZZkmWiQDWQbL9UhczGw3OpJpBBuIIINhcq3B+Ynv18eBTHjGcsUWLKlMSlq4CQKHh0hywQEWBfEgt2OZFTXgJrPjRjGh+aoZc823ZUCB5QaPAoKUqLC8eTJI1D8vi5jCFMCkj+5nQUgExgk13Z3OmgQao1LzBj15EdSRhaKBFf4iIMLiGXhbQkgxqpEoXvo+UBOxiSC0KkmAHpAfgvBq28IExFNlYTJ19kzOdHBJiVSI2f62U+Q5kRhgqFYksu4emxVtmghRau6wTAn3gG8ONHcpapvianQaiB/Yf5R0XB52FS0q9PBGFUCfyQynHADllXu1GG7bKdoA//aq04zMIn8T8sTiqFqFSpjMUv0gP/aBjbcmBzwhrRekUxdc9SfitSALljO3eMJg8wjhaA3eVJNfBWM5qZ+SmVkcvmzlqL5zW6hB1PRHS3DfFec7XmpD0c+YeRg2o+12vEch1Oee776B3y1c2+hQLK7IMeeoVSujfcL3OeDZ/fO6sidoQ0ZLCA7MV+m91tOr2ELuosH5ixhjdB+FEmme95nUl2LNNUUAPWK06m0bzZAitgjU9aKY51bsM83jy/d7NMz/2CEqG82XPl1dWXkVg3rJJp0myN0Ko8MzKr71UiTXKtEWnrNyPRfq4SqJNjWV7b2RS+LTSz9bgLZo2OJsR7VtNnbafblafJDsUDDE+467dWusBFdovoDdCUxSmHCsXHTwrkb7+6ocu2YYFfs7TdmNJhP04+2QSybNtK5r2hIdAk9Rd8T141OFSiUtFrZhEaF1IHZtHkVYM/b7BPIRJ6w/dFIotEzVlbTG67sByZijiZQfm7AEI9CC+gSP4QYyFxyG7YANAOWzoEOaTB4gaQ2vMWuBrXlg4aprZ8wyn6yl7DmlJgxjOQyrdhxY8PejTRPd2SwHdbkyQOFoZglIgUaDToNySDbF1vakgEuTKWPWu3u8xihwfWe1oXWBu1ccNLyU7k/kCLWSs7BlAbdwqnnk7pJ9jzQOmZWCEc1rdu2ZnoEg2QTJSNttuZUjCYmucwlv7o2YmLeTYWhXF2LHDde9w0DU+IaX+gBa+IFufjZm8DaJh81KV05zKiV9kWtNXnBi1wq7vWw1sD/xv45kh4KsLZGs5CXFXE/YgQR4XpYyCuzU2ghah2LjEMhYY1W/EW6oNKphbV2tw1SbDYbnfDVGh+veH/noCn531VKpE2T0M82PbAhMY9xysVdJi+TvR4r/sehU3dm5fHYFNLtN2qdIqv9jFdQxybzu8MgQ+duK/CwBXAshkFaU/RsV21J6EtEKx61mNgo2BtYGAt4KkQaGRXEFjvMV0MjBp71G+y6dz7ASFWm/xkjDUe47GAZCIYjHmSzhFlbeOAqY5q0Yyry0V9NgDcL4P14Pm0FNQBsyoFtSbrcrCZgc48EOs2BIk7CbjvbRLADlfwuyXPOfGJznKiFeSNEZZoA73BdjLJHjZs03BrzHsjx+wSjxjWWOjCSneubkYVOlJogYq9LGlhiu1YDynulrWBKBX7UwHFnBRZPKmOin7EkoqOv56c7sQ9ga3iHzDXtFeUmZpgttvGpSqKGPJCjgtR0mH/TrD4d3U69j0KJZrMVblO6jytTtKHZVhmuCeIVGbors4iQx+8PaiSyfms1HVMawDd1V2GUdejqrCW+H9yh/jA6Xp0dQQfSZbPlNGnQAV6bJpkB70d+OVfDnovd+Av45uNQdv72hiz8qoo28ejOQ4Y8rWSM6kE8NC930SmgL8HPbwwoauML4rJgnGW4V/TJBWlwjDoSGsSY3cy+wOrXXtV6MTbB2y409S3V6ZLlyV7VePy4W7dY04i6wa7ga9bbDFbt5iFqOv681ZKBQszz333rrO+5rM3jfUlqTfgeTLI09k4ycpBmozE9pRnUHoXg0qYRv93tx/BiBBCPxlndNwt+lZ0qN9d6HtPxxr0TpeeepU5AwT0MUT6NPUPVflmtcrP71Hc4sbe4QLaT2QMef/+3cWlpy8QnHtdzxwib19CPnld97v21uFWxvNdfata0qV4Mpr7pHR9p0s+uEIFrvFWxboGcZ6uiZ3+6wf4aJbHTR8lMfpbRZNv5yj4hXJWxuK3X8/wrgWyCFZ9zMYOFx5dHr/+5j7UBq1yovOlb3GqkyG7ySSwh59D5voboJ4oHxKLGrkbftYO/vYOrZ15cvrm9PLU22h097Um2PuMzO60r0YDEIGPPsoKoszJIjYehjyOTz+Begh7Amo13ytnt9NEeX2mXeQL7HaqRvqGRYR+T8SIz1LzUsGGI9SbUzABHwjgICeQIX5jWFtIkm8dGKCnM3iNZ98mUDm3SwLxNQsQYIN+8IL/2dN9l8S21VTO0X1DVt1c0+rqYdcci+vWReCsEdaGEJY8YQxHguZZ6j/g3Hrgle7VJI/w77LLWr4yZ4guTd1aU9rjRJfOtnX43p7Odbi/tnLVBFTvov5m/1fjrnS/3q0/wv3moMGlME2t4KaDhl12Ppvegp2tIKduL9AnEZX4xnGQfQi55PDKrFX+tq/K/mZ322FXentsngQ81Nlmn+dSmCYXb3Sp2+Fo26WdvFOxUPGJm45WlJvNVYfPrW3LLl/GdXS0xfVq844rbMdURBPcKKyeCvO4Rh9oHZiZ0Z9aM/0CyxAsvbq6oE2TOTCgF2CdZGe4b9lIdQn1+RFM5PITLveIQx9yWK1xmQSdtTi8GOHgthBb3VBKOmiSBgVtO9pE1Ow4gYYD9Z8l+of6g4Z2Wp5+M3nwEG+8eGFHxW2d3r3S1g63rybYDIF5ornL3G83CzqLxnt2RXpe7xq1Fm4mb4weqObunhQ8rtXW2MMGBb4/K6G68r2r5V30dZ9ddRwEXntofjZLU2dWtLCuadAC/98IEvh3pKAAhV23oHWtMa4XrAqcDr6kIkc9nMFgTm0ZWU+OU2nWpH1bxq2LcjL9bL0uTT+5ehnuWh1H6PJTtxGo1FFuYlBaMVZZcr25p3AVt/Jxd46Hsw+9qLiCPVJX3zXD9akpG3Se5mZxOKGj0FDJs4t35sVyEJYQtcLf6bOXO02FjVZhkkXpLBalT6IAaWxHPisnpnGvMX1ObtXruXEKJtnymmrtt/i+qKF8aQsy5UlmsNyp2ffMp4H6vWpL4uzySZpmD+ltr+/TU9wqQdFdMhX6ga7pa7yxqp89db1ZahziLj+ccx7D9qpHcW9gV8Te6l2RefyLr1tpa+a+fm2c1ZBeh+EUFlHgo/Oa37K7TH7OGHV5+grFeU6nD7vRnX8BUEsDBBQAAAAIAExXcVxfOyJiCAQAADYPAAAbAAAAbGlmZS1tYW5hZ2VyL3dlYi9pbmRleC5odG1svVfNcts2EL77KVCcLVPOqQeKMx4nbQ52m04908kpA5ErEREIMMBSCvv03QUomfJIisaqcyG5wP5h99slNv/l/Z/3T58/fRA1Nqa4yvkljLLLmQQreQFUVVwJkTeASpS18gFwJjtcTH6VzxtWNTCTaw2b1nmUonQWwRLjRldYzypY6xImkbgW2mrUykxCqQzMbpMa1GigeNALEI/KqiX4PEtrvGu0XQkPZiYD9gZCDUBWag+LmbzJ4tpNGQJ7nCWX87mr+ihb6bUojQphJlXbTkjWmGiT9pgX/Ha7Bu+GnSS3/Saq3TJBD3PvNrJ4ql2jgvhkuqW2edaOmOvbFyehhQOq2N6kdG0vizthHIVjstA+IIWvaZStRAXlSiycF5taobAAVRC967xQyOHVzgp0leqvBdY6iA3A6lqwYCS/dcoj+JuRb3k2OtU4MtGVgAqDFLpK9N+RLEYyKbjgi6tENkrbrYal19VecGk/QBmdHFhaZcGI+JygCqsgR1EZOZM42NSI4WVG9kOZRFa6XIGn1HBQ9lKS0vKueGKzdIx3e4qzF5rzQPr2VTPMU2jY80emiqnQCA2pY/bRUfbV5ZTAZif5GxFyhyWLvp/w/v5BtW07HIoqFoEU2LdMwHfCfWtUCbUzlImZvKsqoQSrjkiJeJBUK9867aHaPxUYSsigt/XaeY29fBEk18aUrZXpiKvWy1oWH+mZZ2nnJHsDle7ofMkSmX+MC2fJGi6qB7c5xEwhjhqPR0n5JeCXSuEuVvF7T2DeIXLJxO3QzRuNVHkUP0ZFnqXtcR45M4chyomfGB3wGRMPTBX7FZYNFTAUzOmSoFZhK/VWNXFPzZbU+4NlcRdNX1YXyf3XVUaSPVIb3A5bVeL/UShWJFNiTv12daROxlpPI2rMSd3T4xfUzbMT/H2Un9z4AfdRvH5YU3QuAmyKwsWQrdVc45u18Xv619gSDiL2Y7R8GWKj968DbBT9CXgV0dA5/bxMwTrdziulTT9qz++ZPqs7892CRIt/4vu8nwFdAmuWeUwflzT20nUWt8GyXTMnfIhG25m8lVt7t2dWT4TORdUTk3Jx8SydMm93BfLqK5l2/vA96He2fVn1sPuvKx6W/Bm1w3bOaPE13YP+dfaEur/STVpk4jMofkVEH3ev9W7pgeaRQ4Cd0lt9J7hOpzvoTs+ELqftIuRySE4DN5F8s4/TU+KKExo0FBSEqIe+secBAZ6G5e1IRZHSpYFdapkxThYwmgvQO7ss/nA0p9iloGEDRA9Ik8qws2Vsi+Gvzcegu62IP1mBXpUrltRI02TQFYg0jT3POnk2OJJOsXU+HSWUXrcogi95fKSp8ObrLleNqzrCFsUncfFImWZJKpc4Jf8HUEsDBBQAAAAIAExXcVxvMiZsOAUAAMIRAAAaAAAAbGlmZS1tYW5hZ2VyL3dlYi9zdHlsZS5jc3OtV1uPozYUfp9fYe1qpVBBhAm3sC99q/pc9QcYMMQNYGSczaTV/vce20CAQObSzkjM5MQ+t+87FxLBuUT/vCDkOGmZoK80L7zC/64FLWlolSBRpmTnBYGN7g93f/StySmnk4I3SkGhf8xXrDmDBPsePuSjxOl4IUEcHEIvyoy4Yg0dDLk2OhxsFGJlBXu9FZJltFHX3CL0CjoVOp4SuySOYiPuLo12JI3cg5HkpCmpAGGGsYd777oTyfk1QS7CcfuKfPXQLmAI8BDaKPJHF36+vPyi05TyV6djfzMVa8pFToUDIn3gJOvKfkl5ftMnayJKBo64ylrNGudEWXmCELDrflOylGTnUvBLkyfwCSFBckYqp1R/IaxdxkRWUUQkkrxFFS2kfffvGCskjIOhZSMpSNO1RMBFdPC+WfYbKlMuJa+RUC7ZE4hxDLk/aLXxQq0XD2oVXETc1eLYzWlpQ86jghSZPdAIBXBFhZrxikP6fxCx0xzQwoIDdgWpWXVL0Jc/WpJR9JvgknbnLzYIaMkp+vN3+L8DJ5yOClboRI8pbkmeayQ8vzUY7EnbArC0qvSBnHVtRUB9KZhmYElaOO0Op09U8I2D8NeRtAappA74f6mbLlE41uR1BxzF+0MhrEHghaBTZS0C4WhI8er7o59oYI7K3wW0ev25CSMec3wIdI5XiuSokDLMAEIER3AOe/oLz5qmX8GTmtrUNO75b1AxnwzV9/RGU8Gv9sveVPeZZWcq5rSG395tSV+lo5lScFEn6NK2VGSk01VaUSkhVCBRplOg+ErrEX+oJaqEkScm0mtfKpHrTvw3ofuRYj4eG1FkTbA84cFndPIey3BiMqtI3e7wPgK7oOvHFR77AD5M1AHu7byYsQdNwu1rmrw6V5bLU4L8wfunnsammSlk781gHwQTg50ksvsQIwVtKZE7wHvCTSDhhIWegYlUrGzgYiN1JwVTQi5Mz6sKb7DVfWTr+oxwY+t+H/RB7jpesXzjOLaW7gBrmnk20opn50f2xO/Jf+Q/GtBja8OEAd2B7pug0MQ8sQoNINBWlUYNzrO+82nw4qFXGVbPAYrXAfIfATJFrnVsYGJOKHJa7+gQpi+cKMnnARcV1bb/unSSFbcJ3VR/d1Iqr5Q2G9xkkKHO6HB6eo4omIE1kHLhwmObWk4cvXXMfK+pJPN0qgUAu6spPR6PG6RfDOOe8jPzZk2xHlgbb/c83YQbKW6OaqmfHlGeGlFrJHP3oaIZIhfJ72D0sW9mPOM1oCjvPr3twsSBw9yBYOLAIlzWtBdpz0QdrWi2kKUXcLABmeKNA/NqvDgKxmujRA0r2GcIyE4kZdKpeLmiyUj6lW9GhXlXfFJBCtUEXIJuw+SHYvxMPMbV9Yrvt3NrtosotMf6W1nQFv6OKfpQ1hLU8Ia+d7eZlQtskX4RH4tiWlDXE9jaWhMWofU4ZRfRqastZ9CKhAlMe1yxTj5ZE01uxtMqvieH3cWqtzE88cqqtz4No/Dp8JxtgLrrTD1VQ+v/b8wKl1kGJZPwOvFszcJ79z4l9Z2x786ubPXrZcuM58qgGzHedOuh6kD6fOuZchVKop4rKvbmJfGhjrbI+pWGh6MfDqw1t61hwxiL5D+B4L4BgjED1U3J+enYW6TxOGYRere86V2Ivmu3mIsNLXMCm88qL3G/AL5J9sBffU+cTu2pp0/XttWXzcVMC/vS/rWm8IaMdpNd/hhD1i2tWy+K6pV3ud9tTj6Yd8oaaIZL9+6pdTxMz3dpGV92p9j02+hPCOFfUEsBAhQAFAAAAAgATFdxXBSBTbrnAAAAVgIAABUAAAAAAAAAAAAAALaBAAAAAGxpZmUtbWFuYWdlci9ob29rcy5weVBLAQIUABQAAAAIACVhcVw6wpq98gEAAPkEAAAaAAAAAAAAAAAAAAC2gRoBAABsaWZlLW1hbmFnZXIvbWFuaWZlc3QuanNvblBLAQIUABQAAAAIAExXcVw/yygZ+AAAAIoBAAAWAAAAAAAAAAAAAAC2gUQDAABsaWZlLW1hbmFnZXIvUkVBRE1FLm1kUEsBAhQAFAAAAAgATFdxXBc3P8MCDAAA+TEAABcAAAAAAAAAAAAAALaBcAQAAGxpZmUtbWFuYWdlci93ZWIvYXBwLmpzUEsBAhQAFAAAAAgATFdxXF87ImIIBAAANg8AABsAAAAAAAAAAAAAALaBpxAAAGxpZmUtbWFuYWdlci93ZWIvaW5kZXguaHRtbFBLAQIUABQAAAAIAExXcVxvMiZsOAUAAMIRAAAaAAAAAAAAAAAAAAC2gegUAABsaWZlLW1hbmFnZXIvd2ViL3N0eWxlLmNzc1BLBQYAAAAABgAGAKUBAABYGgAAAAA=",
+      "bundleSizeBytes":7187,
+      "sha256":"fe8dc860b621964e6d11846349bee9cb3852ef614beeab5d8f71c4c05c3522fb",
+      "manifest":{
+        "id":"life-manager",
+        "plugin_id":"life-manager",
+        "title":"Life Manager",
+        "name":"Life Manager",
+        "display_name":"Life Manager",
+        "description":"Tasks, agenda, habits, and goals in one local-first Thomas plugin.",
+        "subtitle":"Tasks, agenda, habits, and goals in one local-first workspace.",
+        "version":"1.0.0",
+        "author":"Thomas",
+        "source":"Thomas Official",
+        "publisher_id":"thomas-official",
+        "publisher_name":"Thomas",
+        "kind":"desktop_plugin",
+        "section":"apps",
+        "mode_id":"life_manager",
+        "icon":"ph-list-checks",
+        "api_namespace":"life-manager",
+        "entrypoint":"hooks.py",
+        "surface":{
+          "entry_html":"web/index.html",
+          "title":"Life Manager",
+          "surface_mode":"immersive"
+        },
+        "capabilities":[
+          "life_manager.tasks",
+          "life_manager.agenda",
+          "life_manager.habits",
+          "life_manager.goals"
+        ],
+        "sha256":"fe8dc860b621964e6d11846349bee9cb3852ef614beeab5d8f71c4c05c3522fb",
+        "signature":"official-a55f7dd35717b2a3",
+        "size_bytes":7187,
+        "verified":true,
+        "tags":[
+          "official",
+          "desktop",
+          "app",
+          "workspace",
+          "productivity",
+          "automation"
+        ],
+        "marketplace_type":"app",
+        "category":"productivity",
+        "categories":[
+          "productivity",
+          "automation"
+        ],
+        "requires":[
+          "life-manager-foundation"
+        ],
+        "left_nav_behavior":"workspace",
+        "default_nav_section":"apps",
+        "default_nav_order":520
+      }
+    },
+    {
+      "id":"life-manager-foundation",
+      "bundleBase64":"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",
+      "bundleSizeBytes":2001,
+      "sha256":"dc232a0fb6be87369d82a5ac57f16befd55f93bade19c572347053356d3a3787",
+      "manifest":{
+        "id":"life-manager-foundation",
+        "plugin_id":"life-manager-foundation",
+        "title":"Life Manager Foundation",
+        "name":"Life Manager Foundation",
+        "display_name":"Life Manager Foundation",
+        "description":"Support component for Life Manager and related workspace upgrades.",
+        "subtitle":"Support component for Life Manager and related upgrades.",
+        "version":"1.0.0",
+        "author":"Thomas",
+        "source":"Thomas Official",
+        "publisher_id":"thomas-official",
+        "publisher_name":"Thomas",
+        "kind":"desktop_plugin",
+        "marketplace_type":"dependency",
+        "category":"productivity",
+        "categories":[
+          "productivity",
+          "automation"
+        ],
+        "section":"apps",
+        "mode_id":"life_manager_foundation",
+        "icon":"ph-stack",
+        "api_namespace":"life-manager-foundation",
+        "entrypoint":"hooks.py",
+        "surface":{
+          "entry_html":"web/index.html",
+          "title":"Life Manager Foundation",
+          "surface_mode":"standard"
+        },
+        "capabilities":[
+          "life_manager.foundation",
+          "life_manager.bootstrap"
+        ],
+        "requires":[],
+        "left_nav_behavior":"none",
+        "default_nav_section":"installed",
+        "default_nav_order":940,
+        "sha256":"dc232a0fb6be87369d82a5ac57f16befd55f93bade19c572347053356d3a3787",
+        "signature":"official-4b1918258565d929",
+        "size_bytes":2001,
+        "verified":true,
+        "tags":[
+          "official",
+          "desktop",
+          "dependency",
+          "support",
+          "productivity",
+          "automation"
+        ]
+      }
+    }
+  ]
 }

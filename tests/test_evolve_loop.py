@@ -14,7 +14,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from evolve_supervisor import WATCHDOG_RETURN_CODE
-
 from thomas.forge.anvil.evolve_loop import (
     STATUS_DONE,
     STATUS_STOPPED,

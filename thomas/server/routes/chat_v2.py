@@ -164,7 +164,6 @@ def register_chat_v2_routes(
     )
 
 
-
 def _prompt_with_documents(prompt: str, docs: Any) -> str:
     """Fold attached documents into the prompt, naming any that did not fit.
 

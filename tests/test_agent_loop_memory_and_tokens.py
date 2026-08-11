@@ -196,8 +196,7 @@ class TestAgentLoopMemoryAndTokens(unittest.TestCase):
         self.assertEqual({}, memory.pins)
         self.assertTrue(
             any(
-                event["etype"] == "user_message"
-                and event["text"] == "my name is Alex and I prefer concise replies."
+                event["etype"] == "user_message" and event["text"] == "my name is Alex and I prefer concise replies."
                 for event in memory.events
             )
         )

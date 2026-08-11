@@ -897,7 +897,6 @@ async def _agent_loop_run(
         if state.finished or state.user_interrupted:
             break
 
-
     if not state.finished and not state.user_interrupted:
         # NOT YET FIXED — deliberately left as an error, and here is why.
         #
