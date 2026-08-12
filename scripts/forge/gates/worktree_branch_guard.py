@@ -284,7 +284,10 @@ def run(_argv: Sequence[str] | None = None) -> int:
         _fresh_branch = _branch_name()
     # _branch_name shells out to git; an unreadable branch must leave the
     # freshness check skipped, never crash the guard that protects the tree.
-    except (OSError, subprocess.SubprocessError, ValueError):
+    # RuntimeError included: _branch_name raises it verbatim when git cannot
+    # detect a branch ("not a git repository"), which is exactly the case a
+    # guard running outside a checkout must survive.
+    except (OSError, subprocess.SubprocessError, ValueError, RuntimeError):
         _fresh_branch = ""
     if _fresh_branch:
         freshness_failure = _branch_freshness_failure(_fresh_branch)

@@ -104,7 +104,16 @@ def test_root_chat_prompts_and_starts_native_chatgpt_oauth_recovery() -> None:
     module = _read(CHAT_HTML_PATH.parent / "js" / "chat_connect_prompt.js")
 
     assert '<script src="/static/js/chat_connect_prompt.js' in text
-    assert "window.ThomasChatConnectPrompt.create({ getProfile: () => state.profile, getProfiles: () => profilesData })" in text
+    # The factory gained getShell on 2026-08-12. It is not cosmetic: the module
+    # was extracted from chat.html with a bare `shell` global that does not exist
+    # outside the page IIFE, so appendChild threw ReferenceError and the reconnect
+    # overlay had NEVER rendered. The container now arrives through the factory,
+    # so this pins all three arguments -- a future extraction that drops getShell
+    # would silently reinstate the same dead prompt.
+    assert (
+        "window.ThomasChatConnectPrompt.create({ getProfile: () => state.profile, "
+        "getProfiles: () => profilesData, getShell: () => shell })"
+    ) in text
     assert "await maybePromptChatGPTConnection(acc);" in text
 
     assert "function shouldPromptChatGPTConnection(assistantText) {" in module

@@ -1092,11 +1092,17 @@
     // Plugins name their icon in Phosphor terms; the shell draws its own. An
     // unmapped name must not fall through to nothing, so anything unrecognised
     // gets the marketplace glyph rather than an empty button.
+    // Keyed WITHOUT the ph- prefix on purpose. Writing the full Phosphor names
+    // here put literal ph-* strings in this shell, and the icon contract scans
+    // the shell for exactly that -- a ph- name absent from the drawn icon map
+    // renders as a bare dot, which has shipped as a real-looking control before.
+    // These are lookup keys, not icons the page uses, so the prefix is stripped
+    // at the call site instead.
     const PLUGIN_ICON_GLYPHS = {
-      'ph-chart-line-up': 'trading', 'ph-chart-line': 'trading', 'ph-currency-dollar': 'trading',
-      'ph-users': 'office', 'ph-user': 'office', 'ph-buildings': 'office',
-      'ph-palette': 'canvas', 'ph-chat': 'channels', 'ph-coins': 'tokens',
-      'ph-books': 'library', 'ph-gear': 'settings',
+      'chart-line-up': 'trading', 'chart-line': 'trading', 'currency-dollar': 'trading',
+      'users': 'office', 'user': 'office', 'buildings': 'office',
+      'palette': 'canvas', 'chat': 'channels', 'coins': 'tokens',
+      'books': 'library', 'gear': 'settings',
     };
 
     async function loadPluginWorkspaces() {
@@ -1115,7 +1121,7 @@
             // frame instead of falling through to /classic.
             WORKSPACE_ROUTES[mode] = String(p.surface_url);
             return {
-              icon: PLUGIN_ICON_GLYPHS[String(p.icon || '')] || 'market',
+              icon: PLUGIN_ICON_GLYPHS[String(p.icon || '').replace(/^ph-/, '')] || 'market',
               label: String(p.surface_title || p.display_name || mode),
               mode,
             };
