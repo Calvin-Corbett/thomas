@@ -7,6 +7,21 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Removed (three scratch files that rode in on a merge)
+
+- **`run_thomas_main_8906.py`, `serve_inkwell_test.py` and `agentic_report.md`
+  were never meant to be in the repository.** One is a throwaway launcher
+  pinned to port 8906, one says *"delete after test"* in its own docstring, and
+  the third is the output of a stress-test run against `example.com`. All three
+  arrived together in a 539-file merge commit in June and nothing referenced
+  them since. Found by asking why the workboard changed-files gate was failing:
+  it listed 35 unclaimed paths, 32 of which were a two-month range being
+  measured at once, and 3 of which were genuinely stray. The gate was mostly
+  noise, but not entirely — worth saying, because the usual response to a noisy
+  check is to stop reading it. Verified the 27 tests that mention
+  `agentic_report.md` still pass: they use it as a filename an agent is asked to
+  create during a run, never as a file read from the repository root.
+
 ### Changed (how this project writes about the person who owns it)
 
 - **You found out from a code review that the commit log had been describing
